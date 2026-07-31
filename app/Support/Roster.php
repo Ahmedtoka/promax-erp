@@ -67,7 +67,14 @@ class Roster
         [
             'email' => 'masna3@promax.com', 'name' => 'أمين المخزن الرئيسي — المصنع',
             'name_en' => 'Main Store Keeper — Factory',
-            'role' => 'warehouse_keeper', 'code' => 'WHK-002', 'warehouse' => 'FAC',
+            // ⚠️ **`TENTH` مش `FAC`.** كود مخزن المصنع بقى `TENTH` في
+            // `SetupCatalogue::WAREHOUSES`. الكود القديم كان بيخلّي
+            // `promax:team:setup` يطبع تحذير ويكمّل — وأمين المخزن
+            // يتعمل بـ`warehouse_id = null`. و`guardWarehouse` بتخرج
+            // من غير ما تمنع لو المخزن فاضي، يعني الحساب اللي المفروض
+            // مقفول على مخزن واحد كان بيفتح كل المخازن. تحذير في
+            // الترمينال محدش قراه = صلاحية مفتوحة على السيستم اللايف.
+            'role' => 'warehouse_keeper', 'code' => 'WHK-002', 'warehouse' => 'TENTH',
         ],
 
         // ═══════════════ السيلز إيجينت — مودرن تريد ═══════════════
