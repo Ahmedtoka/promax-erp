@@ -1,0 +1,201 @@
+/* ═══════════════════════════════════════════════════════════════
+   PROMAX Food Industries — Brand Layer
+   Sourced directly from the 2024 Brand Guidelines. Do not invent
+   colours or fonts here; if something is missing, check the PDF.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ---------- 3.1 Primary font: Base Neue (headings) ----------
+   Base Neue is a licensed dafont family and is not bundled, so
+   Poppins Bold carries the heading weight until the licence lands.
+   ---------- 3.2 Secondary font: Poppins (everything else) ----- */
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('/brand/fonts/Poppins-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/brand/fonts/Poppins-Medium.ttf') format('truetype');
+  font-weight: 500 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/brand/fonts/Poppins-Bold.ttf') format('truetype');
+  font-weight: 700 900;
+  font-display: swap;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   الخط العربي للواجهة — Cairo
+   ═══════════════════════════════════════════════════════════════
+
+   ⚠️ **قرار 2026-07-31:** واجهة السيستم بالعربي بقت Cairo بدل Zagma.
+   Zagma خط عناوين (Display) — ممتاز في اللوجو والبوستر، بس في جدول
+   فيه 40 صف وأرقام صغيرة بيبقى تعبان للقراية. Cairo مصمّم للواجهات
+   والشاشات وبيقرا مريح في المقاسات الصغيرة.
+
+   ⚠️ **Zagma مااتشالش** — لسه محمّل تحت ومتاح للطباعة والعناوين
+   البراندية. مسح الملفات كان هيكسر أي حاجة بتستخدمه.
+
+   ⚠️ **الملفات محلية مش من CDN.** السيستم بيشتغل على XAMPP محلي،
+   ورابط جوجل فونتس معناه إن الخط بيختفي أول ما النت يقطع.
+
+   الوزن: 400 عادي · 500 متوسط · 600 نص عريض · 700-900 عريض
+   الرخصة: SIL Open Font License 1.1 — `fonts/Cairo-OFL.txt` */
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cairo';
+  src: url('/brand/fonts/Cairo-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-display: swap;
+}
+
+/* خط العناوين البراندي — F37 Zagma. للطباعة والعناوين، مش للواجهة. */
+@font-face {
+  font-family: 'Zagma';
+  src: url('/brand/fonts/Zagma-Regular.otf') format('opentype');
+  font-weight: 400 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Zagma';
+  src: url('/brand/fonts/Zagma-Black.otf') format('opentype');
+  font-weight: 700 900;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- 2.1 Main palette ---------- */
+  --royal-blue:   #12399B;   /* primary   R18  G57  B155 */
+  --purple-heart: #602D90;   /* primary   R96  G45  B144 */
+  --razzmatazz:   #D74297;   /* secondary R215 G66  B151 */
+  --brand-yellow: #FFF927;   /* secondary R255 G249 B39  */
+
+  /* تدرجات الأزرق */
+  --blue-700: #12399B;
+  --blue-600: #194FBD;
+  --blue-500: #2470E3;
+  --blue-400: #389CFF;
+  --blue-200: #82C7FF;
+  --blue-050: #E8F1FF;
+
+  /* تدرجات البنفسجي */
+  --purple-700: #602D90;
+  --purple-600: #6E38AD;
+  --purple-500: #7D40D6;
+  --purple-400: #914FFC;
+  --purple-200: #C4A6FF;
+  --purple-050: #F2ECFF;
+
+  /* ---------- 2.2 Flavours palette ---------- */
+  --flv-peanut:   #693300;
+  --flv-caramel:  #FFC796;
+  --flv-mango:    #FFA600;
+  --flv-ice:      #C9EBFF;
+  --flv-lemon:    #FFF759;
+  --flv-cream:    #FFF0E3;
+  --flv-berry:    #BF2917;
+  --flv-sky:      #82C7FF;
+
+  /* ---------- محايدات الواجهة ---------- */
+  --ink:     #0A0A0F;
+  --paper:   #F5F5F5;        /* خلفية الجايد لاين نفسها */
+  --card:    #FFFFFF;
+  --card2:   #F1F1F4;
+  --border:  #E4E4EA;
+  --text:    #12121A;
+  --muted:   #6B6B7B;
+
+  /* ---------- دلالات ---------- */
+  --primary:      var(--royal-blue);
+  --primary-deep: #0C2870;
+  --accent:       var(--purple-heart);
+  --green: #16A34A;
+  --red:   #DC2626;
+  --orange:#EA8C1C;
+  --blue:  var(--blue-500);
+  --purple:var(--purple-500);
+  --pink:  var(--razzmatazz);
+
+  /* ---------- شكل ---------- */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --shadow: 0 1px 2px rgba(10,10,15,.05), 0 8px 24px rgba(18,57,155,.07);
+  --shadow-lift: 0 8px 32px rgba(18,57,155,.16);
+
+  /* التدرج الرسمي — أزرق لبنفسجي */
+  --brand-gradient: linear-gradient(135deg, var(--royal-blue) 0%, var(--purple-heart) 100%);
+  --brand-gradient-soft: linear-gradient(135deg, var(--blue-500) 0%, var(--purple-500) 100%);
+
+  /* ---------- توافقية ----------
+     الهوية القديمة كانت دهبي. الأسماء دي متسيبة عشان أي شاشة
+     لسه بتناديها ما تكسرش، وبتوجّه على الأزرق الملكي.
+     ممنوع تستخدمها في كود جديد — استخدم --primary. */
+  --gold:      var(--royal-blue);
+  --gold-deep: var(--primary-deep);
+}
+
+/* ═══════════ الصاعقة كعلامة مائية ═══════════
+   العنصر الأساسي للبراند (4.1). بيتحط على الكروت والصفحات
+   بشفافية خفيفة — ممنوع يزيد عن .06 عشان مايأثرش على القراءة. */
+.bolt-mark {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: -2%;
+  transform: translateY(-50%) rotate(-8deg);
+  width: 220px;
+  color: var(--royal-blue);
+  opacity: .05;
+  pointer-events: none;
+  z-index: 0;
+}
+.bolt-mark.sm  { width: 120px; opacity: .06 }
+.bolt-mark.lg  { width: 380px; opacity: .04 }
+.has-bolt { position: relative; overflow: hidden }
+.has-bolt > * { position: relative; z-index: 1 }
+
+/* الصاعقة كأيقونة صغيرة جنب العناوين */
+.bolt-icon {
+  width: .72em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -.08em;
+  color: var(--royal-blue);
+}
+
+@media print {
+  .bolt-mark { opacity: .035 }
+}

@@ -1,0 +1,54 @@
+<?php
+
+/** Sidebar navigation + page titles. */
+return [
+    'batch_report' => 'Stock & Expiry',
+
+
+    'app_name' => 'PROMAX ERP',
+    'tagline' => 'Distribution Management System',
+
+    // ---------- Groups ----------
+    'group_management' => 'Management',
+    'group_operations' => 'Field Operations',
+    'group_settings' => 'Settings',
+
+    // ---------- Links ----------
+    'overview' => 'Overview',
+    'clients' => 'Clients',
+    'chains' => 'Chains',
+    'channels' => 'Channels',
+    'contracts' => 'Contracts',
+    'inventory' => 'Inventory',
+    'warehouse' => 'Warehouse',
+    'receipts' => 'Goods Receipts',
+    'shelves' => 'Shelves',
+    'expiry' => 'Expiry Report',
+    'transfers' => 'Transfers',
+    'pick_orders' => 'Picking Orders',
+    'reports' => 'Reports',
+
+    'ops_dashboard' => 'Operations',
+    'purchase_orders' => 'Purchase Orders',
+    'invoices' => 'Invoices',
+    'client_requests' => 'Client Approvals',
+    'replenishments' => 'Replenishment Requests',
+    'merch_visits' => 'Merchandising Visits',
+    'tracking' => 'Tracking',
+
+    'team' => 'Team',
+    'language' => 'Language',
+
+    'dues' => 'Contract Dues',
+    'import' => 'Import Data',
+    'tax' => 'Tax settings',
+    'eta' => 'E-invoicing',
+    'stock_counts' => 'Stock counts',
+    'leads' => 'Leads',
+    'journeys' => 'Journey plans',
+    'assignments' => 'Assignments',
+    'live' => 'Live board',
+    'reps' => 'Reps',
+    'branches' => 'Branches',
+    'vehicles' => 'Vehicles',
+];

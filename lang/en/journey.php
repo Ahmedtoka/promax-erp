@@ -1,0 +1,72 @@
+<?php
+
+return [
+
+    'page' => 'Journey plans',
+    'page_sub' => 'Who visits whom, and when',
+    'plan' => 'Journey plan',
+    'week_plan' => 'Weekly plan',
+    'rep' => 'Rep',
+    'add_to_day' => 'Add clients to this day',
+    'no_plan_day' => 'No clients on this day',
+    'no_reps' => 'No active reps',
+    'available_clients' => 'Available clients',
+    'no_available' => 'All of this rep clients are already in the plan',
+    'frequency' => 'Frequency',
+    'freq_1' => 'Every week',
+    'freq_2' => 'Every other week',
+    'freq_4' => 'Once a month',
+    'sort' => 'Order',
+
+    // ═══ Weekdays — numbered like Carbon: 0 is Sunday ═══
+    'day_0' => 'Sunday',
+    'day_1' => 'Monday',
+    'day_2' => 'Tuesday',
+    'day_3' => 'Wednesday',
+    'day_4' => 'Thursday',
+    'day_5' => 'Friday',
+    'day_6' => 'Saturday',
+
+    // ═══ Assignments ═══
+    'assignments' => 'Client & zone assignment',
+    'assignments_sub' => 'Each rep with their clients and zones',
+    'my_clients' => 'Rep clients',
+    'my_zones' => 'Rep zones',
+    'orphans' => 'Clients with no rep',
+    'orphans_hint' => 'Nobody owns these — nobody visits them and nobody collects from them',
+    'assign_selected' => 'Assign selected',
+    'unassign' => 'Remove assignment',
+    'select_all' => 'Select all',
+    'no_clients' => 'This rep has no clients assigned',
+    'no_orphans' => 'Every client has a rep — all good',
+    'clients_count' => 'Clients',
+
+    // ═══ Live board ═══
+    'live' => 'Live board',
+    'live_sub' => 'Reps out in the field right now',
+    'on_map' => 'Showing on the map',
+    'no_location' => 'No location today',
+    'last_seen' => 'Last seen',
+    'minutes_ago' => ':count minutes ago',
+    'now' => 'Just now',
+    'planned' => 'Planned',
+    'done' => 'Done',
+    'in_visit' => 'In a visit',
+    'pending' => 'Remaining',
+    'off_plan' => 'Off plan',
+    'off_plan_hint' => 'Visits to clients not in today plan — real work, but not counted in the percentage',
+    'completion' => 'Completion',
+    'stock_value' => 'Van stock value',
+    'stock_units' => 'Units on the van',
+    'active_reps' => 'Reps moving',
+    'rep_day' => 'Rep day',
+    'no_activity' => 'No activity today',
+    'refresh_note' => 'This board refreshes itself every minute',
+
+    // ═══ Messages ═══
+    'added' => ':count clients added to the plan',
+    'removed' => 'Client removed from the plan',
+    'reordered' => 'Order saved',
+    'assigned' => ':count clients assigned',
+    'unassigned' => ':client now has no rep',
+];

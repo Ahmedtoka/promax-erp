@@ -1,0 +1,26 @@
+<?php
+
+/** Mobile API: authentication, permissions, and state errors returned to the app. */
+return [
+
+    // ---------- Authentication ----------
+    'token_missing' => 'Authentication token is missing.',
+    'token_invalid' => 'Your session has expired — please sign in again.',
+    'not_signed_in' => 'You are not signed in.',
+    'bad_credentials' => 'Wrong login or password.',
+    'no_app_access' => 'This account has no access to the app.',
+    'signed_out' => 'Signed out.',
+
+    // ---------- Permissions ----------
+    'forbidden' => 'You are not allowed to do this.',
+    'not_your_visit' => 'This visit is not yours.',
+    'order_not_yours' => 'This purchase order is not assigned to you.',
+    'not_your_channel' => 'This request belongs to a channel you do not manage.',
+
+    // ---------- State ----------
+    'order_not_pending' => 'This purchase order is not pending.',
+    'request_already_decided' => 'This request has already been decided.',
+    'request_already_assigned' => 'This request has already been assigned.',
+    'unknown_price_mode' => 'Unknown price mode.',
+
+];

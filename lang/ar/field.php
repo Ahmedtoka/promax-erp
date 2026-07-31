@@ -1,0 +1,110 @@
+<?php
+
+/** الفريق الميداني: العهدة، الزيارات، التسليم، الريفيل. */
+return [
+
+    // ---------- العهدة ----------
+    'van_stock' => 'العهدة',
+    'load_van' => 'تحميل عهدة',
+    'close_van_stock' => 'قفل العهدة',
+    'loaded' => 'المحمّل',
+    'sold' => 'المباع',
+    'returned' => 'المرتجع',
+    'remaining' => 'المتبقي',
+    'custody_not_enough' => 'العهدة ناقصة :short وحدة من :product.',
+    'custody_closed' => 'عهدة النهارده مقفولة خلاص.',
+    'no_custody_today' => 'مفيش عهدة محمّلة النهارده.',
+
+    // ---------- الزيارات ----------
+    'visit' => 'زيارة',
+    'visits' => 'الزيارات',
+    'check_in' => 'تشيك إن',
+    'check_out' => 'تشيك أوت',
+    'open_visit' => 'عندك زيارة مفتوحة بالفعل.',
+    'duration' => 'المدة',
+
+    // ---------- التسليم ----------
+    'purchase_order' => 'أمر توريد',
+    'purchase_orders' => 'أوامر التوريد',
+    'deliver' => 'تسليم',
+    'arrive' => 'تسجيل وصول',
+    'must_arrive_first' => 'سجّل الوصول الأول قبل التسليم.',
+
+    // ---------- الريفيل ----------
+    'merchandising_visit' => 'زيارة رف',
+    'shelf' => 'الرف',
+    'shelf_before' => 'الرف قبل',
+    'shelf_after' => 'الرف بعد',
+    'branch_store_room' => 'مخزن الفرع',
+    'moved_to_shelf' => 'اتنقل للرف',
+    'out_of_stock' => 'ناقص خالص',
+    'photos_required' => 'لازم صورة الرف قبل وبعد.',
+    'moved_exceeds_store' => 'مينفعش تنقل أكتر من اللي في مخزن الفرع.',
+
+    'replenishment' => 'ريفيل',
+    'replenishment_request' => 'طلب ريفيل',
+    'assign_to_rep' => 'تنزيل على مندوب',
+    'awaiting_dispatch' => 'مستني التوزيع',
+
+    // ---------- التراكينج ----------
+    'tracking' => 'التراكينج',
+    'activity' => 'التحركات',
+    'journey_plan' => 'خط السير',
+    'coverage' => 'التغطية',
+    'zone' => 'الزون',
+
+    // ---------- رسائل فلو الأبلكيشن ----------
+    'must_check_out_first' => 'لازم تعمل تشيك أوت من :client الأول.',
+    'must_close_visit_first' => 'لازم تقفل زيارة :client الأول.',
+    'visit_already_closed' => 'الزيارة مقفولة أصلاً.',
+    'visit_has_replenishment' => 'الزيارة دي فيها طلب ريفيل بالفعل.',
+    'photo_before_required' => 'لازم تصوّر الرف قبل الريفيل.',
+    'photo_after_required' => 'لازم تصوّر الرف بعد الريفيل.',
+    'moved_exceeds_store_qty' => 'مش ممكن تنقل :moved من :product ومخزن الفرع فيه :store بس.',
+    'cash_only_client' => 'العميل ده تحصيل فوري — البيع كاش بس.',
+
+    // ---------- مسميات حقول الفاليديشن ----------
+    'attr_place_name' => 'اسم المكان',
+    'attr_place_photo' => 'صورة المكان',
+    'attr_official_docs' => 'الأوراق الرسمية',
+    'attr_shelf_photo' => 'صورة الرف',
+
+    // ---------- أحداث التايم لاين ----------
+    'event_check_in' => 'تشيك إن — :client',
+    'event_check_out' => 'تشيك أوت — :client',
+    'event_visit_minutes' => 'مدة الزيارة :minutes دقيقة',
+    'event_invoice' => 'فاتورة :number — :client',
+    'event_arrived' => 'وصول — :client',
+    'event_delivered' => 'تسليم :number — :client',
+    'event_delivered_sub' => ':qty وحدة • :amount ج',
+    'event_client_request' => 'طلب عميل جديد — :name',
+    'event_awaiting_manager' => 'مستني موافقة المدير',
+    'event_merch_visit' => 'زيارة رف — :client',
+    'event_replenishment' => 'طلب ريفيل :number — :client',
+    'event_qty_requested' => ':qty قطعة مطلوبة',
+    'event_refill' => 'ريفيل — :client',
+    'event_refill_sub' => ':moved قطعة اتنقلت للرف • :short صنف ناقص',
+    'event_exit' => 'خروج — :client',
+    'event_extra_load' => 'تحميل إضافي على العربية',
+    'event_loaded_by' => 'من :name',
+
+    // ---------- الإشعارات ----------
+    'notif_client_approved_title' => 'تمت الموافقة على :name',
+    'notif_client_approved_body' => 'العميل اتضاف لزونك — تقدر تعمله فاتورة.',
+    'notif_client_review_title' => 'طلب :name تحت المراجعة',
+    'notif_client_review_body' => 'العميل هياخد وقت للمراجعة.',
+    'notif_client_rejected_title' => 'طلب :name اترفض',
+    'notif_client_rejected_body' => 'مينفعش تعمل فواتير للعميل ده.',
+    'notif_replenishment_pending_title' => 'طلب ريفيل :number مستني موافقتك',
+    'notif_replenishment_pending_body' => ':client — :qty قطعة — من :user',
+    'notif_replenishment_rejected_title' => 'طلب :number اترفض',
+    'notif_replenishment_rejected_body' => 'راجع المدير بتاعك.',
+    'notif_replenishment_new_title' => 'طلب ريفيل جديد :number',
+    'notif_replenishment_new_body' => ':client — :amount ج',
+    'notif_replenishment_assigned_title' => 'طلبك :number اتنزّل على :name',
+    'notif_replenishment_assigned_body' => 'هيتورد لـ :client قريب.',
+    'notif_po_new_title' => 'أمر توريد جديد :number',
+    'notif_po_new_body' => ':client — :amount ج',
+    'notif_po_assigned_title' => 'اتنزّل عليك أمر توريد :number',
+
+];

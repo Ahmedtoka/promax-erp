@@ -1,0 +1,111 @@
+<?php
+
+/** Field team: van stock, visits, deliveries, merchandising. */
+return [
+
+    // ---------- Van stock ----------
+    'van_stock' => 'Van Stock',
+    'load_van' => 'Load Van',
+    'close_van_stock' => 'Close Van Stock',
+    'loaded' => 'Loaded',
+    'sold' => 'Sold',
+    'returned' => 'Returned',
+    'remaining' => 'Remaining',
+    'custody_not_enough' => 'Van stock is short by :short units of :product.',
+    'custody_closed' => 'Van stock for today is already closed.',
+    'no_custody_today' => 'No van stock loaded today.',
+
+    // ---------- Visits ----------
+    'visit' => 'Visit',
+    'visits' => 'Visits',
+    'check_in' => 'Check-in',
+    'check_out' => 'Check-out',
+    'open_visit' => 'You already have an open visit.',
+    'duration' => 'Duration',
+
+    // ---------- Deliveries ----------
+    'purchase_order' => 'Purchase Order',
+    'purchase_orders' => 'Purchase Orders',
+    'deliver' => 'Deliver',
+    'arrive' => 'Mark Arrived',
+    'must_arrive_first' => 'Mark the order as arrived before delivering it.',
+
+    // ---------- Merchandising ----------
+    'merchandising_visit' => 'Merchandising Visit',
+    'shelf' => 'Shelf',
+    'shelf_before' => 'Shelf Before',
+    'shelf_after' => 'Shelf After',
+    'branch_store_room' => 'Branch Store Room',
+    'moved_to_shelf' => 'Moved to Shelf',
+    'out_of_stock' => 'Out of Stock',
+    'photos_required' => 'Both the before and after shelf photos are required.',
+    'moved_exceeds_store' => 'You cannot move more than what is in the branch store room.',
+
+    // ---------- Replenishment ----------
+    'replenishment' => 'Replenishment',
+    'replenishment_request' => 'Replenishment Request',
+    'assign_to_rep' => 'Assign to Rep',
+    'awaiting_dispatch' => 'Awaiting Dispatch',
+
+    // ---------- Tracking ----------
+    'tracking' => 'Tracking',
+    'activity' => 'Activity',
+    'journey_plan' => 'Journey Plan',
+    'coverage' => 'Coverage',
+    'zone' => 'Zone',
+
+    // ---------- App flow messages ----------
+    'must_check_out_first' => 'Check out of :client first.',
+    'must_close_visit_first' => 'Close the visit at :client first.',
+    'visit_already_closed' => 'This visit is already closed.',
+    'visit_has_replenishment' => 'This visit already has a replenishment request.',
+    'photo_before_required' => 'Take the shelf photo before the refill first.',
+    'photo_after_required' => 'Take the shelf photo after the refill first.',
+    'moved_exceeds_store_qty' => 'You cannot move :moved of :product — the branch store room only has :store.',
+    'cash_only_client' => 'This client is collection on delivery — cash sales only.',
+
+    // ---------- Validation attribute names ----------
+    'attr_place_name' => 'place name',
+    'attr_place_photo' => 'photo of the place',
+    'attr_official_docs' => 'official documents',
+    'attr_shelf_photo' => 'shelf photo',
+
+    // ---------- Timeline events ----------
+    'event_check_in' => 'Check-in — :client',
+    'event_check_out' => 'Check-out — :client',
+    'event_visit_minutes' => 'Visit lasted :minutes minutes',
+    'event_invoice' => 'Invoice :number — :client',
+    'event_arrived' => 'Arrived — :client',
+    'event_delivered' => 'Delivered :number — :client',
+    'event_delivered_sub' => ':qty units • EGP :amount',
+    'event_client_request' => 'New client request — :name',
+    'event_awaiting_manager' => 'Awaiting the manager’s approval',
+    'event_merch_visit' => 'Merchandising visit — :client',
+    'event_replenishment' => 'Replenishment :number — :client',
+    'event_qty_requested' => ':qty units requested',
+    'event_refill' => 'Refill — :client',
+    'event_refill_sub' => ':moved units moved to the shelf • :short items short',
+    'event_exit' => 'Left — :client',
+    'event_extra_load' => 'Extra load on the van',
+    'event_loaded_by' => 'By :name',
+
+    // ---------- Notifications ----------
+    'notif_client_approved_title' => ':name has been approved',
+    'notif_client_approved_body' => 'The client was added to your zone — you can invoice them now.',
+    'notif_client_review_title' => 'Request for :name is under review',
+    'notif_client_review_body' => 'This client needs more time to be reviewed.',
+    'notif_client_rejected_title' => 'Request for :name was rejected',
+    'notif_client_rejected_body' => 'You cannot invoice this client.',
+    'notif_replenishment_pending_title' => 'Replenishment :number is waiting for your approval',
+    'notif_replenishment_pending_body' => ':client — :qty units — from :user',
+    'notif_replenishment_rejected_title' => 'Request :number was rejected',
+    'notif_replenishment_rejected_body' => 'Check with your manager.',
+    'notif_replenishment_new_title' => 'New replenishment :number',
+    'notif_replenishment_new_body' => ':client — EGP :amount',
+    'notif_replenishment_assigned_title' => 'Your request :number was assigned to :name',
+    'notif_replenishment_assigned_body' => 'It will be delivered to :client soon.',
+    'notif_po_new_title' => 'New purchase order :number',
+    'notif_po_new_body' => ':client — EGP :amount',
+    'notif_po_assigned_title' => 'Purchase order :number was assigned to you',
+
+];

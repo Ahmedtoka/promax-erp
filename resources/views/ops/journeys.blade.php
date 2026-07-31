@@ -1,0 +1,153 @@
+@extends('layouts.system')
+
+@section('title', __('journey.page'))
+
+@php
+    $fmt = fn ($n) => number_format((float) $n);
+@endphp
+
+@section('actions')
+    <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
+    <a class="btn" href="{{ route('ops.live') }}">📡 {{ __('journey.live') }}</a>
+@endsection
+
+@section('content')
+
+<div class="card">
+    <h3>🗺️ {{ __('journey.page') }} <span class="side">{{ __('journey.page_sub') }}</span></h3>
+
+    @if ($rep === null)
+        <div class="alert warn">{{ __('journey.no_reps') }}</div>
+    @else
+        <form method="GET" action="{{ route('ops.journeys') }}" class="searchbar">
+            <div>
+                <label class="f">{{ __('journey.rep') }}</label>
+                <select name="rep" onchange="this.form.submit()">
+                    @foreach ($reps as $r)
+                        <option value="{{ $r->id }}" @selected($rep->id === $r->id)>
+                            {{ $r->displayName() }} — {{ $r->roleLabel() }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+        </form>
+    @endif
+</div>
+
+@if ($rep !== null)
+
+{{-- ═══════════ الأسبوع ═══════════ --}}
+<div class="card">
+    <h3>📅 {{ __('journey.week_plan') }} <span class="side">{{ $rep->displayName() }}</span></h3>
+
+    <div class="weekgrid">
+        @foreach ($weekdays as $day)
+            @php $plans = $week[$day] ?? collect(); @endphp
+            <div class="daycol {{ $day === $today ? 'istoday' : '' }}">
+                <div class="dayhead">
+                    {{ __('journey.day_'.$day) }}
+                    <span class="cnt">{{ $plans->count() }}</span>
+                </div>
+
+                @forelse ($plans as $p)
+                    <div class="planrow">
+                        <div style="min-width:0">
+                            <b style="font-size:12px">{{ $p->client->displayName() }}</b>
+                            @if ($p->every_weeks > 1)
+                                <br><span class="s">{{ $p->frequencyLabel() }}</span>
+                            @endif
+                        </div>
+                        <form method="POST" action="{{ route('ops.journeys.destroy', $p) }}">
+                            @csrf @method('DELETE')
+                            <button class="xbtn" title="{{ __('journey.removed') }}">✕</button>
+                        </form>
+                    </div>
+                @empty
+                    <div class="s" style="padding:10px 4px;color:var(--muted)">{{ __('journey.no_plan_day') }}</div>
+                @endforelse
+
+                <button class="btn sm" style="width:100%;margin-top:6px"
+                        onclick="openAdd({{ $day }})">➕</button>
+            </div>
+        @endforeach
+    </div>
+</div>
+
+{{-- ═══════════ إضافة عملاء ═══════════ --}}
+<dialog id="dlgAddPlan">
+    <form class="dlg" method="POST" action="{{ route('ops.journeys.store') }}" style="max-height:86vh;overflow-y:auto">
+        @csrf
+        <input type="hidden" name="user_id" value="{{ $rep->id }}">
+        <input type="hidden" name="weekday" id="addDay" value="0">
+
+        <h4>{{ __('journey.add_to_day') }} — <span id="addDayLabel"></span></h4>
+
+        <div>
+            <label class="f">{{ __('journey.frequency') }}</label>
+            <select name="every_weeks" style="width:100%">
+                @foreach ($frequencies as $f)
+                    <option value="{{ $f }}">{{ __('journey.freq_'.$f) }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div style="margin-top:12px">
+            <label class="f">{{ __('journey.available_clients') }} ({{ $available->count() }})</label>
+
+            @if ($available->isEmpty())
+                <div class="alert info">{{ __('journey.no_available') }}</div>
+            @else
+                <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px">
+                    @foreach ($available as $c)
+                        <label style="display:flex;align-items:center;gap:8px;padding:5px 3px;font-size:12.5px">
+                            <input type="checkbox" name="client_ids[]" value="{{ $c->id }}">
+                            <span>{{ $c->displayName() }}</span>
+                            <span class="s" style="margin-inline-start:auto">{{ $c->zone?->displayName() }}</span>
+                        </label>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgAddPlan')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit" @disabled($available->isEmpty())>{{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+
+@endif
+
+@endsection
+
+@section('scripts')
+@php
+    // أسماء الأيام جاهزة للجافاسكريبت — البليد مابيشتغلش جوه السكريبت
+    $dayNames = [];
+    foreach ($weekdays as $d) {
+        $dayNames[$d] = __('journey.day_'.$d);
+    }
+@endphp
+<script>
+    const DAY_NAMES = {!! json_encode($dayNames, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+
+    function openAdd(day) {
+        document.getElementById('addDay').value = day;
+        document.getElementById('addDayLabel').textContent = DAY_NAMES[day] || '';
+        openDlg('dlgAddPlan');
+    }
+</script>
+<style>
+.weekgrid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto}
+@media(max-width:1200px){.weekgrid{grid-template-columns:repeat(4,minmax(150px,1fr))}}
+@media(max-width:700px){.weekgrid{grid-template-columns:repeat(2,minmax(140px,1fr))}}
+.daycol{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:10px;min-width:0}
+.daycol.istoday{border-color:var(--royal-blue);box-shadow:0 0 0 2px rgba(18,57,155,.12)}
+.dayhead{font-size:12px;font-weight:800;color:var(--royal-blue);display:flex;align-items:center;gap:6px;padding-bottom:7px;margin-bottom:7px;border-bottom:1px solid var(--border)}
+.dayhead .cnt{margin-inline-start:auto;background:var(--royal-blue);color:#fff;border-radius:20px;padding:1px 8px;font-size:10.5px}
+.planrow{display:flex;align-items:center;gap:6px;background:var(--card);border-radius:8px;padding:6px 8px;margin-bottom:5px}
+.planrow .s{font-size:10px;color:var(--muted)}
+.xbtn{margin-inline-start:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px;font-family:inherit}
+.xbtn:hover{color:var(--red)}
+</style>
+@endsection

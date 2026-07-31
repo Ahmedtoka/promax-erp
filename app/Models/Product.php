@@ -1,0 +1,278 @@
+<?php
+
+namespace App\Models;
+
+use App\Models\Concerns\HasBilingualName;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Product extends Model
+{
+    use HasBilingualName, HasFactory;
+    
+    public const FAMILIES = [
+        'promax_bar' => 'بروماكس بار',
+        'promax_cup' => 'بروكب',
+        'spreads' => 'سبريدز',
+        'pmx_bar' => 'PMX بار',
+        'energy_bar' => 'إنرچي بار',
+    ];
+
+    /** مدة الصلاحية الافتراضية بالشهور لو المنتج مش متحدد له */
+    public const DEFAULT_SHELF_LIFE = 12;
+
+    /**
+     * مدة الصلاحية بالشهور حسب العائلة.
+     *
+     * ⚠️ **كانت مكتوبة في `Gs1CatalogueSeeder` لوحده.** أي كود تاني
+     * بيعمل منتج كان بيسيب الخانة فاضية، والصنف بياخد 12 شهر
+     * افتراضي — والكوب الحقيقي 9. الفرق ده بيخلّي السيستم يقول إن
+     * بضاعة سليمة وهي منتهية بـ3 شهور.
+     */
+    public const SHELF_LIFE = [
+        'promax_bar' => 12,
+        'pmx_bar' => 12,
+        'energy_bar' => 12,
+        'promax_cup' => 9,
+        'spreads' => 18,
+    ];
+
+    protected $fillable = [
+        'code', 'barcode', 'case_barcode', 'units_per_case',
+        'name', 'name_en', 'unit', 'unit_en',
+        'cost', 'price_old', 'price_new', 'price_changed_at',
+        'net_content', 'net_uom', 'family', 'brand',
+        'image_url', 'image_path', 'gpc_category',
+        'description', 'description_en', 'shelf_life_months',
+        'active', 'taxable', 'tax_rate', 'eta_code',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'taxable' => 'boolean',
+            'tax_rate' => 'decimal:4',
+            'cost' => 'decimal:2',
+            'price_old' => 'decimal:2',
+            'price_new' => 'decimal:2',
+            'price_changed_at' => 'date',
+            'net_content' => 'decimal:2',
+            'active' => 'boolean',
+        ];
+    }
+
+    /**
+     * أرصدة الصنف — **صف لكل مخزن**.
+     *
+     * ⚠️ **`stock()` المفردة اتشالت.** كانت `HasOne` بترجّع صف واحد
+     * معناه «الشركة كلها عندها كام» من غير أي فكرة عن المكان. مع
+     * مخزنين بقى الرقم ده بيكدب: المخزن بيطلب بضاعة موجودة عنده،
+     * أو بيقول إنه فاضي وهو مليان والرقم بتاع المخزن التاني.
+     *
+     * أي كود بيقرا الإجمالي لازم يستخدم `qtyTotal()` وأخواتها —
+     * وأي كود بيقرا مخزن معيّن يستخدم `stockIn()`.
+     */
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(Stock::class);
+    }
+
+    /** رصيد الصنف في مخزن واحد */
+    public function stockIn(int|Warehouse|null $warehouse): ?Stock
+    {
+        $id = $warehouse instanceof Warehouse ? $warehouse->id : $warehouse;
+
+        if ($id === null) {
+            return null;
+        }
+
+        // ⚠️ `firstWhere` على المجموعة المحمّلة مش كويري جديدة —
+        // الشاشة بتلف على 31 صنف × مخزنين، وكويري لكل خانة معناها
+        // 62 كويري في الصفحة.
+        return $this->relationLoaded('stocks')
+            ? $this->stocks->firstWhere('warehouse_id', $id)
+            : $this->stocks()->where('warehouse_id', $id)->first();
+    }
+
+    /**
+     * الإجمالي عبر كل المخازن.
+     *
+     * ⚠️ بتجمع من العلاقة المحمّلة. لو مش محمّلة بتعمل كويري —
+     * فأي قايمة منتجات لازم `->with('stocks')`.
+     */
+    public function qtyTotal(): int
+    {
+        return (int) $this->stocks->sum('qty');
+    }
+
+    public function holdTotal(): int
+    {
+        return (int) $this->stocks->sum('hold_qty');
+    }
+
+    public function goodTotal(): int
+    {
+        return (int) $this->stocks->sum('good_qty');
+    }
+
+    /** كمية الصنف في مخزن معيّن — صفر لو مالوش صف هناك */
+    public function qtyIn(int|Warehouse|null $warehouse): int
+    {
+        return (int) ($this->stockIn($warehouse)->qty ?? 0);
+    }
+
+    /**
+     * الصورة اللي بتتعرض — المرفوعة بتغلب.
+     *
+     * ⚠️ **الترتيب مقصود.** `image_url` جاي من فيد GS1 على سيرفر
+     * خارجي، وصنف واحد بس من 31 عنده رابط — والباقي فاضي. المرفوع
+     * هو اللي المستخدم شافه واختاره، والرابط الخارجي ممكن يقع في
+     * أي وقت من غير ما حد ياخد باله.
+     */
+    public function imageSrc(): ?string
+    {
+        if ($this->image_path) {
+            // ⚠️ `asset('storage/...')` بيحتاج `php artisan storage:link`.
+            // من غيره الصورة بتطلع 404 والمستخدم بيفتكر إن الرفع فشل.
+            return asset('storage/'.$this->image_path);
+        }
+
+        return $this->image_url ?: null;
+    }
+
+    /** الصورة مرفوعة من عندنا ولا جاية من GS1؟ */
+    public function imageIsOurs(): bool
+    {
+        return (bool) $this->image_path;
+    }
+
+    /** الوصف باللغة الحالية */
+    public function descriptionLabel(): ?string
+    {
+        $text = $this->localized('description');
+
+        return trim((string) $text) !== '' ? $text : null;
+    }
+
+    public function batches(): HasMany
+    {
+        return $this->hasMany(Batch::class);
+    }
+
+    public function familyLabel(): string
+    {
+        // المسمى بييجي من lang/{ar,en}/enums.php — والثابت القديم fallback
+        $key = 'enums.family.'.$this->family;
+
+        return \Illuminate\Support\Facades\Lang::has($key)
+            ? __($key)
+            : (self::FAMILIES[$this->family] ?? $this->family);
+    }
+
+    /** الوحدة باللغة الحالية */
+    public function unitLabel(): string
+    {
+        return $this->localized('unit');
+    }
+
+    /** الوزن بالشكل الكامل: "70 g" */
+    public function netLabel(): ?string
+    {
+        if (blank($this->net_content)) {
+            return null;
+        }
+
+        return rtrim(rtrim(number_format((float) $this->net_content, 2, '.', ''), '0'), '.')
+            .' '.($this->net_uom ?: 'g');
+    }
+
+    /**
+     * سعر القائمة — old أو new. مفيش خصم هنا.
+     * ⚠️ لسعر عميل استخدم Pricing::unitPrice($client, $product).
+     */
+    public function priceFor(string $list): float
+    {
+        return \App\Services\Pricing::byList($this, $list);
+    }
+
+    /** سعر البيع المعتمد افتراضياً — الجديد */
+    public function sellingPrice(string $list = \App\Services\Pricing::LIST_NEW): float
+    {
+        return \App\Services\Pricing::listPrice($this, $list);
+    }
+
+    /** هامش الربح على السعر الجديد */
+    public function marginPct(string $list = \App\Services\Pricing::LIST_NEW): float
+    {
+        return \App\Services\Pricing::marginPct($this, $list);
+    }
+
+    /** السعر اتغير؟ يعني القديم مش زي الجديد */
+    public function priceChanged(): bool
+    {
+        return (float) $this->price_old !== (float) $this->price_new;
+    }
+
+    /** الفرق بين الجديد والقديم بالنسبة المئوية */
+    public function priceDeltaPct(): float
+    {
+        $old = (float) $this->price_old;
+
+        return $old > 0 ? round(((float) $this->price_new - $old) / $old, 4) : 0.0;
+    }
+
+    public function shelfLife(): int
+    {
+        return (int) ($this->shelf_life_months ?: self::DEFAULT_SHELF_LIFE);
+    }
+
+    /** تاريخ الانتهاء المتوقع من تاريخ إنتاج */
+    public function expiryFrom(\DateTimeInterface|string $producedOn): \Carbon\Carbon
+    {
+        return \Carbon\Carbon::parse($producedOn)->addMonths($this->shelfLife());
+    }
+
+    // ==================== المخزون والباتشات ====================
+
+    /** المتاح للبيع فعلياً = مجموع الباتشات السليمة */
+    public function availableQty(): int
+    {
+        return (int) $this->batches()->sellable()->sum('qty_remaining');
+    }
+
+    /** أقرب باتش انتهاءً — ده اللي هيخرج الأول (FEFO) */
+    public function nextBatch(): ?Batch
+    {
+        return $this->batches()->sellable()->first();
+    }
+
+    /** أسوأ حالة صلاحية في المخزن — للتنبيه على شاشة المخزون */
+    public function worstExpiryState(): string
+    {
+        $batch = $this->batches()
+            ->where('qty_remaining', '>', 0)
+            ->orderBy('expires_on')
+            ->first();
+
+        return $batch?->expiryState() ?? 'ok';
+    }
+
+    /** البحث بالباركود — وحدة أو كرتونة */
+    public static function findByBarcode(string $barcode): ?self
+    {
+        $barcode = trim($barcode);
+
+        return static::where('barcode', $barcode)
+            ->orWhere('case_barcode', $barcode)
+            ->first();
+    }
+
+    /** الباركود ده بتاع كرتونة؟ يبقى الكمية × عدد الوحدات */
+    public function unitsForBarcode(string $barcode): int
+    {
+        return trim($barcode) === $this->case_barcode
+            ? (int) ($this->units_per_case ?: 1)
+            : 1;
+    }
+}
