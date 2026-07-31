@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\Rejected;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,16 +86,25 @@ class StockTransfer extends Model
      * يتلغى أو يتعدّل من غير ما حد يفتكر العمود بيخلّيه يكدب للأبد.
      * الحساب من التحويلات المفتوحة نفسها مايقدرش يختلف معاها.
      *
-     * @return array<int, int> [product_id => qty]
+     * @param  int|null  $warehouseId  مخزن واحد، أو null لكل المخازن
+     * @return array<int, int> [warehouse_id => qty] لو مافيش مخزن محدد،
+     *                         و[product_id => qty] لو فيه
      */
-    public static function inTransitFrom(int $warehouseId): array
+    public static function inTransit(?int $warehouseId = null): array
     {
+        $key = $warehouseId === null ? 'stock_transfers.from_warehouse_id' : 'i.product_id';
+
+        // ⚠️ `selectRaw` + `pluck` على اسم مستعار — `pluck(DB::raw(...))`
+        // بترمي الاسم الخام في `SELECT` وبتحاول تقراه كعمود بنفس النص،
+        // فبترجّع مصفوفة فاضية في صمت.
         return static::query()
-            ->where('from_warehouse_id', $warehouseId)
-            ->where('status', 'sent')
             ->join('stock_transfer_items as i', 'i.stock_transfer_id', '=', 'stock_transfers.id')
-            ->groupBy('i.product_id')
-            ->pluck(DB::raw('SUM(i.qty_sent)'), 'i.product_id')
+            ->where('stock_transfers.status', 'sent')
+            ->when($warehouseId !== null,
+                fn ($q) => $q->where('stock_transfers.from_warehouse_id', $warehouseId))
+            ->groupBy($key)
+            ->selectRaw("$key as k, SUM(i.qty_sent) as n")
+            ->pluck('n', 'k')
             ->map(fn ($n) => (int) $n)
             ->all();
     }
@@ -148,85 +158,135 @@ class StockTransfer extends Model
         ?string $carrier = null,
         ?string $notes = null,
     ): array {
-        $error = null;
-
-        // ⚠️ **الاستثناء بيترمي جوه عشان الترانزاكشن ترجع، وبيتمسك
-        // هنا عشان المستخدم يشوف رسالة مش صفحة 500.** الرسالة نفسها
-        // متخزنة في `$error` قبل الرمي — ومابنعتمدش على نص الاستثناء.
-        $transfer = rescue(fn () => DB::transaction(function () use (
-            $user, $fromWarehouseId, $toWarehouseId, $sentOn, $lines, $carrier, $notes, &$error
-        ) {
-            $transfer = static::create([
-                'number' => static::nextNumber(),
-                'from_warehouse_id' => $fromWarehouseId,
-                'to_warehouse_id' => $toWarehouseId,
-                'status' => 'sent',
-                'sent_on' => $sentOn,
-                'sent_by' => $user->id,
-                'carrier_name' => $carrier,
-                'notes' => $notes,
-            ]);
-
-            $touched = [];
-
-            foreach ($lines as $line) {
-                $qty = (int) $line['qty'];
-
-                $batch = Batch::whereKey($line['source_batch_id'])->lockForUpdate()->first();
-
-                // ⚠️ **الباتش لازم يكون في المخزن المرسل نفسه.** من غير
-                // الفحص ده، حد يقدر يبعت `source_batch_id` بتاع باتش في
-                // مخزن تاني ويخصم منه — والبضاعة تظهر في مخزن ثالث.
-                if (! $batch || (int) $batch->warehouse_id !== $fromWarehouseId) {
-                    $error = __('stock.batch_not_in_warehouse');
-
-                    throw new \RuntimeException('rollback');
-                }
-
-                if ((int) $batch->product_id !== (int) $line['product_id']) {
-                    $error = __('stock.batch_product_mismatch');
-
-                    throw new \RuntimeException('rollback');
-                }
-
-                if ($message = $batch->issue($qty)) {
-                    $error = $message;
-
-                    throw new \RuntimeException('rollback');
-                }
-
-                StockTransferItem::create([
-                    'stock_transfer_id' => $transfer->id,
-                    'product_id' => $batch->product_id,
-                    'source_batch_id' => $batch->id,
-                    'batch_no' => $batch->batch_no,
-                    'produced_on' => $batch->produced_on,
-                    'expires_on' => $batch->expires_on,
-                    'qty_sent' => $qty,
-                    // التكلفة بتتنقل من الباتش زي ما هي — البضاعة هي
-                    // هي، والتكلفة صفة فيها مش رقم بيتكتب كل شحنة.
-                    'cost' => $batch->cost,
+        // ⚠️ **`Rejected` مش `RuntimeException` ومش `rescue`.**
+        // `QueryException` بترث من `RuntimeException`، فلقف العام كان
+        // بيبلع الديد لوك وكسر الـFK وانقطاع الاتصال ويقول للمستخدم
+        // «الشحنة مااتبعتتش» — وأخطر حالة: الخطأ بيحصل وقت الـcommit
+        // بعد ما MySQL كتبت فعلاً، فالمستخدم يبعت تاني والباتش يتخصم
+        // مرتين لشحنة واحدة. ولا حاجة من ده كانت هتتسجّل في اللوج.
+        // القاعدة دي مكتوبة صراحةً في `App\Exceptions\Rejected`.
+        try {
+            $transfer = DB::transaction(function () use (
+                $user, $fromWarehouseId, $toWarehouseId, $sentOn, $lines, $carrier, $notes
+            ) {
+                $transfer = static::create([
+                    'number' => static::nextNumber(),
+                    'from_warehouse_id' => $fromWarehouseId,
+                    'to_warehouse_id' => $toWarehouseId,
+                    'status' => 'sent',
+                    'sent_on' => $sentOn,
+                    'sent_by' => $user->id,
+                    'carrier_name' => $carrier,
+                    'notes' => $notes,
                 ]);
 
-                $touched[(int) $batch->product_id] = true;
-            }
+                $touched = [];
 
-            foreach (array_keys($touched) as $productId) {
-                \App\Services\StockCounting::resync((int) $productId, $fromWarehouseId);
-            }
+                foreach ($lines as $line) {
+                    $qty = (int) $line['qty'];
 
-            return $transfer;
-        }), null, report: false);
+                    $batch = Batch::whereKey($line['source_batch_id'])->lockForUpdate()->first();
 
-        // ⚠️ لو الترانزاكشن رجعت من غير ما نسجّل سبب، الرسالة العامة
-        // أحسن من صفحة بيضا — بس ده مايحصلش إلا في خطأ داتابيز حقيقي.
-        if ($transfer === null && $error === null) {
-            $error = __('stock.transfer_failed');
+                    // ⚠️ **الباتش لازم يكون في المخزن المرسل نفسه.** من غير
+                    // الفحص ده، حد يقدر يبعت `source_batch_id` بتاع باتش في
+                    // مخزن تاني ويخصم منه — والبضاعة تظهر في مخزن ثالث.
+                    if (! $batch || (int) $batch->warehouse_id !== $fromWarehouseId) {
+                        throw new Rejected(__('stock.batch_not_in_warehouse'));
+                    }
+
+                    if ((int) $batch->product_id !== (int) $line['product_id']) {
+                        throw new Rejected(__('stock.batch_product_mismatch'));
+                    }
+
+                    // ⚠️ **الرف الأول، وبعدين الباتش.** `batches.qty_remaining`
+                    // المفروض يساوي مجموع `batch_locations.qty` — وده المكتوب
+                    // في الدوكترين. لو خصمنا من الباتش بس، الرف بيفضل يقول إن
+                    // البضاعة عليه: `Warehouse::availableFor()` و`PickOrder`
+                    // بيقروا من الأرفف، فأمر تجهيز بياخد نفس الكراتين اللي
+                    // مشيت، و`PickOrderItem::pull()` بتخصم من الباتش من غير
+                    // حارس فيطلع بالسالب — والبضاعة تتباع مرتين.
+                    if ($message = self::takeFromShelves($batch, $qty)) {
+                        throw new Rejected($message);
+                    }
+
+                    if ($message = $batch->issue($qty)) {
+                        throw new Rejected($message);
+                    }
+
+                    StockTransferItem::create([
+                        'stock_transfer_id' => $transfer->id,
+                        'product_id' => $batch->product_id,
+                        'source_batch_id' => $batch->id,
+                        'batch_no' => $batch->batch_no,
+                        'produced_on' => $batch->produced_on,
+                        'expires_on' => $batch->expires_on,
+                        'qty_sent' => $qty,
+                        // التكلفة بتتنقل من الباتش زي ما هي — البضاعة هي
+                        // هي، والتكلفة صفة فيها مش رقم بيتكتب كل شحنة.
+                        'cost' => $batch->cost,
+                    ]);
+
+                    $touched[(int) $batch->product_id] = true;
+                }
+
+                foreach (array_keys($touched) as $productId) {
+                    \App\Services\StockCounting::resync((int) $productId, $fromWarehouseId);
+                }
+
+                return $transfer;
+            });
+        } catch (Rejected $e) {
+            // رفض متوقّع — الترانزاكشن رجعت، ومافيش حاجة اتغيّرت.
+            return ['transfer' => null, 'error' => $e->getMessage()];
         }
 
-        $transfer?->notifyDestination();
+        // ⚠️ بره الترانزاكشن: الإشعار مش جزء من صحة الحركة.
+        $transfer->notifyDestination();
 
-        return ['transfer' => $transfer, 'error' => $error];
+        return ['transfer' => $transfer, 'error' => null];
+    }
+
+    /**
+     * خصم الكمية من أرفف الباتش بترتيب أقل رصيد أولاً.
+     *
+     * ⚠️ **الرفوف بتتقفل كلها قبل ما نخصم من أي واحد.** من غير القفل،
+     * تحويلين على نفس الباتش بيقروا نفس أرصدة الأرفف ويخصموا الاتنين،
+     * فالرف يطلع بالسالب.
+     *
+     * ⚠️ **بضاعة مستلمة ولسه مترصّفتش مش على أي رف.** الباتش اللي لسه
+     * على أرض المخزن (`unshelvedQty`) بيتخصم من الباتش مباشرةً — و
+     * `putAway` بتحسب المتاح للترصيف من `qty_remaining` ناقص المرصّف،
+     * فالحساب بيفضل مظبوط.
+     */
+    private static function takeFromShelves(Batch $batch, int $qty): ?string
+    {
+        $rows = $batch->locations()->where('qty', '>', 0)
+            ->orderBy('qty')->lockForUpdate()->get();
+
+        $shelved = (int) $rows->sum('qty');
+
+        // اللي لسه مااترصّفش بيتخصم من الباتش من غير رف
+        $left = max($qty - max((int) $batch->qty_remaining - $shelved, 0), 0);
+
+        if ($left > $shelved) {
+            return __('stock.shelf_short', ['available' => $shelved + max((int) $batch->qty_remaining - $shelved, 0)]);
+        }
+
+        foreach ($rows as $row) {
+            if ($left <= 0) {
+                break;
+            }
+
+            $take = min($left, (int) $row->qty);
+
+            if ($error = $row->take($take)) {
+                return $error;
+            }
+
+            $left -= $take;
+        }
+
+        return null;
     }
 
     /**
@@ -301,6 +361,14 @@ class StockTransfer extends Model
         // ⚠️ **الاستلام مايزيدش عن المبعوت.** المخزن المستقبِل
         // مايقدرش يخلق بضاعة — لو وصله أكتر، ده جرد مش استلام.
         foreach ($this->items as $item) {
+            // ⚠️ **بند من غير باتش مصدر معناه إن المخزن المرسل مااتخصمش.**
+            // استلامه بيزوّد المخزن المستقبِل من غير ما ينقّص المرسل،
+            // فإجمالي بضاعة الشركة بيزيد من العدم. المايجريشن بتلغي
+            // الشحنات القديمة، والفحص ده حزام أمان لو فضلت واحدة.
+            if ($item->source_batch_id === null) {
+                return ['receipt' => null, 'error' => __('stock.transfer_legacy')];
+            }
+
             $q = $receivedByItem === null ? null : ($receivedByItem[$item->id] ?? null);
 
             if ($q !== null && (int) $q > (int) $item->qty_sent) {
@@ -312,6 +380,17 @@ class StockTransfer extends Model
         }
 
         $receipt = DB::transaction(function () use ($user, $receivedByItem, $producedByItem, $notes) {
+            // ⚠️ **الفحص لازم يتكرر جوه الترانزاكشن وبقفل.** الفحص اللي
+            // فوق بره الترانزاكشن، فضغطتين على «استلام» في نفس اللحظة
+            // (أو دبل كليك على نت بطيء — العملية بتاخد أجزاء من الثانية)
+            // كانوا بيعدّوا الاتنين، و`increment` بتراكم: المخزن المستقبِل
+            // بياخد الكمية **مرتين**، وبيتعمل إذنين استلام واحد منهم يتيم.
+            $fresh = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $fresh || $fresh->status !== 'sent') {
+                throw new Rejected(__('stock.transfer_not_open'));
+            }
+
             $receipt = GoodsReceipt::create([
                 'number' => GoodsReceipt::nextNumber(),
                 'warehouse_id' => $this->to_warehouse_id,
@@ -337,12 +416,22 @@ class StockTransfer extends Model
                 // الورقة اللي على الكرتونة هي الحقيقة، واللي بعت ممكن
                 // يكون كتبه غلط — والتاريخ الغلط معناه صلاحية غلط
                 // وترتيب FEFO غلط لكل ما الباتش ده يخرج بعد كده.
-                $produced = $producedByItem === null
-                    ? $item->produced_on
-                    : (($producedByItem[$item->id] ?? null) ?: $item->produced_on);
+                $typed = $producedByItem[$item->id] ?? null;
+                $produced = $typed ?: $item->produced_on;
 
                 $product = $item->product;
-                $expires = $produced && $product
+
+                // ⚠️ **الصلاحية بتتحسب من تاني بس لو المستلم غيّر تاريخ
+                // الإنتاج فعلاً.** كانت بتتحسب في كل استلام، فالباتش اللي
+                // أمين المخزن كتب صلاحيته بإيده وقت الاستلام (`storeReceipt`
+                // بتسمح بده) كان بيوصل المخزن التاني بصلاحية محسوبة مختلفة —
+                // نفس الكرتونة بتنتهي في تاريخين. وكانت بتتكتب كمان على
+                // بند التحويل، يعني الورقة الممضية لو اتطبعت تاني بتطلع
+                // بتواريخ غير اللي في الدرج.
+                $changed = $typed !== null
+                    && $item->produced_on?->toDateString() !== \Illuminate\Support\Carbon::parse($typed)->toDateString();
+
+                $expires = $changed && $product
                     ? $product->expiryFrom($produced)->toDateString()
                     : $item->expires_on;
 
@@ -361,8 +450,19 @@ class StockTransfer extends Model
                     $source = Batch::whereKey($item->source_batch_id)->lockForUpdate()->first();
 
                     if ($source) {
-                        $source->decrement('qty_issued', min($short, (int) $source->qty_issued));
-                        $source->increment('qty_damaged', $short);
+                        // ⚠️ **نفس الرقم في الطرفين.** كان الخصم محدود
+                        // بـ`qty_issued` والزيادة مش محدودة، فأول ما
+                        // الحد يشتغل تنكسر معادلة الباتش
+                        // (`received = remaining + issued + damaged`)
+                        // للأبد ومن غير أي أثر. المحاسبة الناقصة أهون
+                        // من رقم بيكدب على نفسه.
+                        $move = min($short, (int) $source->qty_issued);
+
+                        if ($move > 0) {
+                            $source->decrement('qty_issued', $move);
+                            $source->increment('qty_damaged', $move);
+                        }
+
                         $touched[$this->from_warehouse_id][$item->product_id] = true;
                     }
                 }
@@ -372,7 +472,14 @@ class StockTransfer extends Model
                 }
 
                 // نفس رقم الباتش في مخزن مختلف = صف مستقل
-                $batch = Batch::updateOrCreate(
+                //
+                // ⚠️ **`firstOrCreate` مش `updateOrCreate`.** التواريخ
+                // والتكلفة بتتكتب وقت الإنشاء بس. `updateOrCreate` كانت
+                // بتدوس بيهم على الصف الموجود — يعني شحنة جديدة من نفس
+                // رقم الباتش بتغيّر تاريخ الصلاحية والتكلفة لكل الكمية
+                // القديمة اللي على الرف، فترتيب FEFO وتقرير الصلاحية
+                // وهامش الفاتورة كلهم بيتحركوا لبضاعة محدش لمسها.
+                $batch = Batch::firstOrCreate(
                     [
                         'product_id' => $item->product_id,
                         'batch_no' => $item->batch_no,
@@ -382,10 +489,10 @@ class StockTransfer extends Model
                         'goods_receipt_id' => $receipt->id,
                         'produced_on' => $produced,
                         'expires_on' => $expires,
-                        // ⚠️ **التكلفة من كارت الصنف مش من الشحنة.**
-                        // كانت خانة في فورم التحويل، يعني نفس الصنف
-                        // كان بياخد تكلفة مختلفة كل شحنة على مزاج اللي
-                        // بيكتب — وربحية الفاتورة بتطلع من تكلفة الباتش.
+                        // ⚠️ **التكلفة من الباتش المصدر مش من الشحنة.**
+                        // كانت خانة في فورم التحويل، يعني نفس الصنف كان
+                        // بياخد تكلفة مختلفة كل شحنة على مزاج اللي بيكتب —
+                        // وربحية الفاتورة بتطلع من تكلفة الباتش.
                         'cost' => $item->cost ?? $product?->cost ?? 0,
                     ],
                 );

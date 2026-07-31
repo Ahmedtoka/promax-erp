@@ -75,7 +75,16 @@ class StockCountController extends Controller
             fn ($a, $b) => strcmp((string) $a->expiryLabel(), (string) $b->expiryLabel()),
         ])->values();
 
+        // ⚠️ **الجرد بيكتب `qty_remaining` مطلقاً، مش بيجمع فرق.**
+        // فلو فيه شحنة خرجت من المخزن (اتخصمت من الرصيد) والكراتين
+        // لسه على الأرض مستنية العربية، اللي بيعدّ هيعدّها ويرجّعها
+        // للرصيد — وتتعدّ في المخزنين. التحذير ده بيقوله قبل ما يعدّ.
+        $openTransfers = \App\Models\StockTransfer::where('status', 'sent')
+            ->where('from_warehouse_id', $stockCount->warehouse_id)
+            ->count();
+
         return view('wh.count', [
+            'openTransfers' => $openTransfers,
             'count' => $stockCount,
             'items' => $items,
             'reasons' => StockCount::REASONS,

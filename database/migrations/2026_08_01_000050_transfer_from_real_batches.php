@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -57,6 +58,25 @@ return new class extends Migration
                 $table->string('carrier_name', 120)->nullable()->after('received_by');
             }
         });
+
+        // ⚠️ **الشحنات القديمة المفتوحة لازم تتلغي.**
+        // اللي اتعمل قبل المايجريشن دي مااتخصمش من المخزن المرسل خالص
+        // (`source_batch_id` فاضي)، فلو حد استلمها دلوقتي هتزوّد المخزن
+        // المستقبِل من غير ما تنقّص المرسل — وده بالظبط تضخيم المخزون
+        // اللي المايجريشن دي اتعملت تمنعه.
+        //
+        // ⚠️ **بنلغيها مابنمسحهاش.** الشحنة اللي مشيت فعلاً ليها ورق،
+        // والصف بيفضل عشان اللي بيراجع يلاقيه. البضاعة نفسها بتترصد
+        // بجرد على المخزنين — ودي حاجة بني آدم يقررها مش مايجريشن.
+        $stale = DB::table('stock_transfers')->where('status', 'sent')->count();
+
+        if ($stale > 0) {
+            DB::table('stock_transfers')->where('status', 'sent')->update([
+                'status' => 'cancelled',
+                'notes' => DB::raw("CONCAT(COALESCE(notes, ''), '\n[اتلغت آلياً: اتعملت قبل ما التحويل يخصم من المخزن المرسل. اعملها من تاني، واجرد المخزنين.]')"),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     public function down(): void

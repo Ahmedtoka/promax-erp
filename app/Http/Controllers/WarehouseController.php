@@ -324,10 +324,23 @@ class WarehouseController extends Controller
 
     public function transfers(Request $request)
     {
+        $user = $request->user();
+
         return view('wh.transfers', [
+            // ⚠️ **مفلترة بمخزن أمين المخزن.** كانت `latest()` على طول،
+            // يعني أمين مخزن المعادي يشوف كل شحنة بين أي مخزنين
+            // بأرقام باتشاتها وكمياتها وصلاحياتها — ويطبع ورق مخزن
+            // مش بتاعه. الشحنة تخصّه لو هو الطرف المرسل أو المستقبل.
             'transfers' => StockTransfer::with([
                 'fromWarehouse', 'toWarehouse', 'items.product', 'sender',
-            ])->latest()->paginate(20),
+            ])
+                ->when(
+                    $user?->isWarehouseKeeper() && $user->warehouse_id,
+                    fn ($q) => $q->where(fn ($w) => $w
+                        ->where('from_warehouse_id', $user->warehouse_id)
+                        ->orWhere('to_warehouse_id', $user->warehouse_id)),
+                )
+                ->latest()->paginate(20),
             'warehouses' => $this->visibleWarehouses($request),
             'products' => Product::where('active', true)->orderBy('code')->get(),
             // ⚠️ **الباتشات الحقيقية بتغذّي الفورم.** قبل كده كان
@@ -335,8 +348,13 @@ class WarehouseController extends Controller
             // بتاخد رقم في العاشر ورقم تاني في المعادي، فترتيب الصلاحية
             // (FEFO) بيتكسر، والأهم: مافيش أي ضمان إن الكمية دي موجودة
             // أصلاً عشان تتبعت.
+            // ⚠️ **مفلترة بالمخازن اللي المستخدم بيشوفها.** كانت بتحمّل
+            // كل باتش قابل للبيع في الشركة وتسلسله JSON في الصفحة —
+            // مع بضع آلاف باتش ده ميجابايتات في كل فتحة، ولمستخدم
+            // مايقدرش يفتح الفورم أصلاً.
             'batches' => Batch::query()
                 ->sellable()
+                ->whereIn('warehouse_id', $this->visibleWarehouses($request)->pluck('id'))
                 ->with('product:id,code,name,name_en')
                 ->get(['id', 'product_id', 'warehouse_id', 'batch_no',
                     'produced_on', 'expires_on', 'qty_remaining']),
@@ -389,6 +407,8 @@ class WarehouseController extends Controller
     /** صفحة استلام التحويل — الكميات وتواريخ الإنتاج قابلة للتعديل */
     public function transfer(Request $request, StockTransfer $transfer)
     {
+        $this->guardTransfer($request, $transfer);
+
         $transfer->load(['items.product', 'items.sourceBatch', 'fromWarehouse', 'toWarehouse', 'sender', 'receiver']);
 
         return view('wh.transfer', ['t' => $transfer]);
@@ -397,6 +417,8 @@ class WarehouseController extends Controller
     /** ورقة إذن الصرف — إمضاء أمين المخزن المرسل والمستلم */
     public function printTransfer(Request $request, StockTransfer $transfer)
     {
+        $this->guardTransfer($request, $transfer);
+
         $transfer->load(['items.product', 'fromWarehouse', 'toWarehouse', 'sender']);
 
         return view('wh.transfer_print', ['t' => $transfer, 'mode' => 'issue']);
@@ -405,6 +427,8 @@ class WarehouseController extends Controller
     /** محضر الاستلام — المبعوت والمستلم والفرق، بإمضاء الطرفين */
     public function printTransferReceipt(Request $request, StockTransfer $transfer)
     {
+        $this->guardTransfer($request, $transfer);
+
         if ($transfer->status !== 'received') {
             return redirect()->route('wh.transfers.print', $transfer);
         }
@@ -429,7 +453,11 @@ class WarehouseController extends Controller
             // الكرتونة — التاريخ الغلط معناه صلاحية غلط وترتيب FEFO
             // غلط لكل مرة الباتش ده يخرج بعد كده.
             'produced' => ['nullable', 'array'],
-            'produced.*' => ['nullable', 'date'],
+            // ⚠️ `before_or_equal:today` مش زيادة: تاريخ إنتاج في
+            // المستقبل بيطلّع باتش صلاحيته بعيدة كذبًا، وتاريخ قديم
+            // جداً بيخلق باتش منتهي لحظة إنشاؤه — و`sellable` بتستبعده
+            // بينما `resync` بتعدّه، فالرقمين يختلفوا بلا سبب ظاهر.
+            'produced.*' => ['nullable', 'date', 'before_or_equal:today'],
             'notes' => ['nullable', 'string'],
         ]);
 
@@ -513,6 +541,30 @@ class WarehouseController extends Controller
      * ده موجود» مش «المخزن ده بتاعك» — فأمين مخزن المعادي كان يبعت
      * `warehouse_id` بتاع المصنع في بودي الطلب وخلاص.
      */
+    /**
+     * الشحنة دي تخص المستخدم ده؟
+     *
+     * ⚠️ **الحارس ده على القراءة والطباعة كمان مش الكتابة بس.**
+     * `guardWarehouse` بتحمي الاستلام، بس صفحة الشحنة وورقة الإذن
+     * كانوا مفتوحين — فأمين مخزن يقدر يفتح شحنة بين مخزنين تانيين
+     * ويطبع ورقها بأرقام الباتشات والكميات.
+     */
+    private function guardTransfer(Request $request, StockTransfer $transfer): void
+    {
+        $user = $request->user();
+
+        if (! $user?->isWarehouseKeeper() || ! $user->warehouse_id) {
+            return;
+        }
+
+        $mine = (int) $user->warehouse_id === (int) $transfer->from_warehouse_id
+            || (int) $user->warehouse_id === (int) $transfer->to_warehouse_id;
+
+        if (! $mine) {
+            abort(403, __('stock.not_your_warehouse'));
+        }
+    }
+
     private function guardWarehouse(Request $request, int|string|null $warehouseId): void
     {
         $user = $request->user();

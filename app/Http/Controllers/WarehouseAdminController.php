@@ -41,6 +41,10 @@ class WarehouseAdminController extends Controller
 
         return view('erp.warehouses', [
             'warehouses' => $warehouses,
+            // ⚠️ **بضاعة خرجت وماوصلتش.** من غير العمود ده، اللي بيبص
+            // على المخزن بيلاقي الرصيد قلّ ومايعرفش إن الفرق ماشي على
+            // الطريق — ويفتكر إنه عجز ويفتح تحقيق في حاجة طبيعية.
+            'transit' => \App\Models\StockTransfer::inTransit(),
             'managers' => \App\Models\User::whereIn('role', ['admin', 'manager', 'warehouse_keeper'])
                 ->where('active', true)->orderBy('name')->get(),
             'types' => [Warehouse::TYPE_FACTORY, Warehouse::TYPE_BRANCH],

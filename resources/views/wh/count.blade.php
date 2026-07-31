@@ -17,6 +17,16 @@
 
 @section('content')
 
+@if (($openTransfers ?? 0) > 0)
+    {{-- ⚠️ التحذير ده لازم يبقى فوق الجدول: اللي بيعدّ بيبص على
+         الأرقام على طول، والسبب اللي هيخلّيه يشك في رقم لازم يكون
+         قدام عينه قبل ما يكتب. --}}
+    <div class="alert warn" style="margin-bottom:14px">
+        <span>⚠️</span><span>{{ __('stock.count_open_transfers', ['count' => $openTransfers]) }}</span>
+    </div>
+@endif
+
+
 <div class="card">
     <h3>📊 {{ $count->number }}
         <span class="side">{{ $count->warehouse->displayName() }} · {{ $count->count_date?->format('Y-m-d') }}</span>

@@ -18,7 +18,12 @@
     // ⚠️ الزرار بيبان للي بيقدر يستلم فعلاً: الاستلام محمي بـ
     // `role:admin,manager,warehouse_keeper` **و**بحارس المخزن.
     // زرار بيرمي 403 أسوأ من زرار مش موجود.
-    $mine = $u->isAdmin() || $u->isManager()
+    //
+    // ⚠️ **`isManager()` بتشمل `branch_manager` واللي مش في الراوت.**
+    // كانت بتوري لمدير الفرع خانات الكمية وتاريخ الإنتاج وزرار
+    // الاستلام، ويدوس بعد ما يملاها وياخد 403 — وهو ده بالظبط اللي
+    // التعليق اللي فوق بيقول إنه مايحصلش.
+    $mine = $u->isAdmin() || $u->role === 'manager'
         || ($u->isWarehouseKeeper() && (int) $u->warehouse_id === (int) $t->to_warehouse_id);
     $canReceive = $t->isOpen() && $mine;
 @endphp

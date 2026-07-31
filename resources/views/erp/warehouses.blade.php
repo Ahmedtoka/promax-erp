@@ -31,6 +31,11 @@
         <div class="lbl">{{ __('stock.hold') }}</div>
         <div class="val mid">{{ $fmt($warehouses->sum('hold_total')) }}</div>
     </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('stock.in_transit') }}</div>
+        <div class="val">{{ $fmt(array_sum($transit)) }}</div>
+        <div class="sub2">{{ __('stock.in_transit_hint') }}</div>
+    </div>
 </div>
 
 <div class="card">
@@ -41,6 +46,7 @@
                 <th>{{ __('common.code') }}</th><th>{{ __('stock.warehouse') }}</th>
                 <th>{{ __('stock.type') }}</th><th>{{ __('stock.keeper') }}</th>
                 <th>{{ __('stock.skus') }}</th><th>{{ __('stock.qty') }}</th><th>{{ __('stock.hold') }}</th>
+                <th>{{ __('stock.in_transit') }}</th>
                 <th>{{ __('common.status') }}</th>
                 @if ($manager)<th></th>@endif
                 <th></th>
@@ -74,6 +80,14 @@
                     <td class="num">{{ $fmt($w->sku_count) }}</td>
                     <td class="num"><b>{{ $fmt($w->qty_total) }}</b></td>
                     <td class="num mid">{{ $fmt($w->hold_total) }}</td>
+                    <td class="num">
+                        @php $tr = $transit[$w->id] ?? 0; @endphp
+                        @if ($tr > 0)
+                            <a href="{{ route('wh.transfers') }}"><b>{{ $fmt($tr) }}</b></a>
+                        @else
+                            <span class="muted">—</span>
+                        @endif
+                    </td>
                     <td>
                         @if ($w->active)
                             <span class="badge b-green">{{ __('common.active') }}</span>
@@ -91,7 +105,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 10 : 9 }}" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $manager ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('stock.no_warehouses') }}
                 </td></tr>
             @endforelse

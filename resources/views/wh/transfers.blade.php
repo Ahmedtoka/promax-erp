@@ -4,7 +4,13 @@
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
-    $manager = auth()->user()->isManager();
+
+    // ⚠️ **`isManager()` مش نفس `role:admin,manager`.** الأولى بتشمل
+    // `branch_manager` كمان (`User::MANAGER_ROLES`)، وراوت إنشاء
+    // التحويل مقفول على أدمن ومدير القناة بس. فمدير الفرع كان بيشوف
+    // الزرار، يملا الفورم بكل سطوره، يدوس حفظ، وياخد 403.
+    $u = auth()->user();
+    $manager = $u->isAdmin() || $u->role === 'manager';
 
     // ⚠️ قايمة الأصناف بتتبني هنا مرة واحدة كـ HTML وبتتحط في قالب البند.
     // ممنوع نلف على $products جوه الجافاسكريبت — البليد مابيشتغلش هناك.
@@ -20,10 +26,15 @@
     // في العاشر ورقم تاني في المعادي فترتيب الصلاحية بيتكسر، والأهم
     // إن مافيش أي ضمان إن الكمية دي موجودة عشان تتبعت أصلاً.
     //
-    // ⚠️ **`json_encode` في `@php` مش `@json` في الـHTML.** التوجيه
+    // ⚠️ **`json_encode` هنا مش توجيه JSON في الـHTML.** التوجيه
     // بمصفوفة بيكسّر بارسر البليد؛ والفلاجز ضرورية لأن الناتج بيقع
     // جوه سمة HTML.
-    $batchData = json_encode($batches->map(fn ($b) => [
+    // (وممنوع نكتب اسم دايركتيف بليد في تعليق — نفس القاعدة المكتوبة تحت.)
+    // ⚠️ **بتتبني للي بيقدر يفتح الفورم بس.** كانت بتتبعت لكل من
+    // يفتح الصفحة، جوه `@section('scripts')` اللي بره شرط المدير —
+    // يعني أرصدة كل المخازن (أرقام الباتشات وكمياتها وصلاحياتها)
+    // كانت بتنزل في سورس الصفحة لأمين مخزن مالوش دعوة بيها.
+    $batchData = ! $manager ? null : json_encode($batches->map(fn ($b) => [
         'id' => $b->id,
         'w' => (int) $b->warehouse_id,
         'p' => (int) $b->product_id,
@@ -236,7 +247,7 @@
      * وانت بتكتب، وطلب سيرفر لكل تغيير في قايمة الصنف بيخلّي
      * الشاشة تتلكّك على اتصال ضعيف في المخزن.
      */
-    const TR_BATCHES = @if (isset($batchData)) {!! $batchData !!} @else [] @endif;
+    const TR_BATCHES = @if ($batchData) {!! $batchData !!} @else [] @endif;
 
     /** المخزن اللي بنبعت منه دلوقتي */
     function trFromWarehouse() {
@@ -255,6 +266,16 @@
         batchSel.innerHTML = '';
         row.querySelector('[data-role="prodOn"]').textContent = '—';
         row.querySelector('[data-role="left"]').textContent = '—';
+
+        // ⚠️ **الكمية لازم تتفضّى مع الباتش.** تغيير المخزن المرسل
+        // بيعيد ملا القايمة وبيختار أول باتش تلقائياً — لو الكمية
+        // فضلت مكتوبة، السطر بقى بيبعت كمية اتكتبت لباتش، من باتش
+        // تاني خالص برقم وصلاحية مختلفين، والمستخدم مش واخد باله.
+        const qty = row.querySelector('[data-role="qty"]');
+
+        if (qty) {
+            qty.value = '';
+        }
 
         const rows = TR_BATCHES.filter(b => b.p === productId && b.w === warehouseId);
 
