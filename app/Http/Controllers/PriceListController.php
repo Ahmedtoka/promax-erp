@@ -23,7 +23,7 @@ class PriceListController extends Controller
     public function index()
     {
         $lists = PriceList::withCount([
-            'clients as live_clients' => fn ($q) => $q->where('active', true),
+            'clients as live_clients' => fn ($q) => $q->where('status', 'active'),
         ])->orderByDesc('is_default')->orderBy('id')->get();
 
         // ⚠️ الناقص بيتحسب لكل قايمة عشان الشاشة تقول «فاضل 6 أصناف»

@@ -29,7 +29,9 @@ class ClientActivationController extends Controller
     {
         $q = Client::query()
             ->with(['group', 'zone', 'rep'])
-            ->where('active', false);
+            // ⚠️ **`status` مش `active`.** الجدول مافيهوش عمود
+            // `active` — الحالة enum في `status`.
+            ->where('status', '!=', 'active');
 
         if ($s = $request->string('q')->trim()->value()) {
             $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
@@ -57,7 +59,7 @@ class ClientActivationController extends Controller
         return view('erp.client_activate', [
             'clients' => $q->orderBy('code')->paginate(50)->withQueryString(),
             'groups' => ClientGroup::withCount([
-                'clients as off_count' => fn ($w) => $w->where('active', false),
+                'clients as off_count' => fn ($w) => $w->where('status', '!=', 'active'),
             ])->orderBy('name')->get(),
             'zones' => Zone::where('active', true)->orderBy('name')->get(),
             'reps' => User::whereIn('role', ['sales_agent', 'promoter'])
@@ -66,8 +68,8 @@ class ClientActivationController extends Controller
                 ->where('active', true)->orderBy('name')->get(),
             'lists' => $this->priceLists(),
             'filters' => $request->only(['q', 'group', 'gov', 'incomplete']),
-            'waiting' => Client::where('active', false)->count(),
-            'live' => Client::where('active', true)->count(),
+            'waiting' => Client::where('status', '!=', 'active')->count(),
+            'live' => Client::where('status', 'active')->count(),
         ]);
     }
 
@@ -94,7 +96,7 @@ class ClientActivationController extends Controller
         // ⚠️ **الموقوفين بس.** الـids بتيجي من الفورم، والتاب اللي
         // فضلت مفتوحة من قبل ما حد يفعّل بتبعت أكواد اتفعّلت خلاص —
         // وإعادة تفعيلها كانت هتدوس على منطقتها ومندوبها بقيم الفورم.
-        $ids = Client::whereIn('id', $data['ids'])->where('active', false)->pluck('id');
+        $ids = Client::whereIn('id', $data['ids'])->where('status', '!=', 'active')->pluck('id');
 
         if ($ids->isEmpty()) {
             return back()->withErrors(['ids' => __('client.activate_none')]);
@@ -123,7 +125,7 @@ class ClientActivationController extends Controller
 
         DB::transaction(function () use ($ids, $payload) {
             Client::whereIn('id', $ids)->update($payload + [
-                'active' => true,
+                'status' => 'active',
                 'first_activity_at' => now(),
             ]);
         });
@@ -139,13 +141,13 @@ class ClientActivationController extends Controller
         // مصدرها.
         if (abs((float) $client->balance) > 0.01) {
             return back()->withErrors([
-                'active' => __('client.cannot_stop_with_balance', [
+                'status' => __('client.cannot_stop_with_balance', [
                     'balance' => number_format((float) $client->balance, 2),
                 ]),
             ]);
         }
 
-        $client->update(['active' => false]);
+        $client->update(['status' => 'pending']);
 
         return back()->with('ok', __('client.deactivated', ['name' => $client->displayName()]));
     }

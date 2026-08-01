@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  *   • 455 فرع كعملاء **كلهم موقوفين**
  *   • ملفات العقود متربطة بسلاسلها بالاسم
  *
- * ⚠️ **كل العملاء بيتعملوا `active = 0` عن قصد.** الداتا دي من
+ * ⚠️ **كل العملاء بيتعملوا `status = pending` عن قصد.** الداتا دي من
  * شيتات، ومحدش راجع كل صف فيها. عميل مفعّل معناه إنه بيبان للمندوب
  * في خط سيره وبيتباعله، فـ455 عميل مفعّل مرة واحدة معناه إن الفريق
  * هيلف على فروع مقفولة وعناوين غلط. التفعيل بيتم واحد واحد من شاشة
@@ -39,7 +39,8 @@ class SetupClients extends Command
 {
     protected $signature = 'promax:clients
         {--force : من غير تأكيد}
-        {--contracts= : مسار مجلد ملفات العقود PDF}';
+        {--contracts= : مسار مجلد ملفات العقود PDF}
+        {--fix-status : رجّع العملاء المستوردين لـpending — لو نزلوا شغّالين بالغلط}';
 
     protected $description = 'بينزّل السلاسل والمناطق وفروع العملاء من ملف الداتا';
 
@@ -79,6 +80,37 @@ class SetupClients extends Command
             $this->line('     شغّل الأول: php artisan promax:channels');
 
             return self::FAILURE;
+        }
+
+        // ═══════════ تصليح: العملاء اللي نزلوا شغّالين ═══════════
+        //
+        // ⚠️ **إصدار قديم كان بيكتب `'active' => false`** — وده عمود
+        // مش موجود ومش في `$fillable`، فالحماية من الكتابة الجماعية
+        // كانت **بترميه في صمت** والعميل ينزل بالحالة الافتراضية
+        // `active`. اللي شغّل الأمر ساعتها عنده 455 عميل شغّال
+        // وبيبانوا للمناديب، وهو عكس المطلوب بالظبط.
+        if ($this->option('fix-status')) {
+            $codes = array_column($clients, 'code');
+
+            // ⚠️ **المستوردين بس، واللي محصلش عليهم أي شغل.** العميل
+            // اللي عليه رصيد أو حركة يبقى حد اشتغل عليه فعلاً —
+            // إرجاعه `pending` بيخفيه من الشاشات ورصيده يفضل في
+            // الإجماليات.
+            $n = Client::whereIn('code', $codes)
+                ->where('status', 'active')
+                ->where('balance', 0)
+                ->whereNull('first_activity_at')
+                ->update(['status' => 'pending']);
+
+            $kept = Client::whereIn('code', $codes)->where('status', 'active')->count();
+
+            $this->warn("  🔧 اترجّع {$n} عميل لـ«مستني التفعيل».");
+
+            if ($kept > 0) {
+                $this->line("     ⚠️ {$kept} اتساب شغّال — عليهم رصيد أو حركة، شيلهم بإيدك لو محتاج.");
+            }
+
+            $this->newLine();
         }
 
         $existing = Client::whereIn('code', array_column($clients, 'code'))->count();
@@ -272,14 +304,36 @@ class SetupClients extends Command
                 'address' => $c['address'] ? Str::limit($c['address'], 250) : null,
                 'phone' => $c['phone'] ?: null,
                 'location_url' => $c['location_url'] ?: null,
-                // ⚠️ **موقوف.** ده مش تفصيلة — ده اللي بيمنع 455 فرع
-                // مااتراجعش من الظهور في خطوط سير المناديب بكرة.
-                'active' => false,
+                // ⚠️ **`status` مش `active`.** جدول `clients` مافيهوش
+                // عمود `active` خالص — الحالة في `status` (enum:
+                // active/pending/rejected). و`active` مش في `$fillable`
+                // كمان، فـ`fill()` كانت **بترميه في صمت**: الـ455 فرع
+                // اتعملوا بالحالة الافتراضية `active` — يعني شغّالين
+                // وبيبانوا للمناديب، وهو عكس المطلوب بالظبط.
+                //
+                // ⚠️ الحماية من الكتابة الجماعية بتسكت على المفتاح
+                // الغلط بدل ما ترمي خطأ — وده اللي خلّى الغلطة تعدّي
+                // لحد اللايف. الفحص تحت بيمنع تكرارها.
+                'status' => 'pending',
                 'category' => 'idle',
             ];
 
             if ($isNew) {
                 $client->fill($payload)->save();
+
+                // ⚠️ **الفحص ده هو اللي كان هيمنع الكارثة.** الحماية
+                // من الكتابة الجماعية بترمي أي مفتاح مش في `$fillable`
+                // **في صمت** — فـ`'active' => false` اتشالت والعميل
+                // اتعمل شغّال. الفحص بيقارن اللي اتخزن باللي طلبناه
+                // ويقف لو الاتنين مختلفين.
+                if ($client->status !== 'pending') {
+                    throw new \RuntimeException(
+                        "العميل {$client->code} اتعمل بالحالة «{$client->status}» "
+                        .'مش «pending» — يعني `status` مش في `$fillable` أو فيه '
+                        .'قيمة افتراضية بتغلب. أوقف واصلّح قبل ما تكمّل.'
+                    );
+                }
+
                 $this->created++;
 
                 continue;
@@ -292,7 +346,7 @@ class SetupClients extends Command
             $touched = false;
 
             foreach ($payload as $k => $v) {
-                if ($k === 'active' || $k === 'category') {
+                if ($k === 'status' || $k === 'category') {
                     continue;
                 }
 
@@ -425,8 +479,8 @@ class SetupClients extends Command
             $this->line("     اتحدّثوا:  <fg=yellow>{$this->updated}</>");
         }
 
-        $off = Client::where('active', false)->count();
-        $on = Client::where('active', true)->count();
+        $off = Client::where('status', '!=', 'active')->count();
+        $on = Client::where('status', 'active')->count();
 
         $this->newLine();
         $this->info("  ✅ {$on} عميل شغّال · {$off} مستني التفعيل");

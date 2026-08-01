@@ -114,7 +114,8 @@ class PriceList extends Model
      */
     public function deactivate(): ?string
     {
-        $n = $this->clients()->where('active', true)->count();
+        // ⚠️ العميل حالته في `status` مش في عمود `active`.
+        $n = $this->clients()->where('status', 'active')->count();
 
         if ($n > 0) {
             return __('price.cannot_stop_in_use', ['count' => $n]);
