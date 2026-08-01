@@ -15,8 +15,8 @@ return [
     'token_countable' => ':count توكن',
     'active' => 'شغّال',
     'inactive' => 'موقوف',
-    'demo_credentials' => 'بيانات الدخول التجريبية',
-    'demo_password_note' => 'كل الحسابات كلمة سرها :password — والدخول ممكن بالإيميل أو بكود الموظف.',
     'app_login_note' => 'المناديب بيدخلوا الموبايل أبلكيشن بنفس البيانات، والسيستم بيصدرلهم توكن تلقائي.',
 
+    'app_access' => 'الدخول على الأبلكيشن',
+    'password_reset_note' => 'السيستم مايعرفش الباسوردات — متخزنة مشفّرة. لتغيير باسورد حد: php artisan promax:password <الإيميل>',
 ];

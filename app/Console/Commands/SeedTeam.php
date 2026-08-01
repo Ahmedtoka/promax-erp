@@ -28,6 +28,16 @@ class SeedTeam extends Command
 
     public function handle(ModernTradeSeeder $seeder): int
     {
+        // ⚠️ **الأمر ده بيحطّ فريق الديمو بباسورد معروف.**
+        // اسمه شبه `promax:team:setup` (اللي بيحطّ الفريق الحقيقي)
+        // لدرجة إن `promax:password` نفسه كان بينصح بيه بالغلط.
+        if (app()->environment('production')) {
+            $this->error('  ⛔ الأمر ده بيحطّ فريق ديمو بباسورد معروف — ممنوع على production.');
+            $this->line('     الفريق الحقيقي: php artisan promax:team:setup');
+
+            return self::FAILURE;
+        }
+
         $existing = User::count();
 
         $this->newLine();
@@ -79,7 +89,7 @@ class SeedTeam extends Command
         }
 
         $this->newLine();
-        $this->info('  ✅ خلاص. ادخل بأي إيميل فوق والباسورد promax123');
+        $this->info('  ✅ خلاص. ادخل بأي إيميل فوق — الباسورد في السيدر');
         $this->line('     أو بكود الموظف بدل الإيميل.');
         $this->newLine();
 

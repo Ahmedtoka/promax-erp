@@ -23,11 +23,13 @@ use Illuminate\Support\Facades\Hash;
  * ⚠️ **الباسورد مابيتغيّرش لليوزر الموجود.** لو حد غيّر باسورده،
  * إعادة تشغيل السيدر مالازمش ترجّعه للمبدئي وتقفل عليه.
  *
- * كلمة السر للحسابات الجديدة: promax123
+ * كلمة السر بتتولّد عشوائي وبتتطبع في آخر التشغيل
  */
 class ModernTradeSeeder extends Seeder
 {
-    private const PASSWORD = 'promax123';
+    // ⚠️ **الباسورد بقى عشوائي لكل تشغيلة.** كان `promax123` ثابت
+    // ومكتوب في README المرفوع على الجت.
+    private static ?string $pw = null;
 
     /**
      * عربيات مودرن تريد — 3 عربيات، كل واحدة بمناطقها.
@@ -89,6 +91,8 @@ class ModernTradeSeeder extends Seeder
 
     public function run(): void
     {
+        $this->blockOnProduction();
+
         $branch = $this->maadiBranch();
         $channel = $this->modernTradeChannel();
 
@@ -106,7 +110,7 @@ class ModernTradeSeeder extends Seeder
         $this->command->info('   • '.User::count().' يوزر');
         $this->command->info('   • '.Vehicle::count().' عربية');
         $this->command->info("   • {$zoneCount} منطقة مودرن تريد");
-        $this->command->info('   • الباسورد للكل: '.self::PASSWORD);
+        $this->command->info('   • الباسورد للكل: '.self::seedPassword());
     }
 
     // ═══════════════════════ الفرع ═══════════════════════
@@ -217,7 +221,7 @@ class ModernTradeSeeder extends Seeder
 
         return User::create($attrs + [
             'code' => $code,
-            'password' => Hash::make(self::PASSWORD),
+            'password' => Hash::make(self::seedPassword()),
         ]);
     }
 
@@ -230,7 +234,7 @@ class ModernTradeSeeder extends Seeder
             'email' => 'admin@promax.local',
             'role' => 'admin',
             'active' => true,
-            'locale' => 'ar',
+            'locale' => 'en',
             // ⚠️ من غير فرع = مركزي = بيشوف كل الفروع
             'branch_id' => null,
         ]);
@@ -242,7 +246,7 @@ class ModernTradeSeeder extends Seeder
             'email' => 'manager@promax.local',
             'role' => 'manager',
             'active' => true,
-            'locale' => 'ar',
+            'locale' => 'en',
             'branch_id' => null,
         ]);
 
@@ -259,7 +263,7 @@ class ModernTradeSeeder extends Seeder
             'role' => 'branch_manager',
             'branch_id' => $branch->id,
             'active' => true,
-            'locale' => 'ar',
+            'locale' => 'en',
         ]);
 
         $branch->update(['manager_id' => $user->id]);
@@ -280,7 +284,7 @@ class ModernTradeSeeder extends Seeder
             'channel_id' => $channel->id,
             'branch_id' => $branch->id,
             'active' => true,
-            'locale' => 'ar',
+            'locale' => 'en',
         ]);
 
         $driver = $rep;   // الافتراضي: المندوب بيسوق
@@ -296,7 +300,7 @@ class ModernTradeSeeder extends Seeder
                 'channel_id' => $channel->id,
                 'branch_id' => $branch->id,
                 'active' => true,
-                'locale' => 'ar',
+                'locale' => 'en',
             ]);
         }
 
@@ -379,7 +383,53 @@ class ModernTradeSeeder extends Seeder
             'channel_id' => $channel->id,
             'branch_id' => $branch->id,
             'active' => true,
-            'locale' => 'ar',
+            'locale' => 'en',
         ]);
+    }
+
+    /**
+     * ⚠️ **الحارس ده هو الفرق بين تيست وكارثة.**
+     * السيدرز دي بتعمل `admin@promax.local` بباسورد معروف ومكتوب في
+     * README المرفوع على الجت. `php artisan db:seed --force` على
+     * اللايف — سطر واحد بيتكتب بالغلط أو بيتنسخ من دليل قديم —
+     * بيفتح باب خلفي على السيستم الشغّال.
+     *
+     * التشغيل على production لازم يبقى قرار صريح:
+     *     PROMAX_ALLOW_SEED=1 php artisan db:seed --force
+     */
+    private function blockOnProduction(): void
+    {
+        if (! app()->environment('production') || env('PROMAX_ALLOW_SEED') === '1') {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'السيدر ده بيعمل حسابات ديمو بباسورد معروف، وممنوع يشتغل على production. '
+            .'الفريق الحقيقي بيتعمل بـ`php artisan promax:team:setup`. '
+            .'لو متأكد إنك عايزه: PROMAX_ALLOW_SEED=1 php artisan db:seed --force'
+        );
+    }
+
+    /**
+     * باسورد عشوائي واحد للتشغيلة دي، بيتطبع في الترمينال.
+     *
+     * ⚠️ ثابت جوه التشغيلة الواحدة (`static`) عشان كل الحسابات تاخد
+     * نفس الباسورد وتقدر تدخل بيه، ومختلف كل مرة عشان مايتكتبش في
+     * أي ملف ولا يتحفظ في أي دليل.
+     */
+    protected static function seedPassword(): string
+    {
+        if (static::$pw !== null) {
+            return static::$pw;
+        }
+
+        $alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $out = '';
+
+        for ($i = 0; $i < 10; $i++) {
+            $out .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return static::$pw = $out;
     }
 }

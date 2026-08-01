@@ -118,7 +118,13 @@ class TeamImporter extends Importer
 
                 // الباسورد للجديد بس — الموجود بيحتفظ بباسورده
                 if (! $existing) {
-                    $payload['password'] = Hash::make($row['password'] ?? 'promax2026');
+                    // ⚠️ **عشوائي مش `promax2026`.** الشيت اللي مافيهوش
+                    // عمود باسورد كان بيعمل كل الحسابات بنفس الباسورد
+                    // المعروف. اللي بيستورد بيظبط الباسوردات بعدها بـ
+                    // `promax:password`، أو بيحطها في عمود في الشيت.
+                    $payload['password'] = Hash::make(
+                        $row['password'] ?? \App\Console\Commands\SetupTeam::newPassword()
+                    );
                 }
 
                 $user = $existing

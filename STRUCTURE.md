@@ -78,20 +78,22 @@
 
 ---
 
-## الحسابات التجريبية (`promax123`)
+## الحسابات
 
-| الحساب | الرول | القناة |
-|---|---|---|
-| `admin@promax.local` | أدمن | الكل |
-| `hossam@promax.local` | Channel Manager | كل القنوات |
-| `yasmin@promax.local` | Channel Manager | كي أكاونت بس |
-| `tarek@promax.local` | Channel Manager | أونلاين + جملة |
-| `ahmed@promax.local` | سيلز إيجينت | كاش فان — مدينة نصر |
-| `mariam@promax.local` | سيلز إيجينت | كاش فان — مصر الجديدة |
-| `mohamed@promax.local` | سواق توزيع | أونلاين |
-| `kareem@promax.local` | بروموتر | كي أكاونت — مدينة نصر |
+> ⚠️ **مافيش حسابات ولا باسوردات مكتوبة هنا.**
+> كان مكتوب في المكان ده باسورد `promax123` وقايمة إيميلات — والملف
+> ده مرفوع على الجت، يعني أي حد شاف الريبو معاه بيانات دخول السيستم
+> الشغّال. الحسابات بتتعمل بأمر، والباسورد بيتولّد عشوائي وبيتطبع في
+> الترمينال مرة واحدة:
+>
+> ```
+> php artisan promax:catalogue --force     # المخازن والمنتجات
+> php artisan promax:team:setup --force    # الفريق — بيطبع الباسورد المؤقّت
+> php artisan promax:password <الإيميل> --password=<باسورد قوي>
+> ```
+>
+> ولو الدخول مش شغّال: `php artisan promax:doctor`
 
----
 
 ## الشاشات الجديدة
 

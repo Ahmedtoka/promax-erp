@@ -36,8 +36,16 @@ class SetupTeam extends Command
 {
     protected $signature = 'promax:team:setup
         {--force : من غير تأكيد}
-        {--password=promax123 : باسورد الحسابات الجديدة}
+        {--password= : باسورد الحسابات الجديدة — لو مااتكتبش بيتولّد عشوائي ويتطبع}
         {--purge : امسح اللي عليه شغل كمان — بيمسح فواتير وعُهد وزيارات}';
+
+    /**
+     * الباسورد المستخدم في التشغيلة دي.
+     *
+     * ⚠️ بيتخزن هنا عشان يتطبع في آخر التقرير — الطباعة بتحصل في
+     * `handle()` والتوليد بيحصل جوه بناء الحسابات.
+     */
+    private string $password = '';
 
     protected $description = 'يحطّ فريق PROMAX الحقيقي ويشيل حسابات التجربة';
 
@@ -305,7 +313,11 @@ class SetupTeam extends Command
         }
 
         $this->newLine();
-        $this->info("  ✅ {$made} حساب جاهز. الباسورد: ".$this->option('password'));
+        $this->info("  ✅ {$made} حساب جاهز.");
+        $this->newLine();
+        $this->line('     الباسورد المؤقّت: <fg=yellow;options=bold>'.$this->password.'</>');
+        $this->line('     <fg=red>⚠️ الرسالة دي مش هتتكرر. انسخها دلوقتي.</>');
+        $this->line('     غيّر باسورد كل حساب: php artisan promax:password <الإيميل> --password=…');
         $this->line('     الدخول بالإيميل أو بكود الموظف.');
         $this->newLine();
 
@@ -449,7 +461,15 @@ class SetupTeam extends Command
     /** إنشاء أو تحديث الفريق من `Roster` */
     private function buildTeam(): int
     {
-        $password = (string) $this->option('password');
+        // ⚠️ **مافيش باسورد افتراضي معروف.** كان `promax123` — مكتوب
+        // في الـsignature، ومطبوع على صفحة `/erp/team`، ومكتوب في
+        // README و STRUCTURE المرفوعين على الجت. يعني أي حد شاف
+        // الريبو معاه باسورد كل حساب في الشركة.
+        //
+        // دلوقتي: لو مااتكتبش، بيتولّد عشوائي وبيتطبع في الترمينال
+        // مرة واحدة. اللي شغّل الأمر هو الوحيد اللي شافه.
+        $password = (string) ($this->option('password') ?: self::randomPassword());
+        $this->password = $password;
         $made = 0;
 
         foreach (Roster::TEAM as $row) {
@@ -633,5 +653,33 @@ class SetupTeam extends Command
         }
 
         return $made;
+    }
+
+    /**
+     * باسورد مؤقّت عشوائي.
+     *
+     * ⚠️ حروف وأرقام بس — من غير رموز. المناديب بيكتبوه على كيبورد
+     * الموبايل في الشارع، والرمز اللي محتاج تبديل لوحة مفاتيح بيخلّي
+     * نص الفريق يتصل يقول إن الباسورد مش شغّال.
+     *
+     * ⚠️ من غير `l` و`I` و`O` و`0` و`1` — الخلط بينهم في ورقة
+     * مكتوبة بالإيد هو أشهر سبب لـ«الباسورد غلط».
+     */
+    /** مشتركة مع `promax:reset` — نفس القاعدة لكل باسورد بيتولّد */
+    public static function newPassword(int $length = 10): string
+    {
+        return self::randomPassword($length);
+    }
+
+    private static function randomPassword(int $length = 10): string
+    {
+        $alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $out = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $out .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return $out;
     }
 }

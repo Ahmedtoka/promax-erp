@@ -72,11 +72,20 @@
     </div>
 </div>
 
+{{-- ⚠️ **بلوك «بيانات الدخول» اتشال خالص.**
+     كان بيطبع الباسورد `promax123` بالنص، فوق جدول فيه إيميل وكود
+     ورول كل واحد في الشركة. يعني أي مدير فرع — أقل رول بيوصل
+     للصفحة دي — كان معاه بيانات دخول الأدمن كاملة، وسكرين شوت
+     واحدة للصفحة بتسلّم الشركة كلها.
+
+     ⚠️ **وممنوع يرجع.** السيستم مايعرفش الباسوردات أصلاً (متخزنة
+     مشفّرة)، فأي رقم بيتكتب هنا هو رقم متبتّت في الكود — وده تعريف
+     الباب الخلفي. --}}
 <div class="card">
-    <h3>🔑 {{ __('team.demo_credentials') }}</h3>
-    <div class="alerts">
-        <div class="alert info"><div>{!! __('team.demo_password_note', ['password' => '<b>promax123</b>']) !!}</div></div>
-        <div class="alert good"><div>{{ __('team.app_login_note') }}</div></div>
+    <h3>📱 {{ __('team.app_access') }}</h3>
+    <div class="alert good"><div>{{ __('team.app_login_note') }}</div></div>
+    <div class="alert info" style="margin-top:8px">
+        <div>{{ __('team.password_reset_note') }}</div>
     </div>
 </div>
 

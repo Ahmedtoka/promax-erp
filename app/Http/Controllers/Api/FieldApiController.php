@@ -36,7 +36,8 @@ class FieldApiController extends Controller
                 'role' => $user->role, 'role_label' => $user->roleLabel(),
                 'zone' => $user->zone?->displayName(),
                 // الأبلكيشن بيظبط لغته من هنا — نفس لغة الإشعارات
-                'locale' => $user->locale ?: 'ar',
+                // ⚠️ نفس السبب: الافتراضي بييجي من إعدادات السيستم.
+                'locale' => $user->locale ?: config('app.locale'),
             ],
             // السواق بيشوف عهدته بسعر القائمة القديم والسيلز بالجديد
             'custody' => $this->custodyPayload($custody, $user->isDriver() ? 'old' : 'new'),

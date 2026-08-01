@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Schema;
  * تشغّله على اللايف وانت مطمّن.
  *
  *   php artisan promax:doctor
- *   php artisan promax:doctor --check-password=promax123
+ *   php artisan promax:doctor --check-password=<الباسورد اللي معاك>
  */
 class Doctor extends Command
 {
@@ -100,7 +100,13 @@ class Doctor extends Command
         $cached = file_exists(base_path('bootstrap/cache/config.php'));
 
         if ($cached) {
-            $envDb = trim((string) (parse_ini_file(base_path('.env'))['DB_DATABASE'] ?? ''), '"\'');
+            // ⚠️ `parse_ini_file` بترمي تحذير وبترجّع false لو الملف
+            // مش موجود أو فيه رمز محجوز في INI — والحارس بيخلّي
+            // الفحص يعدّي بهدوء بدل ما يكسّر الأمر كله.
+            $raw = is_file(base_path('.env'))
+                ? @parse_ini_file(base_path('.env'), false, INI_SCANNER_RAW)
+                : [];
+            $envDb = trim((string) (($raw ?: [])['DB_DATABASE'] ?? ''), '"\'');
             $liveDb = (string) config('database.connections.mysql.database');
 
             $this->row('كاش الإعدادات', $cached ? 'مفعّل' : 'مطفي',
@@ -163,7 +169,11 @@ class Doctor extends Command
             ->reject(fn ($e) => User::where('email', $e)->exists())
             ->values();
 
-        $this->row('من قايمة الفريق', (14 - $missing->count()).' / 14', $missing->isEmpty(),
+        // ⚠️ العدد من `Roster` مش رقم متبتّت — أول ما حد يتضاف أو
+        // يتشال، الرقم المكتوب بالإيد بيكدب وهو لابس علامة ✓.
+        $expected = count(Roster::emails());
+
+        $this->row('من قايمة الفريق', ($expected - $missing->count())." / {$expected}", $missing->isEmpty(),
             $missing->isNotEmpty() ? 'ناقص: '.$missing->implode(', ') : null);
 
         // أمين مخزن من غير مخزن = بيفتح كل المخازن

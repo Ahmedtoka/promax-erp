@@ -94,6 +94,17 @@ class ResetSystem extends Command
 
     public function handle(): int
     {
+        // ⚠️ **`--force` على production كانت بتفضّي الداتابيز فوراً**
+        // وتسيب `admin@promax.local` بباسورد افتراضي معروف. الأمر ده
+        // موجود عشان التجارب، و`--force` بتتكتب بالعادة — سطر متنسّي
+        // في سكربت نشر بيمسح شغل شهور.
+        if (app()->environment('production') && env('PROMAX_ALLOW_RESET') !== '1') {
+            $this->error('  ⛔ ممنوع على production.');
+            $this->line('     لو متأكد: PROMAX_ALLOW_RESET=1 php artisan promax:reset --force');
+
+            return self::FAILURE;
+        }
+
         $this->warn('⚠️  الأمر ده هيمسح **كل** داتا السيستم ومالوش رجعة.');
         $this->newLine();
 
@@ -242,8 +253,11 @@ class ResetSystem extends Command
 
         if ($password === null) {
             $password = $this->option('force')
-                ? 'promax2026'
-                : ($this->secret('الباسورد (اتركه فاضي لـ promax2026)') ?: 'promax2026');
+// ⚠️ **مافيش باسورد افتراضي معروف.** كان `promax2026` — يعني
+                // `promax:reset --force` بتسيب أدمن على السيستم بباسورد
+                // مكتوب في الكود وأي حد شاف الريبو يعرفه.
+                ? \App\Console\Commands\SetupTeam::newPassword()
+                : ((string) $this->secret('باسورد الأدمن') ?: \App\Console\Commands\SetupTeam::newPassword());
         }
 
         return [$name, $email, $password];

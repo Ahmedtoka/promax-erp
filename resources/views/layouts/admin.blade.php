@@ -1,5 +1,13 @@
+{{-- ⚠️ **`lang` و`dir` من اللوكال مش متبتّتين.** كانوا `ar`/`rtl`
+     ثابتين، والسيستم بقى بيفتح إنجليزي — فأي شاشة بتستخدم اللاي أوت
+     ده كانت هتطلع إنجليزي مقلوب من اليمين لليسار.
+
+     ⚠️ اللاي أوت ده مالوش راوت دلوقتي (`DashboardController` مش
+     مذكور في `routes/`)، بس ساعتها بالظبط بيبقى خطر: أول واحد
+     يوصّله براوت هيكسر «السيستم بيفتح إنجليزي» من غير ما يعرف. --}}
+@php $rtl = app()->getLocale() === 'ar'; @endphp
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ app()->getLocale() }}" dir="{{ $rtl ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

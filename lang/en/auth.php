@@ -14,11 +14,5 @@ return [
     'attr_password' => 'password',
 
     'demo_accounts' => 'Demo accounts',
-    'demo_password' => 'All accounts use the password :password',
-    'demo_hint' => 'You can sign in with either the email or the employee code.',
-
-    'accounts_on_system' => 'Accounts on this system',
-    'no_accounts' => 'No accounts yet — run this:',
-    'forgot_hint' => 'Forgot the password? php artisan promax:password',
     'email_or_code_ph' => 'Email or employee code',
 ];

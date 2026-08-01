@@ -20,7 +20,10 @@ Route::get('/ping', fn () => response()->json([
     'time' => now()->toDateTimeString(),
 ]));
 
-Route::post('/login', [AuthApiController::class, 'login']);
+Route::post('/login', [AuthApiController::class, 'login'])
+    // ⚠️ نفس السبب — ومجموعة `api` في لارافيل 12 مش متسرّعة
+    // افتراضياً، فالراوت ده كان مفتوح تماماً للتخمين.
+    ->middleware('throttle:5,1');
 
 // 'locale' بيتنادى تاني بعد api.token عشان اليوزر يكون اتحدد
 // وناخد users.locale — مجموعة الـ api في bootstrap بتشتغل قبل التوكن

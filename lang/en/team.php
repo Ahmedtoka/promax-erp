@@ -15,8 +15,8 @@ return [
     'token_countable' => ':count tokens',
     'active' => 'Active',
     'inactive' => 'Inactive',
-    'demo_credentials' => 'Demo Credentials',
-    'demo_password_note' => 'Every account uses the password :password — you can sign in with either the email or the employee code.',
     'app_login_note' => 'Field reps sign into the mobile app with the same credentials, and the system issues them a token automatically.',
 
+    'app_access' => 'App access',
+    'password_reset_note' => 'The system does not know passwords — they are stored hashed. To change one: php artisan promax:password <email>',
 ];

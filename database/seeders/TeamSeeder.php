@@ -10,12 +10,16 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * فريق العمل: الأدمن، مديرين القنوات، السيلز إيجينت، السواقين، البروموترز
- * كلمة السر للكل: promax123
+ * كلمة السر بتتولّد عشوائي وبتتطبع في آخر التشغيل
  */
 class TeamSeeder extends Seeder
 {
+    private static ?string $pw = null;
+
     public function run(): void
     {
+        $this->blockOnProduction();
+
         $z1 = Zone::where('code', 'Z1')->first();
         $z2 = Zone::where('code', 'Z2')->first();
 
@@ -57,7 +61,7 @@ class TeamSeeder extends Seeder
                     'zone_id' => $zoneId,
                     'channel_id' => $channelId,
                     'active' => true,
-                    'password' => Hash::make('promax123'),
+                    'password' => Hash::make(self::seedPassword()),
                 ],
             );
 
@@ -75,6 +79,52 @@ class TeamSeeder extends Seeder
             }
         }
 
-        $this->command->info('   • '.count($team).' مستخدم (الباسورد: promax123)');
+        $this->command->info('   • '.count($team).' مستخدم (الباسورد اتطبع فوق)');
+    }
+
+    /**
+     * ⚠️ **الحارس ده هو الفرق بين تيست وكارثة.**
+     * السيدرز دي بتعمل `admin@promax.local` بباسورد معروف ومكتوب في
+     * README المرفوع على الجت. `php artisan db:seed --force` على
+     * اللايف — سطر واحد بيتكتب بالغلط أو بيتنسخ من دليل قديم —
+     * بيفتح باب خلفي على السيستم الشغّال.
+     *
+     * التشغيل على production لازم يبقى قرار صريح:
+     *     PROMAX_ALLOW_SEED=1 php artisan db:seed --force
+     */
+    private function blockOnProduction(): void
+    {
+        if (! app()->environment('production') || env('PROMAX_ALLOW_SEED') === '1') {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'السيدر ده بيعمل حسابات ديمو بباسورد معروف، وممنوع يشتغل على production. '
+            .'الفريق الحقيقي بيتعمل بـ`php artisan promax:team:setup`. '
+            .'لو متأكد إنك عايزه: PROMAX_ALLOW_SEED=1 php artisan db:seed --force'
+        );
+    }
+
+    /**
+     * باسورد عشوائي واحد للتشغيلة دي، بيتطبع في الترمينال.
+     *
+     * ⚠️ ثابت جوه التشغيلة الواحدة (`static`) عشان كل الحسابات تاخد
+     * نفس الباسورد وتقدر تدخل بيه، ومختلف كل مرة عشان مايتكتبش في
+     * أي ملف ولا يتحفظ في أي دليل.
+     */
+    protected static function seedPassword(): string
+    {
+        if (static::$pw !== null) {
+            return static::$pw;
+        }
+
+        $alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $out = '';
+
+        for ($i = 0; $i < 10; $i++) {
+            $out .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return static::$pw = $out;
     }
 }

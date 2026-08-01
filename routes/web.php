@@ -12,7 +12,13 @@ use Illuminate\Support\Facades\Route;
 
 // ================= الدخول =================
 Route::get('/login', [LoginController::class, 'show'])->name('login');
-Route::post('/login', [LoginController::class, 'login']);
+Route::post('/login', [LoginController::class, 'login'])
+    // ⚠️ **من غير `throttle` اللوجين مفتوح للتخمين بلا حدود.**
+    // إيميلات الفريق شكلها متوقّع (`الاسم@promax.com`)، فالباقي
+    // تجربة باسوردات بسرعة الشبكة. 5 محاولات في الدقيقة لكل
+    // (إيميل + IP) بتخلّي التخمين مستحيل عملياً من غير ما تزعج
+    // اللي بيغلط في الكتابة مرة أو اتنين.
+    ->middleware('throttle:5,1');
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 // ⚠️ **مش `erp.overview` مباشرة.** أمين المخزن اللي بيكتب الدومين

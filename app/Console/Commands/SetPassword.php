@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Hash;
  *   php artisan promax:password
  *   php artisan promax:password admin@promax.local
  *   php artisan promax:password ADM-001 --password=1234
- *   php artisan promax:password --all --password=promax123
+ *   php artisan promax:password --all --password=<باسورد قوي>
  */
 class SetPassword extends Command
 {
@@ -41,7 +41,10 @@ class SetPassword extends Command
         }
 
         $password = $this->option('password')
-            ?: ($this->secret('الباسورد الجديد (فاضي = promax123)') ?: 'promax123');
+            // ⚠️ **مافيش باسورد افتراضي.** كان بيقع على `promax123`
+            // لو المستخدم دوس Enter — يعني حساب على سيستم لايف بياخد
+            // باسورد معروف من ضغطة زرار بالغلط.
+            ?: (string) $this->secret('الباسورد الجديد');
 
         if (strlen($password) < 4) {
             $this->error('  الباسورد قصير أوي.');
