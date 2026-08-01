@@ -18,16 +18,11 @@ class LoginController extends Controller
             return redirect()->route(Access::home(auth()->user()));
         }
 
-        // ⚠️ **من الداتابيز مش قايمة مكتوبة في الفيو.** القايمة
-        // المتبتّتة فضلت بتعرض حسابات اتمسحت من زمان، فاليوزر كان
-        // بيجرّب إيميلات مش موجودة ويفتكر إن السيستم باظ.
-        return view('auth.login', [
-            'accounts' => User::where('active', true)
-                ->orderByRaw("FIELD(role, 'admin', 'manager', 'branch_manager', 'sales_agent', 'driver', 'promoter')")
-                ->orderBy('name')
-                ->take(12)
-                ->get(['id', 'name', 'name_en', 'email', 'code', 'role']),
-        ]);
+        // ⚠️ **مفيش أي بيانات حسابات بتتبعت للصفحة.**
+        // كانت بتبعت 12 حساب بإيميلاتهم وأسمائهم ورولاتهم لأي حد
+        // يفتح `/login` — من غير تسجيل دخول. على سيستم على الإنترنت
+        // ده تسليم نص بيانات الدخول لأي زائر.
+        return view('auth.login');
     }
 
     public function login(Request $request): RedirectResponse

@@ -20,4 +20,5 @@ return [
     'accounts_on_system' => 'Accounts on this system',
     'no_accounts' => 'No accounts yet — run this:',
     'forgot_hint' => 'Forgot the password? php artisan promax:password',
+    'email_or_code_ph' => 'Email or employee code',
 ];

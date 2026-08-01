@@ -20,4 +20,5 @@ return [
     'accounts_on_system' => 'الحسابات الموجودة على السيستم',
     'no_accounts' => 'مفيش حسابات لسه — شغّل الأمر ده:',
     'forgot_hint' => 'نسيت الباسورد؟ php artisan promax:password',
+    'email_or_code_ph' => 'الإيميل أو كود الموظف',
 ];

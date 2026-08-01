@@ -105,7 +105,11 @@ button:hover{filter:brightness(1.12);box-shadow:var(--shadow-lift)}
         @endif
 
         <label for="email">{{ __('auth.email_or_code') }}</label>
-        <input id="email" type="text" name="email" value="{{ old('email', $accounts->first()->email ?? '') }}" required autofocus>
+        {{-- ⚠️ **مفيش قيمة افتراضية.** كانت بتتملّى بإيميل أول حساب
+             في السيستم — يعني أي حد بيفتح الصفحة بياخد إيميل شغّال
+             جاهز، ومحتاج الباسورد بس. --}}
+        <input id="email" type="text" name="email" value="{{ old('email') }}" required autofocus
+               autocomplete="username" placeholder="{{ __('auth.email_or_code_ph') }}">
 
         <label for="password">{{ __('auth.password') }}</label>
         <input id="password" type="password" name="password" required>
@@ -117,25 +121,15 @@ button:hover{filter:brightness(1.12);box-shadow:var(--shadow-lift)}
 
         <button type="submit">{{ __('auth.sign_in') }}</button>
 
-        {{-- ⚠️ الحسابات من الداتابيز. القايمة المتبتّتة كانت بتعرض
-             حسابات اتمسحت، واليوزر بيجرّبها ويفتكر إن اللوجين باظ.
-             ومفيش ذكر لباسورد هنا — السيستم مايعرفهوش، وكتابة رقم
-             مش صح أسوأ من عدم كتابة حاجة. --}}
-        @if (isset($accounts) && $accounts->isNotEmpty())
-            <div class="hint">
-                <b>{{ __('auth.accounts_on_system') }}</b><br>
-                @foreach ($accounts as $a)
-                    <b>{{ $a->email }}</b> — {{ $a->displayName() }} · {{ $a->roleLabel() }}<br>
-                @endforeach
-                {{ __('auth.demo_hint') }}<br>
-                <span style="opacity:.75">{{ __('auth.forgot_hint') }}</span>
-            </div>
-        @else
-            <div class="hint">
-                <b>{{ __('auth.no_accounts') }}</b><br>
-                <code>php artisan promax:team</code>
-            </div>
-        @endif
+        {{-- ⚠️ **قايمة الحسابات اتشالت خالص.**
+             كانت بتعرض إيميل واسم ورول كل حساب مفعّل في السيستم لأي
+             حد يفتح الصفحة — يعني نص بيانات الدخول متسلّمة قبل أي
+             محاولة، والباقي تخمين باسورد. ده كان مقبول وإحنا بنجرّب
+             على الجهاز، ومستحيل على سيستم شغّال على الإنترنت.
+
+             ⚠️ **وممنوع ترجع تاني في أي شكل** — ولا «حساب تجريبي»
+             ولا لينك «نسيت الباسورد» بيقول إن الإيميل موجود ولا لأ. --}}
+
     </form>
 
     {{-- تبديل اللغة قبل الدخول --}}
