@@ -51,6 +51,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/clients', [ErpController::class, 'storeClient'])
             ->middleware('role:admin,manager,branch_manager')->name('clients.store');
 
+        // ═══ تفعيل العملاء المستوردين ═══
+        // ⚠️ **قبل `/clients/{client}`.** لو `{client}` اتعرّف الأول،
+        // لارافيل هيحاول يلاقي عميل كوده «activate» ويرمي 404.
+        Route::get('/clients/activate', [\App\Http\Controllers\ClientActivationController::class, 'index'])
+            ->middleware('role:admin,manager,branch_manager')->name('clients.activate');
+        Route::post('/clients/activate', [\App\Http\Controllers\ClientActivationController::class, 'activate'])
+            ->middleware('role:admin,manager')->name('clients.activate.do');
+        Route::post('/clients/{client}/deactivate', [\App\Http\Controllers\ClientActivationController::class, 'deactivate'])
+            ->middleware('role:admin,manager')->name('clients.deactivate');
+
         // ⚠️ **قبل `/clients/{client}` بالظبط.** لارافيل بيطابق بالترتيب،
         // ولو `{client}` اتعرّف الأول كان هيحاول يلاقي عميل كوده «new»
         // ويرمي 404 على صفحة إضافة عميل.
@@ -79,6 +89,32 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // رصيد أول المدة — بداية الشغل على السيستم
         Route::post('/clients/{client}/opening', [ErpController::class, 'openingBalance'])
             ->middleware('role:admin,manager,branch_manager,accountant')->name('clients.opening');
+
+        // ═══ قوايم الأسعار ═══
+        // ⚠️ **العرض للمديرين، والتعديل للأدمن ومدير القنوات.**
+        // السعر اللي بيتكتب هنا هو اللي بيتحاسب بيه العميل في كل
+        // فاتورة — مش شاشة إعدادات، دي شاشة فلوس.
+        Route::get('/prices', [\App\Http\Controllers\PriceListController::class, 'index'])
+            ->middleware('role:admin,manager,branch_manager')->name('prices');
+        Route::get('/prices/{priceList}', [\App\Http\Controllers\PriceListController::class, 'show'])
+            ->middleware('role:admin,manager,branch_manager')->name('prices.show');
+
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/prices', [\App\Http\Controllers\PriceListController::class, 'store'])
+                ->name('prices.store');
+            Route::put('/prices/{priceList}', [\App\Http\Controllers\PriceListController::class, 'update'])
+                ->name('prices.update');
+            Route::post('/prices/{priceList}/save', [\App\Http\Controllers\PriceListController::class, 'savePrices'])
+                ->name('prices.save');
+            Route::post('/prices/{priceList}/bulk', [\App\Http\Controllers\PriceListController::class, 'bulk'])
+                ->name('prices.bulk');
+            Route::post('/prices/{priceList}/activate', [\App\Http\Controllers\PriceListController::class, 'activate'])
+                ->name('prices.activate');
+            Route::post('/prices/{priceList}/deactivate', [\App\Http\Controllers\PriceListController::class, 'deactivate'])
+                ->name('prices.deactivate');
+            Route::post('/prices/{priceList}/default', [\App\Http\Controllers\PriceListController::class, 'makeDefault'])
+                ->name('prices.default');
+        });
 
         Route::get('/contracts', [ErpController::class, 'contracts'])->name('contracts');
         // صفحة عقد العميل — كل عقد لوحده
@@ -339,6 +375,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // بتليفونه ورصيده. مندوب بيشوفها يقدر ياخد عملاء زمايله
         // ويعرف تحركاتهم — دي بيانات إدارة مش بيانات ميدان.
         Route::middleware('role:admin,manager')->group(function () {
+            // ═══ تسليم العهدة ═══
+            // ⚠️ **بيخرّج بضاعة فوراً.** عشان كده مقفول على الأدمن
+            // ومدير القنوات وأمين المخزن — اللي بيقدر يحمّل عربية.
+            Route::get('/handout', [\App\Http\Controllers\CustodyHandoutController::class, 'index'])
+                ->middleware('role:admin,manager,warehouse_keeper')->name('handout');
+            Route::post('/handout', [\App\Http\Controllers\CustodyHandoutController::class, 'store'])
+                ->middleware('role:admin,manager,warehouse_keeper')->name('handout.store');
+            Route::get('/handout/{pick}/print', [\App\Http\Controllers\CustodyHandoutController::class, 'print'])
+                ->middleware('role:admin,manager,warehouse_keeper')->name('handout.print');
+
             Route::get('/journeys', [\App\Http\Controllers\JourneyController::class, 'index'])
                 ->name('journeys');
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])

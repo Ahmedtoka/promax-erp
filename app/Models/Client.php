@@ -37,7 +37,7 @@ class Client extends Model
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
         'contacts', 'category', 'status',
         'channel_id', 'group_id', 'branch_id', 'sub_channel', 'parent_id', 'uses_channel_discount',
-        'price_list', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
+        'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng',
         'discount', 'is_new', 'photo_path', 'docs_path', 'docs_type', 'has_docs',
         'purchases', 'collections', 'returns', 'rebates', 'settlements', 'balance', 'withheld',
@@ -117,7 +117,20 @@ class Client extends Model
         return $this->belongsTo(Branch::class);
     }
 
-    public function zone(): BelongsTo
+        /**
+     * قائمة السعر المعتمدة — الصف مش النص.
+     *
+     * ⚠️ **اسمها مش `priceList`.** فيه عمود اسمه `price_list` (نص
+     * `old`/`new`)، ولو العلاقة اتسمّت `priceList` كان Eloquent
+     * هيلغبط الاتنين: `$model->price_list` بترجّع العلاقة بدل النص
+     * وكل كود قديم بيقارن بالنص بيقع.
+     */
+    public function priceListRow(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(PriceList::class, 'price_list_id');
+    }
+
+public function zone(): BelongsTo
     {
         return $this->belongsTo(Zone::class);
     }

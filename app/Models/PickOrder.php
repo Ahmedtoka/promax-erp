@@ -234,6 +234,86 @@ class PickOrder extends Model
     }
 
     /**
+     * تسليم عهدة مباشر — خطوة واحدة بدل تلاتة.
+     *
+     * ⚠️ **ده اللي المالك طلبه بالنص:** «تطلع مني على طول». الفلو
+     * القديم `raise → markReady → handOver` بيمرّ على أمين المخزن،
+     * وده منطقي في مخزن كبير فيه حد بيشيل فعلاً — بس هنا اللي بيحمّل
+     * العربية هو اللي بيعمل الأمر.
+     *
+     * ⚠️ **بيستخدم نفس `raise` و`markReady` مش كود جديد.** لو كتبنا
+     * خصم مستقل هنا، كنا هنعيد نفس الغلطة اللي التحويلات وقعت فيها:
+     * مسار تاني بيخصم من الباتش وينسى الرف، فأمر تجهيز تاني بياخد
+     * نفس الكراتين اللي مشيت.
+     *
+     * @param  array<int, int>  $qtyByProduct   [product_id => qty]  للبيع
+     * @param  array<int, int>  $giftByProduct  [product_id => qty]  هدايا
+     * @return array{order: ?PickOrder, error: ?string}
+     */
+    public static function issueDirect(
+        Warehouse $warehouse,
+        User $rep,
+        array $qtyByProduct,
+        array $giftByProduct = [],
+        ?User $issuedBy = null,
+        ?string $carrierNote = null,
+    ): array {
+        $qtyByProduct = array_map('intval', array_filter($qtyByProduct, fn ($q) => (int) $q > 0));
+        $giftByProduct = array_map('intval', array_filter($giftByProduct, fn ($q) => (int) $q > 0));
+
+        // ⚠️ **الهدية بتتحجز من نفس المخزون.** فالطلب للمخزن هو
+        // المجموع؛ لو خططنا للبيع بس، الهدية كانت هتخرج من غير ما
+        // حد يخصمها والمخزن يقول إنها لسه موجودة.
+        $total = $qtyByProduct;
+
+        foreach ($giftByProduct as $pid => $g) {
+            $total[$pid] = ($total[$pid] ?? 0) + $g;
+        }
+
+        if ($total === []) {
+            return ['order' => null, 'error' => __('stock.pick_no_items')];
+        }
+
+        $raised = self::raise($warehouse, $rep, $total, self::PURPOSE_VAN_LOAD, $issuedBy);
+
+        if ($raised['error'] !== null) {
+            return $raised;
+        }
+
+        /** @var self $order */
+        $order = $raised['order'];
+
+        // ⚠️ **الهدية بتتوزّع على بنود الأمر بنفس ترتيب FEFO.**
+        // `raise` بتقسّم الكمية على أكتر من باتش، فبنمشي على البنود
+        // بالترتيب وناخد من كل واحد نصيبه من الهدية.
+        $left = $giftByProduct;
+
+        foreach ($order->items()->orderBy('id')->get() as $item) {
+            $pid = (int) $item->product_id;
+
+            if (($left[$pid] ?? 0) <= 0) {
+                continue;
+            }
+
+            $take = min($left[$pid], (int) $item->qty_requested);
+            $item->update(['gift_qty' => $take]);
+            $left[$pid] -= $take;
+        }
+
+        // الخروج الفعلي من الأرفف — نفس المسار اللي المخزن بيستخدمه
+        if ($error = $order->markReady($issuedBy ?? $rep)) {
+            return ['order' => null, 'error' => $error];
+        }
+
+        $order->update([
+            'issued_at' => now(),
+            'carrier_note' => $carrierNote,
+        ]);
+
+        return ['order' => $order->fresh(), 'error' => null];
+    }
+
+    /**
      * بيوزّع الكمية المطلوبة على الباتشات والأرفف بترتيب الـ FEFO.
      * بيرجع null لو الكمية مش متاحة.
      *
@@ -405,7 +485,19 @@ class PickOrder extends Model
                             'product_id' => $item->product_id,
                             'batch_id' => $item->batch_id,
                         ]);
-                        $line->assigned = (int) $line->assigned + $got;
+
+                        // ⚠️ **الهدية في خانتها.** لو دخلت في `assigned`
+                        // كان المندوب هيقفل عهدته و«يبيع» عينات مجانية،
+                        // والفرق بين المبيع والموزّع كان يضيع للأبد —
+                        // وده أهم رقم في ميزانية التسويق.
+                        //
+                        // ⚠️ **الهدية بتتقص لو المستلم أخد أقل.** الفرق
+                        // بيرجع للرف، فتوزيع الهدية على الناقص كان
+                        // هيخلّي عهدة الهدايا أكبر من اللي خرج فعلاً.
+                        $gift = min((int) ($item->gift_qty ?? 0), $got);
+
+                        $line->assigned = (int) $line->assigned + ($got - $gift);
+                        $line->gift_assigned = (int) $line->gift_assigned + $gift;
                         $line->save();
                     }
                 }

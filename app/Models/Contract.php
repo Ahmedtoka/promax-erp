@@ -270,7 +270,7 @@ class Contract extends Model
 
     protected $fillable = [
         'client_id', 'group_id', 'number', 'chain', 'chain_en', 'type', 'type_key', 'duration',
-        'discount', 'price_list',
+        'discount', 'price_list', 'price_list_id',
         'withholding_pct', 'total_deduction_pct', 'settlement_mode',
         'terms', 'payment_days', 'payment_days_from', 'starts_at', 'ends_at', 'auto_renew', 'notice_days',
         'signed_ok', 'note', 'termination', 'renewal_note', 'file_path', 'clauses', 'active',
@@ -318,7 +318,20 @@ class Contract extends Model
         });
     }
 
-    public function client(): BelongsTo
+        /**
+     * قائمة السعر المعتمدة — الصف مش النص.
+     *
+     * ⚠️ **اسمها مش `priceList`.** فيه عمود اسمه `price_list` (نص
+     * `old`/`new`)، ولو العلاقة اتسمّت `priceList` كان Eloquent
+     * هيلغبط الاتنين: `$model->price_list` بترجّع العلاقة بدل النص
+     * وكل كود قديم بيقارن بالنص بيقع.
+     */
+    public function priceListRow(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(PriceList::class, 'price_list_id');
+    }
+
+public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }

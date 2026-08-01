@@ -43,6 +43,7 @@ class Access
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
+            'erp.prices',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
@@ -58,6 +59,7 @@ class Access
             'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
             'erp.leads', 'erp.stock', 'erp.batches', 'erp.reports',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
+            'erp.prices',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
             // كل صف لينك لكارته (`erp.products.show`)، وكان بيرمي 403
             // لأن البادئة مش مغطّاة — نفس الغلطة بالظبط اللي الملف ده
@@ -68,7 +70,7 @@ class Access
             // اللايف كلهم `role:admin,manager`. البادئة العامة كانت
             // بتوري مدير الفرع تلات لينكات في السايدبار بتاعه بترفضه
             // أول ما يدوس — وده بالظبط اللي الخريطة دي اتعملت تمنعه.
-            'ops.dashboard', 'ops.requests', 'ops.pos', 'ops.replenishments',
+            'ops.dashboard', 'ops.requests', 'ops.pos', 'ops.replenishments', 'ops.handout',
             // ⚠️ **`ops.invoices` بالجمع لازم تتكتب لوحدها.** قاعدة
             // البادئة بتطابق الاسم بالظبط أو `الاسم + نقطة` — و
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
@@ -95,7 +97,8 @@ class Access
             // `role:admin,manager` جوه الراوت نفسه.
             'erp.stock', 'erp.batches', 'erp.warehouses', 'erp.products',
             'wh.',
-            'ops.pos',
+            // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
+            'ops.pos', 'ops.handout',
         ],
     ];
 
@@ -134,13 +137,15 @@ class Access
     public const NAV = [
         'nav.group_management' => [
             ['erp.overview', '📊', 'nav.overview', 'erp.overview', null],
-            ['erp.clients', '👥', 'nav.clients', 'erp.clients*', null],
+            ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
+            ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
             ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
             ['erp.leads', '🎯', 'nav.leads', 'erp.leads', null],
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
             ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['erp.reports', '📑', 'nav.reports', 'erp.reports', null],
         ],
@@ -159,6 +164,7 @@ class Access
         'nav.group_operations' => [
             ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
+            ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],

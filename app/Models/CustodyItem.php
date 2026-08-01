@@ -10,7 +10,8 @@ class CustodyItem extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['custody_id', 'product_id', 'batch_id', 'assigned', 'sold', 'returned'];
+    protected $fillable = ['custody_id', 'product_id', 'batch_id', 'assigned', 'sold', 'returned',
+        'gift_assigned', 'gift_given'];
 
     public function custody(): BelongsTo
     {
@@ -41,5 +42,17 @@ class CustodyItem extends Model
     public function batchLabel(): string
     {
         return $this->batch?->batch_no ?? '—';
+    }
+
+    /**
+     * الهدايا اللي لسه في العربية.
+     *
+     * ⚠️ **الرقم ده لازم يوصل صفر قبل قفل العهدة.** الهدية اللي
+     * مااتوزّعتش ومارجعتش المخزن هي بضاعة ضايعة مسجّلة كأنها
+     * اتصرفت تسويق.
+     */
+    public function giftLeft(): int
+    {
+        return max((int) $this->gift_assigned - (int) $this->gift_given, 0);
     }
 }

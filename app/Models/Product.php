@@ -73,6 +73,17 @@ class Product extends Model
      * أي كود بيقرا الإجمالي لازم يستخدم `qtyTotal()` وأخواتها —
      * وأي كود بيقرا مخزن معيّن يستخدم `stockIn()`.
      */
+    /**
+     * أسعار الصنف في كل القوايم.
+     *
+     * ⚠️ اسمها `prices` مش `priceList` — الصنف بيبقى في كل القوايم،
+     * مش في واحدة.
+     */
+    public function prices(): HasMany
+    {
+        return $this->hasMany(PriceListItem::class);
+    }
+
     public function stocks(): HasMany
     {
         return $this->hasMany(Stock::class);

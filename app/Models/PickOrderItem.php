@@ -16,7 +16,7 @@ class PickOrderItem extends Model
 
     protected $fillable = [
         'pick_order_id', 'product_id', 'batch_id', 'location_id',
-        'qty_requested', 'qty_picked', 'qty_received', 'variance_note',
+        'qty_requested', 'qty_picked', 'qty_received', 'gift_qty', 'variance_note',
     ];
 
     public function pickOrder(): BelongsTo

@@ -90,6 +90,7 @@ class PickApiController extends Controller
             'qty_requested' => $o->qtyRequested(),
             'qty_picked' => $o->qtyPicked(),
             'qty_received' => $o->qtyReceived(),
+            'gift_total' => (int) $o->items->sum('gift_qty'),
             'can_receive' => $o->status === 'ready',
             'has_variance' => (bool) $o->has_variance,
             'needed_on' => $o->needed_on?->toDateString(),
@@ -116,7 +117,13 @@ class PickApiController extends Controller
             'qty_requested' => (int) $i->qty_requested,
             'qty_picked' => (int) ($i->qty_picked ?? 0),
             'qty_received' => $i->qty_received === null ? null : (int) $i->qty_received,
+            // ⚠️ **الهدية بتبان للمندوب قبل ما يستلم.** لو مابانتش،
+            // هو بيستلم الكمية كلها وهو فاكرها كلها للبيع، وبعدين
+            // بيلاقي عهدته فيها كمية «مجانية» مش عارف مصدرها.
+            'gift_qty' => (int) ($i->gift_qty ?? 0),
         ])->values();
+
+        $base['gift_total'] = (int) $o->items->sum('gift_qty');
 
         return $base;
     }

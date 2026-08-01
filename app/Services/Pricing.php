@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Batch;
 use App\Models\Client;
+use App\Models\PriceList;
 use App\Models\Product;
 
 /**
@@ -16,8 +17,8 @@ use App\Models\Product;
  * نادِ على Pricing::quote() أو Pricing::listPrice().
  *
  * الترتيب:
- *   1. قائمة السعر  → العقد يثبّتها، وإلا العميل، وإلا الجديد
- *   2. سعر القائمة  → products.price_old أو products.price_new
+ *   1. قائمة السعر  → العقد يثبّتها، وإلا العميل، وإلا الافتراضية
+ *   2. سعر القائمة  → `price_list_items` (وإلا الأعمدة القديمة)
  *   3. الخصم        → العقد → خصم خاص → السلسلة → القناة
  *   4. التكلفة      → تكلفة الباتش لو معروف، وإلا تكلفة المنتج
  */
@@ -32,6 +33,38 @@ class Pricing
      * قائمة السعر المعتمدة للعميل.
      * العقد بيغلب لأنه اتفاق مكتوب.
      */
+    /**
+     * صف قائمة السعر المعتمد للعميل.
+     *
+     * ⚠️ **القوايم بقت مسمّاة ومفتوحة العدد.** كانت عمودين ثابتين
+     * (`price_old` / `price_new`)، ودلوقتي صفوف في `price_lists`.
+     * الدالة دي هي اللي بتقرر أنهي قايمة، وكل حساب سعر بيمرّ منها.
+     *
+     * ⚠️ **العقد بيغلب لأنه اتفاق مكتوب**، وبعده اللي على العميل،
+     * وبعده الافتراضية. العميل اللي مالوش ولا واحدة فيهم بياخد
+     * الافتراضية بدل ما يتباع بصفر.
+     */
+    public static function listRowFor(Client $client): ?PriceList
+    {
+        $contract = $client->liveContract();
+
+        // ⚠️ **لازم تكون مفعّلة.** قايمة موقوفة معناها إن أسعارها
+        // مش معتمدة — والبيع بيها بيطلّع فاتورة بسعر محدش أقرّه.
+        $fromContract = $contract?->priceListRow;
+
+        if ($fromContract && $fromContract->active) {
+            return $fromContract;
+        }
+
+        $own = $client->priceListRow;
+
+        if ($own && $own->active) {
+            return $own;
+        }
+
+        return PriceList::default();
+    }
+
     public static function listFor(Client $client): string
     {
         // ⚠️ liveContract() هي المصدر الوحيد للعقد: بتاع العميل لو موجود
@@ -49,10 +82,52 @@ class Pricing
             : self::LIST_NEW;
     }
 
-    /** سعر القائمة قبل أي خصم */
-    public static function listPrice(Product $product, string $list = self::LIST_NEW): float
+    /**
+     * سعر القائمة قبل أي خصم.
+     *
+     * ⚠️ **`price_list_items` هي المصدر، والأعمدة القديمة احتياطي.**
+     * الشغل التاريخي كله (فواتير وتقارير قديمة) اتحسب من الأعمدة،
+     * فمسحها بيحوّل كل رقم قديم لصفر. المايجريشن نقلتهم لقايمتين،
+     * والاحتياطي هنا بيغطي أي داتابيز لسه ماهاجرتش.
+     */
+    public static function listPrice(Product $product, string|PriceList|null $list = null): float
     {
+        if ($list instanceof PriceList) {
+            $price = $list->priceFor($product);
+
+            if ($price > 0) {
+                return $price;
+            }
+
+            // القوايم المنقولة أكوادها `old`/`new` — نرجع لعمودها
+            $list = $list->code;
+        }
+
+        $list = $list ?: self::LIST_NEW;
+
         return (float) ($list === self::LIST_OLD ? $product->price_old : $product->price_new);
+    }
+
+    /**
+     * سعر صنف لعميل — قبل الخصم.
+     *
+     * ⚠️ **بترجّع `null` لو الصنف مش متسعّر في قايمة العميل.** صفر
+     * كان هيعدّي كأنه سعر حقيقي وتطلع فاتورة مجانية؛ الـ`null`
+     * بتخلّي اللي بينادي يقرر: يرفض البيع، أو يقول إن الصنف ده
+     * مالوش سعر للعميل ده. (قرار المالك: كل قايمة لازم تكون كاملة،
+     * فالحالة دي مفروض ماتحصلش أصلاً — ودي شبكة الأمان.)
+     */
+    public static function priceForClient(Client $client, Product $product): ?float
+    {
+        $list = self::listRowFor($client);
+
+        if ($list === null) {
+            return null;
+        }
+
+        $price = self::listPrice($product, $list);
+
+        return $price > 0 ? $price : null;
     }
 
     /**
@@ -80,8 +155,11 @@ class Pricing
         ?Batch $batch = null,
         int $qty = 1,
     ): array {
-        $list = self::listFor($client);
-        $listPrice = self::listPrice($product, $list);
+        // ⚠️ الصف الأول عشان ياخد السعر المسمّى، والكود بعده عشان
+        // اللي بيقرا `list` من الناتج (شاشات وتقارير) مايتكسرش.
+        $listRow = self::listRowFor($client);
+        $list = $listRow?->code ?? self::listFor($client);
+        $listPrice = self::listPrice($product, $listRow ?? $list);
         $discountPct = $client->effectiveDiscount();
 
         $unitPrice = round($listPrice * (1 - $discountPct), 2);

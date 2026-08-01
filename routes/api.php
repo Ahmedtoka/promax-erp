@@ -65,6 +65,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ⚠️ **العرض بس** — والكنترولر بيفلتر بالمستخدم أصلاً، فالمحاسب
     // بيشوف اللي يخصّه. أمين المخزن بيشوف أوامر التجهيز عشان دي شغله.
     Route::get('/invoices', [FieldApiController::class, 'invoices']);
+    // ═══ الهدايا — المندوب بيسجّل اداها لمين ═══
+    // ⚠️ من غير التسجيل ده، «صرفنا 200 عينة» رقم مالوش تفصيل.
+    Route::get('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'index']);
+    Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store']);
+
     Route::get('/picks', [PickApiController::class, 'index']);
     Route::get('/picks/{pick}', [PickApiController::class, 'show']);
 
