@@ -183,6 +183,40 @@ class ErpController extends Controller
     }
 
     /**
+     * تعديل العميل — **نفس ويزارد الإنشاء**.
+     *
+     * ⚠️ **كان مودال بحقول قليلة.** كارت العميل فيه زرار «تعديل»
+     * بيفتح مودال فيه الاسم والعنوان والقناة وبس — يعني العقد وبنوده
+     * والخصومات والتسعير والضريبة، اللي هي أهم حاجة في العميل، مالهاش
+     * أي واجهة تعديل. اللي عايز يظبط نسبة خصم كان لازم يمسح العميل
+     * ويعمله من تاني.
+     *
+     * ⚠️ **نفس الفيو مش نسخة منه.** الويزارد فيه فاليديشن وترتيب
+     * وبنود عقد ومنطق إظهار وإخفاء؛ نسخة تانية معناها إن أي حقل جديد
+     * لازم يتضاف مرتين، والمرة اللي بتتنسى بتخلّي الحقل يتحفظ من
+     * شاشة ومايتحفظش من التانية.
+     */
+    public function editClient(Request $request, Client $client)
+    {
+        abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+
+        // ⚠️ `group.contract` لازم — الفيو بيسأل عليه عشان يقول
+        // «العقد جاي من السلسلة» بدل ما يوري بلوك فاضي. و`manager`
+        // عشان يفضل في الدروب داون حتى لو اتوقف.
+        $client->load(['contract.contractClauses', 'group.contract', 'manager', 'zone', 'channel']);
+
+        // ⚠️ **`array_merge` مش `+`.** المعامل `+` بيسيب قيمة الشمال
+        // للمفتاح المكرر — و`clientFormData` بتحط `editing => false`،
+        // فالتجاوز كان بيتبلع في صمت والشاشة تفضل «عميل جديد».
+        return view('erp.client_form', array_merge(
+            $this->clientFormData($request, $client),
+            // العلم ده هو اللي بيخلّي الفورم يبعت `PUT` على العميل بدل
+            // `POST` بعميل جديد. من غيره «تعديل» كان هيعمل نسخة.
+            ['editing' => true],
+        ));
+    }
+
+    /**
      * منطقة جديدة من جوه فورم العميل — بترجع JSON.
      *
      * ⚠️ **مالهاش صفحة ومابتعملش redirect.** المستخدم واقف في نص فورم
@@ -304,6 +338,9 @@ class ErpController extends Controller
         return [
             'src' => $src,
             'ct' => $contract,
+            // ⚠️ الافتراضي `false` — الفيو بيستخدمه من غير `??`،
+            // وأي مسار بينسى يبعته كان هيرمي «Undefined variable».
+            'editing' => false,
             'presets' => ContractIntake::currentPresets($contract),
             'governorates' => Governorates::options(),
             'branches' => \App\Models\Branch::scope(
@@ -317,11 +354,29 @@ class ErpController extends Controller
             'zones' => \App\Models\Branch::scope(Zone::query(), $request->user())
                 ->orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
-            'groups' => \App\Models\ClientGroup::where('active', true)->orderBy('name')->get(),
+            // ⚠️ **سلسلة العميل بتتضاف حتى لو موقوفة.** القايمة بتعرض
+            // المفعّل بس، فالعميل اللي سلسلته اتوقفت مافيش أوبشن
+            // بتطابقه — الـselect بيبعت فاضي وأول حفظ بيفك ربطه
+            // بالسلسلة في صمت، ومعاه عقد السلسلة وخصمه.
+            'groups' => (function () use ($src) {
+                $groups = \App\Models\ClientGroup::where('active', true)->orderBy('name')->get();
+
+                return $src?->group && ! $groups->contains('id', $src->group_id)
+                    ? $groups->concat([$src->group])
+                    : $groups;
+            })(),
             // ⚠️ المديرين مسكوبين كمان — القايمة بتكشف أسماء فريق فرع
             // تاني، و`exists:users,id` مابيسألش عن الفرع فالتخصيص كان
             // بيعدّي.
-            'managers' => $this->managerOptions($request),
+            // ⚠️ نفس السبب: مدير الحساب اللي اتوقف أو اتغيّر رولّه
+            // مش في `managerOptions()`، وبيتصفّر عند أول حفظ.
+            'managers' => (function () use ($request, $src) {
+                $managers = $this->managerOptions($request);
+
+                return $src?->manager && ! $managers->contains('id', $src->manager_id)
+                    ? $managers->concat([$src->manager])
+                    : $managers;
+            })(),
         ];
     }
 
@@ -404,7 +459,11 @@ class ErpController extends Controller
             $this->syncContract($client, $data, $request);
         });
 
-        return back()->with('ok', __('flash.client_saved'));
+        // ⚠️ **`back()` كان بيرجّع للويزارد نفسه.** المستخدم بيحفظ
+        // ويلاقي نفس الفورم قدامه فمش عارف إتحفظ ولا لأ. الكارت هو
+        // المكان اللي بيشوف فيه النتيجة.
+        return redirect()->route('erp.clients.show', $client)
+            ->with('ok', __('flash.client_saved'));
     }
 
     /**
@@ -549,7 +608,10 @@ class ErpController extends Controller
             // التعريف تخمين بيتحوّل لحقيقة في الشاشة — عميل يتعلّم
             // «تحصيل فوري» من يومه الأول ويتقفل عليه الآجل من غير
             // أي سبب. بيتظبط من كارت العميل بعد أول تعاملات.
-            'category' => ['nullable', 'in:danger,watch,grow,ok,idle,internal,credit'],
+            // ⚠️ من الثابت مباشرة — القايمة كانت مكتوبة بالنص هنا وفي
+            // الفيو، فإضافة تصنيف جديد كانت بتوري أوبشن الفاليديشن
+            // يرفضها.
+            'category' => ['nullable', Rule::in(array_keys(Client::CATEGORIES))],
             'discount' => ['required', 'numeric', 'min:0', 'max:100'],
             // قائمة السعر اللي العميل بيتحاسب بيها — إجبارية
             'price_list' => ['required', 'in:old,new'],

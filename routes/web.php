@@ -68,6 +68,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,branch_manager')->name('clients.new');
         Route::get('/clients/{client}/clone', [ErpController::class, 'cloneClient'])
             ->middleware('role:admin,manager,branch_manager')->name('clients.clone');
+        // ⚠️ **التعديل بقى نفس ويزارد الإنشاء** بدل المودال القديم —
+        // العقد وبنوده والتسعير مالهمش أي واجهة تعديل في المودال.
+        Route::get('/clients/{client}/edit', [ErpController::class, 'editClient'])
+            ->middleware('role:admin,manager,branch_manager')->name('clients.edit');
 
         Route::get('/clients/{client}', [ErpController::class, 'client'])->name('clients.show');
         Route::put('/clients/{client}', [ErpController::class, 'updateClient'])

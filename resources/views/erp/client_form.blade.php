@@ -1,6 +1,8 @@
 @extends('layouts.system')
 
-@section('title', $src ? __('client.clone_title', ['name' => $src->displayName()]) : __('client.new_client'))
+@section('title', $editing
+    ? __('client.edit_title', ['name' => $src->displayName()])
+    : ($src ? __('client.clone_title', ['name' => $src->displayName()]) : __('client.new_client')))
 
 @php
     use App\Models\Channel;
@@ -22,11 +24,40 @@
         return $src?->getAttribute($key) ?? $fallback;
     };
 
-    // ⚠️ الحقول دي بتستخدم `old()` لوحدها من غير المصدر — الاسم
-    // والعنوان والتليفون واللوكيشن **خاصة بالفرع الجديد**. لو اتنسخوا،
-    // بيتحفظ فرعين بنفس الاسم والعنوان ومحدش يفرّق بينهم.
+    /**
+     * الحقول اللي بتخص الفرع نفسه: الاسم والعنوان والتليفون واللوكيشن.
+     *
+     * ⚠️ **في الاستنساخ بتفضل فاضية.** لو اتنسخت، بيتحفظ فرعين بنفس
+     * الاسم والعنوان ومحدش يفرّق بينهم.
+     *
+     * ⚠️ **في التعديل بتتعبّى.** دي بالظبط الحقول اللي المستخدم جاي
+     * يغيّرها؛ لو فضيت، أول حفظ كان هيمسح اسم العميل وعنوانه.
+     */
+    $own = function (string $key, $fallback = null) use ($src, $editing) {
+        $o = old($key);
+        if ($o !== null) {
+            return $o;
+        }
+
+        return ($editing ? $src?->getAttribute($key) : null) ?? $fallback;
+    };
+
     $presetOn = fn ($k) => (bool) (old("clause.$k.on", $presets[$k]['on'] ? 1 : 0));
     $presetVal = fn ($k) => old("clause.$k.value", $presets[$k]['value'] ?: '');
+
+    /**
+     * البند مقفول؟
+     *
+     * ⚠️ **القفل في التعديل بس.** الـ22 عقد الحقيقيين فيهم بنود مكتوبة
+     * بإيد من الـPDF من غير `preset`. `ContractIntake::syncClauses()`
+     * بترفض تكتب فوقها عشان مايبقاش خصمين لنفس النوع. الشاشة لازم
+     * تعرض القفل ده — من غيره المستخدم بيغيّر الرقم، بياخد «اتحفظ»
+     * أخضر، والقيمة زي ما هي ومفيش رسالة تقول ليه.
+     *
+     * ⚠️ في الإنشاء/الاستنساخ مفيش قفل: العقد جديد فاضي، ولو قفلنا
+     * الفرع الجديد كان هيفتح بخصم صفر.
+     */
+    $locked = fn ($k) => $editing && ! empty($presets[$k]['locked']);
 
     // ═══════════════════════════════════════════════════════════
     // أدوات عرض الأخطاء
@@ -95,7 +126,14 @@
 
 @section('content')
 
-@if ($src)
+@if ($editing)
+    <div class="alert info" style="margin-bottom:14px">
+        <span>✎</span>
+        <span>{{ __('client.edit_hint', ['name' => $src->displayName(), 'code' => $src->code]) }}</span>
+        <a class="btn sm" href="{{ route('erp.clients.show', $src) }}"
+           style="margin-inline-start:auto">{{ __('client.back_to_card') }}</a>
+    </div>
+@elseif ($src)
     <div class="alert info" style="margin-bottom:14px">
         <span>⧉</span>
         <span>{{ __('client.clone_hint', ['name' => $src->displayName(), 'code' => $src->code]) }}</span>
@@ -131,9 +169,16 @@
 
 {{-- الحقول كلها في فورم واحد — الخطوات إخفاء وإظهار بس، فمفيش
      داتا بتضيع لو المستخدم رجع خطوة لورا --}}
-<form method="POST" action="{{ route('erp.clients.store') }}" enctype="multipart/form-data" id="clientForm">
+{{-- ⚠️ **التعديل بيروح على راوت تاني بـ`PUT`.** لو فضل `POST` على
+     `clients.store`، «تعديل» كان بيعمل عميل جديد كل مرة. --}}
+<form method="POST" id="clientForm" enctype="multipart/form-data"
+      action="{{ $editing ? route('erp.clients.update', $src) : route('erp.clients.store') }}">
     @csrf
-    @if ($src)<input type="hidden" name="cloned_from" value="{{ $src->id }}">@endif
+    @if ($editing)
+        @method('PUT')
+    @elseif ($src)
+        <input type="hidden" name="cloned_from" value="{{ $src->id }}">
+    @endif
 
     {{-- ══════════════════ 1. تعريف العميل ══════════════════ --}}
     <div class="card step-pane" data-pane="1">
@@ -151,7 +196,7 @@
                      قيمة مكتوبة فعلاً، وفيه ناس بتسيب الخانة فاكرة إنها
                      مليانة — وبعدين الحفظ بيترفض وهم مش فاهمين ليه. --}}
                 <input type="text" name="name_en" maxlength="190" dir="ltr" autofocus data-req
-                       value="{{ old('name_en') }}" style="width:100%"
+                       value="{{ $own('name_en') }}" style="width:100%"
                        class="{{ trim($bad('name_en')) }}"
                        placeholder="{{ __('client.name_en_ph') }}">
                 {!! $err('name_en') !!}
@@ -160,7 +205,7 @@
                 <label class="f">{{ __('client.name_ar_field') }} {!! $star !!}</label>
                 <input type="text" name="name" maxlength="190" data-req
                        class="{{ trim($bad('name')) }}"
-                       value="{{ old('name') }}" style="width:100%"
+                       value="{{ $own('name') }}" style="width:100%"
                        placeholder="{{ __('client.name_ar_ph') }}">
                 {!! $err('name') !!}
             </div>
@@ -201,7 +246,7 @@
                 <label class="f">{{ __('common.phone') }}</label>
                 <input type="text" name="phone" maxlength="30" dir="ltr" placeholder="01000000000"
                        class="{{ trim($bad('phone')) }}"
-                       value="{{ old('phone') }}" style="width:100%">
+                       value="{{ $own('phone') }}" style="width:100%">
                 {!! $err('phone') !!}
             </div>
         </div>
@@ -274,7 +319,7 @@
         <div class="frow">
             <div style="grid-column:1/-1">
                 <label class="f">{{ __('common.address') }} <span style="color:var(--muted);font-weight:400">· EN</span></label>
-                <input type="text" name="address" dir="ltr" maxlength="190" value="{{ old('address') }}"
+                <input type="text" name="address" dir="ltr" maxlength="190" value="{{ $own('address') }}"
                        class="{{ trim($bad('address')) }}"
                        style="width:100%" placeholder="{{ __('client.address_ph') }}">
                 {!! $err('address') !!}
@@ -286,7 +331,7 @@
                 <label class="f">{{ __('geo.location_url') }}</label>
                 <div style="display:flex;gap:6px">
                     <input type="url" name="location_url" id="locUrl" maxlength="500" dir="ltr"
-                           value="{{ old('location_url') }}" style="flex:1;min-width:0"
+                           value="{{ $own('location_url') }}" style="flex:1;min-width:0"
                            class="{{ trim($bad('location_url')) }}"
                            placeholder="https://maps.app.goo.gl/..." oninput="autoDetect()">
                     <button type="button" class="btn" id="detectBtn" onclick="detectLocation()">🧭 {{ __('geo.detect') }}</button>
@@ -398,6 +443,64 @@
     <div class="card step-pane" data-pane="2" style="display:none">
         <h3>{{ __('client.step_contract') }}</h3>
 
+        {{-- ═════ التسعير — بيتحفظ سواء فيه عقد أو مفيش ═════ --}}
+        {{-- ⚠️ **بره بلوك العقد — دلوقتي بجد.** التعليق ده كان موجود
+             والحقول كانت **جوه** البلوك فعلاً؛ ماكانش بيبان لأن البلوك
+             ماكانش بيتقفل أبداً. أول ما التشيك بوكس رجع في التعديل،
+             `toggleContract()` بقت تعطّل كل حاجة جوه البلوك — يعني عميل
+             من غير عقد بيتبعت من غير `price_list` ولا `discount`،
+             والاتنين `required`، فبياخد 422 على خانتين مش شايفهم أصلاً
+             ومفيش طريقة يوصلهم. --}}
+        <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('ops.pricing') }}</div>
+        {{-- ⚠️ **التصنيف مش هنا.** هو نتيجة سلوك مش مدخل: بيدفع في
+             مواعيده ولا لأ، بيكبر ولا لأ. تحديده وقت التعريف تخمين
+             بيتحوّل لحقيقة في الشاشة — عميل يتعلّم «تحصيل فوري» من
+             يومه الأول ويتقفل عليه الآجل من غير سبب. العميل الجديد
+             بيبدأ `grow` وبيتظبط من كارته بعد أول تعاملات. --}}
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.price_list') }} {!! $star !!}</label>
+                <select name="price_list" style="width:100%" data-req class="{{ trim($bad('price_list')) }}">
+                    {{-- ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
+                         الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
+                         غير ما يقرا — والعميل اللي المفروض على القائمة
+                         القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
+                    <option value="">— {{ __('client.pick_price_list') }} —</option>
+                    <option value="new" @selected($v('price_list') === 'new')>{{ __('stock.price_list_new') }}</option>
+                    <option value="old" @selected($v('price_list') === 'old')>{{ __('stock.price_list_old') }}</option>
+                </select>
+                {!! $err('price_list') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
+            </div>
+            <div>
+                <label class="f">{{ __('client.custom_discount') }} % {!! $star !!}</label>
+                <input type="number" step="0.5" min="0" max="100" name="discount" data-req style="width:100%"
+                       class="{{ trim($bad('discount')) }}"
+                       value="{{ old('discount', $src ? round((float) $src->discount * 100, 2) : 0) }}">
+                {!! $err('discount') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
+            </div>
+            {{-- ⚠️ **في التعديل بس.** التصنيف نتيجة سلوك مش مدخل،
+                 فمالوش لازمة وقت التعريف (الشرح فوق). بس المودال
+                 القديم كان **المكان الوحيد في السيستم كله** اللي
+                 بيظبطه — وبشيله فضل كل عميل على `grow` للأبد، يعني
+                 `danger` و`credit` و`internal` بقوا كود ميّت. --}}
+            @if ($editing)
+                <div>
+                    <label class="f">{{ __('client.category') }}</label>
+                    <select name="category" style="width:100%" class="{{ trim($bad('category')) }}">
+                        {{-- ⚠️ المفتاح هو القيمة — `CATEGORIES` شكلها
+                             `key => [label, css]`، والـforeach من غير
+                             `$k =>` كان بيحط الأراي كله في `value`. --}}
+                        @foreach (array_keys(Client::CATEGORIES) as $ck)
+                            <option value="{{ $ck }}" @selected($v('category') === $ck)>{{ __('enums.category.'.$ck) }}</option>
+                        @endforeach
+                    </select>
+                    {!! $err('category') !!}
+                </div>
+            @endif
+        </div>
+
         {{-- ⚠️ **مفيش تشيك بوكس «العميل ده له عقد» تاني.**
              القايمة نفسها بقت بتقول: «اتفاق تجاري بدون عقد» نوع،
              و«تعامل بالطلب بدون مدة» مدة. التشيك بوكس كان بيسأل سؤال
@@ -407,9 +510,41 @@
              ⚠️ الحقل المخفي بيفضل: `syncContract()` و`required_if`
              الاتنين بيقروا منه، والـAPI لسه بيدعم عميل من غير عقد
              (البوست اللي مابيبعتش `has_contract` خالص). --}}
-        <input type="hidden" name="has_contract" value="1">
+        {{-- ⚠️ **في الإنشاء ثابت 1، في التعديل تشيك بوكس.** العميل
+             الجديد لازم يتحدّد له نوع تعامل (ولو «بدون عقد»). لكن في
+             التعديل الثبات ده كان كارثة:
 
-        <div id="contractBox">
+             • **فرع بياخد عقد سلسلته** (`liveContract()` بترجع عقد
+               المجموعة) `$ct` بتاعه `null`، فالويزارد كان بيرسم بلوك
+               فاضي ويبعت `has_contract=1` — و`syncContract` بتعمله عقد
+               خاص فاضي فعّال. الفرع بيفقد خصم السلسلة كله عشان حد
+               عدّل تليفونه.
+             • **عميل من غير عقد أصلاً** (كاش فان/جملة) كان بياخد 3
+               أخطاء فاليديشن على أي حفظ.
+             • **عقد اتوقف عن قصد** كان بيترجّع `active` في صمت. --}}
+        @if ($editing)
+            {{-- الحقل المخفي بيسبق: البوست بياخد آخر قيمة، فلو التشيك
+                 بوكس مش متعلّم بيوصل `0` بدل ما مايوصلش خالص. --}}
+            <input type="hidden" name="has_contract" value="0">
+            <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:800;margin-bottom:12px;cursor:pointer">
+                <input type="checkbox" name="has_contract" value="1" id="hasContract"
+                       @checked(old('has_contract', $ct !== null ? 1 : 0))
+                       onchange="toggleContract()">
+                {{ __('client.has_contract') }}
+            </label>
+
+            @if ($ct === null && $src?->group?->contract)
+                <div class="alert warn" style="margin-bottom:12px">
+                    <span>⛓</span>
+                    <span>{{ __('client.contract_from_chain_note', ['chain' => $src->group->displayName()]) }}</span>
+                </div>
+            @endif
+        @else
+            <input type="hidden" name="has_contract" value="1">
+        @endif
+
+
+        <div id="contractBox" @style(['display:none' => $editing && $ct === null])>
             @php
     // ⚠️ **الأنواع القديمة بتبان بس لو العقد ده نوعه واحد
                 // منها.** الـ22 عقد الحقيقيين فيهم `supply_agreement`
@@ -453,13 +588,30 @@
                      كان بيتنسى ويتحفظ عقد بخصم صفر. --}}
                 <div>
                     <label class="f">{{ __('client.preset_invoice_discount') }} % {!! $star !!}</label>
-                    <input type="hidden" name="clause[invoice_discount][on]" value="1">
-                    <input type="number" step="0.5" min="0" max="100" style="width:100%" data-req-contract
+                    {{-- المقفول بيبعت `on=0` عشان السيرفر مايحاولش
+                         يكتب فوق البند المكتوب بإيد. --}}
+                    <input type="hidden" name="clause[invoice_discount][on]" value="{{ $locked('invoice_discount') ? 0 : 1 }}">
+                    {{-- ⚠️ **المقفول لازم يبعت قيمة برضه.** قاعدة
+                         `clause.invoice_discount.value` معلّقة على
+                         `required_if:has_contract,1` مش على `on` — والبند
+                         المقفول معناه إن فيه عقد، يعني `has_contract=1`.
+                         الخانة `disabled` مابتتبعتش، فالتحقق كان بيرفض
+                         الحفظ **كل مرة** برسالة تحت خانة رمادية. القيمة
+                         دي مابتتكتبش: `syncClauses()` بتعمل `continue`
+                         على المقفول قبل ما تقرا أي حاجة. --}}
+                    @if ($locked('invoice_discount'))
+                        <input type="hidden" name="clause[invoice_discount][value]" value="0">
+                    @endif
+                    <input type="number" step="0.5" min="0" max="100" style="width:100%"
+                           @if (! $locked('invoice_discount')) data-req-contract @endif
                            class="{{ trim($bad('clause.invoice_discount.value')) }}"
+                           @disabled($locked('invoice_discount')) @if ($locked('invoice_discount')) data-keep-disabled="1" @endif
                            name="clause[invoice_discount][value]"
                            value="{{ $presetVal('invoice_discount') !== '' ? $presetVal('invoice_discount') : '' }}">
                     {!! $err('clause.invoice_discount.value') !!}
-                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.invoice_discount_hint') }}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                        {{ $locked('invoice_discount') ? '🔒 '.__('client.clause_locked_hint') : __('client.invoice_discount_hint') }}
+                    </div>
                 </div>
             </div>
 
@@ -522,41 +674,6 @@
                 </div>
             </div>
 
-            {{-- ═════ التسعير — بيتحفظ سواء فيه عقد أو مفيش ═════ --}}
-            {{-- ⚠️ **بره بلوك العقد عن قصد.** التصنيف وقائمة السعر أعمدة على
-                 العميل نفسه، والعميل بيبيع وبيتحاسب حتى لو مالوش عقد. لو
-                 اتحطوا جوه البلوك، أي عميل من غير عقد كان هيتحفظ من غير
-                 قائمة سعر والتسعيرة كلها تقع. --}}
-            <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('ops.pricing') }}</div>
-            {{-- ⚠️ **التصنيف مش هنا.** هو نتيجة سلوك مش مدخل: بيدفع في
-                 مواعيده ولا لأ، بيكبر ولا لأ. تحديده وقت التعريف تخمين
-                 بيتحوّل لحقيقة في الشاشة — عميل يتعلّم «تحصيل فوري» من
-                 يومه الأول ويتقفل عليه الآجل من غير سبب. العميل الجديد
-                 بيبدأ `grow` وبيتظبط من كارته بعد أول تعاملات. --}}
-            <div class="frow">
-                <div>
-                    <label class="f">{{ __('client.price_list') }} {!! $star !!}</label>
-                    <select name="price_list" style="width:100%" data-req class="{{ trim($bad('price_list')) }}">
-                        {{-- ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
-                             الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
-                             غير ما يقرا — والعميل اللي المفروض على القائمة
-                             القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
-                        <option value="">— {{ __('client.pick_price_list') }} —</option>
-                        <option value="new" @selected($v('price_list') === 'new')>{{ __('stock.price_list_new') }}</option>
-                        <option value="old" @selected($v('price_list') === 'old')>{{ __('stock.price_list_old') }}</option>
-                    </select>
-                    {!! $err('price_list') !!}
-                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
-                </div>
-                <div>
-                    <label class="f">{{ __('client.custom_discount') }} % {!! $star !!}</label>
-                    <input type="number" step="0.5" min="0" max="100" name="discount" data-req style="width:100%"
-                           class="{{ trim($bad('discount')) }}"
-                           value="{{ old('discount', $src ? round((float) $src->discount * 100, 2) : 0) }}">
-                    {!! $err('discount') !!}
-                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
-                </div>
-            </div>
 
             {{-- ═════ بنود الخصم ═════ --}}
             <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.discount_clauses') }}</div>
@@ -578,9 +695,15 @@
                         <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:800;cursor:pointer">
                             <input type="hidden" name="clause[{{ $key }}][on]" value="0">
                             <input type="checkbox" name="clause[{{ $key }}][on]" value="1"
+                                   {{-- ⚠️ **باين ومتعلّم، مش مخفي.** لو فضّيناه،
+                                        البند اللي في العقد الأصلي بيختفي من
+                                        الشاشة خالص واللي بيراجع يفتكر إن
+                                        العميل مالوش الشرط ده. --}}
                                    id="cl_{{ $key }}" @checked($presetOn($key))
+                                   @disabled($locked($key)) @if ($locked($key)) data-keep-disabled="1" @endif
                                    onchange="toggleClause('{{ $key }}')">
                             {{ __('client.preset_'.$key) }}
+                            @if ($locked($key))<span title="{{ __('client.clause_locked_hint') }}">🔒</span>@endif
                             <span class="b {{ $isPct ? 'b-green' : 'b-gray' }}" style="margin-inline-start:auto;font-size:10.5px">
                                 {{ $isPct ? '%' : __('common.currency') }}
                             </span>
@@ -588,9 +711,11 @@
                         <div id="box_{{ $key }}" style="display:none;margin-top:9px">
                             <input type="number" name="clause[{{ $key }}][value]"
                                    step="{{ $isPct ? '0.5' : '1' }}" min="0" max="{{ $isPct ? '100' : '99999999' }}"
+                                   @disabled($locked($key)) @if ($locked($key)) data-keep-disabled="1" @endif
                                    value="{{ $presetVal($key) }}" style="width:100%"
                                    placeholder="{{ $isPct ? __('client.pct_placeholder') : __('client.amount_placeholder') }}">
                             <input type="text" name="clause[{{ $key }}][note]" maxlength="500"
+                                   @disabled($locked($key)) @if ($locked($key)) data-keep-disabled="1" @endif
                                    value="{{ old("clause.$key.note", $presets[$key]['note']) }}"
                                    style="width:100%;margin-top:6px"
                                    placeholder="{{ __('common.notes') }}">
@@ -717,7 +842,12 @@
                     <label class="f">{{ __('client.tax_id') }}</label>
                     <input type="text" name="tax_id" maxlength="40" dir="ltr" style="width:100%"
                            class="{{ trim($bad('tax_id')) }}" placeholder="123-456-789"
-                           value="{{ old('tax_id') }}">
+                           {{-- ⚠️ **`$own` مش `old()` لوحدها.** الخانة دي جوه
+                                `#taxBox` المخبّي، والمخبّي بيتبعت فاضي — فأول
+                                حفظ من الشاشة دي كان بيمسح الرقم الضريبي لكل
+                                عميل، وهو الرقم اللي رفع الفاتورة الإلكترونية
+                                كله متعلّق بيه. --}}
+                           value="{{ $own('tax_id') }}">
                     {!! $err('tax_id') !!}
                 </div>
                 <div>
@@ -744,7 +874,7 @@
 
         <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
             <button type="button" class="btn" onclick="goStep(2)">← {{ __('client.step_contract') }}</button>
-            <button type="submit" class="btn gold">{{ __('client.save_client') }}</button>
+            <button type="submit" class="btn gold">{{ $editing ? __('client.save_changes') : __('client.save_client') }}</button>
         </div>
     </div>
 </form>
@@ -1092,19 +1222,28 @@ function toggleContract() {
     const box = document.getElementById('contractBox');
     if (!box) return;
 
-    box.style.display = '';
+    // ⚠️ **الدالة دي بتتنادى عند التحميل كمان (سطر التهيئة تحت).**
+    // لما كانت بتفتح البلوك بالعافية، وضع التعديل لعميل بياخد عقد
+    // سلسلته كان بيفتح بلوك عقد فاضي — واللي بيقرا الشاشة يفتكر إن
+    // العميل مالوش شروط، ويحفظ فيعمله عقد خاص فاضي يلغي عقد السلسلة.
+    // العميل الجديد مافيهوش تشيك بوكس أصلاً، فبيفضل مفتوح زي ما كان.
+    const cb = document.getElementById('hasContract');
+    const on = cb ? cb.checked : true;
 
-    // ⚠️ **الحقول المقفولة بتتعطّل، مش بتتخبّى بس.** `display:none`
-    // مابيمنعش الإرسال — الـ`hidden` بتاع `clause[invoice_discount][on]`
-    // كان بيتبعت بـ1 مع خانة قيمة فاضية على **كل** عميل مالوش عقد،
-    // فقاعدة `required_if:clause.*.on,1` كانت بترفض الحفظ وتوري رسالة
-    // عن بند البلوك بتاعه مقفول — يعني مفيش خانة المستخدم يقدر يصلّحها.
-    // العطّل بيمنع الإرسال أصلاً، وبيمنع كمان تاريخ البداية الافتراضي
-    // وأيام السداد إنهم يتسرّبوا في حفظ عميل مالوش عقد.
-    // ⚠️ التعطيل اتشال مع التشيك بوكس. كان بيمنع حقول بلوك مقفول
-    // إنها تتبعت — والبلوك مابقاش بيتقفل.
+    box.style.display = on ? '' : 'none';
+
+    // ⚠️ **الإخفاء لوحده مش كفاية — لازم تعطيل.** `display:none`
+    // مابيمنعش الإرسال. لما البلوك بيتقفل، `clause[...][on]` وتاريخ
+    // البداية وأيام السداد بيفضلوا بيتبعتوا، فـ`required_if` بترفض
+    // الحفظ وتوري رسالة عن خانة المستخدم مش شايفها أصلاً.
+    //
+    // ⚠️ **`data-keep-disabled` بيستثني البند المقفول.** البند المكتوب
+    // بإيد في عقد الـPDF مايتغيّرش من هنا؛ لو الحلقة فكّت تعطيله،
+    // المستخدم بيكتب رقم وياخد «اتحفظ» أخضر والسيرفر بيرميه في صمت.
     box.querySelectorAll('input, select, textarea').forEach(function (el) {
-        el.disabled = false;
+        if (el.dataset.keepDisabled === '1') return;
+        // مفتوح ⇒ شغّال، مقفول ⇒ معطّل عشان مايتبعتش
+        el.disabled = ! on;
     });
 }
 
