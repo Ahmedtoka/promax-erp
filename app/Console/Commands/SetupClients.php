@@ -69,6 +69,18 @@ class SetupClients extends Command
         $chains = $data['chains'];
         $clients = $data['clients'];
 
+        // ⚠️ **القنوات لازم تكون موجودة قبل العملاء.**
+        // `Channel::where(...)->value('id')` بترجّع `null` بهدوء لو
+        // القناة مش موجودة — و455 عميل كانوا هيتعملوا بـ`channel_id`
+        // فاضي: مايبانوش في أي شاشة قناة، وتقارير الكي أكاونت تطلع
+        // صفر، ومحدش يعرف السبب. الوقوف هنا أوضح بكتير.
+        if (Channel::where('code', Channel::KEY_ACCOUNT)->doesntExist()) {
+            $this->error('  ⛔ قناة الكي أكاونت مش موجودة.');
+            $this->line('     شغّل الأول: php artisan promax:channels');
+
+            return self::FAILURE;
+        }
+
         $existing = Client::whereIn('code', array_column($clients, 'code'))->count();
 
         $this->line('  السلاسل:        <fg=green>'.count($chains).'</>');
