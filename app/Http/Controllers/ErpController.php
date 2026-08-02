@@ -68,7 +68,9 @@ class ErpController extends Controller
             'monthly' => $monthly,
             'catCounts' => $catCounts,
             'aging' => $this->agingTotals(),
-            'top' => Client::orderByDesc('purchases')->take(15)->get(),
+            // ⚠️ `group` و`zone` eager — `fullName()` بتقرا السلسلة لكل
+            // صف، ومن غيرها 15 صف = 15 كويري زيادة.
+            'top' => Client::with(['group', 'zone'])->orderByDesc('purchases')->take(15)->get(),
             'stockValue' => Stock::join('products', 'products.id', '=', 'stocks.product_id')
                 ->sum(DB::raw('stocks.qty * products.price_new')),
             'todayInvoices' => Invoice::whereDate('created_at', today())->sum('total'),

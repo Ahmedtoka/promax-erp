@@ -14,6 +14,22 @@ class Client extends Model
     use HasBilingualName, HasFactory;
 
     /** التصنيفات التجارية: [التسمية، كلاس الشارة] */
+    /**
+     * الاسم الكامل: السلسلة الأول وبعدين الفرع.
+     *
+     * ⚠️ «Katameya Heights» لوحدها ماتقولش إنه فرع جورميه — واللي
+     * بيقرا الداشبورد بيفتكره عميل مستقل. أول ما العميل ليه سلسلة،
+     * اسمها بييجي الأول: «Gourmet — Katameya Heights».
+     */
+    public function fullName(): string
+    {
+        $chain = $this->group?->displayName();
+
+        return $chain && $chain !== $this->displayName()
+            ? $chain.' — '.$this->displayName()
+            : $this->displayName();
+    }
+
     public const CATEGORIES = [
         'danger' => ['🔴 تحصيل فوري', 'b-red'],
         'watch' => ['🟠 تابع عن قرب', 'b-orange'],

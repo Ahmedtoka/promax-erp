@@ -75,7 +75,7 @@
             @foreach ($top as $i => $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                     <td>{{ $i + 1 }}</td>
-                    <td><b>{{ $c->displayName() }}</b></td>
+                    <td><b>{{ $c->fullName() }}</b></td>
                     <td><span class="badge {{ $c->categoryClass() }}">{{ $c->categoryLabel() }}</span></td>
                     <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>
                     <td class="num">{{ $fmt($c->purchases) }}</td>

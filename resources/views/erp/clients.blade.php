@@ -85,7 +85,7 @@
             </tr>
             @forelse ($clients as $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
-                    <td><b>{{ $c->displayName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span></td>
+                    <td><b>{{ $c->fullName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span></td>
                     <td>
                         @if ($c->status === 'active')
                             <span class="badge b-green">{{ __('client.status_active') }}</span>
