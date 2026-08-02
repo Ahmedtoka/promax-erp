@@ -1478,7 +1478,9 @@ class ErpController extends Controller
             'password' => ['required', 'string', 'min:8', 'max:100', 'confirmed'],
         ]);
 
-        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($data['password'])]);
+        // ⚠️ من غير `Hash::make` — كاست `hashed` على الموديل بيشفّر
+        // بنفسه، والتشفير المزدوج كان هيخلّي الباسورد الجديد مايشتغلش.
+        $user->update(['password' => $data['password']]);
 
         // ⚠️ **توكينات الأبلكيشن بتتلغي.** تغيير الباسورد غالباً سببه
         // إن الجهاز ضاع أو الموظف مشي — لو التوكن القديم فضل شغال،
