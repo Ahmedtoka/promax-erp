@@ -1490,6 +1490,90 @@ class ErpController extends Controller
         return back()->with('ok', __('team.password_changed', ['name' => $user->displayName()]));
     }
 
+    /** قواعد فورم اليوزر — مصدر واحد للإضافة والتعديل */
+    private function userRules(?User $user = null): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
+            'email' => ['required', 'email', 'max:190',
+                \Illuminate\Validation\Rule::unique('users', 'email')->ignore($user?->id)],
+            'code' => ['nullable', 'string', 'max:30',
+                \Illuminate\Validation\Rule::unique('users', 'code')->ignore($user?->id)],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'role' => ['required', \Illuminate\Validation\Rule::in(array_keys(User::ROLES))],
+            'branch_id' => ['nullable', 'exists:branches,id'],
+            'zone_id' => ['nullable', 'exists:zones,id'],
+            // ⚠️ أمين المخزن من غير مخزن مايعرفش يفتح أي شاشة شغل —
+            // كل شاشات `wh.` بتفلتر بمخزنه.
+            'warehouse_id' => ['nullable', 'required_if:role,warehouse_keeper', 'exists:warehouses,id'],
+        ];
+    }
+
+    public function storeUser(Request $request)
+    {
+        $data = $request->validate($this->userRules() + [
+            'password' => ['required', 'string', 'min:8', 'max:100'],
+        ]);
+
+        // الكاست `hashed` على الموديل بيشفّر الباسورد بنفسه
+        User::create($data + ['active' => $request->boolean('active', true)]);
+
+        return back()->with('ok', __('team.user_added', ['name' => $data['name']]));
+    }
+
+    public function updateUser(Request $request, User $user)
+    {
+        $data = $this->guardSelfEdit($request, $user,
+            $request->validate($this->userRules($user)));
+
+        $user->update($data + ['active' => $request->boolean('active')]);
+
+        return back()->with('ok', __('team.user_updated', ['name' => $user->displayName()]));
+    }
+
+    /**
+     * ⚠️ **الأدمن مايقدرش يقفل على نفسه.** تعديل رول نفسه أو إيقاف
+     * حسابه كان بيخرجه من السيستم في نفس الثانية — ومفيش حد تاني
+     * يرجّعه. الرول والحالة بتاعته بيتسابوا زي ما هم.
+     */
+    private function guardSelfEdit(Request $request, User $user, array $data): array
+    {
+        if ($user->id === $request->user()->id) {
+            unset($data['role']);
+            $request->merge(['active' => true]);
+        }
+
+        return $data;
+    }
+
+    /** منطقة جديدة من شاشة الفريق — الكود بيتولّد زي `quickZone` */
+    public function storeZone(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
+            'governorate' => ['nullable', Governorates::rule()],
+            'day_label' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $base = 'Z'.str_pad((string) (Zone::count() + 1), 2, '0', STR_PAD_LEFT);
+        $code = $base;
+        $n = 2;
+
+        while (Zone::where('code', $code)->exists()) {
+            $code = $base.'-'.$n++;
+        }
+
+        Zone::create($data + [
+            'code' => $code,
+            'branch_id' => $request->user()->seesAllBranches() ? null : $request->user()->branch_id,
+            'active' => true,
+        ]);
+
+        return back()->with('ok', __('team.zone_added', ['name' => $data['name']]));
+    }
+
     public function team(Request $request)
     {
         // ⚠️ سكوب الفرع — مدير المعادي بيشوف فريق المعادي بس
@@ -1497,6 +1581,8 @@ class ErpController extends Controller
             'users' => \App\Models\Branch::scope(
                 User::with(['zone', 'branch']), $request->user(),
             )->orderBy('role')->get(),
+            'branches' => \App\Models\Branch::where('active', true)->orderBy('code')->get(),
+            'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('code')->get(),
             'zones' => \App\Models\Branch::scope(Zone::query(), $request->user())
                 ->orderBy('code')->get(),
             // العربية المخصصة لكل واحد — كويري واحدة مش لوب

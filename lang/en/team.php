@@ -26,4 +26,13 @@ return [
     'password_min_hint' => 'At least 8 characters. The current password cannot be shown - only a new one can be set.',
     'password_logs_out_app' => 'This user has the mobile app. Changing the password signs them out; they log in again with the new one.',
     'password_changed' => 'The password for :name was changed.',
+    'new_user' => 'New user',
+    'edit_user' => 'Edit user',
+    'user_added' => ':name was added - give them their login details.',
+    'user_updated' => ':name was updated.',
+    'cannot_change_own_role' => 'You cannot change your own role or deactivate yourself - so you never lock yourself out.',
+    'warehouse_hint' => 'Required for warehouse keepers - every warehouse screen filters by their warehouse.',
+    'new_zone' => 'New zone',
+    'zone_added' => 'Zone ":name" was created - assign it from the assignments screen.',
+    'visit_day_ph' => 'Sat & Tue',
 ];

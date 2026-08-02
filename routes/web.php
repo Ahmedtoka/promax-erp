@@ -247,6 +247,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // باسورد الأدمن ويستلم السيستم.
         Route::post('/team/{user}/password', [ErpController::class, 'setPassword'])
             ->middleware('role:admin')->name('team.password');
+        // ⚠️ **إضافة وتعديل اليوزرات للأدمن بس.** مدير بيقدر يعمل
+        // يوزر برول أدمن = بيقدر يستلم السيستم.
+        Route::post('/team', [ErpController::class, 'storeUser'])
+            ->middleware('role:admin')->name('team.store');
+        Route::put('/team/{user}', [ErpController::class, 'updateUser'])
+            ->middleware('role:admin')->name('team.update');
+        // منطقة جديدة من شاشة الفريق — نفس صلاحية المناطق في فورم العميل
+        Route::post('/zones', [ErpController::class, 'storeZone'])
+            ->middleware('role:admin,manager,branch_manager')->name('zones.store');
 
         // ===== السلاسل =====
         Route::get('/groups', [GroupController::class, 'index'])->name('groups');
