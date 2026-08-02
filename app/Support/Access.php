@@ -228,6 +228,7 @@ class Access
         // ═══ ٧. الإعدادات ═══
         'nav.group_settings' => [
             ['erp.team', '🧑‍💼', 'nav.team', 'erp.team', null],
+            ['erp.zones', '📍', 'team.zones_and_govs', 'erp.zones*', null],
             ['erp.branches', '🏢', 'nav.branches', 'erp.branches', null],
             ['erp.vehicles', '🚚', 'nav.vehicles', 'erp.vehicles*', null],
             ['erp.import', '📥', 'nav.import', 'erp.import*', null],

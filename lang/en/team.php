@@ -35,4 +35,11 @@ return [
     'new_zone' => 'New zone',
     'zone_added' => 'Zone ":name" was created - assign it from the assignments screen.',
     'visit_day_ph' => 'Sat & Tue',
+    'zones_and_govs' => 'Zones & Governorates',
+    'edit_zone' => 'Edit zone',
+    'zone_updated' => 'Zone ":name" was updated.',
+    'zone_has_active_clients' => 'Cannot deactivate - it has :count active clients. Move them to another zone first.',
+    'of_27_governorates' => 'of 27 governorates have zones',
+    'in_zones_hint' => 'active clients assigned to zones',
+    'no_gov_hint' => 'need to be placed in their governorates',
 ];

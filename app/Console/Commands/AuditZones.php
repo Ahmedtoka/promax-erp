@@ -100,6 +100,11 @@ class AuditZones extends Command
             ['sharm elsheikh', 'sharm el sheikh', 'شرم الشيخ']],
         'south_sinai_gov' => ['جنوب سيناء', 'South Sinai', 'south_sinai', ['جنوب سيناء', 'south sinai']],
 
+        // اللي ظهروا في أول تشغيل على اللايف
+        'monufia_gov' => ['المنوفية', 'Monufia', 'monufia', ['المنوفية', 'monufia', 'منوفيه']],
+        'mostakbal' => ['مدينة المستقبل', 'Mostakbal City', 'cairo',
+            ['المستقبل', 'mostakbal', 'mostakbal city', 'مدينة المستقبل']],
+
         // البحر الأحمر والصعيد
         'gouna' => ['الجونة', 'El Gouna', 'red_sea', ['gouna', 'el gouna', 'الجونة']],
         'red_sea_gov' => ['البحر الأحمر', 'Red Sea', 'red_sea', ['البحر الاحمر', 'البحر الأحمر', 'red sea']],

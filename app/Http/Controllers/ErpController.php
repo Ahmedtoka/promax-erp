@@ -1554,6 +1554,54 @@ class ErpController extends Controller
         return $data;
     }
 
+    /**
+     * صفحة إدارة المناطق — مجمّعة بالمحافظات.
+     *
+     * ⚠️ المحافظات الـ27 ثابتة في `Governorates::KEYS` — مش بتتعمل
+     * من الشاشة. اللي بيتعمل هو المناطق جواها: منطقة جديدة في
+     * محافظة، تعديل اسمها (عربي + إنجليزي)، نقلها لمحافظة تانية،
+     * أو إيقافها.
+     */
+    public function zones(Request $request)
+    {
+        return view('erp.zones', [
+            'zones' => \App\Models\Branch::scope(
+                Zone::withCount([
+                    'clients as active_clients' => fn ($q) => $q->where('status', 'active'),
+                    'clients',
+                ])->with('users:id,name,name_en,zone_id'),
+                $request->user(),
+            )->get(),
+        ]);
+    }
+
+    public function updateZone(Request $request, Zone $zone)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
+            'governorate' => ['nullable', Governorates::rule()],
+            'day_label' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        // ⚠️ **الإيقاف مرفوض والمنطقة عليها عملاء شغّالين** — المنطقة
+        // الموقوفة بتختفي من قوايم الاختيار، وعملاؤها كانوا هيفضلوا
+        // متسكّنين على حاجة محدش يقدر يختارها تاني.
+        $active = $request->boolean('active', true);
+
+        if (! $active && $zone->clients()->where('status', 'active')->exists()) {
+            return back()->withErrors([
+                'active' => __('team.zone_has_active_clients', [
+                    'count' => $zone->clients()->where('status', 'active')->count(),
+                ]),
+            ]);
+        }
+
+        $zone->update($data + ['active' => $active]);
+
+        return back()->with('ok', __('team.zone_updated', ['name' => $zone->displayName()]));
+    }
+
     /** منطقة جديدة من شاشة الفريق — الكود بيتولّد زي `quickZone` */
     public function storeZone(Request $request)
     {

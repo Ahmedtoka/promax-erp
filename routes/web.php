@@ -301,9 +301,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('team.store');
         Route::put('/team/{user}', [ErpController::class, 'updateUser'])
             ->middleware('role:admin')->name('team.update');
-        // منطقة جديدة من شاشة الفريق — نفس صلاحية المناطق في فورم العميل
+        // ═══ إدارة المناطق والمحافظات ═══
+        Route::get('/zones', [ErpController::class, 'zones'])
+            ->middleware('role:admin,manager,branch_manager')->name('zones');
         Route::post('/zones', [ErpController::class, 'storeZone'])
             ->middleware('role:admin,manager,branch_manager')->name('zones.store');
+        Route::put('/zones/{zone}', [ErpController::class, 'updateZone'])
+            ->middleware('role:admin,manager,branch_manager')->name('zones.update');
 
         // ===== السلاسل =====
         Route::get('/groups', [GroupController::class, 'index'])->name('groups');
