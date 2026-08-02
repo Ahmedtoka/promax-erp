@@ -242,9 +242,10 @@ class SetupDemo extends Command
             ]);
 
             // رف DEMO — مايتلخبطش مع الأرفف الحقيقية
+            // ⚠️ `stand` و`level` NOT NULL من غير default — لازم يتبعتوا
             $location = Location::firstOrCreate(
                 ['warehouse_id' => $warehouse->id, 'code' => 'DEMO'],
-                ['active' => true],
+                ['stand' => 'D', 'level' => 1, 'is_pick_face' => true, 'active' => true],
             );
 
             foreach ($products as $p) {
