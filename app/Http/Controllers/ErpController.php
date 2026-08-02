@@ -105,6 +105,14 @@ class ErpController extends Controller
             Client::query()->with(['zone', 'contract', 'group.contract']),
         );
 
+        // ⚠️ **الافتراضي الكل مش الشغّال بس.** بعد استيراد الـ455،
+        // معظم القايمة `pending` — لو خبّيناهم افتراضياً المستخدم
+        // بيدوّر على عميل لسه مفعّلوش ومش بيلاقيه ويفتكر الاستيراد
+        // ضاع. الفلتر بيوريه اللي عايزه، والشارة على الصف بتفرّق.
+        if ($st = $request->string('status')->value()) {
+            $q->where('status', $st);
+        }
+
         if ($s = $request->string('q')->trim()->value()) {
             $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
                 ->orWhere('phone', 'like', "%$s%")
@@ -150,7 +158,12 @@ class ErpController extends Controller
                 ->groupBy('category')->pluck('n', 'category')->all(),
             'channelCounts' => Client::selectRaw('channel_id, COUNT(*) as n')
                 ->groupBy('channel_id')->pluck('n', 'channel_id')->all(),
-            'filters' => $request->only(['q', 'cat', 'zone', 'contract', 'channel', 'sub']),
+            'filters' => $request->only(['q', 'cat', 'zone', 'contract', 'channel', 'sub', 'status']),
+            // ⚠️ بنفس سكوب الفرع بتاع القايمة — عداد بيقول 455 وقايمة
+            // بتوري 80 بيخلّي مدير الفرع يفتكر في حاجة مخفية عنه.
+            'statusCounts' => \App\Models\Branch::scope(Client::query())
+                ->selectRaw('status, COUNT(*) as n')
+                ->groupBy('status')->pluck('n', 'status')->all(),
         ]);
     }
 

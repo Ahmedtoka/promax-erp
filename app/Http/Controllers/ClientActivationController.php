@@ -27,11 +27,19 @@ class ClientActivationController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Client::query()
-            ->with(['group', 'zone', 'rep'])
-            // ⚠️ **`status` مش `active`.** الجدول مافيهوش عمود
-            // `active` — الحالة enum في `status`.
-            ->where('status', '!=', 'active');
+        $q = Client::query()->with(['group', 'zone', 'rep']);
+
+        // ⚠️ **`status` مش `active`.** الجدول مافيهوش عمود `active` —
+        // الحالة enum في `status`. الافتراضي «المستني» لأن ده شغل
+        // الشاشة، بس بعد ما التفعيل بدأ لازم تعرف تراجع اللي اتفعّل
+        // وتوقفه لو اتفعّل بالغلط.
+        $status = $request->string('status')->value() ?: 'waiting';
+
+        match ($status) {
+            'active' => $q->where('status', 'active'),
+            'all' => null,
+            default => $q->where('status', '!=', 'active'),
+        };
 
         if ($s = $request->string('q')->trim()->value()) {
             $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
@@ -56,8 +64,30 @@ class ClientActivationController extends Controller
                 ->orWhereNull('governorate')->orWhereNull('name_en'));
         }
 
+        // ⚠️ **الترتيب من قايمة بيضا.** `orderBy($request->input())`
+        // مباشرة بيسمح بترتيب بأي عمود — بما فيهم الرصيد والخصم اللي
+        // الشاشة أصلاً مش بتعرضهم. المفتاح بيتترجم هنا لعمود حقيقي
+        // أو ساب كويري للاسم المرتبط.
+        $sort = $request->string('sort')->value();
+        $dir = $request->string('dir')->value() === 'desc' ? 'desc' : 'asc';
+
+        match ($sort) {
+            'name' => $q->orderBy('name', $dir),
+            'gov' => $q->orderBy('governorate', $dir)->orderBy('code'),
+            'status' => $q->orderBy('status', $dir)->orderBy('code'),
+            'group' => $q->orderBy(
+                ClientGroup::select('name')->whereColumn('client_groups.id', 'clients.group_id'),
+                $dir,
+            )->orderBy('code'),
+            'zone' => $q->orderBy(
+                Zone::select('name')->whereColumn('zones.id', 'clients.zone_id'),
+                $dir,
+            )->orderBy('code'),
+            default => $q->orderBy('code', $dir),
+        };
+
         return view('erp.client_activate', [
-            'clients' => $q->orderBy('code')->paginate(50)->withQueryString(),
+            'clients' => $q->paginate(50)->withQueryString(),
             'groups' => ClientGroup::withCount([
                 'clients as off_count' => fn ($w) => $w->where('status', '!=', 'active'),
             ])->orderBy('name')->get(),
@@ -67,7 +97,12 @@ class ClientActivationController extends Controller
             'managers' => User::whereIn('role', ['manager', 'branch_manager', 'admin'])
                 ->where('active', true)->orderBy('name')->get(),
             'lists' => $this->priceLists(),
-            'filters' => $request->only(['q', 'group', 'gov', 'incomplete']),
+            // ⚠️ `array_merge` مش `+` — المعامل `+` بيسيب قيمة الشمال،
+            // و`status=''` من الريكوست كانت هتغطي على `waiting` المطبّع.
+            'filters' => array_merge(
+                $request->only(['q', 'group', 'gov', 'incomplete', 'sort', 'dir']),
+                ['status' => $status],
+            ),
             'waiting' => Client::where('status', '!=', 'active')->count(),
             'live' => Client::where('status', 'active')->count(),
         ]);

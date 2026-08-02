@@ -65,6 +65,11 @@
             <option value="yes" @selected(($filters['contract'] ?? '') === 'yes')>{{ __('client.with_contract') }}</option>
             <option value="no" @selected(($filters['contract'] ?? '') === 'no')>{{ __('client.without_contract') }}</option>
         </select>
+        <select name="status">
+            <option value="">{{ __('client.status_all') }} ({{ array_sum($statusCounts) }})</option>
+            <option value="active" @selected(($filters['status'] ?? '') === 'active')>{{ __('client.status_active') }} ({{ $statusCounts['active'] ?? 0 }})</option>
+            <option value="pending" @selected(($filters['status'] ?? '') === 'pending')>{{ __('client.status_waiting') }} ({{ $statusCounts['pending'] ?? 0 }})</option>
+        </select>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.clients') }}">{{ __('common.clear') }}</a>
         <span class="badge b-gray">{{ __('client.client_countable', ['count' => $clients->total()]) }}</span>
@@ -80,7 +85,15 @@
             </tr>
             @forelse ($clients as $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
-                    <td><b>{{ $c->displayName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span></td>
+                    <td>
+                        <b>{{ $c->displayName() }}</b>
+                        {{-- ⚠️ الشارة على المستني بس — 455 شارة خضرا زحمة
+                             بتغرق الاستثناء اللي الشارة اتعملت توريه. --}}
+                        @if ($c->status !== 'active')
+                            <span class="badge b-orange" style="font-size:9.5px">{{ __('client.status_waiting') }}</span>
+                        @endif
+                        <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span>
+                    </td>
                     <td>
                         @if ($c->channel)
                             <span class="badge {{ $c->channel->badgeClass() }}">{{ $c->channel->displayName() }}</span>

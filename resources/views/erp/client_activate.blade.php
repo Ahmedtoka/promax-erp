@@ -12,22 +12,49 @@
 
     $fmt = fn ($n) => number_format((float) $n);
     $f = $filters;
+
+    /**
+     * رأس عمود قابل للترتيب.
+     *
+     * ⚠️ بيحافظ على كل الفلاتر — ترتيب بيمسح البحث والسلسلة كان
+     * هيخلّي المستخدم يعيد فلترته بعد كل ضغطة. الضغط على نفس العمود
+     * بيقلب الاتجاه.
+     */
+    $sortLink = function (string $key, string $label) use ($f) {
+        $current = ($f['sort'] ?? '') ?: 'code';
+        $active = $current === $key;
+        $dir = $active && ($f['dir'] ?? 'asc') !== 'desc' ? 'desc' : 'asc';
+        // ⚠️ `page => 1` — الترتيب الجديد ترقيمه مختلف، والفضل على
+        // صفحة 7 بتاعة الترتيب القديم بيوري صفحة فاضية.
+        $url = request()->fullUrlWithQuery(['sort' => $key, 'dir' => $dir, 'page' => 1]);
+        $arrow = $active ? (($f['dir'] ?? 'asc') === 'desc' ? ' ↓' : ' ↑') : '';
+
+        return '<a href="'.e($url).'" style="color:inherit;text-decoration:none">'
+            .e($label).$arrow.'</a>';
+    };
+
+    $canStop = auth()->user()->canDecideOps();
+    $showingActive = ($f['status'] ?? 'waiting') !== 'waiting';
 @endphp
 
 @section('title', __('client.activate_clients'))
 
 @section('content')
 
+{{-- الكروت نفسها فلاتر — «مستني» و«شغّال» بضغطة --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('erp.clients.activate', ['status' => 'waiting']) }}"
+       style="text-decoration:none;color:inherit;{{ ($f['status'] ?? 'waiting') === 'waiting' ? 'outline:2px solid var(--royal-blue)' : '' }}">
         <div class="lbl">{{ __('client.waiting_activation') }}</div>
         <div class="val mid">{{ $fmt($waiting) }}</div>
         <div class="sub2">{{ __('client.waiting_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.clients.activate', ['status' => 'active']) }}"
+       style="text-decoration:none;color:inherit;{{ ($f['status'] ?? '') === 'active' ? 'outline:2px solid var(--royal-blue)' : '' }}">
         <div class="lbl">{{ __('client.live_clients') }}</div>
         <div class="val pos">{{ $fmt($live) }}</div>
-    </div>
+        <div class="sub2">{{ __('client.tap_to_review') }}</div>
+    </a>
 </div>
 
 <div class="card">
@@ -49,6 +76,12 @@
             @foreach (Governorates::KEYS as $k)
                 <option value="{{ $k }}" @selected(($f['gov'] ?? '') === $k)>{{ Governorates::label($k) }}</option>
             @endforeach
+        </select>
+
+        <select name="status" style="min-width:130px">
+            <option value="waiting" @selected(($f['status'] ?? 'waiting') === 'waiting')>{{ __('client.status_waiting') }}</option>
+            <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('client.status_active') }}</option>
+            <option value="all" @selected(($f['status'] ?? '') === 'all')>{{ __('client.status_all') }}</option>
         </select>
 
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;white-space:nowrap">
@@ -133,15 +166,22 @@
             <table>
                 <tr>
                     <th style="width:34px">
-                        <input type="checkbox" id="allBox" onchange="toggleAll(this)">
+                        {{-- ⚠️ في عرض المفعّلين مفيش تعليم — الفورم
+                             بيفعّل بس، والمفعّل مالوش تشيك بوكس --}}
+                        @unless (($f['status'] ?? 'waiting') === 'active')
+                            <input type="checkbox" id="allBox" onchange="toggleAll(this)">
+                        @endunless
                     </th>
-                    <th>{{ __('common.code') }}</th>
-                    <th>{{ __('client.client') }}</th>
-                    <th>{{ __('nav.chains') }}</th>
-                    <th>{{ __('geo.governorate') }}</th>
-                    <th>{{ __('client.zone') }}</th>
+                    <th>{!! $sortLink('code', __('common.code')) !!}</th>
+                    <th>{!! $sortLink('name', __('client.client')) !!}</th>
+                    <th>{!! $sortLink('group', __('nav.chains')) !!}</th>
+                    <th>{!! $sortLink('gov', __('geo.governorate')) !!}</th>
+                    <th>{!! $sortLink('zone', __('client.zone')) !!}</th>
                     <th>{{ __('common.address') }}</th>
                     <th>{{ __('common.phone') }}</th>
+                    @if ($showingActive)
+                        <th>{!! $sortLink('status', __('common.status')) !!}</th>
+                    @endif
                     <th>{{ __('client.missing') }}</th>
                 </tr>
                 @forelse ($clients as $c)
@@ -157,8 +197,12 @@
                         if (! $c->zone_id) $miss[] = __('client.zone');
                     @endphp
                     <tr>
-                        <td><input type="checkbox" name="ids[]" value="{{ $c->id }}"
-                                   class="rowBox" onchange="syncCount()"></td>
+                        <td>
+                            @if ($c->status !== 'active')
+                                <input type="checkbox" name="ids[]" value="{{ $c->id }}"
+                                       class="rowBox" onchange="syncCount()">
+                            @endif
+                        </td>
                         <td class="num"><b>{{ $c->code }}</b></td>
                         <td>
                             <a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->displayName() }}</b></a>
@@ -173,6 +217,24 @@
                             {{ Str::limit($c->address ?? '', 60) ?: ($c->location_url ? '🗺️' : '—') }}
                         </td>
                         <td class="num" dir="ltr" style="font-size:11.5px">{{ $c->phone ?: '—' }}</td>
+                        @if ($showingActive)
+                            <td>
+                                @if ($c->status === 'active')
+                                    <span class="badge b-green">{{ __('client.status_active') }}</span>
+                                    @if ($canStop)
+                                        {{-- ⚠️ الزرار بيبعت الفورم الصغير بتاعه —
+                                             مش جوه فورم التفعيل عشان مايبعتوش مع
+                                             بعض. `form` attribute بيربطه بفورم
+                                             مستقل معرّف تحت الجدول. --}}
+                                        <button class="btn sm" type="submit"
+                                                form="deact-{{ $c->id }}"
+                                                onclick="return confirm(DEACT_CONFIRM)">⏸ {{ __('client.deactivate') }}</button>
+                                    @endif
+                                @else
+                                    <span class="badge b-orange">{{ __('client.status_waiting') }}</span>
+                                @endif
+                            </td>
+                        @endif
                         <td>
                             @if ($miss === [])
                                 <span class="badge b-green">{{ __('client.complete') }}</span>
@@ -184,13 +246,27 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="{{ $showingActive ? 10 : 9 }}" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('client.no_waiting') }}
                     </td></tr>
                 @endforelse
             </table>
         </div>
     </form>
+
+    {{-- ⚠️ **فورمات الإيقاف بره فورم التفعيل.** فورم جوه فورم HTML
+         مش صحيح والمتصفح بيبعت الغلط — كل زرار مربوط بفورمه بخاصية
+         `form`. --}}
+    @if ($canStop && $showingActive)
+        @foreach ($clients as $c)
+            @if ($c->status === 'active')
+                <form id="deact-{{ $c->id }}" method="POST"
+                      action="{{ route('erp.clients.deactivate', $c) }}">
+                    @csrf
+                </form>
+            @endif
+        @endforeach
+    @endif
 
     <div class="pag">{{ $clients->links('pagination::simple-default') }}</div>
 </div>
@@ -199,6 +275,8 @@
 
 @section('scripts')
 <script>
+const DEACT_CONFIRM = @json(__('client.deactivate_confirm'));
+
 /**
  * ⚠️ **«علّم على الكل» بتعلّم على الصفحة دي بس.** الجدول مقسّم 50
  * صف؛ لو التعليم شمل اللي مش ظاهر، ضغطة واحدة كانت هتفعّل 455 فرع

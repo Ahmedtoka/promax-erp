@@ -470,6 +470,12 @@ return [
     'chain_name_ar_ph' => 'Type the chain name in Arabic',
 
     // ═══ تفعيل العملاء المستوردين ═══
+    'status_waiting' => 'Awaiting activation',
+    'status_active' => 'Active',
+    'status_all' => 'All',
+    'tap_to_review' => 'Tap to review, or stop one activated by mistake',
+    'deactivate' => 'Deactivate',
+    'deactivate_confirm' => 'Deactivate this client? They go back to the waiting list and disappear from every rep.',
     'activate_clients' => 'Activate clients',
     'waiting_activation' => 'Awaiting activation',
     'waiting_hint' => 'Imported from sheets, not yet reviewed',
