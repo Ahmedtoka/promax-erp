@@ -93,7 +93,31 @@ class GroupController extends Controller
 
     public function update(Request $request, ClientGroup $group)
     {
+        $request->validate([
+            'apply_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+
         $group->update($this->validated($request));
+
+        // ⚠️ **الخانة الفاضية غير الصفر.** فاضية = ماتلمسش خصومات
+        // الفروع (الوضع الطبيعي لأي حفظ)؛ صفر مكتوب = صفّرهم كلهم
+        // عن قصد. لو الفاضي اتعامل كصفر، أي تعديل اسم كان بيمسح
+        // خصومات السلسلة كلها في صمت.
+        if ($request->filled('apply_discount')) {
+            $pct = round((float) $request->input('apply_discount'), 2);
+
+            // ⚠️ بيتكتب كخصم خاص على كل فرع — مش عمود على السلسلة.
+            // قرار 2026-08-01: السلسلة تجميعة مش كيان تجاري، والخصم
+            // بيعيش على الفرع عشان الفرع اللي هيتفاوض لوحده بعدين
+            // يتعدّل لوحده. والفرع اللي ليه عقد سارٍ بخصم فاتورة،
+            // خصم العقد هو اللي بيتحاسب بيه (أولوية `effectiveDiscount`).
+            $n = $group->clients()->update(['discount' => $pct / 100]);
+
+            return back()->with('ok', __('client.chain_discount_applied', [
+                'pct' => $pct,
+                'count' => $n,
+            ]));
+        }
 
         return back()->with('ok', __('flash.chain_saved'));
     }

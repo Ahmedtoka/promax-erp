@@ -14,6 +14,7 @@ return [
     'close' => 'Close',
     'back' => 'Back',
     'pick' => 'Pick',
+    'number' => 'Number',
     'search' => 'Search',
     'clear' => 'Clear',
     'filter' => 'Filter',

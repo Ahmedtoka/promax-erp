@@ -120,6 +120,54 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('prices.default');
         });
 
+        // ═══ الموردين والمشتريات ═══
+        // ⚠️ **`erp.purchasing` مش `purchase_orders`** — الاسم التاني
+        // محجوز لطلبيات العملاء اللي السواقين بيوصّلوها.
+        Route::middleware('role:admin,manager,accountant')->group(function () {
+            Route::get('/suppliers', [\App\Http\Controllers\SupplierController::class, 'index'])
+                ->name('suppliers');
+            Route::get('/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'show'])
+                ->name('suppliers.show');
+            // ⚠️ المحاسب بيدفع — ده شغله، زي تحصيل العملاء بالظبط
+            Route::post('/suppliers/{supplier}/pay', [\App\Http\Controllers\SupplierController::class, 'pay'])
+                ->name('suppliers.pay');
+        });
+
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/suppliers', [\App\Http\Controllers\SupplierController::class, 'store'])
+                ->name('suppliers.store');
+            Route::put('/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'update'])
+                ->name('suppliers.update');
+            Route::post('/suppliers/{supplier}/opening', [\App\Http\Controllers\SupplierController::class, 'opening'])
+                ->name('suppliers.opening');
+        });
+
+        // أوامر الشراء — العرض للإدارة وأمين المخزن (هو اللي بيستلم)
+        Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
+            Route::get('/purchasing', [\App\Http\Controllers\SupplierController::class, 'orders'])
+                ->name('purchasing');
+            // ⚠️ **`/purchasing/new` قبل `/purchasing/{supplierOrder}`** —
+            // لارافيل بيطابق بالترتيب و«new» كانت هتتقري كـid.
+            Route::get('/purchasing/new', [\App\Http\Controllers\SupplierController::class, 'createOrder'])
+                ->middleware('role:admin,manager')->name('purchasing.new');
+            Route::get('/purchasing/{supplierOrder}', [\App\Http\Controllers\SupplierController::class, 'order'])
+                ->name('purchasing.show');
+            // الاستلام بيدخل بضاعة للمخزن — شغل أمين المخزن
+            Route::post('/purchasing/{supplierOrder}/receive', [\App\Http\Controllers\SupplierController::class, 'receiveOrder'])
+                ->name('purchasing.receive');
+        });
+
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/purchasing', [\App\Http\Controllers\SupplierController::class, 'storeOrder'])
+                ->name('purchasing.store');
+            Route::post('/purchasing/{supplierOrder}/invoice', [\App\Http\Controllers\SupplierController::class, 'invoiceOrder'])
+                ->name('purchasing.invoice');
+            Route::post('/purchasing/{supplierOrder}/cancel', [\App\Http\Controllers\SupplierController::class, 'cancelOrder'])
+                ->name('purchasing.cancel');
+            Route::post('/purchasing/{supplierOrder}/close', [\App\Http\Controllers\SupplierController::class, 'closeOrder'])
+                ->name('purchasing.close');
+        });
+
         Route::get('/contracts', [ErpController::class, 'contracts'])->name('contracts');
         // صفحة عقد العميل — كل عقد لوحده
         Route::get('/contracts/{contract}', [ErpController::class, 'contract'])->name('contracts.show');

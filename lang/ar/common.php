@@ -14,6 +14,7 @@ return [
     'close' => 'إغلاق',
     'back' => 'رجوع',
     'pick' => 'اختار',
+    'number' => 'الرقم',
     'search' => 'بحث',
     'clear' => 'مسح',
     'filter' => 'فلتر',

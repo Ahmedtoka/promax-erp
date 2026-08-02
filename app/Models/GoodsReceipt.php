@@ -17,7 +17,7 @@ class GoodsReceipt extends Model
 
     protected $fillable = [
         'number', 'warehouse_id', 'source_warehouse_id', 'received_on', 'status',
-        'supplier', 'reference', 'created_by', 'notes',
+        'supplier', 'supplier_id', 'supplier_order_id', 'reference', 'created_by', 'notes',
     ];
 
     protected function casts(): array
@@ -65,6 +65,17 @@ class GoodsReceipt extends Model
     public function totalValue(): float
     {
         return (float) $this->batches->sum(fn ($b) => $b->qty_received * (float) $b->cost);
+    }
+
+    /** المورد — لو الإذن جاي من أمر شراء */
+    public function supplierRow(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function supplierOrder(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(SupplierOrder::class, 'supplier_order_id');
     }
 
     public static function nextNumber(): string

@@ -62,7 +62,9 @@ class ResetSystem extends Command
         // المخزن
         'pick_order_items', 'pick_orders',
         'stock_transfer_items', 'stock_transfers',
-        'batch_locations', 'batches', 'goods_receipts',
+        'batch_locations', 'batches', 'supplier_transactions', 'supplier_payments', 'supplier_invoices',
+            'supplier_order_items', 'supplier_orders', 'suppliers',
+            'goods_receipts',
         'locations', 'warehouses', 'stocks',
 
         // العقود

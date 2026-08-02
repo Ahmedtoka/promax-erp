@@ -400,4 +400,5 @@ return [
     'shelf_short' => 'Only :available available on this batch’s shelves.',
     'transfer_legacy' => 'This shipment was created before transfers deducted from the sending warehouse, so receiving it would create stock out of nothing. Cancel it and raise it again.',
     'count_open_transfers' => 'This warehouse has :count shipment(s) sent but not yet received. The goods have already left the balance but may still be on the floor — counting them puts them back and they get counted in both warehouses.',
+    'product' => 'Product',
 ];

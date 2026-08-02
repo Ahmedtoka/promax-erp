@@ -206,6 +206,16 @@
                 </select>
             </div>
         </div>
+        {{-- ═════ خصم على كل الفروع ═════ --}}
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
+            <label class="f">{{ __('client.chain_apply_discount') }} %</label>
+            <input type="number" name="apply_discount" step="0.5" min="0" max="100"
+                   style="width:100%" value="" placeholder="{{ __('client.chain_apply_discount_ph') }}">
+            <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                {{ __('client.chain_apply_discount_hint', ['count' => $g->clients()->count()]) }}
+            </div>
+        </div>
+
         <div class="alert info" style="margin-bottom:12px">
             <span>ℹ️</span><span>{{ __('client.chain_is_a_grouping') }}</span>
         </div>

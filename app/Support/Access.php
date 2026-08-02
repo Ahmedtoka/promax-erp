@@ -44,6 +44,7 @@ class Access
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
+            'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
@@ -89,6 +90,11 @@ class Access
         'accountant' => [
             'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
+            // ⚠️ المحاسب بيشوف الموردين ويدفع لهم — المستحقات شغله.
+            // أوامر الشراء نفسها (بضاعة) مش له، وتعريف المورد
+            // والافتتاحي قرارات إدارة (`role:admin,manager` في الراوت).
+            'erp.suppliers',
+            '!erp.suppliers.store', '!erp.suppliers.update', '!erp.suppliers.opening',
             'ops.invoices', 'ops.invoice',
             // ⚠️ **استثناء من بادئة `erp.clients`.** تفعيل العملاء
             // المستوردين قرار إداري (`role:admin,manager,branch_manager`)،
@@ -110,6 +116,11 @@ class Access
             'wh.',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
+            // بيستلم بضاعة الموردين — عرض الأوامر والاستلام بس،
+            // الإنشاء والفوترة والإلغاء قرارات إدارة.
+            'erp.purchasing',
+            '!erp.purchasing.new', '!erp.purchasing.store', '!erp.purchasing.invoice',
+            '!erp.purchasing.cancel', '!erp.purchasing.close',
         ],
     ];
 
@@ -169,6 +180,7 @@ class Access
         // ═══ الفلوس — شاشات المحاسب ═══
         'nav.group_money' => [
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
+            ['erp.suppliers', '🏭', 'supplier.suppliers', 'erp.suppliers*', null],
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
         ],
@@ -176,6 +188,7 @@ class Access
         // ═══ المخزون — البضاعة وحركتها ═══
         'nav.group_inventory' => [
             ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            ['erp.purchasing', '📥', 'supplier.purchase_orders', 'erp.purchasing*', null],
             ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
             ['wh.index', '🏭', 'nav.warehouse', 'wh.index', null],
             ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
