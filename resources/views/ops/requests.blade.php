@@ -91,10 +91,13 @@
                 </select>
             </div>
             <div id="wrapZone"><label class="f">{{ __('team.zone') }}</label>
-                <select name="zone_id" id="dZone" style="width:100%">
-                    <option value="">— {{ __('common.none') }} —</option>
-                    @foreach ($zones as $z)<option value="{{ $z->id }}">{{ $z->displayName() }}</option>@endforeach
-                </select>
+                @include('partials._zone_select', [
+                    'zones' => $zones,
+                    'name' => 'zone_id',
+                    'placeholder' => '— '.__('common.none').' —',
+                    'style' => 'width:100%',
+                    'attrs' => 'id="dZone"',
+                ])
             </div>
             <div id="wrapDisc"><label class="f">{{ __('client.discount_pct') }}</label><input type="number" step="0.5" name="discount" value="0" style="width:100%"></div>
         </div>

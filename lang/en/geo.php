@@ -3,6 +3,7 @@
 return [
     'governorate' => 'Governorate',
     'zone' => 'Zone',
+    'no_governorate' => 'No governorate',
     'pick_governorate' => '— Pick a governorate —',
     'pick_zone' => '— Pick a zone —',
     'zone_filtered_hint' => 'Only zones inside the selected governorate are listed.',

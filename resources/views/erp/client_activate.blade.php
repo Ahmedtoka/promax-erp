@@ -111,14 +111,13 @@
             <div class="frow">
                 <div>
                     <label class="f">{{ __('client.zone') }} <b class="req-star">*</b></label>
-                    <select name="zone_id" style="width:100%">
-                        <option value="">— {{ __('client.keep_current') }} —</option>
-                        @foreach ($zones as $z)
-                            <option value="{{ $z->id }}" @selected(old('zone_id') == $z->id)>
-                                {{ $z->displayName() }}
-                            </option>
-                        @endforeach
-                    </select>
+                    @include('partials._zone_select', [
+                        'zones' => $zones,
+                        'name' => 'zone_id',
+                        'selected' => old('zone_id'),
+                        'placeholder' => '— '.__('client.keep_current').' —',
+                        'style' => 'width:100%',
+                    ])
                     <div style="font-size:11px;color:var(--muted);margin-top:4px">
                         {{ __('client.zone_required_hint') }}
                     </div>

@@ -69,4 +69,5 @@ return [
     'reordered' => 'الترتيب اتحفظ',
     'assigned' => ':count عميل اتخصص',
     'unassigned' => ':client بقى من غير مندوب',
+    'zone_countable' => 'منطقة',
 ];

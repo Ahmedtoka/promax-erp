@@ -3,6 +3,7 @@
 return [
     'governorate' => 'المحافظة',
     'zone' => 'المنطقة',
+    'no_governorate' => 'بدون محافظة',
     'pick_governorate' => '— اختر المحافظة —',
     'pick_zone' => '— اختر المنطقة —',
     'zone_filtered_hint' => 'المناطق المعروضة تابعة للمحافظة المختارة.',

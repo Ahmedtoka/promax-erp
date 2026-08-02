@@ -54,12 +54,18 @@
                 <option value="{{ $k }}" @selected(($filters['sub'] ?? '') === $k)>{{ __('enums.sub_channel.'.$k) }}</option>
             @endforeach
         </select>
-        <select name="zone">
-            <option value="">{{ __('client.all_zones') }}</option>
-            @foreach ($zones as $z)
-                <option value="{{ $z->id }}" @selected((int) ($filters['zone'] ?? 0) === $z->id)>{{ $z->displayName() }}</option>
+        <select name="gov">
+            <option value="">{{ __('geo.governorate') }}: {{ __('common.all') }}</option>
+            @foreach (\App\Support\Governorates::options() as $gk => $gLabel)
+                <option value="{{ $gk }}" @selected(($filters['gov'] ?? '') === $gk)>{{ $gLabel }}</option>
             @endforeach
         </select>
+        @include('partials._zone_select', [
+            'zones' => $zones,
+            'name' => 'zone',
+            'selected' => $filters['zone'] ?? null,
+            'placeholder' => __('client.all_zones'),
+        ])
         <select name="contract">
             <option value="">{{ __('client.contracts_all') }}</option>
             <option value="yes" @selected(($filters['contract'] ?? '') === 'yes')>{{ __('client.with_contract') }}</option>

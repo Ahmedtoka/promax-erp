@@ -8,9 +8,21 @@
 
     // ⚠️ قوايم الأوبشنز بتتبني هنا في PHP — البليد مابيشتغلش جوه
     // الجافاسكريبت، والدالة اللي بتفتح المودال محتاجة الـ HTML جاهز.
+    // ⚠️ مجمّعة بالمحافظة زي باقي السيستم — optgroup لكل محافظة
+    // بالترتيب الجغرافي، والـ«بدون» في الآخر.
     $zoneOptions = '<option value="">—</option>';
-    foreach ($zones as $z) {
-        $zoneOptions .= '<option value="'.(int) $z->id.'">'.e($z->displayName()).'</option>';
+    $zByGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none');
+    foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk) {
+        $zGroup = $zByGov->get($gk);
+        if (! $zGroup || $zGroup->isEmpty()) {
+            continue;
+        }
+        $govLabel = $gk === '_none' ? __('geo.no_governorate') : \App\Support\Governorates::label($gk);
+        $zoneOptions .= '<optgroup label="'.e($govLabel).'">';
+        foreach ($zGroup->sortBy(fn ($z) => $z->displayName()) as $z) {
+            $zoneOptions .= '<option value="'.(int) $z->id.'">'.e($z->displayName()).'</option>';
+        }
+        $zoneOptions .= '</optgroup>';
     }
     $channelOptions = '<option value="">—</option>';
     foreach ($channels as $c) {
@@ -39,12 +51,12 @@
                 <option value="{{ $s }}" @selected(($filters['status'] ?? '') === $s)>{{ __('lead.status_'.$s) }}</option>
             @endforeach
         </select>
-        <select name="zone">
-            <option value="">{{ __('common.all') }}</option>
-            @foreach ($zones as $z)
-                <option value="{{ $z->id }}" @selected(($filters['zone'] ?? '') == $z->id)>{{ $z->displayName() }}</option>
-            @endforeach
-        </select>
+        @include('partials._zone_select', [
+            'zones' => $zones,
+            'name' => 'zone',
+            'selected' => $filters['zone'] ?? null,
+            'placeholder' => __('common.all'),
+        ])
         <select name="rep">
             <option value="">{{ __('common.all') }}</option>
             @foreach ($reps as $r)

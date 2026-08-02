@@ -16,6 +16,9 @@ return [
     'group_inventory' => 'Inventory',
     'group_field' => 'Field',
     'group_reports' => 'Reports',
+    'group_home' => 'Home',
+    'group_purchasing' => 'Purchasing',
+    'group_wh' => 'Warehouse',
     'group_settings' => 'Settings',
 
     // ---------- Links ----------

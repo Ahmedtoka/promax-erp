@@ -126,6 +126,11 @@ class ErpController extends Controller
         if ($zone = $request->integer('zone')) {
             $q->where('zone_id', $zone);
         }
+        // ⚠️ فلتر المحافظة بيقرا من عمود العميل نفسه مش من منطقته —
+        // عميل من غير منطقة لسه ليه محافظة ولازم يظهر في فلترها.
+        if ($gov = $request->string('gov')->value()) {
+            $q->where('governorate', $gov);
+        }
         if ($channel = $request->integer('channel')) {
             $q->where('channel_id', $channel);
         }
@@ -160,7 +165,7 @@ class ErpController extends Controller
                 ->groupBy('category')->pluck('n', 'category')->all(),
             'channelCounts' => Client::selectRaw('channel_id, COUNT(*) as n')
                 ->groupBy('channel_id')->pluck('n', 'channel_id')->all(),
-            'filters' => $request->only(['q', 'cat', 'zone', 'contract', 'channel', 'sub', 'status']),
+            'filters' => $request->only(['q', 'cat', 'zone', 'gov', 'contract', 'channel', 'sub', 'status']),
             // ⚠️ بنفس سكوب الفرع بتاع القايمة — عداد بيقول 455 وقايمة
             // بتوري 80 بيخلّي مدير الفرع يفتكر في حاجة مخفية عنه.
             'statusCounts' => \App\Models\Branch::scope(Client::query())

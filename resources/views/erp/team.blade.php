@@ -100,14 +100,26 @@
     <div class="tablewrap">
         <table>
             <tr><th>{{ __('common.code') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('team.visit_day') }}</th><th>{{ __('team.client_count') }}</th><th>{{ __('ops.rep') }}</th></tr>
-            @foreach ($zones as $z)
+            {{-- ⚠️ مجمّعة بالمحافظة — رأس لكل محافظة ومناطقها تحته
+                 بالترتيب الجغرافي، والـ«بدون محافظة» في الآخر. --}}
+            @php $zByGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none'); @endphp
+            @foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk)
+                @continue(! ($zGroup = $zByGov->get($gk)) || $zGroup->isEmpty())
                 <tr>
-                    <td class="num">{{ $z->code }}</td>
-                    <td><b>{{ $z->displayName() }}</b></td>
-                    <td>{{ $z->day_label ?? '—' }}</td>
-                    <td class="num">{{ $z->clients()->count() }}</td>
-                    <td>{{ $z->users->pluck('name')->join(__('common.list_separator')) ?: '—' }}</td>
+                    <td colspan="5" style="background:var(--card2);font-weight:900;color:var(--royal-blue);font-size:12px">
+                        📍 {{ $gk === '_none' ? __('geo.no_governorate') : \App\Support\Governorates::label($gk) }}
+                        <span style="color:var(--muted);font-weight:400">· {{ $zGroup->count() }}</span>
+                    </td>
                 </tr>
+                @foreach ($zGroup->sortBy(fn ($z) => $z->displayName()) as $z)
+                    <tr>
+                        <td class="num">{{ $z->code }}</td>
+                        <td><b>{{ $z->displayName() }}</b></td>
+                        <td>{{ $z->day_label ?? '—' }}</td>
+                        <td class="num">{{ $z->clients()->count() }}</td>
+                        <td>{{ $z->users->pluck('name')->join(__('common.list_separator')) ?: '—' }}</td>
+                    </tr>
+                @endforeach
             @endforeach
         </table>
     </div>
@@ -198,12 +210,12 @@
             </div>
             <div>
                 <label class="f">{{ __('team.zone') }}</label>
-                <select name="zone_id" id="uZone" style="width:100%">
-                    <option value="">—</option>
-                    @foreach ($zones as $z)
-                        <option value="{{ $z->id }}">{{ $z->displayName() }}</option>
-                    @endforeach
-                </select>
+                @include('partials._zone_select', [
+                    'zones' => $zones,
+                    'name' => 'zone_id',
+                    'style' => 'width:100%',
+                    'attrs' => 'id="uZone"',
+                ])
             </div>
         </div>
         <div class="frow">

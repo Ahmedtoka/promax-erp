@@ -69,4 +69,5 @@ return [
     'reordered' => 'Order saved',
     'assigned' => ':count clients assigned',
     'unassigned' => ':client now has no rep',
+    'zone_countable' => 'zones',
 ];

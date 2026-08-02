@@ -16,6 +16,9 @@ return [
     'group_inventory' => 'المخزون',
     'group_field' => 'الميدان',
     'group_reports' => 'التقارير',
+    'group_home' => 'الرئيسية',
+    'group_purchasing' => 'المشتريات',
+    'group_wh' => 'المخزن',
     'group_settings' => 'الإعدادات',
 
     // ---------- الروابط ----------

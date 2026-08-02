@@ -41,14 +41,13 @@
             </div>
             <div>
                 <label class="f">{{ __('client.zone') }}</label>
-                <select name="zone" onchange="this.form.submit()">
-                    <option value="">{{ __('common.all') }}</option>
-                    @foreach ($zones as $z)
-                        <option value="{{ $z->id }}" @selected(($filters['zone'] ?? '') == $z->id)>
-                            {{ $z->displayName() }} ({{ $z->clients_count }})
-                        </option>
-                    @endforeach
-                </select>
+                @include('partials._zone_select', [
+                    'zones' => $zones,
+                    'name' => 'zone',
+                    'selected' => $filters['zone'] ?? null,
+                    'placeholder' => __('common.all'),
+                    'attrs' => 'onchange="this.form.submit()"',
+                ])
             </div>
             <div>
                 <label class="f">{{ __('common.search') }}</label>
@@ -108,16 +107,34 @@
                  فمن غير العلم مسح كل المناطق مابيتنفذش. --}}
             <input type="hidden" name="zones_form" value="1">
 
+            {{-- ⚠️ **المحافظة رأس والمناطق تحتها.** القايمة المسطّحة
+                 كانت بتحط 49 منطقة ورا بعض واللي بيسكّن مندوب على
+                 «العاشر» مش شايف إنه ساب باقي مناطق الشرقية من غير
+                 حد. تشيك بوكس المحافظة بيعلّم على كل مناطقها مرة واحدة. --}}
             <div style="max-height:330px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:9px">
-                @foreach ($zones as $z)
-                    <label style="display:flex;align-items:center;gap:8px;padding:5px 3px;font-size:12.5px">
-                        <input type="checkbox" name="zone_ids[]" value="{{ $z->id }}"
-                               @checked(in_array($z->id, $myZoneIds, true))>
-                        <span>{{ $z->displayName() }}</span>
-                        <span class="s" style="margin-inline-start:auto;color:var(--muted)">
-                            {{ $fmt($z->clients_count) }}
+                @php $byGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none'); @endphp
+                @foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk)
+                    @continue(! ($group = $byGov->get($gk)) || $group->isEmpty())
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 3px;font-size:12px;font-weight:900;color:var(--royal-blue);border-bottom:1px solid var(--border);cursor:pointer">
+                        <input type="checkbox" class="govBox" data-gov="{{ $gk }}"
+                               onchange="toggleGov(this)">
+                        <span>{{ $gk === '_none' ? __('geo.no_governorate') : \App\Support\Governorates::label($gk) }}</span>
+                        <span class="s" style="margin-inline-start:auto;color:var(--muted);font-weight:400">
+                            {{ $group->count() }} {{ __('journey.zone_countable') }}
                         </span>
                     </label>
+                    @foreach ($group->sortBy(fn ($z) => $z->displayName()) as $z)
+                        <label style="display:flex;align-items:center;gap:8px;padding:5px 3px 5px 18px;font-size:12.5px">
+                            <input type="checkbox" name="zone_ids[]" value="{{ $z->id }}"
+                                   class="zoneBox" data-gov="{{ $gk }}"
+                                   @checked(in_array($z->id, $myZoneIds, true))
+                                   onchange="syncGov('{{ $gk }}')">
+                            <span>{{ $z->displayName() }}</span>
+                            <span class="s" style="margin-inline-start:auto;color:var(--muted)">
+                                {{ $fmt($z->clients_count) }}
+                            </span>
+                        </label>
+                    @endforeach
                 @endforeach
             </div>
 
@@ -179,5 +196,23 @@
     function toggleAll(box) {
         document.querySelectorAll('.pick').forEach(el => { el.checked = box.checked; });
     }
+
+    // تشيك بوكس المحافظة بيعلّم/يشيل كل مناطقها
+    function toggleGov(box) {
+        document.querySelectorAll('.zoneBox[data-gov="' + box.dataset.gov + '"]')
+            .forEach(el => { el.checked = box.checked; });
+    }
+
+    // والعكس: حالة رأس المحافظة بتتبع مناطقها
+    function syncGov(gov) {
+        const boxes = [...document.querySelectorAll('.zoneBox[data-gov="' + gov + '"]')];
+        const head = document.querySelector('.govBox[data-gov="' + gov + '"]');
+        if (!head) return;
+        const on = boxes.filter(b => b.checked).length;
+        head.checked = on > 0 && on === boxes.length;
+        head.indeterminate = on > 0 && on < boxes.length;
+    }
+
+    document.querySelectorAll('.govBox').forEach(b => syncGov(b.dataset.gov));
 </script>
 @endsection

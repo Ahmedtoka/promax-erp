@@ -157,64 +157,67 @@ class Access
      * @var array<string, list<array{0:string,1:string,2:string,3:string,4:?string}>>
      */
     public const NAV = [
-        // ⚠️ **الترتيب هو ترتيب يوم الشغل مش ترتيب بناء السيستم.**
-        // المنيو القديمة كانت متقسومة «إدارة/مخزن/عمليات» — قسمة
-        // المطوّر مش قسمة المستخدم: «الإدارة» كان فيها 12 لينك من
-        // العملاء للتسعير للتقارير، والتقارير نفسها كانت مبعثرة في
-        // تلات مجموعات (أعمار الديون هنا، الصلاحية هناك، التراكينج
-        // في العمليات). دلوقتي: البيع → الفلوس → البضاعة → الميدان →
-        // التقارير كلها مع بعض → الإعدادات.
+        // ⚠️ **الترتيب هو دورة البضاعة نفسها — من الشراء للتقرير.**
+        // البضاعة بتتشري من المورد → تدخل المخزن وتترصّف → تتعرّف
+        // وتتسعّر وتتباع لعملاء → الميدان يوصّلها → الفلوس تتحصّل
+        // وتتسدد → التقارير تقول حصل إيه. اللي بيدوّر على شاشة بيمشي
+        // مع البضاعة في دماغه فبيلاقيها في مكانها من الدورة.
 
-        // ═══ العملاء والبيع — اللي بنبيع لمين وبكام ═══
-        'nav.group_clients' => [
+        // ═══ الرئيسية ═══
+        'nav.group_home' => [
             ['erp.overview', '📊', 'nav.overview', 'erp.overview', null],
-            ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
-            ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
-            ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
-            ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
-            ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
-            ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
-            ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
         ],
 
-        // ═══ الفلوس — شاشات المحاسب ═══
-        'nav.group_money' => [
-            ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
-            ['erp.suppliers', '🏭', 'supplier.suppliers', 'erp.suppliers*', null],
-            ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
-            ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
+        // ═══ ١. المشتريات — البضاعة داخلة ═══
+        'nav.group_purchasing' => [
+            ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
+            ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
         ],
 
-        // ═══ المخزون — البضاعة وحركتها ═══
-        'nav.group_inventory' => [
-            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
-            ['erp.purchasing', '📥', 'supplier.purchase_orders', 'erp.purchasing*', null],
-            ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
+        // ═══ ٢. المخزن — بترتيب دخول البضاعة ═══
+        'nav.group_wh' => [
             ['wh.index', '🏭', 'nav.warehouse', 'wh.index', null],
             ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
             ['wh.locations', '🗄️', 'nav.shelves', 'wh.locations', null],
+            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
             ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', null],
             ['wh.picks', '📋', 'nav.pick_orders', 'wh.picks*', null],
             ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
         ],
 
-        // ═══ الميدان — الفريق والعربيات والزيارات ═══
+        // ═══ ٣. البيع والعملاء — محتمل ← عميل ← عقد ← سعر ═══
+        'nav.group_clients' => [
+            ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
+            ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
+            ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
+            ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
+            ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
+            ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
+            ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
+        ],
+
+        // ═══ ٤. الميدان — إعداد ← تنفيذ ← متابعة ═══
         'nav.group_field' => [
-            ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
-            ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
+            ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
+            ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
+            ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
-            ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
-            ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
+            ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
             ['ops.live', '📡', 'nav.live', 'ops.live', null],
         ],
 
-        // ═══ التقارير — كلها في مكان واحد ═══
-        // ⚠️ التقرير = شاشة قراءة بتجاوب على سؤال، مش شاشة بتعمل
-        // حاجة. أعمار الديون والصلاحية والتراكينج كانوا في تلات
-        // مجموعات مختلفة واللي بيدوّر على «التقارير» مش بيلاقيهم.
+        // ═══ ٥. الفلوس — بعد ما البيع حصل ═══
+        'nav.group_money' => [
+            ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
+            ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
+        ],
+
+        // ═══ ٦. التقارير — كلها في مكان واحد ═══
         'nav.group_reports' => [
             ['erp.reports', '📑', 'nav.reports', 'erp.reports', null],
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
@@ -222,7 +225,7 @@ class Access
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
         ],
 
-        // ═══ الإعدادات ═══
+        // ═══ ٧. الإعدادات ═══
         'nav.group_settings' => [
             ['erp.team', '🧑‍💼', 'nav.team', 'erp.team', null],
             ['erp.branches', '🏢', 'nav.branches', 'erp.branches', null],
