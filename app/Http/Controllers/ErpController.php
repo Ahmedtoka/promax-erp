@@ -1194,9 +1194,9 @@ class ErpController extends Controller
             'shelf_life_months' => ['nullable', 'integer', 'min:1', 'max:120'],
 
             // ═══ التسعير ═══
-            'cost' => ['required', 'numeric', 'min:0'],
-            'price_old' => ['required', 'numeric', 'min:0'],
-            'price_new' => ['required', 'numeric', 'min:0'],
+            'cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            'price_old' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            'price_new' => ['required', 'numeric', 'min:0', 'max:9999999'],
             'taxable' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
 
@@ -1252,6 +1252,16 @@ class ErpController extends Controller
             'batches' => $batches,
             'buyers' => $buyers,
             'families' => Product::FAMILIES,
+            // ⚠️ سعر الصنف في **كل** قايمة مسمّاة — الفواتير بتتسعّر
+            // من القوايم دلوقتي، فكارت بيوري عمودين قديمين بس بيكدب.
+            // ⚠️ الـeager load مقيّد بالصنف ده — `priceFor` بتلمس
+            // `items` كلها، ومن غير القيد كارت واحد بيحمّل كل أسعار
+            // كل القوايم.
+            'priceLists' => $request->user()->isWarehouseKeeper()
+                ? collect()
+                : \App\Models\PriceList::with([
+                    'items' => fn ($q) => $q->where('product_id', $product->id),
+                ])->orderByDesc('is_default')->orderBy('id')->get(),
             // ⚠️ نفس بوابة شاشة المخزون: أمين المخزن بيشوف كميات
             // مش تكلفة ولا هامش. الشاشة الجديدة كانت هتفتح الباب
             // اللي الشاشة القديمة قافلاه.
@@ -1267,25 +1277,37 @@ class ErpController extends Controller
             'family' => ['required', 'string', 'max:40'],
         ]);
 
-        $product = Product::create(
-            Arr::except($data, self::PRODUCT_NOT_COLUMNS)
-            + $this->taxFields($request)
-            + ['active' => $request->boolean('active', true)]
-        );
-
-        if ($request->hasFile('image')) {
-            $product->update(['image_path' => \App\Services\ProductImage::store($product, $request->file('image'))]);
-        }
+        // ⚠️ **الترانزاكشن بتلم الصنف والأرصدة والمزامنة.** فشل في
+        // النص كان بيسيب صنف من غير صفوف رصيد فمايبانش في المخازن،
+        // أو عمود سعر اتكتب والقايمة لأ.
+        $product = DB::transaction(function () use ($data, $request) {
+            $product = Product::create(
+                Arr::except($data, self::PRODUCT_NOT_COLUMNS)
+                + $this->taxFields($request)
+                + ['active' => $request->boolean('active', true)]
+            );
         // ⚠️ **صف رصيد بصفر في كل مخزن مفعّل.** من غيره الصنف
         // مابيبانش في شاشة أي مخزن، واللي بيجرد بيفتكر إنه مش متعرّف
         // ويعمله تاني بكود جديد. الكميات نفسها بتتحط من شاشة تعديل
         // أرصدة المخزن — مش من هنا؛ الفورم ده بيعرّف صنف مش بيوزّع
         // بضاعة، والكمية من غير مكان بتخلّي مخزن يطلب بضاعة عنده.
-        foreach (\App\Models\Warehouse::where('active', true)->pluck('id') as $warehouseId) {
-            $product->stocks()->firstOrCreate(
-                ['warehouse_id' => $warehouseId],
-                ['qty' => 0, 'hold_qty' => 0, 'good_qty' => 0],
-            );
+            foreach (\App\Models\Warehouse::where('active', true)->pluck('id') as $warehouseId) {
+                $product->stocks()->firstOrCreate(
+                    ['warehouse_id' => $warehouseId],
+                    ['qty' => 0, 'hold_qty' => 0, 'good_qty' => 0],
+                );
+            }
+
+            // عمود ← قايمة، والاتجاه العكسي في شاشة التسعير
+            \App\Services\Pricing::syncColumnsToLists($product);
+
+            return $product;
+        });
+
+        // ⚠️ الصورة بره الترانزاكشن — كتابة ملف مش بتترجّع بالرول باك،
+        // وفشلها مايستاهلش يضيّع تعريف الصنف كله.
+        if ($request->hasFile('image')) {
+            $product->update(['image_path' => \App\Services\ProductImage::store($product, $request->file('image'))]);
         }
 
         return back()->with('ok', __('flash.product_added'));
@@ -1295,11 +1317,16 @@ class ErpController extends Controller
     {
         $data = $request->validate($this->productRules($product));
 
-        $product->update(
-            Arr::except($data, self::PRODUCT_NOT_COLUMNS)
-            + $this->taxFields($request)
-            + ['active' => $request->boolean('active')]
-        );
+        DB::transaction(function () use ($data, $request, $product) {
+            $product->update(
+                Arr::except($data, self::PRODUCT_NOT_COLUMNS)
+                + $this->taxFields($request)
+                + ['active' => $request->boolean('active')]
+            );
+
+            // عمود ← قايمة، والاتجاه العكسي في شاشة التسعير
+            \App\Services\Pricing::syncColumnsToLists($product->refresh());
+        });
 
         // ⚠️ **الصورة بتتحدّث بس لو المستخدم رفع واحدة.** لو كتبنا
         // `image_path` على طول، أي حفظ من غير رفع كان بيفضّي الصورة —

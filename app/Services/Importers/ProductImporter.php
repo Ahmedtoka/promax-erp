@@ -144,6 +144,10 @@ class ProductImporter extends Importer
                     'active' => true,
                 ]);
 
+                // ⚠️ المستورد بيكتب العمودين — لازم القايمتين المهاجرتين
+                // يتحدّثوا معاهم، وإلا الشيت يتقرا والفواتير تفضل بالقديم.
+                \App\Services\Pricing::syncColumnsToLists($product);
+
                 $existing ? $updated++ : $created++;
 
                 // الرصيد الافتتاحي اختياري — لو مش موجود بنسيب المخزون فاضي

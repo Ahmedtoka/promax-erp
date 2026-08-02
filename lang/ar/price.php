@@ -6,6 +6,7 @@ return [
     'new_list' => 'قايمة جديدة',
     'price' => 'السعر',
     'priced' => 'متسعّر',
+    'inactive' => 'موقوفة',
     'missing' => 'ناقص',
     'missing_only' => 'الناقص بس',
     'draft' => 'مسوّدة',

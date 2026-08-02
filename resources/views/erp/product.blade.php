@@ -200,6 +200,52 @@
         </div>
     </div>
 
+    {{-- ═════════ الأسعار في القوايم ═════════ --}}
+    {{-- ⚠️ الفواتير بتتسعّر من القوايم المسمّاة مش من العمودين —
+         فالكارت لازم يوري سعر الصنف في **كل** قايمة، والناقص فيها
+         بيبان بشارة حمرا لأنه هو اللي بيمنع تفعيلها. --}}
+    @if ($priceLists->isNotEmpty())
+    <div class="card">
+        <h3>🏷️ {{ __('price.price_lists') }}</h3>
+        <div class="tablewrap">
+            <table>
+                <tr>
+                    <th>{{ __('price.list') }}</th>
+                    <th class="num">{{ __('price.price') }}</th>
+                    <th></th>
+                </tr>
+                @foreach ($priceLists as $pl)
+                    {{-- ⚠️ **السعر الفعلي مش سعر صف القايمة.** القايمتين
+                         المهاجرتين بيرجعوا لعمود الصنف لو مافيش صف —
+                         لو عرضنا الصف بس، الكارت بيقول «ناقص» والـKPI
+                         اللي فوقه بيقول 20.00 وهي فعلاً اللي بتتحاسب. --}}
+                    @php $lp = \App\Services\Pricing::listPrice($p, $pl); @endphp
+                    <tr>
+                        <td>
+                            <a href="{{ route('erp.prices.show', $pl) }}"><b>{{ $pl->displayName() }}</b></a>
+                            @if ($pl->is_default)<span class="badge b-blue" style="font-size:10px">{{ __('price.default') }}</span>@endif
+                            @unless ($pl->active)<span class="badge b-gray" style="font-size:10px">{{ __('price.inactive') }}</span>@endunless
+                        </td>
+                        <td class="num">
+                            @if ($lp > 0)
+                                <b>{{ $money($lp) }}</b> {{ __('common.currency') }}
+                            @else
+                                <span class="badge b-red" style="font-size:10px">{{ __('price.missing') }}</span>
+                            @endif
+                        </td>
+                        <td class="num">
+                            @if ($seeCost && $lp > 0 && (float) $p->cost > 0)
+                                @php $m = ($lp - (float) $p->cost) / $lp; @endphp
+                                <span class="{{ $mgCls($m) }}">{{ number_format($m * 100, 1) }}%</span>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+    </div>
+    @endif
+
     {{-- ═════════ الباتشات ═════════ --}}
     <div class="card">
         <h3>{{ __('stock.batches_of') }} <span class="side">{{ $batches->count() }}</span></h3>

@@ -99,6 +99,15 @@ class Pricing
                 return $price;
             }
 
+            // ⚠️ **القايمة المسمّاة الناقصة بترجّع صفر — مش سعر قايمة
+            // تانية.** الرجوع لـ`price_new` كان معناه إن عميل على
+            // «قائمة 3» والصنف مش متسعّر فيها يتحاسب بسعر محدش
+            // اعتمده للقايمة دي، في صمت. الصفر بيتلقف عند البيع
+            // وبيترفض — قرار المالك إن كل قايمة لازم تكون كاملة.
+            if (! in_array($list->code, self::LISTS, true)) {
+                return 0.0;
+            }
+
             // القوايم المنقولة أكوادها `old`/`new` — نرجع لعمودها
             $list = $list->code;
         }
@@ -128,6 +137,44 @@ class Pricing
         $price = self::listPrice($product, $list);
 
         return $price > 0 ? $price : null;
+    }
+
+    /**
+     * مزامنة عمودي السعر مع القايمتين المهاجرتين (`old`/`new`).
+     *
+     * ⚠️ **الاتجاهين لازم يفضلوا متطابقين.** الفواتير بتقرا
+     * `price_list_items` والـKPIs والأبلكيشن بيقروا العمودين —
+     * لو اتفرقوا، المندوب بيشوف سعر والفاتورة بتطلع بسعر تاني.
+     * فورم الصنف والمستورد بينادوا الدالة دي (عمود ← قايمة)،
+     * وشاشة التسعير بتكتب العمود مع القايمة (قايمة ← عمود).
+     *
+     * ⚠️ **الصفر مابيدوسش على سعر حقيقي.** المستورد والسيدر بيعملوا
+     * أصناف أسعارها 0 — لو الصفر ده اتكتب فوق سعر معتمد في القايمة
+     * الافتراضية، الصنف بيبقى «ناقص» فيها وأي فاتورة بيه بصفر.
+     */
+    public static function syncColumnsToLists(Product $product): void
+    {
+        foreach (['old' => 'price_old', 'new' => 'price_new'] as $code => $column) {
+            $list = PriceList::where('code', $code)->first();
+
+            if ($list === null) {
+                continue;   // داتابيز لسه ماهاجرتش — العمود هو المصدر
+            }
+
+            $value = (float) $product->{$column};
+
+            $item = \App\Models\PriceListItem::firstOrNew([
+                'price_list_id' => $list->id,
+                'product_id' => $product->id,
+            ]);
+
+            if ($value <= 0 && $item->exists && (float) $item->price > 0) {
+                continue;
+            }
+
+            $item->price = $value;
+            $item->save();
+        }
     }
 
     /**

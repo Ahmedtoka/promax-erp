@@ -176,6 +176,15 @@ class PriceListController extends Controller
                 $item->price = $price;
                 $item->save();
                 $touched++;
+
+                // ⚠️ **القايمتين المهاجرتين ليهم عمودين على الصنف**
+                // لسه بيقروا منهم الـKPIs والأبلكيشن وأوامر التوريد.
+                // من غير الكتابة العكسية دي، المندوب بيشوف سعر
+                // والفاتورة بتطلع بسعر تاني.
+                if (in_array($priceList->code, \App\Services\Pricing::LISTS, true)) {
+                    Product::whereKey((int) $productId)
+                        ->update(['price_'.$priceList->code => $price]);
+                }
             }
         });
 
@@ -246,6 +255,11 @@ class PriceListController extends Controller
                     ['price_list_id' => $priceList->id, 'product_id' => $pid],
                     ['price' => round($price, 2)],
                 );
+
+                // نفس الكتابة العكسية بتاعت `savePrices` — الشرح هناك
+                if (in_array($priceList->code, \App\Services\Pricing::LISTS, true)) {
+                    Product::whereKey($pid)->update(['price_'.$priceList->code => round($price, 2)]);
+                }
 
                 $done++;
             }

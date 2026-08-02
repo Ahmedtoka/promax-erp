@@ -23,4 +23,5 @@ return [
     'request_already_assigned' => 'الطلب ده اتنزّل قبل كده.',
     'unknown_price_mode' => 'تسعيرة غير معروفة.',
 
+    'product_not_priced' => '«:product» مالوش سعر في قايمة العميل — سعّره الأول من شاشة قوايم الأسعار.',
 ];

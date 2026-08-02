@@ -6,6 +6,7 @@ return [
     'new_list' => 'New list',
     'price' => 'Price',
     'priced' => 'Priced',
+    'inactive' => 'Inactive',
     'missing' => 'Missing',
     'missing_only' => 'Missing only',
     'draft' => 'Draft',

@@ -387,6 +387,16 @@ class FieldApiController extends Controller
                     // بأي تعديل سعر أو تكلفة بعد كده.
                     $quote = \App\Services\Pricing::quote($client, $item->product, $item->batch, $qty);
 
+                    // ⚠️ **سعر القايمة صفر = بيع مرفوض.** الصنف اللي مش
+                    // متسعّر في قايمة العميل كان بيعدّي ويطلع سطر فاتورة
+                    // بـ0.00 من غير أي رسالة — بضاعة بتخرج ببلاش والرقم
+                    // مابيبانش غير في مراجعة آخر الشهر.
+                    if ($quote['list_price'] <= 0) {
+                        throw new \App\Exceptions\Rejected(__('api.product_not_priced', [
+                            'product' => $item->product->displayName(),
+                        ]));
+                    }
+
                     // ⚠️ الضريبة على الصافي **بعد الخصم**، وسطر بسطر —
                     // الفاتورة ممكن تجمع صنف خاضع وصنف معفى.
                     $taxRate = \App\Services\Tax::rate($client, $item->product);
@@ -507,9 +517,11 @@ class FieldApiController extends Controller
 
                 return $invoice;
             });
-        } catch (StockShortage $e) {
-            // نقص في العهدة — الترانزاكشن اترجعت، فالعهدة زي ما هي.
-            // أي خطأ تاني (SQL مثلاً) بيكمّل لـ 500 عن قصد.
+        } catch (\App\Exceptions\Rejected $e) {
+            // رفض تجاري (نقص عهدة، صنف مش متسعّر…) — الترانزاكشن
+            // اترجعت والعهدة زي ما هي. StockShortage وريثة Rejected
+            // فبتتلقف هنا برضه. أي خطأ تاني (SQL مثلاً) بيكمّل لـ500
+            // عن قصد.
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
