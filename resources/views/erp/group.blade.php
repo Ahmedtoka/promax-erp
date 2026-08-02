@@ -80,7 +80,10 @@
             @forelse ($branches as $b)
                 <tr data-txt="{{ $b->displayName() }} {{ $b->address }}">
                     <td onclick="location.href='{{ route('erp.clients.show', $b) }}'" style="cursor:pointer">
-                        <b>{{ $b->displayName() }}</b>
+                        {{-- ⚠️ اسم السلسلة من `$g` مش من `$b->fullName()` —
+                             الـ199 صف كلهم نفس السلسلة، و`fullName()` كانت
+                             هتعمل lazy load للمجموعة لكل صف. --}}
+                        <b><span style="color:var(--muted);font-weight:600">{{ $g->displayName() }} — </span>{{ $b->displayName() }}</b>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $b->address }}</span>
                     </td>
                     <td style="color:var(--muted)">{{ $b->zone?->displayName() ?? '—' }}</td>
@@ -132,7 +135,7 @@
             <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.chain_in_contract') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.discount') }}</th><th>{{ __('client.payment_terms') }}</th><th>{{ __('client.expires_on') }}</th><th>{{ __('common.notes') }}</th></tr>
             @foreach ($contracts as $b)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $b) }}'">
-                    <td><b>{{ $b->displayName() }}</b></td>
+                    <td><b><span style="color:var(--muted);font-weight:600">{{ $g->displayName() }} — </span>{{ $b->displayName() }}</b></td>
                     <td>{{ $b->contract->displayChain() ?: '—' }}</td>
                     <td><span class="badge b-blue">{{ $b->contract->typeLabel() ?: '—' }}</span></td>
                     <td class="num">{{ number_format($b->contract->discount * 100, 1) }}%</td>
