@@ -10,6 +10,11 @@
         if ($v->rep_id) { $vanOf[$v->rep_id] = $v; }
         if ($v->driver_id) { $vanOf[$v->driver_id] = $v; }
     }
+
+    // ⚠️ زرار الباسورد للأدمن بس — الراوت نفسه `role:admin`، ومدير
+    // القنوات لو شافه هياخد 403 (وأصلاً مينفعش يقدر يغيّر باسورد
+    // الأدمن ويستلم السيستم).
+    $canSetPassword = auth()->user()->isAdmin();
 @endphp
 
 @section('content')
@@ -18,7 +23,7 @@
     <h3>🧑‍💼 {{ __('team.users_and_roles') }}</h3>
     <div class="tablewrap">
         <table>
-            <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th></tr>
+            <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canSetPassword)<th></th>@endif</tr>
             @foreach ($users as $u)
                 <tr>
                     <td><b>{{ $u->displayName() }}</b></td>
@@ -48,6 +53,14 @@
                             <span class="badge b-gold">{{ __('team.token_countable', ['count' => $u->tokens()->count()]) }}</span>
                         @else — @endif
                     </td>
+                    @if ($canSetPassword)
+                        <td class="num">
+                            <button class="btn sm" type="button"
+                                    onclick="openPass({{ $u->id }}, @js($u->displayName()), {{ $u->isFieldUser() ? 'true' : 'false' }})">
+                                🔑 {{ __('team.set_password') }}
+                            </button>
+                        </td>
+                    @endif
                 </tr>
             @endforeach
         </table>
@@ -89,4 +102,91 @@
     </div>
 </div>
 
+@if ($canSetPassword)
+<dialog id="dlgPass">
+    <form class="dlg" method="POST" id="passForm" action="">
+        @csrf
+        {{-- ⚠️ بيرجعوا مع رفض الفاليديشن — من غيرهم الديالوج بيتفتح
+             تاني بفورم من غير هدف: الاسم فاضي والحفظ بيروح لصفحة
+             الفريق نفسها بـ405. --}}
+        <input type="hidden" name="_user" id="passUser" value="">
+        <input type="hidden" name="_user_name" id="passUserName" value="">
+        <input type="hidden" name="_is_field" id="passIsField" value="">
+        <h4>🔑 {{ __('team.set_password_for') }} <span id="passName"></span></h4>
+
+        @if ($errors->any())
+            <div class="alert" style="margin-bottom:10px;flex-direction:column;align-items:stretch;gap:4px">
+                @foreach ($errors->all() as $msg)
+                    <div class="errline" style="margin:0">{{ $msg }}</div>
+                @endforeach
+            </div>
+        @endif
+
+        <div>
+            <label class="f">{{ __('team.new_password') }}</label>
+            <div style="display:flex;gap:6px">
+                <input type="password" name="password" id="passField" required minlength="8"
+                       autocomplete="new-password" style="flex:1" dir="ltr">
+                <button class="btn sm" type="button" onclick="togglePass()">👁</button>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('team.password_min_hint') }}</div>
+        </div>
+
+        <div style="margin-top:10px">
+            <label class="f">{{ __('team.confirm_password') }}</label>
+            <input type="password" name="password_confirmation" id="passConfirm" required minlength="8"
+                   autocomplete="new-password" style="width:100%" dir="ltr">
+        </div>
+
+        {{-- ⚠️ اللي معاه أبلكيشن بيتطرد منه — التوكينات بتتلغي مع
+             التغيير، فلازم اللي بيغيّر يعرف إن المندوب هيسجّل دخول
+             تاني. --}}
+        <div class="alert warn" id="passAppNote" style="margin-top:10px;display:none">
+            <span>📱</span><span>{{ __('team.password_logs_out_app') }}</span>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgPass')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
+@endsection
+
+@section('scripts')
+@if ($canSetPassword)
+<script>
+const PASS_URL = @js(route('erp.team.password', ['user' => '__ID__']));
+
+function openPass(id, name, isField) {
+    document.getElementById('passForm').action = PASS_URL.replace('__ID__', id);
+    document.getElementById('passName').textContent = name;
+    document.getElementById('passAppNote').style.display = isField ? '' : 'none';
+    document.getElementById('passUser').value = id;
+    document.getElementById('passUserName').value = name;
+    document.getElementById('passIsField').value = isField ? '1' : '';
+    document.getElementById('passField').value = '';
+    document.getElementById('passConfirm').value = '';
+    openDlg('dlgPass');
+    document.getElementById('passField').focus();
+}
+
+function togglePass() {
+    ['passField', 'passConfirm'].forEach(function (id) {
+        const el = document.getElementById(id);
+        el.type = el.type === 'password' ? 'text' : 'password';
+    });
+}
+
+{{-- الديالوج بيرجع مفتوح لو الفاليديشن رفضت — من غير كده الرسالة
+     الحمرا جوه ديالوج مقفول ومحدش شايفها --}}
+@if ($errors->any() && old('_user'))
+document.addEventListener('DOMContentLoaded', function () {
+    openPass(@js((int) old('_user')), @js(old('_user_name', '')), @js((bool) old('_is_field')));
+});
+@endif
+</script>
+@endif
 @endsection

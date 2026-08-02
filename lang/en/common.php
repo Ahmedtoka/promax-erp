@@ -13,6 +13,7 @@ return [
     'confirm' => 'Confirm',
     'close' => 'Close',
     'back' => 'Back',
+    'pick' => 'Pick',
     'search' => 'Search',
     'clear' => 'Clear',
     'filter' => 'Filter',

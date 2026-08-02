@@ -125,6 +125,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/contracts/{contract}', [ErpController::class, 'contract'])->name('contracts.show');
         Route::post('/contracts', [ErpController::class, 'storeContract'])
             ->middleware('role:admin,manager')->name('contracts.store');
+        // ربط عقد يتيم بسلسلة أو عميل — للعقود اللي المطابقة
+        // التلقائية ماعرفتلهاش طريق
+        Route::post('/contracts/{contract}/link', [ErpController::class, 'linkContract'])
+            ->middleware('role:admin,manager')->name('contracts.link');
         Route::delete('/contracts/{contract}', [ErpController::class, 'destroyContract'])
             ->middleware('role:admin,manager')->name('contracts.destroy');
 
@@ -238,6 +242,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         });
         Route::get('/team', [ErpController::class, 'team'])
             ->middleware('role:admin,manager,branch_manager')->name('team');
+        // ⚠️ **تغيير الباسورد للأدمن بس.** مدير القنوات ومدير الفرع
+        // بيشوفوا الشاشة — لو التغيير كان مفتوح ليهم، أي مدير يغيّر
+        // باسورد الأدمن ويستلم السيستم.
+        Route::post('/team/{user}/password', [ErpController::class, 'setPassword'])
+            ->middleware('role:admin')->name('team.password');
 
         // ===== السلاسل =====
         Route::get('/groups', [GroupController::class, 'index'])->name('groups');

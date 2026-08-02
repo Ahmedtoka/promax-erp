@@ -31,6 +31,38 @@ class ContractsSeeder extends Seeder
 {
     private const SOURCE = 'data/contracts.json';
 
+    /**
+     * اسم العقد ← اسم السلسلة في شيتات 2026.
+     *
+     * ⚠️ **العقود اتكتبت قبل استيراد الـ455 فرع.** زمان كل سلسلة كانت
+     * عميل واحد فالعقد اتربط بالاسم زي ما هو مكتوب في الـPDF. دلوقتي
+     * «On The Run» سلسلة بـ33 فرع اسمها في الشيتات مختلف عن اللي في
+     * العقد («Pickup» ↔ «Pick Up»، «Kwake 24» ↔ «Quick 24»…) —
+     * فالمطابقة بالاسم الحرفي كانت بتسيب 14 عقد يتيم والسيستم كله
+     * يقول «من غير عقد».
+     *
+     * ⚠️ **الربط بالسلسلة مش بفرع** — الفروع بتورث عقد سلسلتها من
+     * `liveContract()`. الأسماء اللي مش هنا (رابيت، رويال هاوس،
+     * ماكس ماسل…) مش سلاسل كي أكاونت في الشيتات، فبتاخد المسار
+     * القديم: عميل بالاسم أو `create_client` أو يتيم يتربط بالإيد.
+     */
+    private const GROUP_ALIASES = [
+        'On The Run' => 'On The Run',
+        'بيت الجملة سوبر ماركت' => 'Bait El Gomla',
+        'Circle K' => 'Circle K',
+        'A Market' => 'A Market',
+        'Marhaba Market' => 'Marhba',
+        'Flamingo Haiper Market' => 'Flamingo',
+        'Kwake 24' => 'Quick 24',
+        'Life Lines' => 'Live Lines',
+        'Oscar Market' => 'Oscar',
+        'Pickup' => 'Pick Up',
+        'W Mart' => 'W Mart',
+        'ZoneMart' => 'Zone Mart',
+        'الحسيني للتجارة والتوزيع' => 'Al Hussiny & New Benni',
+        'Healthy Milk' => 'Healthy Elite',
+    ];
+
     public function run(): void
     {
         $path = storage_path('app/'.self::SOURCE);
@@ -67,6 +99,19 @@ class ContractsSeeder extends Seeder
 
                 // العقد بيتعرّف بملفه — عشان إعادة التشغيل ماتكررش
                 $contract = Contract::firstOrNew(['file_path' => 'contracts/'.$row['file']]);
+
+                // ⚠️ **الاستب بيتشال قبل الحقيقي ما يتسجل.** أمر
+                // `promax:clients --contracts` بيعمل عقد ملف-بس موقوف
+                // (CTR-<code>، من غير بنود) على السلسلة. لو فضل، السلسلة
+                // يبقى ليها عقدين و`hasOne` بترجّع الأقدم — يعني الاستب
+                // الفاضي هو اللي بيتورث والحقيقي بيتجاهل في صمت.
+                if ($groupId !== null) {
+                    Contract::where('group_id', $groupId)
+                        ->where('file_path', '!=', 'contracts/'.$row['file'])
+                        ->where('active', false)
+                        ->whereDoesntHave('contractClauses')
+                        ->delete();
+                }
 
                 $contract->fill([
                     'number' => $contract->number ?? Contract::nextNumber(),
@@ -161,6 +206,21 @@ class ContractsSeeder extends Seeder
      */
     private function resolveTarget(array $row): array
     {
+        // ⚠️ **جدول الأسماء الأول — قبل أي مطابقة حرفية.** لو السلسلة
+        // موجودة في شيتات 2026، العقد بيتربط بيها حتى لو الـJSON قال
+        // `client`: العميل الواحد بتاع زمان بقى سلسلة بفروع.
+        if ($alias = self::GROUP_ALIASES[$row['link_name']] ?? null) {
+            $id = ClientGroup::where('name_en', $alias)
+                ->orWhere('name', $alias)
+                ->value('id');
+
+            if ($id !== null) {
+                return [null, $id];
+            }
+
+            $this->command->warn('   ! سلسلة في الجدول مش في الداتابيز: '.$alias);
+        }
+
         if ($row['link_kind'] === 'group') {
             $id = ClientGroup::where('name', $row['link_name'])->value('id');
             if ($id === null) {

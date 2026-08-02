@@ -944,7 +944,43 @@ class ErpController extends Controller
             'penalties' => $bucket(['penalty']),
             'others' => $bucket(['returns', 'credit', 'tax_withheld', 'other']),
             'branches' => $branches,
+            // ⚠️ لفورم الربط اليدوي — بيظهر بس للعقد اليتيم. العقود
+            // اللي سلاسلها مش في شيتات 2026 (رابيت، رويال هاوس…)
+            // مالهاش مطابقة تلقائية، ومن غير الفورم ده بتفضل يتيمة
+            // للأبد وكل عملاءها «من غير عقد».
+            'linkGroups' => $contract->client_id === null && $contract->group_id === null
+                ? \App\Models\ClientGroup::where('active', true)->orderBy('name')->get()
+                : collect(),
+            'linkClients' => $contract->client_id === null && $contract->group_id === null
+                ? Client::orderBy('code')->get(['id', 'code', 'name', 'name_en'])
+                : collect(),
         ]);
+    }
+
+    /**
+     * ربط عقد يتيم بسلسلة أو عميل.
+     *
+     * ⚠️ **حصري: سلسلة أو عميل مش الاتنين.** عقد على سلسلة وعميل في
+     * نفس الوقت بيتحسب مرتين في `liveContract()` — الفرع بياخده من
+     * نفسه ومن سلسلته.
+     */
+    public function linkContract(Request $request, Contract $contract)
+    {
+        $data = $request->validate([
+            'group_id' => ['nullable', 'required_without:client_id', 'exists:client_groups,id'],
+            'client_id' => ['nullable', 'required_without:group_id', 'exists:clients,id'],
+        ]);
+
+        if (! empty($data['group_id']) && ! empty($data['client_id'])) {
+            return back()->withErrors(['group_id' => __('client.link_pick_one')]);
+        }
+
+        $contract->update([
+            'group_id' => $data['group_id'] ?? null,
+            'client_id' => $data['client_id'] ?? null,
+        ]);
+
+        return back()->with('ok', __('client.contract_linked'));
     }
 
     public function storeContract(Request $request)
@@ -1426,6 +1462,31 @@ class ErpController extends Controller
     }
 
     // ================= الفريق =================
+
+    /**
+     * تغيير باسورد يوزر — من شاشة الفريق.
+     *
+     * ⚠️ **السيستم مايعرفش الباسورد الحالي** (متخزن مشفّر) — فمفيش
+     * «عرض الباسورد»، فيه تعيين واحد جديد وبس. اللي نسي بيتعمله
+     * واحد جديد من هنا.
+     */
+    public function setPassword(Request $request, User $user)
+    {
+        $data = $request->validate([
+            // ⚠️ `confirmed` — غلطة كتابة في باسورد بيتكتب مرة واحدة
+            // بتقفل الحساب من غير ما حد يعرف الحرف اللي اتكتب غلط.
+            'password' => ['required', 'string', 'min:8', 'max:100', 'confirmed'],
+        ]);
+
+        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($data['password'])]);
+
+        // ⚠️ **توكينات الأبلكيشن بتتلغي.** تغيير الباسورد غالباً سببه
+        // إن الجهاز ضاع أو الموظف مشي — لو التوكن القديم فضل شغال،
+        // التغيير مالوش أي لازمة: الأبلكيشن القديم لسه داخل عادي.
+        $user->tokens()->delete();
+
+        return back()->with('ok', __('team.password_changed', ['name' => $user->displayName()]));
+    }
 
     public function team(Request $request)
     {

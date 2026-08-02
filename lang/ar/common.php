@@ -13,6 +13,7 @@ return [
     'confirm' => 'تأكيد',
     'close' => 'إغلاق',
     'back' => 'رجوع',
+    'pick' => 'اختار',
     'search' => 'بحث',
     'clear' => 'مسح',
     'filter' => 'فلتر',

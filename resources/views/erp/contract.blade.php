@@ -54,6 +54,47 @@
     </div>
 </div>
 
+{{-- ═══════════ الربط — العقد اليتيم مالوش لازمة ═══════════ --}}
+@if ($ct->client_id === null && $ct->group_id === null && auth()->user()->canDecideOps())
+    <div class="card">
+        <div class="alert warn" style="margin-bottom:12px">
+            <span>🔗</span>
+            <span>{{ __('client.link_contract_hint') }}</span>
+        </div>
+
+        <form method="POST" action="{{ route('erp.contracts.link', $ct) }}" class="frow" style="align-items:end">
+            @csrf
+            <div>
+                <label class="f">{{ __('client.chain') }}</label>
+                <select name="group_id" id="linkGroup" style="width:100%"
+                        onchange="if (this.value) document.getElementById('linkClient').value = ''">
+                    <option value="">— {{ __('common.pick') }} —</option>
+                    @foreach ($linkGroups as $g)
+                        <option value="{{ $g->id }}">{{ $g->displayName() }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="f">{{ __('client.or_single_client') }}</label>
+                {{-- ⚠️ داتاليست مش سيلكت — 455 عميل. بيكتب الكود أو
+                     الاسم والمتصفح بيرشّح. --}}
+                <input list="linkClientsList" id="linkClientPick" style="width:100%"
+                       placeholder="{{ __('client.search_ph') }}"
+                       oninput="pickLinkClient(this)">
+                <input type="hidden" name="client_id" id="linkClient">
+                <datalist id="linkClientsList">
+                    @foreach ($linkClients as $lc)
+                        <option value="{{ $lc->code }} — {{ $lc->displayName() }}" data-id="{{ $lc->id }}"></option>
+                    @endforeach
+                </datalist>
+            </div>
+            <div>
+                <button class="btn gold" type="submit">🔗 {{ __('client.link_contract') }}</button>
+            </div>
+        </form>
+    </div>
+@endif
+
 {{-- ═══════════ التنبيهات — أول حاجة تتشاف ═══════════ --}}
 @if ($ct->noticeMissed())
     <div class="card"><div class="alert warn">
@@ -351,6 +392,17 @@
 @endsection
 
 @section('scripts')
+<script>
+// الداتاليست بيرجّع النص — بندوّر على الـid بتاعه، ولو اتكتب عميل
+// بنفضّي السلسلة عشان الربط يفضل حصري
+function pickLinkClient(input) {
+    const opt = [...document.querySelectorAll('#linkClientsList option')]
+        .find(o => o.value === input.value);
+    const hidden = document.getElementById('linkClient');
+    hidden.value = opt ? opt.dataset.id : '';
+    if (hidden.value) document.getElementById('linkGroup').value = '';
+}
+</script>
 @if ($manager)
     @php
         $clauseJson = $ct->contractClauses->mapWithKeys(fn ($cl) => [$cl->id => [

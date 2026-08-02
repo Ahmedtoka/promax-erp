@@ -78,21 +78,22 @@
     <div class="tablewrap">
         <table>
             <tr>
-                <th>{{ __('client.client') }}</th><th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.category') }}</th>
+                <th>{{ __('client.client') }}</th><th>{{ __('common.status') }}</th><th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.category') }}</th>
                 <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th><th>{{ __('client.discount') }}</th>
                 <th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.returns') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.collection_rate') }}</th><th>{{ __('client.last_payment') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
             @forelse ($clients as $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
+                    <td><b>{{ $c->displayName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span></td>
                     <td>
-                        <b>{{ $c->displayName() }}</b>
-                        {{-- ⚠️ الشارة على المستني بس — 455 شارة خضرا زحمة
-                             بتغرق الاستثناء اللي الشارة اتعملت توريه. --}}
-                        @if ($c->status !== 'active')
-                            <span class="badge b-orange" style="font-size:9.5px">{{ __('client.status_waiting') }}</span>
+                        @if ($c->status === 'active')
+                            <span class="badge b-green">{{ __('client.status_active') }}</span>
+                        @elseif ($c->status === 'rejected')
+                            <span class="badge b-red">{{ __('enums.client_status.rejected') }}</span>
+                        @else
+                            <span class="badge b-orange">{{ __('client.status_waiting') }}</span>
                         @endif
-                        <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span>
                     </td>
                     <td>
                         @if ($c->channel)
@@ -138,7 +139,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 14 : 13 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('client.no_clients') }}</td></tr>
+                <tr><td colspan="{{ $manager ? 15 : 14 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('client.no_clients') }}</td></tr>
             @endforelse
         </table>
     </div>
