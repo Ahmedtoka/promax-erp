@@ -62,16 +62,23 @@
                         @else — @endif
                     </td>
                     @if ($canSetPassword)
+                        @php
+                            // ⚠️ **مش `@json([...])` متعدد الأسطر** — ده الفخ
+                            // المسجّل في سكيل المشروع: بيكسر بارسر Blade
+                            // بـ«Unclosed [». والـHEX flags عشان الأسماء اللي
+                            // فيها ' أو " ماتكسرش خاصية onclick.
+                            $uPayload = json_encode([
+                                'id' => $u->id, 'name' => $u->name, 'name_en' => $u->name_en,
+                                'email' => $u->email, 'code' => $u->code, 'phone' => $u->phone,
+                                'role' => $u->role, 'branch_id' => $u->branch_id,
+                                'zone_id' => $u->zone_id, 'warehouse_id' => $u->warehouse_id,
+                                'active' => (bool) $u->active,
+                                'self' => $u->id === auth()->id(),
+                            ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+                        @endphp
                         <td class="num" style="white-space:nowrap">
                             <button class="btn sm" type="button"
-                                    onclick='openUser(@json([
-                                        "id" => $u->id, "name" => $u->name, "name_en" => $u->name_en,
-                                        "email" => $u->email, "code" => $u->code, "phone" => $u->phone,
-                                        "role" => $u->role, "branch_id" => $u->branch_id,
-                                        "zone_id" => $u->zone_id, "warehouse_id" => $u->warehouse_id,
-                                        "active" => (bool) $u->active,
-                                        "self" => $u->id === auth()->id(),
-                                    ]))'>✎ {{ __('common.edit') }}</button>
+                                    onclick='openUser({!! $uPayload !!})'>✎ {{ __('common.edit') }}</button>
                             <button class="btn sm" type="button"
                                     onclick="openPass({{ $u->id }}, @js($u->displayName()), {{ $u->isFieldUser() ? 'true' : 'false' }})">
                                 🔑
