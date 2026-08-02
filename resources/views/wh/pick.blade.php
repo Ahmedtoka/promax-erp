@@ -18,7 +18,9 @@
 
     $canStart = $o->status === 'requested';
     $canReady = $o->canPick();
-    $canCancel = $o->status !== 'handed';
+    // ⚠️ الإلغاء قرار مدير (`role:admin,manager` في الراوت) — من غير
+    // فحص الرول أمين المخزن كان بيشوف الزرار وياخد 403.
+    $canCancel = $o->status !== 'handed' && auth()->user()->canDecideOps();
 
     // المصدر — أمر توريد لعميل أو طلب ريفيل
     $sourceLabel = null;

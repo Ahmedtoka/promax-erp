@@ -5,8 +5,18 @@
 @php
     $fmt = fn ($n) => number_format((float) $n);
     $money = fn ($n) => number_format((float) $n, 2);
-    $manager = auth()->user()->isManager();
+    // ⚠️ **`canDecideOps()` مش `isManager()`.** الاعتماد والإلغاء
+    // راوتاتهم `role:admin,manager` — و`isManager()` بتشمل مدير الفرع،
+    // فكان بيشوف زرار الاعتماد وياخد 403 بعد ما يدوس.
+    $manager = auth()->user()->canDecideOps();
+    // ⚠️ العدّ نفسه شغل المخزن (`role:...,warehouse_keeper` في الراوت).
+    // مدير الفرع بيفتح الشاشة يتفرج — لو الفورم اتعرضله بيدوس حفظ
+    // بعد ما يملا الورقة كلها وياخد 403 ويضيّع اللي كتبه.
+    $canRecord = auth()->user()->canWorkWarehouse();
     $open = $count->isOpen();
+    // ⚠️ الخانات بتبان للي بيقدر يحفظ وبس — مدير الفرع بيفتح جرد
+    // مفتوح يتفرج عليه بالقيم، مش بخانات يملاها وياخد 403.
+    $editable = $open && $canRecord;
     $moved = $items->filter(fn ($i) => $i->moved())->count();
 @endphp
 
@@ -122,7 +132,7 @@
                         @endif
 
                         <td class="num">
-                            @if ($open)
+                            @if ($editable)
                                 <input type="number" min="0" step="1"
                                        name="counted[{{ $it->id }}]"
                                        value="{{ $it->counted_qty }}"
@@ -141,7 +151,7 @@
                         </td>
 
                         <td>
-                            @if ($open)
+                            @if ($editable)
                                 <select name="reason[{{ $it->id }}]" style="width:130px">
                                     <option value="">—</option>
                                     @foreach ($reasons as $r)
@@ -163,7 +173,7 @@
             </table>
         </div>
 
-        @if ($open)
+        @if ($editable)
             <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:14px" class="noprint">
                 <button class="btn gold" type="submit">💾 {{ __('count.save_counts') }}</button>
             </div>

@@ -136,7 +136,9 @@ class Journeys
         $plans = JourneyPlan::with('client')
             ->where('user_id', $user->id)
             ->where('active', true)   // الموقوفة مالهاش لازمة في الشبكة
-            ->orderBy('sort')
+            // ⚠️ `id` كاسر تعادل — الصفوف القديمة كلها sort=0 وكانت
+            // بتترتب على مزاج الداتابيز لحد أول ضغطة سهم.
+            ->orderBy('sort')->orderBy('id')
             ->get()
             ->groupBy('weekday');
 

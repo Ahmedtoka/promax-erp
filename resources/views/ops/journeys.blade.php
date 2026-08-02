@@ -50,13 +50,26 @@
                 </div>
 
                 @forelse ($plans as $p)
-                    <div class="planrow">
-                        <div style="min-width:0">
+                    {{-- ⚠️ الترتيب هو خط السير الفعلي — المندوب بيمشي
+                         بالقايمة من فوق لتحت، فالأسهم دي هي اللي بتحدد
+                         مشوار عربيته. الراوت `journeys.reorder` كان
+                         موجود من غير أي واجهة تناديه. --}}
+                    <div class="planrow" data-plan="{{ $p->id }}">
+                        <span class="ordnum">{{ $loop->iteration }}</span>
+                        <div style="min-width:0;flex:1">
                             <b style="font-size:12px">{{ $p->client->displayName() }}</b>
                             @if ($p->every_weeks > 1)
                                 <br><span class="s">{{ $p->frequencyLabel() }}</span>
                             @endif
                         </div>
+                        <span class="ordbtns">
+                            @unless ($loop->first)
+                                <button type="button" class="xbtn" onclick="movePlan(this, -1)" title="↑">▲</button>
+                            @endunless
+                            @unless ($loop->last)
+                                <button type="button" class="xbtn" onclick="movePlan(this, 1)" title="↓">▼</button>
+                            @endunless
+                        </span>
                         <form method="POST" action="{{ route('ops.journeys.destroy', $p) }}">
                             @csrf @method('DELETE')
                             <button class="xbtn" title="{{ __('journey.removed') }}">✕</button>
@@ -97,9 +110,21 @@
             @if ($available->isEmpty())
                 <div class="alert info">{{ __('journey.no_available') }}</div>
             @else
+                {{-- ⚠️ بعد استيراد الـ455 عميل القايمة دي طوّلت —
+                     الفلترة في المتصفح عشان الديالوج مايتقفلش ويضيع
+                     اللي المستخدم علّم عليه. المعلّم بيفضل معلّم حتى
+                     لو اتخفى بالفلتر، وبيتبعت عادي. --}}
+                {{-- ⚠️ Enter جوه فورم بيعمل submit ضمني — يعني اللي
+                     بيكتب في البحث ويدوس Enter كان بيحفظ الخطة بدل
+                     ما يفلتر. --}}
+                <input type="search" id="availFilter" style="width:100%;margin-bottom:7px"
+                       placeholder="{{ __('common.search') }}…"
+                       onkeydown="if (event.key === 'Enter') event.preventDefault()"
+                       oninput="filterAvail(this.value)">
                 <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px">
                     @foreach ($available as $c)
-                        <label style="display:flex;align-items:center;gap:8px;padding:5px 3px;font-size:12.5px">
+                        <label class="availrow" data-t="{{ mb_strtolower($c->name.' '.$c->name_en.' '.$c->zone?->displayName()) }}"
+                               style="display:flex;align-items:center;gap:8px;padding:5px 3px;font-size:12.5px">
                             <input type="checkbox" name="client_ids[]" value="{{ $c->id }}">
                             <span>{{ $c->displayName() }}</span>
                             <span class="s" style="margin-inline-start:auto">{{ $c->zone?->displayName() }}</span>
@@ -115,6 +140,12 @@
         </div>
     </form>
 </dialog>
+
+{{-- فورم واحد مخفي بيتملى بالجافاسكربت ويتبعت — مش فورم لكل سهم --}}
+<form method="POST" action="{{ route('ops.journeys.reorder') }}" id="reorderForm" style="display:none">
+    @csrf
+    <div id="reorderFields"></div>
+</form>
 
 @endif
 
@@ -136,6 +167,36 @@
         document.getElementById('addDayLabel').textContent = DAY_NAMES[day] || '';
         openDlg('dlgAddPlan');
     }
+
+    function filterAvail(q) {
+        q = q.trim().toLowerCase();
+        document.querySelectorAll('.availrow').forEach(function (row) {
+            row.style.display = (!q || row.dataset.t.includes(q)) ? '' : 'none';
+        });
+    }
+
+    // ⚠️ **بيبعت اليوم كله بترتيبه الجديد.** الكنترولر بيكتب `sort`
+    // بمكان كل عنصر في المصفوفة، فإرسال عنصرين بس كان هيديهم 1 و2
+    // ويخبط في ترتيب باقي اليوم.
+    function movePlan(btn, dir) {
+        const row = btn.closest('.planrow');
+        const col = row.parentElement;
+        const sib = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+        if (!sib || !sib.classList.contains('planrow')) return;
+
+        dir < 0 ? col.insertBefore(row, sib) : col.insertBefore(sib, row);
+
+        const fields = document.getElementById('reorderFields');
+        fields.innerHTML = '';
+        col.querySelectorAll('.planrow').forEach(function (r) {
+            const i = document.createElement('input');
+            i.type = 'hidden';
+            i.name = 'order[]';
+            i.value = r.dataset.plan;
+            fields.appendChild(i);
+        });
+        document.getElementById('reorderForm').submit();
+    }
 </script>
 <style>
 .weekgrid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto}
@@ -149,5 +210,10 @@
 .planrow .s{font-size:10px;color:var(--muted)}
 .xbtn{margin-inline-start:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px;font-family:inherit}
 .xbtn:hover{color:var(--red)}
+.ordnum{font-size:10px;font-weight:800;color:#fff;background:var(--royal-blue);border-radius:50%;min-width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.ordbtns{display:flex;flex-direction:column;line-height:1}
+/* ⚠️ margin-inline-start:auto موروثة من .xbtn بتزق الأسهم على طرف
+   العمود وبتقلب مكانهم بين العربي والإنجليزي — بنصفّرها */
+.ordbtns .xbtn{font-size:9px;padding:2px 5px;margin-inline-start:0}
 </style>
 @endsection

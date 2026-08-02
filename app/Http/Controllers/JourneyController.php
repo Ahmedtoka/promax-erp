@@ -135,6 +135,17 @@ class JourneyController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
+            // ⚠️ **كل الصفوف لازم تكون نفس المندوب ونفس اليوم.**
+            // `exists:` بتتأكد إن الصف موجود بس — بوست بايت أو معدّل
+            // كان بيرقّم يوم مندوب تاني ويخربط خط سيره في صمت.
+            $plans = JourneyPlan::whereIn('id', $data['order'])->get();
+
+            abort_if(
+                $plans->pluck('user_id')->unique()->count() > 1
+                    || $plans->pluck('weekday')->unique()->count() > 1,
+                422,
+            );
+
             foreach ($data['order'] as $i => $id) {
                 JourneyPlan::whereKey($id)->update(['sort' => $i + 1]);
             }
@@ -173,6 +184,14 @@ class JourneyController extends Controller
             ->whereNull('rep_id')
             ->where('status', 'active')
             ->when($request->filled('zone'), fn ($q) => $q->where('zone_id', $request->input('zone')))
+            // ⚠️ البحث في السيرفر مش المتصفح — القايمة مقصوصة على 300،
+            // والعميل رقم 301 مش هيظهر بأي فلترة في المتصفح.
+            ->when($request->filled('q'), function ($q) use ($request) {
+                $s = $request->string('q')->trim()->value();
+                $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
+                    ->orWhere('name_en', 'like', "%$s%")
+                    ->orWhere('code', 'like', "%$s%"));
+            })
             ->orderBy('name')
             ->limit(300)
             ->get();
@@ -185,7 +204,7 @@ class JourneyController extends Controller
             'orphans' => $orphans,
             'orphanTotal' => Branch::scope(Client::query())
                 ->whereNull('rep_id')->where('status', 'active')->count(),
-            'filters' => $request->only(['zone']),
+            'filters' => $request->only(['zone', 'q']),
         ]);
     }
 

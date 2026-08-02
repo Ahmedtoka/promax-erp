@@ -50,6 +50,14 @@
                     @endforeach
                 </select>
             </div>
+            <div>
+                <label class="f">{{ __('common.search') }}</label>
+                {{-- ⚠️ سيرفر-سايد مش متصفح — قايمة اليتامى مقصوصة على
+                     300 صف، فالفلترة في المتصفح بتدوّر في المقصوص بس
+                     والعميل اللي بعد الحد مش هيظهر أبداً. --}}
+                <input type="search" name="q" value="{{ $filters['q'] ?? '' }}"
+                       placeholder="{{ __('common.search') }}…">
+            </div>
         </form>
     @endif
 </div>

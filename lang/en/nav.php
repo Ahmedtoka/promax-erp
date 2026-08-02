@@ -11,6 +11,11 @@ return [
     // ---------- Groups ----------
     'group_management' => 'Management',
     'group_operations' => 'Field Operations',
+    'group_clients' => 'Clients & Sales',
+    'group_money' => 'Money',
+    'group_inventory' => 'Inventory',
+    'group_field' => 'Field',
+    'group_reports' => 'Reports',
     'group_settings' => 'Settings',
 
     // ---------- Links ----------

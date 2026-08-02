@@ -378,16 +378,23 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // موقع كل مندوب لايف، وقيمة عهدته، وكل عميل من غير مسؤول
         // بتليفونه ورصيده. مندوب بيشوفها يقدر ياخد عملاء زمايله
         // ويعرف تحركاتهم — دي بيانات إدارة مش بيانات ميدان.
-        Route::middleware('role:admin,manager')->group(function () {
-            // ═══ تسليم العهدة ═══
-            // ⚠️ **بيخرّج بضاعة فوراً.** عشان كده مقفول على الأدمن
-            // ومدير القنوات وأمين المخزن — اللي بيقدر يحمّل عربية.
+        // ═══ تسليم العهدة ═══
+        // ⚠️ **بره مجموعة `role:admin,manager` عن قصد.** لارافيل بيدمج
+        // ميدل وير المجموعة مع ميدل وير الراوت — مابيستبدلوش. الراوتس
+        // دي كانت جوه المجموعة وعليها `role:...,warehouse_keeper`،
+        // فالفحصين كانوا بيشتغلوا ورا بعض والأول بيرفض أمين المخزن
+        // بـ403 — واللينك في السايدبار بتاعه لأن `Access` بتسمحله.
+        // تسليم العهدة شغله الأساسي: هو اللي بيحمّل العربية.
+        Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
             Route::get('/handout', [\App\Http\Controllers\CustodyHandoutController::class, 'index'])
-                ->middleware('role:admin,manager,warehouse_keeper')->name('handout');
+                ->name('handout');
             Route::post('/handout', [\App\Http\Controllers\CustodyHandoutController::class, 'store'])
-                ->middleware('role:admin,manager,warehouse_keeper')->name('handout.store');
+                ->name('handout.store');
             Route::get('/handout/{pick}/print', [\App\Http\Controllers\CustodyHandoutController::class, 'print'])
-                ->middleware('role:admin,manager,warehouse_keeper')->name('handout.print');
+                ->name('handout.print');
+        });
+
+        Route::middleware('role:admin,manager')->group(function () {
 
             Route::get('/journeys', [\App\Http\Controllers\JourneyController::class, 'index'])
                 ->name('journeys');

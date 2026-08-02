@@ -70,7 +70,11 @@ class Access
             // اللايف كلهم `role:admin,manager`. البادئة العامة كانت
             // بتوري مدير الفرع تلات لينكات في السايدبار بتاعه بترفضه
             // أول ما يدوس — وده بالظبط اللي الخريطة دي اتعملت تمنعه.
-            'ops.dashboard', 'ops.requests', 'ops.pos', 'ops.replenishments', 'ops.handout',
+            // ⚠️ **مفيش `ops.handout`.** تسليم العهدة بيخرّج بضاعة من
+            // المخزن فوراً، وده محصور في الأدمن ومدير القنوات وأمين
+            // المخزن. البادئة كانت هنا فمدير الفرع بيشوف اللينك
+            // والراوت بيرفضه بـ403.
+            'ops.dashboard', 'ops.requests', 'ops.pos', 'ops.replenishments',
             // ⚠️ **`ops.invoices` بالجمع لازم تتكتب لوحدها.** قاعدة
             // البادئة بتطابق الاسم بالظبط أو `الاسم + نقطة` — و
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
@@ -86,6 +90,13 @@ class Access
             'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
             'ops.invoices', 'ops.invoice',
+            // ⚠️ **استثناء من بادئة `erp.clients`.** تفعيل العملاء
+            // المستوردين قرار إداري (`role:admin,manager,branch_manager`)،
+            // والبادئة كانت بتوري المحاسب اللينك والراوت يرفضه بـ403.
+            '!erp.clients.activate',
+            // ⚠️ وإيقاف العميل نفس القرار الإداري — البادئة نفسها
+            // كانت بتغطيه (`role:admin,manager` في الراوت).
+            '!erp.clients.deactivate',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -135,53 +146,76 @@ class Access
      * @var array<string, list<array{0:string,1:string,2:string,3:string,4:?string}>>
      */
     public const NAV = [
-        'nav.group_management' => [
+        // ⚠️ **الترتيب هو ترتيب يوم الشغل مش ترتيب بناء السيستم.**
+        // المنيو القديمة كانت متقسومة «إدارة/مخزن/عمليات» — قسمة
+        // المطوّر مش قسمة المستخدم: «الإدارة» كان فيها 12 لينك من
+        // العملاء للتسعير للتقارير، والتقارير نفسها كانت مبعثرة في
+        // تلات مجموعات (أعمار الديون هنا، الصلاحية هناك، التراكينج
+        // في العمليات). دلوقتي: البيع → الفلوس → البضاعة → الميدان →
+        // التقارير كلها مع بعض → الإعدادات.
+
+        // ═══ العملاء والبيع — اللي بنبيع لمين وبكام ═══
+        'nav.group_clients' => [
             ['erp.overview', '📊', 'nav.overview', 'erp.overview', null],
             ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
             ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
             ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
-            ['erp.leads', '🎯', 'nav.leads', 'erp.leads', null],
-            ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
-            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
             ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
-            ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
-            ['erp.reports', '📑', 'nav.reports', 'erp.reports', null],
         ],
 
-        'nav.warehouse' => [
+        // ═══ الفلوس — شاشات المحاسب ═══
+        'nav.group_money' => [
+            ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
+            ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
+        ],
+
+        // ═══ المخزون — البضاعة وحركتها ═══
+        'nav.group_inventory' => [
+            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
             ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
             ['wh.index', '🏭', 'nav.warehouse', 'wh.index', null],
             ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
             ['wh.locations', '🗄️', 'nav.shelves', 'wh.locations', null],
-            ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', null],
             ['wh.picks', '📋', 'nav.pick_orders', 'wh.picks*', null],
             ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
         ],
 
-        'nav.group_operations' => [
+        // ═══ الميدان — الفريق والعربيات والزيارات ═══
+        'nav.group_field' => [
             ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
-            ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.live', '📡', 'nav.live', 'ops.live', null],
+        ],
+
+        // ═══ التقارير — كلها في مكان واحد ═══
+        // ⚠️ التقرير = شاشة قراءة بتجاوب على سؤال، مش شاشة بتعمل
+        // حاجة. أعمار الديون والصلاحية والتراكينج كانوا في تلات
+        // مجموعات مختلفة واللي بيدوّر على «التقارير» مش بيلاقيهم.
+        'nav.group_reports' => [
+            ['erp.reports', '📑', 'nav.reports', 'erp.reports', null],
+            ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
+            ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
         ],
 
+        // ═══ الإعدادات ═══
         'nav.group_settings' => [
-            ['erp.import', '📥', 'nav.import', 'erp.import*', null],
-            ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
-            ['erp.eta', '🧾', 'nav.eta', 'erp.eta*', null],
             ['erp.team', '🧑‍💼', 'nav.team', 'erp.team', null],
             ['erp.branches', '🏢', 'nav.branches', 'erp.branches', null],
             ['erp.vehicles', '🚚', 'nav.vehicles', 'erp.vehicles*', null],
+            ['erp.import', '📥', 'nav.import', 'erp.import*', null],
+            ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
         ],
     ];
 
@@ -224,13 +258,33 @@ class Access
             return true;
         }
 
-        foreach (self::SCREENS[$user->role] ?? [] as $prefix) {
-            if ($routeName === $prefix || str_starts_with($routeName, rtrim($prefix, '.').'.')) {
+        $prefixes = self::SCREENS[$user->role] ?? [];
+
+        // ⚠️ **الاستثناءات الأول.** `!erp.clients.activate` بتغلب بادئة
+        // `erp.clients` — من غيرها البادئة الواسعة بتوري لينكات راوتها
+        // بيرفض الرول، والسايدبار يرجع يكدب على الميدل وير.
+        foreach ($prefixes as $prefix) {
+            // ⚠️ `str_starts_with` مش `$prefix[0]` — عنصر فاضي بالغلط
+            // كان هيرمي ErrorException في السايدبار = 500 في كل صفحة.
+            if (str_starts_with($prefix, '!') && self::matches($routeName, substr($prefix, 1))) {
+                return false;
+            }
+        }
+
+        foreach ($prefixes as $prefix) {
+            if (! str_starts_with($prefix, '!') && self::matches($routeName, $prefix)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /** الاسم بيطابق البادئة؟ (بالظبط أو `البادئة.`) */
+    private static function matches(string $routeName, string $prefix): bool
+    {
+        return $routeName === $prefix
+            || str_starts_with($routeName, rtrim($prefix, '.').'.');
     }
 
     /** فين يروح بعد اللوجين */

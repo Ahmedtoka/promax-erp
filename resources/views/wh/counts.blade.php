@@ -5,7 +5,10 @@
 @php
     $fmt = fn ($n) => number_format((float) $n);
     $money = fn ($n) => number_format((float) $n, 2);
-    $manager = auth()->user()->isManager();
+    // ⚠️ **`canDecideOps()` مش `isManager()`.** فتح جرد جديد راوته
+    // `role:admin,manager` — و`isManager()` بتشمل مدير الفرع، فكان
+    // بيشوف الزرار وياخد 403.
+    $manager = auth()->user()->canDecideOps();
 @endphp
 
 @section('actions')

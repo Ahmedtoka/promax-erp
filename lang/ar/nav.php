@@ -11,6 +11,11 @@ return [
     // ---------- المجموعات ----------
     'group_management' => 'الإدارة',
     'group_operations' => 'العمليات الميدانية',
+    'group_clients' => 'العملاء والبيع',
+    'group_money' => 'الفلوس',
+    'group_inventory' => 'المخزون',
+    'group_field' => 'الميدان',
+    'group_reports' => 'التقارير',
     'group_settings' => 'الإعدادات',
 
     // ---------- الروابط ----------
