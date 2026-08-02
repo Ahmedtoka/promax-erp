@@ -21,7 +21,9 @@
 <div class="kpis">
     <div class="kpi">
         <div class="lbl">{{ __('geo.governorate') }}</div>
-        <div class="val">{{ $byGov->except('_none')->count() }}</div>
+        {{-- ⚠️ مش `except()` — على كولكشن Eloquent بتفلتر بمفاتيح
+             الموديلز وبتنادي getKey() على المجموعات = 500 --}}
+        <div class="val">{{ $byGov->keys()->reject(fn ($k) => $k === '_none')->count() }}</div>
         <div class="sub2">{{ __('team.of_27_governorates') }}</div>
     </div>
     <div class="kpi">
