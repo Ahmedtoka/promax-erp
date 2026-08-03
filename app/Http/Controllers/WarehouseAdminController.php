@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\Rejected;
 use App\Models\Product;
-use App\Models\Stock;
 use App\Models\Warehouse;
+use App\Services\OpeningStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -18,10 +19,10 @@ use Illuminate\Validation\Rule;
  * التاني شغل يومي: استلام، ترصيف، تحويل، جرد — وأمين المخزن بيدخله.
  * ده تعريف وتعديل أرصدة بالإيد، وده قرار إدارة مش تشغيل.
  *
- * ⚠️ **تعديل الرصيد بالإيد مايعملش حركة مخزون.** الفلو الطبيعي
- * (استلام → باتش → ترصيف) بيسيب أثر: مين استلم وإمتى وبأنهي إذن.
- * التعديل هنا بيكتب الرقم مباشرةً — للتأسيس والتصحيح بس، ومكتوب
- * على الشاشة صراحةً عشان محدش يستخدمه بدل الفلو.
+ * ⚠️ **تعديل الرصيد بالإيد بيمرّ بـ`OpeningStock`.** الفلو الطبيعي
+ * (استلام → باتش → ترصيف) بيسيب أثر كامل. التعديل هنا للتأسيس
+ * والتصحيح بس — وبيتحوّل لباتش تسوية `ADJ` مترصّف على رف سحب، عشان
+ * الرقم يبان في تسليم العهدة وأوامر التجهيز مش في شاشة المخزون بس.
  */
 class WarehouseAdminController extends Controller
 {
@@ -153,32 +154,28 @@ class WarehouseAdminController extends Controller
         $data['rows'] = $rows;
         $touched = 0;
 
-        DB::transaction(function () use ($data, $warehouse, &$touched) {
-            foreach ($data['rows'] as $productId => $row) {
-                $qty = (int) $row['qty'];
-                $hold = (int) $row['hold'];
+        // ⚠️ **مش بنكتب في `stocks` مباشرة.** ده اللي عمل مشكلة اللايف
+        // (2026-08-03): الرقم اليدوي كان بينزل في التجميعة من غير باتش
+        // ولا رف، فشاشة المخزون تقول «موجود» وتسليم العهدة يقول
+        // «المتاح 0» — لأن التسليم بيخصم من الأرفف. `OpeningStock`
+        // بيعمل باتش تسوية ويرصّفه على رف سحب، و`resync` بيكتب
+        // التجميعة من الباتشات — فكل الشاشات بتشوف نفس الرقم.
+        try {
+            DB::transaction(function () use ($data, $warehouse, &$touched) {
+                $products = Product::whereIn('id', array_keys($data['rows']))->get()->keyBy('id');
 
-                $stock = Stock::firstOrNew([
-                    'product_id' => (int) $productId,
-                    'warehouse_id' => $warehouse->id,
-                ]);
+                foreach ($data['rows'] as $productId => $row) {
+                    $product = $products->get((int) $productId);
 
-                // ⚠️ الصف اللي مااتغيرش مابيتلمسش — عشان `counted_at`
-                // تفضل تقول تاريخ آخر عدّ حقيقي مش تاريخ آخر ما حد
-                // فتح الشاشة ودَس حفظ.
-                if ($stock->exists && (int) $stock->qty === $qty && (int) $stock->hold_qty === $hold) {
-                    continue;
+                    if ($product && OpeningStock::apply($warehouse, $product, (int) $row['qty'], (int) $row['hold'])) {
+                        $touched++;
+                    }
                 }
-
-                $stock->qty = $qty;
-                $stock->hold_qty = $hold;
-                $stock->syncGood();
-                $stock->counted_at = today();
-                $stock->save();
-
-                $touched++;
-            }
-        });
+            });
+        } catch (Rejected $e) {
+            // رف اتملى أو رفض ترصيف — كل الشاشة بترجع زي ما كانت
+            return back()->withErrors(['rows' => $e->getMessage()])->withInput();
+        }
 
         return back()->with('ok', __('stock.stock_saved', ['count' => $touched]));
     }
