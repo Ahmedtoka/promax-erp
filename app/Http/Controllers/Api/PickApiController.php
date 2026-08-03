@@ -14,19 +14,31 @@ use Illuminate\Http\Request;
  */
 class PickApiController extends Controller
 {
-    /** GET /api/picks — أوامر التجهيز الخاصة بالمندوب */
+    /**
+     * GET /api/picks — أوامر التجهيز الخاصة بالمندوب.
+     *
+     * `?history=1` — **كل** استلامات العهدة اللي تمّت (المُسلَّمة)
+     * بتواريخها وبنودها الكاملة، الأحدث الأول. المندوب بيراجع منها
+     * «استلمت إيه وإمتى» في أي وقت.
+     */
     public function index(Request $request): JsonResponse
     {
+        $history = $request->boolean('history');
+
         $orders = PickOrder::forRep($request->user()->id)
             ->with(['warehouse', 'items.product', 'items.batch', 'items.location'])
-            ->where(fn ($q) => $q->open()->orWhereDate('handed_at', today()))
-            ->latest()
-            ->take(30)
+            ->when(
+                $history,
+                fn ($q) => $q->where('status', 'handed')->latest('handed_at')->take(60),
+                fn ($q) => $q->where(fn ($w) => $w->open()->orWhereDate('handed_at', today()))
+                    ->latest()->take(30),
+            )
             ->get();
 
         return response()->json([
-            'picks' => $orders->map(fn (PickOrder $o) => $this->payload($o))->values(),
-            'ready_count' => $orders->where('status', 'ready')->count(),
+            // الهيستوري بالبنود كاملة — الشاشة بتفردها من غير ريكوست لكل أمر
+            'picks' => $orders->map(fn (PickOrder $o) => $this->payload($o, full: $history))->values(),
+            'ready_count' => $history ? 0 : $orders->where('status', 'ready')->count(),
         ]);
     }
 

@@ -82,6 +82,11 @@ class FieldApiController extends Controller
                 'product_id' => $i->product_id,
                 'code' => $i->product->code,
                 'name' => $i->product->displayName(),
+                // ⚠️ الاسمين الاتنين — البحث في شاشة البيع بيلاقي
+                // «برو» عربي أو إنجليزي مهما كانت لغة الواجهة
+                'name_ar' => $i->product->name,
+                'name_en' => $i->product->name_en,
+                'image' => $i->product->imageSrc(),
                 'unit' => $i->product->unitLabel(),
                 'price' => (float) $i->product->priceFor($mode),
                 'assigned' => $i->assigned,
@@ -110,6 +115,17 @@ class FieldApiController extends Controller
             $zoneIds = collect([$user->zone_id]);
         }
 
+        // ⚠️ **مناطق عملائه كمان، مش التسكين بس.** المدير ساعات بيسكّن
+        // العملاء (rep_id) من غير ما يعلّم على تشيك بوكس المناطق —
+        // فالمندوب كان بيفتح «المناطق» يلاقيها فاضية وعملاؤه موجودين
+        // فعلاً. أي منطقة فيها عميل بتاعه هي منطقته بحكم الواقع.
+        $clientZoneIds = Client::where('rep_id', $user->id)
+            ->where('status', 'active')
+            ->whereNotNull('zone_id')
+            ->distinct()->pluck('zone_id');
+
+        $zoneIds = $zoneIds->merge($clientZoneIds)->unique()->values();
+
         $zones = Zone::with([
             'clients' => function ($q) use ($user) {
                 // ⚠️ contract و group.contract ضروريين: effectiveDiscount()
@@ -118,13 +134,17 @@ class FieldApiController extends Controller
                 $q->where('status', 'active')
                     ->with(['channel', 'contract', 'group.contract'])
                     ->orderBy('name');
-                // ⚠️ **عملاءه هو، أو اللي لسه من غير مندوب في منطقته** —
-                // دول شغله برضه لحد ما يتوزعوا. عميل مندوب تاني لأ.
-                $q->where(fn ($w) => $w->where('rep_id', $user->id)->orWhereNull('rep_id'));
-                // السيلز إيجينت بيشوف عملاء قناته بس (لو متحدد له قناة)
-                if ($user->channel_id) {
-                    $q->where('channel_id', $user->channel_id);
-                }
+                // ⚠️ **عملاءه هو دايماً** (مهما كانت قناتهم)، واللي لسه
+                // من غير مندوب — دول بس بيتفلتروا بقناته لو ليه قناة.
+                $q->where(function ($w) use ($user) {
+                    $w->where('rep_id', $user->id);
+                    $w->orWhere(function ($w2) use ($user) {
+                        $w2->whereNull('rep_id');
+                        if ($user->channel_id) {
+                            $w2->where('channel_id', $user->channel_id);
+                        }
+                    });
+                });
             },
         ])->whereIn('id', $zoneIds)->where('active', true)->orderBy('code')->get();
 
@@ -678,7 +698,7 @@ class FieldApiController extends Controller
 
                 // ⚠️ **دائن** — بيقلل مديونية العميل. بالإجمالي شامل
                 // الضريبة، زي قيد البيع المقابل بالظبط.
-                Transaction::create([
+                $entry = Transaction::create([
                     'client_id' => $client->id,
                     'date' => today(),
                     'memo' => __('flash.memo_return', [
@@ -720,6 +740,8 @@ class FieldApiController extends Controller
                     $data['lat'] ?? null, $data['lng'] ?? null);
 
                 return [
+                    // رقم المرتجع — بيتطبع على السامري وبيظهر في مبيعاتي
+                    'number' => 'RET-'.$entry->id,
                     'net' => round($net, 2),
                     'tax_total' => round($taxTotal, 2),
                     'grand_total' => $grand,
@@ -733,19 +755,60 @@ class FieldApiController extends Controller
         return response()->json(['return' => $result + ['time' => now()->toIso8601String()]], 201);
     }
 
-    /** GET /api/invoices — فواتير المندوب النهارده */
+    /**
+     * GET /api/invoices — مبيعات ومرتجعات المندوب (آخر ٧ أيام).
+     *
+     * المندوب لازم يقدر يراجع «بعت إيه ورجّعت إيه» في أي وقت —
+     * مش بس توتال اليوم على الرئيسية.
+     */
     public function invoices(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // فلتر التاريخ: from/to (Y-m-d) — الافتراضي آخر ٧ أيام
+        $data = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        $since = isset($data['from']) ? \Illuminate\Support\Carbon::parse($data['from']) : today()->subDays(7);
+        $until = isset($data['to']) ? \Illuminate\Support\Carbon::parse($data['to']) : today();
+
         $invoices = Invoice::with('client')
-            ->where('user_id', $request->user()->id)
-            ->whereDate('created_at', today())
-            ->latest()->get()->map(fn ($i) => [
+            ->where('user_id', $user->id)
+            ->whereDate('created_at', '>=', $since)
+            ->whereDate('created_at', '<=', $until)
+            ->latest()->take(200)->get()->map(fn ($i) => [
                 'id' => $i->id, 'number' => $i->number, 'client' => $i->client->displayName(),
-                'total' => (float) $i->total, 'payment' => $i->payment,
+                'total' => (float) $i->total,
+                // ⚠️ الإجمالي شامل الضريبة — ده اللي اتحصّل فعلاً
+                'grand_total' => (float) $i->grand_total,
+                'payment' => $i->payment,
                 'time' => $i->created_at->toIso8601String(),
             ]);
 
-        return response()->json(['invoices' => $invoices]);
+        // مرتجعاته: قيود `return` المربوطة بزياراته هو —
+        // Transaction مالهاش user_id، فالملكية من الزيارة المصدر
+        $visitIds = Visit::where('user_id', $user->id)
+            ->whereDate('created_at', '>=', $since)
+            ->pluck('id');
+
+        $returns = Transaction::with('client')
+            ->where('kind', 'return')
+            ->where('source_type', Visit::class)
+            ->whereIn('source_id', $visitIds)
+            ->whereDate('created_at', '<=', $until)
+            ->latest()->take(200)->get()->map(fn ($t) => [
+                'id' => $t->id,
+                // رقم المرتجع — من id القيد: ثابت وفريد ومايتكررش
+                'number' => 'RET-'.$t->id,
+                'client' => $t->client?->displayName() ?? '—',
+                'total' => (float) $t->credit,
+                'memo' => $t->memo,
+                'time' => $t->created_at->toIso8601String(),
+            ]);
+
+        return response()->json(['invoices' => $invoices, 'returns' => $returns]);
     }
 
     // ================= أوامر التوريد (الكورير) =================

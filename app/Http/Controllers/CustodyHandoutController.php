@@ -49,6 +49,14 @@ class CustodyHandoutController extends Controller
                 ->whereNotNull('issued_at')
                 ->with(['rep', 'warehouse', 'items.product'])
                 ->latest('issued_at')->take(30)->get(),
+            // ⚠️ **الهيستوري** — كل تحميلات العربيات اللي اتسلّمت:
+            // مين وإمتى وبكام، وإعادة طباعة الورقة في أي وقت.
+            // القيمة بتتحسب بقايمة المندوب (السواق قديمة والسيلز جديدة)
+            // — نفس منطق عرض العهدة في الأبلكيشن.
+            'done' => PickOrder::where('purpose', PickOrder::PURPOSE_VAN_LOAD)
+                ->where('status', 'handed')
+                ->with(['rep', 'warehouse', 'items.product'])
+                ->latest('handed_at')->take(40)->get(),
         ]);
     }
 

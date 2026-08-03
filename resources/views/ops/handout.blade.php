@@ -173,6 +173,49 @@
 </div>
 @endif
 
+{{-- ═══════════ الهيستوري — كل التسليمات اللي تمّت ═══════════ --}}
+@if ($done->isNotEmpty())
+<div class="card">
+    <h3>📦 {{ __('field.handout_history') }}
+        <span class="side">{{ __('field.handout_history_hint') }}</span></h3>
+    <div class="tablewrap">
+        <table>
+            <tr>
+                <th>{{ __('stock.pick_order') }}</th>
+                <th>{{ __('ops.rep') }}</th>
+                <th>{{ __('stock.warehouse') }}</th>
+                <th>{{ __('field.handed_at') }}</th>
+                <th class="num">{{ __('common.total') }}</th>
+                <th class="num">🎁</th>
+                <th class="num">{{ __('field.handout_value') }}</th>
+                <th></th>
+            </tr>
+            @foreach ($done as $o)
+                @php
+                    // القيمة بقايمة المندوب — السواق قديمة والسيلز جديدة
+                    $mode = $o->rep?->isDriver() ? 'old' : 'new';
+                    $value = $o->items->sum(fn ($i) => (int) ($i->qty_received ?? $i->qty_picked)
+                        * (float) ($i->product?->priceFor($mode) ?? 0));
+                @endphp
+                <tr>
+                    <td class="num"><b>{{ $o->number }}</b></td>
+                    <td>{{ $o->rep?->displayName() ?? '—' }}</td>
+                    <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
+                    <td class="num" style="font-size:11.5px">{{ $o->handed_at?->format('Y-m-d H:i') ?? '—' }}</td>
+                    <td class="num">{{ $fmt($o->items->sum(fn ($i) => (int) ($i->qty_received ?? $i->qty_picked))) }}</td>
+                    <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
+                    <td class="num"><b>{{ number_format($value, 2) }}</b></td>
+                    <td class="num">
+                        {{-- إعادة طباعة ورقة التسليم في أي وقت --}}
+                        <a class="btn sm" href="{{ route('ops.handout.print', $o) }}">🖨️</a>
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    </div>
+</div>
+@endif
+
 @endsection
 
 @section('scripts')
