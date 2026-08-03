@@ -87,6 +87,72 @@
     </div>
 </div>
 
+{{-- ═══════════ خطة الشهر — النمط مفرود على التواريخ ═══════════ --}}
+@php
+    $firstCol = $monthStart->dayOfWeek; // 0 = الأحد = أول عمود
+    $daysInMonth = $monthStart->daysInMonth;
+    $todayKey = today()->toDateString();
+    $prevMonth = $monthStart->copy()->subMonth()->format('Y-m');
+    $nextMonth = $monthStart->copy()->addMonth()->format('Y-m');
+    $mLink = fn ($m) => route('ops.journeys', ['rep' => $rep->id, 'month' => $m]);
+@endphp
+<div class="card">
+    <h3>📅 {{ __('journey.month_plan') }} — {{ $monthStart->format('m / Y') }}
+        <span class="side">
+            <a class="btn sm" href="{{ $mLink($prevMonth) }}">◀</a>
+            <a class="btn sm" href="{{ $mLink(today()->format('Y-m')) }}">{{ __('journey.this_month') }}</a>
+            <a class="btn sm" href="{{ $mLink($nextMonth) }}">▶</a>
+        </span>
+    </h3>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">{{ __('journey.month_hint') }}</div>
+
+    <div class="tablewrap">
+        <table style="table-layout:fixed">
+            <tr>
+                @foreach ($weekdays as $d)
+                    <th style="text-align:center">{{ __('journey.day_'.$d) }}</th>
+                @endforeach
+            </tr>
+            @for ($cell = 0; $cell < $firstCol + $daysInMonth; $cell += 7)
+                <tr>
+                    @for ($col = 0; $col < 7; $col++)
+                        @php
+                            $dayNum = $cell + $col - $firstCol + 1;
+                            $inMonth = $dayNum >= 1 && $dayNum <= $daysInMonth;
+                            $date = $inMonth ? $monthStart->copy()->addDays($dayNum - 1) : null;
+                            $key = $date?->toDateString();
+                            $rows = $inMonth ? ($calendar[$key] ?? []) : [];
+                            $isToday = $key === $todayKey;
+                            $isPast = $date && $date->lt(today());
+                        @endphp
+                        <td style="vertical-align:top;height:96px;padding:6px 7px;
+                                   {{ $isToday ? 'background:var(--blue-050);box-shadow:inset 0 0 0 2px var(--royal-blue);border-radius:8px;' : '' }}
+                                   {{ ! $inMonth ? 'background:var(--card2);' : '' }}">
+                            @if ($inMonth)
+                                <div style="font-size:12px;font-weight:900;margin-bottom:4px;
+                                            color:{{ $isToday ? 'var(--royal-blue)' : 'var(--muted)' }}">
+                                    {{ $dayNum }}
+                                </div>
+                                {{-- أول ٤ عملاء + عدّاد للباقي — الخلية مش صفحة --}}
+                                @foreach (array_slice($rows, 0, 4) as $r)
+                                    <div style="font-size:10.5px;line-height:1.7;white-space:nowrap;
+                                                overflow:hidden;text-overflow:ellipsis;
+                                                color:{{ $r['done'] ? 'var(--green)' : ($isPast ? 'var(--red)' : 'var(--ink)') }}">
+                                        {{ $r['done'] ? '✓' : ($isPast ? '✗' : '•') }} {{ $r['name'] }}
+                                    </div>
+                                @endforeach
+                                @if (count($rows) > 4)
+                                    <div style="font-size:10px;color:var(--muted)">+{{ count($rows) - 4 }}</div>
+                                @endif
+                            @endif
+                        </td>
+                    @endfor
+                </tr>
+            @endfor
+        </table>
+    </div>
+</div>
+
 {{-- ═══════════ إضافة عملاء ═══════════ --}}
 <dialog id="dlgAddPlan">
     <form class="dlg" method="POST" action="{{ route('ops.journeys.store') }}" style="max-height:86vh;overflow-y:auto">

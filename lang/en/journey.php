@@ -29,6 +29,9 @@ return [
 
     // ═══ Assignments ═══
     'assignments' => 'Client & zone assignment',
+    'month_plan' => 'Month plan by date',
+    'month_hint' => 'The weekly pattern laid out on real dates - ✓ visited, ✗ missed, • upcoming. Edit from the weekly grid above.',
+    'this_month' => 'This month',
     'assignments_sub' => 'Each rep with their clients and zones',
     'my_clients' => 'Rep clients',
     'my_zones' => 'Rep zones',

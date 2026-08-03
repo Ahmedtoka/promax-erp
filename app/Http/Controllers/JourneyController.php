@@ -63,6 +63,47 @@ class JourneyController extends Controller
             ->orderBy('name')
             ->get();
 
+        // ═══ عرض الشهر — النمط الأسبوعي مفرود على تواريخ حقيقية ═══
+        // (طلب المالك 2026-08-03): «عاوز الخطة بالشهر وقدامي بالتواريخ».
+        // الخطة نمط، فكل يوم في الشهر بنسأل dueOn() — والتردد (كل
+        // أسبوعين/شهري) بيبان صح على التقويم بدل ما يفضل رقم مخفي.
+        $month = (string) $request->input('month', today()->format('Y-m'));
+
+        try {
+            $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        } catch (\Throwable) {
+            $monthStart = today()->startOfMonth();
+        }
+
+        // الزيارات المقفولة في الشهر — عشان الماضي يتلون: اتزار/فات
+        $monthVisits = Visit::where('user_id', $rep->id)
+            ->whereBetween('created_at', [
+                $monthStart->copy()->startOfDay(),
+                $monthStart->copy()->endOfMonth()->endOfDay(),
+            ])
+            ->whereNotNull('checked_out_at')
+            ->get()
+            ->groupBy(fn ($v) => $v->created_at->toDateString().'|'.$v->client_id);
+
+        $allPlans = JourneyPlan::with('client.group')
+            ->where('user_id', $rep->id)
+            ->where('active', true)
+            ->orderBy('weekday')->orderBy('sort')
+            ->get();
+
+        $calendar = [];
+
+        for ($d = $monthStart->copy(); $d->month === $monthStart->month; $d->addDay()) {
+            $key = $d->toDateString();
+
+            $calendar[$key] = $allPlans
+                ->filter(fn (JourneyPlan $p) => $p->dueOn($d->copy()))
+                ->map(fn (JourneyPlan $p) => [
+                    'name' => $p->client?->fullName() ?? '—',
+                    'done' => $monthVisits->has($key.'|'.$p->client_id),
+                ])->values()->all();
+        }
+
         return view('ops.journeys', [
             'reps' => $reps,
             'rep' => $rep,
@@ -71,6 +112,8 @@ class JourneyController extends Controller
             'weekdays' => JourneyPlan::WEEKDAYS,
             'frequencies' => JourneyPlan::FREQUENCIES,
             'today' => today()->dayOfWeek,
+            'monthStart' => $monthStart,
+            'calendar' => $calendar,
         ]);
     }
 
