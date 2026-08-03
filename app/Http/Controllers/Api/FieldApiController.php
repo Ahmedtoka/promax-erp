@@ -151,6 +151,11 @@ class FieldApiController extends Controller
         $todayVisits = Visit::where('user_id', $user->id)
             ->whereDate('created_at', today())->get()->keyBy('client_id');
 
+        // ⚠️ **المناطق اللي فيها شغل ليه بس** (قرار المالك 2026-08-03).
+        // التسكين ممكن يكون على ٢٠ منطقة والعملاء في ٤ — عرض الفاضي
+        // زحمة بلا فايدة. أول ما يتسكن عليه عميل في منطقة هتظهر لوحدها.
+        $zones = $zones->filter(fn ($z) => $z->clients->isNotEmpty())->values();
+
         return $zones->map(fn ($z) => [
             'id' => $z->id,
             'code' => $z->code,
