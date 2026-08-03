@@ -70,8 +70,10 @@ class ShelveStock extends Command
                     continue;
                 }
 
+                $clean = true;
+
                 try {
-                    DB::transaction(function () use ($w, $p, $stock, $stockQty, $stockHold, $batchQty) {
+                    DB::transaction(function () use ($w, $p, $stock, $stockQty, $stockHold, $batchQty, &$clean) {
                     // ١) الرقم اليدوي في `stocks` هو الحقيقة — باتشات
                     //    التسوية بتتظبط عليه (لو مفيش صف stocks أصلاً،
                     //    الباتشات هي المصدر ومفيش رقم يدوي نمشي وراه)
@@ -99,6 +101,8 @@ class ShelveStock extends Command
                         $err = BatchLocation::putAway($batch, $shelf, $loose);
 
                         if ($err !== null) {
+                            // اترصّفش — مايتحسبش «اتصلح» في الرسالة النهائية
+                            $clean = false;
                             $this->warn("  ⚠️ {$w->code}/{$p->code} {$batch->batch_no}: $err");
                         }
                     }
@@ -106,7 +110,9 @@ class ShelveStock extends Command
                         \App\Services\StockCounting::resync($p->id, $w->id);
                     });
 
-                    $fixed++;
+                    if ($clean) {
+                        $fixed++;
+                    }
                 } catch (\App\Exceptions\Rejected $e) {
                     // رف مليان أو رفض ترصيف — الصنف ده بيتساب زي ما هو
                     // والأمر بيكمّل على الباقي بدل ما يقف في النص

@@ -77,6 +77,11 @@ class InvoiceTaxLedgerTest extends TestCase
     {
         [$rep, $client, $product] = $scene;
 
+        // ⚠️ كاش/آجل بقت من **تعريف العميل** مش من البوست (قرار
+        // المالك 2026-08-03) — بنثبّتها على العميل عشان السيناريو
+        // يتنفذ بالطريقة اللي التيست قاصدها، والحقل في البوست بيتطنش.
+        $client->update(['payment_terms' => $payment]);
+
         // ⚠️ التوكن مش actingAs — الـ API بيصادق بالـ Bearer
         return $this->withHeaders($this->tokenFor($rep))
             ->postJson('/api/invoices', [

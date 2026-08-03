@@ -51,7 +51,7 @@ class Client extends Model
 
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
-        'contacts', 'category', 'status',
+        'contacts', 'category', 'payment_terms', 'status',
         'channel_id', 'group_id', 'branch_id', 'sub_channel', 'parent_id', 'uses_channel_discount',
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng',
@@ -498,10 +498,42 @@ public function zone(): BelongsTo
         return $this->channel?->code === Channel::KEY_ACCOUNT;
     }
 
-    /** العميل الخطر لازم يشتري كاش */
+    /**
+     * طريقة الدفع: كاش ولا آجل — **قرار إدارة مش قرار مندوب**
+     * (قرار المالك 2026-08-03). الأبلكيشن مابيسألش؛ بياخدها من هنا.
+     *
+     * الترتيب:
+     *   1. التصنيف `danger` ← كاش إجباري مهما كانت الخانة
+     *   2. الخانة المتظبطة بالإيد من الأدمن (`payment_terms`)
+     *   3. حسب القناة: كاش فان وجملة كاش، كي أكاونت وأونلاين آجل
+     */
+    public function paymentTerms(): string
+    {
+        if ($this->category === 'danger') {
+            return 'cash';
+        }
+
+        if (in_array($this->payment_terms, ['cash', 'credit'], true)) {
+            return $this->payment_terms;
+        }
+
+        // ⚠️ العميل من غير قناة → **آجل** مش كاش. العميل الجديد بيتعمل
+        // من غير قناة أحياناً، وقفل الآجل عليه من يومه الأول حكم على
+        // سلوك لسه مافيش منه حاجة (نفس منطق التصنيف).
+        return in_array($this->channel?->code, [Channel::CASH_VAN, Channel::WHOLESALE], true)
+            ? 'cash'
+            : 'credit';
+    }
+
+    public function paymentTermsLabel(): string
+    {
+        return __('client.terms_'.$this->paymentTerms());
+    }
+
+    /** العميل اللي بيشتري كاش بس — من `paymentTerms()` مش من التصنيف لوحده */
     public function cashOnly(): bool
     {
-        return $this->category === 'danger';
+        return $this->paymentTerms() === 'cash';
     }
 
     public function collectionRate(): float

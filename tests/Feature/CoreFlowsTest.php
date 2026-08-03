@@ -84,16 +84,26 @@ class CoreFlowsTest extends TestCase
     {
         [$rep, $product, $channel] = $this->stockedRep();
 
-        // ⚠️ تصنيف danger = كاش بس. الباج اللي حصل: الآجل عدّى.
-        $client = $this->makeClient(['channel_id' => $channel->id, 'category' => 'danger']);
+        // ⚠️ تصنيف danger = كاش بس — حتى لو الخانة نفسها مكتوب فيها
+        // آجل. ومن 2026-08-03 السيرفر مابيسمعش للبوست أصلاً: أي
+        // `payment` مبعوت بيتطنش والفاتورة بتتسجل كاش بقيد تحصيل
+        // مقابل، فالرصيد مايتحركش.
+        $client = $this->makeClient([
+            'channel_id' => $channel->id,
+            'category' => 'danger',
+            'payment_terms' => 'credit',   // بتتداس بالتصنيف
+        ]);
 
         $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
             'client_id' => $client->id,
             'payment' => 'credit',
             'items' => [['product_id' => $product->id, 'qty' => 1]],
-        ])->assertStatus(422);
+        ])->assertStatus(201);
 
-        $this->assertSame(0, Invoice::count());
+        $invoice = Invoice::first();
+        $this->assertSame('cash', $invoice->payment, 'المفروض تتقسر كاش');
+        $this->assertEqualsWithDelta(0.0, (float) $client->fresh()->balance, 0.01,
+            'عميل الكاش الإجباري مايتفتحلوش مديونية أبداً');
     }
 
     public function test_a_sale_deducts_from_the_van(): void
@@ -216,8 +226,9 @@ class CoreFlowsTest extends TestCase
     {
         [$rep, $product, $channel] = $this->stockedRep(100);
 
-        $onCredit = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل آجل']);
-        $onCash = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل كاش']);
+        // ⚠️ كاش/آجل من تعريف العميل مش من البوست — بنثبّتها هنا
+        $onCredit = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل آجل', 'payment_terms' => 'credit']);
+        $onCash = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل كاش', 'payment_terms' => 'cash']);
 
         $headers = $this->tokenFor($rep);
 

@@ -10,8 +10,10 @@ class CustodyItem extends Model
 {
     use HasFactory;
 
+    // ⚠️ `returned` = مرتجع المندوب **للمخزن**، و`returned_in` = مرتجع
+    // **من العملاء** جوه العربية — اتنين مختلفين ومحدش يبيع من التاني
     protected $fillable = ['custody_id', 'product_id', 'batch_id', 'assigned', 'sold', 'returned',
-        'gift_assigned', 'gift_given'];
+        'returned_in', 'gift_assigned', 'gift_given'];
 
     public function custody(): BelongsTo
     {

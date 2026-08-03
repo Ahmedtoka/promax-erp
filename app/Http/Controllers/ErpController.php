@@ -632,6 +632,8 @@ class ErpController extends Controller
             // الفيو، فإضافة تصنيف جديد كانت بتوري أوبشن الفاليديشن
             // يرفضها.
             'category' => ['nullable', Rule::in(array_keys(Client::CATEGORIES))],
+            // كاش/آجل — فاضي = حسب القناة، و`danger` كاش إجباري
+            'payment_terms' => ['nullable', 'in:cash,credit'],
             'discount' => ['required', 'numeric', 'min:0', 'max:100'],
             // قائمة السعر اللي العميل بيتحاسب بيها — إجبارية
             'price_list' => ['required', 'in:old,new'],

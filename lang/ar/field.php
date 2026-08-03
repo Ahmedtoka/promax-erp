@@ -74,6 +74,7 @@ return [
     'event_check_out' => 'تشيك أوت — :client',
     'event_visit_minutes' => 'مدة الزيارة :minutes دقيقة',
     'event_invoice' => 'فاتورة :number — :client',
+    'event_return' => 'مرتجع من :client',
     'event_arrived' => 'وصول — :client',
     'event_delivered' => 'تسليم :number — :client',
     'event_delivered_sub' => ':qty وحدة • :amount ج',

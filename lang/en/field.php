@@ -75,6 +75,7 @@ return [
     'event_check_out' => 'Check-out — :client',
     'event_visit_minutes' => 'Visit lasted :minutes minutes',
     'event_invoice' => 'Invoice :number — :client',
+    'event_return' => 'Return from :client',
     'event_arrived' => 'Arrived — :client',
     'event_delivered' => 'Delivered :number — :client',
     'event_delivered_sub' => ':qty units • EGP :amount',

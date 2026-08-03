@@ -480,6 +480,20 @@
                 {!! $err('discount') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
             </div>
+            <div>
+                {{-- ⚠️ **قرار إدارة مش قرار مندوب** — الأبلكيشن بياخد
+                     كاش/آجل من هنا ومابيسألش المندوب. الافتراضي حسب
+                     القناة: كاش فان وجملة كاش، كي أكاونت وأونلاين آجل.
+                     و`danger` كاش إجباري مهما اتكتب هنا. --}}
+                <label class="f">{{ __('client.pay_method') }}</label>
+                <select name="payment_terms" style="width:100%" class="{{ trim($bad('payment_terms')) }}">
+                    <option value="" @selected($v('payment_terms') === null || $v('payment_terms') === '')>{{ __('client.terms_by_channel') }}</option>
+                    <option value="cash" @selected($v('payment_terms') === 'cash')>{{ __('client.terms_cash') }}</option>
+                    <option value="credit" @selected($v('payment_terms') === 'credit')>{{ __('client.terms_credit') }}</option>
+                </select>
+                {!! $err('payment_terms') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.pay_method_hint') }}</div>
+            </div>
             {{-- ⚠️ **في التعديل بس.** التصنيف نتيجة سلوك مش مدخل،
                  فمالوش لازمة وقت التعريف (الشرح فوق). بس المودال
                  القديم كان **المكان الوحيد في السيستم كله** اللي

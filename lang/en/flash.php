@@ -51,6 +51,8 @@ return [
     // ---------- Ledger memos (persisted with the transaction) ----------
     'memo_invoice' => 'Invoice :number — :user',
     'memo_cash_with_invoice' => 'Cash collection with invoice :number',
+    'memo_return' => 'Return of :count units — :user',
+    'memo_return_refund' => 'Return value refunded in cash — cash client',
     'memo_po_delivered' => 'Purchase order :number delivered',
     'memo_cash_collection' => 'Cash collection',
 

@@ -51,6 +51,8 @@ return [
     // ---------- بيان القيود (بيتخزن مع الترانزاكشن) ----------
     'memo_invoice' => 'فاتورة :number — :user',
     'memo_cash_with_invoice' => 'تحصيل نقدي مع فاتورة :number',
+    'memo_return' => 'مرتجع :count وحدة — :user',
+    'memo_return_refund' => 'رد قيمة المرتجع نقداً — عميل كاش',
     'memo_po_delivered' => 'تسليم أمر توريد :number',
     'memo_cash_collection' => 'تحصيل نقدي',
 

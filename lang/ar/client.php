@@ -42,6 +42,13 @@ return [
     'discount' => 'الخصم',
     'discount_pct' => 'الخصم %',
     'custom_discount' => 'خصم خاص',
+    // ⚠️ `pay_method` مش `payment_terms` — المفتاح ده كان بيتصادم مع
+    // «شروط السداد» بتاعة العقد تحت وبياخد قيمتها
+    'pay_method' => 'طريقة الدفع',
+    'terms_by_channel' => 'حسب القناة (افتراضي)',
+    'terms_cash' => 'كاش',
+    'terms_credit' => 'آجل',
+    'pay_method_hint' => 'الأبلكيشن بياخدها من هنا — المندوب مابيختارش. والتصنيف «تحصيل فوري» كاش إجباري.',
     'channel_discount' => 'خصم القناة',
     'chain_discount' => 'خصم السلسلة',
     'purchases' => 'المشتريات',

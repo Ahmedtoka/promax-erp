@@ -64,12 +64,97 @@ class OpeningStock
             return false;
         }
 
-        self::adjustPool($warehouse, $product, $batches->where('blocked', false), $good - $curGood, false);
-        self::adjustPool($warehouse, $product, $batches->where('blocked', true), $hold - $curHold, true);
+        $deltaGood = $good - $curGood;
+        $deltaHold = $hold - $curHold;
+
+        // ⚠️ **النقل بين السليم والمحجوب مش عجز.** لو واحد ناقص
+        // والتاني زايد، الفرق المشترك بيتنقل بقلب `blocked` على
+        // الباتشات نفسها — الصلاحية والتكلفة ورقم التشغيلة بيفضلوا
+        // زي ما هم. الطريقة القديمة كانت بتسجل النقص `qty_damaged`
+        // (توالف وهمية) وتخلق باتش جديد بصلاحية النهارده — يعني حجز
+        // البضاعة وفكّها كان بيغسل تاريخ صلاحيتها ويضحك على الـFEFO.
+        if ($deltaGood < 0 && $deltaHold > 0) {
+            $moved = self::moveBetweenPools($warehouse, $batches->where('blocked', false), min(-$deltaGood, $deltaHold), true);
+            $deltaGood += $moved;
+            $deltaHold -= $moved;
+        } elseif ($deltaHold < 0 && $deltaGood > 0) {
+            $moved = self::moveBetweenPools($warehouse, $batches->where('blocked', true), min(-$deltaHold, $deltaGood), false);
+            $deltaHold += $moved;
+            $deltaGood -= $moved;
+        }
+
+        self::adjustPool($warehouse, $product, $batches->where('blocked', false), $deltaGood, false);
+        self::adjustPool($warehouse, $product, $batches->where('blocked', true), $deltaHold, true);
 
         StockCounting::resync($product->id, $warehouse->id);
 
         return true;
+    }
+
+    /**
+     * نقل كمية بين السليم والمحجوب بقلب `blocked` — مش بالعجز.
+     *
+     * الباتش اللي بيتنقل كله ← بيتقلب في مكانه (الأرفف زي ما هي).
+     * الجزئي ← بينشق: باتش جديد بنفس الصلاحية والتكلفة والرقم
+     * (بلاحقة -H/-G)، والكمية بتتنقل له مع رفّها.
+     *
+     * @param  \Illuminate\Support\Collection<int, Batch>  $source  باتشات المصدر (FEFO)
+     * @return int اللي اتنقل فعلاً
+     */
+    private static function moveBetweenPools(Warehouse $warehouse, $source, int $qty, bool $toBlocked): int
+    {
+        $moved = 0;
+
+        foreach ($source as $batch) {
+            if ($moved >= $qty) {
+                break;
+            }
+
+            $take = min($qty - $moved, (int) $batch->qty_remaining);
+
+            if ($take <= 0) {
+                continue;
+            }
+
+            if ($take === (int) $batch->qty_remaining) {
+                // الباتش كله — قلب العلم وخلاص، الأرفف متأثرتش
+                $batch->update(['blocked' => $toBlocked]);
+                $moved += $take;
+
+                continue;
+            }
+
+            // جزء من الباتش — شق باتش شقيق بنفس الهوية
+            $twin = Batch::create([
+                'product_id' => $batch->product_id,
+                'warehouse_id' => $batch->warehouse_id,
+                'batch_no' => $batch->batch_no.($toBlocked ? '-H' : '-G'),
+                'produced_on' => $batch->produced_on,
+                'expires_on' => $batch->expires_on,
+                'qty_received' => $take, 'qty_remaining' => $take,
+                'qty_issued' => 0, 'qty_damaged' => 0,
+                'cost' => (float) $batch->cost,
+                'blocked' => $toBlocked,
+                'notes' => __('stock.manual_adjust_note'),
+            ]);
+
+            $batch->update([
+                'qty_received' => (int) $batch->qty_received - $take,
+                'qty_remaining' => (int) $batch->qty_remaining - $take,
+            ]);
+
+            self::drainLocations($batch, $take);
+
+            $err = BatchLocation::putAway($twin, self::pickShelf($warehouse), $take);
+
+            if ($err !== null) {
+                throw new \App\Exceptions\Rejected($err);
+            }
+
+            $moved += $take;
+        }
+
+        return $moved;
     }
 
     /**
@@ -153,20 +238,22 @@ class OpeningStock
     /** رف السحب اللي التسوية بتترصّف عليه */
     public static function pickShelf(Warehouse $warehouse): Location
     {
+        // ⚠️ **رف من غير سعة بس.** رف بسعة ممكن يتملى في نص حفظ
+        // شاشة فيها ٣١ صنف — و`Rejected` واحدة بترجّع الشاشة كلها.
+        // لو كل الأرفف ليها سعة، بنعمل رف تسوية `ADJ` مفتوح.
         $shelf = Location::where('warehouse_id', $warehouse->id)
             ->where('active', true)
+            ->whereNull('capacity')
             ->orderByDesc('is_pick_face')
             ->orderBy('stand')->orderBy('level')
             ->first();
 
-        // ⚠️ رف التسوية من غير `capacity` (null = من غير حد) — رف
-        // بسعة كان هيرفض الرصيد الافتتاحي الكبير
-        return $shelf ?? Location::create([
-            'warehouse_id' => $warehouse->id,
-            'code' => self::SHELF_CODE,
-            'stand' => 'A', 'level' => 1,
-            'is_pick_face' => true, 'active' => true,
-        ]);
+        // ⚠️ `firstOrCreate` مش `create` — رف ADJ قديم (حتى الموقوف)
+        // مع unique index كان هيرمي 500 بدل ما يتساب يشتغل
+        return $shelf ?? Location::firstOrCreate(
+            ['warehouse_id' => $warehouse->id, 'code' => self::SHELF_CODE],
+            ['stand' => 'A', 'level' => 1, 'is_pick_face' => true, 'active' => true],
+        );
     }
 
     /** خصم كمية من أرفف باتش (زي عجز الجرد) */

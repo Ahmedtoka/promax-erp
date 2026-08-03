@@ -90,6 +90,7 @@ return [
         'transfer' => 'Transfer Entry',
         'taxded' => 'Withheld Tax',
         'consignment' => 'Consignment Stock',
+        'refund' => 'Return Cash Refund',
     ],
 
     'price_mode' => [

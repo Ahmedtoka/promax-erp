@@ -90,6 +90,7 @@ return [
         'transfer' => 'قيد تحويل',
         'taxded' => 'ضرائب مخصومة',
         'consignment' => 'بضاعة أمانة',
+        'refund' => 'رد نقدي لمرتجع',
     ],
 
     'price_mode' => [

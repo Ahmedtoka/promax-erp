@@ -76,6 +76,8 @@ class FieldApiController extends Controller
             'remaining_units' => $custody->remainingUnits(),
             'remaining_value' => round($custody->remainingValue($mode), 2),
             'assigned_value' => round($custody->assignedValue($mode), 2),
+            // إجمالي مرتجع العملاء في العربية — معروض مفصول عن المتاح
+            'returned_in_units' => (int) $custody->items->sum(fn ($i) => (int) ($i->returned_in ?? 0)),
             'items' => $custody->items->map(fn ($i) => [
                 'product_id' => $i->product_id,
                 'code' => $i->product->code,
@@ -85,6 +87,8 @@ class FieldApiController extends Controller
                 'assigned' => $i->assigned,
                 'sold' => $i->sold,
                 'remaining' => $i->remaining(),
+                // مرتجع العملاء — بضاعة راجعة في العربية، **مش للبيع**
+                'returned_in' => (int) ($i->returned_in ?? 0),
                 // ⚠️ الأبلكيشن محتاج يعرض الضريبة **قبل** ما يحفظ —
                 // المندوب بيقول للعميل الرقم وبيحصّله. عرض الصافي
                 // معناه إنه بيحصّل ناقص قيمة الضريبة في كل بيعة.
@@ -148,6 +152,8 @@ class FieldApiController extends Controller
                     'discount_source' => $c->discountSource(),
                     'channel' => $c->channel?->displayName(),
                     'cash_only' => $c->cashOnly(),
+                    // كاش/آجل — قرار الأدمن؛ الأبلكيشن بيعرضها ومابيسألش
+                    'payment_terms' => $c->paymentTerms(),
                     'is_new' => $c->is_new,
                     'taxable' => (bool) $c->taxable,
                     'tax_rate' => \App\Services\Tax::rate($c),
@@ -205,6 +211,13 @@ class FieldApiController extends Controller
         // فكل `/api/bootstrap` كان بيعمل الشغل مرتين على شبكة موبايل.
         $rows = \App\Services\Journeys::forDay($user);
 
+        // ⚠️ الخصم بيتبعت مع المحطة — من غيره العميل اللي مش في زونز
+        // المندوب (المدير حاطه في الخطة) كان بيتسعّر في الشاشة بصفر
+        // خصم، والمندوب يقول للعميل رقم أعلى من الفاتورة الفعلية.
+        // `loadMissing` دفعة واحدة — مش كويريين لكل محطة.
+        \Illuminate\Database\Eloquent\Collection::make($rows->pluck('client'))
+            ->unique('id')->values()->loadMissing(['contract', 'group.contract']);
+
         $done = $rows->where('status', 'done')->count();
         $planned = $rows->count();
 
@@ -227,6 +240,8 @@ class FieldApiController extends Controller
                 'lng' => $r['client']->lng !== null ? (float) $r['client']->lng : null,
                 'balance' => (float) $r['client']->balance,
                 'cash_only' => $r['client']->cashOnly(),
+                'payment_terms' => $r['client']->paymentTerms(),
+                'discount' => $r['client']->effectiveDiscount(),
                 'taxable' => (bool) $r['client']->taxable,
                 'tax_rate' => \App\Services\Tax::rate($r['client']),
                 'category' => $r['client']->category,
@@ -347,7 +362,8 @@ class FieldApiController extends Controller
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
             'visit_id' => ['nullable', 'exists:visits,id'],
-            'payment' => ['required', 'in:cash,credit'],
+            // ⚠️ بيتقبل من نسخ قديمة بس **بيتطنش** — شوف تحت
+            'payment' => ['nullable', 'in:cash,credit'],
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
             'items' => ['required', 'array', 'min:1'],
@@ -362,9 +378,11 @@ class FieldApiController extends Controller
         if (! $custody) {
             return response()->json(['message' => __('field.no_custody_today')], 422);
         }
-        if ($data['payment'] === 'credit' && $client->cashOnly()) {
-            return response()->json(['message' => __('field.cash_only_client')], 422);
-        }
+
+        // ⚠️ **كاش/آجل من تعريف العميل مش من المندوب** (قرار المالك
+        // 2026-08-03). اللي الأبلكيشن بيبعته بيتطنش — توكن معدّل كان
+        // يقدر يبعت `credit` لعميل كاش ويفتح مديونية محدش قررها.
+        $data['payment'] = $client->paymentTerms();
 
         $qtyByProduct = [];
         foreach ($data['items'] as $i) {
@@ -555,6 +573,164 @@ class FieldApiController extends Controller
                 'time' => $invoice->created_at->toIso8601String(),
             ],
         ], 201);
+    }
+
+    /**
+     * POST /api/returns { client_id, visit_id, items: [{product_id, qty}] }
+     *
+     * مرتجع من العميل (قرار المالك 2026-08-03):
+     *   - قيد `return` **دائن** على العميل بسعره الفعلي (قايمته وخصمه
+     *     وضريبته) — بيقلل مديونيته
+     *   - البضاعة بتدخل العربية في `custody_items.returned_in` —
+     *     **مفصولة تماماً** عن المتاح للبيع وعن مرتجع المخزن
+     */
+    public function storeReturn(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            // ⚠️ **الزيارة إجبارية** — هي المرساة المادية للمرتجع.
+            // من غيرها أي توكن كان يقدر يكتب قيد دائن بلا حدود على
+            // أي عميل في الشركة ويمسح مديونيته.
+            'visit_id' => ['required', 'exists:visits,id'],
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.qty' => ['required', 'integer', 'min:1', 'max:9999'],
+        ]);
+
+        $user = $request->user();
+        $client = Client::findOrFail($data['client_id']);
+        $custody = $user->todayCustody();
+
+        // ⚠️ من غير عهدة مفيش مكان البضاعة تتحط فيه — المرتجع بيتسجل
+        // على عربية، مش في الهوا
+        if (! $custody) {
+            return response()->json(['message' => __('field.no_custody_today')], 422);
+        }
+
+        // زيارته هو، مفتوحة، وعلى نفس العميل — نفس منطق التشيك إن
+        $visit = Visit::find($data['visit_id']);
+
+        if ($visit === null || $visit->user_id !== $user->id) {
+            return response()->json(['message' => __('api.not_your_visit')], 403);
+        }
+        if (! $visit->isOpen() || $visit->client_id !== $client->id) {
+            return response()->json(['message' => __('api.return_needs_open_visit')], 422);
+        }
+
+        // ⚠️ عميل الأمانة بضاعته أصلاً ملك بروماكس ومفيش مديونية
+        // بيع تتخصم — مرتجعه بيتسوى من تقرير مبيعات الفرع مش من هنا
+        if ($client->isConsignment()) {
+            return response()->json(['message' => __('api.return_consignment')], 422);
+        }
+
+        $qtyByProduct = [];
+        foreach ($data['items'] as $i) {
+            $qtyByProduct[$i['product_id']] = ($qtyByProduct[$i['product_id']] ?? 0) + $i['qty'];
+        }
+
+        try {
+            $result = DB::transaction(function () use ($data, $user, $client, $custody, $qtyByProduct) {
+                $net = 0.0;
+                $taxTotal = 0.0;
+                $lines = [];
+
+                foreach ($qtyByProduct as $productId => $qty) {
+                    $product = \App\Models\Product::findOrFail($productId);
+
+                    // نفس تسعير البيع بالظبط — قايمة العميل وخصمه.
+                    // ⚠️ الصنف الغير متسعّر مرفوض هنا برضه: مرتجع بصفر
+                    // بيدخل بضاعة من غير ما يقلل مديونية، ومرتجع بسعر
+                    // مخمّن بيقلل مديونية برقم محدش اعتمده.
+                    $quote = \App\Services\Pricing::quote($client, $product, null, $qty);
+
+                    if ($quote['list_price'] <= 0) {
+                        throw new \App\Exceptions\Rejected(__('api.product_not_priced', [
+                            'product' => $product->displayName(),
+                        ]));
+                    }
+
+                    $lineTax = \App\Services\Tax::on($quote['line_total'], $client, $product);
+
+                    $net += $quote['line_total'];
+                    $taxTotal += $lineTax;
+
+                    // البضاعة تدخل العربية — صف المرتجعات (batch مجهول:
+                    // اللي راجع من العميل مش معروف من أنهي تشغيلة)
+                    $item = \App\Models\CustodyItem::firstOrCreate(
+                        ['custody_id' => $custody->id, 'product_id' => $productId, 'batch_id' => null],
+                        ['assigned' => 0, 'sold' => 0, 'returned' => 0, 'returned_in' => 0],
+                    );
+                    $item->increment('returned_in', $qty);
+
+                    $lines[] = [
+                        'product_id' => $productId,
+                        'name' => $product->displayName(),
+                        'unit' => $product->unitLabel(),
+                        'qty' => $qty,
+                        'price' => $quote['unit_price'],
+                        'total' => $quote['line_total'],
+                    ];
+                }
+
+                $grand = round($net + $taxTotal, 2);
+
+                // ⚠️ **دائن** — بيقلل مديونية العميل. بالإجمالي شامل
+                // الضريبة، زي قيد البيع المقابل بالظبط.
+                Transaction::create([
+                    'client_id' => $client->id,
+                    'date' => today(),
+                    'memo' => __('flash.memo_return', [
+                        'count' => array_sum($qtyByProduct),
+                        'user' => $user->displayName(),
+                    ]),
+                    'debit' => 0,
+                    'credit' => $grand,
+                    'tax' => round($taxTotal, 2),
+                    'kind' => 'return',
+                    'source_type' => \App\Models\Visit::class,
+                    'source_id' => $data['visit_id'],
+                ]);
+
+                // ⚠️ **عميل الكاش بياخد فلوسه في إيده.** بيعته اتقفلت
+                // (مدين + تحصيل = صفر)، فمن غير قيد الرد ده المرتجع
+                // بيسيب رصيد دائن وهمي على كل مرتجع كاش — والحقيقة إن
+                // المندوب ردّ القيمة نقداً في اللحظة. الآجل بيفضل
+                // القيد الدائن يقلل مديونيته عادي.
+                if ($client->paymentTerms() === 'cash') {
+                    Transaction::create([
+                        'client_id' => $client->id,
+                        'date' => today(),
+                        'memo' => __('flash.memo_return_refund'),
+                        'debit' => $grand,
+                        'credit' => 0,
+                        'tax' => round($taxTotal, 2),
+                        'kind' => 'refund',
+                        'source_type' => \App\Models\Visit::class,
+                        'source_id' => $data['visit_id'],
+                    ]);
+                }
+
+                $client->recalculate();
+
+                TrackEvent::log($user, 'return',
+                    __('field.event_return', ['client' => $client->displayName()]),
+                    __('common.money', ['amount' => number_format($grand)]),
+                    $data['lat'] ?? null, $data['lng'] ?? null);
+
+                return [
+                    'net' => round($net, 2),
+                    'tax_total' => round($taxTotal, 2),
+                    'grand_total' => $grand,
+                    'lines' => $lines,
+                ];
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['return' => $result + ['time' => now()->toIso8601String()]], 201);
     }
 
     /** GET /api/invoices — فواتير المندوب النهارده */

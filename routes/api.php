@@ -51,6 +51,9 @@ Route::middleware(['api.token', 'locale'])->group(function () {
 
         Route::post('/invoices', [FieldApiController::class, 'storeInvoice']);
 
+        // مرتجع من العميل — قيد دائن + بضاعة مفصولة في العهدة
+        Route::post('/returns', [FieldApiController::class, 'storeReturn']);
+
         // أوامر التوريد
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);
