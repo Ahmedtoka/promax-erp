@@ -1,0 +1,96 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\Client;
+use App\Models\User;
+use App\Models\Zone;
+use Illuminate\Console\Command;
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * فحص مندوب — «هو شايف إيه في الأبلكيشن وليه؟»
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * لما مندوب يقول «المناطق فاضية» الأمر ده بيجاوب في ثانية:
+ * رولّه إيه، متسكن على إيه (zone_user + zone_id)، عملاؤه فين،
+ * والمناطق اللي الـAPI هيرجّعها له فعلاً.
+ *
+ *   php artisan promax:rep mohamed@promax.com
+ *   php artisan promax:rep EMP-102
+ */
+class InspectRep extends Command
+{
+    protected $signature = 'promax:rep {login : الإيميل أو كود الموظف}';
+
+    protected $description = 'فحص مندوب: الرول، التسكين، العملاء، والمناطق اللي الأبلكيشن هيوريها';
+
+    public function handle(): int
+    {
+        $login = $this->argument('login');
+
+        $user = User::where('email', $login)->orWhere('code', $login)->first();
+
+        if (! $user) {
+            $this->error("مفيش يوزر بالإيميل أو الكود: $login");
+
+            return self::FAILURE;
+        }
+
+        $this->info("👤 {$user->displayName()} — {$user->roleLabel()} ({$user->role})".($user->active ? '' : ' ⛔ موقوف'));
+        $this->line('   القناة: '.($user->channel?->displayName() ?? '— (بيشوف كل القنوات)'));
+        $this->line('   المنطقة الأساسية (zone_id): '.($user->zone?->displayName() ?? '—'));
+
+        if (! $user->isSalesAgent()) {
+            $this->warn('⚠️ الرول مش sales_agent — تاب «المناطق» بيتبعت فاضي لأي رول تاني!');
+        }
+
+        // التسكين من شاشة التوزيع
+        $pivotZones = $user->zones()->get();
+        $this->newLine();
+        $this->info('📍 التسكين من شاشة التوزيع (zone_user): '.$pivotZones->count());
+        foreach ($pivotZones as $z) {
+            $this->line("   - {$z->displayName()}".($z->active ? '' : ' ⛔ المنطقة موقوفة'));
+        }
+
+        // عملاؤه ومناطقهم
+        $clients = Client::where('rep_id', $user->id)->where('status', 'active')->with('zone')->get();
+        $this->newLine();
+        $this->info("🏪 عملاؤه النشطين (rep_id): {$clients->count()}");
+        foreach ($clients->groupBy(fn ($c) => $c->zone?->displayName() ?? 'بدون منطقة') as $zoneName => $group) {
+            $this->line("   - $zoneName: {$group->count()} عميل");
+        }
+
+        // اللي الـAPI هيرجّعه فعلاً — نفس منطق zonesPayload
+        $zoneIds = $user->zones()->pluck('zones.id');
+
+        if ($zoneIds->isEmpty() && $user->zone_id) {
+            $zoneIds = collect([$user->zone_id]);
+        }
+
+        $zoneIds = $zoneIds
+            ->merge($clients->pluck('zone_id')->filter())
+            ->unique()->values();
+
+        $apiZones = Zone::whereIn('id', $zoneIds)->where('active', true)->get();
+
+        $this->newLine();
+        $this->info('📱 اللي الأبلكيشن هيوريه في تاب المناطق: '.$apiZones->count().' منطقة');
+        foreach ($apiZones as $z) {
+            $mine = $clients->where('zone_id', $z->id)->count();
+            $free = Client::whereNull('rep_id')->where('status', 'active')
+                ->where('zone_id', $z->id)
+                ->when($user->channel_id, fn ($q) => $q->where('channel_id', $user->channel_id))
+                ->count();
+            $this->line("   - {$z->displayName()}: $mine بتوعه + $free من غير مندوب");
+        }
+
+        if ($apiZones->isEmpty()) {
+            $this->newLine();
+            $this->warn('⚠️ فاضية فعلاً: لا تسكين في zone_user، ولا zone_id، ولا عملاء متسكنين عليه.');
+            $this->line('   سكّنه من /ops/assignments (علّم على المناطق واحفظ، أو علّم على عملاء واعمل تسكين).');
+        }
+
+        return self::SUCCESS;
+    }
+}
