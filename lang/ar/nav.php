@@ -19,6 +19,8 @@ return [
     'group_home' => 'الرئيسية',
     'group_purchasing' => 'المشتريات',
     'group_wh' => 'المخزن',
+    'group_custody' => 'العهدة',
+    'prep_orders' => 'تجهيز الطلبات',
     'group_settings' => 'الإعدادات',
 
     // ---------- الروابط ----------

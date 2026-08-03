@@ -182,8 +182,15 @@ class Access
             ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
             ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
             ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', null],
-            ['wh.picks', '📋', 'nav.pick_orders', 'wh.picks*', null],
             ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
+        ],
+
+        // ═══ ٢.٥ العهدة — فلو تحميل العربيات كامل في مكان واحد ═══
+        // (قرار المالك 2026-08-03): طلب التسليم ← تجهيز الطلبات ←
+        // تأكيد ← إشعار المندوب ← استلام من الأبلكيشن
+        'nav.group_custody' => [
+            ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
+            ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', null],
         ],
 
         // ═══ ٣. البيع والعملاء — محتمل ← عميل ← عقد ← سعر ═══
@@ -201,7 +208,6 @@ class Access
         'nav.group_field' => [
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
-            ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],

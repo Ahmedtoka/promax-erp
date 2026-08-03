@@ -1,14 +1,35 @@
 @extends('layouts.system')
 
 {{--
-    تسليم عهدة — اختار المندوب، حدد الأعداد، وسلّم.
+    تسليم عهدة — الفلو الجديد (قرار المالك 2026-08-03):
 
-    ⚠️ **الشاشة دي بتخرّج بضاعة فوراً.** أول ما تدوس تسليم الكراتين
-    بتنزل من الأرفف وبتبقى مسؤولية المندوب.
+    اختار المخزن والمندوب ← دوّر على الأصناف وضيفها بالكميات ←
+    «إرسال للتجهيز» ← الورقة بتتطبع ← المخزن بيجهّز فيزيكال من شاشة
+    «تجهيز الطلبات» وبيأكد ← إشعار للمندوب ← يستلم من الأبلكيشن.
+
+    ⚠️ **البضاعة مابتخرجش من هنا** — بتخرج عند تأكيد التجهيز بس.
 --}}
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
+
+    // كتالوج البحث — بالاسمين والكود والمتاح والصورة
+    $catalog = $products->map(fn ($p) => [
+        'id' => $p->id,
+        'code' => (string) $p->code,
+        'name' => $p->displayName(),
+        'name_ar' => (string) $p->name,
+        'name_en' => (string) $p->name_en,
+        'unit' => $p->unitLabel(),
+        'family' => $p->familyLabel(),
+        'available' => (int) $p->available,
+        'image' => $p->imageSrc(),
+    ])->values();
+
+    // صفوف رجعت من فاليديشن مرفوضة — بنعيد بناءها
+    $oldRows = collect(old('qty', []))->keys()
+        ->merge(collect(old('gift', []))->keys())
+        ->unique()->values();
 @endphp
 
 @section('title', __('field.handout'))
@@ -69,76 +90,88 @@
             </div>
         </div>
 
-        <div class="tablewrap" style="margin-top:14px">
+        {{-- ═══════════ البحث — اكتب أو دوس مسافة يفتح الكل ═══════════ --}}
+        <div style="position:relative;margin-top:14px">
+            <input type="text" id="prodSearch" autocomplete="off" style="width:100%"
+                   placeholder="🔍 {{ __('field.search_product_ph') }}"
+                   oninput="searchProducts()" onfocus="searchProducts()">
+            <div id="prodResults"
+                 style="display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;z-index:60;
+                        background:#fff;border:1px solid var(--border);border-radius:12px;
+                        box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:320px;overflow-y:auto"></div>
+        </div>
+
+        {{-- ═══════════ الأصناف المختارة — بتنزل هنا صف صف ═══════════ --}}
+        <div class="tablewrap" style="margin-top:12px">
             <table>
                 <tr>
                     <th style="width:40px"></th>
-                    <th>{{ __('common.code') }}</th>
                     <th>{{ __('stock.item') }}</th>
-                    <th>{{ __('stock.family') }}</th>
                     <th class="num">{{ __('stock.available') }}</th>
                     <th class="num" style="width:110px">{{ __('field.qty_sale') }}</th>
-                    {{-- ⚠️ **الهدايا خانة منفصلة عن البيع.** لو كانت
-                         نفس الخانة، المندوب كان هيقفل عهدته و«يبيع»
-                         عينات مجانية والفرق يضيع. --}}
+                    {{-- الهدايا خانة منفصلة عن البيع — عشان الفرق مايضيعش --}}
                     <th class="num" style="width:110px">🎁 {{ __('field.qty_gift') }}</th>
                     <th class="num">{{ __('common.total') }}</th>
+                    <th style="width:40px"></th>
                 </tr>
-
-                @forelse ($products as $p)
-                    <tr>
-                        <td>
-                            @if ($p->imageSrc())
-                                <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                     style="width:30px;height:30px;object-fit:contain;border-radius:5px;
-                                            border:1px solid var(--border);background:#fff">
-                            @endif
+                <tbody id="selBody">
+                    <tr id="selEmpty">
+                        <td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
+                            {{ __('field.no_selected_hint') }}
                         </td>
-                        <td class="num">{{ $p->code }}</td>
-                        <td><b>{{ $p->displayName() }}</b>
-                            <div style="font-size:10.5px;color:var(--muted)">{{ $p->unitLabel() }}</div>
-                        </td>
-                        <td><span class="badge b-gray">{{ $p->familyLabel() }}</span></td>
-                        <td class="num {{ $p->available > 0 ? '' : 'muted' }}">
-                            <b>{{ $fmt($p->available) }}</b>
-                        </td>
-                        <td class="num">
-                            <input type="number" min="0" max="{{ (int) $p->available }}" style="width:100%"
-                                   name="qty[{{ $p->id }}]" value="{{ old('qty.'.$p->id) }}"
-                                   data-row="{{ $p->id }}" data-kind="qty"
-                                   data-max="{{ (int) $p->available }}"
-                                   oninput="syncRow({{ $p->id }})" @disabled($p->available <= 0)>
-                        </td>
-                        <td class="num">
-                            <input type="number" min="0" max="{{ (int) $p->available }}" style="width:100%"
-                                   name="gift[{{ $p->id }}]" value="{{ old('gift.'.$p->id) }}"
-                                   data-row="{{ $p->id }}" data-kind="gift"
-                                   oninput="syncRow({{ $p->id }})" @disabled($p->available <= 0)>
-                        </td>
-                        <td class="num" id="tot{{ $p->id }}">—</td>
                     </tr>
-                @empty
-                    <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">
-                        {{ __('stock.no_items') }}
-                    </td></tr>
-                @endforelse
+                </tbody>
             </table>
         </div>
 
-        @if ($products->isNotEmpty())
-            <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:14px">
-                <span style="font-size:12.5px;color:var(--muted)">
-                    {{ __('field.total_units') }}: <b id="grand">0</b>
-                    · 🎁 <b id="grandGift">0</b>
-                </span>
-                <button class="btn gold" type="submit" id="hoBtn" disabled>
-                    🚚 {{ __('field.do_handout') }}
-                </button>
-            </div>
-        @endif
+        <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:14px">
+            <span style="font-size:12.5px;color:var(--muted)">
+                {{ __('field.total_units') }}: <b id="grand">0</b>
+                · 🎁 <b id="grandGift">0</b>
+            </span>
+            <button class="btn gold" type="submit" id="hoBtn" disabled>
+                📋 {{ __('field.send_to_prep') }}
+            </button>
+        </div>
     </form>
     @endif
 </div>
+
+{{-- ═══════════ تحت التجهيز — المخزن لسه بيجمع ═══════════ --}}
+@if ($preparing->isNotEmpty())
+<div class="card">
+    <h3>📋 {{ __('field.preparing_title') }}
+        <span class="side">{{ __('field.preparing_hint') }}</span></h3>
+    <div class="tablewrap">
+        <table>
+            <tr>
+                <th>{{ __('stock.pick_order') }}</th>
+                <th>{{ __('ops.rep') }}</th>
+                <th>{{ __('stock.warehouse') }}</th>
+                <th>{{ __('common.date') }}</th>
+                <th class="num">{{ __('common.total') }}</th>
+                <th class="num">🎁</th>
+                <th></th>
+            </tr>
+            @foreach ($preparing as $o)
+                <tr>
+                    <td class="num"><b>{{ $o->number }}</b></td>
+                    <td>{{ $o->rep?->displayName() ?? '—' }}</td>
+                    <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
+                    <td class="num" style="font-size:11.5px">{{ $o->created_at?->format('Y-m-d H:i') }}</td>
+                    <td class="num">{{ $fmt($o->items->sum('qty_requested')) }}</td>
+                    <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
+                    <td class="num" style="white-space:nowrap">
+                        <a class="btn sm" href="{{ route('ops.handout.print', $o) }}">🖨️</a>
+                        {{-- تأكيد التجهيز — بيفتح الأمر في شاشة التجهيز --}}
+                        <a class="btn sm gold" href="{{ route('wh.picks.show', $o) }}">✅ {{ __('field.go_prepare') }}</a>
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    </div>
+</div>
+@endif
 
 @if ($open->isNotEmpty())
 <div class="card">
@@ -160,7 +193,7 @@
                     <td class="num"><b>{{ $o->number }}</b></td>
                     <td>{{ $o->rep?->displayName() ?? '—' }}</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11.5px">{{ $o->issued_at?->format('Y-m-d H:i') ?? '—' }}</td>
+                    <td class="num" style="font-size:11.5px">{{ ($o->issued_at ?? $o->ready_at)?->format('Y-m-d H:i') ?? '—' }}</td>
                     <td class="num">{{ $fmt($o->items->sum('qty_picked')) }}</td>
                     <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
                     <td class="num">
@@ -220,6 +253,92 @@
 
 @section('scripts')
 <script>
+{{-- الكتالوج كله للبحث — 31 صنف، مش وجع للمتصفح --}}
+const CATALOG = {!! json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+const OLD_ROWS = {!! json_encode($oldRows, JSON_UNESCAPED_UNICODE) !!};
+const OLD_QTY = {!! json_encode(old('qty', new stdClass), JSON_UNESCAPED_UNICODE) !!};
+const OLD_GIFT = {!! json_encode(old('gift', new stdClass), JSON_UNESCAPED_UNICODE) !!};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+/**
+ * البحث: اكتب اسم (عربي أو إنجليزي) أو كود — أو مسافة/فوكس يفتح الكل.
+ */
+function searchProducts() {
+    const box = document.getElementById('prodResults');
+    const q = document.getElementById('prodSearch').value.trim().toLowerCase();
+
+    const hits = CATALOG.filter(p =>
+        q === '' ||
+        p.name.toLowerCase().includes(q) ||
+        (p.name_ar || '').includes(q) ||
+        (p.name_en || '').toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q)
+    );
+
+    box.innerHTML = hits.length === 0
+        ? '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">{{ __('stock.no_items') }}</div>'
+        : hits.map(p => {
+            const out = p.available <= 0;
+            return '<div onclick="' + (out ? '' : 'addRow(' + p.id + ')') + '"' +
+                ' style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:' + (out ? 'not-allowed' : 'pointer') + ';' +
+                'border-bottom:1px solid var(--border);opacity:' + (out ? '.45' : '1') + '">' +
+                (p.image ? '<img src="' + esc(p.image) + '" style="width:32px;height:32px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">' : '<span style="width:32px"></span>') +
+                '<span style="flex:1;min-width:0"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
+                '<span style="display:block;font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</span></span>' +
+                '<span style="font-size:11px;font-weight:800;color:' + (out ? 'var(--red, #B00020)' : 'var(--muted)') + '">' +
+                (out ? '{{ __('stock.out_of') }}' : '{{ __('stock.available') }}: ' + p.available.toLocaleString()) + '</span></div>';
+        }).join('');
+
+    box.style.display = 'block';
+}
+
+// قفل القايمة عند الضغط بره
+document.addEventListener('click', e => {
+    if (!e.target.closest('#prodSearch') && !e.target.closest('#prodResults')) {
+        const box = document.getElementById('prodResults');
+        if (box) box.style.display = 'none';
+    }
+});
+
+/** اختيار صنف — ينزل صف في الجدول بكمية وهدية */
+function addRow(id) {
+    const p = CATALOG.find(x => x.id === id);
+    if (!p) return;
+
+    document.getElementById('prodResults').style.display = 'none';
+    document.getElementById('prodSearch').value = '';
+
+    const existing = document.querySelector('[data-row="' + id + '"][data-kind="qty"]');
+    if (existing) { existing.focus(); return; }
+
+    const empty = document.getElementById('selEmpty');
+    if (empty) empty.remove();
+
+    const tr = document.createElement('tr');
+    tr.id = 'row' + id;
+    tr.innerHTML =
+        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:30px;height:30px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
+        '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></td>' +
+        '<td class="num"><b>' + p.available.toLocaleString() + '</b></td>' +
+        '<td class="num"><input type="number" min="0" max="' + p.available + '" style="width:100%"' +
+            ' name="qty[' + id + ']" data-row="' + id + '" data-kind="qty" data-max="' + p.available + '"' +
+            ' oninput="syncRow(' + id + ')"></td>' +
+        '<td class="num"><input type="number" min="0" max="' + p.available + '" style="width:100%"' +
+            ' name="gift[' + id + ']" data-row="' + id + '" data-kind="gift" oninput="syncRow(' + id + ')"></td>' +
+        '<td class="num" id="tot' + id + '">—</td>' +
+        '<td class="num"><button type="button" class="btn sm" onclick="removeRow(' + id + ')">✕</button></td>';
+
+    document.getElementById('selBody').appendChild(tr);
+    tr.querySelector('[data-kind="qty"]').focus();
+}
+
+function removeRow(id) {
+    document.getElementById('row' + id)?.remove();
+    syncTotals();
+}
+
 /**
  * إجمالي السطر = بيع + هدايا، والحد الأقصى للاتنين مع بعض هو المتاح.
  *
@@ -265,6 +384,16 @@ function syncTotals() {
 
     if (btn) btn.disabled = over || (sale + gift) === 0;
 }
+
+// الفاليديشن رفضت؟ نرجّع الصفوف اللي المستخدم كان مليها
+OLD_ROWS.forEach(id => {
+    addRow(Number(id));
+    const q = document.querySelector('[data-row="' + id + '"][data-kind="qty"]');
+    const g = document.querySelector('[data-row="' + id + '"][data-kind="gift"]');
+    if (q) q.value = OLD_QTY[id] ?? '';
+    if (g) g.value = OLD_GIFT[id] ?? '';
+    syncRow(Number(id));
+});
 
 syncTotals();
 </script>

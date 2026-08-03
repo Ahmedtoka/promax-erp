@@ -41,10 +41,14 @@ class PickOrder extends Model
         'cancelled' => 'b-red',
     ];
 
+    // ⚠️ `issued_at` و`carrier_note` كانوا ناقصين هنا — الأعمدة موجودة
+    // في المايجريشن بس الـmass-assignment كان بيسقطهم **في صمت**،
+    // فقايمة «بانتظار الاستلام» (اللي بتشترط issued_at) كانت فاضية.
     protected $fillable = [
         'number', 'warehouse_id', 'assigned_to', 'requested_by', 'picked_by',
         'purpose', 'status', 'purchase_order_id', 'replenishment_request_id',
-        'custody_id', 'needed_on', 'ready_at', 'handed_at', 'has_variance', 'notes',
+        'custody_id', 'needed_on', 'ready_at', 'issued_at', 'carrier_note',
+        'handed_at', 'has_variance', 'notes',
     ];
 
     protected function casts(): array
@@ -52,6 +56,7 @@ class PickOrder extends Model
         return [
             'needed_on' => 'date',
             'ready_at' => 'datetime',
+            'issued_at' => 'datetime',
             'handed_at' => 'datetime',
             'has_variance' => 'boolean',
         ];
@@ -250,6 +255,72 @@ class PickOrder extends Model
      * @param  array<int, int>  $giftByProduct  [product_id => qty]  هدايا
      * @return array{order: ?PickOrder, error: ?string}
      */
+    /**
+     * طلب تحميل عربية — **من غير خروج فوري** (قرار المالك 2026-08-03).
+     *
+     * الفلو الجديد: المكتب بيطلب → الورقة بتتطبع → المخزن بيجهّز
+     * فيزيكال من شاشة «تجهيز الطلبات» → تأكيد التجهيز (بكميات قابلة
+     * للتعديل) هو اللي بيخرج البضاعة ويبعت إشعار للمندوب → المندوب
+     * يستلم من الأبلكيشن زي ما هو.
+     *
+     * نفس `issueDirect` بالظبط ما عدا `markReady` — دي بقت خطوة
+     * أمين المخزن مش خطوة المكتب.
+     *
+     * @param  array<int, int>  $qtyByProduct   [product_id => qty]  للبيع
+     * @param  array<int, int>  $giftByProduct  [product_id => qty]  هدايا
+     * @return array{order: ?PickOrder, error: ?string}
+     */
+    public static function requestLoad(
+        Warehouse $warehouse,
+        User $rep,
+        array $qtyByProduct,
+        array $giftByProduct = [],
+        ?User $requestedBy = null,
+        ?string $carrierNote = null,
+    ): array {
+        $qtyByProduct = array_map('intval', array_filter($qtyByProduct, fn ($q) => (int) $q > 0));
+        $giftByProduct = array_map('intval', array_filter($giftByProduct, fn ($q) => (int) $q > 0));
+
+        // الهدية من نفس المخزون — الطلب بالمجموع (نفس منطق issueDirect)
+        $total = $qtyByProduct;
+
+        foreach ($giftByProduct as $pid => $g) {
+            $total[$pid] = ($total[$pid] ?? 0) + $g;
+        }
+
+        if ($total === []) {
+            return ['order' => null, 'error' => __('stock.pick_no_items')];
+        }
+
+        $raised = self::raise($warehouse, $rep, $total, self::PURPOSE_VAN_LOAD, $requestedBy, [
+            'carrier_note' => $carrierNote,
+        ]);
+
+        if ($raised['error'] !== null) {
+            return $raised;
+        }
+
+        /** @var self $order */
+        $order = $raised['order'];
+
+        // توزيع الهدايا على البنود بترتيب الـ FEFO — زي issueDirect
+        $left = $giftByProduct;
+
+        foreach ($order->items()->orderBy('id')->get() as $item) {
+            $pid = (int) $item->product_id;
+
+            if (($left[$pid] ?? 0) <= 0) {
+                continue;
+            }
+
+            $take = min($left[$pid], (int) $item->qty_requested);
+            $item->update(['gift_qty' => $take]);
+            $left[$pid] -= $take;
+        }
+
+        return ['order' => $order->fresh(), 'error' => null];
+    }
+
     public static function issueDirect(
         Warehouse $warehouse,
         User $rep,

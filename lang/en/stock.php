@@ -367,6 +367,7 @@ return [
     'no_items' => 'No items',
     'stock_saved' => ':count items updated.',
     'manual_adjust_note' => 'Manual adjustment from warehouses screen',
+    'out_of' => 'Out',
     'hold_over_qty' => ':count items have hold greater than the total — good stock would go negative.',
     'manual_stock_warning' => 'Editing stock here writes the number directly, with no stock movement and no record of who changed it. Use it for setup and corrections only — normal intake goes through a goods receipt.',
     'keeper' => 'Warehouse keeper',

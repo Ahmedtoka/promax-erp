@@ -19,6 +19,8 @@ return [
     'group_home' => 'Home',
     'group_purchasing' => 'Purchasing',
     'group_wh' => 'Warehouse',
+    'group_custody' => 'Custody',
+    'prep_orders' => 'Order Preparation',
     'group_settings' => 'Settings',
 
     // ---------- Links ----------

@@ -45,10 +45,19 @@ class CustodyHandoutController extends Controller
                         return $p;
                     })
                 : collect(),
-            'open' => PickOrder::where('status', 'ready')
-                ->whereNotNull('issued_at')
+            // ⚠️ تحت التجهيز — طلبات لسه المخزن مأكدهاش. من هنا بيطبع
+            // الورقة تاني وبيروح يأكد من شاشة «تجهيز الطلبات».
+            'preparing' => PickOrder::where('purpose', PickOrder::PURPOSE_VAN_LOAD)
+                ->whereIn('status', ['requested', 'picking'])
                 ->with(['rep', 'warehouse', 'items.product'])
-                ->latest('issued_at')->take(30)->get(),
+                ->latest()->take(30)->get(),
+            // جاهزة ومستنية المندوب يستلم من الأبلكيشن
+            // ⚠️ مش بنشترط issued_at — أوامر الفلو الجديد بتتأكد من
+            // شاشة التجهيز من غير ما حد يملاه
+            'open' => PickOrder::where('purpose', PickOrder::PURPOSE_VAN_LOAD)
+                ->where('status', 'ready')
+                ->with(['rep', 'warehouse', 'items.product'])
+                ->latest('ready_at')->take(30)->get(),
             // ⚠️ **الهيستوري** — كل تحميلات العربيات اللي اتسلّمت:
             // مين وإمتى وبكام، وإعادة طباعة الورقة في أي وقت.
             // القيمة بتتحسب بقايمة المندوب (السواق قديمة والسيلز جديدة)
@@ -83,7 +92,11 @@ class CustodyHandoutController extends Controller
             return back()->withErrors(['rep_id' => __('field.not_a_field_role')])->withInput();
         }
 
-        $result = PickOrder::issueDirect(
+        // ⚠️ **الفلو الجديد (قرار المالك 2026-08-03): طلب مش خروج.**
+        // البضاعة **مابتخرجش هنا** — بيتعمل طلب تجهيز، الورقة بتتطبع،
+        // المخزن بيجهّز فيزيكال من شاشة «تجهيز الطلبات»، وتأكيد
+        // التجهيز هناك هو اللي بيخرج البضاعة ويبعت إشعار للمندوب.
+        $result = PickOrder::requestLoad(
             $warehouse,
             $rep,
             $data['qty'] ?? [],
@@ -96,12 +109,10 @@ class CustodyHandoutController extends Controller
             return back()->withErrors(['qty' => $result['error']])->withInput();
         }
 
-        // ⚠️ **بيروح على الورقة على طول.** اللي بيحمّل العربية واقف
-        // جنبها ومش هيفتكر يطبع بعدين — والشحنة اللي مشيت من غير
-        // إمضاء مالهاش إثبات.
+        // الورقة بتتطبع فوراً — دي ورقة التجهيز اللي المخزن هيمشي بيها
         return redirect()
             ->route('ops.handout.print', $result['order'])
-            ->with('ok', __('field.handout_done', [
+            ->with('ok', __('field.load_requested', [
                 'number' => $result['order']->number,
                 'rep' => $rep->displayName(),
             ]));

@@ -11,7 +11,10 @@
 @php
     $fmt = fn ($n) => number_format((float) $n);
     $gift = (int) $o->items->sum('gift_qty');
-    $sale = (int) $o->items->sum('qty_picked') - $gift;
+    // ⚠️ في مرحلة الطلب (قبل تأكيد التجهيز) qty_picked لسه صفر —
+    // الورقة بتتطبع بالمطلوب عشان المخزن يجهّز عليها
+    $totalQty = (int) $o->items->sum(fn ($it) => (int) ($it->qty_picked ?: $it->qty_requested));
+    $sale = $totalQty - $gift;
 @endphp
 
 @section('title', __('field.handout_note').' '.$o->number)
@@ -75,7 +78,8 @@
                 @foreach ($o->items as $i => $it)
                     @php
                         $g = (int) ($it->gift_qty ?? 0);
-                        $picked = (int) ($it->qty_picked ?? 0);
+                        // المطلوب لو التجهيز لسه ماتأكدش
+                        $picked = (int) (($it->qty_picked ?? 0) ?: $it->qty_requested);
                     @endphp
                     <tr>
                         <td class="num">{{ $i + 1 }}</td>
