@@ -76,6 +76,8 @@ return [
     'event_visit_minutes' => 'Visit lasted :minutes minutes',
     'event_invoice' => 'Invoice :number — :client',
     'event_return' => 'Return from :client',
+    'gift_new_request' => 'New request',
+    'gift_not_your_request' => 'This request was not registered by you.',
     'event_arrived' => 'Arrived — :client',
     'event_delivered' => 'Delivered :number — :client',
     'event_delivered_sub' => ':qty units • EGP :amount',

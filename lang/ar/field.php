@@ -75,6 +75,8 @@ return [
     'event_visit_minutes' => 'مدة الزيارة :minutes دقيقة',
     'event_invoice' => 'فاتورة :number — :client',
     'event_return' => 'مرتجع من :client',
+    'gift_new_request' => 'طلب جديد',
+    'gift_not_your_request' => 'الطلب ده مش من تسجيلك.',
     'event_arrived' => 'وصول — :client',
     'event_delivered' => 'تسليم :number — :client',
     'event_delivered_sub' => ':qty وحدة • :amount ج',

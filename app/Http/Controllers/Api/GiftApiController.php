@@ -48,12 +48,13 @@ class GiftApiController extends Controller
                     'left' => $i->giftLeft(),
                 ])->values(),
             'handouts' => GiftHandout::where('custody_id', $custody->id)
-                ->with(['product', 'client'])
+                ->with(['product', 'client', 'clientRequest'])
                 ->latest()->take(50)->get()
                 ->map(fn ($h) => [
                     'id' => $h->id,
                     'product' => $h->product?->displayName(),
-                    'client' => $h->client?->displayName(),
+                    // المستلم أياً كان: عميل، طلب جديد، أو توزيع عام
+                    'client' => $h->recipientName(),
                     'qty' => (int) $h->qty,
                     'reason' => $h->reason,
                     'time' => $h->created_at->toIso8601String(),
@@ -71,10 +72,22 @@ class GiftApiController extends Controller
             // المارّة. إجباره كان هيخلّي المندوب يختار أي عميل عشان
             // يعدّي الشاشة، والرقم يبقى كدب.
             'client_id' => ['nullable', 'exists:clients,id'],
+            // طلب عميل جديد — تحت الموافقة أو اتوافق عليه ولسه ماتحوّلش
+            'client_request_id' => ['nullable', 'exists:client_requests,id'],
             'visit_id' => ['nullable', 'exists:visits,id'],
             'reason' => ['nullable', 'string', 'max:40'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
+
+        // ⚠️ الطلب لازم يكون **بتاعه هو** — من غير الفحص ده أي مندوب
+        // يقدر يسجل هدايا على طلبات زمايله ويبوّظ حساب الحملة
+        if (isset($data['client_request_id'])) {
+            $req = \App\Models\ClientRequest::find($data['client_request_id']);
+
+            if ($req === null || (int) $req->created_by !== (int) $request->user()->id) {
+                return response()->json(['error' => __('field.gift_not_your_request')], 422);
+            }
+        }
 
         $custody = $this->custody($request);
 
@@ -108,6 +121,7 @@ class GiftApiController extends Controller
                 'user_id' => $request->user()->id,
                 'product_id' => $data['product_id'],
                 'client_id' => $data['client_id'] ?? null,
+                'client_request_id' => $data['client_request_id'] ?? null,
                 'visit_id' => $data['visit_id'] ?? null,
                 'batch_id' => $line->batch_id,
                 'qty' => $data['qty'],

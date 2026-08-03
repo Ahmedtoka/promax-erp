@@ -15,7 +15,7 @@ class GiftHandout extends Model
 {
     protected $fillable = [
         'custody_id', 'user_id', 'product_id', 'client_id',
-        'visit_id', 'batch_id', 'qty', 'reason', 'note',
+        'client_request_id', 'visit_id', 'batch_id', 'qty', 'reason', 'note',
     ];
 
     protected function casts(): array
@@ -41,5 +41,25 @@ class GiftHandout extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /** طلب عميل جديد — الهدية بتتسجل عليه قبل ما يبقى عميل رسمي */
+    public function clientRequest(): BelongsTo
+    {
+        return $this->belongsTo(ClientRequest::class);
+    }
+
+    /** اسم المستلم أياً كان نوعه — عميل، طلب جديد، أو توزيع عام */
+    public function recipientName(): string
+    {
+        if ($this->client) {
+            return $this->client->displayName();
+        }
+
+        if ($this->clientRequest) {
+            return $this->clientRequest->name.' ('.__('field.gift_new_request').')';
+        }
+
+        return $this->note ?: '—';
     }
 }
