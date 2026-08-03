@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\JourneyPlan;
 use App\Models\TrackEvent;
 use App\Models\User;
+use App\Models\Visit;
 use App\Models\Zone;
 use App\Services\Journeys;
 use Illuminate\Http\Request;
