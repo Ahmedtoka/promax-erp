@@ -17,6 +17,18 @@
   max-width:820px;background:var(--card);border:1px solid var(--border);
   border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow);
 }
+
+/* ⚠️ **العلامة المائية (الصاعقة) لازم absolute.** الكلاس ده كان من
+   غير تعريف أساسي خالص، فالـSVG كان بيترندر في الفلو العادي بعرض
+   المستند كله — صفحة بيضا طويلة والإذن مزقوق تحتها. حصلت فعلاً
+   على ورقة تسليم العهدة (2026-08-03) وبتأثر على الفاتورة والتحويل. */
+.doc.has-bolt{position:relative}
+.bolt-mark{
+  position:absolute;top:40px;inset-inline-start:-60px;width:360px;height:auto;
+  opacity:.05;pointer-events:none;z-index:0;transform:rotate(8deg);
+}
+.bolt-mark.lg{width:440px}
+.doc-head,.doc-body,.doc-foot{position:relative;z-index:1}
 .doc-head{
   background:var(--brand-gradient);color:#fff;padding:22px 26px;
   display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;
