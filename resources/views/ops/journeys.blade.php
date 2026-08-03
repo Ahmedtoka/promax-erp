@@ -57,7 +57,8 @@
                     <div class="planrow" data-plan="{{ $p->id }}">
                         <span class="ordnum">{{ $loop->iteration }}</span>
                         <div style="min-width:0;flex:1">
-                            <b style="font-size:12px">{{ $p->client->displayName() }}</b>
+                            {{-- الاسم الكامل: السلسلة — الفرع --}}
+                            <b style="font-size:12px">{{ $p->client->fullName() }}</b>
                             @if ($p->every_weeks > 1)
                                 <br><span class="s">{{ $p->frequencyLabel() }}</span>
                             @endif
@@ -123,10 +124,11 @@
                        oninput="filterAvail(this.value)">
                 <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px">
                     @foreach ($available as $c)
-                        <label class="availrow" data-t="{{ mb_strtolower($c->name.' '.$c->name_en.' '.$c->zone?->displayName()) }}"
+                        {{-- البحث بيشمل اسم السلسلة كمان — الاسم المعروض بيبدأ بيها --}}
+                        <label class="availrow" data-t="{{ mb_strtolower($c->fullName().' '.$c->name_en.' '.($c->group?->name_en ?? '').' '.$c->zone?->displayName()) }}"
                                style="display:flex;align-items:center;gap:8px;padding:5px 3px;font-size:12.5px">
                             <input type="checkbox" name="client_ids[]" value="{{ $c->id }}">
-                            <span>{{ $c->displayName() }}</span>
+                            <span>{{ $c->fullName() }}</span>
                             <span class="s" style="margin-inline-start:auto">{{ $c->zone?->displayName() }}</span>
                         </label>
                     @endforeach

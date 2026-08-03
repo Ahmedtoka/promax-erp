@@ -133,7 +133,8 @@ class Journeys
      */
     public static function week(User $user): array
     {
-        $plans = JourneyPlan::with('client')
+        // ⚠️ `client.group` — الاسم بيتعرض «السلسلة — الفرع» في الشبكة
+        $plans = JourneyPlan::with('client.group')
             ->where('user_id', $user->id)
             ->where('active', true)   // الموقوفة مالهاش لازمة في الشبكة
             // ⚠️ `id` كاسر تعادل — الصفوف القديمة كلها sort=0 وكانت

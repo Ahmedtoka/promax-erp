@@ -52,7 +52,7 @@ class JourneyController extends Controller
         // في الخطة والاتنين يروحوا نفس المحل.
         $planned = collect($week)->flatten()->pluck('client_id')->unique();
 
-        $available = Client::where('status', 'active')
+        $available = Client::with(['zone', 'group'])->where('status', 'active')
             ->where(function ($q) use ($rep) {
                 $q->where('rep_id', $rep->id);
                 if ($rep->zone_id) {
@@ -175,12 +175,14 @@ class JourneyController extends Controller
             ->orderBy('code')
             ->get();
 
+        // ⚠️ `group` محمّلة عشان الاسم بيتعرض «السلسلة — الفرع» —
+        // من غيرها fullName() بيضرب استعلام لكل صف من الـ300.
         $mine = $rep
-            ? Client::with('zone')->where('rep_id', $rep->id)->where('status', 'active')->orderBy('name')->get()
+            ? Client::with(['zone', 'group'])->where('rep_id', $rep->id)->where('status', 'active')->orderBy('name')->get()
             : collect();
 
         // العملاء اللي مالهمش مندوب — دول اللي بيضيعوا في السيستم
-        $orphans = Branch::scope(Client::with('zone'))
+        $orphans = Branch::scope(Client::with(['zone', 'group']))
             ->whereNull('rep_id')
             ->where('status', 'active')
             ->when($request->filled('zone'), fn ($q) => $q->where('zone_id', $request->input('zone')))
@@ -188,9 +190,12 @@ class JourneyController extends Controller
             // والعميل رقم 301 مش هيظهر بأي فلترة في المتصفح.
             ->when($request->filled('q'), function ($q) use ($request) {
                 $s = $request->string('q')->trim()->value();
+                // البحث باسم السلسلة كمان — الاسم المعروض بيبدأ بيها
                 $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
                     ->orWhere('name_en', 'like', "%$s%")
-                    ->orWhere('code', 'like', "%$s%"));
+                    ->orWhere('code', 'like', "%$s%")
+                    ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")));
             })
             ->orderBy('name')
             ->limit(300)

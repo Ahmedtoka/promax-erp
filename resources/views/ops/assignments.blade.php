@@ -77,7 +77,8 @@
                 </tr>
                 @forelse ($mine as $c)
                     <tr>
-                        <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->displayName() }}</b></a></td>
+                        {{-- الاسم الكامل: السلسلة الأول وبعدين الفرع — زي صفحة العملاء --}}
+                        <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a></td>
                         <td class="s">{{ $c->zone?->displayName() ?: '—' }}</td>
                         <td class="num">
                             <form method="POST" action="{{ route('ops.assignments.unassign', $c) }}">
@@ -172,7 +173,7 @@
                     @foreach ($orphans as $c)
                         <tr>
                             <td><input type="checkbox" class="pick" name="client_ids[]" value="{{ $c->id }}"></td>
-                            <td><a href="{{ route('erp.clients.show', $c) }}">{{ $c->displayName() }}</a></td>
+                            <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a></td>
                             <td class="s">{{ $c->zone?->displayName() ?: '—' }}</td>
                             <td class="num s">{{ $c->phone ?: '—' }}</td>
                             <td class="num">{{ number_format((float) $c->balance, 2) }}</td>
