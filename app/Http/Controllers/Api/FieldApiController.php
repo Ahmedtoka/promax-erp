@@ -165,9 +165,18 @@ class FieldApiController extends Controller
             'clients' => $z->clients->map(function ($c) use ($todayVisits) {
                 $v = $todayVisits->get($c->id);
 
+                // ⚠️ الاسم الكامل «السلسلة — الفرع» زي الـERP بالظبط —
+                // «Katameya Heights» لوحدها ماتقولش إنه فرع جورميه.
+                // والسلسلة والفرع مفصولين كمان للشاشات اللي بتعرضهم
+                // سطرين (زي اختيار مستلم الهدية).
+                $chain = $c->group?->displayName();
+                $chain = ($chain && $chain !== $c->displayName()) ? $chain : null;
+
                 return [
                     'id' => $c->id,
-                    'name' => $c->displayName(),
+                    'name' => $c->fullName(),
+                    'chain' => $chain,
+                    'branch' => $c->displayName(),
                     'address' => $c->address,
                     'phone' => $c->phone,
                     'category' => $c->category,
@@ -265,7 +274,8 @@ class FieldApiController extends Controller
             'stops' => $rows->map(fn ($r) => [
                 'plan_id' => $r['plan']->id,
                 'client_id' => $r['client']->id,
-                'name' => $r['client']->displayName(),
+                // الاسم الكامل — السلسلة الأول وبعدين الفرع
+                'name' => $r['client']->fullName(),
                 'address' => $r['client']->address,
                 'phone' => $r['client']->phone,
                 'lat' => $r['client']->lat !== null ? (float) $r['client']->lat : null,
