@@ -243,6 +243,12 @@ class FieldApiController extends Controller
         \Illuminate\Database\Eloquent\Collection::make($rows->pluck('client'))
             ->unique('id')->values()->loadMissing(['contract', 'group.contract']);
 
+        // آخر زيارة لكل عميل — كويري واحد مجمّع مش كويري لكل محطة
+        $lastVisits = Visit::whereIn('client_id', $rows->pluck('client')->pluck('id'))
+            ->selectRaw('client_id, MAX(checked_in_at) as t')
+            ->groupBy('client_id')
+            ->pluck('t', 'client_id');
+
         $done = $rows->where('status', 'done')->count();
         $planned = $rows->count();
 
@@ -267,6 +273,9 @@ class FieldApiController extends Controller
                 'cash_only' => $r['client']->cashOnly(),
                 'payment_terms' => $r['client']->paymentTerms(),
                 'discount' => $r['client']->effectiveDiscount(),
+                // كارت المحطة بيوري تاريخ العميل: مبيعاته وآخر مرة اتزار
+                'purchases' => (float) $r['client']->purchases,
+                'last_visit_at' => $lastVisits->get($r['client']->id),
                 'taxable' => (bool) $r['client']->taxable,
                 'tax_rate' => \App\Services\Tax::rate($r['client']),
                 'category' => $r['client']->category,
