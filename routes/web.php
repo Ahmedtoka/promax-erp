@@ -423,8 +423,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/', [OpsController::class, 'dashboard'])->name('dashboard');
 
         Route::get('/reps/{user}', [OpsController::class, 'rep'])->name('rep');
-        Route::post('/reps/{user}/load', [OpsController::class, 'loadVan'])
-            ->middleware('role:admin,manager')->name('rep.load');
+        // ⚠️ راوت التحميل المباشر اتشال (2026-08-03) — التحميل بيمرّ
+        // بفلو تسليم العهدة: طلب ← تجهيز ← تأكيد ← استلام المندوب
         Route::post('/reps/{user}/close', [OpsController::class, 'closeCustody'])
             ->middleware('role:admin,manager')->name('rep.close');
 

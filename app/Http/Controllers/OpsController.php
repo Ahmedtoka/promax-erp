@@ -90,61 +90,10 @@ class OpsController extends Controller
 
     // ================= العهدة =================
 
-    public function loadVan(Request $request, User $user)
-    {
-        $data = $request->validate([
-            'qty' => ['required', 'array'],
-            'qty.*' => ['nullable', 'integer', 'min:0'],
-        ]);
-
-        // ⚠️ التحميل لازم يمرّ بأمر تجهيز حقيقي، مايتخلقش من الهوا.
-        // قبل كده كان بيزوّد assigned على العهدة على طول: المخزن مابينقصش،
-        // والباتش مايتسجلش (فالتكلفة الفعلية والصلاحية بيضيعوا)، وأي خطأ
-        // في نص اللوب بيسيب نص عهدة. دلوقتي بيخرج من الرف بالـ FEFO
-        // وبيسيب أثر كامل (أمر تجهيز → عهدة).
-        $warehouse = Warehouse::defaultBranch()
-            ?? Warehouse::where('active', true)->orderBy('id')->first();
-
-        if (! $warehouse) {
-            return back()->withErrors(['status' => __('stock.no_warehouse')]);
-        }
-
-        $qtyByProduct = collect($data['qty'])
-            ->map(fn ($q) => (int) $q)
-            ->filter(fn ($q) => $q > 0)
-            ->all();
-
-        if (! $qtyByProduct) {
-            return back()->withErrors(['status' => __('stock.pick_no_items')]);
-        }
-
-        $raised = PickOrder::raise(
-            $warehouse, $user, $qtyByProduct,
-            PickOrder::PURPOSE_VAN_LOAD, $request->user(),
-        );
-
-        if ($raised['error']) {
-            return back()->withErrors(['status' => $raised['error']]);
-        }
-
-        /** @var PickOrder $pick */
-        $pick = $raised['order'];
-
-        // التحميل اليدوي من شاشة العمليات = تجهيز وتسليم فوري، فبنعدّي
-        // المرحلتين على طول. أي خطأ في أي مرحلة بيرجع رسالة، والترانزاكشن
-        // اللي جوّاهم بترجّع كل حاجة.
-        if ($err = $pick->markReady($request->user())) {
-            return back()->withErrors(['status' => $err]);
-        }
-        if ($err = $pick->fresh()->handOver($user)) {
-            return back()->withErrors(['status' => $err]);
-        }
-
-        // ملاحظة: PickOrder::handOver بيسجّل حدث التسليم في التايم لاين بنفسه،
-        // فمابنسجلش حدث تاني هنا عشان مايتكررش على المندوب.
-
-        return back()->with('ok', __('flash.van_loaded'));
-    }
+    // ⚠️ `loadVan` (التحميل المباشر) **اتشال** (قرار المالك 2026-08-03):
+    // كان بيجهّز ويسلّم في نفس الثانية من غير استلام المندوب من
+    // الأبلكيشن — التحميل الرسمي بقى من فلو تسليم العهدة:
+    // CustodyHandoutController::store ← تجهيز الطلبات ← تأكيد ← استلام.
 
     public function closeCustody(User $user)
     {

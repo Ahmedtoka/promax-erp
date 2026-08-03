@@ -10,7 +10,8 @@
 @section('actions')
     <a class="btn" href="{{ route('ops.dashboard') }}">← {{ __('ops.dashboard') }}</a>
     @if ($manager)
-        <button class="btn gold" onclick="openDlg('dlgLoad')">+ {{ __('ops.load_van') }}</button>
+        {{-- التحميل بقى من فلو تسليم العهدة الرسمي — مش ديالوج مباشر --}}
+        <a class="btn gold" href="{{ route('ops.handout') }}">📤 {{ __('field.handout') }}</a>
         @if ($custody && $custody->status === 'open')
             <form method="POST" action="{{ route('ops.rep.close', $u) }}" style="display:inline" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('ops.confirm_close_van')) }})">
                 @csrf<button class="btn red" type="submit">{{ __('ops.close_van_stock') }}</button>
@@ -97,30 +98,9 @@
     </div>
 </div>
 
-@if ($manager)
-<dialog id="dlgLoad">
-    <form class="dlg" method="POST" action="{{ route('ops.rep.load', $u) }}">
-        @csrf
-        <h4>{{ __('ops.load_van_for', ['name' => $u->displayName()]) }}</h4>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">{{ __('ops.load_hint') }}</p>
-        <div style="max-height:50vh;overflow-y:auto">
-            <table>
-                <tr><th>{{ __('stock.item') }}</th><th>{{ __('stock.unit') }}</th><th style="width:110px">{{ __('common.qty') }}</th></tr>
-                @foreach ($products as $p)
-                    <tr>
-                        <td>{{ $p->code }} — {{ $p->displayName() }}</td>
-                        <td style="color:var(--muted);font-size:11px">{{ $p->unitLabel() }}</td>
-                        <td><input type="number" min="0" name="qty[{{ $p->id }}]" placeholder="0" style="width:100%"></td>
-                    </tr>
-                @endforeach
-            </table>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-            <button class="btn" type="button" onclick="closeDlg('dlgLoad')">{{ __('common.cancel') }}</button>
-            <button class="btn gold" type="submit">{{ __('ops.load_van') }}</button>
-        </div>
-    </form>
-</dialog>
-@endif
+{{-- ⚠️ ديالوج «تحميل عهدة» المباشر **اتشال** (قرار المالك 2026-08-03):
+     كان بيجهّز ويسلّم في نفس الثانية من غير ما المندوب يستلم من
+     الأبلكيشن — متناقض مع الفلو الرسمي: تسليم عهدة ← تجهيز الطلبات
+     ← تأكيد ← إشعار ← استلام المندوب. الزرار فوق بقى بيوصّل للفلو ده. --}}
 
 @endsection
