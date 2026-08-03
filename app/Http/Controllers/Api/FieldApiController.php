@@ -173,6 +173,7 @@ class FieldApiController extends Controller
                     'category' => $c->category,
                     'category_label' => $c->categoryLabel(),
                     'balance' => (float) $c->balance,
+                    'purchases' => (float) $c->purchases,
                     'discount' => $c->effectiveDiscount(),
                     'discount_source' => $c->discountSource(),
                     'channel' => $c->channel?->displayName(),
