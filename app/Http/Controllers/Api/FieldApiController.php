@@ -96,6 +96,16 @@ class FieldApiController extends Controller
 
     private function zonesPayload($user): array
     {
+        // ⚠️ **مناطقه هو وبس.** كانت بترجّع كل مناطق الشركة بكل
+        // عملائها — مندوب المعادي كان بيشوف عملاء الإسكندرية بأرصدتهم
+        // وخصومهم. المناطق من شاشة التوزيع (`zone_user`)، ولو لسه
+        // ماتوزّعش بياخد منطقته الأساسية (`zone_id`) لحد ما يتسكّن.
+        $zoneIds = $user->zones()->pluck('zones.id');
+
+        if ($zoneIds->isEmpty() && $user->zone_id) {
+            $zoneIds = collect([$user->zone_id]);
+        }
+
         $zones = Zone::with([
             'clients' => function ($q) use ($user) {
                 // ⚠️ contract و group.contract ضروريين: effectiveDiscount()
@@ -104,12 +114,15 @@ class FieldApiController extends Controller
                 $q->where('status', 'active')
                     ->with(['channel', 'contract', 'group.contract'])
                     ->orderBy('name');
+                // ⚠️ **عملاءه هو، أو اللي لسه من غير مندوب في منطقته** —
+                // دول شغله برضه لحد ما يتوزعوا. عميل مندوب تاني لأ.
+                $q->where(fn ($w) => $w->where('rep_id', $user->id)->orWhereNull('rep_id'));
                 // السيلز إيجينت بيشوف عملاء قناته بس (لو متحدد له قناة)
                 if ($user->channel_id) {
                     $q->where('channel_id', $user->channel_id);
                 }
             },
-        ])->where('active', true)->orderBy('code')->get();
+        ])->whereIn('id', $zoneIds)->where('active', true)->orderBy('code')->get();
 
         $todayVisits = Visit::where('user_id', $user->id)
             ->whereDate('created_at', today())->get()->keyBy('client_id');
