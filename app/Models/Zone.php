@@ -14,6 +14,29 @@ class Zone extends Model
 
     protected $fillable = ['code', 'name', 'name_en', 'day_label', 'branch_id', 'governorate', 'active'];
 
+    /**
+     * كود منطقة جديد مضمون إنه فاضي.
+     *
+     * ⚠️ **مش `count()+1`.** العدّ بيتكسر أول ما منطقة تتمسح أو
+     * الأكواد تتخطى العدّ — استيراد عملاء محمد هجر وقع فعلاً على
+     * «Duplicate Z50» بالطريقة دي (2026-08-04). بنبدأ من أكبر رقم
+     * موجود ونلف لحد ما نلاقي فاضي.
+     */
+    public static function nextCode(): string
+    {
+        // الحساب في PHP مش SQL — REGEXP_REPLACE مش موجودة في MySQL 5.7،
+        // والمناطق عشرات مش ملايين
+        $max = static::query()->pluck('code')
+            ->map(fn ($c) => (int) preg_replace('/\D+/', '', (string) $c))
+            ->max() ?? 0;
+
+        do {
+            $code = 'Z'.str_pad((string) ++$max, 2, '0', STR_PAD_LEFT);
+        } while (static::where('code', $code)->exists());
+
+        return $code;
+    }
+
     protected function casts(): array
     {
         return ['active' => 'boolean'];

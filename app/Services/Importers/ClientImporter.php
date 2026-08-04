@@ -255,9 +255,11 @@ class ClientImporter extends Importer
             return $cache[$name];
         }
 
+        // ⚠️ الكود من `Zone::nextCode()` مش من العدّ — العدّ وقع على
+        // «Duplicate Z50» ورجّع استيراد كامل (2026-08-04)
         $z = Zone::where('name', $name)->orWhere('code', $name)->orWhere('name_en', $name)->first()
             ?? Zone::create([
-                'code' => 'Z'.str_pad((string) (Zone::count() + 1), 2, '0', STR_PAD_LEFT),
+                'code' => Zone::nextCode(),
                 'name' => $name,
                 'active' => true,
             ]);

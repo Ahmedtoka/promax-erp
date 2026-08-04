@@ -194,7 +194,8 @@ class TeamImporter extends Importer
 
         if ($z === null) {
             $z = Zone::create([
-                'code' => 'Z'.str_pad((string) (Zone::count() + 1), 2, '0', STR_PAD_LEFT),
+                // نفس إصلاح ClientImporter — العدّ بيقع على كود مكرر
+                'code' => Zone::nextCode(),
                 'name' => $name,
                 'day_label' => $day,
                 'active' => true,
