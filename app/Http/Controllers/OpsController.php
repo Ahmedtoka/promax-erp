@@ -271,7 +271,8 @@ class OpsController extends Controller
         return view('ops.po_handout', [
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(),
             // الفروع بتتفلتر بالسلسلة في الجافاسكريبت — فبنبعت الكل مع group_id
-            'clients' => Client::where('active', true)->orderBy('name')
+            // ⚠️ العميل حالته عمود `status` نصي ('active') مش بوليان `active`
+            'clients' => Client::with('group')->where('status', 'active')->orderBy('name')
                 ->get(['id', 'name', 'group_id', 'balance']),
             'reps' => User::whereIn('role', ['sales_agent', 'driver'])
                 ->where('active', true)->orderBy('name')->get(['id', 'name']),
