@@ -32,14 +32,21 @@
     ])->values();
 
     $oldRows = collect(old('qty', []))->keys()->unique()->values();
+
+    // ═══ وضع التعديل: نفس الشاشة متملية ببيانات أمر pending ═══
+    $edit = $editing ?? null;
+    $editRows = $edit?->items->map(fn ($i) => [
+        'id' => $i->product_id,
+        'qty' => (int) $i->qty,   // بالقطع — الوحدة بترجع «قطعة»
+    ])->values() ?? collect();
 @endphp
 
-@section('title', __('ops.po_handout'))
+@section('title', $edit ? __('ops.po_edit').' '.$edit->number : __('ops.po_handout'))
 
 @section('content')
 
 <div class="card">
-    <h3>📦 {{ __('ops.po_handout') }}
+    <h3>📦 {{ $edit ? __('ops.po_edit').' '.$edit->number : __('ops.po_handout') }}
         <span class="side">{{ __('ops.po_handout_hint') }}</span></h3>
 
     @if ($errors->any())
@@ -50,7 +57,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('ops.pos.store') }}" id="poForm">
+    <form method="POST" action="{{ $edit ? route('ops.po.update', $edit) : route('ops.pos.store') }}" id="poForm">
         @csrf
         <input type="hidden" name="approval" value="1">
         <input type="hidden" name="price_mode" value="channel">
@@ -78,7 +85,7 @@
                 <select name="assigned_to" required style="width:100%">
                     <option value="">—</option>
                     @foreach ($reps as $r)
-                        <option value="{{ $r->id }}" @selected(old('assigned_to') == $r->id)>{{ $r->name }}</option>
+                        <option value="{{ $r->id }}" @selected(old('assigned_to', $edit?->assigned_to) == $r->id)>{{ $r->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -89,19 +96,19 @@
                 <label class="f">{{ __('stock.warehouse') }} <b class="req-star">*</b></label>
                 <select name="warehouse_id" required style="width:100%">
                     @foreach ($warehouses as $w)
-                        <option value="{{ $w->id }}" @selected(old('warehouse_id') == $w->id)>{{ $w->displayName() }}</option>
+                        <option value="{{ $w->id }}" @selected(old('warehouse_id', $edit?->warehouse_id) == $w->id)>{{ $w->displayName() }}</option>
                     @endforeach
                 </select>
             </div>
             <div>
                 <label class="f">{{ __('ops.due_at') }} <b class="req-star">*</b></label>
                 {{-- باليوم **والساعة** — معاد استلام الفرع للبضاعة --}}
-                <input type="datetime-local" name="due_at" required style="width:100%" value="{{ old('due_at') }}">
+                <input type="datetime-local" name="due_at" required style="width:100%" value="{{ old('due_at', $edit?->due_at?->format('Y-m-d\\TH:i')) }}">
             </div>
             <div>
                 <label class="f">{{ __('ops.source') }}</label>
                 <input type="text" name="source" maxlength="40" style="width:100%"
-                       placeholder="{{ __('ops.source_ph') }}" value="{{ old('source') }}">
+                       placeholder="{{ __('ops.source_ph') }}" value="{{ old('source', $edit?->source) }}">
             </div>
         </div>
 
@@ -113,11 +120,11 @@
             <div id="prodResults" style="display:none;position:absolute;top:100%;inset-inline:0;z-index:30;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.12);max-height:300px;overflow-y:auto"></div>
         </div>
 
-        <div class="tablewrap" style="margin-top:12px">
+        {{-- الهيدر ثابت + الصورة جوه خانة الصنف — نفس نمط تسليم العهدة --}}
+        <div class="tablewrap" style="margin-top:12px;max-height:56vh;overflow-y:auto">
             <table>
-                <thead>
+                <thead style="position:sticky;top:0;z-index:5;background:var(--card, #fff);box-shadow:0 1px 0 var(--border)">
                     <tr>
-                        <th style="width:40px"></th>
                         <th>{{ __('stock.item') }}</th>
                         <th class="num">{{ __('stock.available') }}</th>
                         <th style="width:110px">{{ __('stock.entry_unit') }}</th>
@@ -128,7 +135,7 @@
                 </thead>
                 <tbody id="selBody">
                     <tr id="selEmpty">
-                        <td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
+                        <td colspan="6" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('field.no_selected_hint') }}
                         </td>
                     </tr>
@@ -140,7 +147,7 @@
             <div style="font-size:12.5px;color:var(--muted)">
                 {{ __('common.total') }}: <b id="grand" style="color:var(--ink)">0</b> {{ __('stock.unit_piece') }}
             </div>
-            <button class="btn gold" type="submit" id="poBtn" disabled>📨 {{ __('ops.send_to_accounting') }}</button>
+            <button class="btn gold" type="submit" id="poBtn" disabled>{{ $edit ? '💾 '.__('ops.save_edit') : '📨 '.__('ops.send_to_accounting') }}</button>
         </div>
     </form>
 </div>
@@ -155,6 +162,10 @@ const OLD_ROWS = {!! json_encode($oldRows, JSON_UNESCAPED_UNICODE) !!};
 const OLD_QTY = {!! json_encode(old('qty', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 const OLD_UNIT = {!! json_encode(old('unit', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 const OLD_BRANCH = @json(old('client_id'));
+// وضع التعديل — الصفوف والفرع والسلسلة بتوع الأمر المفتوح
+const EDIT_ROWS = {!! json_encode($editRows, JSON_UNESCAPED_UNICODE) !!};
+const EDIT_BRANCH = @json($edit?->client_id);
+const EDIT_CHAIN = @json($edit?->client?->group_id);
 
 const UNIT_LABELS = {
     piece: @json(__('stock.unit_piece')),
@@ -253,9 +264,14 @@ function addRow(id) {
 
     const tr = document.createElement('tr');
     tr.id = 'row' + id;
+    // الصورة جوه خانة الصنف — مش عمود لوحدها بمسافة فاضية
     tr.innerHTML =
-        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
-        '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</div></td>' +
+        '<td><div style="display:flex;gap:10px;align-items:center">' +
+            (p.image
+                ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">'
+                : '<div style="width:56px;height:56px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>') +
+            '<div><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</div></div>' +
+        '</div></td>' +
         '<td class="num">' + p.available.toLocaleString() + '</td>' +
         '<td>' + unitSelect(p) + '</td>' +
         '<td class="num"><input type="number" min="0" style="width:100%"' +
@@ -297,9 +313,21 @@ function syncTotals() {
     document.getElementById('poBtn').disabled = total === 0;
 }
 
-// استرجاع بعد فاليديشن مرفوضة
+// استرجاع بعد فاليديشن مرفوضة — أو تعبئة وضع التعديل
+if (EDIT_CHAIN && !OLD_ROWS.length) { document.getElementById('poChain').value = String(EDIT_CHAIN); }
 poFilterBranches();
 if (OLD_BRANCH) { document.getElementById('poBranch').value = String(OLD_BRANCH); poShowBalance(); }
+else if (EDIT_BRANCH) { document.getElementById('poBranch').value = String(EDIT_BRANCH); poShowBalance(); }
+
+// صفوف الأمر المفتوح للتعديل — بالقطع (الوحدة بترجع «قطعة»)
+if (!OLD_ROWS.length) {
+    EDIT_ROWS.forEach(r => {
+        addRow(r.id);
+        const q = document.querySelector('[data-row="' + r.id + '"][data-kind="qty"]');
+        if (q) q.value = r.qty;
+        syncRow(r.id);
+    });
+}
 OLD_ROWS.forEach(id => {
     addRow(Number(id));
     const q = document.querySelector('[data-row="' + id + '"][data-kind="qty"]');

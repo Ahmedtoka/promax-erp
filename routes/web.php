@@ -446,6 +446,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن
         Route::get('/po-handout', [OpsController::class, 'poHandout'])
             ->middleware('role:admin,manager')->name('po.handout');
+        // التعديل مفتوح لصاحب الأمر (أدمن/مدير قناة) وللحسابات — طالما pending
+        Route::get('/po-handout/{purchaseOrder}/edit', [OpsController::class, 'editPo'])
+            ->middleware('role:admin,manager,accountant')->name('po.edit');
+        Route::post('/po-handout/{purchaseOrder}', [OpsController::class, 'updatePo'])
+            ->middleware('role:admin,manager,accountant')->name('po.update');
         Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
             ->middleware('role:admin,accountant')->name('po.approvals');
         Route::post('/po-approvals/{purchaseOrder}', [OpsController::class, 'decidePoApproval'])

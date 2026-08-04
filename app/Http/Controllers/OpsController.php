@@ -168,6 +168,7 @@ class OpsController extends Controller
 
         $needsApproval = $request->boolean('approval');
 
+        try {
         DB::transaction(function () use ($data, $request, $needsApproval) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel
             $client = Client::findOrFail($data['client_id']);
@@ -194,55 +195,7 @@ class OpsController extends Controller
                 'total' => 0,
             ]);
 
-            $total = 0;
-            $rows = [];
-            foreach ($data['qty'] as $productId => $qty) {
-                $qty = (int) $qty;
-                if ($qty <= 0) {
-                    continue;
-                }
-                $product = Product::find($productId);
-                if (! $product) {
-                    continue;
-                }
-                // ⚠️ channel = سعر العميل بخصمه (زي الفاتورة بالظبط).
-                // old/new = سعر قائمة بدون خصم، وده مقصود لبعض السلاسل
-                // اللي بتتحاسب بسعر قائمة صافي متفق عليه في العقد.
-                $price = $data['price_mode'] === 'channel'
-                    ? $client->priceFor($product)
-                    : $product->priceFor($data['price_mode']);
-
-                $lineTotal = round($qty * $price, 2);
-
-                // ⚠️ الضريبة سطر بسطر من `Tax` — نفس قاعدة الفاتورة بالظبط.
-                // الأمر ممكن يجمع صنف خاضع وصنف معفى.
-                $taxRate = \App\Services\Tax::rate($client, $product);
-                $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
-
-                PurchaseOrderItem::create([
-                    'purchase_order_id' => $po->id,
-                    'product_id' => $product->id,
-                    'qty' => $qty,
-                    'price' => $price,
-                    'total' => $lineTotal,
-                    'tax_rate' => $taxRate,
-                    'tax' => $lineTax,
-                ]);
-
-                $rows[] = ['total' => $lineTotal, 'tax' => $lineTax];
-                $total += $lineTotal;
-            }
-
-            // ⚠️ `total` صافي المبيعات، و `grand_total` اللي العميل بيدفعه —
-            // وهو اللي بيتقيّد في كشف الحساب عند التسليم.
-            $sums = \App\Services\Tax::totals($rows);
-            $total = $sums['net'];
-
-            $po->update([
-                'total' => $sums['net'],
-                'tax_total' => $sums['tax'],
-                'grand_total' => $sums['grand'],
-            ]);
+            $this->fillPoItems($po, $client, $data['qty'], $data['price_mode']);
 
             // ⚠️ **في فلو الموافقة المندوب مايتبلغش هنا** — بيتبلغ لما
             // المخزن يجهّز بعد موافقة الحسابات. إشعار بدري = مندوب
@@ -259,11 +212,158 @@ class OpsController extends Controller
                 );
             }
         });
+        } catch (\App\Exceptions\Rejected $e) {
+            // صنف مش متسعّر — الأمر كله بيترفض بدل ما يدخل بسطر بصفر
+            return back()->withErrors(['qty' => $e->getMessage()])->withInput();
+        }
 
         return back()->with('ok', $needsApproval ? __('flash.po_sent_accounting') : __('flash.po_created'));
     }
 
+    /**
+     * بناء بنود الأمر وتسعيرها وإجمالياته — مشترك بين الإنشاء والتعديل.
+     *
+     * ⚠️ channel = سعر العميل بخصمه (زي الفاتورة). old/new = سعر قائمة
+     * بدون خصم — مقصود لسلاسل بتتحاسب بسعر صافي متفق عليه.
+     *
+     * ⚠️ **سعر صفر = رفض الأمر كله** (نفس دوكترين الفاتورة «الصنف مش
+     * متسعّر») — أمر PO-2001 دخل فعلاً بصنف بسعر 0.00 وكان هيتقيّد
+     * على الفرع ناقص (اتشاف 2026-08-04).
+     */
+    private function fillPoItems(PurchaseOrder $po, Client $client, array $qtyByProduct, string $priceMode): void
+    {
+        $rows = [];
+
+        foreach ($qtyByProduct as $productId => $qty) {
+            $qty = (int) $qty;
+            if ($qty <= 0) {
+                continue;
+            }
+            $product = Product::find($productId);
+            if (! $product) {
+                continue;
+            }
+
+            $price = $priceMode === 'channel'
+                ? $client->priceFor($product)
+                : $product->priceFor($priceMode);
+
+            if ((float) $price <= 0) {
+                throw new \App\Exceptions\Rejected(
+                    __('stock.po_not_priced', ['name' => $product->displayName()])
+                );
+            }
+
+            $lineTotal = round($qty * $price, 2);
+
+            // الضريبة سطر بسطر من `Tax` — نفس قاعدة الفاتورة بالظبط
+            $taxRate = \App\Services\Tax::rate($client, $product);
+            $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
+
+            PurchaseOrderItem::create([
+                'purchase_order_id' => $po->id,
+                'product_id' => $product->id,
+                'qty' => $qty,
+                'price' => $price,
+                'total' => $lineTotal,
+                'tax_rate' => $taxRate,
+                'tax' => $lineTax,
+            ]);
+
+            $rows[] = ['total' => $lineTotal, 'tax' => $lineTax];
+        }
+
+        // `total` صافي المبيعات، و`grand_total` اللي بيتقيّد عند التسليم
+        $sums = \App\Services\Tax::totals($rows);
+
+        $po->update([
+            'total' => $sums['net'],
+            'tax_total' => $sums['tax'],
+            'grand_total' => $sums['grand'],
+        ]);
+    }
+
     // ═══════════ أوامر توريد الكي أكاونت — 2026-08-04 ═══════════
+
+    /** فتح أمر pending للتعديل — نفس شاشة الإنشاء متملية بالبيانات */
+    public function editPo(PurchaseOrder $purchaseOrder)
+    {
+        if ($purchaseOrder->approval_status !== 'pending') {
+            return redirect()->route('ops.po.approvals')
+                ->withErrors(['decision' => __('ops.po_already_decided')]);
+        }
+
+        $data = $this->poHandout()->getData();
+        $data['editing'] = $purchaseOrder->load(['items', 'client']);
+
+        return view('ops.po_handout', $data);
+    }
+
+    /**
+     * حفظ تعديل أمر pending — للحسابات ولصاحب الأمر (أدمن/مدير قناة).
+     *
+     * ⚠️ **البنود بتتبني من الأول بأسعار النهارده** — التعديل مش
+     * بيرقّع، بيعيد التسعير كأنه أمر جديد بنفس الرقم. والقرار لسه
+     * عند الحسابات: التعديل مابيوافقش، بيرجّع الأمر للطابور.
+     */
+    public function updatePo(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        if ($purchaseOrder->approval_status !== 'pending') {
+            return back()->withErrors(['decision' => __('ops.po_already_decided')]);
+        }
+
+        $data = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            'assigned_to' => ['required', 'exists:users,id'],
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'due_at' => ['required', 'date'],
+            'source' => ['nullable', 'string', 'max:40'],
+            'qty' => ['required', 'array'],
+            'qty.*' => ['nullable', 'integer', 'min:0'],
+            'unit' => ['nullable', 'array'],
+            'unit.*' => ['nullable', 'in:piece,box,case'],
+        ]);
+
+        // وحدة الإدخال → قطع، في السيرفر — نفس قاعدة الإنشاء
+        foreach ($request->input('unit', []) as $productId => $unit) {
+            if (! $unit || $unit === 'piece' || empty($data['qty'][$productId])) {
+                continue;
+            }
+
+            $factor = Product::find($productId)?->unitFactor($unit);
+
+            if ($factor === null) {
+                return back()->withErrors([
+                    'qty' => __('stock.unit_not_for_product', ['name' => Product::find($productId)?->displayName() ?? $productId]),
+                ])->withInput();
+            }
+
+            $data['qty'][$productId] = (int) $data['qty'][$productId] * $factor;
+        }
+
+        try {
+            DB::transaction(function () use ($purchaseOrder, $data) {
+                $client = Client::findOrFail($data['client_id']);
+
+                $purchaseOrder->update([
+                    'client_id' => $client->id,
+                    'assigned_to' => $data['assigned_to'],
+                    'warehouse_id' => $data['warehouse_id'],
+                    'due_at' => $data['due_at'],
+                    'source' => $data['source'] ?? null,
+                    'price_mode' => $client->priceList(),
+                ]);
+
+                // بنود جديدة بالكامل — التعديل إعادة بناء مش ترقيع
+                $purchaseOrder->items()->delete();
+                $this->fillPoItems($purchaseOrder, $client, $data['qty'], 'channel');
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['qty' => $e->getMessage()])->withInput();
+        }
+
+        return redirect()->route('ops.po.approvals')->with('ok', __('flash.po_updated'));
+    }
 
     /** شاشة «تسليم PO للمندوب»: سلسلة ← فرع ← مندوب ← معاد ← أصناف بالوحدات */
     public function poHandout()

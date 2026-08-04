@@ -59,6 +59,8 @@ return [
     'po_approve_confirm' => 'Approve? The pick order goes to the warehouse immediately.',
     'po_reject_confirm' => 'Reject this order? It will be cancelled and the channel manager notified.',
     'po_edit_hint' => 'Edit field is in pieces: empty = unchanged, 0 = remove the item. Any edit notifies the channel manager.',
+    'po_edit' => 'Edit order',
+    'save_edit' => 'Save changes',
     'po_decided' => 'Recent decisions',
     'edited' => 'Edited',
     'by' => 'By',

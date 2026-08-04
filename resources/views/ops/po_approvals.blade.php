@@ -102,6 +102,8 @@
                 </div>
 
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px">
+                    {{-- تعديل كامل (أصناف/مندوب/معاد) — مفتوح للحسابات ولصاحب الأمر --}}
+                    <a class="btn" href="{{ route('ops.po.edit', $po) }}">✏️ {{ __('ops.po_edit') }}</a>
                     <input type="text" name="note" maxlength="500" style="flex:1;min-width:220px"
                            placeholder="{{ __('ops.decision_note_ph') }}">
                     {{-- زرارين بنفس الفورم — قيمة decision بتحدد المسار --}}
