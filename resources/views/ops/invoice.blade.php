@@ -22,7 +22,7 @@
     {{-- الترويسة --}}
     <header class="doc-head">
         <div class="doc-brand">
-            <img src="{{ asset('brand/logo/logo-h-white.svg') }}" alt="PROMAX" class="doc-logo">
+            <img src="{{ asset('img/promax-logo.png') }}" alt="PROMAX" class="doc-logo">
             <div class="doc-corp">{{ __('ops.corp_name') }}</div>
             {{-- الرقم الضريبي للبائع — بند إجباري في الفاتورة الضريبية --}}
             @if ($inv->hasTax() && $companyTaxId)

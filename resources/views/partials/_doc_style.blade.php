@@ -33,7 +33,9 @@
   background:var(--brand-gradient);color:#fff;padding:22px 26px;
   display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;
 }
-.doc-logo{width:168px;height:auto;display:block}
+{{-- ⚠️ اللوجو الرسمي مربع (640×640) — التحكم بالارتفاع مش العرض،
+     عشان أي لوجو بأي نسبة أبعاد يقعد صح في هيدر المستند --}}
+.doc-logo{height:64px;width:auto;display:block}
 .doc-corp{font-size:10px;letter-spacing:1.5px;opacity:.72;margin-top:6px;font-weight:600}
 .doc-id{text-align:end}
 .doc-kind{font-size:10.5px;letter-spacing:1.2px;opacity:.75;font-weight:600}

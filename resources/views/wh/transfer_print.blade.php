@@ -41,7 +41,7 @@
 
     <header class="doc-head">
         <div class="doc-brand">
-            <img src="{{ asset('brand/logo/logo-h-white.svg') }}" alt="PROMAX" class="doc-logo">
+            <img src="{{ asset('img/promax-logo.png') }}" alt="PROMAX" class="doc-logo">
             <div class="doc-corp">{{ __('ops.corp_name') }}</div>
         </div>
         <div class="doc-id">

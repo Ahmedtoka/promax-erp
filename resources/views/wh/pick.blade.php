@@ -202,10 +202,19 @@
             @forelse ($o->items as $item)
                 <tr>
                     <td>
-                        <b>{{ $item->product?->displayName() ?? __('stock.product_hash', ['id' => $item->product_id]) }}</b>
-                        @if ($item->product)
-                            <br><span style="font-size:10.5px;color:var(--muted)">{{ $item->product->code }} • {{ $item->product->unitLabel() }}</span>
-                        @endif
+                        <div style="display:flex;gap:8px;align-items:center">
+                            {{-- صورة الصنف — ريفرنس بصري للي بيجهّز --}}
+                            @if ($item->product?->imageSrc())
+                                <img src="{{ $item->product->imageSrc() }}" alt=""
+                                     style="width:34px;height:34px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                            @endif
+                            <div>
+                                <b>{{ $item->product?->displayName() ?? __('stock.product_hash', ['id' => $item->product_id]) }}</b>
+                                @if ($item->product)
+                                    <br><span style="font-size:10.5px;color:var(--muted)">{{ $item->product->code }} • {{ $item->product->unitLabel() }}</span>
+                                @endif
+                            </div>
+                        </div>
                     </td>
                     <td class="num">{{ $item->batchNo() }}</td>
                     <td class="num">{{ $item->expiresOn() ?? '—' }}</td>

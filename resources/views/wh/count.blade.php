@@ -117,8 +117,17 @@
                 @foreach ($items as $it)
                     <tr>
                         <td>
-                            <b>{{ $it->product->displayName() }}</b>
-                            <br><span style="font-size:10.5px;color:var(--muted)">{{ $it->product->code }}</span>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                {{-- صورة الصنف — اللي بيعد يتأكد إنه بيعد الحاجة الصح --}}
+                                @if ($it->product->imageSrc())
+                                    <img src="{{ $it->product->imageSrc() }}" alt=""
+                                         style="width:34px;height:34px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                @endif
+                                <div>
+                                    <b>{{ $it->product->displayName() }}</b>
+                                    <br><span style="font-size:10.5px;color:var(--muted)">{{ $it->product->code }}</span>
+                                </div>
+                            </div>
                         </td>
                         <td class="num s">{{ $it->batchLabel() }}</td>
                         <td class="num s">{{ $it->expiryLabel() ?? '—' }}</td>
