@@ -47,6 +47,7 @@ class ClientImporter extends Importer
             'payment_days' => ['أجل السداد', 'payment_days', 'credit days'],
             'lat' => ['خط العرض', 'lat', 'latitude'],
             'lng' => ['خط الطول', 'lng', 'longitude'],
+            'status' => ['الحالة', 'status'],
             'opening_balance' => ['الرصيد الافتتاحي', 'opening_balance', 'opening'],
             'opening_date' => ['تاريخ الرصيد', 'opening_date'],
             'tax_id' => ['الرقم الضريبي', 'tax_id'],
@@ -160,7 +161,15 @@ class ClientImporter extends Importer
                     // ده أدق من إن اليوزر يفتكر يعلّم خانة تانية.
                     'tax_id' => $row['tax_id'] ?? null,
                     'taxable' => ($row['tax_id'] ?? null) !== null,
-                    'status' => 'active',
+                    // ⚠️ **الجديد بينزل pending مش active** (قرار المالك
+                    // 2026-08-04): العميل المستورد لازم يعدي على شاشة
+                    // «تفعيل العملاء» ويتراجع قبل ما يظهر للمناديب.
+                    // الموجود بيحتفظ بحالته زي ما هي — الاستيراد
+                    // مايوقفش عميل شغال. وعمود «الحالة» في الشيت
+                    // بيتحكم صراحةً لو حد عاوز يدخّل active على طول.
+                    'status' => $this->status($row['status'] ?? null)
+                        ?? $existing?->status
+                        ?? 'pending',
                 ];
 
                 if ($existing) {
@@ -182,6 +191,15 @@ class ClientImporter extends Importer
             'created' => $created, 'updated' => $updated, 'opening' => $opened,
             'channels' => count($channels), 'zones' => count($zones), 'groups' => count($groups),
         ];
+    }
+
+    /** حالة صريحة من الشيت — null يعني الافتراضي (pending للجديد) */
+    private function status(?string $v): ?string
+    {
+        return $this->toKey($v, ['active' => 'active', 'pending' => 'pending'], [
+            'نشط' => 'active', 'مفعل' => 'active', 'مفعّل' => 'active',
+            'مستني' => 'pending', 'غير مفعل' => 'pending',
+        ]);
     }
 
     /** التصنيف من المفتاح أو من اسمه العربي */
