@@ -43,6 +43,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
     Route::prefix('erp')->name('erp.')->group(function () {
         Route::get('/', [ErpController::class, 'overview'])->name('overview');
 
+        // ═══ التفضية والديمو (2026-08-04) — أدمن بس، بتأكيد مكتوب ═══
+        Route::post('/wipe-transactions', [ErpController::class, 'wipeTransactions'])
+            ->middleware('role:admin')->name('wipe');
+        Route::post('/demo-data', [ErpController::class, 'demoData'])
+            ->middleware('role:admin')->name('demo');
+
         Route::get('/clients', [ErpController::class, 'clients'])->name('clients');
         // ⚠️ **مدير الفرع مسموح له هنا.** الاتفاق إنه «معاه صلاحيات كل
         // حاجة تخص فرعه»، وعملاء فرعه منها. الحماية مش في الميدلوير —
@@ -348,6 +354,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/', [WarehouseController::class, 'index'])->name('index');
         Route::get('/receipts', [WarehouseController::class, 'receipts'])->name('receipts');
         Route::get('/receipts/{receipt}', [WarehouseController::class, 'receipt'])->name('receipt');
+        // باك أب الإذن CSV — بنفس أعمدة مستورد المخزون فيرجع يتسحب
+        Route::get('/receipts/{receipt}/export', [WarehouseController::class, 'exportReceipt'])->name('receipt.export');
         Route::get('/shelves', [WarehouseController::class, 'locations'])->name('locations');
         Route::get('/expiry', [WarehouseController::class, 'expiryReport'])->name('expiry');
         Route::get('/transfers', [WarehouseController::class, 'transfers'])->name('transfers');

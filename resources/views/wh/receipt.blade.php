@@ -15,6 +15,8 @@
 
 @section('actions')
     <a class="btn" href="{{ route('wh.receipts', ['warehouse' => $receipt->warehouse_id]) }}">← {{ __('stock.goods_receipts') }}</a>
+    {{-- باك أب كامل — يترفع تاني من شاشة الاستيراد (نوع «المخزون») كرصيد أول مدة --}}
+    <a class="btn" href="{{ route('wh.receipt.export', $receipt) }}">⬇️ {{ __('stock.export_receipt') }}</a>
     <a class="btn" href="{{ route('wh.locations', ['warehouse' => $receipt->warehouse_id]) }}">🗄️ {{ __('stock.shelf_map') }}</a>
 @endsection
 

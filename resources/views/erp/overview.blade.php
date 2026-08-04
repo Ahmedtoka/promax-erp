@@ -12,7 +12,64 @@
     $cur = __('common.currency');
 @endphp
 
+@section('actions')
+    @if (auth()->user()->isAdmin())
+        {{-- فلو التيست (قرار المالك 2026-08-04): ديمو ← تجربة ← مسح ← استيراد رصيد أول المدة --}}
+        <button class="btn" onclick="openDlg('dlgDemo')">🧪 {{ __('ops.demo_btn') }}</button>
+        <button class="btn red" onclick="openDlg('dlgWipe')">🧨 {{ __('ops.wipe_btn') }}</button>
+    @endif
+@endsection
+
 @section('content')
+
+@if (auth()->user()->isAdmin())
+    {{-- ═══ مسح الترانزاكشنز — تأكيد بالكتابة، مش ضغطة ═══ --}}
+    <dialog id="dlgWipe">
+        <form class="dlg" method="POST" action="{{ route('erp.wipe') }}">
+            @csrf
+            <h4>🧨 {{ __('ops.wipe_btn') }}</h4>
+            <div class="alert warn" style="margin:10px 0">
+                <span>⚠️</span><span>{{ __('ops.wipe_warning') }}</span>
+            </div>
+            <ul style="font-size:12px;color:var(--muted);margin:0 0 10px;padding-inline-start:18px;line-height:1.9">
+                <li>{{ __('ops.wipe_goes') }}</li>
+                <li>{{ __('ops.wipe_stays') }}</li>
+            </ul>
+            <label class="f">{{ __('ops.wipe_type_confirm') }}</label>
+            <input type="text" name="confirm" dir="ltr" autocomplete="off" required
+                   placeholder="WIPE" style="width:100%;font-weight:900;letter-spacing:2px">
+            @error('confirm')<div class="errline">{{ $message }}</div>@enderror
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                <button class="btn" type="button" onclick="closeDlg('dlgWipe')">{{ __('common.cancel') }}</button>
+                <button class="btn red" type="submit">🧨 {{ __('ops.wipe_do') }}</button>
+            </div>
+        </form>
+    </dialog>
+
+    {{-- ═══ داتا ديمو — بتمشي في الفلو الحقيقي (إذن ← ترصيف ← عهدة) ═══ --}}
+    <dialog id="dlgDemo">
+        <form class="dlg" method="POST" action="{{ route('erp.demo') }}">
+            @csrf
+            <h4>🧪 {{ __('ops.demo_btn') }}</h4>
+            <p style="font-size:12.5px;color:var(--muted)">{{ __('ops.demo_hint') }}</p>
+            <label class="f">{{ __('ops.rep') }}</label>
+            <select name="email" required style="width:100%">
+                @foreach (\App\Models\User::whereIn('role', ['sales_agent', 'driver'])->where('active', true)->orderBy('name')->get() as $r)
+                    <option value="{{ $r->email }}">{{ $r->name }}</option>
+                @endforeach
+            </select>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                <button class="btn" type="button" onclick="closeDlg('dlgDemo')">{{ __('common.cancel') }}</button>
+                <button class="btn gold" type="submit">🧪 {{ __('ops.demo_do') }}</button>
+            </div>
+        </form>
+    </dialog>
+
+    {{-- الفاليديشن رفضت كلمة التأكيد؟ نرجّع الديالوج مفتوح --}}
+    @if ($errors->has('confirm'))
+        <script>document.addEventListener('DOMContentLoaded', () => openDlg('dlgWipe'));</script>
+    @endif
+@endif
 
 <div class="kpis">
     <div class="kpi">

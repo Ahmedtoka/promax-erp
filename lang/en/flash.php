@@ -38,6 +38,8 @@ return [
     'po_created' => 'Purchase order created.',
     'po_sent_accounting' => 'Order sent to accounting - the pick order drops once approved.',
     'po_approved' => 'Order approved and the pick order went to the warehouse.',
+    'wiped_done' => ':n movement rows wiped - stock and balances zeroed, master data untouched.',
+    'demo_loaded' => 'Demo data loaded - a receipt and a full custody for the rep.',
     'memo_po_partial' => 'PO :number delivered - :diff pcs short of the order',
     'po_rejected' => 'Order rejected and the channel manager was notified.',
     'po_assigned' => 'The order was assigned to the driver.',

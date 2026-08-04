@@ -22,6 +22,37 @@ class ErpController extends Controller
 {
     // ================= نظرة عامة =================
 
+    /**
+     * مسح الترانزاكشنز من الداش بورد — الماستر داتا بتفضل.
+     *
+     * ⚠️ **التأكيد بكتابة WIPE مش تشيك بوكس.** المسح مالوش رجعة،
+     * وضغطة غلط على زرار جنب زرار تانية بتضيع شغل — الكتابة بتجبر
+     * على قصد حقيقي. المنطق في `App\Services\ResetTransactions`.
+     */
+    public function wipeTransactions(Request $request)
+    {
+        $request->validate(
+            ['confirm' => ['required', 'in:WIPE']],
+            ['confirm.in' => __('ops.wipe_bad_confirm')],
+        );
+
+        $wiped = \App\Services\ResetTransactions::run();
+
+        return back()->with('ok', __('flash.wiped_done', [
+            'n' => number_format(array_sum($wiped)),
+        ]));
+    }
+
+    /** تحميل داتا ديمو لمندوب — بيمشي في الفلو الحقيقي (promax:demo) */
+    public function demoData(Request $request)
+    {
+        $data = $request->validate(['email' => ['required', 'email', 'exists:users,email']]);
+
+        \Illuminate\Support\Facades\Artisan::call('promax:demo', ['email' => $data['email']]);
+
+        return back()->with('ok', __('flash.demo_loaded'));
+    }
+
     public function overview()
     {
         // ملاحظة: `returns` كلمة محجوزة في MySQL — لازم backticks

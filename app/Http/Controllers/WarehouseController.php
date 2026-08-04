@@ -154,6 +154,55 @@ class WarehouseController extends Controller
             ]));
     }
 
+    /**
+     * تصدير إذن الاستلام CSV — باك أب قابل لإعادة الاستيراد.
+     *
+     * ⚠️ **الأعمدة بنفس أسماء مستورد المخزون بالظبط** (StockImporter)
+     * — الملف ده بيترفع من شاشة الاستيراد (نوع «المخزون») زي ما هو
+     * ويرجّع الرصيد كرصيد أول مدة بعد التفضية. أي عمود زيادة
+     * (اسم الصنف، التجميعة) المستورد بيطنشه.
+     */
+    public function exportReceipt(Request $request, GoodsReceipt $receipt)
+    {
+        $this->guardWarehouse($request, $receipt->warehouse_id);
+
+        $receipt->load(['batches.product', 'batches.locations.location', 'warehouse']);
+
+        $rows = [];
+        $rows[] = ['كود الصنف', 'الباركود', 'اسم الصنف', 'رقم الباتش', 'تاريخ الإنتاج',
+            'تاريخ الصلاحية', 'الكمية', 'التجميعة', 'التكلفة', 'المخزن', 'الرف', 'محجوز'];
+
+        foreach ($receipt->batches as $b) {
+            $rows[] = [
+                $b->product?->code,
+                $b->product?->barcode,
+                $b->product?->displayName(),
+                $b->batch_no,
+                $b->produced_on?->toDateString(),
+                $b->expires_on?->toDateString(),
+                (int) $b->qty_received,
+                $b->product?->packBreakdown((int) $b->qty_received),
+                (float) $b->cost,
+                $receipt->warehouse?->name,
+                // أول رف اترصّف عليه — المستورد بيرصّف عليه تاني
+                $b->locations->first()?->location?->code,
+                $b->blocked ? 1 : '',
+            ];
+        }
+
+        $filename = $receipt->number.'-'.now()->format('Ymd-Hi').'.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            // ⚠️ الـBOM لازم — من غيره إكسل بيفتح العربي شخابيط
+            fwrite($out, "\xEF\xBB\xBF");
+            foreach ($rows as $row) {
+                fputcsv($out, $row);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     /** صفحة إذن الاستلام — ومنها الترصيف */
     public function receipt(Request $request, GoodsReceipt $receipt)
     {
