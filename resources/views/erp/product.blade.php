@@ -125,6 +125,10 @@
     <div class="kpi">
         <div class="lbl">{{ __('stock.qty') }}</div>
         <div class="val">{{ $fmt($qty) }}</div>
+        {{-- التجميعة بالوحدات — عرض بس، المخزون قطع --}}
+        @if ($bd = $p->packBreakdown($qty))
+            <div class="sub2" style="font-weight:800;color:var(--royal-blue)">{{ $bd }}</div>
+        @endif
         <div class="sub2">
             {{ __('stock.good_stock') }} {{ $fmt($p->goodTotal()) }}
             @if ($p->holdTotal() > 0) · <span class="mid">{{ __('stock.hold') }} {{ $fmt($p->holdTotal()) }}</span>@endif

@@ -323,6 +323,45 @@ class Product extends Model
         return $this->unitFactors()[$unit ?: 'piece'] ?? null;
     }
 
+    /**
+     * تجميعة رصيد بالوحدات: 245 قطعة → «3 كرتونة + 1 علبة + 5 قطعة».
+     *
+     * عرض بس — الرقم المخزّن قطع دايماً. بتاخد الأكبر الأول
+     * (كرتونة ← علبة ← قطعة) وبتتخطى أي وحدة مش معرّفة للصنف.
+     * صفر أو صنف من غير تدريج → null (الشاشة تعرض الرقم لوحده).
+     */
+    public function packBreakdown(int $pieces): ?string
+    {
+        if ($pieces <= 0) {
+            return null;
+        }
+
+        $tiers = [
+            [__('stock.unit_case'), (int) $this->units_per_case],
+            [__('stock.unit_box'), (int) $this->box_units],
+        ];
+
+        $parts = [];
+        $rest = $pieces;
+
+        foreach ($tiers as [$label, $size]) {
+            if ($size > 1 && $rest >= $size) {
+                $parts[] = number_format(intdiv($rest, $size)).' '.$label;
+                $rest %= $size;
+            }
+        }
+
+        if ($parts === []) {
+            return null;   // مفيش تدريج — الرقم الخام كفاية
+        }
+
+        if ($rest > 0) {
+            $parts[] = number_format($rest).' '.__('stock.unit_piece');
+        }
+
+        return implode(' + ', $parts);
+    }
+
     /** «الكرتونة = 6 علب × 12 قطعة = 72» — سطر التدريج لكارت الصنف */
     public function packLabel(): ?string
     {

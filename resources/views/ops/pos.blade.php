@@ -100,13 +100,40 @@
         <div style="max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
             <table>
                 @foreach ($products as $p)
+                    @php $factors = $p->unitFactors(); @endphp
                     <tr>
                         <td>{{ $p->code }} — {{ $p->displayName() }}</td>
-                        <td style="width:100px"><input type="number" min="0" name="qty[{{ $p->id }}]" placeholder="0" style="width:100%"></td>
+                        {{-- الوحدة: العرض بس — السيرفر بيعيد الضرب في storePurchaseOrder --}}
+                        <td style="width:96px">
+                            <select name="unit[{{ $p->id }}]" data-po-unit="{{ $p->id }}" style="width:100%" onchange="poEq({{ $p->id }})">
+                                @foreach ($factors as $u => $f)
+                                    <option value="{{ $u }}">{{ __('stock.unit_'.$u) }}@if ($f > 1) ({{ $f }})@endif</option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td style="width:100px">
+                            <input type="number" min="0" name="qty[{{ $p->id }}]" placeholder="0" style="width:100%"
+                                   data-po-qty="{{ $p->id }}" oninput="poEq({{ $p->id }})">
+                            <div data-po-eq="{{ $p->id }}" data-factors='@json($factors)' style="font-size:10px;color:var(--muted)"></div>
+                        </td>
                     </tr>
                 @endforeach
             </table>
         </div>
+        <script>
+        /* «= N قطعة» — عرض بس، الضرب في السيرفر */
+        function poEq(id) {
+            const eq = document.querySelector('[data-po-eq="' + id + '"]');
+            const factors = JSON.parse(eq.dataset.factors);
+            const unit = document.querySelector('[data-po-unit="' + id + '"]').value;
+            const qty = Number(document.querySelector('[data-po-qty="' + id + '"]').value || 0);
+            const f = factors[unit] || 1;
+
+            eq.textContent = (f > 1 && qty > 0)
+                ? '= ' + (qty * f).toLocaleString() + ' ' + @json(__('stock.unit_piece'))
+                : '';
+        }
+        </script>
 
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
             <button class="btn" type="button" onclick="closeDlg('dlgNewPo')">{{ __('common.cancel') }}</button>

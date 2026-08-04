@@ -328,6 +328,26 @@ function unitSelect(p) {
         '</select>';
 }
 
+/** تجميعة العرض: 245 → «3 كرتونة + 1 علبة + 5 قطعة» — عرض بس */
+function packBd(p, n) {
+    if (!p.units || n <= 0) return '';
+
+    const parts = [];
+    let rest = n;
+
+    [['case', p.units['case']], ['box', p.units.box]].forEach(([u, size]) => {
+        if (size > 1 && rest >= size) {
+            parts.push(Math.floor(rest / size).toLocaleString() + ' ' + UNIT_LABELS[u]);
+            rest %= size;
+        }
+    });
+
+    if (!parts.length) return '';
+    if (rest > 0) parts.push(rest.toLocaleString() + ' ' + UNIT_LABELS.piece);
+
+    return parts.join(' + ');
+}
+
 /** مضاعِف الوحدة المختارة في صف — بالقطع */
 function rowFactor(id) {
     const p = CATALOG.find(x => x.id === id);
@@ -355,7 +375,9 @@ function addRow(id) {
     tr.innerHTML =
         '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:30px;height:30px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
         '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></td>' +
-        '<td class="num"><b>' + p.available.toLocaleString() + '</b></td>' +
+        '<td class="num"><b>' + p.available.toLocaleString() + '</b>' +
+            (packBd(p, p.available) ? '<div style="font-size:10px;color:var(--muted);white-space:nowrap">' + esc(packBd(p, p.available)) + '</div>' : '') +
+        '</td>' +
         '<td>' + unitSelect(p) + '</td>' +
         '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="qty[' + id + ']" data-row="' + id + '" data-kind="qty" data-max="' + p.available + '"' +

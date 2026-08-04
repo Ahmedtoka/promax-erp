@@ -19,7 +19,29 @@
     // كتبه. الفورم ده فيه 20+ خانة، وكتابتها تاني من الأول عقوبة
     // على غلطة في خانة واحدة.
     $v = fn (string $key, $fallback = null) => old($key, $isNew ? null : ($p->{$key} ?? $fallback));
+
+    // ═══ التسعير من القوايم — قرار المالك 2026-08-04 ═══
+    // مفيش خانتي «قديم/جديد» تايهين: صف لكل قائمة أسعار، والسعر
+    // بيتكتب في `price_list_items` (مع مزامنة عمودي old/new للـKPIs
+    // والأبلكيشن). خانة فاضية = ماتلمسش سعر القايمة دي.
+    $priceLists = \App\Models\PriceList::orderByDesc('is_default')->orderBy('id')->get();
+    $listPrices = $isNew
+        ? collect()
+        : \App\Models\PriceListItem::where('product_id', $p->id)->pluck('price', 'price_list_id');
+
+    // «الوحدة» دروب منيو من الوحدات المستخدمة فعلاً + كتابة حرة
+    $unitsAr = \App\Models\Product::whereNotNull('unit')->where('unit', '!=', '')->distinct()->orderBy('unit')->pluck('unit');
+    $unitsEn = \App\Models\Product::whereNotNull('unit_en')->where('unit_en', '!=', '')->distinct()->orderBy('unit_en')->pluck('unit_en');
 @endphp
+
+@once
+    <datalist id="dlUnitsAr">
+        @foreach ($unitsAr as $u)<option value="{{ $u }}"></option>@endforeach
+    </datalist>
+    <datalist id="dlUnitsEn">
+        @foreach ($unitsEn as $u)<option value="{{ $u }}"></option>@endforeach
+    </datalist>
+@endonce
 
 <dialog id="{{ $isNew ? 'dlgNewP' : 'dlgEditP' }}">
     <form class="dlg" method="POST" enctype="multipart/form-data"
@@ -113,12 +135,13 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('stock.unit') }} <b class="req-star">*</b></label>
-                <input type="text" name="unit" maxlength="40" required style="width:100%" value="{{ $v('unit') }}">
+                {{-- دروب منيو من الوحدات الموجودة + كتابة حرة لوحدة جديدة --}}
+                <input type="text" name="unit" maxlength="40" required list="dlUnitsAr" autocomplete="off" style="width:100%" value="{{ $v('unit') }}">
                 @error('unit')<div class="errline">{{ $message }}</div>@enderror
             </div>
             <div>
                 <label class="f">{{ __('stock.unit') }} · EN</label>
-                <input type="text" name="unit_en" dir="ltr" maxlength="40" style="width:100%" value="{{ $v('unit_en') }}">
+                <input type="text" name="unit_en" dir="ltr" maxlength="40" list="dlUnitsEn" autocomplete="off" style="width:100%" value="{{ $v('unit_en') }}">
             </div>
             <div>
                 <label class="f">{{ __('stock.brand') }}</label>
@@ -144,15 +167,48 @@
             </div>
             <div>
                 <label class="f">{{ __('stock.units_per_case') }}</label>
-                <input type="number" name="units_per_case" min="1" max="9999" style="width:100%" value="{{ $v('units_per_case') }}">
+                <input type="number" name="units_per_case" min="1" max="9999" style="width:100%" value="{{ $v('units_per_case') }}" oninput="packPreview(this)">
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('stock.units_per_case_hint') }}</div>
             </div>
             <div>
                 <label class="f">{{ __('stock.box_units') }}</label>
-                <input type="number" name="box_units" min="1" max="9999" style="width:100%" value="{{ $v('box_units') }}">
+                <input type="number" name="box_units" min="1" max="9999" style="width:100%" value="{{ $v('box_units') }}" oninput="packPreview(this)">
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('stock.box_units_hint') }}</div>
             </div>
         </div>
+        {{-- معاينة التدريج لايف: «الكرتونة = 6 علب × 12 قطعة = 72» --}}
+        <div class="pack-preview" style="font-size:12px;font-weight:800;color:var(--royal-blue);margin-top:4px">
+            @unless ($isNew){{ $p->packLabel() }}@endunless
+        </div>
+
+        @once
+        <script>
+        // ⚠️ معاينة بس — التخزين بالقطعة والضرب في السيرفر
+        const PACK_T = {
+            bc: @json(__('stock.pack_box_case')),
+            c: @json(__('stock.pack_case_only')),
+            b: @json(__('stock.pack_box_only'))
+        };
+
+        function packPreview(el) {
+            const form = el.closest('form');
+            const box = Number(form.querySelector('[name="box_units"]').value || 0);
+            const cs = Number(form.querySelector('[name="units_per_case"]').value || 0);
+            const out = form.querySelector('.pack-preview');
+            let txt = '';
+
+            if (cs > 1 && box > 1 && cs % box === 0) {
+                txt = PACK_T.bc.replace(':boxes', cs / box).replace(':box', box).replace(':case', cs);
+            } else if (cs > 1) {
+                txt = PACK_T.c.replace(':case', cs);
+            } else if (box > 1) {
+                txt = PACK_T.b.replace(':box', box);
+            }
+
+            out.textContent = txt;
+        }
+        </script>
+        @endonce
 
         {{-- ═════ المواصفات ═════ --}}
         <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('stock.specs') }}</div>
@@ -204,15 +260,39 @@
                 <label class="f">{{ __('stock.cost') }} <b class="req-star">*</b></label>
                 <input type="number" step="0.01" min="0" name="cost" required style="width:100%" value="{{ $v('cost', 0) }}">
             </div>
-            <div>
-                <label class="f">{{ __('stock.price_old') }} <b class="req-star">*</b></label>
-                <input type="number" step="0.01" min="0" name="price_old" required style="width:100%" value="{{ $v('price_old', 0) }}">
-            </div>
-            <div>
-                <label class="f">{{ __('stock.price_new') }} <b class="req-star">*</b></label>
-                <input type="number" step="0.01" min="0" name="price_new" required style="width:100%" value="{{ $v('price_new', 0) }}">
-            </div>
         </div>
+
+        {{-- ⚠️ **السعر من القوايم مش من عمودين.** صف لكل قائمة أسعار —
+             السعر اللي هنا هو اللي بيتحاسب بيه العميل المربوط بالقايمة.
+             خانة فاضية = سعر القايمة دي مايتلمسش (والقايمة مابتتفعّلش
+             غير لما كل صنف مفعّل يبقى ليه سعر فيها). --}}
+        <div class="frow">
+            @forelse ($priceLists as $list)
+                <div>
+                    <label class="f">
+                        💰 {{ $list->displayName() }}
+                        @if ($list->is_default)<span class="badge b-gold" style="font-size:9.5px">{{ __('price.default') }}</span> <b class="req-star">*</b>@endif
+                    </label>
+                    {{-- القايمة الافتراضية إجبارية للصنف الجديد — الباقي اختياري --}}
+                    <input type="number" step="0.01" style="width:100%"
+                           min="{{ $list->is_default && $isNew ? '0.01' : '0' }}"
+                           @if ($list->is_default && $isNew) required @endif
+                           name="list_price[{{ $list->id }}]"
+                           value="{{ old('list_price.'.$list->id, $listPrices[$list->id] ?? null) }}">
+                </div>
+            @empty
+                {{-- داتابيز لسه ماتهاجرتش للقوايم — نرجع للعمودين --}}
+                <div>
+                    <label class="f">{{ __('stock.price_old') }} <b class="req-star">*</b></label>
+                    <input type="number" step="0.01" min="0" name="price_old" required style="width:100%" value="{{ $v('price_old', 0) }}">
+                </div>
+                <div>
+                    <label class="f">{{ __('stock.price_new') }} <b class="req-star">*</b></label>
+                    <input type="number" step="0.01" min="0" name="price_new" required style="width:100%" value="{{ $v('price_new', 0) }}">
+                </div>
+            @endforelse
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ __('stock.list_price_hint') }}</div>
 
         <div class="frow">
             <div>

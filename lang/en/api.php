@@ -16,6 +16,7 @@ return [
     'not_your_visit' => 'This visit is not yours.',
     'return_needs_open_visit' => 'Returns must be recorded from an open visit on the same client.',
     'return_consignment' => 'Consignment client — returns are settled from the branch sales report, not here.',
+    'qty_too_large' => 'Quantity exceeds the allowed limit — check the unit and the number.',
     'order_not_yours' => 'This purchase order is not assigned to you.',
     'not_your_channel' => 'This request belongs to a channel you do not manage.',
 

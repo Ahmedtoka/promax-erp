@@ -132,7 +132,28 @@ class OpsController extends Controller
             'due_date' => ['nullable', 'date'],
             'qty' => ['required', 'array'],
             'qty.*' => ['nullable', 'integer', 'min:0'],
+            'unit' => ['nullable', 'array'],
+            'unit.*' => ['nullable', 'in:piece,box,case'],
         ]);
+
+        // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.** «5 كراتين»
+        // بتتخزن 60 قطعة على بنود الأمر — والتسعير بالقطعة زي ما هو.
+        // وحدة مش معرّفة للصنف = رفض الأمر كله، مش افتراض قطعة.
+        foreach ($request->input('unit', []) as $productId => $unit) {
+            if (! $unit || $unit === 'piece' || empty($data['qty'][$productId])) {
+                continue;
+            }
+
+            $factor = Product::find($productId)?->unitFactor($unit);
+
+            if ($factor === null) {
+                return back()->withErrors([
+                    'qty' => __('stock.unit_not_for_product', ['name' => Product::find($productId)?->displayName() ?? $productId]),
+                ])->withInput();
+            }
+
+            $data['qty'][$productId] = (int) $data['qty'][$productId] * $factor;
+        }
 
         DB::transaction(function () use ($data) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel

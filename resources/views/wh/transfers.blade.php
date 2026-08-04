@@ -43,6 +43,12 @@
         'exp' => $b->expires_on?->toDateString(),
         'left' => (int) $b->qty_remaining,
     ])->values(), JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+
+    // وحدات الإدخال لكل صنف — العرض بس؛ الضرب الحقيقي في السيرفر (storeTransfer)
+    $trUnits = ! $manager ? null : json_encode(
+        $products->mapWithKeys(fn ($p) => [$p->id => $p->unitFactors()]),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
+    );
 @endphp
 
 @section('actions')
@@ -185,6 +191,7 @@
                         <th>{{ __('stock.batch_no') }}</th>
                         <th>{{ __('stock.produced_on') }}</th>
                         <th class="num">{{ __('stock.available') }}</th>
+                        <th>{{ __('stock.entry_unit') }}</th>
                         <th class="num">{{ __('stock.qty') }}</th>
                         <th></th>
                     </tr>
@@ -227,8 +234,16 @@
              يقدر يصححه وقت الاستلام لو الورقة على الكرتونة مختلفة. --}}
         <td class="num" data-role="prodOn" style="color:var(--muted);font-size:11.5px">—</td>
         <td class="num" data-role="left" style="color:var(--muted);font-size:11.5px">—</td>
-        <td class="num"><input type="number" min="1" name="lines[IDX][qty]" required style="width:90px"
-                               data-role="qty"></td>
+        <td>
+            <select name="lines[IDX][unit]" data-role="unit" style="width:100px" onchange="trUnitHint(this)">
+                <option value="piece">{{ __('stock.unit_piece') }}</option>
+            </select>
+        </td>
+        <td class="num">
+            <input type="number" min="1" name="lines[IDX][qty]" required style="width:90px"
+                   data-role="qty" oninput="trUnitHint(this)">
+            <div data-role="eq" style="font-size:10.5px;color:var(--muted);margin-top:3px"></div>
+        </td>
         <td class="num"><button class="btn sm" type="button" onclick="this.closest('tr').remove()">×</button></td>
     </tr>
 </template>
@@ -248,6 +263,58 @@
      * الشاشة تتلكّك على اتصال ضعيف في المخزن.
      */
     const TR_BATCHES = @if ($batchData) {!! $batchData !!} @else [] @endif;
+
+    // وحدات الإدخال لكل صنف — العرض بس؛ السيرفر بيعيد الضرب بنفسه
+    const TR_UNITS = @if ($trUnits) {!! $trUnits !!} @else {} @endif;
+    const TR_UNIT_LABELS = {
+        piece: @json(__('stock.unit_piece')),
+        box: @json(__('stock.unit_box')),
+        'case': @json(__('stock.unit_case'))
+    };
+
+    /** قايمة الوحدات المتاحة لصنف السطر (قطعة دايماً + علبة/كرتونة لو معرّفين) */
+    function trFillUnits(row) {
+        const pid = row.querySelector('[data-role="prod"]').value;
+        const sel = row.querySelector('[data-role="unit"]');
+        const factors = TR_UNITS[pid] || { piece: 1 };
+        const current = sel.value;
+
+        sel.innerHTML = '';
+        Object.keys(factors).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u;
+            opt.textContent = TR_UNIT_LABELS[u] + (factors[u] > 1 ? ' (' + factors[u] + ')' : '');
+            sel.appendChild(opt);
+        });
+
+        sel.value = factors[current] ? current : 'piece';
+    }
+
+    /** مضاعِف وحدة السطر بالقطع */
+    function trFactor(row) {
+        const pid = row.querySelector('[data-role="prod"]').value;
+        const unit = row.querySelector('[data-role="unit"]').value;
+
+        return (TR_UNITS[pid] || {})[unit] || 1;
+    }
+
+    /**
+     * «= N قطعة» تحت الكمية + الحد الأقصى **بوحدة السطر**:
+     * باتش فيه 100 قطعة والوحدة كرتونة (12) ← أقصى كمية 8 كراتين.
+     */
+    function trUnitHint(el) {
+        const row = el.closest('tr');
+        const qtyEl = row.querySelector('[data-role="qty"]');
+        const eq = row.querySelector('[data-role="eq"]');
+        const factor = trFactor(row);
+        const batch = TR_BATCHES.find(b => String(b.id) === String(row.querySelector('[data-role="batch"]').value));
+        const qty = Number(qtyEl.value || 0);
+
+        qtyEl.max = batch ? Math.floor(batch.left / factor) : '';
+        eq.textContent = (factor > 1 && qty > 0)
+            ? '= ' + (qty * factor).toLocaleString() + ' ' + TR_UNIT_LABELS.piece
+            : '';
+    }
 
     /** المخزن اللي بنبعت منه دلوقتي */
     function trFromWarehouse() {
@@ -276,6 +343,8 @@
         if (qty) {
             qty.value = '';
         }
+
+        trFillUnits(row);
 
         const rows = TR_BATCHES.filter(b => b.p === productId && b.w === warehouseId);
 
@@ -310,8 +379,9 @@
 
         // ⚠️ السيرفر بيرفض الزيادة برضه، بس الشاشة بتقولها قبل ما
         // اللي بيجهّز الشحنة يخلّص كل السطور ويترمي عليه خطأ.
+        // الحد بوحدة السطر (كرتونة = المتاح ÷ 12) — في trUnitHint.
         if (qty) {
-            qty.max = batch ? batch.left : '';
+            trUnitHint(qty);
         }
     }
 

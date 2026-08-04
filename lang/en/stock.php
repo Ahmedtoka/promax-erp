@@ -46,6 +46,7 @@ return [
     'unit_case' => 'Case',
     'unit_not_for_product' => 'This unit is not defined for :name — set it on the product card first.',
     'pack_tiers' => 'Pack tiers',
+    'list_price_hint' => 'The price here is what clients on that list are charged on every invoice. Empty field = that list price stays untouched.',
     'pack_box_case' => 'Case = :boxes boxes × :box pcs = :case pcs',
     'pack_case_only' => 'Case = :case pcs',
     'pack_box_only' => 'Box = :box pcs',

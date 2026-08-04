@@ -390,12 +390,35 @@ class WarehouseController extends Controller
             // مايضمنش إن البضاعة موجودة، وكان بيخلّي التحويل يخلق
             // بضاعة من العدم.
             'lines.*.source_batch_id' => ['required', 'exists:batches,id'],
+            'lines.*.unit' => ['nullable', 'in:piece,box,case'],
             'lines.*.qty' => ['required', 'integer', 'min:1'],
         ]);
 
         // ⚠️ التحويل بيطلّع بضاعة من مخزن. أمين المخزن مايبعتش من
         // مخزن غير بتاعه — ولا يستقبل نيابةً عن مخزن تاني.
         $this->guardWarehouse($request, $data['from_warehouse_id']);
+
+        // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.**
+        // «3 كراتين» بتتحول 36 قطعة قبل ما توصل لـ StockTransfer::send
+        // — والتحويل كله بالقطعة زي ما هو. وحدة مش معرّفة للصنف = رفض.
+        foreach ($data['lines'] as $i => $line) {
+            $unit = $line['unit'] ?? 'piece';
+
+            if ($unit === 'piece') {
+                continue;
+            }
+
+            $product = Product::find($line['product_id']);
+            $factor = $product?->unitFactor($unit);
+
+            if ($factor === null) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'lines' => __('stock.unit_not_for_product', ['name' => $product?->displayName() ?? $line['product_id']]),
+                ]);
+            }
+
+            $data['lines'][$i]['qty'] = (int) $line['qty'] * $factor;
+        }
 
         $result = StockTransfer::send(
             $request->user(),

@@ -1253,9 +1253,15 @@ class ErpController extends Controller
             'shelf_life_months' => ['nullable', 'integer', 'min:1', 'max:120'],
 
             // ═══ التسعير ═══
+            // ⚠️ **السعر من القوايم (قرار المالك 2026-08-04).** الفورم
+            // بيبعت `list_price[list_id]` لكل قائمة، والعمودان القديمان
+            // بقوا nullable — لسه بيتقبلوا من المستورد والفولباك لما
+            // مفيش قوايم في الداتابيز.
             'cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
-            'price_old' => ['required', 'numeric', 'min:0', 'max:9999999'],
-            'price_new' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            'price_old' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'price_new' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'list_price' => ['nullable', 'array'],
+            'list_price.*' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'taxable' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
 
@@ -1267,7 +1273,60 @@ class ErpController extends Controller
     /** الحقول اللي مش أعمدة في `products` */
     private const PRODUCT_NOT_COLUMNS = [
         'qty', 'hold_qty', 'warehouse_id', 'taxable', 'tax_rate', 'image', 'active',
+        'list_price',
     ];
+
+    /**
+     * كتابة أسعار القوايم من الفورم — قرار المالك 2026-08-04.
+     *
+     * لكل قائمة اتبعت لها قيمة: بنكتب `price_list_items` (مصدر
+     * الفواتير)، ولو القايمة هي المهاجرة `old`/`new` بنزامن العمود
+     * (مصدر الـKPIs والأبلكيشن) — فالاتجاهين متطابقين دايماً.
+     *
+     * ⚠️ **الخانة الفاضية = ماتلمسش.** null مش صفر: المستخدم اللي
+     * ساب قايمة فاضية مش قاصد يصفّر سعرها — والصفر على السعر
+     * الافتراضي كان بيخلي الفاتورة تترفض «الصنف مش متسعّر».
+     *
+     * لو الفورم ماباعتش قوايم خالص (المستورد / داتابيز من غير
+     * قوايم) بنرجع للمزامنة القديمة عمود ← قايمة.
+     */
+    private function applyListPrices(Product $product, array $prices): void
+    {
+        if ($prices === []) {
+            \App\Services\Pricing::syncColumnsToLists($product);
+
+            return;
+        }
+
+        $columns = [];
+
+        foreach (\App\Models\PriceList::all() as $list) {
+            $value = $prices[$list->id] ?? null;
+
+            // ⚠️ **الصفر زي الفاضي — مابيلمسش.** نفس قاعدة
+            // Pricing::syncColumnsToLists: صفر بيتكتب فوق سعر معتمد
+            // كان بيخلّي كل فواتير عملاء القايمة تترفض «الصنف مش
+            // متسعّر» — وتصفير سعر عن قصد مكانه شاشة التسعير.
+            if ($value === null || $value === '' || (float) $value <= 0) {
+                continue;
+            }
+
+            \App\Models\PriceListItem::updateOrCreate(
+                ['price_list_id' => $list->id, 'product_id' => $product->id],
+                ['price' => (float) $value],
+            );
+
+            if ($list->code === 'old') {
+                $columns['price_old'] = (float) $value;
+            } elseif ($list->code === 'new') {
+                $columns['price_new'] = (float) $value;
+            }
+        }
+
+        if ($columns !== []) {
+            $product->update($columns);
+        }
+    }
 
     /**
      * كارت الصنف — صفحة واحدة فيها كل حاجة عنه.
@@ -1331,10 +1390,24 @@ class ErpController extends Controller
 
     public function storeProduct(Request $request)
     {
-        $data = $request->validate($this->productRules() + [
+        $rules = $this->productRules() + [
             'code' => ['required', 'string', 'max:20', 'unique:products,code'],
             'family' => ['required', 'string', 'max:40'],
-        ]);
+        ];
+
+        // ⚠️ **صنف جديد لازم يتسعّر في القايمة الافتراضية.** من غير
+        // القاعدة دي الصنف بيتعرّف من غير سعر خالص (العمودان بقوا
+        // nullable) وأول فاتورة بيه في الشارع بتترفض «الصنف مش
+        // متسعّر». المستورد القديم بيبعت price_new فبيعدي.
+        $defaultList = \App\Models\PriceList::where('is_default', true)->first();
+
+        if ($defaultList !== null) {
+            $rules['list_price.'.$defaultList->id] = [
+                'required_without:price_new', 'numeric', 'min:0.01', 'max:9999999',
+            ];
+        }
+
+        $data = $request->validate($rules);
 
         // ⚠️ **الترانزاكشن بتلم الصنف والأرصدة والمزامنة.** فشل في
         // النص كان بيسيب صنف من غير صفوف رصيد فمايبانش في المخازن،
@@ -1357,8 +1430,8 @@ class ErpController extends Controller
                 );
             }
 
-            // عمود ← قايمة، والاتجاه العكسي في شاشة التسعير
-            \App\Services\Pricing::syncColumnsToLists($product);
+            // أسعار القوايم من الفورم (أو مزامنة العمودين لو الفورم قديم)
+            $this->applyListPrices($product, $data['list_price'] ?? []);
 
             return $product;
         });
@@ -1383,8 +1456,8 @@ class ErpController extends Controller
                 + ['active' => $request->boolean('active')]
             );
 
-            // عمود ← قايمة، والاتجاه العكسي في شاشة التسعير
-            \App\Services\Pricing::syncColumnsToLists($product->refresh());
+            // أسعار القوايم من الفورم (أو مزامنة العمودين لو الفورم قديم)
+            $this->applyListPrices($product->refresh(), $data['list_price'] ?? []);
         });
 
         // ⚠️ **الصورة بتتحدّث بس لو المستخدم رفع واحدة.** لو كتبنا

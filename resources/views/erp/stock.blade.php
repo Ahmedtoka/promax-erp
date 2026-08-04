@@ -126,10 +126,19 @@
                         @endif
                     </td>
                     @if ($seeCost)<td class="num {{ $mgCls($margin) }}"><b>{{ number_format($margin * 100, 1) }}%</b></td>@endif
-                    <td class="num"><b>{{ $fmt($p->qtyTotal()) }}</b></td>
+                    <td class="num"><b>{{ $fmt($p->qtyTotal()) }}</b>
+                        {{-- التجميعة: «3 كرتونة + 1 علبة + 5 قطعة» — عرض بس، المخزون قطع --}}
+                        @if ($bd = $p->packBreakdown($p->qtyTotal()))
+                            <div style="font-size:10px;color:var(--muted);white-space:nowrap">{{ $bd }}</div>
+                        @endif
+                    </td>
                     @foreach ($warehouses as $wh)
                         @php $wq = $p->qtyIn($wh); @endphp
-                        <td class="num" @class(['muted' => $wq === 0])>{{ $wq === 0 ? '—' : $fmt($wq) }}</td>
+                        <td class="num" @class(['muted' => $wq === 0])>{{ $wq === 0 ? '—' : $fmt($wq) }}
+                            @if ($wq > 0 && ($wbd = $p->packBreakdown($wq)))
+                                <div style="font-size:10px;color:var(--muted);white-space:nowrap">{{ $wbd }}</div>
+                            @endif
+                        </td>
                     @endforeach
                     <td class="num mid">{{ $fmt($p->holdTotal()) }}</td>
                     <td class="num">{{ $fmt($p->goodTotal()) }}</td>

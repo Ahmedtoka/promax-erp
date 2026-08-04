@@ -51,7 +51,11 @@
                     <td style="color:var(--muted);font-size:11.5px">{{ $it->product->unitLabel() }}</td>
                     <td class="num">{{ $it->assigned }}</td>
                     <td class="num" style="color:var(--blue)">{{ $it->sold }}</td>
-                    <td class="num pos"><b>{{ $it->remaining() }}</b></td>
+                    <td class="num pos"><b>{{ $it->remaining() }}</b>
+                        @if ($bd = $it->product?->packBreakdown((int) $it->remaining()))
+                            <div style="font-size:10px;color:var(--muted);white-space:nowrap">{{ $bd }}</div>
+                        @endif
+                    </td>
                     <td class="num">{{ $fmt($it->remaining() * $it->product->priceFor($u->isDriver() ? 'old' : 'new')) }}</td>
                 </tr>
             @endforeach

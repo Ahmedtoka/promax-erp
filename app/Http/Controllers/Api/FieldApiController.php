@@ -88,6 +88,10 @@ class FieldApiController extends Controller
                 'name_en' => $i->product->name_en,
                 'image' => $i->product->imageSrc(),
                 'unit' => $i->product->unitLabel(),
+                // تدريج الوحدات — الأبلكيشن بيعرض ويبعت اسم الوحدة،
+                // والضرب للقطع بيحصل هنا في السيرفر وقت البيع/المرتجع
+                'box_units' => (int) $i->product->box_units,
+                'case_units' => (int) $i->product->units_per_case,
                 'price' => (float) $i->product->priceFor($mode),
                 'assigned' => $i->assigned,
                 'sold' => $i->sold,
@@ -414,6 +418,7 @@ class FieldApiController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
+            'items.*.unit' => ['nullable', 'in:piece,box,case'],
         ]);
 
         $user = $request->user();
@@ -428,6 +433,14 @@ class FieldApiController extends Controller
         // 2026-08-03). اللي الأبلكيشن بيبعته بيتطنش — توكن معدّل كان
         // يقدر يبعت `credit` لعميل كاش ويفتح مديونية محدش قررها.
         $data['payment'] = $client->paymentTerms();
+
+        // ⚠️ **وحدة البيع بتتضرب هنا مش في الأبلكيشن** — التفاصيل في itemsToPieces. «2 كرتونة»
+        // بتتحول 24 قطعة قبل الخصم من العهدة والتسعير — والسعر سعر
+        // القطعة × العدد (قرار المالك 2026-08-04). وحدة مش معرّفة
+        // للصنف = رفض الفاتورة كلها، مش افتراض قطعة.
+        if ($err = $this->itemsToPieces($data['items'])) {
+            return $err;
+        }
 
         $qtyByProduct = [];
         foreach ($data['items'] as $i) {
@@ -642,7 +655,14 @@ class FieldApiController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:9999'],
+            'items.*.unit' => ['nullable', 'in:piece,box,case'],
         ]);
+
+        // وحدة المرتجع → قطع، في السيرفر — نفس قاعدة البيع،
+        // والسقف 9999 **قطعة** بعد التحويل (المرتجع من غير حارس مخزون)
+        if ($err = $this->itemsToPieces($data['items'], 9999)) {
+            return $err;
+        }
 
         $user = $request->user();
         $client = Client::findOrFail($data['client_id']);
@@ -1000,5 +1020,42 @@ class FieldApiController extends Controller
         $request->user()->appNotifications()->whereNull('read_at')->update(['read_at' => now()]);
 
         return response()->json(['message' => __('common.saved')]);
+    }
+
+    /**
+     * تحويل بنود البيع/المرتجع من وحدتها المكتوبة للقطع — في السيرفر.
+     *
+     * ⚠️ **الأبلكيشن بيبعت اسم الوحدة بس، عمره ما يضرب.** توكن معدّل
+     * يقدر يبعت أي أرقام — فالضرب والفحص هنا. وحدة مش معرّفة للصنف
+     * بترجّع 422 بدل افتراض إنها قطعة (الفرق بين 2 و144 في العهدة
+     * والفلوس). بترجّع null لو كله سليم، أو JsonResponse بالرفض.
+     */
+    private function itemsToPieces(array &$items, ?int $maxPieces = null)
+    {
+        foreach ($items as $idx => $item) {
+            $unit = $item['unit'] ?? 'piece';
+
+            if ($unit !== 'piece') {
+                $product = \App\Models\Product::find($item['product_id']);
+                $factor = $product?->unitFactor($unit);
+
+                if ($factor === null) {
+                    return response()->json([
+                        'message' => __('stock.unit_not_for_product', ['name' => $product?->displayName() ?? $item['product_id']]),
+                    ], 422);
+                }
+
+                $items[$idx]['qty'] = (int) $item['qty'] * $factor;
+            }
+
+            // ⚠️ **السقف بيتفحص بعد الضرب مش قبله.** «9999 كرتونة» كانت
+            // بتعدّي فاليديشن max:9999 وتتحول 719,928 قطعة — والمرتجع
+            // قيد دائن من غير حارس مخزون، فالسقف هنا هو الحارس الوحيد.
+            if ($maxPieces !== null && (int) $items[$idx]['qty'] > $maxPieces) {
+                return response()->json(['message' => __('api.qty_too_large')], 422);
+            }
+        }
+
+        return null;
     }
 }
