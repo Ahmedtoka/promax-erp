@@ -92,8 +92,25 @@ class ResetTransactions
             // في كل مخزن، مش يختفي من الشاشات
             DB::table('stocks')->update(['qty' => 0, 'hold_qty' => 0, 'good_qty' => 0, 'counted_at' => null]);
 
-            // مفيش قيود = مفيش مديونية — نفس نتيجة recalculate() بس دفعة واحدة
-            DB::table('clients')->update(['balance' => 0, 'withheld' => 0]);
+            // ⚠️ **كل المجاميع الدفترية على العميل، مش الرصيد بس.**
+            // `recalculate()` بيخزّن مشتريات/تحصيلات/مرتجعات/خصومات/
+            // تسويات كأعمدة على `clients` — والنظرة العامة بتقرا منهم
+            // مباشرة. تصفير الرصيد لوحده ساب «مشتريات 210 وتحصيل
+            // 5,000» طالعين في الداش بورد بعد المسح (اتشاف فعلاً
+            // 2026-08-04). مفيش قيود = كل المجاميع صفر — نفس نتيجة
+            // recalculate() على دفتر فاضي بس دفعة واحدة.
+            DB::table('clients')->update([
+                'balance' => 0, 'withheld' => 0,
+                'purchases' => 0, 'collections' => 0, 'returns' => 0,
+                'rebates' => 0, 'settlements' => 0,
+                'first_activity_at' => null, 'last_activity_at' => null,
+                'last_payment_at' => null,
+            ]);
+
+            // ونفس القاعدة للموردين — رصيدهم تجميعة من دفترهم اللي اتمسح
+            if (Schema::hasTable('suppliers')) {
+                DB::table('suppliers')->update(['balance' => 0]);
+            }
         });
 
         return $wiped;
