@@ -372,8 +372,11 @@ class OpsController extends Controller
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(),
             // الفروع بتتفلتر بالسلسلة في الجافاسكريبت — فبنبعت الكل مع group_id
             // ⚠️ العميل حالته عمود `status` نصي ('active') مش بوليان `active`
-            'clients' => Client::with('group')->where('status', 'active')->orderBy('name')
-                ->get(['id', 'name', 'group_id', 'balance']),
+            // العلاقات دي عشان Pricing::listRowFor تشتغل من الميموري —
+            // البحث بيفلتر الأصناف بسعر قايمة الفرع المختار
+            'clients' => Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
+                ->where('status', 'active')->orderBy('name')
+                ->get(['id', 'name', 'name_en', 'group_id', 'balance', 'price_list', 'price_list_id']),
             'reps' => User::whereIn('role', ['sales_agent', 'driver'])
                 ->where('active', true)->orderBy('name')->get(['id', 'name']),
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),

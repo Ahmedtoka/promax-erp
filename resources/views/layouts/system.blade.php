@@ -117,7 +117,7 @@ tr.clickable:hover{background:var(--card2)}
 .b-purple{background:#F1EAFD;color:var(--purple)}
 .b-gold{background:#FFFDE0;color:#8A7A00}
 .searchbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
-input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;outline:none;transition:.15s}
+input[type=text],input[type=number],input[type=date],input[type=datetime-local],input[type=time],input[type=email],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;outline:none;transition:.15s}
 input:focus,select:focus,textarea:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14)}
 .searchbar input[type=text]{flex:1;min-width:200px}
 label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:var(--muted)}

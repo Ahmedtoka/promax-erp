@@ -13,6 +13,15 @@
 @php
     $fmt = fn ($n) => number_format((float) $n);
 
+    // قوايم الأسعار (الصفوف المسمّاة) اللي العملاء النشطين فعلاً عليها —
+    // البحث مايطلعش صنف مش متسعّر لقايمة الفرع المختار.
+    // listRowFor هي نفس مصدر التسعير اللي fillPoItems بيحاسب بيه.
+    $listRows = new \Illuminate\Database\Eloquent\Collection(
+        $clients->map(fn ($c) => \App\Services\Pricing::listRowFor($c))
+            ->filter()->unique('id')->values()->all()
+    );
+    $listRows->load('items');   // priceFor بتقرا من items المحمّلة — من غير كويري لكل صنف
+
     $catalog = $products->map(fn ($p) => [
         'id' => $p->id,
         'code' => (string) $p->code,
@@ -22,6 +31,7 @@
         'image' => $p->imageSrc(),
         'available' => (int) $p->qtyTotal(),
         'units' => $p->unitFactors(),
+        'prices' => $listRows->mapWithKeys(fn ($l) => [$l->id => \App\Services\Pricing::listPrice($p, $l)]),
     ])->values();
 
     $branches = $clients->map(fn ($c) => [
@@ -29,6 +39,7 @@
         'name' => $c->fullName(),
         'group' => (int) $c->group_id,
         'balance' => (float) $c->balance,
+        'list' => \App\Services\Pricing::listRowFor($c)?->id,
     ])->values();
 
     $oldRows = collect(old('qty', []))->keys()->unique()->values();
@@ -207,10 +218,26 @@ function poShowBalance() {
         : @json(__('ops.branch_credit')) + ' ' + Math.abs(b.balance).toLocaleString();
 }
 
+/** قايمة أسعار الفرع المختار — null لو لسه مفيش فرع */
+function poBranchList() {
+    const b = BRANCHES.find(x => String(x.id) === document.getElementById('poBranch').value);
+    return b ? b.list : null;
+}
+
+/** الصنف متسعّر؟ بقايمة الفرع لو مختار — وإلا بأي قايمة */
+function poPriced(p) {
+    const list = poBranchList();
+    const prices = p.prices || {};
+    return list ? (prices[list] || 0) > 0
+                : Object.values(prices).some(v => v > 0);
+}
+
 function poSearch() {
     const q = document.getElementById('prodSearch').value.trim().toLowerCase();
     const box = document.getElementById('prodResults');
-    const hits = CATALOG.filter(p =>
+    // ⚠️ بحث الأصناف بيطلّع اللي ليه كمية **وسعر** بس — صنف من غير
+    // سعر الحسابات هترفضه أصلاً (stock.po_not_priced)، فمايظهرش هنا
+    const hits = CATALOG.filter(p => p.available > 0 && poPriced(p)).filter(p =>
         !q || p.name.toLowerCase().includes(q) || p.name_ar.includes(q)
         || p.name_en.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
 

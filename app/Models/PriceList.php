@@ -151,9 +151,21 @@ class PriceList extends Model
      */
     public static function default(): ?self
     {
-        return static::where('is_default', true)->where('active', true)->first()
-            ?? static::where('active', true)->orderBy('id')->first();
+        // ⚠️ ميمو للريكوست الواحد — listRowFor بتقع هنا لكل عميل من غير
+        // قايمة خاصة، وشاشات فيها مئات العملاء كانت بتضرب نفس الكويري
+        // مئات المرات. setDefault بتصفّر الكاش.
+        if (! static::$defaultResolved) {
+            static::$defaultResolved = true;
+            static::$defaultCache = static::where('is_default', true)->where('active', true)->first()
+                ?? static::where('active', true)->orderBy('id')->first();
+        }
+
+        return static::$defaultCache;
     }
+
+    protected static ?self $defaultCache = null;
+
+    protected static bool $defaultResolved = false;
 
     public function setDefault(): ?string
     {
@@ -165,6 +177,8 @@ class PriceList extends Model
             static::where('is_default', true)->update(['is_default' => false]);
             $this->update(['is_default' => true]);
         });
+
+        static::$defaultResolved = false;   // الكاش بقى قديم
 
         return null;
     }
