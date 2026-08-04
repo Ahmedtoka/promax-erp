@@ -1,6 +1,7 @@
 @extends('layouts.system')
 
-@section('title', __('stock.inventory'))
+{{-- «المنتجات» — الصفحة الأم: كل الأصناف × كل المخازن بالقيم والسليم والهولد --}}
+@section('title', __('nav.inventory'))
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
