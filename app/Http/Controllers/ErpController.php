@@ -1236,6 +1236,7 @@ class ErpController extends Controller
                 Rule::unique('products', 'barcode')->ignore($id)],
             'case_barcode' => ['nullable', 'string', 'max:20'],
             'units_per_case' => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'box_units' => ['nullable', 'integer', 'min:1', 'max:9999'],
             'eta_code' => ['nullable', 'string', 'max:30'],
 
             // ═══ المواصفات ═══

@@ -147,6 +147,11 @@
                 <input type="number" name="units_per_case" min="1" max="9999" style="width:100%" value="{{ $v('units_per_case') }}">
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('stock.units_per_case_hint') }}</div>
             </div>
+            <div>
+                <label class="f">{{ __('stock.box_units') }}</label>
+                <input type="number" name="box_units" min="1" max="9999" style="width:100%" value="{{ $v('box_units') }}">
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('stock.box_units_hint') }}</div>
+            </div>
         </div>
 
         {{-- ═════ المواصفات ═════ --}}

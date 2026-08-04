@@ -81,6 +81,7 @@ class WarehouseController extends Controller
             'lines.*.batch_no' => ['required', 'string', 'max:60'],
             'lines.*.produced_on' => ['nullable', 'date'],
             'lines.*.expires_on' => ['nullable', 'date'],
+            'lines.*.unit' => ['nullable', 'in:piece,box,case'],
             'lines.*.qty' => ['required', 'integer', 'min:1'],
             'lines.*.cost' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -105,6 +106,20 @@ class WarehouseController extends Controller
                 $product = Product::find($line['product_id']);
                 $produced = $line['produced_on'] ?? null;
 
+                // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.**
+                // «5 كراتين اسبريد» بتتخزن 60 قطعة — والمخزون كله
+                // بالقطعة زي ما هو. وحدة مش معرّفة للصنف = رفض،
+                // مش افتراض إنها قطعة (الفرق بين 5 و360 في المخزن).
+                $factor = $product->unitFactor($line['unit'] ?? 'piece');
+
+                if ($factor === null) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'lines' => __('stock.unit_not_for_product', ['name' => $product->displayName()]),
+                    ]);
+                }
+
+                $qtyPieces = (int) $line['qty'] * $factor;
+
                 // تاريخ الانتهاء: اللي المستخدم كتبه، وإلا محسوب من الإنتاج + مدة الصلاحية
                 $expires = $line['expires_on']
                     ?? ($produced ? $product->expiryFrom($produced)->toDateString() : null)
@@ -123,8 +138,8 @@ class WarehouseController extends Controller
                     'cost' => $line['cost'] ?? $batch->cost,
                 ]);
                 // الكمية بتتزوّد — نفس الباتش ممكن يوصل على أكتر من شحنة
-                $batch->qty_received = (int) $batch->qty_received + (int) $line['qty'];
-                $batch->qty_remaining = (int) $batch->qty_remaining + (int) $line['qty'];
+                $batch->qty_received = (int) $batch->qty_received + $qtyPieces;
+                $batch->qty_remaining = (int) $batch->qty_remaining + $qtyPieces;
                 $batch->save();
             }
 

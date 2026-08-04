@@ -79,7 +79,33 @@ class CustodyHandoutController extends Controller
             'qty.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
             'gift' => ['nullable', 'array'],
             'gift.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'unit' => ['nullable', 'array'],
+            'unit.*' => ['nullable', 'in:piece,box,case'],
         ]);
+
+        // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.** المستخدم
+        // كتب «5 كرتونة اسبريد» — بنحوّلها 60 قطعة قبل ما توصل
+        // لـ requestLoad، والعهدة كلها بالقطعة زي ما هي. وحدة مش
+        // معرّفة للصنف = رفض الأمر كله، مش افتراض إنها قطعة.
+        foreach ($request->input('unit', []) as $productId => $unit) {
+            if (! $unit || $unit === 'piece') {
+                continue;
+            }
+
+            $factor = Product::find($productId)?->unitFactor($unit);
+
+            if ($factor === null) {
+                return back()->withErrors([
+                    'qty' => __('stock.unit_not_for_product', ['name' => Product::find($productId)?->displayName() ?? $productId]),
+                ])->withInput();
+            }
+
+            foreach (['qty', 'gift'] as $key) {
+                if (! empty($data[$key][$productId])) {
+                    $data[$key][$productId] = (int) $data[$key][$productId] * $factor;
+                }
+            }
+        }
 
         $warehouse = Warehouse::findOrFail($data['warehouse_id']);
         $rep = User::findOrFail($data['rep_id']);

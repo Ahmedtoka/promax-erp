@@ -16,6 +16,9 @@
             .e($p->code.' — '.$p->displayName())
             .'</option>';
     }
+
+    // وحدات الإدخال لكل صنف — العرض بس؛ الضرب الحقيقي في السيرفر (storeReceipt)
+    $unitMap = $products->mapWithKeys(fn ($p) => [$p->id => $p->unitFactors()]);
 @endphp
 
 @section('actions')
@@ -144,6 +147,7 @@
                         <th>{{ __('stock.batch_no') }}</th>
                         <th>{{ __('stock.produced_on') }}</th>
                         <th>{{ __('stock.expires_on') }}</th>
+                        <th>{{ __('stock.entry_unit') }}</th>
                         <th>{{ __('common.qty') }}</th>
                         <th>{{ __('stock.cost') }}</th>
                         <th></th>
@@ -174,7 +178,15 @@
         <td><input type="text" data-n="batch_no" required style="width:120px"></td>
         <td><input type="date" data-n="produced_on" style="width:150px"></td>
         <td><input type="date" data-n="expires_on" style="width:150px"></td>
-        <td><input type="number" data-n="qty" min="1" step="1" value="1" required style="width:90px"></td>
+        <td>
+            <select data-n="unit" style="width:100px" onchange="grnUnitHint(this)">
+                <option value="piece">{{ __('stock.unit_piece') }}</option>
+            </select>
+        </td>
+        <td>
+            <input type="number" data-n="qty" min="1" step="1" value="1" required style="width:90px" oninput="grnUnitHint(this)">
+            <div class="grn-eq" style="font-size:10.5px;color:var(--muted);margin-top:3px"></div>
+        </td>
         <td><input type="number" data-n="cost" min="0" step="0.01" style="width:100px"></td>
         <td><button class="btn sm red" type="button" onclick="grnRemoveLine(this)">{{ __('stock.remove_line') }}</button></td>
     </tr>
@@ -186,6 +198,54 @@
 @section('scripts')
 @if ($manager)
 <script>
+// وحدات الإدخال لكل صنف — {id: {piece:1, box:12, case:72}}
+// ⚠️ العرض بس: السيرفر بيعيد الضرب بنفسه في storeReceipt
+const GRN_UNITS = {!! json_encode($unitMap, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+const GRN_UNIT_LABELS = {
+    piece: @json(__('stock.unit_piece')),
+    box: @json(__('stock.unit_box')),
+    'case': @json(__('stock.unit_case'))
+};
+
+/** الصنف اتغيّر؟ نبني قايمة الوحدات المتاحة ليه (قطعة دايماً + علبة/كرتونة لو معرّفين) */
+function grnUnitOptions(row) {
+    var pid = row.querySelector('[data-n="product_id"]').value;
+    var sel = row.querySelector('[data-n="unit"]');
+    var factors = GRN_UNITS[pid] || { piece: 1 };
+    var current = sel.value;
+
+    sel.innerHTML = '';
+    Object.keys(factors).forEach(function (u) {
+        var opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = GRN_UNIT_LABELS[u] + (factors[u] > 1 ? ' (' + factors[u] + ')' : '');
+        sel.appendChild(opt);
+    });
+
+    sel.value = factors[current] ? current : 'piece';
+    grnUnitHint(sel);
+}
+
+/** «= N قطعة» تحت الكمية — بيبان بس لما الوحدة مش قطعة */
+function grnUnitHint(el) {
+    var row = el.closest('tr');
+    var pid = row.querySelector('[data-n="product_id"]').value;
+    var unit = row.querySelector('[data-n="unit"]').value;
+    var qty = Number(row.querySelector('[data-n="qty"]').value || 0);
+    var eq = row.querySelector('.grn-eq');
+    var factor = (GRN_UNITS[pid] || {})[unit] || 1;
+
+    eq.textContent = (factor > 1 && qty > 0)
+        ? '= ' + (qty * factor).toLocaleString() + ' ' + GRN_UNIT_LABELS.piece
+        : '';
+}
+
+document.addEventListener('change', function (e) {
+    if (e.target.matches('#grnRows [data-n="product_id"]')) {
+        grnUnitOptions(e.target.closest('tr'));
+    }
+});
+
 function grnReindex() {
     document.querySelectorAll('#grnRows > tr').forEach(function (tr, i) {
         tr.querySelectorAll('[data-n]').forEach(function (el) {

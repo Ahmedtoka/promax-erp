@@ -24,6 +24,8 @@
         'family' => $p->familyLabel(),
         'available' => (int) $p->available,
         'image' => $p->imageSrc(),
+        // وحدات الإدخال — العرض بس؛ الضرب الحقيقي في السيرفر (store)
+        'units' => $p->unitFactors(),
     ])->values();
 
     // صفوف رجعت من فاليديشن مرفوضة — بنعيد بناءها
@@ -108,6 +110,7 @@
                     <th style="width:40px"></th>
                     <th>{{ __('stock.item') }}</th>
                     <th class="num">{{ __('stock.available') }}</th>
+                    <th style="width:110px">{{ __('stock.entry_unit') }}</th>
                     <th class="num" style="width:110px">{{ __('field.qty_sale') }}</th>
                     {{-- الهدايا خانة منفصلة عن البيع — عشان الفرق مايضيعش --}}
                     <th class="num" style="width:110px">🎁 {{ __('field.qty_gift') }}</th>
@@ -116,7 +119,7 @@
                 </tr>
                 <tbody id="selBody">
                     <tr id="selEmpty">
-                        <td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
+                        <td colspan="8" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('field.no_selected_hint') }}
                         </td>
                     </tr>
@@ -258,6 +261,7 @@ const CATALOG = {!! json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS
 const OLD_ROWS = {!! json_encode($oldRows, JSON_UNESCAPED_UNICODE) !!};
 const OLD_QTY = {!! json_encode(old('qty', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 const OLD_GIFT = {!! json_encode(old('gift', new stdClass), JSON_UNESCAPED_UNICODE) !!};
+const OLD_UNIT = {!! json_encode(old('unit', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -302,6 +306,36 @@ document.addEventListener('click', e => {
     }
 });
 
+const UNIT_LABELS = {
+    piece: @json(__('stock.unit_piece')),
+    box: @json(__('stock.unit_box')),
+    'case': @json(__('stock.unit_case'))
+};
+
+/**
+ * سيلكت الوحدة — قطعة دايماً + علبة/كرتونة لو معرّفين للصنف.
+ * ⚠️ العرض بس: السيرفر بيعيد ضرب الكمية والهدية بنفسه في store.
+ */
+function unitSelect(p) {
+    const units = p.units || { piece: 1 };
+
+    return '<select name="unit[' + p.id + ']" data-row="' + p.id + '" data-kind="unit"' +
+        ' style="width:100%" onchange="syncRow(' + p.id + ')">' +
+        Object.keys(units).map(u =>
+            '<option value="' + u + '">' + esc(UNIT_LABELS[u]) +
+            (units[u] > 1 ? ' (' + units[u] + ')' : '') + '</option>'
+        ).join('') +
+        '</select>';
+}
+
+/** مضاعِف الوحدة المختارة في صف — بالقطع */
+function rowFactor(id) {
+    const p = CATALOG.find(x => x.id === id);
+    const sel = document.querySelector('[data-row="' + id + '"][data-kind="unit"]');
+
+    return (p && p.units && sel && p.units[sel.value]) || 1;
+}
+
 /** اختيار صنف — ينزل صف في الجدول بكمية وهدية */
 function addRow(id) {
     const p = CATALOG.find(x => x.id === id);
@@ -322,10 +356,11 @@ function addRow(id) {
         '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:30px;height:30px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
         '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></td>' +
         '<td class="num"><b>' + p.available.toLocaleString() + '</b></td>' +
-        '<td class="num"><input type="number" min="0" max="' + p.available + '" style="width:100%"' +
+        '<td>' + unitSelect(p) + '</td>' +
+        '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="qty[' + id + ']" data-row="' + id + '" data-kind="qty" data-max="' + p.available + '"' +
             ' oninput="syncRow(' + id + ')"></td>' +
-        '<td class="num"><input type="number" min="0" max="' + p.available + '" style="width:100%"' +
+        '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="gift[' + id + ']" data-row="' + id + '" data-kind="gift" oninput="syncRow(' + id + ')"></td>' +
         '<td class="num" id="tot' + id + '">—</td>' +
         '<td class="num"><button type="button" class="btn sm" onclick="removeRow(' + id + ')">✕</button></td>';
@@ -352,11 +387,15 @@ function syncRow(id) {
 
     if (!qty || !gift || !cell) return;
 
+    // الإجمالي **بالقطع** — الكمية المكتوبة × مضاعِف الوحدة المختارة
+    const factor = rowFactor(id);
     const max = Number(qty.dataset.max || 0);
-    const sum = Number(qty.value || 0) + Number(gift.value || 0);
+    const sum = (Number(qty.value || 0) + Number(gift.value || 0)) * factor;
     const over = sum > max;
 
-    cell.innerHTML = sum === 0 ? '—' : '<b>' + sum.toLocaleString() + '</b>';
+    cell.innerHTML = sum === 0 ? '—'
+        : '<b>' + sum.toLocaleString() + '</b>' +
+          (factor > 1 ? ' <span style="font-size:10px;color:var(--muted)">' + esc(UNIT_LABELS.piece) + '</span>' : '');
     cell.className = over ? 'num neg' : 'num';
     qty.className = gift.className = over ? 'bad' : '';
 
@@ -368,8 +407,9 @@ function syncTotals() {
 
     document.querySelectorAll('[data-kind="qty"]').forEach(q => {
         const g = document.querySelector('[data-row="' + q.dataset.row + '"][data-kind="gift"]');
-        const s = Number(q.value || 0);
-        const gv = Number(g ? g.value || 0 : 0);
+        const f = rowFactor(Number(q.dataset.row));
+        const s = Number(q.value || 0) * f;
+        const gv = Number(g ? g.value || 0 : 0) * f;
 
         sale += s;
         gift += gv;
@@ -392,6 +432,8 @@ OLD_ROWS.forEach(id => {
     const g = document.querySelector('[data-row="' + id + '"][data-kind="gift"]');
     if (q) q.value = OLD_QTY[id] ?? '';
     if (g) g.value = OLD_GIFT[id] ?? '';
+    const u = document.querySelector('[data-row="' + id + '"][data-kind="unit"]');
+    if (u && OLD_UNIT[id]) u.value = OLD_UNIT[id];
     syncRow(Number(id));
 });
 

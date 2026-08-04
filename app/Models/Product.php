@@ -39,7 +39,7 @@ class Product extends Model
     ];
 
     protected $fillable = [
-        'code', 'barcode', 'case_barcode', 'units_per_case',
+        'code', 'barcode', 'case_barcode', 'units_per_case', 'box_units',
         'name', 'name_en', 'unit', 'unit_en',
         'cost', 'price_old', 'price_new', 'price_changed_at',
         'net_content', 'net_uom', 'family', 'brand',
@@ -285,5 +285,64 @@ class Product extends Model
         return trim($barcode) === $this->case_barcode
             ? (int) ($this->units_per_case ?: 1)
             : 1;
+    }
+
+    // ═══════════════ وحدات الإدخال — قرار المالك 2026-08-04 ═══════════════
+    //
+    // ⚠️ **المخزون بالقطعة دايماً.** العلبة والكرتونة مجرد مضاعِف عند
+    // الإدخال (استلام / تسليم عهدة) — بيتحسب **في السيرفر** مش في
+    // الجافاسكريبت، عشان تعديل الـHTML مايدخّلش كميات غلط.
+    //
+    //   `box_units`       = قطع العلبة (NULL للأصناف اللي مالهاش علبة)
+    //   `units_per_case`  = قطع الكرتونة (نفس العمود اللي بيضرب باركود الكرتونة)
+
+    /** وحدات الإدخال المتاحة للصنف ده ومضاعِف كل واحدة بالقطع */
+    public function unitFactors(): array
+    {
+        $f = ['piece' => 1];
+
+        if ((int) $this->box_units > 1) {
+            $f['box'] = (int) $this->box_units;
+        }
+
+        if ((int) $this->units_per_case > 1) {
+            $f['case'] = (int) $this->units_per_case;
+        }
+
+        return $f;
+    }
+
+    /**
+     * مضاعِف وحدة معينة — أو null لو الوحدة دي **مش معرّفة** للصنف.
+     *
+     * ⚠️ null مش 1: لو حد بعت `case` لصنف مالوش كرتونة، الرفض أحسن
+     * من افتراض إنها قطعة — الفرق بين 5 و 360 قطعة في المخزن.
+     */
+    public function unitFactor(?string $unit): ?int
+    {
+        return $this->unitFactors()[$unit ?: 'piece'] ?? null;
+    }
+
+    /** «الكرتونة = 6 علب × 12 قطعة = 72» — سطر التدريج لكارت الصنف */
+    public function packLabel(): ?string
+    {
+        $box = (int) $this->box_units;
+        $case = (int) $this->units_per_case;
+
+        if ($case > 1 && $box > 1 && $case % $box === 0) {
+            return __('stock.pack_box_case', [
+                'boxes' => $case / $box, 'box' => $box, 'case' => $case,
+            ]);
+        }
+
+        if ($case > 1) {
+            return __('stock.pack_case_only', ['case' => $case]);
+        }
+
+        if ($box > 1) {
+            return __('stock.pack_box_only', ['box' => $box]);
+        }
+
+        return null;
     }
 }

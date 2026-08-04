@@ -177,6 +177,12 @@
                         @endif
                     </td>
                 </tr>
+                @if ($p->packLabel())
+                    <tr>
+                        <th>{{ __('stock.pack_tiers') }}</th>
+                        <td>{{ $p->packLabel() }}</td>
+                    </tr>
+                @endif
                 <tr><th>{{ __('stock.eta_code') }}</th><td class="num">{{ $p->eta_code ?: '—' }}</td></tr>
                 <tr><th>{{ __('stock.family') }}</th><td>{{ $p->familyLabel() }}</td></tr>
                 <tr><th>{{ __('stock.brand') }}</th><td>{{ $p->brand ?: '—' }}</td></tr>
