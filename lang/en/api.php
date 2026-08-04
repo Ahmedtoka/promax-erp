@@ -17,6 +17,9 @@ return [
     'return_needs_open_visit' => 'Returns must be recorded from an open visit on the same client.',
     'return_consignment' => 'Consignment client — returns are settled from the branch sales report, not here.',
     'qty_too_large' => 'Quantity exceeds the allowed limit — check the unit and the number.',
+    'po_over_delivery' => 'You cannot deliver more than the order asks - extras go on a regular invoice.',
+    'po_item_not_in_order' => 'This product is not part of the purchase order.',
+    'po_nothing_delivered' => 'Nothing was delivered - if the branch refused the whole delivery, tell management.',
     'order_not_yours' => 'This purchase order is not assigned to you.',
     'not_your_channel' => 'This request belongs to a channel you do not manage.',
 

@@ -36,6 +36,10 @@ return [
 
     // ---------- Purchase orders ----------
     'po_created' => 'Purchase order created.',
+    'po_sent_accounting' => 'Order sent to accounting - the pick order drops once approved.',
+    'po_approved' => 'Order approved and the pick order went to the warehouse.',
+    'memo_po_partial' => 'PO :number delivered - :diff pcs short of the order',
+    'po_rejected' => 'Order rejected and the channel manager was notified.',
     'po_assigned' => 'The order was assigned to the driver.',
 
     // ---------- Client requests ----------

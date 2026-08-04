@@ -54,6 +54,12 @@ return [
         'energy_bar' => 'Energy Bar',
     ],
 
+    'po_approval' => [
+        'pending' => 'Awaiting accounting',
+        'approved' => 'Approved by accounting',
+        'rejected' => 'Rejected',
+    ],
+
     'po_status' => [
         'pending' => 'Pending',
         'arrived' => 'Arrived',

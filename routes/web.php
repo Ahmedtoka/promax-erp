@@ -434,6 +434,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/pos/{purchaseOrder}/assign', [OpsController::class, 'assignPurchaseOrder'])
             ->middleware('role:admin,manager')->name('pos.assign');
 
+        // ═══ أوامر توريد الكي أكاونت (2026-08-04) ═══
+        // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن
+        Route::get('/po-handout', [OpsController::class, 'poHandout'])
+            ->middleware('role:admin,manager')->name('po.handout');
+        Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
+            ->middleware('role:admin,accountant')->name('po.approvals');
+        Route::post('/po-approvals/{purchaseOrder}', [OpsController::class, 'decidePoApproval'])
+            ->middleware('role:admin,accountant')->name('po.decide');
+
         Route::get('/requests', [OpsController::class, 'requests'])->name('requests');
         Route::post('/requests/{clientRequest}/decide', [OpsController::class, 'decideRequest'])
             ->middleware('role:admin,manager')->name('requests.decide');

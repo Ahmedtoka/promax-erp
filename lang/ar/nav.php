@@ -40,6 +40,8 @@ return [
 
     'ops_dashboard' => 'لوحة العمليات',
     'purchase_orders' => 'أوامر التوريد',
+    'po_handout' => 'تسليم PO للمندوب',
+    'po_approvals' => 'موافقات التوريد',
     'invoices' => 'الفواتير',
     'client_requests' => 'موافقات العملاء',
     'replenishments' => 'طلبات الريفيل',

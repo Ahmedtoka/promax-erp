@@ -108,6 +108,8 @@ return [
     'notif_replenishment_assigned_title' => 'Your request :number was assigned to :name',
     'notif_replenishment_assigned_body' => 'It will be delivered to :client soon.',
     'notif_po_new_title' => 'New purchase order :number',
+    'notif_po_rejected_title' => 'Accounting rejected :number',
+    'notif_po_edited_title' => 'Accounting edited :number',
     'notif_po_new_body' => ':client — EGP :amount',
     'notif_po_assigned_title' => 'Purchase order :number was assigned to you',
 

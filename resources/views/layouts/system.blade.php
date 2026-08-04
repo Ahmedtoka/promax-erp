@@ -183,6 +183,10 @@ dialog h4{font-size:16px;font-weight:900;margin-bottom:14px}
         $navCounts['replenishments'] = \App\Models\ReplenishmentRequest::where('status', 'pending')->count();
     }
 
+    if (in_array('po_approvals', $shown, true)) {
+        $navCounts['po_approvals'] = \App\Models\PurchaseOrder::where('approval_status', 'pending')->count();
+    }
+
     if (in_array('dues', $shown, true)) {
     // ⚠️ كاش دقيقة: العدّاد ده كان كويري على كل صفحة لكل مستخدم.
         $navCounts['dues'] = cache()->remember('nav.open_dues', 60,

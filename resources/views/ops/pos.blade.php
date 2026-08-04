@@ -8,7 +8,11 @@
     $manager = auth()->user()->canDecideOps(); @endphp
 
 @section('actions')
-    @if ($manager)<button class="btn gold" onclick="openDlg('dlgNewPo')">+ {{ __('ops.purchase_order') }}</button>@endif
+    @if ($manager)
+        {{-- فلو الكي أكاونت: إنشاء بموافقة الحسابات --}}
+        <a class="btn" href="{{ route('ops.po.handout') }}">📦 {{ __('ops.po_handout') }}</a>
+        <button class="btn gold" onclick="openDlg('dlgNewPo')">+ {{ __('ops.purchase_order') }}</button>
+    @endif
 @endsection
 
 @section('content')
@@ -28,19 +32,35 @@
         <table>
             <tr>
                 <th>{{ __('ops.order') }}</th><th>{{ __('client.client') }}</th><th>{{ __('ops.source') }}</th>
-                <th>{{ __('common.address') }}</th><th>{{ __('ops.driver') }}</th><th>{{ __('ops.units') }}</th>
-                <th>{{ __('stock.value') }}</th><th>{{ __('ops.pricing') }}</th><th>{{ __('common.status') }}</th>@if ($manager)<th></th>@endif
+                <th>{{ __('ops.rep') }}</th><th>{{ __('ops.due_at') }}</th><th>{{ __('ops.units') }}</th>
+                <th>{{ __('stock.value') }}</th><th>{{ __('ops.decision') }}</th><th>{{ __('common.status') }}</th>@if ($manager)<th></th>@endif
             </tr>
             @forelse ($pos as $po)
                 <tr>
                     <td class="num"><b>{{ $po->number }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}</span></td>
                     <td><b>{{ $po->client->displayName() }}</b></td>
                     <td><span class="badge {{ $po->sourceClass() }}">{{ $po->sourceLabel() }}</span></td>
-                    <td style="white-space:normal;max-width:200px;color:var(--muted);font-size:11.5px">{{ $po->address }}</td>
                     <td>{{ $po->courier?->displayName() ?? '—' }}</td>
-                    <td class="num">{{ $po->qtyTotal() }}</td>
+                    {{-- معاد التوريد بالساعة + شارة التأخير — فلو الكي أكاونت --}}
+                    <td style="font-size:11.5px">
+                        {{ $po->due_at?->format('m-d H:i') ?? $po->due_date?->format('m-d') ?? '—' }}
+                        @if ($po->isLate())<br><span class="badge b-red" style="font-size:9.5px">⏰ {{ __('ops.po_late') }}</span>@endif
+                    </td>
+                    <td class="num">{{ $po->qtyTotal() }}
+                        {{-- الفرق بعد التسليم: سلم إيه وناقص إيه --}}
+                        @if ($po->status === 'delivered' && $po->qtyTotal() !== $po->deliveredQtyTotal())
+                            <br><span style="font-size:10px;color:#B86E00;font-weight:800">{{ __('ops.po_delivered_qty') }} {{ $po->deliveredQtyTotal() }} · {{ __('ops.po_variance') }} {{ $po->qtyTotal() - $po->deliveredQtyTotal() }}</span>
+                        @endif
+                    </td>
                     <td class="num pos">{{ $fmt($po->total) }}</td>
-                    <td><span class="badge b-gray">{{ __('enums.price_mode.'.($po->price_mode === 'old' ? 'old' : 'new')) }}</span></td>
+                    <td>
+                        @if ($po->needsApproval())
+                            <span class="badge {{ $po->approvalClass() }}">{{ $po->approvalLabel() }}</span>
+                            @if ($po->was_edited)<br><span class="badge b-orange" style="font-size:9.5px">{{ __('ops.edited') }}</span>@endif
+                        @else
+                            <span class="badge b-gray">—</span>
+                        @endif
+                    </td>
                     <td><span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span>
                         @if ($po->delivered_at)<br><span style="font-size:10.5px;color:var(--muted)">{{ $po->delivered_at->format('H:i') }}</span>@endif
                     </td>

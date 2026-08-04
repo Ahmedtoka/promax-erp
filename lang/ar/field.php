@@ -107,6 +107,8 @@ return [
     'notif_replenishment_assigned_title' => 'طلبك :number اتنزّل على :name',
     'notif_replenishment_assigned_body' => 'هيتورد لـ :client قريب.',
     'notif_po_new_title' => 'أمر توريد جديد :number',
+    'notif_po_rejected_title' => 'الحسابات رفضت :number',
+    'notif_po_edited_title' => 'الحسابات عدّلت :number',
     'notif_po_new_body' => ':client — :amount ج',
     'notif_po_assigned_title' => 'اتنزّل عليك أمر توريد :number',
 

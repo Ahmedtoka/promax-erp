@@ -54,6 +54,12 @@ return [
         'energy_bar' => 'إنرچي بار',
     ],
 
+    'po_approval' => [
+        'pending' => 'مستني الحسابات',
+        'approved' => 'اعتمدته الحسابات',
+        'rejected' => 'مرفوض',
+    ],
+
     'po_status' => [
         'pending' => 'مستني',
         'arrived' => 'جاري التسليم',

@@ -42,7 +42,10 @@ class FieldApiController extends Controller
             // السواق بيشوف عهدته بسعر القائمة القديم والسيلز بالجديد
             'custody' => $this->custodyPayload($custody, $user->isDriver() ? 'old' : 'new'),
             'zones' => $user->isSalesAgent() ? $this->zonesPayload($user) : [],
-            'purchase_orders' => $user->isDriver() ? $this->posPayload($user) : [],
+            // ⚠️ السيلز بقى بيشوف أوامر التوريد برضو — فلو الكي أكاونت
+            // (2026-08-04): أمر معتمد من الحسابات واتجهز بينزله يسلمه.
+            'purchase_orders' => ($user->isDriver() || $user->isSalesAgent())
+                ? $this->posPayload($user) : [],
             'today' => $this->todayPayload($user),
             'notifications' => $user->appNotifications()->take(20)->get()->map(fn ($n) => [
                 'id' => $n->id, 'title' => $n->title, 'body' => $n->body,
@@ -211,11 +214,17 @@ class FieldApiController extends Controller
         return PurchaseOrder::with(['client', 'items.product'])
             ->where('assigned_to', $user->id)
             ->whereIn('status', ['pending', 'arrived', 'delivered'])
-            ->whereDate('created_at', '>=', today()->subDays(3))
+            // ⚠️ **أمر الموافقة مايظهرش غير معتمد.** pending موافقة =
+            // الحسابات ممكن ترفضه — المندوب مايشوفوش أصلاً.
+            // null = الفلو القديم (سواق/ريفيل) زي ما هو.
+            ->where(fn ($q) => $q->whereNull('approval_status')->orWhere('approval_status', 'approved'))
+            // أوامر الكي أكاونت ليها معاد مستقبلي — مانقصرش عليها الـ3 أيام
+            ->where(fn ($q) => $q->whereDate('created_at', '>=', today()->subDays(3))
+                ->orWhere(fn ($qq) => $qq->whereNotNull('due_at')->where('status', '!=', 'delivered')))
             ->latest()->get()->map(fn ($po) => [
                 'id' => $po->id,
                 'number' => $po->number,
-                'client' => $po->client->displayName(),
+                'client' => $po->client->fullName(),
                 'source' => $po->sourceLabel(),
                 'address' => $po->address,
                 'status' => $po->status,
@@ -227,11 +236,21 @@ class FieldApiController extends Controller
                 'qty_total' => $po->qtyTotal(),
                 'arrived_at' => $po->arrived_at?->toIso8601String(),
                 'delivered_at' => $po->delivered_at?->toIso8601String(),
+                // معاد التوريد بالساعة + متأخر — لأوامر الكي أكاونت
+                'due_at' => $po->due_at?->toIso8601String(),
+                'late' => $po->isLate(),
+                'delivered_qty_total' => (int) $po->deliveredQtyTotal(),
                 'items' => $po->items->map(fn ($i) => [
+                    'item_id' => $i->id,
                     'product_id' => $i->product_id,
                     'name' => $i->product->displayName(),
                     'unit' => $i->product->unitLabel(),
+                    'image' => $i->product->imageSrc(),
                     'qty' => $i->qty,
+                    'delivered_qty' => (int) $i->delivered_qty,
+                    // تدريج الوحدات — عشان المندوب يعدل «9 كراتين» وقت التسليم
+                    'box_units' => (int) $i->product->box_units,
+                    'case_units' => (int) $i->product->units_per_case,
                     'price' => (float) $i->price,
                     'total' => (float) $i->total,
                 ])->values(),
@@ -894,19 +913,92 @@ class FieldApiController extends Controller
             return response()->json(['message' => __('field.no_custody_today')], 422);
         }
 
-        $purchaseOrder->load('items');
-        $qty = $purchaseOrder->items->pluck('qty', 'product_id')->all();
+        // ═══ تسليم بكميات فعلية (فلو الكي أكاونت 2026-08-04) ═══
+        // الأبلكيشن يقدر يبعت items: [{product_id, qty, unit}] بالمسلَّم
+        // فعلاً («9 كراتين مش 10») — والقيد بيتكتب **بالمسلَّم** مش
+        // بالمطلوب. من غير items = الفلو القديم (تسليم كامل) زي ما هو.
+        $data = $request->validate([
+            'items' => ['nullable', 'array'],
+            'items.*.product_id' => ['required_with:items', 'exists:products,id'],
+            'items.*.qty' => ['required_with:items', 'integer', 'min:0'],
+            'items.*.unit' => ['nullable', 'in:piece,box,case'],
+        ]);
+
+        $purchaseOrder->load('items.product');
+
+        $delivered = null;   // null = تسليم كامل بالمطلوب
+
+        if (! empty($data['items'])) {
+            if ($err = $this->itemsToPieces($data['items'])) {
+                return $err;
+            }
+
+            $delivered = [];
+            foreach ($data['items'] as $i) {
+                $delivered[$i['product_id']] = ($delivered[$i['product_id']] ?? 0) + (int) $i['qty'];
+            }
+
+            // ⚠️ المسلَّم مقفول بالمطلوب: أكتر من المطلوب مش تعديل —
+            // ده بيع من غير أمر، وله مساره (فاتورة عادية).
+            foreach ($purchaseOrder->items as $item) {
+                if (($delivered[$item->product_id] ?? 0) > (int) $item->qty) {
+                    return response()->json(['message' => __('api.po_over_delivery')], 422);
+                }
+            }
+
+            // صنف مش في الأمر أصلاً = رفض
+            $orderProducts = $purchaseOrder->items->pluck('product_id')->all();
+            foreach (array_keys($delivered) as $pid) {
+                if (! in_array((int) $pid, $orderProducts, true)) {
+                    return response()->json(['message' => __('api.po_item_not_in_order')], 422);
+                }
+            }
+
+            if (array_sum($delivered) === 0) {
+                return response()->json(['message' => __('api.po_nothing_delivered')], 422);
+            }
+        }
+
+        $qty = $delivered ?? $purchaseOrder->items->pluck('qty', 'product_id')->all();
+        // الخصم بالكميات اللي **اتسلمت فعلاً** — الباقي بيفضل في العهدة
+        $qty = array_filter($qty, fn ($q) => (int) $q > 0);
 
         // ⚠️ نفس قاعدة storeInvoice: الخصم من العهدة جوه الترانزاكشن،
         // مايصحّش تخرج البضاعة من العربية وأمر التوريد يفضل مش متسلّم.
         try {
-            DB::transaction(function () use ($purchaseOrder, $user, $request, $custody, $qty) {
+            DB::transaction(function () use ($purchaseOrder, $user, $request, $custody, $qty, $delivered) {
                 if ($err = $custody->deduct($qty)) {
                     throw new StockShortage($err);
                 }
 
                 $purchaseOrder->update(['status' => 'delivered', 'delivered_at' => now()]);
-                $purchaseOrder->items()->update(['delivered_qty' => DB::raw('qty')]);
+
+                // ═══ قيمة القيد = المسلَّم فعلاً بسعر بنوده وضريبتها ═══
+                $net = 0.0;
+                $taxTotal = 0.0;
+
+                foreach ($purchaseOrder->items as $item) {
+                    $dq = $delivered === null ? (int) $item->qty : (int) ($delivered[$item->product_id] ?? 0);
+                    $item->update(['delivered_qty' => $dq]);
+
+                    // ⚠️ **السطر الكامل بياخد أرقامه المخزنة بالمليم** —
+                    // إعادة الحساب ممكن تفرق قرش تقريب عن grand_total
+                    // اللي الفلو القديم كان بيقيّد بيه. الجزئي بس هو
+                    // اللي بيتحسب من جديد.
+                    if ($dq === (int) $item->qty) {
+                        $net += (float) $item->total;
+                        $taxTotal += (float) $item->tax;
+                    } else {
+                        $lineNet = round($dq * (float) $item->price, 2);
+                        $net += $lineNet;
+                        $taxTotal += round($lineNet * (float) ($item->tax_rate ?? 0), 2);
+                    }
+                }
+
+                $net = round($net, 2);
+                $taxTotal = round($taxTotal, 2);
+                $grand = round($net + $taxTotal, 2);
+                $variance = $purchaseOrder->qtyTotal() - $purchaseOrder->items->sum('delivered_qty');
 
                 // نفس قاعدة الفاتورة: عقد الأمانة مايعملش مديونية عند التوريد
                 $consigned = $purchaseOrder->client->isConsignment();
@@ -917,12 +1009,15 @@ class FieldApiController extends Controller
                     'memo' => $consigned
                         ? __('flash.memo_consignment', [
                             'number' => $purchaseOrder->number,
-                            'amount' => number_format($purchaseOrder->payable()),
+                            'amount' => number_format($grand),
                         ])
-                        : __('flash.memo_po_delivered', ['number' => $purchaseOrder->number]),
-                    // ⚠️ المديونية بالإجمالي شامل الضريبة — زي الفاتورة
-                    'debit' => $consigned ? 0 : $purchaseOrder->payable(),
-                    'tax' => $consigned ? 0 : (float) $purchaseOrder->tax_total,
+                        : ($variance > 0
+                            ? __('flash.memo_po_partial', ['number' => $purchaseOrder->number, 'diff' => $variance])
+                            : __('flash.memo_po_delivered', ['number' => $purchaseOrder->number])),
+                    // ⚠️ المديونية **بالمسلَّم** شامل ضريبته — الفرع
+                    // مايتحاسبش على كرتونة ماوصلتلوش (قرار المالك 2026-08-04)
+                    'debit' => $consigned ? 0 : $grand,
+                    'tax' => $consigned ? 0 : $taxTotal,
                     'credit' => 0,
                     'kind' => $consigned ? 'consignment' : 'sale',
                     'source_type' => PurchaseOrder::class,
@@ -937,8 +1032,8 @@ class FieldApiController extends Controller
                         'client' => $purchaseOrder->client->displayName(),
                     ]),
                     __('field.event_delivered_sub', [
-                        'qty' => $purchaseOrder->qtyTotal(),
-                        'amount' => number_format($purchaseOrder->payable()),
+                        'qty' => $purchaseOrder->items->sum('delivered_qty'),
+                        'amount' => number_format($grand),
                     ]),
                     $request->input('lat'), $request->input('lng'));
             });
@@ -947,7 +1042,16 @@ class FieldApiController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(['status' => 'delivered']);
+        $purchaseOrder->refresh()->load('items');
+
+        // السامري: سلم إيه وإيه الفرق — من السيرفر مش من حساب الأبلكيشن
+        return response()->json([
+            'status' => 'delivered',
+            'number' => $purchaseOrder->number,
+            'qty_ordered' => $purchaseOrder->qtyTotal(),
+            'qty_delivered' => (int) $purchaseOrder->items->sum('delivered_qty'),
+            'delivered_value' => $purchaseOrder->deliveredValue(),
+        ]);
     }
 
     // ================= طلبات العملاء الجدد =================

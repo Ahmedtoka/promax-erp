@@ -96,6 +96,10 @@ class Access
             'erp.suppliers',
             '!erp.suppliers.store', '!erp.suppliers.update', '!erp.suppliers.opening',
             'ops.invoices', 'ops.invoice',
+            // ⚠️ موافقات أوامر توريد الكي أكاونت — دي شغل الحسابات
+            // الأساسي في الفلو الجديد (2026-08-04). الإنشاء نفسه
+            // (`ops.po.handout`) فاضل لمدير القناة والأدمن.
+            'ops.po.approvals', 'ops.po.decide',
             // ⚠️ **استثناء من بادئة `erp.clients`.** تفعيل العملاء
             // المستوردين قرار إداري (`role:admin,manager,branch_manager`)،
             // والبادئة كانت بتوري المحاسب اللينك والراوت يرفضه بـ403.
@@ -209,6 +213,7 @@ class Access
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
+            ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
@@ -219,6 +224,7 @@ class Access
         // ═══ ٥. الفلوس — بعد ما البيع حصل ═══
         'nav.group_money' => [
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
         ],

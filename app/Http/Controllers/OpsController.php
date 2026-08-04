@@ -130,11 +130,22 @@ class OpsController extends Controller
             'assigned_to' => ['nullable', 'exists:users,id'],
             'price_mode' => ['required', 'in:channel,old,new'],
             'due_date' => ['nullable', 'date'],
+            // ═══ فلو الكي أكاونت (2026-08-04): موعد بالساعة + مخزن
+            // التجهيز + فلاج «محتاج موافقة الحسابات» ═══
+            'due_at' => ['nullable', 'date'],
+            'warehouse_id' => ['nullable', 'exists:warehouses,id'],
+            'approval' => ['nullable', 'boolean'],
             'qty' => ['required', 'array'],
             'qty.*' => ['nullable', 'integer', 'min:0'],
             'unit' => ['nullable', 'array'],
             'unit.*' => ['nullable', 'in:piece,box,case'],
         ]);
+
+        // ⚠️ فلو الموافقة لازم له مندوب ومخزن — التجهيز بيتعمل منهم
+        // وقت موافقة الحسابات، مش وقت الإنشاء.
+        if ($request->boolean('approval') && (empty($data['assigned_to']) || empty($data['warehouse_id']))) {
+            return back()->withErrors(['assigned_to' => __('ops.po_needs_rep_wh')])->withInput();
+        }
 
         // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.** «5 كراتين»
         // بتتخزن 60 قطعة على بنود الأمر — والتسعير بالقطعة زي ما هو.
@@ -155,7 +166,9 @@ class OpsController extends Controller
             $data['qty'][$productId] = (int) $data['qty'][$productId] * $factor;
         }
 
-        DB::transaction(function () use ($data) {
+        $needsApproval = $request->boolean('approval');
+
+        DB::transaction(function () use ($data, $request, $needsApproval) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel
             $client = Client::findOrFail($data['client_id']);
 
@@ -172,6 +185,11 @@ class OpsController extends Controller
                     ? $client->priceList()
                     : $data['price_mode'],
                 'due_date' => $data['due_date'] ?? null,
+                // ═══ فلو الكي أكاونت: مستني الحسابات ═══
+                'approval_status' => $needsApproval ? 'pending' : null,
+                'due_at' => $data['due_at'] ?? null,
+                'warehouse_id' => $data['warehouse_id'] ?? null,
+                'created_by' => $request->user()->id,
                 'status' => 'pending',
                 'total' => 0,
             ]);
@@ -226,7 +244,10 @@ class OpsController extends Controller
                 'grand_total' => $sums['grand'],
             ]);
 
-            if ($po->assigned_to) {
+            // ⚠️ **في فلو الموافقة المندوب مايتبلغش هنا** — بيتبلغ لما
+            // المخزن يجهّز بعد موافقة الحسابات. إشعار بدري = مندوب
+            // بيستنى بضاعة الحسابات ممكن ترفضها أصلاً.
+            if ($po->assigned_to && ! $needsApproval) {
                 AppNotification::send(
                     User::find($po->assigned_to),
                     fn () => __('field.notif_po_new_title', ['number' => $po->number]),
@@ -239,7 +260,181 @@ class OpsController extends Controller
             }
         });
 
-        return back()->with('ok', __('flash.po_created'));
+        return back()->with('ok', $needsApproval ? __('flash.po_sent_accounting') : __('flash.po_created'));
+    }
+
+    // ═══════════ أوامر توريد الكي أكاونت — 2026-08-04 ═══════════
+
+    /** شاشة «تسليم PO للمندوب»: سلسلة ← فرع ← مندوب ← معاد ← أصناف بالوحدات */
+    public function poHandout()
+    {
+        return view('ops.po_handout', [
+            'groups' => \App\Models\ClientGroup::orderBy('name')->get(),
+            // الفروع بتتفلتر بالسلسلة في الجافاسكريبت — فبنبعت الكل مع group_id
+            'clients' => Client::where('active', true)->orderBy('name')
+                ->get(['id', 'name', 'group_id', 'balance']),
+            'reps' => User::whereIn('role', ['sales_agent', 'driver'])
+                ->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
+            'products' => Product::where('active', true)->orderBy('code')->get(),
+        ]);
+    }
+
+    /** طابور الحسابات: مستني القرار + آخر اللي اتقرر فيهم */
+    public function poApprovals()
+    {
+        $base = PurchaseOrder::with(['client.group', 'courier', 'items.product', 'creator', 'warehouse', 'approvedBy']);
+
+        return view('ops.po_approvals', [
+            'pending' => (clone $base)->where('approval_status', 'pending')
+                ->orderBy('due_at')->get(),
+            'decided' => (clone $base)->whereIn('approval_status', ['approved', 'rejected'])
+                ->latest('approved_at')->limit(30)->get(),
+        ]);
+    }
+
+    /**
+     * قرار الحسابات: موافقة / تعديل كميات + موافقة / رفض.
+     *
+     * ⚠️ **الموافقة هي اللي بتعمل أمر التجهيز** — قبلها البضاعة
+     * ماتتحجزش. والرفض/التعديل بيتبلغ بيه صاحب الأمر (مدير القناة).
+     */
+    public function decidePoApproval(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $data = $request->validate([
+            'decision' => ['required', 'in:approved,rejected'],
+            'note' => ['nullable', 'string', 'max:500'],
+            // تعديل الحسابات بالقطع — الشاشة بتوري التجميعة جنب الخانة
+            'qty_edit' => ['nullable', 'array'],
+            'qty_edit.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
+        ]);
+
+        // ⚠️ قرار واحد بس — ضغطتين متتاليتين مايعملوش أمري تجهيز
+        if ($purchaseOrder->approval_status !== 'pending') {
+            return back()->withErrors(['decision' => __('ops.po_already_decided')]);
+        }
+
+        // ⚠️ المندوب أو المخزن اتشالوا بعد الإنشاء (nullOnDelete)؟
+        // الموافقة بتعمل أمر تجهيز منهم — من غيرهم مفيش قرار.
+        if ($data['decision'] === 'approved'
+            && ($purchaseOrder->warehouse === null || $purchaseOrder->courier === null)) {
+            return back()->withErrors(['decision' => __('ops.po_needs_rep_wh')]);
+        }
+
+        if ($data['decision'] === 'rejected') {
+            $purchaseOrder->update([
+                'approval_status' => 'rejected',
+                'approved_by' => $request->user()->id,
+                'approved_at' => now(),
+                'approval_note' => $data['note'] ?? null,
+                'status' => 'cancelled',
+            ]);
+
+            // مدير القناة يعرف إن أمره اترفض وليه
+            if ($purchaseOrder->created_by) {
+                AppNotification::send(
+                    User::find($purchaseOrder->created_by),
+                    fn () => __('field.notif_po_rejected_title', ['number' => $purchaseOrder->number]),
+                    fn () => ($data['note'] ?? null) ?: $purchaseOrder->client->displayName(),
+                    false,
+                );
+            }
+
+            return back()->with('ok', __('flash.po_rejected'));
+        }
+
+        // ═══ موافقة (مع تعديل اختياري) ═══
+        try {
+            DB::transaction(function () use ($purchaseOrder, $data, $request) {
+                $changes = [];
+
+                // ⚠️ التعديل بيعيد حساب السطر بنفس سعره وضريبته —
+                // السعر ثابت من وقت الإنشاء، الكمية بس اللي بتتغير.
+                foreach ($data['qty_edit'] ?? [] as $itemId => $newQty) {
+                    if ($newQty === null || $newQty === '') {
+                        continue;
+                    }
+
+                    $item = $purchaseOrder->items->firstWhere('id', (int) $itemId);
+
+                    if (! $item || (int) $newQty === (int) $item->qty) {
+                        continue;
+                    }
+
+                    $changes[] = $item->product->displayName().': '.$item->qty.' ← '.(int) $newQty;
+
+                    if ((int) $newQty === 0) {
+                        $item->delete();
+
+                        continue;
+                    }
+
+                    $lineTotal = round((int) $newQty * (float) $item->price, 2);
+                    $item->update([
+                        'qty' => (int) $newQty,
+                        'total' => $lineTotal,
+                        'tax' => round($lineTotal * (float) ($item->tax_rate ?? 0), 2),
+                    ]);
+                }
+
+                $purchaseOrder->load('items');
+
+                if ($purchaseOrder->items->isEmpty()) {
+                    throw new \App\Exceptions\Rejected(__('ops.po_no_items_left'));
+                }
+
+                if ($changes !== []) {
+                    $rows = $purchaseOrder->items
+                        ->map(fn ($i) => ['total' => (float) $i->total, 'tax' => (float) $i->tax])
+                        ->all();
+                    $sums = \App\Services\Tax::totals($rows);
+
+                    $purchaseOrder->update([
+                        'total' => $sums['net'],
+                        'tax_total' => $sums['tax'],
+                        'grand_total' => $sums['grand'],
+                        'was_edited' => true,
+                    ]);
+                }
+
+                // ⚠️ **أمر التجهيز بيتعمل هنا** — طلب (requested) بينزل
+                // شاشة «تجهيز الطلبات»، وتأكيد التجهيز هناك هو اللي
+                // بيخصم ويبعت إشعار للمندوب (نفس فلو العهدة بالظبط).
+                $result = \App\Models\PickOrder::raise(
+                    $purchaseOrder->warehouse,
+                    $purchaseOrder->courier,
+                    $purchaseOrder->items->pluck('qty', 'product_id')->all(),
+                    \App\Models\PickOrder::PURPOSE_VAN_LOAD,
+                    $request->user(),
+                );
+
+                if ($result['error']) {
+                    throw new \App\Exceptions\Rejected($result['error']);
+                }
+
+                $purchaseOrder->update([
+                    'approval_status' => 'approved',
+                    'approved_by' => $request->user()->id,
+                    'approved_at' => now(),
+                    'approval_note' => $data['note'] ?? null,
+                    'pick_order_id' => $result['order']->id,
+                ]);
+
+                // مدير القناة يعرف إن أمره اتعدل وإيه اللي اتغير
+                if ($changes !== [] && $purchaseOrder->created_by) {
+                    AppNotification::send(
+                        User::find($purchaseOrder->created_by),
+                        fn () => __('field.notif_po_edited_title', ['number' => $purchaseOrder->number]),
+                        fn () => implode(' · ', $changes),
+                        false,
+                    );
+                }
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['decision' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('flash.po_approved'));
     }
 
     public function assignPurchaseOrder(Request $request, PurchaseOrder $purchaseOrder)

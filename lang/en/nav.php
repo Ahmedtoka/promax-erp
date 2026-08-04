@@ -40,6 +40,8 @@ return [
 
     'ops_dashboard' => 'Operations',
     'purchase_orders' => 'Purchase Orders',
+    'po_handout' => 'PO handout',
+    'po_approvals' => 'PO approvals',
     'invoices' => 'Invoices',
     'client_requests' => 'Client Approvals',
     'replenishments' => 'Replenishment Requests',
