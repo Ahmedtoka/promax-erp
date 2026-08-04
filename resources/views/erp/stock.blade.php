@@ -109,7 +109,11 @@
                                         border:1px solid var(--border);background:#fff">
                         @else
                             <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);
-                                        display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px">📦</div>
+                                        display:flex;flex-direction:column;align-items:center;justify-content:center;
+                                        gap:2px;color:var(--muted)">
+                                <span style="font-size:18px">📦</span>
+                                <span style="font-size:8.5px;font-weight:800;letter-spacing:.4px">NO IMAGE</span>
+                            </div>
                         @endif
                     </td>
                     <td class="num">

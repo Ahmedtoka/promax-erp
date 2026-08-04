@@ -79,10 +79,18 @@
                     @endphp
                     <tr>
                         <td>
+                            {{-- كبيرة + بلاسهولدر واضح للي لسه ملوش صورة --}}
                             @if ($p->imageSrc())
                                 <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                     style="width:56px;height:56px;object-fit:contain;border-radius:5px;
+                                     style="width:72px;height:72px;object-fit:contain;border-radius:10px;
                                             border:1px solid var(--border);background:#fff">
+                            @else
+                                <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);
+                                            display:flex;flex-direction:column;align-items:center;justify-content:center;
+                                            gap:2px;color:var(--muted)">
+                                    <span style="font-size:18px">📦</span>
+                                    <span style="font-size:8.5px;font-weight:800;letter-spacing:.4px">NO IMAGE</span>
+                                </div>
                             @endif
                         </td>
                         <td class="num">

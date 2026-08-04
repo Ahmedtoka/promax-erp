@@ -141,6 +141,12 @@ class WarehouseController extends Controller
                 $batch->qty_received = (int) $batch->qty_received + $qtyPieces;
                 $batch->qty_remaining = (int) $batch->qty_remaining + $qtyPieces;
                 $batch->save();
+
+                // ⚠️ **الدوكترين: أي حركة باتش يتبعها resync.** من غير
+                // السطر ده الاستلام بيزوّد الباتشات وتجميعة `stocks`
+                // بتفضل صفر — وصفحة «المخازن» (اللي بتقرا التجميعة)
+                // بتوري المخزن فاضي وهو مليان (اتشاف فعلاً 2026-08-04).
+                \App\Services\StockCounting::resync($product->id, (int) $data['warehouse_id']);
             }
 
             return $receipt;
