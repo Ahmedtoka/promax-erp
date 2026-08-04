@@ -102,10 +102,14 @@
                          بيلاقيه بعينه أسرع من ما يقرا 23 اسم متشابه
                          («بار بروتين كوكيز» / «بار بروتين قهوة»). --}}
                     <td>
+                        {{-- كبيرة (60px) — قرار المالك 2026-08-04: الصورة ريفرنس أساسي مش زينة --}}
                         @if ($p->imageSrc())
                             <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                 style="width:34px;height:34px;object-fit:contain;border-radius:6px;
+                                 style="width:60px;height:60px;object-fit:contain;border-radius:10px;
                                         border:1px solid var(--border);background:#fff">
+                        @else
+                            <div style="width:60px;height:60px;border-radius:10px;border:1px dashed var(--border);
+                                        display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px">📦</div>
                         @endif
                     </td>
                     <td class="num">
