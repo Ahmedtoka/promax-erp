@@ -123,6 +123,8 @@ class PickApiController extends Controller
             'name' => $i->product?->displayName(),
             'code' => $i->product?->code,
             'unit' => $i->product?->unitLabel(),
+            // الصورة — المندوب بيعدّ بضاعة حقيقية قدامه، الصورة بتأمّن العد
+            'image' => $i->product?->imageSrc(),
             'batch_no' => $i->batchNo(),
             'expires_on' => $i->expiresOn(),
             'location' => $i->locationCode(),

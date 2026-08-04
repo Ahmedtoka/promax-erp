@@ -287,4 +287,12 @@
     </dialog>
 @endif
 
+{{-- بعد «تم التجهيز»: رسالة النجاح بتبان وبنرجع لقايمة تجهيز
+     الطلبات بعد 3 ثواني — أمين المخزن بيكمل على الأمر اللي بعده --}}
+@if (session('ok') && $o->status === 'ready')
+<script>
+setTimeout(() => { location.href = @json(route('wh.picks')); }, 3000);
+</script>
+@endif
+
 @endsection

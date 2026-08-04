@@ -131,4 +131,16 @@
 
 @section('scripts')
 @include('partials._doc_style')
+
+{{-- ⚠️ **الطباعة أوتوماتيك بعد الإنشاء بس** (قرار المالك 2026-08-04):
+     جاي من «إرسال للتجهيز» → بريفيو الطباعة بيفتح لوحده، وبعد الطباعة
+     أو الإلغاء بيرجع لصفحة تسليم العهدة. إعادة الطباعة من الهيستوري
+     بتفتح الصفحة عادي من غير أوتوماتيك — عشان مايتطبعش ورق بالغلط. --}}
+@if (session('ok'))
+<script>
+window.addEventListener('load', () => setTimeout(() => window.print(), 400));
+// onafterprint بيشتغل بعد «طباعة» وبعد «إلغاء» الاتنين
+window.onafterprint = () => { location.href = @json(route('ops.handout')); };
+</script>
+@endif
 @endsection

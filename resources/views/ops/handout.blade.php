@@ -104,10 +104,12 @@
         </div>
 
         {{-- ═══════════ الأصناف المختارة — بتنزل هنا صف صف ═══════════ --}}
-        <div class="tablewrap" style="margin-top:12px">
+        {{-- ⚠️ الهيدر ثابت (sticky) — القايمة بتطول والمستخدم لازم
+             يفضل شايف أسماء الأعمدة وهو نازل (قرار المالك 2026-08-04) --}}
+        <div class="tablewrap" style="margin-top:12px;max-height:56vh;overflow-y:auto">
             <table>
+                <thead style="position:sticky;top:0;z-index:5;background:var(--card, #fff);box-shadow:0 1px 0 var(--border)">
                 <tr>
-                    <th style="width:40px"></th>
                     <th>{{ __('stock.item') }}</th>
                     <th class="num">{{ __('stock.available') }}</th>
                     <th style="width:110px">{{ __('stock.entry_unit') }}</th>
@@ -117,9 +119,10 @@
                     <th class="num">{{ __('common.total') }}</th>
                     <th style="width:40px"></th>
                 </tr>
+                </thead>
                 <tbody id="selBody">
                     <tr id="selEmpty">
-                        <td colspan="8" style="text-align:center;color:var(--muted);padding:26px">
+                        <td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('field.no_selected_hint') }}
                         </td>
                     </tr>
@@ -372,9 +375,14 @@ function addRow(id) {
 
     const tr = document.createElement('tr');
     tr.id = 'row' + id;
+    // الصورة جوه خانة الصنف نفسها — مش عمود لوحدها بمسافة فاضية
     tr.innerHTML =
-        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
-        '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></td>' +
+        '<td><div style="display:flex;gap:10px;align-items:center">' +
+            (p.image
+                ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">'
+                : '<div style="width:56px;height:56px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>') +
+            '<div><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></div>' +
+        '</div></td>' +
         '<td class="num"><b>' + p.available.toLocaleString() + '</b>' +
             (packBd(p, p.available) ? '<div style="font-size:10px;color:var(--muted);white-space:nowrap">' + esc(packBd(p, p.available)) + '</div>' : '') +
         '</td>' +
