@@ -752,6 +752,8 @@ class FieldApiController extends Controller
                         'product_id' => $productId,
                         'name' => $product->displayName(),
                         'unit' => $product->unitLabel(),
+                        // الصورة في سامري المرتجع — ريفرنس بصري ضد الغلط
+                        'image' => $product->imageSrc(),
                         'qty' => $qty,
                         'price' => $quote['unit_price'],
                         'total' => $quote['line_total'],
@@ -838,7 +840,7 @@ class FieldApiController extends Controller
         $since = isset($data['from']) ? \Illuminate\Support\Carbon::parse($data['from']) : today()->subDays(7);
         $until = isset($data['to']) ? \Illuminate\Support\Carbon::parse($data['to']) : today();
 
-        $invoices = Invoice::with('client')
+        $invoices = Invoice::with(['client', 'items.product'])
             ->where('user_id', $user->id)
             ->whereDate('created_at', '>=', $since)
             ->whereDate('created_at', '<=', $until)
@@ -849,6 +851,15 @@ class FieldApiController extends Controller
                 'grand_total' => (float) $i->grand_total,
                 'payment' => $i->payment,
                 'time' => $i->created_at->toIso8601String(),
+                // بنود الفاتورة بالصور — المندوب يفتحها ويتأكد بعينه
+                // إيه اللي اتباع بالظبط (قرار المالك 2026-08-04)
+                'lines' => $i->items->map(fn ($it) => [
+                    'name' => $it->product?->displayName() ?? '—',
+                    'image' => $it->product?->imageSrc(),
+                    'qty' => (int) $it->qty,
+                    'price' => (float) $it->price,
+                    'total' => (float) $it->total,
+                ])->values(),
             ]);
 
         // مرتجعاته: قيود `return` المربوطة بزياراته هو —
