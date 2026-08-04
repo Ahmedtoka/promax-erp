@@ -206,7 +206,7 @@
                             {{-- صورة الصنف — ريفرنس بصري للي بيجهّز --}}
                             @if ($item->product?->imageSrc())
                                 <img src="{{ $item->product->imageSrc() }}" alt=""
-                                     style="width:34px;height:34px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                     style="width:56px;height:56px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                             @endif
                             <div>
                                 <b>{{ $item->product?->displayName() ?? __('stock.product_hash', ['id' => $item->product_id]) }}</b>

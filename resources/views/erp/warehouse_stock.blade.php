@@ -81,7 +81,7 @@
                         <td>
                             @if ($p->imageSrc())
                                 <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                     style="width:30px;height:30px;object-fit:contain;border-radius:5px;
+                                     style="width:56px;height:56px;object-fit:contain;border-radius:5px;
                                             border:1px solid var(--border);background:#fff">
                             @endif
                         </td>

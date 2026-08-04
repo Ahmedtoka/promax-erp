@@ -208,7 +208,7 @@ function poSearch() {
         ? '<div style="padding:14px;text-align:center;color:var(--muted)">' + @json(__('common.no_results')) + '</div>'
         : hits.map(p =>
             '<div onclick="addRow(' + p.id + ')" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)">' +
-            (p.image ? '<img src="' + esc(p.image) + '" style="width:34px;height:34px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">' : '') +
+            (p.image ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">' : '') +
             '<div style="flex:1"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
             '<div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + @json(__('stock.available')) + ' ' + p.available.toLocaleString() + '</div></div>' +
             '</div>').join('');
@@ -254,7 +254,7 @@ function addRow(id) {
     const tr = document.createElement('tr');
     tr.id = 'row' + id;
     tr.innerHTML =
-        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:30px;height:30px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
+        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
         '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</div></td>' +
         '<td class="num">' + p.available.toLocaleString() + '</td>' +
         '<td>' + unitSelect(p) + '</td>' +

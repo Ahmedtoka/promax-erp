@@ -288,7 +288,7 @@ function searchProducts() {
             return '<div onclick="' + (out ? '' : 'addRow(' + p.id + ')') + '"' +
                 ' style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:' + (out ? 'not-allowed' : 'pointer') + ';' +
                 'border-bottom:1px solid var(--border);opacity:' + (out ? '.45' : '1') + '">' +
-                (p.image ? '<img src="' + esc(p.image) + '" style="width:32px;height:32px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">' : '<span style="width:32px"></span>') +
+                (p.image ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">' : '<span style="width:52px"></span>') +
                 '<span style="flex:1;min-width:0"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
                 '<span style="display:block;font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</span></span>' +
                 '<span style="font-size:11px;font-weight:800;color:' + (out ? 'var(--red, #B00020)' : 'var(--muted)') + '">' +
@@ -373,7 +373,7 @@ function addRow(id) {
     const tr = document.createElement('tr');
     tr.id = 'row' + id;
     tr.innerHTML =
-        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:30px;height:30px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
+        '<td>' + (p.image ? '<img src="' + esc(p.image) + '" style="width:56px;height:56px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:#fff">' : '') + '</td>' +
         '<td><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</div></td>' +
         '<td class="num"><b>' + p.available.toLocaleString() + '</b>' +
             (packBd(p, p.available) ? '<div style="font-size:10px;color:var(--muted);white-space:nowrap">' + esc(packBd(p, p.available)) + '</div>' : '') +

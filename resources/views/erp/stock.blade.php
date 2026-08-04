@@ -105,10 +105,10 @@
                         {{-- كبيرة (60px) — قرار المالك 2026-08-04: الصورة ريفرنس أساسي مش زينة --}}
                         @if ($p->imageSrc())
                             <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                 style="width:60px;height:60px;object-fit:contain;border-radius:10px;
+                                 style="width:72px;height:72px;object-fit:contain;border-radius:10px;
                                         border:1px solid var(--border);background:#fff">
                         @else
-                            <div style="width:60px;height:60px;border-radius:10px;border:1px dashed var(--border);
+                            <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);
                                         display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px">📦</div>
                         @endif
                     </td>
