@@ -90,61 +90,89 @@
         <a class="btn" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">{{ __('common.clear') }}</a>
     </form>
 
-    @forelse ($stands as $stand => $shelves)
-        <div style="margin-bottom:16px">
-            <div style="font-size:12px;font-weight:900;color:var(--muted);margin-bottom:7px">
-                {{ __('stock.stand') }} {{ $stand }}
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:10px">
-                {{-- الرف الأعلى الأول — زي ما الستاند واقف في المخزن --}}
-                @foreach ($shelves->sortByDesc('level') as $loc)
-                    @php
-                        $q = (int) $loc->batchLocations->sum('qty');
-                        $state = $q > 0 ? $loc->worstExpiryState() : null;
-                        $edge = $state === null ? 'var(--border)' : ($stateColor[$state] ?? 'var(--border)');
-                    @endphp
-                    <div style="background:var(--card);border:1px solid var(--border);
-                                border-inline-start:5px solid {{ $edge }};border-radius:12px;
-                                padding:10px 13px;min-width:132px;box-shadow:var(--shadow)">
-                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                            <b style="font-size:14px">{{ $loc->code }}</b>
-                            @if ($loc->life_band)
-                                <span class="badge {{ $loc->bandBadge() }}" style="font-size:9.5px">{{ $loc->bandLabel() }}</span>
-                            @endif
-                            @if ($loc->is_pick_face)
-                                <span class="badge b-purple" title="{{ __('stock.pick_face') }}">★ {{ __('stock.pick_face') }}</span>
-                            @endif
-                        </div>
-                        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">
-                            {{ __('stock.level') }} {{ $loc->level }}
-                            @if ($loc->capacity)
-                                • {{ __('stock.free_capacity') }} {{ $fmt($loc->freeCapacity()) }}/{{ $fmt($loc->capacity) }}
-                            @endif
-                        </div>
-                        @if ($q > 0)
-                            <div class="num" style="font-size:18px;font-weight:900;margin-top:5px">{{ $fmt($q) }}</div>
-                            <div style="margin-top:4px">
-                                <span class="badge {{ $state === 'ok' ? 'b-green' : ($state === 'warn' ? 'b-orange' : 'b-red') }}">
-                                    {{ $stateLabel[$state] ?? $state }}
-                                </span>
-                            </div>
-                        @else
-                            <div style="font-size:12px;color:var(--muted);margin-top:8px">{{ __('stock.empty_shelf') }}</div>
+    {{-- ═══ الحائط (2026-08-06): كل البلوكات جنب بعض في صف واحد —
+         زي ما انت واقف قدام حيطة المخزن. الترتيب من الأقرب انتهاءً
+         (شهر ← 3 شهور ← 6 شهور ← سنة) وبعدين الأرفف الحرة. ═══ --}}
+    @php
+        $bandOrder = ['month' => 0, 'quarter' => 1, 'half' => 2, 'year' => 3];
+        $wall = $locations->sortBy([
+            fn ($a, $b) => ($bandOrder[$a->life_band] ?? 9) <=> ($bandOrder[$b->life_band] ?? 9),
+            fn ($a, $b) => strcmp($a->code, $b->code),
+        ])->values();
+
+        // لون حافة كل نطاق — نفس ألوان الشارات
+        $bandEdge = [
+            'month' => 'var(--red, #B00020)',
+            'quarter' => 'var(--orange, #B86E00)',
+            'half' => 'var(--royal-blue, #12399B)',
+            'year' => 'var(--green, #1B7A3D)',
+        ];
+    @endphp
+
+    @if ($wall->isEmpty())
+        <div class="alert warn"><span>🗄️</span><span>{{ __('stock.no_locations') }}</span></div>
+    @else
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;align-items:stretch">
+            @foreach ($wall as $loc)
+                @php
+                    $bls = $loc->batchLocations->where('qty', '>', 0);
+                    $q = (int) $bls->sum('qty');
+                    $skus = $bls->pluck('product_id')->unique()->count();
+                    $exps = $bls->map(fn ($bl) => $bl->batch?->expires_on)->filter()->sort()->values();
+                    $state = $q > 0 ? $loc->worstExpiryState() : null;
+                    $edge = $bandEdge[$loc->life_band] ?? 'var(--border)';
+                @endphp
+                <div style="background:var(--card);border:1px solid var(--border);border-top:5px solid {{ $edge }};
+                            border-radius:14px;padding:14px 12px;box-shadow:var(--shadow);text-align:center;
+                            display:flex;flex-direction:column;gap:6px;{{ $q === 0 ? 'opacity:.75' : '' }}">
+                    {{-- الكود كبير — ده اللي مكتوب على الحيطة فعلاً --}}
+                    <div style="font-size:21px;font-weight:900;letter-spacing:.5px" dir="ltr">{{ $loc->code }}</div>
+                    <div>
+                        <span class="badge {{ $loc->bandBadge() }}" style="font-size:10px">{{ $loc->bandLabel() }}</span>
+                        @if ($loc->is_pick_face)
+                            <span class="badge b-purple" style="font-size:10px" title="{{ __('stock.pick_face') }}">★</span>
                         @endif
                     </div>
-                @endforeach
-            </div>
+
+                    @if ($q > 0)
+                        <div class="num" style="font-size:24px;font-weight:900;line-height:1">{{ $fmt($q) }}</div>
+                        <div style="font-size:10.5px;color:var(--muted)">
+                            {{ __('stock.units') }} • {{ $skus }} {{ __('stock.skus') }}
+                        </div>
+                        {{-- التواريخ اللي على البلوك: أقرب وأبعد انتهاء --}}
+                        @if ($exps->isNotEmpty())
+                            <div style="font-size:10px;color:var(--muted)" dir="ltr">
+                                📅 {{ $exps->first()->format('Y-m-d') }}@if ($exps->count() > 1) → {{ $exps->last()->format('Y-m-d') }}@endif
+                            </div>
+                        @endif
+                        <div style="margin-top:auto">
+                            <span class="badge {{ $state === 'ok' ? 'b-green' : ($state === 'warn' ? 'b-orange' : 'b-red') }}">
+                                {{ $stateLabel[$state] ?? $state }}
+                            </span>
+                        </div>
+                    @else
+                        <div style="font-size:13px;color:var(--muted);margin-top:auto;margin-bottom:auto;padding:10px 0">
+                            {{ __('stock.empty_shelf') }}
+                        </div>
+                    @endif
+
+                    @if ($loc->capacity)
+                        <div style="font-size:9.5px;color:var(--muted)">
+                            {{ __('stock.free_capacity') }} {{ $fmt($loc->freeCapacity()) }}/{{ $fmt($loc->capacity) }}
+                        </div>
+                    @endif
+                </div>
+            @endforeach
         </div>
-    @empty
-        <div class="alert warn"><span>🗄️</span><span>{{ __('stock.no_locations') }}</span></div>
-    @endforelse
+    @endif
 </div>
 
 <div class="card">
     <h3>📋 {{ __('stock.stock_by_location') }}
         <span class="side">{{ __('stock.total_on_shelves') }}: {{ $fmt($totalOnShelves) }}</span></h3>
-    <div class="tablewrap">
+    <div class="tablewrap" style="max-height:60vh;overflow-y:auto">
         <table>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
                 <th>{{ __('stock.location') }}</th>
                 <th>{{ __('stock.item') }}</th>
@@ -154,6 +182,7 @@
                 <th>{{ __('common.qty') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
+            </thead>
             @php $anyRow = false; @endphp
             @foreach ($locations as $loc)
                 @foreach ($loc->batchLocations as $bl)
