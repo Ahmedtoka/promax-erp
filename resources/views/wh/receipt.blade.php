@@ -18,9 +18,28 @@
     {{-- باك أب كامل — يترفع تاني من شاشة الاستيراد (نوع «المخزون») كرصيد أول مدة --}}
     <a class="btn" href="{{ route('wh.receipt.export', $receipt) }}">⬇️ {{ __('stock.export_receipt') }}</a>
     <a class="btn" href="{{ route('wh.locations', ['warehouse' => $receipt->warehouse_id]) }}">🗄️ {{ __('stock.shelf_map') }}</a>
+    {{-- ترصيف الإذن كله بضغطة — كل باتش في بلوكه حسب تاريخ انتهائه (2026-08-06) --}}
+    @if ($unshelved > 0 && $manager && \App\Support\Access::action(auth()->user(), 'act.wh.putaway'))
+        <form method="POST" action="{{ route('wh.receipt.putaway', $receipt) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('stock.putaway_receipt_confirm')))">
+            @csrf
+            <button class="btn gold" type="submit">📥 {{ __('stock.putaway_receipt') }} ({{ $fmt($unshelved) }})</button>
+        </form>
+    @endif
 @endsection
 
 @section('content')
+
+@if (session('ok'))
+    <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
+@endif
+@if ($errors->any())
+    <div class="alert" style="margin-bottom:12px;flex-direction:column;align-items:stretch;gap:4px">
+        @foreach ($errors->all() as $msg)
+            <div class="errline" style="margin:0">{{ $msg }}</div>
+        @endforeach
+    </div>
+@endif
 
 <div class="kpis">
     <div class="kpi">

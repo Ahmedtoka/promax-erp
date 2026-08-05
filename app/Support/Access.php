@@ -303,7 +303,7 @@ class Access
 
         // ═══ المخزن ═══
         'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', null, ['wh.receipts.store', 'wh.receipts.import', 'wh.batch.update']],
-        'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', null, ['wh.putaway', 'wh.move', 'wh.locations.store']],
+        'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', null, ['wh.putaway', 'wh.receipt.putaway', 'wh.move', 'wh.locations.store']],
         'act.wh.transfer' => ['perm.act_wh_transfer', 'wh.transfers', null, ['wh.transfers.store', 'wh.transfers.receive', 'wh.transfers.new']],
         'act.wh.count' => ['perm.act_wh_count', 'wh.counts', null, ['wh.counts.store', 'wh.count.record', 'wh.count.approve', 'wh.count.cancel']],
         'act.wh.pick' => ['perm.act_wh_pick', 'wh.picks', null, ['wh.picks.create', 'wh.picks.store', 'wh.picks.start', 'wh.picks.ready', 'wh.picks.cancel', 'wh.picks.po', 'wh.picks.rpl']],

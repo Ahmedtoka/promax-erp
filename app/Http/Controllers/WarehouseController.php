@@ -460,6 +460,54 @@ class WarehouseController extends Controller
         return $errors === [] ? $resp : $resp->withErrors($errors);
     }
 
+    /**
+     * ترصيف إذن استلام كامل بضغطة (2026-08-06) — كل باتش لسه
+     * مترصّفش بيروح **للبلوك المطابق لعمره** أوتوماتيك (LifeBands).
+     * اللي من غير تاريخ انتهاء مالوش بلوك — بيتبلغ عنه ويترصّف يدوي.
+     */
+    public function putAwayReceipt(Request $request, GoodsReceipt $receipt)
+    {
+        $this->guardWarehouse($request, $receipt->warehouse_id);
+
+        $done = 0;
+        $doneQty = 0;
+        $errors = [];
+
+        foreach ($receipt->batches as $batch) {
+            $left = $batch->unshelvedQty();
+
+            if ($left <= 0) {
+                continue;
+            }
+
+            $target = \App\Support\LifeBands::suggest($batch->warehouse_id, $batch);
+
+            if ($target === null) {
+                $errors[] = __('stock.no_block_for_batch', ['batch' => $batch->batch_no]);
+
+                continue;
+            }
+
+            // الحارس جوه putAway بيتأكد إن البلوك مطابق للنطاق برضه
+            if ($error = BatchLocation::putAway($batch, $target, $left)) {
+                $errors[] = $error;
+
+                continue;
+            }
+
+            $done++;
+            $doneQty += $left;
+        }
+
+        $resp = back();
+
+        if ($done > 0) {
+            $resp->with('ok', __('stock.receipt_putaway_done', ['count' => $done, 'qty' => $doneQty]));
+        }
+
+        return $errors === [] ? $resp : $resp->withErrors($errors);
+    }
+
     /** نقل بضاعة من رف لرف */
     public function moveStock(Request $request, BatchLocation $batchLocation)
     {

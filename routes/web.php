@@ -431,6 +431,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             // إذن استلام من شيت — نفس أعمدة ملف التصدير (2026-08-05)
             Route::post('/receipts/import', [WarehouseController::class, 'importReceipt'])->name('receipts.import');
             Route::post('/batches/{batch}/put-away', [WarehouseController::class, 'putAway'])->name('putaway');
+            // ترصيف الإذن كله بضغطة — كل باتش في بلوكه حسب التاريخ (2026-08-06)
+            Route::post('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayReceipt'])->name('receipt.putaway');
             // تعديل تواريخ/رقم/تكلفة الباتش من صفحة الإذن — الكميات لأ
             Route::post('/batches/{batch}/update', [WarehouseController::class, 'updateBatch'])->name('batch.update');
             // الترصيف الجماعي من شاشة عمليات المخزن — نفس صلاحية putaway
