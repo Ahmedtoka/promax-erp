@@ -29,9 +29,14 @@
 
 <div class="kpis">
     <div class="kpi">
+        <div class="lbl">{{ __('stock.total_in_wh') }}</div>
+        <div class="val">{{ $fmt($stockUnits) }}</div>
+        <div class="sub2">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</div>
+    </div>
+    <div class="kpi">
         <div class="lbl">{{ __('stock.available_units') }}</div>
         <div class="val pos">{{ $fmt($availableUnits) }}</div>
-        <div class="sub2">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</div>
+        <div class="sub2">{{ __('stock.available_hint') }}</div>
     </div>
     <div class="kpi">
         <div class="lbl">{{ __('stock.shelf_count') }}</div>

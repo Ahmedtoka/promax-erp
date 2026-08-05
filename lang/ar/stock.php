@@ -213,6 +213,8 @@ return [
     'awaiting_putaway_hint' => 'مستلم بس لسه مش على رف — مينفعش يتجهّز منه حاجة قبل ما يترصّف.',
     'shelved' => 'مترصّف',
     'available_units' => 'وحدات متاحة',
+    'total_in_wh' => 'إجمالي بالمخزن',
+    'available_hint' => 'المرصوف على الأرفف الجاهز للتجهيز — الترصيف بيزوّده',
     'shelf_count' => 'أرفف',
     'location_not_found' => 'مفيش رف بالكود :code في المخزن ده.',
     'put_away_done' => ':qty وحدة اتحطت على الرف :location.',

@@ -48,6 +48,10 @@ class WarehouseController extends Controller
             'receipts' => $warehouse->receipts()->with('batches.product')->take(10)->get(),
             'locationCount' => $warehouse->locations()->count(),
             'availableUnits' => $warehouse->availableUnits(),
+            // ⚠️ الرصيد الكلي من `stocks` — «المتاح» بيعدّ المرصوف بس،
+            // وبعد استيراد رصيد أول مدة كله بيبقى لسه على الأرض فالمتاح
+            // صفر والمخزن مليان. الرقمين جنب بعض بيوضّحوا الصورة.
+            'stockUnits' => (int) \App\Models\Stock::where('warehouse_id', $warehouse->id)->sum('qty'),
         ]);
     }
 

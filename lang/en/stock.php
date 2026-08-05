@@ -213,6 +213,8 @@ return [
     'awaiting_putaway_hint' => 'Received but not on a shelf yet — nothing can be picked until it is shelved.',
     'shelved' => 'Shelved',
     'available_units' => 'Available Units',
+    'total_in_wh' => 'Total in Warehouse',
+    'available_hint' => 'Shelved and ready to pick - put-away increases it',
     'shelf_count' => 'Shelves',
     'location_not_found' => 'No shelf with the code :code in this warehouse.',
     'put_away_done' => ':qty units placed on shelf :location.',
