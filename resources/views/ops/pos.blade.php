@@ -22,11 +22,12 @@
 
 @section('title', __('ops.purchase_orders'))
 
+{{-- طريقتين رسميتين بس للإنشاء (قرار المالك 2026-08-06):
+     PO للمندوب أو رفع شيتات — الإنشاء اليدوي السريع اتشال --}}
 @section('actions')
     @if ($manager && \App\Support\Access::action(auth()->user(), 'act.ka.create'))
-        <a class="btn" href="{{ route('ops.po.import') }}">⬆️ {{ __('ops.po_import') }}</a>
-        <button class="btn" onclick="openDlg('dlgNewPo')">+ {{ __('ops.purchase_order') }}</button>
-        <a class="btn gold" href="{{ route('ops.po.handout') }}">📦 {{ __('ops.po_handout') }}</a>
+        <a class="btn gold" href="{{ route('ops.po.handout') }}">📦 {{ __('nav.po_handout') }}</a>
+        <a class="btn" href="{{ route('ops.po.import') }}">📊 {{ __('nav.po_import') }}</a>
     @endif
 @endsection
 
@@ -191,87 +192,6 @@
 </div>
 
 @if ($manager)
-<dialog id="dlgNewPo">
-    <form class="dlg" method="POST" action="{{ route('ops.pos.store') }}">
-        @csrf
-        <h4>{{ __('ops.new_purchase_order') }}</h4>
-        <div class="frow">
-            <div><label class="f">{{ __('client.client') }}</label>
-                <select name="client_id" required style="width:100%">
-                    @foreach ($clients as $c)
-                        <option value="{{ $c->id }}">{{ $c->displayName() }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div><label class="f">{{ __('ops.source') }}</label><input type="text" name="source" value="" placeholder="{{ __('ops.source') }}" style="width:100%"></div>
-        </div>
-        <div class="frow">
-            <div><label class="f">{{ __('ops.address_or_branch') }}</label><input type="text" name="address" style="width:100%"></div>
-            <div><label class="f">{{ __('ops.driver') }}</label>
-                <select name="assigned_to" style="width:100%">
-                    <option value="">— {{ __('ops.not_yet') }} —</option>
-                    @foreach ($couriers as $co)<option value="{{ $co->id }}">{{ $co->name }}</option>@endforeach
-                </select>
-            </div>
-        </div>
-        <div class="frow">
-            <div><label class="f">{{ __('ops.pricing') }}</label>
-                <select name="price_mode" style="width:100%">
-                    {{-- الافتراضي: تسعيرة العميل بخصمه، زي الفاتورة بالظبط --}}
-                    <option value="channel">{{ __('enums.price_mode.channel') }}</option>
-                    <option value="new">{{ __('enums.price_mode.new') }}</option>
-                    <option value="old">{{ __('enums.price_mode.old') }}</option>
-                </select>
-            </div>
-            <div><label class="f">{{ __('ops.delivery_date') }}</label><input type="date" name="due_date" style="width:100%"></div>
-        </div>
-
-        <label class="f">{{ __('ops.items_and_qty') }}</label>
-        <div style="max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
-            <table>
-                @foreach ($products as $p)
-                    @php $factors = $p->unitFactors(); @endphp
-                    <tr>
-                        <td>{{ $p->code }} — {{ $p->displayName() }}</td>
-                        {{-- الوحدة: العرض بس — السيرفر بيعيد الضرب في storePurchaseOrder --}}
-                        <td style="width:96px">
-                            <select name="unit[{{ $p->id }}]" data-po-unit="{{ $p->id }}" style="width:100%" onchange="poEq({{ $p->id }})">
-                                @foreach ($factors as $unitKey => $factor)
-                                    <option value="{{ $unitKey }}">{{ __('stock.unit_'.$unitKey) }}@if ($factor > 1) ({{ $factor }})@endif</option>
-                                @endforeach
-                            </select>
-                        </td>
-                        <td style="width:100px">
-                            <input type="number" min="0" name="qty[{{ $p->id }}]" placeholder="0" style="width:100%"
-                                   data-po-qty="{{ $p->id }}" oninput="poEq({{ $p->id }})">
-                            <div data-po-eq="{{ $p->id }}" data-factors='@json($factors)' style="font-size:10px;color:var(--muted)"></div>
-                        </td>
-                    </tr>
-                @endforeach
-            </table>
-        </div>
-        <script>
-        /* «= N قطعة» — عرض بس، الضرب في السيرفر */
-        function poEq(id) {
-            const eq = document.querySelector('[data-po-eq="' + id + '"]');
-            const factors = JSON.parse(eq.dataset.factors);
-            const unit = document.querySelector('[data-po-unit="' + id + '"]').value;
-            const qty = Number(document.querySelector('[data-po-qty="' + id + '"]').value || 0);
-            const factor = factors[unit] || 1;
-
-            eq.textContent = (factor > 1 && qty > 0)
-                ? '= ' + (qty * factor).toLocaleString() + ' ' + @json(__('stock.unit_piece'))
-                : '';
-        }
-        </script>
-
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-            <button class="btn" type="button" onclick="closeDlg('dlgNewPo')">{{ __('common.cancel') }}</button>
-            <button class="btn gold" type="submit">{{ __('common.create') }}</button>
-        </div>
-    </form>
-</dialog>
-
 <dialog id="dlgAssign">
     <form class="dlg" method="POST" id="formAssign">
         @csrf

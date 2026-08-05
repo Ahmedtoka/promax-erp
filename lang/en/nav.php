@@ -42,7 +42,8 @@ return [
 
     'ops_dashboard' => 'Operations',
     'purchase_orders' => 'Purchase Orders',
-    'po_handout' => 'PO handout',
+    'po_handout' => 'Rep PO',
+    'po_import' => 'Excel PO',
     'po_approvals' => 'PO approvals',
     'invoices' => 'Invoices',
     'client_requests' => 'Client Approvals',

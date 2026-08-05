@@ -174,9 +174,8 @@ class OpsController extends Controller
             ],
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::whereHas('clients')->orderBy('name')->get(['id', 'name', 'name_en']),
+            // دايالوج الأساين بس — دايالوج الإنشاء اليدوي اتشال (2026-08-06)
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
-            'clients' => Client::visibleTo(Client::orderBy('name'))->get(['id', 'name']),
-            'products' => Product::orderBy('code')->get(),
             'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'from', 'to']),
         ]);
     }
@@ -727,17 +726,25 @@ class OpsController extends Controller
 
     public function poHandout()
     {
+        // السلاسل ومين منها في أنهي قناة — نفس كاسكيد شاشة رفع الشيتات:
+        // القناة ← السلسلة ← الفرع (طلب المالك 2026-08-06)
+        $groupChannels = Client::visibleTo(Client::query())
+            ->whereNotNull('group_id')->whereNotNull('channel_id')
+            ->distinct()->get(['group_id', 'channel_id']);
+
         return view('ops.po_handout', [
             'shelfAvail' => $this->shelfAvailability(),
+            'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(),
-            // الفروع بتتفلتر بالسلسلة في الجافاسكريبت — فبنبعت الكل مع group_id
+            'groupChannels' => $groupChannels,
+            // الفروع بتتفلتر بالقناة والسلسلة في الجافاسكريبت — فبنبعت الكل
             // ⚠️ العميل حالته عمود `status` نصي ('active') مش بوليان `active`
             // العلاقات دي عشان Pricing::listRowFor تشتغل من الميموري —
             // البحث بيفلتر الأصناف بسعر قايمة الفرع المختار
             // ⚠️ وسكوب التشانل مانجر: مايعملش أمر غير لعملائه (2026-08-05)
             'clients' => Client::visibleTo(Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
                 ->where('status', 'active'))->orderBy('name')
-                ->get(['id', 'name', 'name_en', 'group_id', 'balance', 'price_list', 'price_list_id']),
+                ->get(['id', 'name', 'name_en', 'group_id', 'channel_id', 'balance', 'price_list', 'price_list_id']),
             'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver']))
                 ->where('active', true)->orderBy('name')->get(['id', 'name']),
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
@@ -745,19 +752,44 @@ class OpsController extends Controller
         ]);
     }
 
-    /** طابور الحسابات: مستني القرار + آخر اللي اتقرر فيهم */
-    public function poApprovals()
+    /**
+     * طابور الحسابات — جدول كولابس (2026-08-06): كل أمر صف، الضغط
+     * عليه بيفتح تفاصيله. الفلاتر والترتيب سيرفر سايد، و«آخر
+     * القرارات» اتشالت — المتقرر فيه مكانه صفحة أوامر التوريد.
+     */
+    public function poApprovals(Request $request)
     {
-        $base = PurchaseOrder::with(['client.group', 'courier', 'items.product', 'creator', 'warehouse', 'approvedBy']);
+        $q = PurchaseOrder::with(['client.group', 'client.channel', 'courier', 'items.product', 'creator', 'warehouse'])
+            ->where('approval_status', 'pending')
+            ->when($request->string('q')->trim()->value(), function ($q2, $s) {
+                $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
+                    ->orWhere('source', 'like', "%$s%")
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%")));
+            })
+            ->when($request->integer('group'),
+                fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))
+            ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('due_at', '>=', $d))
+            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('due_at', '<=', $d));
+
+        // الترتيب: الافتراضي أقرب معاد توريد — القرار المستعجل الأول
+        match ($request->string('sort')->value()) {
+            'value' => $q->orderByDesc('grand_total'),
+            'newest' => $q->latest(),
+            default => $q->orderByRaw('due_at IS NULL')->orderBy('due_at'),
+        };
 
         return view('ops.po_approvals', [
-            'pending' => (clone $base)->where('approval_status', 'pending')
-                ->orderBy('due_at')->get(),
-            'decided' => (clone $base)->whereIn('approval_status', ['approved', 'rejected'])
-                ->latest('approved_at')->limit(30)->get(),
+            'pending' => $q->get(),
+            // سلاسل الأوامر المستنية بس — سيلكت الفلتر
+            'groups' => \App\Models\ClientGroup::whereHas('clients.purchaseOrders',
+                fn ($p) => $p->where('approval_status', 'pending'))
+                ->orderBy('name')->get(['id', 'name', 'name_en']),
             // المتاح على أرفف كل مخزن — الحسابات تشوف العجز **قبل**
             // ما تدوس موافقة بدل ما الرفض يفاجئها (2026-08-05)
             'shelfAvail' => $this->shelfAvailability(),
+            'filters' => $request->only(['q', 'group', 'from', 'to', 'sort']),
         ]);
     }
 
@@ -771,15 +803,34 @@ class OpsController extends Controller
     {
         $data = $request->validate([
             'decision' => ['required', 'in:approved,rejected'],
-            'note' => ['nullable', 'string', 'max:500'],
+            // ⚠️ الرفض من غير سبب ممنوع — مدير القناة لازم يعرف ليه
+            'note' => ['required_if:decision,rejected', 'nullable', 'string', 'max:500'],
             // تعديل الحسابات بالقطع — الشاشة بتوري التجميعة جنب الخانة
             'qty_edit' => ['nullable', 'array'],
             'qty_edit.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
+        ], [
+            'note.required_if' => __('ops.po_note_required_reject'),
         ]);
 
         // ⚠️ قرار واحد بس — ضغطتين متتاليتين مايعملوش أمري تجهيز
         if ($purchaseOrder->approval_status !== 'pending') {
             return back()->withErrors(['decision' => __('ops.po_already_decided')]);
+        }
+
+        // ⚠️ تعديل كميات من غير ملحوظة ممنوع برضه — التعديل بيتبلغ بيه
+        // مدير القناة، والإشعار من غير سبب مايتفهمش (2026-08-06)
+        if ($data['decision'] === 'approved' && blank($data['note'] ?? null)) {
+            foreach ($data['qty_edit'] ?? [] as $itemId => $newQty) {
+                if ($newQty === null || $newQty === '') {
+                    continue;
+                }
+
+                $item = $purchaseOrder->items->firstWhere('id', (int) $itemId);
+
+                if ($item && (int) $newQty !== (int) $item->qty) {
+                    return back()->withErrors(['note' => __('ops.po_note_required_edit')])->withInput();
+                }
+            }
         }
 
         // ⚠️ المندوب أو المخزن اتشالوا بعد الإنشاء (nullOnDelete)؟

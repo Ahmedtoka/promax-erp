@@ -203,12 +203,13 @@ class Access
         ],
 
         // ═══ ٤. توريد الكي أكاونت — السايكل كامل في مكان واحد ═══
-        // (قرار المالك 2026-08-04): إنشاء الأمر ← موافقة الحسابات
-        // (بتعمل أمر التجهيز) ← قايمة المتابعة بالمعاد والفرق.
+        // (ترتيب المالك 2026-08-06): القايمة ← PO للمندوب ← PO إكسيل
+        // ← موافقات الحسابات (اللي بتعمل أمر التجهيز).
         'nav.group_ka' => [
-            ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
-            ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
             ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
+            ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
+            ['ops.po.import', '📊', 'nav.po_import', 'ops.po.import*', null],
+            ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══

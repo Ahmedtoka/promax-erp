@@ -41,8 +41,16 @@
         'id' => $c->id,
         'name' => $c->fullName(),
         'group' => (int) $c->group_id,
+        'channel' => (int) $c->channel_id,
         'balance' => (float) $c->balance,
         'list' => \App\Services\Pricing::listRowFor($c)?->id,
+    ])->values();
+
+    // السلسلة ← قنواتها (سلسلة ممكن يكون ليها فروع في أكتر من قناة)
+    $chainRows = $groups->map(fn ($g) => [
+        'id' => $g->id,
+        'name' => $g->displayName(),
+        'channels' => $groupChannels->where('group_id', $g->id)->pluck('channel_id')->values(),
     ])->values();
 
     $oldRows = collect(old('qty', []))->keys()->unique()->values();
@@ -76,14 +84,21 @@
         <input type="hidden" name="approval" value="1">
         <input type="hidden" name="price_mode" value="channel">
 
+        {{-- نفس كاسكيد شاشة رفع الشيتات: القناة ← السلسلة ← الفرع --}}
         <div class="frow">
             <div>
-                <label class="f">{{ __('nav.chains') }} <b class="req-star">*</b></label>
+                <label class="f">{{ __('client.channel') }} <b class="req-star">*</b></label>
+                <select id="poChannel" required style="width:100%" onchange="poFilterChains()">
+                    <option value="">—</option>
+                    @foreach ($channels as $ch)
+                        <option value="{{ $ch->id }}">{{ $ch->displayName() }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="f">{{ __('nav.chains') }}</label>
                 <select id="poChain" style="width:100%" onchange="poFilterBranches()">
                     <option value="">—</option>
-                    @foreach ($groups as $g)
-                        <option value="{{ $g->id }}">{{ $g->displayName() }}</option>
-                    @endforeach
                 </select>
             </div>
             <div>
@@ -94,15 +109,6 @@
                 {{-- رصيد الفرع قدام مدير القناة من دلوقتي — قبل ما الحسابات ترفض --}}
                 <div id="poBalance" style="font-size:11px;font-weight:800;margin-top:5px"></div>
             </div>
-            <div>
-                <label class="f">{{ __('ops.rep') }} <b class="req-star">*</b></label>
-                <select name="assigned_to" required style="width:100%">
-                    <option value="">—</option>
-                    @foreach ($reps as $r)
-                        <option value="{{ $r->id }}" @selected(old('assigned_to', $edit?->assigned_to) == $r->id)>{{ $r->name }}</option>
-                    @endforeach
-                </select>
-            </div>
         </div>
 
         <div class="frow">
@@ -111,6 +117,15 @@
                 <select name="warehouse_id" id="poWh" required style="width:100%" onchange="poWhChanged()">
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected(old('warehouse_id', $edit?->warehouse_id) == $w->id)>{{ $w->displayName() }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="f">{{ __('ops.rep') }} <b class="req-star">*</b></label>
+                <select name="assigned_to" required style="width:100%">
+                    <option value="">—</option>
+                    @foreach ($reps as $r)
+                        <option value="{{ $r->id }}" @selected(old('assigned_to', $edit?->assigned_to) == $r->id)>{{ $r->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -180,6 +195,9 @@ const OLD_BRANCH = @json(old('client_id'));
 const EDIT_ROWS = {!! json_encode($editRows, JSON_UNESCAPED_UNICODE) !!};
 const EDIT_BRANCH = @json($edit?->client_id);
 const EDIT_CHAIN = @json($edit?->client?->group_id);
+const EDIT_CHANNEL = @json($edit?->client?->channel_id);
+// السلاسل بقنواتها — سيلكت السلسلة بيتبني من هنا حسب القناة المختارة
+const CHAINS = {!! json_encode($chainRows, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
 
 const UNIT_LABELS = {
     piece: @json(__('stock.unit_piece')),
@@ -190,14 +208,33 @@ const UNIT_LABELS = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-/** الفروع بتتفلتر بالسلسلة المختارة */
+/** القناة اتغيرت — سيلكت السلاسل بيتبني من سلاسل القناة دي بس */
+function poFilterChains() {
+    const ch = Number(document.getElementById('poChannel').value || 0);
+    const sel = document.getElementById('poChain');
+    const current = sel.value;
+
+    sel.innerHTML = '<option value="">—</option>';
+    CHAINS.filter(g => !ch || (g.channels || []).includes(ch)).forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.name;
+        sel.appendChild(opt);
+    });
+
+    sel.value = current;
+    poFilterBranches();
+}
+
+/** الفروع بتتفلتر بالقناة والسلسلة المختارين */
 function poFilterBranches() {
+    const ch = Number(document.getElementById('poChannel').value || 0);
     const chain = Number(document.getElementById('poChain').value || 0);
     const sel = document.getElementById('poBranch');
     const current = sel.value;
 
     sel.innerHTML = '<option value="">—</option>';
-    BRANCHES.filter(b => !chain || b.group === chain).forEach(b => {
+    BRANCHES.filter(b => (!ch || b.channel === ch) && (!chain || b.group === chain)).forEach(b => {
         const opt = document.createElement('option');
         opt.value = b.id;
         opt.textContent = b.name;
@@ -359,9 +396,20 @@ function syncTotals() {
     document.getElementById('poBtn').disabled = total === 0;
 }
 
-// استرجاع بعد فاليديشن مرفوضة — أو تعبئة وضع التعديل
-if (EDIT_CHAIN && !OLD_ROWS.length) { document.getElementById('poChain').value = String(EDIT_CHAIN); }
-poFilterBranches();
+// استرجاع بعد فاليديشن مرفوضة — أو تعبئة وضع التعديل.
+// القناة مش بتتبعت للسيرفر (فلتر عرض) — بنستنتجها من الفرع المحفوظ.
+const oldBranchRow = OLD_BRANCH ? BRANCHES.find(b => String(b.id) === String(OLD_BRANCH)) : null;
+
+if (oldBranchRow) {
+    document.getElementById('poChannel').value = String(oldBranchRow.channel || '');
+} else if (EDIT_CHANNEL) {
+    document.getElementById('poChannel').value = String(EDIT_CHANNEL);
+}
+poFilterChains();
+
+if (oldBranchRow && oldBranchRow.group) { document.getElementById('poChain').value = String(oldBranchRow.group); poFilterBranches(); }
+else if (EDIT_CHAIN && !OLD_ROWS.length) { document.getElementById('poChain').value = String(EDIT_CHAIN); poFilterBranches(); }
+
 if (OLD_BRANCH) { document.getElementById('poBranch').value = String(OLD_BRANCH); poShowBalance(); }
 else if (EDIT_BRANCH) { document.getElementById('poBranch').value = String(EDIT_BRANCH); poShowBalance(); }
 
