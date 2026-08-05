@@ -47,6 +47,8 @@
                     <th>{{ __('ops.po_file') }}</th>
                     <th style="width:120px">{{ __('ops.po_source_no') }}</th>
                     <th style="width:230px">{{ __('ops.branch_client') }}</th>
+                    {{-- معاد التوريد لكل أمر لوحده (2026-08-06) — متملي بمعاد الدفعة --}}
+                    <th style="width:175px">{{ __('ops.due_at') }}</th>
                     <th>{{ __('stock.item') }}</th>
                     <th class="num" style="width:90px">{{ __('common.qty') }}</th>
                     <th style="width:150px">{{ __('common.status') }}</th>
@@ -89,6 +91,10 @@
                                 @endforeach
                             </select>
                         </td>
+                        <td>
+                            <input type="datetime-local" data-pi="due" style="width:100%"
+                                   value="{{ \Illuminate\Support\Carbon::parse($batch['due_at'])->format('Y-m-d\\TH:i') }}">
+                        </td>
                         <td style="font-size:11.5px">
                             @forelse ($e['items'] as $it)
                                 <div>{{ $it['name'] }} × <b>{{ $fmt($it['qty']) }}</b></div>
@@ -96,6 +102,8 @@
                                 <span class="badge b-red">{{ __('ops.po_no_items') }}</span>
                             @endforelse
                             <input type="hidden" data-pi="items" value="{{ $itemsJson }}">
+                            <input type="hidden" data-pi="sheet" value="{{ $e['sheet_path'] }}">
+                            <input type="hidden" data-pi="sheetname" value="{{ $e['file'] }}">
                         </td>
                         <td class="num"><b>{{ $fmt($e['qty_total']) }}</b></td>
                         <td id="piSt{{ $i }}" style="font-size:11.5px">—</td>
@@ -150,9 +158,12 @@ async function piRun() {
             client_id: client,
             source: tr.querySelector('[data-pi="source"]').value,
             items,
+            sheet_path: tr.querySelector('[data-pi="sheet"]').value,
+            sheet_name: tr.querySelector('[data-pi="sheetname"]').value,
             warehouse_id: document.getElementById('piWh').value,
             assigned_to: document.getElementById('piRep').value,
-            due_at: document.getElementById('piDue').value,
+            // معاد الصف لو اتكتب — وإلا معاد الدفعة الافتراضي
+            due_at: tr.querySelector('[data-pi="due"]').value || document.getElementById('piDue').value,
         }});
     });
 
@@ -207,9 +218,15 @@ async function piRun() {
     document.getElementById('piGoApprovals').hidden = false;
 
     if (createdIds.length) {
+        // طباعة الكل بتفتح أوتوماتيك (قرار المالك 2026-08-06):
+        // auto=1 بتشغّل window.print هناك، وback=pos بترجّع لأوامر
+        // التوريد بعد الطباعة أو الإلغاء. ثانية ونص عشان السامري يبان.
+        const url = PI_PRINT + '?ids=' + createdIds.join(',') + '&back=pos&auto=1';
         const btn = document.getElementById('piPrintAll');
-        btn.href = PI_PRINT + '?ids=' + createdIds.join(',');
+        btn.href = url;
         btn.hidden = false;
+        document.getElementById('piProgLbl').textContent += ' — ' + @js(__('ops.po_opening_print'));
+        setTimeout(() => { window.location.href = url; }, 1500);
     }
 }
 </script>

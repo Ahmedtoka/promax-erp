@@ -496,6 +496,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // طباعة مجمعة: ?ids=1,2,3 — أمر في صفحة (2026-08-06)
         Route::get('/pos-print-batch', [OpsController::class, 'printPoBatch'])
             ->middleware('role:admin,manager,accountant')->name('po.print.batch');
+        // تنزيل شيت الأمر الأصلي — المرجع المحفوظ وقت الرفع
+        Route::get('/pos/{purchaseOrder}/sheet', [OpsController::class, 'downloadPoSheet'])
+            ->middleware('role:admin,manager,accountant')->name('po.sheet');
         Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
             ->middleware('role:admin,accountant')->name('po.approvals');
         // ⚠️ البلك قبل الراوت البارامتري — /po-approvals-bulk مساره مختلف أصلاً

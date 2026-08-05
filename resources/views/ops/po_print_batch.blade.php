@@ -32,10 +32,20 @@
   .po-doc:last-child{page-break-after:auto}
 }
 </style>
+@php
+    // back=pos: جايين من فلو الرفع — الرجوع لأوامر التوريد مش الموافقات.
+    // auto=1: الطباعة بتتفتح لوحدها أول ما الصفحة تحمّل.
+    $backUrl = request()->query('back') === 'pos' ? route('ops.pos') : route('ops.po.approvals');
+@endphp
 <script>
-// بعد الطباعة: 3 ثواني ورجوع لموافقات التوريد — نفس نمط الفردي
+// بعد الطباعة (أو الإلغاء): 3 ثواني وريديركت — نفس نمط الفردي
 window.addEventListener('afterprint', () => {
-    setTimeout(() => { window.location.href = @json(route('ops.po.approvals')); }, 3000);
+    setTimeout(() => { window.location.href = @json($backUrl); }, 3000);
 });
+
+@if (request()->boolean('auto'))
+// جايين من الإنشاء المتتابع — الطباعة بتتفتح أوتوماتيك
+window.addEventListener('load', () => setTimeout(() => window.print(), 600));
+@endif
 </script>
 @endsection

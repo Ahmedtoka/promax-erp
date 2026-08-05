@@ -30,7 +30,7 @@ class PurchaseOrder extends Model
     ];
 
     protected $fillable = [
-        'number', 'client_id', 'source', 'address', 'assigned_to', 'status',
+        'number', 'client_id', 'source', 'sheet_path', 'sheet_name', 'address', 'assigned_to', 'status',
         'price_mode', 'total', 'tax_total', 'grand_total',
         'arrived_at', 'delivered_at', 'due_date',
         'approval_status', 'approved_by', 'approved_at', 'approval_note',

@@ -409,8 +409,17 @@ class OpsController extends Controller
                     || ($c->name_en && mb_strtolower(trim($c->name_en)) === $store))
                 ?? ($sid !== '' ? $clients->first(fn ($c) => preg_match('/-0*'.$sid.'$/', $c->code)) : null);
 
+            // ⚠️ الشيت بيتحفظ هنا (مش وقت الإنشاء) — الإنشاء AJAX من غير
+            // الملفات. المسار بيمشي مع الصف وبيتسجل على الأمر كمرجع.
+            // نفس نمط العقود: storage/app مش public — الشيتات فيها أسعار.
+            $origName = $file->getClientOriginalName();
+            $safe = uniqid().'_'.preg_replace('/[^\w.\-\x{0600}-\x{06FF}]+/u', '_', $origName);
+            $dir = 'po-sheets/'.now()->format('Y-m');
+            $file->move(storage_path('app/'.$dir), $safe);
+
             $entries[] = [
-                'file' => $file->getClientOriginalName(),
+                'file' => $origName,
+                'sheet_path' => $dir.'/'.$safe,
                 'po_no' => $parsed['po_no'],
                 'store_name' => $parsed['store_name'],
                 'store_id' => $parsed['store_id'],
@@ -515,11 +524,27 @@ class OpsController extends Controller
         $data = $request->validate([
             'warehouse_id' => ['required', 'exists:warehouses,id'],
             'assigned_to' => ['required', 'exists:users,id'],
+            // معاد التوريد بقى لكل أمر لوحده (2026-08-06) — الصف بيبعت بتاعه
             'due_at' => ['required', 'date'],
             'client_id' => ['required', 'exists:clients,id'],
             'source' => ['nullable', 'string', 'max:40'],
             'items' => ['required', 'string'],
+            'sheet_path' => ['nullable', 'string', 'max:255'],
+            'sheet_name' => ['nullable', 'string', 'max:190'],
         ]);
+
+        // ⚠️ المسار جاي من hidden input — نتأكد إنه جوه po-sheets فعلاً
+        // وموجود، وإلا بيتداس. حارس ضد التسلل بالمسار.
+        $sheet = (string) ($data['sheet_path'] ?? '');
+
+        if ($sheet !== '') {
+            $real = realpath(storage_path('app/'.$sheet));
+            $root = realpath(storage_path('app/po-sheets'));
+
+            if ($root === false || $real === false || ! str_starts_with($real, $root) || ! is_file($real)) {
+                $sheet = '';
+            }
+        }
 
         // أرقام صحيحة بس — أي حاجة تانية في الـJSON بتتداس
         $qty = collect(json_decode($data['items'], true) ?: [])
@@ -531,7 +556,7 @@ class OpsController extends Controller
         }
 
         try {
-            $po = DB::transaction(function () use ($data, $qty, $request) {
+            $po = DB::transaction(function () use ($data, $qty, $sheet, $request) {
                 $client = Client::findOrFail($data['client_id']);
 
                 // ⚠️ سكوب التشانل مانجر — حارس الراوت زي الرفع الجماعي
@@ -541,6 +566,8 @@ class OpsController extends Controller
                     'number' => PurchaseOrder::nextNumber(),
                     'client_id' => $client->id,
                     'source' => $data['source'] ?? null,
+                    'sheet_path' => $sheet !== '' ? $sheet : null,
+                    'sheet_name' => $sheet !== '' ? ($data['sheet_name'] ?? null) : null,
                     'assigned_to' => $data['assigned_to'],
                     'price_mode' => $client->priceList(),
                     'approval_status' => 'pending',
@@ -655,6 +682,25 @@ class OpsController extends Controller
         $purchaseOrder->load(['client.group', 'client.zone', 'courier', 'items.product', 'warehouse', 'creator']);
 
         return view('ops.po_print', ['po' => $purchaseOrder]);
+    }
+
+    /**
+     * تنزيل شيت الأمر الأصلي (2026-08-06) — المرجع اللي السلسلة بعتته.
+     * نفس حراسة ملفات العقود: realpath جوه po-sheets وبس.
+     */
+    public function downloadPoSheet(PurchaseOrder $purchaseOrder)
+    {
+        $path = (string) $purchaseOrder->sheet_path;
+        $real = $path !== '' ? realpath(storage_path('app/'.$path)) : false;
+        $root = realpath(storage_path('app/po-sheets'));
+
+        if ($real === false || $root === false || ! str_starts_with($real, $root) || ! is_file($real)) {
+            abort(404);
+        }
+
+        $name = $purchaseOrder->number.' - '.($purchaseOrder->sheet_name ?: basename($real));
+
+        return response()->download($real, $name);
     }
 
     /**

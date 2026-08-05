@@ -70,8 +70,21 @@
 
         <div style="margin-top:12px">
             <label class="f">{{ __('ops.po_files') }} <b class="req-star">*</b></label>
-            <input type="file" name="files[]" multiple required accept=".xlsx,.xls" style="width:100%">
-            <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('ops.po_files_hint') }}</div>
+            {{-- الانبوت الخام مخفي — الرفع بمنطقة متصممة وشيبس بأسماء الملفات --}}
+            <input type="file" name="files[]" id="piFiles" multiple required accept=".xlsx,.xls"
+                   style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden"
+                   onchange="piShowFiles()">
+            <label for="piFiles" id="piDrop"
+                   style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+                          border:2px dashed var(--border);border-radius:14px;padding:26px 16px;cursor:pointer;
+                          background:var(--card2, #fafbff);text-align:center;transition:border-color .15s">
+                <span style="font-size:30px">📂</span>
+                <span class="btn gold" style="pointer-events:none">⬆️ {{ __('ops.po_pick_files') }}</span>
+                <span style="font-size:11px;color:var(--muted)">{{ __('ops.po_files_hint') }}</span>
+            </label>
+            {{-- شيبس الملفات المختارة — أيقونة + اسم + حجم --}}
+            <div id="piChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
+            <div id="piCount" style="font-size:11.5px;font-weight:800;color:var(--royal-blue);margin-top:6px"></div>
         </div>
 
         <div style="display:flex;justify-content:flex-end;margin-top:14px">
@@ -121,5 +134,27 @@ function piFilterGroups() {
 
 piFilterGroups();
 if (PI.old) { document.getElementById('piGroup').value = String(PI.old); }
+
+// ═══ شيبس الملفات المختارة — أيقونة صغيرة + الاسم + الحجم ═══
+const PI_COUNT_TPL = @js(__('ops.po_files_count', ['count' => '#N#']));
+const piEsc = s => String(s ?? '').replace(/[&<>"']/g,
+    ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+function piShowFiles() {
+    const files = [...document.getElementById('piFiles').files];
+    const chips = document.getElementById('piChips');
+
+    chips.innerHTML = files.map(f =>
+        '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);' +
+        'border-radius:10px;padding:6px 10px;font-size:11.5px;background:#fff;max-width:260px">' +
+        '<span style="font-size:15px">📄</span>' +
+        '<b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + piEsc(f.name) + '">' + piEsc(f.name) + '</b>' +
+        '<span style="color:var(--muted);flex-shrink:0" dir="ltr">' + (f.size / 1024).toFixed(0) + ' KB</span>' +
+        '</span>').join('');
+
+    document.getElementById('piCount').textContent =
+        files.length ? PI_COUNT_TPL.replace('#N#', files.length) : '';
+    document.getElementById('piDrop').style.borderColor = files.length ? 'var(--royal-blue)' : 'var(--border)';
+}
 </script>
 @endsection

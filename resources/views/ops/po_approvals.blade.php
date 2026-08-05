@@ -148,6 +148,10 @@
                             @endif
                             <a class="btn sm" href="{{ route('ops.po.print', $po) }}" target="_blank"
                                title="{{ __('ops.print') }}" onclick="event.stopPropagation()">🖨️</a>
+                            @if ($po->sheet_path)
+                                <a class="btn sm" href="{{ route('ops.po.sheet', $po) }}"
+                                   title="{{ __('ops.po_sheet') }}" onclick="event.stopPropagation()">📎</a>
+                            @endif
                         </td>
                     </tr>
                     {{-- صف التفاصيل — مقفول افتراضياً --}}
@@ -215,6 +219,7 @@
                                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px">
                                     @if ($canEdit)<a class="btn" href="{{ route('ops.po.edit', $po) }}">✏️ {{ __('ops.po_edit') }}</a>@endif
                                     <a class="btn" href="{{ route('ops.po.print', $po) }}" target="_blank">🖨️ {{ __('ops.print') }}</a>
+                                    @if ($po->sheet_path)<a class="btn" href="{{ route('ops.po.sheet', $po) }}">📎 {{ __('ops.po_sheet') }}</a>@endif
                                     <input type="text" name="note" id="poNote{{ $po->id }}" maxlength="500" style="flex:1;min-width:220px"
                                            placeholder="{{ __('ops.decision_note_ph') }}">
                                     @if ($canDecide)

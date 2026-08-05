@@ -173,6 +173,10 @@
                     <td>
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
                             <a class="btn sm" href="{{ route('ops.po.print', $po) }}" target="_blank" title="{{ __('ops.print') }}">🖨️</a>
+                            @if ($po->sheet_path)
+                                {{-- شيت السلسلة الأصلي — المرجع المحفوظ وقت الرفع --}}
+                                <a class="btn sm" href="{{ route('ops.po.sheet', $po) }}" title="{{ __('ops.po_sheet') }}">📎</a>
+                            @endif
                             @if ($po->approval_status === 'pending' && \App\Support\Access::action(auth()->user(), 'act.ka.edit'))
                                 <a class="btn sm" href="{{ route('ops.po.edit', $po) }}" title="{{ __('ops.po_edit') }}">✏️</a>
                             @endif

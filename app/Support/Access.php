@@ -102,6 +102,8 @@ class Access
             'ops.po.approvals', 'ops.po.decide',
             // مستند الأمر — بيطبع نسختين ويختمهم بعد الموافقة
             'ops.po.print',
+            // شيت الأمر الأصلي — المرجع اللي السلسلة بعتته
+            'ops.po.sheet',
             // التعديل الكامل على أمر pending — قرار المالك 2026-08-04
             'ops.po.edit', 'ops.po.update',
             // ⚠️ **استثناء من بادئة `erp.clients`.** تفعيل العملاء
