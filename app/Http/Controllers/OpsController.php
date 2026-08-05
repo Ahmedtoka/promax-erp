@@ -112,23 +112,72 @@ class OpsController extends Controller
 
     // ================= أوامر التوريد =================
 
+    /**
+     * لوحة التوريد (كي أكاونت + أونلاين) — 2026-08-05: KPIs بحالات
+     * الموافقة والتسليم والتأخير + فلاتر (بحث بالفرع، قناة، سلسلة،
+     * موافقة، حالة، تواريخ) — والـKPIs بنفس فلاتر القايمة (نطاق واحد).
+     */
     public function purchaseOrders(Request $request)
     {
-        // ⚠️ سكوب التشانل مانجر (2026-08-05): أوامر عملائه بس
+        // ⚠️ سكوب التشانل مانجر: أوامر عملائه بس
         $u = auth()->user();
-        $q = PurchaseOrder::with(['client', 'courier', 'items'])
+
+        // الفلاتر المشتركة (من غير الحالة) — الأساس للقايمة والـKPIs
+        $base = fn () => PurchaseOrder::query()
             ->when($u?->role === 'manager',
-                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')));
+                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')))
+            ->when($request->string('q')->trim()->value(), function ($q2, $s) {
+                $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
+                    ->orWhere('source', 'like', "%$s%")
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%")));
+            })
+            ->when($request->integer('channel'),
+                fn ($q2, $ch) => $q2->whereHas('client', fn ($c) => $c->where('channel_id', $ch)))
+            ->when($request->integer('group'),
+                fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))
+            ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '>=', $d))
+            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d));
+
+        // «متأخر» = عدّى معاده ولسه ماتسلمش (والمرفوض مش متأخر — اتقفل)
+        $lateScope = fn ($q2) => $q2->whereNotNull('due_at')
+            ->where('due_at', '<', now())
+            ->where('status', '!=', 'delivered')
+            ->where(fn ($w) => $w->whereNull('approval_status')->orWhere('approval_status', '!=', 'rejected'));
+
+        $q = $base()->with(['client.channel', 'courier', 'items', 'creator', 'approvedBy', 'editor']);
+
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
+        }
+        if ($approval = $request->string('approval')->value()) {
+            $q->where('approval_status', $approval);
+        }
+        if ($request->boolean('late')) {
+            $lateScope($q);
         }
 
         return view('ops.pos', [
             'pos' => $q->latest()->paginate(30)->withQueryString(),
+            // ⚠️ كل الأرقام من نفس الأساس المفلتر — رقم فوق وجدول تحت
+            // من نطاقين = شاشة بتكدب
+            'kpi' => [
+                'total' => $base()->count(),
+                'pending' => $base()->where('approval_status', 'pending')->count(),
+                'approved' => $base()->where('approval_status', 'approved')->count(),
+                'rejected' => $base()->where('approval_status', 'rejected')->count(),
+                'delivered' => $base()->where('status', 'delivered')->count(),
+                'late' => $lateScope($base())->count(),
+                'value' => (float) $base()->where(fn ($w) => $w->whereNull('approval_status')
+                    ->orWhere('approval_status', '!=', 'rejected'))->sum('grand_total'),
+            ],
+            'channels' => \App\Models\Channel::orderBy('id')->get(),
+            'groups' => \App\Models\ClientGroup::whereHas('clients')->orderBy('name')->get(['id', 'name', 'name_en']),
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
             'clients' => Client::visibleTo(Client::orderBy('name'))->get(['id', 'name']),
             'products' => Product::orderBy('code')->get(),
-            'filters' => $request->only('status'),
+            'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'from', 'to']),
         ]);
     }
 
@@ -627,6 +676,10 @@ class OpsController extends Controller
                     'due_at' => $data['due_at'],
                     'source' => $data['source'] ?? null,
                     'price_mode' => $client->priceList(),
+                    // تراك التعديل: مين وإمتى (2026-08-05)
+                    'was_edited' => true,
+                    'edited_by' => auth()->id(),
+                    'edited_at' => now(),
                 ]);
 
                 // بنود جديدة بالكامل — التعديل إعادة بناء مش ترقيع
@@ -809,6 +862,9 @@ class OpsController extends Controller
                         'tax_total' => $sums['tax'],
                         'grand_total' => $sums['grand'],
                         'was_edited' => true,
+                        // تراك: مين عدّل الكميات وإمتى (2026-08-05)
+                        'edited_by' => $request->user()->id,
+                        'edited_at' => now(),
                     ]);
                 }
 

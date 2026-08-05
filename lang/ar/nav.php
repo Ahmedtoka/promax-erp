@@ -19,7 +19,7 @@ return [
     'group_home' => 'الرئيسية',
     'group_purchasing' => 'المشتريات',
     'group_products' => 'المنتجات والتسعير',
-    'group_ka' => 'توريد الكي أكاونت',
+    'group_ka' => 'توريد القنوات',
     'group_wh' => 'المخزن',
     'group_custody' => 'العهدة',
     'prep_orders' => 'تجهيز الطلبات',

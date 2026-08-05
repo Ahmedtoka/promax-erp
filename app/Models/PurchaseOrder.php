@@ -34,7 +34,7 @@ class PurchaseOrder extends Model
         'price_mode', 'total', 'tax_total', 'grand_total',
         'arrived_at', 'delivered_at', 'due_date',
         'approval_status', 'approved_by', 'approved_at', 'approval_note',
-        'was_edited', 'due_at', 'warehouse_id', 'pick_order_id', 'created_by',
+        'was_edited', 'edited_by', 'edited_at', 'due_at', 'warehouse_id', 'pick_order_id', 'created_by',
     ];
 
     protected function casts(): array
@@ -49,6 +49,7 @@ class PurchaseOrder extends Model
             'due_at' => 'datetime',
             'approved_at' => 'datetime',
             'was_edited' => 'boolean',
+            'edited_at' => 'datetime',
         ];
     }
 
@@ -202,6 +203,12 @@ class PurchaseOrder extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /** آخر واحد عدّل الأمر (تراك 2026-08-05) */
+    public function editor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'edited_by');
     }
 
     public static function nextNumber(): string
