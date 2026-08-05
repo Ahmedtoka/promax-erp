@@ -11,6 +11,7 @@
     @if ($manager)
         {{-- فلو الكي أكاونت: إنشاء بموافقة الحسابات --}}
         @if (\App\Support\Access::action(auth()->user(), 'act.ka.create'))<a class="btn" href="{{ route('ops.po.handout') }}">📦 {{ __('ops.po_handout') }}</a>@endif
+        @if (\App\Support\Access::action(auth()->user(), 'act.ka.create'))<a class="btn" href="{{ route('ops.po.import') }}">⬆️ {{ __('ops.po_import') }}</a>@endif
         <button class="btn gold" onclick="openDlg('dlgNewPo')">+ {{ __('ops.purchase_order') }}</button>
     @endif
 @endsection

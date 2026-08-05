@@ -480,6 +480,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,accountant')->name('po.edit');
         Route::post('/po-handout/{purchaseOrder}', [OpsController::class, 'updatePo'])
             ->middleware('role:admin,manager,accountant')->name('po.update');
+        // رفع POs من شيتات السلاسل — bulk (2026-08-05)
+        Route::get('/po-import', [OpsController::class, 'poImport'])
+            ->middleware('role:admin,manager')->name('po.import');
+        Route::post('/po-import/preview', [OpsController::class, 'poImportPreview'])
+            ->middleware('role:admin,manager')->name('po.import.preview');
+        Route::post('/po-import', [OpsController::class, 'poImportStore'])
+            ->middleware('role:admin,manager')->name('po.import.store');
+        // مستند الأمر للطباعة — الحسابات بتطبع نسختين وتختمهم
+        Route::get('/pos/{purchaseOrder}/print', [OpsController::class, 'printPo'])
+            ->middleware('role:admin,manager,accountant')->name('po.print');
         Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
             ->middleware('role:admin,accountant')->name('po.approvals');
         Route::post('/po-approvals/{purchaseOrder}', [OpsController::class, 'decidePoApproval'])

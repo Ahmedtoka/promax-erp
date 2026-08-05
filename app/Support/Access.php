@@ -100,6 +100,8 @@ class Access
             // الأساسي في الفلو الجديد (2026-08-04). الإنشاء نفسه
             // (`ops.po.handout`) فاضل لمدير القناة والأدمن.
             'ops.po.approvals', 'ops.po.decide',
+            // مستند الأمر — بيطبع نسختين ويختمهم بعد الموافقة
+            'ops.po.print',
             // التعديل الكامل على أمر pending — قرار المالك 2026-08-04
             'ops.po.edit', 'ops.po.update',
             // ⚠️ **استثناء من بادئة `erp.clients`.** تفعيل العملاء
@@ -304,7 +306,7 @@ class Access
 
         // ═══ العهدة وتوريد الكي أكاونت ═══
         'act.custody.handout' => ['perm.act_custody_handout', 'ops.handout', null, ['ops.handout.store']],
-        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign']],
+        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store']],
         'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide']],
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 

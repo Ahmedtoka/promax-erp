@@ -104,6 +104,7 @@
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px">
                     {{-- تعديل كامل (أصناف/مندوب/معاد) — مفتوح للحسابات ولصاحب الأمر --}}
                     @if (\App\Support\Access::action(auth()->user(), 'act.ka.edit'))<a class="btn" href="{{ route('ops.po.edit', $po) }}">✏️ {{ __('ops.po_edit') }}</a>@endif
+                    <a class="btn" href="{{ route('ops.po.print', $po) }}" target="_blank">🖨️ {{ __('ops.print') }}</a>
                     <input type="text" name="note" maxlength="500" style="flex:1;min-width:220px"
                            placeholder="{{ __('ops.decision_note_ph') }}">
                     {{-- زرارين بنفس الفورم — قيمة decision بتحدد المسار --}}
@@ -137,7 +138,7 @@
             <tbody>
                 @forelse ($decided as $po)
                     <tr>
-                        <td><b>{{ $po->number }}</b>@if ($po->was_edited) <span class="badge b-orange" style="font-size:9.5px">{{ __('ops.edited') }}</span>@endif</td>
+                        <td><a href="{{ route('ops.po.print', $po) }}" target="_blank"><b>{{ $po->number }}</b></a>@if ($po->was_edited) <span class="badge b-orange" style="font-size:9.5px">{{ __('ops.edited') }}</span>@endif</td>
                         <td>{{ $po->client?->fullName() ?? '—' }}</td>
                         <td>{{ $po->courier?->name ?? '—' }}</td>
                         <td class="num">{{ $fmt($po->payable()) }}</td>

@@ -298,6 +298,243 @@ class OpsController extends Controller
         ]);
     }
 
+    // ═══════════ رفع POs من شيتات السلاسل — 2026-08-05 ═══════════
+
+    /**
+     * شاشة الرفع: قناة + مخزن + مندوب + معاد + ملفات PO متعددة.
+     * كل ملف = أمر لفرع — صيغة شيتات رابت وأمثالها (Store ID/Name
+     * + Order Nr + جدول أصناف بالباركود والكمية بالقطع).
+     */
+    public function poImport()
+    {
+        return view('ops.po_import', [
+            'channels' => \App\Models\Channel::orderBy('id')->get(),
+            'warehouses' => Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
+            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver'])
+                ->where('active', true))->orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
+    /** معاينة: بارس كل ملف + أوتوماتش الفرع — مفيش كتابة هنا */
+    public function poImportPreview(Request $request)
+    {
+        $data = $request->validate([
+            'channel_id' => ['required', 'exists:channels,id'],
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'assigned_to' => ['required', 'exists:users,id'],
+            'due_at' => ['required', 'date'],
+            'files' => ['required', 'array', 'min:1', 'max:30'],
+            'files.*' => ['file', 'mimes:xlsx,xls', 'max:10240'],
+        ]);
+
+        // فروع القناة المختارة — وبسكوب التشانل مانجر
+        $clients = Client::visibleTo(Client::where('channel_id', $data['channel_id'])
+            ->where('status', 'active'))->orderBy('name')
+            ->get(['id', 'name', 'name_en', 'code']);
+
+        $entries = [];
+
+        foreach ($request->file('files') as $file) {
+            $parsed = $this->parsePoSheet($file->getRealPath());
+
+            // أوتوماتش الفرع: بالاسم زي ما هو، وإلا بكود بيخلص بـStore ID
+            $store = mb_strtolower(trim((string) ($parsed['store_name'] ?? '')));
+            $sid = preg_replace('/\D+/', '', (string) ($parsed['store_id'] ?? ''));
+            $guess = $clients->first(fn ($c) => mb_strtolower(trim($c->name)) === $store
+                    || ($c->name_en && mb_strtolower(trim($c->name_en)) === $store))
+                ?? ($sid !== '' ? $clients->first(fn ($c) => preg_match('/-0*'.$sid.'$/', $c->code)) : null);
+
+            $entries[] = [
+                'file' => $file->getClientOriginalName(),
+                'po_no' => $parsed['po_no'],
+                'store_name' => $parsed['store_name'],
+                'store_id' => $parsed['store_id'],
+                'client_id' => $guess?->id,
+                'items' => $parsed['items'],
+                'qty_total' => array_sum(array_column($parsed['items'], 'qty')),
+                'unknown' => $parsed['unknown'],
+            ];
+        }
+
+        return view('ops.po_import_preview', [
+            'entries' => $entries,
+            'clients' => $clients,
+            'batch' => [
+                'channel_id' => (int) $data['channel_id'],
+                'warehouse_id' => (int) $data['warehouse_id'],
+                'assigned_to' => (int) $data['assigned_to'],
+                'due_at' => $data['due_at'],
+            ],
+        ]);
+    }
+
+    /**
+     * التنفيذ بعد التأكيد: أمر لكل ملف — **نفس فلو الإنشاء اليدوي
+     * بالظبط**: pending للحسابات، تسعير قايمة العميل، رفض الصنف
+     * الغير متسعّر. أمر واقع مايوقّعش الباقي — أخطاؤه بتتجمع.
+     */
+    public function poImportStore(Request $request)
+    {
+        $data = $request->validate([
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'assigned_to' => ['required', 'exists:users,id'],
+            'due_at' => ['required', 'date'],
+            'orders' => ['required', 'array', 'min:1'],
+            'orders.*.client_id' => ['nullable', 'exists:clients,id'],
+            'orders.*.source' => ['nullable', 'string', 'max:40'],
+            'orders.*.items' => ['required', 'string'],
+            'orders.*.skip' => ['nullable', 'boolean'],
+        ]);
+
+        $created = 0;
+        $errors = [];
+
+        foreach ($data['orders'] as $order) {
+            if (! empty($order['skip']) || empty($order['client_id'])) {
+                continue;
+            }
+
+            $qty = json_decode($order['items'], true);
+
+            if (! is_array($qty) || $qty === []) {
+                continue;
+            }
+
+            // أرقام صحيحة بس — أي حاجة تانية في الـJSON بتتداس
+            $qty = collect($qty)->mapWithKeys(fn ($q, $pid) => [(int) $pid => (int) $q])
+                ->filter(fn ($q, $pid) => $pid > 0 && $q > 0)->all();
+
+            try {
+                DB::transaction(function () use ($order, $qty, $data, $request) {
+                    $client = Client::findOrFail($order['client_id']);
+
+                    abort_unless($client->visibleBy($request->user()), 403);
+
+                    $po = PurchaseOrder::create([
+                        'number' => PurchaseOrder::nextNumber(),
+                        'client_id' => $client->id,
+                        // رقم أمر السلسلة (Order Nr) — بيتطبع على المستند
+                        'source' => $order['source'] ?? null,
+                        'assigned_to' => $data['assigned_to'],
+                        'price_mode' => $client->priceList(),
+                        'approval_status' => 'pending',
+                        'due_at' => $data['due_at'],
+                        'warehouse_id' => $data['warehouse_id'],
+                        'created_by' => $request->user()->id,
+                        'status' => 'pending',
+                        'total' => 0,
+                    ]);
+
+                    $this->fillPoItems($po, $client, $qty, 'channel');
+                });
+
+                $created++;
+            } catch (\App\Exceptions\Rejected $e) {
+                $errors[] = ($order['source'] ?: '—').': '.$e->getMessage();
+            }
+        }
+
+        $resp = redirect()->route('ops.po.approvals')
+            ->with('ok', __('flash.pos_imported', ['count' => $created]));
+
+        return $errors === [] ? $resp : $resp->withErrors($errors);
+    }
+
+    /**
+     * بارس شيت PO واحد — صيغة رابت: أزواج (ليبل، قيمة) في الهيدر،
+     * وبعدين جدول أصناف عموده الفاصل «Barcode»، ولحد صف «Total».
+     *
+     * @return array{po_no: ?string, store_id: ?string, store_name: ?string,
+     *               items: list<array{product_id: int, name: string, qty: int}>,
+     *               unknown: list<string>}
+     */
+    private function parsePoSheet(string $path): array
+    {
+        $rows = \App\Services\Sheet::rows($path);
+
+        $meta = ['po_no' => null, 'store_id' => null, 'store_name' => null];
+        $items = [];
+        $unknown = [];
+        $cols = null;
+
+        foreach ($rows as $row) {
+            $cells = array_map(fn ($c) => trim((string) $c), $row);
+
+            // الهيدر: الليبل وجنبه القيمة — الليبلات بأسماء رابت الحرفية
+            foreach ($cells as $i => $cell) {
+                $next = $cells[$i + 1] ?? null;
+                if ($next === null || $next === '') {
+                    continue;
+                }
+                match (mb_strtolower($cell)) {
+                    'order nr', 'po nr', 'po #' => $meta['po_no'] = $meta['po_no'] ?? $next,
+                    'store id' => $meta['store_id'] = $meta['store_id'] ?? $next,
+                    'store name' => $meta['store_name'] = $meta['store_name'] ?? $next,
+                    default => null,
+                };
+            }
+
+            // صف عناوين الجدول — بيحدد أماكن الأعمدة
+            $lower = array_map('mb_strtolower', $cells);
+            if (in_array('barcode', $lower, true)) {
+                $cols = [
+                    'barcode' => array_search('barcode', $lower, true),
+                    'sku' => array_search('sku', $lower, true),
+                    'qty' => array_search('total pc', $lower, true),
+                ];
+
+                continue;
+            }
+
+            if ($cols === null) {
+                continue;
+            }
+
+            // نهاية الجدول
+            if (in_array('total', $lower, true) && trim((string) ($cells[$cols['barcode']] ?? '')) === '') {
+                break;
+            }
+
+            $barcode = preg_replace('/\D+/', '', (string) ($cells[$cols['barcode']] ?? ''));
+            $qty = (int) \App\Services\Sheet::number($cells[$cols['qty']] ?? null);
+
+            if ($barcode === '' || $qty <= 0) {
+                continue;
+            }
+
+            // الباركود الأول (المصدر الأدق) وبعدين SKU ككود صنف
+            $product = Product::findByBarcode($barcode)
+                ?? ($cols['sku'] !== false ? Product::where('code', $cells[$cols['sku']] ?? '')->first() : null);
+
+            if ($product === null) {
+                $unknown[] = $barcode;
+
+                continue;
+            }
+
+            // نفس الصنف في سطرين — الكميات بتتجمع
+            if (isset($items[$product->id])) {
+                $items[$product->id]['qty'] += $qty;
+            } else {
+                $items[$product->id] = [
+                    'product_id' => $product->id,
+                    'name' => $product->displayName(),
+                    'qty' => $qty,
+                ];
+            }
+        }
+
+        return $meta + ['items' => array_values($items), 'unknown' => $unknown];
+    }
+
+    /** مستند أمر التوريد للطباعة — نسخ الحسابات المختومة */
+    public function printPo(PurchaseOrder $purchaseOrder)
+    {
+        $purchaseOrder->load(['client.group', 'client.zone', 'courier', 'items.product', 'warehouse', 'creator']);
+
+        return view('ops.po_print', ['po' => $purchaseOrder]);
+    }
+
     // ═══════════ أوامر توريد الكي أكاونت — 2026-08-04 ═══════════
 
     /** فتح أمر pending للتعديل — نفس شاشة الإنشاء متملية بالبيانات */
