@@ -407,6 +407,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
             Route::post('/receipts', [WarehouseController::class, 'storeReceipt'])->name('receipts.store');
             Route::post('/batches/{batch}/put-away', [WarehouseController::class, 'putAway'])->name('putaway');
+            // الترصيف الجماعي من شاشة عمليات المخزن — نفس صلاحية putaway
+            // (بادئة `wh.putaway` في ACTIONS بتغطي `wh.putaway.bulk`)
+            Route::post('/put-away-bulk', [WarehouseController::class, 'putAwayBulk'])->name('putaway.bulk');
             Route::post('/shelf-stock/{batchLocation}/move', [WarehouseController::class, 'moveStock'])->name('move');
             Route::post('/shelves', [WarehouseController::class, 'storeLocation'])->name('locations.store');
             Route::post('/transfers/{transfer}/receive', [WarehouseController::class, 'receiveTransfer'])
