@@ -127,6 +127,7 @@ return [
     'on_shelf' => 'On Shelf',
     'unshelved' => 'Not Shelved Yet',
     'put_away' => 'Put Away',
+    'shelf_code' => 'Shelf code',
     'put_away_hint' => 'Scan or type the shelf code (e.g. A03) and the quantity.',
     'move_stock' => 'Move Stock',
     'shelf_map' => 'Shelf Map',

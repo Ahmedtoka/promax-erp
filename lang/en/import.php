@@ -2,6 +2,7 @@
 
 return [
     'page' => 'Import Data',
+    'opening_receipt_ref' => 'Opening balance import',
     'page_sub' => 'Upload a sheet, see what it will do, then confirm',
     'order_hint' => 'Import in this order: products first, then clients, then the team, then stock. Each step relies on the one before it.',
     'rows_in_system' => 'rows in the system now',

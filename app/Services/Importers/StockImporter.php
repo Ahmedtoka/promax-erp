@@ -4,6 +4,7 @@ namespace App\Services\Importers;
 
 use App\Models\Batch;
 use App\Models\BatchLocation;
+use App\Models\GoodsReceipt;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\Stock;
@@ -101,6 +102,11 @@ class StockImporter extends Importer
 
         DB::transaction(function () use ($rows, &$batches, &$shelved, &$touched) {
             $whCache = $locCache = [];
+            // ⚠️ **إذن استلام لكل مخزن** (إصلاح 2026-08-05). الاستيراد
+            // كان بيعمل باتشات من غير إذن خالص — فشاشة الأذون فاضية،
+            // وزرار الترصيف اللي عايش على صفحة الإذن مالوش طريق،
+            // والبضاعة تقعد «مستني الترصيف» من غير أي زرار يرصّفها.
+            $grns = [];
 
             foreach ($rows as $row) {
                 $product = $this->findProduct($row);
@@ -145,7 +151,19 @@ class StockImporter extends Importer
                 $batch = Batch::where($key)->first();
 
                 if ($batch === null) {
+                    // إذن الاستيراد بتاع المخزن ده — بيتعمل مرة واحدة
+                    $grn = $warehouse === null ? null
+                        : ($grns[$warehouse->id] ??= GoodsReceipt::create([
+                            'number' => GoodsReceipt::nextNumber(),
+                            'warehouse_id' => $warehouse->id,
+                            'received_on' => today()->toDateString(),
+                            'status' => 'posted',
+                            'reference' => __('import.opening_receipt_ref'),
+                            'created_by' => auth()->id(),
+                        ]));
+
                     $batch = Batch::create($key + [
+                        'goods_receipt_id' => $grn?->id,
                         'produced_on' => $produced?->format('Y-m-d'),
                         'expires_on' => $expires->format('Y-m-d'),
                         'qty_received' => $qty,

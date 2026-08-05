@@ -70,6 +70,14 @@
     <h3>📦 {{ __('stock.awaiting_putaway') }}
         <span class="side">{{ __('stock.awaiting_putaway_hint') }}</span></h3>
 
+    @if ($errors->any())
+        <div class="alert" style="margin-bottom:12px;flex-direction:column;align-items:stretch;gap:4px">
+            @foreach ($errors->all() as $msg)
+                <div class="errline" style="margin:0">{{ $msg }}</div>
+            @endforeach
+        </div>
+    @endif
+
     @if ($pending->isEmpty())
         <div class="alert good"><span>✅</span><span>{{ __('stock.all_shelved') }}</span></div>
     @else
@@ -100,6 +108,17 @@
                                 <a class="btn sm gold" href="{{ route('wh.receipt', $b->receipt) }}">
                                     {{ __('stock.put_away') }} — {{ $b->receipt->number }}
                                 </a>
+                            @elseif (\App\Support\Access::action(auth()->user(), 'act.wh.putaway'))
+                                {{-- باتش من غير إذن (استيراد قديم) — ترصيف مباشر من هنا --}}
+                                <form method="POST" action="{{ route('wh.putaway', $b) }}"
+                                      style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                                    @csrf
+                                    <input type="text" name="location_code" list="locCodes" required
+                                           placeholder="{{ __('stock.shelf_code') }}" style="width:90px">
+                                    <input type="number" name="qty" min="1" max="{{ $b->unshelvedQty() }}"
+                                           value="{{ $b->unshelvedQty() }}" required style="width:84px">
+                                    <button class="btn sm gold" type="submit">{{ __('stock.put_away') }}</button>
+                                </form>
                             @else
                                 <span class="badge b-gray">—</span>
                             @endif
@@ -108,6 +127,11 @@
                 @endforeach
             </table>
         </div>
+        <datalist id="locCodes">
+            @foreach ($locationCodes as $code)
+                <option value="{{ $code }}">
+            @endforeach
+        </datalist>
     @endif
 </div>
 

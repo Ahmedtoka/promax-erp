@@ -127,6 +127,7 @@ return [
     'on_shelf' => 'على الرف',
     'unshelved' => 'لسه مترصّفش',
     'put_away' => 'ترصيف',
+    'shelf_code' => 'كود الرف',
     'put_away_hint' => 'اسكن أو اكتب كود الرف (زي A03) والكمية.',
     'move_stock' => 'نقل بضاعة',
     'shelf_map' => 'خريطة الأرفف',
