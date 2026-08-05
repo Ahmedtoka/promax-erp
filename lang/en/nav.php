@@ -56,6 +56,7 @@ return [
     'language' => 'Language',
 
     'dues' => 'Contract Dues',
+    'repclose' => 'Rep Settlements',
     'import' => 'Import Data',
     'tax' => 'Tax settings',
     'eta' => 'E-invoicing',

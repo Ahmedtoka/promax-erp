@@ -90,6 +90,8 @@ class Access
         'accountant' => [
             'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
+            // تصفية المناديب — ده شغل الحسابات الأساسي (2026-08-06)
+            'erp.repclose',
             // ⚠️ المحاسب بيشوف الموردين ويدفع لهم — المستحقات شغله.
             // أوامر الشراء نفسها (بضاعة) مش له، وتعريف المورد
             // والافتتاحي قرارات إدارة (`role:admin,manager` في الراوت).
@@ -247,6 +249,8 @@ class Access
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══
         'nav.group_money' => [
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
+            ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
         ],

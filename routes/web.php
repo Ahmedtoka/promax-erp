@@ -275,6 +275,17 @@ Route::middleware(['auth', 'screen'])->group(function () {
         });
 
         // ===== مستحقات العقود =====
+        // ═════ تصفية المناديب (2026-08-06) — قفلة الحسابات اليومية ═════
+        Route::get('/rep-close', [\App\Http\Controllers\RepSettlementController::class, 'index'])
+            ->middleware('role:admin,accountant')->name('repclose');
+        // ⚠️ doc قبل {user} — «doc» ماينفعش يتفسر كـid مندوب
+        Route::get('/rep-close/doc/{settlement}', [\App\Http\Controllers\RepSettlementController::class, 'doc'])
+            ->middleware('role:admin,accountant')->name('repclose.doc');
+        Route::get('/rep-close/{user}', [\App\Http\Controllers\RepSettlementController::class, 'show'])
+            ->middleware('role:admin,accountant')->name('repclose.show');
+        Route::post('/rep-close/{user}', [\App\Http\Controllers\RepSettlementController::class, 'store'])
+            ->middleware('role:admin,accountant')->name('repclose.store');
+
         Route::get('/dues', [\App\Http\Controllers\DuesController::class, 'index'])->name('dues');
         Route::post('/dues/generate', [\App\Http\Controllers\DuesController::class, 'generate'])
             ->middleware('role:admin,manager,accountant')->name('dues.generate');
