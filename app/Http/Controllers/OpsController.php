@@ -641,9 +641,41 @@ class OpsController extends Controller
     }
 
     /** شاشة «تسليم PO للمندوب»: سلسلة ← فرع ← مندوب ← معاد ← أصناف بالوحدات */
+    /**
+     * المتاح للتجهيز لكل (مخزن، صنف) — **نفس مصدر الحجز بالظبط**
+     * (`Warehouse::availableFor`: المرصوف السليم على الأرفف).
+     *
+     * ⚠️ الشاشة كانت بتعرض إجمالي `stocks` (كل المخازن + غير المرصوف)
+     * فالمدير يشوف 120 والموافقة ترفض بـ«المتاح 0» — رقمين من مصدرين
+     * (اتشاف 2026-08-05). دلوقتي المعروض هو اللي هيتحجز فعلاً.
+     *
+     * @return array<int, array<int, int>>  [warehouse_id][product_id] => qty
+     */
+    private function shelfAvailability(): array
+    {
+        $rows = \App\Models\BatchLocation::query()
+            ->join('locations', 'locations.id', '=', 'batch_locations.location_id')
+            ->join('batches', 'batches.id', '=', 'batch_locations.batch_id')
+            ->where('batch_locations.qty', '>', 0)
+            ->where('batches.blocked', false)
+            ->where('batches.qty_remaining', '>', 0)
+            ->whereDate('batches.expires_on', '>=', now()->toDateString())
+            ->selectRaw('locations.warehouse_id as wid, batches.product_id as pid, SUM(batch_locations.qty) as q')
+            ->groupBy('locations.warehouse_id', 'batches.product_id')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r->wid][(int) $r->pid] = (int) $r->q;
+        }
+
+        return $out;
+    }
+
     public function poHandout()
     {
         return view('ops.po_handout', [
+            'shelfAvail' => $this->shelfAvailability(),
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(),
             // الفروع بتتفلتر بالسلسلة في الجافاسكريبت — فبنبعت الكل مع group_id
             // ⚠️ العميل حالته عمود `status` نصي ('active') مش بوليان `active`
@@ -670,6 +702,9 @@ class OpsController extends Controller
                 ->orderBy('due_at')->get(),
             'decided' => (clone $base)->whereIn('approval_status', ['approved', 'rejected'])
                 ->latest('approved_at')->limit(30)->get(),
+            // المتاح على أرفف كل مخزن — الحسابات تشوف العجز **قبل**
+            // ما تدوس موافقة بدل ما الرفض يفاجئها (2026-08-05)
+            'shelfAvail' => $this->shelfAvailability(),
         ]);
     }
 

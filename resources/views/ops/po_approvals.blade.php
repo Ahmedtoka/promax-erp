@@ -74,6 +74,7 @@
                             <tr>
                                 <th>{{ __('stock.item') }}</th>
                                 <th class="num">{{ __('ops.qty_requested') }}</th>
+                                <th class="num">{{ __('ops.avail_in_wh') }}</th>
                                 <th class="num" style="width:130px">{{ __('ops.qty_after_edit') }}</th>
                                 <th class="num">{{ __('ops.price') }}</th>
                                 <th class="num">{{ __('common.total') }}</th>
@@ -87,6 +88,12 @@
                                         @if ($bd = $it->product?->packBreakdown((int) $it->qty))
                                             <div style="font-size:10px;color:var(--muted)">{{ $bd }}</div>
                                         @endif
+                                    </td>
+                                    {{-- المتاح على أرفف مخزن الأمر — نفس مصدر الحجز.
+                                         الأحمر = الموافقة هترفض قبل ما تدوس --}}
+                                    @php $av = (int) ($shelfAvail[$po->warehouse_id][$it->product_id] ?? 0); @endphp
+                                    <td class="num {{ $av < (int) $it->qty ? 'neg' : 'pos' }}">
+                                        <b>{{ $fmt($av) }}</b>
                                     </td>
                                     {{-- التعديل بالقطع — فاضية يعني سيبها زي ما هي، و0 يعني شيل الصنف --}}
                                     <td class="num">

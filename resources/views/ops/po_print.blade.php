@@ -173,4 +173,11 @@
   .po-doc .bolt-mark.po-bolt{opacity:.035 !important}
 }
 </style>
+<script>
+// بعد الطباعة (أو إلغائها): 3 ثواني ورجوع لموافقات التوريد —
+// نفس نمط ورقة تسليم العهدة (قرار المالك 2026-08-05)
+window.addEventListener('afterprint', () => {
+    setTimeout(() => { window.location.href = @json(route('ops.po.approvals')); }, 3000);
+});
+</script>
 @endsection

@@ -189,7 +189,7 @@ return [
     'qty_received_col' => 'المستلم',
     'variance_note' => 'سبب الفرق',
     'pick_no_items' => 'ضيف صنف واحد على الأقل.',
-    'pick_not_enough' => ':product مش كفاية في المخزن — المتاح :available بس.',
+    'pick_not_enough' => ':product مش كفاية على أرفف المخزن — المتاح :available بس. (المتاح = المرصوف السليم؛ لو فيه بضاعة لسه على الأرض رصّفها من عمليات المخزن.)',
     'pick_wrong_status' => 'الأمر ده مش في حالة تسمح بالتجهيز.',
     'pick_not_ready' => 'الأمر ده لسه مش جاهز للاستلام.',
     'pick_not_yours' => 'أمر التجهيز ده مش منزّل عليك.',

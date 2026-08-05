@@ -61,6 +61,7 @@ return [
     'po_edit_hint' => 'Edit field is in pieces: empty = unchanged, 0 = remove the item. Any edit notifies the channel manager.',
     'po_edit' => 'Edit order',
     'po_import' => 'Upload PO sheets',
+    'avail_in_wh' => 'Available in WH',
     'po_parent_client' => 'Parent client / chain',
     'po_whole_channel' => 'Whole channel',
     'po_no_branches' => 'No active branches for this selection - check the channel and chain.',

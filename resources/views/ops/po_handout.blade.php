@@ -29,7 +29,10 @@
         'name_ar' => (string) $p->name,
         'name_en' => (string) $p->name_en,
         'image' => $p->imageSrc(),
-        'available' => (int) $p->qtyTotal(),
+        // ⚠️ «المتاح» بقى لكل مخزن من الأرفف — نفس مصدر حجز التجهيز.
+        // الإجمالي القديم (stocks كل المخازن) كان بيوري 120 والموافقة
+        // ترفض بـ«المتاح 0» لأن التجهيز بيسحب من أرفف مخزن الأمر بس.
+        'shelf' => collect($shelfAvail)->map(fn ($m) => (int) ($m[$p->id] ?? 0)),
         'units' => $p->unitFactors(),
         'prices' => $listRows->mapWithKeys(fn ($l) => [$l->id => \App\Services\Pricing::listPrice($p, $l)]),
     ])->values();
@@ -105,7 +108,7 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('stock.warehouse') }} <b class="req-star">*</b></label>
-                <select name="warehouse_id" required style="width:100%">
+                <select name="warehouse_id" id="poWh" required style="width:100%" onchange="poWhChanged()">
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected(old('warehouse_id', $edit?->warehouse_id) == $w->id)>{{ $w->displayName() }}</option>
                     @endforeach
@@ -224,6 +227,22 @@ function poBranchList() {
     return b ? b.list : null;
 }
 
+/** المتاح على أرفف المخزن المختار — نفس مصدر حجز أمر التجهيز */
+function pAvail(p) {
+    const wh = document.getElementById('poWh').value;
+    return Number((p.shelf || {})[wh] || 0);
+}
+
+/** المخزن اتغير — المتاح المعروض في الصفوف بيتحدث */
+function poWhChanged() {
+    document.querySelectorAll('[data-kind="qty"]').forEach(q => {
+        const id = Number(q.dataset.row);
+        const p = CATALOG.find(x => x.id === id);
+        const cell = document.getElementById('av' + id);
+        if (p && cell) cell.textContent = pAvail(p).toLocaleString();
+    });
+}
+
 /** الصنف متسعّر؟ بقايمة الفرع لو مختار — وإلا بأي قايمة */
 function poPriced(p) {
     const list = poBranchList();
@@ -235,9 +254,9 @@ function poPriced(p) {
 function poSearch() {
     const q = document.getElementById('prodSearch').value.trim().toLowerCase();
     const box = document.getElementById('prodResults');
-    // ⚠️ بحث الأصناف بيطلّع اللي ليه كمية **وسعر** بس — صنف من غير
-    // سعر الحسابات هترفضه أصلاً (stock.po_not_priced)، فمايظهرش هنا
-    const hits = CATALOG.filter(p => p.available > 0 && poPriced(p)).filter(p =>
+    // ⚠️ بحث الأصناف بيطلّع اللي ليه كمية **على أرفف المخزن المختار**
+    // وسعر بس — صنف من غير سعر أو رصيد الحسابات هترفضه أصلاً
+    const hits = CATALOG.filter(p => pAvail(p) > 0 && poPriced(p)).filter(p =>
         !q || p.name.toLowerCase().includes(q) || p.name_ar.includes(q)
         || p.name_en.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
 
@@ -248,7 +267,7 @@ function poSearch() {
             '<div onclick="addRow(' + p.id + ')" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)">' +
             (p.image ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">' : '') +
             '<div style="flex:1"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
-            '<div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + @json(__('stock.available')) + ' ' + p.available.toLocaleString() + '</div></div>' +
+            '<div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + @json(__('stock.available')) + ' ' + pAvail(p).toLocaleString() + '</div></div>' +
             '</div>').join('');
 }
 
@@ -299,7 +318,7 @@ function addRow(id) {
                 : '<div style="width:56px;height:56px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>') +
             '<div><b>' + esc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</div></div>' +
         '</div></td>' +
-        '<td class="num">' + p.available.toLocaleString() + '</td>' +
+        '<td class="num" id="av' + p.id + '">' + pAvail(p).toLocaleString() + '</td>' +
         '<td>' + unitSelect(p) + '</td>' +
         '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="qty[' + id + ']" data-row="' + id + '" data-kind="qty" oninput="syncRow(' + id + ')"></td>' +

@@ -189,7 +189,7 @@ return [
     'qty_received_col' => 'Received',
     'variance_note' => 'Reason for the difference',
     'pick_no_items' => 'Add at least one item.',
-    'pick_not_enough' => 'Not enough :product in the warehouse — only :available available.',
+    'pick_not_enough' => 'Not enough :product on the warehouse shelves - only :available available. (Available = shelved sellable stock; put away any unshelved goods first.)',
     'pick_wrong_status' => 'This order is not in a state that can be picked.',
     'pick_not_ready' => 'This order is not ready for pickup yet.',
     'pick_not_yours' => 'This picking order is not assigned to you.',
