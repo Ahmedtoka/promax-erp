@@ -80,7 +80,7 @@
 
         <select name="gov" style="min-width:150px">
             <option value="">— {{ __('geo.governorate') }} —</option>
-            @foreach (Governorates::KEYS as $k)
+            @foreach (Governorates::keys() as $k)
                 <option value="{{ $k }}" @selected(($f['gov'] ?? '') === $k)>{{ Governorates::label($k) }}</option>
             @endforeach
         </select>

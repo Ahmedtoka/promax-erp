@@ -4,7 +4,7 @@
     ⚠️ **الهرمية بتتعرض في كل مكان اختيار.** قايمة 49 منطقة مسطّحة
     بتخلّي «المعادي» جنب «العاشر من رمضان» واللي بيدور مش عارف هو في
     أنهي محافظة أصلاً — التجميع بيوريه المحافظة وجواها مناطقها،
-    بالترتيب الجغرافي بتاع `Governorates::KEYS` (القاهرة الكبرى الأول).
+    بالترتيب الجغرافي بتاع `Governorates::keys()` (القاهرة الكبرى الأول).
 
     المدخلات:
       $zones      كولكشن المناطق (لازم فيها governorate)
@@ -28,7 +28,7 @@
 @endphp
 <select name="{{ $name }}" @if ($required) required @endif @if ($style) style="{{ $style }}" @endif {!! $attrs !!}>
     <option value="">{{ $placeholder }}</option>
-    @foreach (\App\Support\Governorates::KEYS as $gk)
+    @foreach (\App\Support\Governorates::keys() as $gk)
         @if (($group = $byGov->get($gk)) && $group->isNotEmpty())
             <optgroup label="{{ \App\Support\Governorates::label($gk) }}">
                 @foreach ($group->sortBy(fn ($z) => $z->displayName()) as $z)

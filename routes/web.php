@@ -91,6 +91,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // بـ fetch. الغرض إن المستخدم مايسيبش الصفحة ويفقد اللي كتبه.
         Route::post('/zones/quick', [ErpController::class, 'quickZone'])
             ->middleware('role:admin,manager,branch_manager')->name('zones.quick');
+        // المحافظات — داتابيز قابلة للتعديل والإضافة (2026-08-05)
+        Route::post('/governorates', [ErpController::class, 'storeGovernorate'])
+            ->middleware('role:admin,manager')->name('govs.store');
+        Route::put('/governorates/{governorate}', [ErpController::class, 'updateGovernorate'])
+            ->middleware('role:admin,manager')->name('govs.update');
         Route::post('/groups/quick', [ErpController::class, 'quickGroup'])
             ->middleware('role:admin,manager,branch_manager')->name('groups.quick');
         Route::post('/geo/resolve', [ErpController::class, 'resolveLocation'])

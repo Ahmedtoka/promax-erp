@@ -19,8 +19,12 @@ namespace App\Support;
  */
 final class Governorates
 {
-    /** المفاتيح بترتيب العرض في القوايم */
-    public const KEYS = [
+    /**
+     * الـ27 الأصلية — **زرع واحتياطي بس** (2026-08-05). المصدر بقى
+     * جدول `governorates`: أسماء قابلة للتعديل ومحافظات جديدة تتضاف
+     * من شاشة «المناطق والمحافظات». الترتيب جغرافي مش أبجدي.
+     */
+    public const BUILTIN = [
         // القاهرة الكبرى
         'cairo', 'giza', 'qalyubia',
         // الإسكندرية والساحل
@@ -37,38 +41,119 @@ final class Governorates
         'red_sea', 'new_valley',
     ];
 
+    /**
+     * الصفوف من الداتابيز — ميمو للريكوست + احتياطي للثوابت لو
+     * الجدول لسه ماتعملش (نص migrate مثلاً) أو حصل خطأ اتصال.
+     *
+     * @return array<string, array{name: string, name_en: ?string}>
+     */
+    private static function rows(): array
+    {
+        if (self::$cache !== null) {
+            return self::$cache;
+        }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('governorates')) {
+                $rows = \App\Models\Governorate::where('active', true)
+                    ->orderBy('sort')->orderBy('id')
+                    ->get(['key', 'name', 'name_en']);
+
+                if ($rows->isNotEmpty()) {
+                    return self::$cache = $rows
+                        ->mapWithKeys(fn ($g) => [$g->key => ['name' => $g->name, 'name_en' => $g->name_en]])
+                        ->all();
+                }
+            }
+        } catch (\Throwable) {
+            // من غير داتابيز (كاش الكونفج مثلاً) — الاحتياطي تحت
+        }
+
+        $out = [];
+        foreach (self::BUILTIN as $key) {
+            $out[$key] = [
+                'name' => trans('geo.gov.'.$key, [], 'ar'),
+                'name_en' => trans('geo.gov.'.$key, [], 'en'),
+            ];
+        }
+
+        return self::$cache = $out;
+    }
+
+    /** @var array<string, array{name: string, name_en: ?string}>|null */
+    private static ?array $cache = null;
+
+    /** بعد إضافة/تعديل محافظة — الكاش بقى قديم */
+    public static function flush(): void
+    {
+        self::$cache = null;
+    }
+
+    /** @return list<string> */
+    public static function keys(): array
+    {
+        return array_keys(self::rows());
+    }
+
     public static function has(?string $key): bool
     {
-        return $key !== null && in_array($key, self::KEYS, true);
+        return $key !== null && array_key_exists($key, self::rows());
     }
 
     /** قاعدة التحقق — مصدر واحد بدل ما كل كنترولر يكتب الليستة */
     public static function rule(): string
     {
-        return 'in:'.implode(',', self::KEYS);
+        return 'in:'.implode(',', self::keys());
     }
 
     public static function label(?string $key): string
     {
-        return self::has($key) ? __('geo.gov.'.$key) : '—';
+        $row = $key !== null ? (self::rows()[$key] ?? null) : null;
+
+        if ($row === null) {
+            return '—';
+        }
+
+        return app()->getLocale() === 'ar'
+            ? $row['name']
+            : ($row['name_en'] ?: $row['name']);
     }
 
     /**
-     * مفتاح ⇒ اسم مترجم، للقوايم المنسدلة.
-     *
-     * ⚠️ الترتيب مابيتعملوش sort هنا — `KEYS` متظبطة جغرافياً بالفعل،
-     * و`asort` على النص المترجم بيدي ترتيب مختلف في كل لغة.
+     * مفتاح ⇒ اسم معروض، للقوايم المنسدلة — بترتيب `sort` من الجدول.
      *
      * @return array<string, string>
      */
     public static function options(): array
     {
         $out = [];
-        foreach (self::KEYS as $key) {
-            $out[$key] = __('geo.gov.'.$key);
+        foreach (self::keys() as $key) {
+            $out[$key] = self::label($key);
         }
 
         return $out;
+    }
+
+    /**
+     * مطابقة قيمة من شيت (مفتاح أو اسم عربي أو إنجليزي) — للمستوردات.
+     */
+    public static function match(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        foreach (self::rows() as $key => $row) {
+            if (strcasecmp($value, $key) === 0
+                || $value === $row['name']
+                || ($row['name_en'] !== null && strcasecmp($value, $row['name_en']) === 0)) {
+                return $key;
+            }
+        }
+
+        return null;
     }
 
     /**

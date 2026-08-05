@@ -53,8 +53,58 @@
     </div></div>
 @endif
 
+{{-- ═══════════ المحافظات نفسها: تعديل الأسماء + إضافة (2026-08-05) ═══════════ --}}
+@php $canGov = \App\Support\Access::action(auth()->user(), 'act.org.manage'); @endphp
+<div class="card">
+    <h3>🗺️ {{ __('geo.govs') }}
+        <span class="side">{{ __('geo.govs_hint') }}</span>
+        @if ($canGov)
+            <button class="btn gold sm" style="margin-inline-start:auto" onclick="govDlg()">+ {{ __('geo.new_gov') }}</button>
+        @endif
+    </h3>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+        @foreach ($govRows as $g)
+            @php $gPayload = json_encode(['id' => $g->id, 'name' => $g->name, 'name_en' => $g->name_en],
+                JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); @endphp
+            <span class="badge b-gray" style="font-size:11.5px;display:inline-flex;gap:6px;align-items:center">
+                {{ $g->name }} <span dir="ltr" style="color:var(--muted)">{{ $g->name_en }}</span>
+                @if ($canGov)
+                    <a href="#" onclick='govDlg({!! $gPayload !!}); return false' title="{{ __('geo.edit_gov') }}">✎</a>
+                @endif
+            </span>
+        @endforeach
+    </div>
+</div>
+
+@if ($canGov)
+<dialog id="dlgGov">
+    <form class="dlg" method="POST" id="govForm" action="{{ route('erp.govs.store') }}">
+        @csrf
+        <input type="hidden" name="_method" id="govMethod" value="POST">
+        <h4 id="govTitle">{{ __('geo.new_gov') }}</h4>
+        <div class="alert info" style="margin-bottom:12px">
+            <span>ℹ️</span><span>{{ __('geo.gov_form_hint') }}</span>
+        </div>
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('geo.governorate') }} (AR) <b class="req-star">*</b></label>
+                <input type="text" name="name" id="govName" required maxlength="120" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('geo.governorate') }} (EN) <b class="req-star">*</b></label>
+                <input type="text" name="name_en" id="govNameEn" required maxlength="120" dir="ltr" style="width:100%">
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgGov')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
 {{-- ═══════════ محافظة ← مناطقها ═══════════ --}}
-@foreach (array_merge(Governorates::KEYS, ['_none']) as $gk)
+@foreach (array_merge(Governorates::keys(), ['_none']) as $gk)
     @continue(! ($group = $byGov->get($gk)) || $group->isEmpty())
     <div class="card">
         <h3>📍 {{ $gk === '_none' ? __('geo.no_governorate') : Governorates::label($gk) }}
@@ -163,6 +213,24 @@
 
 @section('scripts')
 <script>
+// ═══ دايالوج المحافظات — إضافة/تعديل الأسماء (المفتاح ثابت) ═══
+const G_STORE = @js(route('erp.govs.store'));
+const G_UPDATE = @js(route('erp.govs.update', ['governorate' => '__ID__']));
+const G_NEW = @js(__('geo.new_gov'));
+const G_EDIT = @js(__('geo.edit_gov'));
+
+function govDlg(g) {
+    const form = document.getElementById('govForm');
+    if (!form) return;
+
+    document.getElementById('govTitle').textContent = g ? G_EDIT : G_NEW;
+    document.getElementById('govMethod').value = g ? 'PUT' : 'POST';
+    form.action = g ? G_UPDATE.replace('__ID__', g.id) : G_STORE;
+    document.getElementById('govName').value = g ? g.name : '';
+    document.getElementById('govNameEn').value = g ? (g.name_en || '') : '';
+    openDlg('dlgGov');
+}
+
 const Z_STORE = @js(route('erp.zones.store'));
 const Z_UPDATE = @js(route('erp.zones.update', ['zone' => '__ID__']));
 const Z_NEW = @js('+ '.__('team.new_zone'));

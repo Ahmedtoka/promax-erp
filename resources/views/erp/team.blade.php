@@ -103,7 +103,7 @@
             {{-- ⚠️ مجمّعة بالمحافظة — رأس لكل محافظة ومناطقها تحته
                  بالترتيب الجغرافي، والـ«بدون محافظة» في الآخر. --}}
             @php $zByGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none'); @endphp
-            @foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk)
+            @foreach (array_merge(\App\Support\Governorates::keys(), ['_none']) as $gk)
                 @continue(! ($zGroup = $zByGov->get($gk)) || $zGroup->isEmpty())
                 <tr>
                     <td colspan="5" style="background:var(--card2);font-weight:900;color:var(--royal-blue);font-size:12px">

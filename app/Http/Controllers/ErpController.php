@@ -1708,12 +1708,11 @@ class ErpController extends Controller
     }
 
     /**
-     * صفحة إدارة المناطق — مجمّعة بالمحافظات.
+     * صفحة إدارة المناطق والمحافظات.
      *
-     * ⚠️ المحافظات الـ27 ثابتة في `Governorates::KEYS` — مش بتتعمل
-     * من الشاشة. اللي بيتعمل هو المناطق جواها: منطقة جديدة في
-     * محافظة، تعديل اسمها (عربي + إنجليزي)، نقلها لمحافظة تانية،
-     * أو إيقافها.
+     * المحافظات بقت داتابيز (2026-08-05): تعديل الأسماء عربي/إنجليزي
+     * وإضافة محافظات جديدة من نفس الشاشة — والمناطق جواها زي ما هي:
+     * منطقة جديدة، تعديل اسمها، نقلها لمحافظة، أو إيقافها.
      */
     public function zones(Request $request)
     {
@@ -1725,7 +1724,50 @@ class ErpController extends Controller
                 ])->with('users:id,name,name_en,zone_id'),
                 $request->user(),
             )->get(),
+            'govRows' => \App\Models\Governorate::orderBy('sort')->orderBy('id')->get(),
         ]);
+    }
+
+    /** محافظة جديدة — المفتاح slug ثابت من الاسم الإنجليزي */
+    public function storeGovernorate(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'name_en' => ['required', 'string', 'max:120'],
+        ]);
+
+        $key = \Illuminate\Support\Str::slug($data['name_en'], '_');
+
+        if ($key === '' || \App\Models\Governorate::where('key', $key)->exists()) {
+            return back()->withErrors(['name_en' => __('geo.gov_key_taken')]);
+        }
+
+        \App\Models\Governorate::create($data + [
+            'key' => $key,
+            'sort' => (int) \App\Models\Governorate::max('sort') + 1,
+            'active' => true,
+        ]);
+
+        \App\Support\Governorates::flush();
+
+        return back()->with('ok', __('geo.gov_saved'));
+    }
+
+    /**
+     * تعديل أسماء محافظة — **المفتاح مابيتغيرش.** العملاء والمناطق
+     * متخزن عليهم المفتاح، وتغييره بيسيبهم على مفتاح ميت.
+     */
+    public function updateGovernorate(Request $request, \App\Models\Governorate $governorate)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'name_en' => ['required', 'string', 'max:120'],
+        ]);
+
+        $governorate->update($data);
+        \App\Support\Governorates::flush();
+
+        return back()->with('ok', __('geo.gov_saved'));
     }
 
     public function updateZone(Request $request, Zone $zone)

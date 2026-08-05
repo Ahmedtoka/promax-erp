@@ -231,22 +231,7 @@ class ClientImporter extends Importer
     /** المحافظة من مفتاحها أو اسمها العربي/الإنجليزي — null لو مش معروفة */
     private function governorate(?string $v): ?string
     {
-        $v = trim((string) $v);
-
-        if ($v === '') {
-            return null;
-        }
-
-        foreach (\App\Support\Governorates::KEYS as $key) {
-            if (strcasecmp($v, $key) === 0
-                || $v === \App\Support\Governorates::label($key)
-                || $v === __('geo.gov.'.$key, [], 'ar')
-                || strcasecmp($v, __('geo.gov.'.$key, [], 'en')) === 0) {
-                return $key;
-            }
-        }
-
-        return null;
+        return \App\Support\Governorates::match($v);
     }
 
     /**

@@ -2,6 +2,13 @@
 
 return [
     'governorate' => 'Governorate',
+    'govs' => 'Governorates',
+    'govs_hint' => 'Edit Arabic/English names or add a new governorate - changes show everywhere instantly',
+    'new_gov' => 'New governorate',
+    'edit_gov' => 'Edit governorate',
+    'gov_form_hint' => 'Both names are required - a new governorate gets a fixed key from its English name that never changes.',
+    'gov_saved' => 'Governorate saved.',
+    'gov_key_taken' => 'A governorate with this English name exists (or the name is empty) - change it.',
     'zone' => 'Zone',
     'no_governorate' => 'No governorate',
     'pick_governorate' => '— Pick a governorate —',

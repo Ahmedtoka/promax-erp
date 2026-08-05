@@ -12,7 +12,7 @@
     // بالترتيب الجغرافي، والـ«بدون» في الآخر.
     $zoneOptions = '<option value="">—</option>';
     $zByGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none');
-    foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk) {
+    foreach (array_merge(\App\Support\Governorates::keys(), ['_none']) as $gk) {
         $zGroup = $zByGov->get($gk);
         if (! $zGroup || $zGroup->isEmpty()) {
             continue;

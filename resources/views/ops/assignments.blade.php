@@ -114,7 +114,7 @@
                  حد. تشيك بوكس المحافظة بيعلّم على كل مناطقها مرة واحدة. --}}
             <div style="max-height:330px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:9px">
                 @php $byGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none'); @endphp
-                @foreach (array_merge(\App\Support\Governorates::KEYS, ['_none']) as $gk)
+                @foreach (array_merge(\App\Support\Governorates::keys(), ['_none']) as $gk)
                     @continue(! ($group = $byGov->get($gk)) || $group->isEmpty())
                     <label style="display:flex;align-items:center;gap:8px;padding:6px 3px;font-size:12px;font-weight:900;color:var(--royal-blue);border-bottom:1px solid var(--border);cursor:pointer">
                         <input type="checkbox" class="govBox" data-gov="{{ $gk }}"
