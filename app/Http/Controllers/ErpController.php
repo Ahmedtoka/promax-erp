@@ -1253,34 +1253,56 @@ class ErpController extends Controller
         $products = $q->orderBy('code')->get();
         $all = Product::with('stocks')->get();
 
+        // ⚠️ **السعر المعروض واحد بس: سعر القايمة الافتراضية** (قرار
+        // المالك 2026-08-06) — مش «قديم/جديد». كل قيم الشاشة بتتحسب
+        // بنفس السعر ده عشان الرقم فوق يساوي الجدول تحت.
+        $defaultList = \App\Models\PriceList::default();
+        $priceOf = fn (Product $p) => \App\Services\Pricing::listPrice($p, $defaultList);
+
+        // الترتيب: بالكود (الافتراضي) / بالكمية / بالقيمة
+        $products = match ($request->string('sort')->value()) {
+            'qty' => $products->sortByDesc(fn ($p) => $p->qtyTotal())->values(),
+            'value' => $products->sortByDesc(fn ($p) => $p->qtyTotal() * $priceOf($p))->values(),
+            default => $products,
+        };
+
+        // ⚠️ **المفعّل + أي موقوف لسه فيه رصيد.**
+        // لو عرضنا المفعّل بس، بضاعة قاعدة في مخزن اتوقف بتختفي
+        // من الأعمدة بينما `qtyTotal()` بتعدّها — فمجموع الأعمدة
+        // مايساويش عمود «الكمية كلها» ومحدش يعرف الفرق راح فين.
+        // المخزن الموقوف اللي رصيده صفر مابيظهرش، فالجدول
+        // مابيتوسّعش من غير داعي.
+        $warehouses = \App\Models\Warehouse::query()
+            ->where(fn ($w) => $w->where('active', true)
+                ->orWhereHas('stocks', fn ($s) => $s->where('qty', '>', 0)))
+            ->orderBy('type')->orderBy('code')->get();
+
         return view('erp.stock', [
             'products' => $products,
             'families' => \App\Models\ProductFamily::options(),
-            // ⚠️ **المفعّل + أي موقوف لسه فيه رصيد.**
-            // لو عرضنا المفعّل بس، بضاعة قاعدة في مخزن اتوقف بتختفي
-            // من الأعمدة بينما `qtyTotal()` بتعدّها — فمجموع الأعمدة
-            // مايساويش عمود «الكمية كلها» ومحدش يعرف الفرق راح فين.
-            // المخزن الموقوف اللي رصيده صفر مابيظهرش، فالجدول
-            // مابيتوسّعش من غير داعي.
-            'warehouses' => \App\Models\Warehouse::query()
-                ->where(fn ($w) => $w->where('active', true)
-                    ->orWhereHas('stocks', fn ($s) => $s->where('qty', '>', 0)))
-                ->orderBy('type')->orderBy('code')->get(),
-            'filters' => $request->only(['q', 'family']),
+            'warehouses' => $warehouses,
+            'defaultList' => $defaultList,
+            'filters' => $request->only(['q', 'family', 'sort']),
             // ⚠️ كل الـ KPIs دي على $all (المخزن كله) — ممنوع تخلط واحد منهم
             // مع رقم محسوب من $products المفلترة، الهامش يطلع غلط.
-            'totalVal' => $all->sum(fn ($p) => $p->qtyTotal() * $p->sellingPrice()),
+            'totalVal' => $all->sum(fn ($p) => $p->qtyTotal() * $priceOf($p)),
             'costVal' => $all->sum(fn ($p) => $p->qtyTotal() * (float) $p->cost),
             'skuCount' => $all->count(),
-            'holdVal' => $all->sum(fn ($p) => $p->holdTotal() * $p->sellingPrice()),
-            'goodVal' => $all->sum(fn ($p) => $p->goodTotal() * $p->sellingPrice()),
+            'holdVal' => $all->sum(fn ($p) => $p->holdTotal() * $priceOf($p)),
+            'goodVal' => $all->sum(fn ($p) => $p->goodTotal() * $priceOf($p)),
             'totalQty' => $all->sum(fn ($p) => $p->qtyTotal()),
             'famStats' => $all->groupBy('family')->map(fn ($g) => [
                 'n' => $g->count(),
                 'qty' => $g->sum(fn ($p) => $p->qtyTotal()),
-                'val' => $g->sum(fn ($p) => $p->qtyTotal() * $p->sellingPrice()),
-                'hold' => $g->sum(fn ($p) => $p->holdTotal() * $p->sellingPrice()),
+                'val' => $g->sum(fn ($p) => $p->qtyTotal() * $priceOf($p)),
+                'hold' => $g->sum(fn ($p) => $p->holdTotal() * $priceOf($p)),
             ])->all(),
+            // توزيع المخازن — للشارت (وحدات + قيمة لكل مخزن)
+            'whStats' => $warehouses->map(fn ($wh) => [
+                'name' => $wh->displayName(),
+                'qty' => $all->sum(fn ($p) => $p->qtyIn($wh)),
+                'val' => round($all->sum(fn ($p) => $p->qtyIn($wh) * $priceOf($p))),
+            ])->values()->all(),
         ]);
     }
 

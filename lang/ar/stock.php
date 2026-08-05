@@ -265,6 +265,13 @@ return [
     'product_override' => 'المنتج ليه مدة قديمة على كارته — شغالة بس لأن العائلة لسه من غير مدة',
     'month_unit' => 'شهر',
     'year_unit' => 'سنة',
+    'price_one' => 'السعر',
+    'price_from_default_list' => 'السعر من القايمة الافتراضية',
+    'units_by_family' => 'الوحدات حسب العائلة',
+    'wh_distribution' => 'التوزيع على المخازن',
+    'sort_code' => 'ترتيب بالكود',
+    'sort_qty' => 'الأعلى كمية',
+    'sort_value' => 'الأعلى قيمة',
     'putaway_exceeds_batch' => 'الباتش :batch فاضل منه :available وحدة للترصيف.',
     'move_exceeds_location' => 'اللي على الرف ده :available وحدة بس.',
     'move_same_location' => 'الرف المصدر والهدف نفس الرف.',
@@ -372,7 +379,7 @@ return [
     'price_delta' => 'الفرق',
     'list_price' => 'سعر القائمة',
     'cost_and_lists' => 'التكلفة والقايمة القديمة والجديدة',
-    'stock_value_new' => 'قيمة المخزون (القايمة الجديدة)',
+    'stock_value_new' => 'قيمة المخزون (سعر البيع)',
 
 
     // ---------- تقرير البضاعة والصلاحيات ----------

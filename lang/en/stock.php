@@ -265,6 +265,13 @@ return [
     'product_override' => "This product carries an old life of its own - active only because its family has no life set",
     'month_unit' => 'months',
     'year_unit' => 'years',
+    'price_one' => 'Price',
+    'price_from_default_list' => 'Prices come from the default price list',
+    'units_by_family' => 'Units by family',
+    'wh_distribution' => 'Distribution across warehouses',
+    'sort_code' => 'Sort by code',
+    'sort_qty' => 'Highest quantity',
+    'sort_value' => 'Highest value',
     'putaway_exceeds_batch' => 'Batch :batch only has :available units left to shelve.',
     'move_exceeds_location' => 'Only :available units are on that shelf.',
     'move_same_location' => 'Source and destination are the same shelf.',
@@ -372,7 +379,7 @@ return [
     'price_delta' => 'Change',
     'list_price' => 'List Price',
     'cost_and_lists' => 'Cost, the old list and the new list',
-    'stock_value_new' => 'Inventory Value (new list)',
+    'stock_value_new' => 'Inventory Value (selling price)',
 
 
     // ---------- تقرير البضاعة والصلاحيات ----------
