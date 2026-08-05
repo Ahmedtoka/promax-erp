@@ -367,19 +367,24 @@ class WarehouseController extends Controller
     {
         $warehouse = $this->currentWarehouse($request);
 
-        $rows = BatchLocation::query()
-            ->where('batch_locations.qty', '>', 0)
-            ->when($warehouse, fn ($q) => $q->inWarehouse($warehouse->id))
-            ->with(['batch.product', 'location', 'product'])
+        // ⚠️ **المصدر الباتشات مش الأرفف** (إصلاح 2026-08-05). التقرير
+        // كان بيقرا `batch_locations` بس — يعني بضاعة مستلمة لسه
+        // ماترصّفتش، أو رصيد أول مدة من غير أرفف، كانوا بيختفوا من
+        // تقرير الصلاحية خالص والشاشة تطلع أصفار والمخزن مليان.
+        // الباتش هو اللي شايل تاريخ الانتهاء، والأرفف تفصيلة جواه.
+        $rows = Batch::query()
+            ->where('qty_remaining', '>', 0)
+            ->when($warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
+            ->with(['product', 'locations.location'])
             ->get()
-            ->sortBy(fn (BatchLocation $bl) => $bl->batch?->expires_on?->timestamp ?? PHP_INT_MAX)
+            ->sortBy(fn (Batch $b) => $b->expires_on?->timestamp ?? PHP_INT_MAX)
             ->values();
 
         $buckets = [
-            'expired' => $rows->filter(fn ($r) => $r->batch?->expiryState() === 'expired'),
-            'danger' => $rows->filter(fn ($r) => $r->batch?->expiryState() === 'danger'),
-            'warn' => $rows->filter(fn ($r) => $r->batch?->expiryState() === 'warn'),
-            'ok' => $rows->filter(fn ($r) => $r->batch?->expiryState() === 'ok'),
+            'expired' => $rows->filter(fn ($b) => $b->expiryState() === 'expired'),
+            'danger' => $rows->filter(fn ($b) => $b->expiryState() === 'danger'),
+            'warn' => $rows->filter(fn ($b) => $b->expiryState() === 'warn'),
+            'ok' => $rows->filter(fn ($b) => $b->expiryState() === 'ok'),
         ];
 
         return view('wh.expiry', [

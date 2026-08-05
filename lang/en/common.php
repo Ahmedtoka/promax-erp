@@ -63,6 +63,7 @@ return [
 
     // ---------- States ----------
     'no_results' => 'Nothing to show here.',
+    'page_of' => 'Page :p of :n',
     'no_data' => 'No data yet.',
     'no_map_points' => 'No coordinates recorded',
     'loading' => 'Loading…',

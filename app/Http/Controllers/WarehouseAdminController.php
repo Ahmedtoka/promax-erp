@@ -46,7 +46,8 @@ class WarehouseAdminController extends Controller
             // على المخزن بيلاقي الرصيد قلّ ومايعرفش إن الفرق ماشي على
             // الطريق — ويفتكر إنه عجز ويفتح تحقيق في حاجة طبيعية.
             'transit' => \App\Models\StockTransfer::inTransit(),
-            'managers' => \App\Models\User::whereIn('role', ['admin', 'manager', 'warehouse_keeper'])
+            // ⚠️ من غير الأدمنز — الموظفين بس في الدروب داونز (2026-08-05)
+            'managers' => \App\Models\User::whereIn('role', ['manager', 'warehouse_keeper'])
                 ->where('active', true)->orderBy('name')->get(),
             'types' => [Warehouse::TYPE_FACTORY, Warehouse::TYPE_BRANCH],
         ]);

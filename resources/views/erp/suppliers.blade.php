@@ -14,7 +14,7 @@
         <a class="btn" href="{{ route('erp.purchasing') }}">📥 {{ __('supplier.purchase_orders') }}</a>
     @endif
     @if ($manager)
-        <button class="btn gold" onclick="openDlg('dlgNewSup')">+ {{ __('supplier.new_supplier') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.suppliers.manage'))<button class="btn gold" onclick="openDlg('dlgNewSup')">+ {{ __('supplier.new_supplier') }}</button>@endif
     @endif
 @endsection
 

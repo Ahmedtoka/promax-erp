@@ -55,8 +55,19 @@ class ErpController extends Controller
 
     public function overview()
     {
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): كل أرقام العملاء في
+        // الشاشة من عملائه المسكّنين له بس. أرقام البضاعة (قيمة
+        // المخزون وتوزيع العائلات الاحتياطي) شركة مش عملاء فبتفضل.
+        $u = auth()->user();
+        $clientIds = $u?->role === 'manager'
+            ? Client::visibleTo(Client::query(), $u)->select('id')
+            : null;
+        $only = fn ($q, string $col = 'client_id') => $clientIds === null
+            ? $q
+            : $q->whereIn($col, $clientIds);
+
         // ملاحظة: `returns` كلمة محجوزة في MySQL — لازم backticks
-        $totals = Client::query()->selectRaw('
+        $totals = Client::visibleTo(Client::query())->selectRaw('
             SUM(`purchases`) as purchases,
             SUM(`collections`) as collections,
             SUM(`returns`) as total_returns,
@@ -66,8 +77,9 @@ class ErpController extends Controller
             COUNT(*) as n_clients
         ')->first();
 
-        $byFamily = DB::table('invoice_items')
+        $byFamily = $only(DB::table('invoice_items')
             ->join('products', 'products.id', '=', 'invoice_items.product_id')
+            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id'), 'invoices.client_id')
             ->selectRaw('products.family, SUM(invoice_items.total) as amt')
             ->groupBy('products.family')
             ->pluck('amt', 'family')
@@ -83,13 +95,13 @@ class ErpController extends Controller
                 ->all();
         }
 
-        $monthly = Transaction::query()
+        $monthly = $only(Transaction::query())
             ->selectRaw("DATE_FORMAT(date, '%Y-%m') as m,
                          SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) as sales,
                          SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) as coll")
             ->groupBy('m')->orderBy('m')->get();
 
-        $catCounts = Client::query()
+        $catCounts = Client::visibleTo(Client::query())
             ->selectRaw('category, COUNT(*) as n')
             ->groupBy('category')->pluck('n', 'category')->all();
 
@@ -101,11 +113,11 @@ class ErpController extends Controller
             'aging' => $this->agingTotals(),
             // ⚠️ `group` و`zone` eager — `fullName()` بتقرا السلسلة لكل
             // صف، ومن غيرها 15 صف = 15 كويري زيادة.
-            'top' => Client::with(['group', 'zone'])->orderByDesc('purchases')->take(15)->get(),
+            'top' => Client::visibleTo(Client::with(['group', 'zone']))->orderByDesc('purchases')->take(15)->get(),
             'stockValue' => Stock::join('products', 'products.id', '=', 'stocks.product_id')
                 ->sum(DB::raw('stocks.qty * products.price_new')),
-            'todayInvoices' => Invoice::whereDate('created_at', today())->sum('total'),
-            'todayPos' => PurchaseOrder::whereDate('delivered_at', today())->sum('total'),
+            'todayInvoices' => $only(Invoice::whereDate('created_at', today()))->sum('total'),
+            'todayPos' => $only(PurchaseOrder::whereDate('delivered_at', today()))->sum('total'),
             'openRequests' => \App\Models\ClientRequest::whereIn('status', ['pending', 'review'])->count(),
         ]);
     }
@@ -115,7 +127,7 @@ class ErpController extends Controller
     {
         $t = ['a30' => 0.0, 'a60' => 0.0, 'a90' => 0.0, 'a180' => 0.0, 'a180p' => 0.0];
 
-        Client::where('balance', '>', 0)
+        Client::visibleTo(Client::where('balance', '>', 0))
             ->with(['transactions' => fn ($q) => $q->where('debit', '>', 0)])
             ->chunk(200, function ($chunk) use (&$t) {
                 foreach ($chunk as $client) {
@@ -134,9 +146,10 @@ class ErpController extends Controller
     {
         // contract و group لازم eager — effectiveDiscount() بتنادي عليهم لكل صف
         // ⚠️ وسكوب الفرع: مدير المعادي بيشوف عملاء المعادي والمركزي بس
-        $q = \App\Models\Branch::scope(
+        // ⚠️ وسكوب التشانل مانجر: عملاءه المسكّنين له بس (2026-08-05)
+        $q = Client::visibleTo(\App\Models\Branch::scope(
             Client::query()->with(['zone', 'contract', 'group.contract']),
-        );
+        ));
 
         // ⚠️ **الافتراضي الكل مش الشغّال بس.** بعد استيراد الـ455،
         // معظم القايمة `pending` — لو خبّيناهم افتراضياً المستخدم
@@ -192,14 +205,14 @@ class ErpController extends Controller
                 ->paginate(40)->withQueryString(),
             'zones' => Zone::orderBy('code')->get(),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
-            'catCounts' => Client::selectRaw('category, COUNT(*) as n')
+            'catCounts' => Client::visibleTo(Client::query())->selectRaw('category, COUNT(*) as n')
                 ->groupBy('category')->pluck('n', 'category')->all(),
-            'channelCounts' => Client::selectRaw('channel_id, COUNT(*) as n')
+            'channelCounts' => Client::visibleTo(Client::query())->selectRaw('channel_id, COUNT(*) as n')
                 ->groupBy('channel_id')->pluck('n', 'channel_id')->all(),
             'filters' => $request->only(['q', 'cat', 'zone', 'gov', 'contract', 'channel', 'sub', 'status']),
             // ⚠️ بنفس سكوب الفرع بتاع القايمة — عداد بيقول 455 وقايمة
             // بتوري 80 بيخلّي مدير الفرع يفتكر في حاجة مخفية عنه.
-            'statusCounts' => \App\Models\Branch::scope(Client::query())
+            'statusCounts' => Client::visibleTo(\App\Models\Branch::scope(Client::query()))
                 ->selectRaw('status, COUNT(*) as n')
                 ->groupBy('status')->pluck('n', 'status')->all(),
         ]);
@@ -227,6 +240,7 @@ class ErpController extends Controller
     public function cloneClient(Request $request, Client $client)
     {
         abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+        abort_unless($client->visibleBy($request->user()), 403);   // سكوب التشانل مانجر 2026-08-05
 
         $client->load(['contract.contractClauses', 'group']);
 
@@ -250,6 +264,7 @@ class ErpController extends Controller
     public function editClient(Request $request, Client $client)
     {
         abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+        abort_unless($client->visibleBy($request->user()), 403);   // سكوب التشانل مانجر 2026-08-05
 
         // ⚠️ `group.contract` لازم — الفيو بيسأل عليه عشان يقول
         // «العقد جاي من السلسلة» بدل ما يوري بلوك فاضي. و`manager`
@@ -375,7 +390,7 @@ class ErpController extends Controller
     private function managerOptions(Request $request)
     {
         return \App\Models\Branch::scope(User::query(), $request->user())
-            ->whereIn('role', User::MANAGER_ROLES)
+            ->whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
             ->where('active', true)
             ->orderBy('name')
             ->get();
@@ -436,6 +451,8 @@ class ErpController extends Controller
         // ⚠️ **فلترة القايمة بتخبّي الصف عن العين مش عن الراوت.**
         // أي حد بيعرف الـ id بيفتح كارت أي عميل بكشف حسابه كله.
         abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+        // ⚠️ ونفس الكلام لسكوب التشانل مانجر — عملاءه بس (2026-08-05)
+        abort_unless($client->visibleBy($request->user()), 403);
 
         $client->load([
             'zone', 'channel', 'rep',
@@ -501,6 +518,7 @@ class ErpController extends Controller
         // ⚠️ نفس حارس كارت العميل — من غيره مدير فرع بيبعت PUT على
         // عميل فرع تاني ويغيّر خصمه، والفلترة في القايمة مابتوقفوش.
         abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+        abort_unless($client->visibleBy($request->user()), 403);   // سكوب التشانل مانجر 2026-08-05
 
         $data = $this->guardBranch($request, $request->validate($this->clientRules()), creating: false);
         $this->checkContractDuration($data);
@@ -529,6 +547,7 @@ class ErpController extends Controller
     public function openingBalance(Request $request, Client $client)
     {
         abort_unless($request->user()->canSeeBranch($client->branch_id), 403);
+        abort_unless($client->visibleBy($request->user()), 403);   // سكوب التشانل مانجر 2026-08-05
 
         $data = $request->validate([
             // ⚠️ السالب مسموح ومقصود = رصيد دائن (العميل دافع مقدماً)
@@ -914,7 +933,14 @@ class ErpController extends Controller
 
     public function contracts()
     {
-        $all = Contract::with(['client.zone', 'group', 'contractClauses'])->get()
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): عقود عملائه + عقود السلاسل
+        // (السلسلة مش مملوكة لمدير — عقدها بيغطي فروع عند كذا مدير).
+        $u = auth()->user();
+        $all = Contract::with(['client.zone', 'group', 'contractClauses'])
+            ->when($u?->role === 'manager', fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('client', fn ($c) => Client::visibleTo($c, $u))
+                ->orWhereNotNull('group_id')))
+            ->get()
             ->sortBy([
                 // المنتهي والمستعجل الأول — ده اللي محتاج قرار
                 fn ($a, $b) => ($a->daysLeft() ?? PHP_INT_MAX) <=> ($b->daysLeft() ?? PHP_INT_MAX),
@@ -941,13 +967,13 @@ class ErpController extends Controller
             'avgTotalDeduction' => $live->count() ? round($live->avg(fn ($c) => $c->totalDeduction()), 4) : 0,
             'avgDisc' => $live->avg('discount') ?? 0,
             'covered' => $live->sum(fn ($c) => (float) ($c->client?->purchases ?? 0)),
-            'totalPurch' => (float) Client::sum('purchases'),
-            'clientsCount' => Client::count(),
+            'totalPurch' => (float) Client::visibleTo(Client::query())->sum('purchases'),
+            'clientsCount' => Client::visibleTo(Client::query())->count(),
             // ⚠️ "من غير عقد" = مفيش صف عقد سارٍ. ممنوع نستنتجها من discount،
             // لأن العميل ممكن ياخد خصم من القناة أو السلسلة وهو من غير عقد،
             // وساعتها كان بيختفي من القايمة ومكنّاش نعرف نكتب له عقد.
-            'noContract' => Client::whereDoesntHave('contract', $this->liveContractScope())
-                ->where('category', '!=', 'internal')
+            'noContract' => Client::visibleTo(Client::whereDoesntHave('contract', $this->liveContractScope())
+                ->where('category', '!=', 'internal'))
                 ->orderByDesc('purchases')->take(20)->get(),
         ]);
     }
@@ -1553,25 +1579,28 @@ class ErpController extends Controller
     {
         $tab = $request->string('tab')->value() ?: 'aging';
 
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): كل جداول التقارير من عملائه بس
+        $vis = fn ($q) => Client::visibleTo($q);
+
         return view('erp.reports', [
             'tab' => $tab,
             'aging' => $this->agingTotals(),
             // ⚠️ `contract` و`group.contract` لازم eager — `overdue()` بتنادي
             // `liveContract()` لكل صف، والـ25 صف كانوا بيعملوا 50 كويري.
-            'topDebt' => Client::with([
+            'topDebt' => $vis(Client::with([
                 'transactions' => fn ($q) => $q->where('debit', '>', 0),
                 'contract', 'group.contract',
-            ])->orderByDesc('balance')->take(25)->get(),
-            'returns' => Client::where('returns', '>', 0)->orderByDesc('returns')->get(),
-            'rebates' => Client::whereRaw('(rebates + settlements) > 0')
+            ]))->orderByDesc('balance')->take(25)->get(),
+            'returns' => $vis(Client::where('returns', '>', 0))->orderByDesc('returns')->get(),
+            'rebates' => $vis(Client::whereRaw('(rebates + settlements) > 0'))
                 ->orderByRaw('(rebates + settlements) DESC')->get(),
-            'circleK' => Client::where('name', 'like', 'Circle K%')->orderByDesc('purchases')->get(),
+            'circleK' => $vis(Client::where('name', 'like', 'Circle K%'))->orderByDesc('purchases')->get(),
             // ⚠️ الفيو بينادي hasContract() لكل صف → liveContract() → العقد والسلسلة
-            'risk' => Client::with(['contract', 'group.contract'])
+            'risk' => $vis(Client::with(['contract', 'group.contract'])
                 ->where('balance', '>', 50000)
-                ->whereRaw('collections < purchases * 0.5')
+                ->whereRaw('collections < purchases * 0.5'))
                 ->orderByDesc('balance')->get(),
-            'credit' => Client::where('balance', '<', -1)->orderBy('balance')->get(),
+            'credit' => $vis(Client::where('balance', '<', -1))->orderBy('balance')->get(),
         ]);
     }
 

@@ -34,7 +34,7 @@ class BranchController extends Controller
 
         return view('erp.branches', [
             'branches' => $branches,
-            'managers' => User::whereIn('role', User::MANAGER_ROLES)
+            'managers' => User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
                 ->where('active', true)->orderBy('name')->get(),
             'canEdit' => $request->user()->isAdmin() || $request->user()->role === 'manager',
 

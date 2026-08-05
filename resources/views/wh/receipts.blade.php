@@ -24,7 +24,7 @@
 @section('actions')
     <a class="btn" href="{{ route('wh.index', $warehouse ? ['warehouse' => $warehouse->id] : []) }}">🏭 {{ __('stock.warehouse_overview') }}</a>
     @if ($manager)
-        <button class="btn gold" onclick="openDlg('dlgNewGrn')">+ {{ __('stock.new_receipt') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.receive'))<button class="btn gold" onclick="openDlg('dlgNewGrn')">+ {{ __('stock.new_receipt') }}</button>@endif
     @endif
 @endsection
 

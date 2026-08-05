@@ -10,7 +10,7 @@
 
 @section('actions')
     @if ($canEdit)
-        <button class="btn gold" onclick="openDlg('dlgNewList')">+ {{ __('price.new_list') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.prices.edit'))<button class="btn gold" onclick="openDlg('dlgNewList')">+ {{ __('price.new_list') }}</button>@endif
     @endif
 @endsection
 

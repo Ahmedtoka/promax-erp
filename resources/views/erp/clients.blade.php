@@ -12,7 +12,7 @@
     @if ($manager)
         {{-- ⚠️ صفحة مستقلة مش مودال — الفلو بقى 3 مراحل وفيه رفع ملف،
              والمودال بارتفاع ثابت كان بيخبّي نص الحقول تحت الشاشة. --}}
-        <a class="btn gold" href="{{ route('erp.clients.new') }}">+ {{ __('client.new_client') }}</a>
+        @if (\App\Support\Access::action(auth()->user(), 'act.clients.create'))<a class="btn gold" href="{{ route('erp.clients.new') }}">+ {{ __('client.new_client') }}</a>@endif
     @endif
 @endsection
 

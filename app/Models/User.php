@@ -38,6 +38,16 @@ class User extends Authenticatable
     public const MANAGER_ROLES = ['admin', 'manager', 'branch_manager'];
 
     /**
+     * الرولز اللي بتظهر في دروب داونز التوزيع والتسكين.
+     *
+     * ⚠️ **من غير الأدمن** (قرار المالك 2026-08-05): «شيل الأدمنز من
+     * الدروب داون — خليهم بس الموظفين في كل السيستم». الأدمن بيدير
+     * مش بيتوزّع عليه شغل. (كان قبل كده بيظهر عشان أكبر العملاء كانوا
+     * على الأدمن نفسه — القرار اتغيّر مع دخول التشانل مانجرز.)
+     */
+    public const ASSIGNABLE_MANAGER_ROLES = ['manager', 'branch_manager'];
+
+    /**
      * رولز المكتب — بتدخل الويب وماتنزلش الشارع.
      *
      * ⚠️ **المحاسب وأمين المخزن مش `MANAGER_ROLES`.** لو حطّيناهم هناك،
@@ -148,6 +158,27 @@ class User extends Authenticatable
     {
         return $this->hasMany(AppNotification::class)->latest();
     }
+
+    public function permissions(): HasMany
+    {
+        return $this->hasMany(UserPermission::class);
+    }
+
+    /**
+     * خريطة استثناءات الصلاحيات — perm => allow.
+     *
+     * ⚠️ **ميمو للريكوست الواحد.** السايدبار بينادي allows() لكل لينك
+     * (40+ مرة في الصفحة) — من غير الكاش دي 40 كويري على نفس الجدول.
+     *
+     * @return array<string, bool>
+     */
+    public function permMap(): array
+    {
+        return $this->permMapCache ??= $this->permissions()
+            ->pluck('allow', 'perm')->map(fn ($v) => (bool) $v)->all();
+    }
+
+    private ?array $permMapCache = null;
 
     // ---------- Helpers ----------
 

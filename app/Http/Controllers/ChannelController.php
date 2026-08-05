@@ -38,7 +38,7 @@ class ChannelController extends Controller
             // الشاشة دي. لازم يبانوا، وإلا الإجماليات تحت بتقل عن
             // إجمالي السيستم ومحدش يعرف ليه.
             'orphans' => Client::whereNull('channel_id')->where('status', 'active')->count(),
-            'managers' => User::whereIn('role', User::MANAGER_ROLES)
+            'managers' => User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
                 ->where('active', true)->with('channels')->get(),
         ]);
     }

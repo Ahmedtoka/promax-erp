@@ -57,7 +57,7 @@
         <div class="alert good" style="align-items:center">
             <span>✅</span>
             <span style="flex:1">{{ __('price.ready_to_activate') }}</span>
-            <button class="btn gold" type="submit">{{ __('price.activate') }}</button>
+            @if (\App\Support\Access::action(auth()->user(), 'act.prices.activate'))<button class="btn gold" type="submit">{{ __('price.activate') }}</button>@endif
         </div>
     </form>
 @endif
@@ -137,9 +137,9 @@
                     <span style="font-size:12.5px;color:var(--muted)">
                         <b id="selCount">0</b> {{ __('client.selected') }}
                     </span>
-                    <button class="btn gold" type="submit" id="bulkBtn" disabled>
+                    @if (\App\Support\Access::action(auth()->user(), 'act.prices.edit'))<button class="btn gold" type="submit" id="bulkBtn" disabled>
                         {{ __('price.apply_bulk') }}
-                    </button>
+                    </button>@endif
                 </div>
             </div>
 
@@ -220,7 +220,7 @@
 
         @if ($canEdit && $products->isNotEmpty())
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-                <button class="btn gold" type="submit">{{ __('price.save_prices') }}</button>
+                @if (\App\Support\Access::action(auth()->user(), 'act.prices.edit'))<button class="btn gold" type="submit">{{ __('price.save_prices') }}</button>@endif
             </div>
         @endif
     </form>

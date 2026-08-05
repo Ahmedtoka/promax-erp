@@ -18,6 +18,8 @@ return [
     'group_reports' => 'Reports',
     'group_home' => 'Home',
     'group_purchasing' => 'Purchasing',
+    'group_products' => 'Products & Pricing',
+    'group_ka' => 'Key Account Supply',
     'group_wh' => 'Warehouse',
     'group_custody' => 'Custody',
     'prep_orders' => 'Order Preparation',

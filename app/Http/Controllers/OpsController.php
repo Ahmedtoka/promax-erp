@@ -107,7 +107,11 @@ class OpsController extends Controller
 
     public function purchaseOrders(Request $request)
     {
-        $q = PurchaseOrder::with(['client', 'courier', 'items']);
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): أوامر عملائه بس
+        $u = auth()->user();
+        $q = PurchaseOrder::with(['client', 'courier', 'items'])
+            ->when($u?->role === 'manager',
+                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')));
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
         }
@@ -115,7 +119,7 @@ class OpsController extends Controller
         return view('ops.pos', [
             'pos' => $q->latest()->paginate(30)->withQueryString(),
             'couriers' => User::where('role', 'driver')->get(),
-            'clients' => Client::orderBy('name')->get(['id', 'name']),
+            'clients' => Client::visibleTo(Client::orderBy('name'))->get(['id', 'name']),
             'products' => Product::orderBy('code')->get(),
             'filters' => $request->only('status'),
         ]);
@@ -172,6 +176,10 @@ class OpsController extends Controller
         DB::transaction(function () use ($data, $request, $needsApproval) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel
             $client = Client::findOrFail($data['client_id']);
+
+            // ⚠️ سكوب التشانل مانجر — مايعملش أمر لعميل مش بتاعه حتى
+            // لو عرف الـid (القايمة في الشاشة مفلترة، وده حارس الراوت)
+            abort_unless($client->visibleBy($request->user()), 403);
 
             $po = PurchaseOrder::create([
                 'number' => PurchaseOrder::nextNumber(),
@@ -288,6 +296,9 @@ class OpsController extends Controller
     /** فتح أمر pending للتعديل — نفس شاشة الإنشاء متملية بالبيانات */
     public function editPo(PurchaseOrder $purchaseOrder)
     {
+        // ⚠️ سكوب التشانل مانجر — مايعدّلش أمر عميل مش بتاعه
+        abort_unless($purchaseOrder->client?->visibleBy(auth()->user()) ?? true, 403);
+
         if ($purchaseOrder->approval_status !== 'pending') {
             return redirect()->route('ops.po.approvals')
                 ->withErrors(['decision' => __('ops.po_already_decided')]);
@@ -345,6 +356,9 @@ class OpsController extends Controller
             DB::transaction(function () use ($purchaseOrder, $data) {
                 $client = Client::findOrFail($data['client_id']);
 
+                // ⚠️ سكوب التشانل مانجر — نفس حارس storePurchaseOrder
+                abort_unless($client->visibleBy(auth()->user()), 403);
+
                 $purchaseOrder->update([
                     'client_id' => $client->id,
                     'assigned_to' => $data['assigned_to'],
@@ -374,8 +388,9 @@ class OpsController extends Controller
             // ⚠️ العميل حالته عمود `status` نصي ('active') مش بوليان `active`
             // العلاقات دي عشان Pricing::listRowFor تشتغل من الميموري —
             // البحث بيفلتر الأصناف بسعر قايمة الفرع المختار
-            'clients' => Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
-                ->where('status', 'active')->orderBy('name')
+            // ⚠️ وسكوب التشانل مانجر: مايعملش أمر غير لعملائه (2026-08-05)
+            'clients' => Client::visibleTo(Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
+                ->where('status', 'active'))->orderBy('name')
                 ->get(['id', 'name', 'name_en', 'group_id', 'balance', 'price_list', 'price_list_id']),
             'reps' => User::whereIn('role', ['sales_agent', 'driver'])
                 ->where('active', true)->orderBy('name')->get(['id', 'name']),
@@ -655,7 +670,12 @@ class OpsController extends Controller
 
     public function invoices(Request $request)
     {
-        $q = Invoice::with(['client', 'user']);
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): فواتير عملائه بس —
+        // والإجمالي من نفس الكويري فمفيش نطاقين مختلطين.
+        $u = auth()->user();
+        $q = Invoice::with(['client', 'user'])
+            ->when($u?->role === 'manager',
+                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')));
         if ($userId = $request->integer('user')) {
             $q->where('user_id', $userId);
         }
@@ -679,6 +699,8 @@ class OpsController extends Controller
         abort_unless(
             request()->user()->canSeeBranch($invoice->client->branch_id), 403,
         );
+        // ⚠️ سكوب التشانل مانجر — فاتورة عميل مش بتاعه ماتتفتحش بالـid
+        abort_unless($invoice->client->visibleBy(request()->user()), 403);
 
         $invoice->load(['items.product', 'client', 'user', 'visit']);
 
@@ -699,6 +721,9 @@ class OpsController extends Controller
     /** تسجيل تحصيل نقدي من عميل */
     public function collect(Request $request, Client $client)
     {
+        // ⚠️ سكوب التشانل مانجر — مايحصّلش من عميل مش بتاعه
+        abort_unless($client->visibleBy($request->user()), 403);
+
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
             'memo' => ['nullable', 'string', 'max:190'],

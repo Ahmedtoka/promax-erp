@@ -135,9 +135,9 @@
                 {{ __('field.total_units') }}: <b id="grand">0</b>
                 · 🎁 <b id="grandGift">0</b>
             </span>
-            <button class="btn gold" type="submit" id="hoBtn" disabled>
+            @if (\App\Support\Access::action(auth()->user(), 'act.custody.handout'))<button class="btn gold" type="submit" id="hoBtn" disabled>
                 📋 {{ __('field.send_to_prep') }}
-            </button>
+            </button>@endif
         </div>
     </form>
     @endif

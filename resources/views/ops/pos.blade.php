@@ -10,7 +10,7 @@
 @section('actions')
     @if ($manager)
         {{-- فلو الكي أكاونت: إنشاء بموافقة الحسابات --}}
-        <a class="btn" href="{{ route('ops.po.handout') }}">📦 {{ __('ops.po_handout') }}</a>
+        @if (\App\Support\Access::action(auth()->user(), 'act.ka.create'))<a class="btn" href="{{ route('ops.po.handout') }}">📦 {{ __('ops.po_handout') }}</a>@endif
         <button class="btn gold" onclick="openDlg('dlgNewPo')">+ {{ __('ops.purchase_order') }}</button>
     @endif
 @endsection

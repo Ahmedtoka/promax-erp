@@ -13,10 +13,10 @@
 
 @section('actions')
     @if ($manager)
-        <form method="POST" action="{{ route('erp.dues.generate') }}" style="display:inline">
+        @if (\App\Support\Access::action(auth()->user(), 'act.money.dues'))<form method="POST" action="{{ route('erp.dues.generate') }}" style="display:inline">
             @csrf
             <button class="btn gold">🔄 {{ __('client.due_generate') }}</button>
-        </form>
+        </form>@endif
     @endif
     <a class="btn" href="{{ route('erp.contracts') }}">📜 {{ __('nav.contracts') }}</a>
 @endsection
@@ -200,16 +200,16 @@
                     @if ($manager)
                         <td class="num" style="white-space:nowrap">
                             @if ($d->isDue())
-                                <form method="POST" action="{{ route('erp.dues.settle', $d) }}" style="display:inline"
+                                @if (\App\Support\Access::action(auth()->user(), 'act.money.dues'))<form method="POST" action="{{ route('erp.dues.settle', $d) }}" style="display:inline"
                                       onsubmit="return confirm(DUE_CONFIRM_SETTLE)">
                                     @csrf
                                     <button class="btn sm green">{{ __('client.due_settle') }}</button>
-                                </form>
-                                <form method="POST" action="{{ route('erp.dues.waive', $d) }}" style="display:inline"
+                                </form>@endif
+                                @if (\App\Support\Access::action(auth()->user(), 'act.money.dues'))<form method="POST" action="{{ route('erp.dues.waive', $d) }}" style="display:inline"
                                       onsubmit="return confirm(DUE_CONFIRM_WAIVE)">
                                     @csrf
                                     <button class="btn sm">{{ __('client.due_waive') }}</button>
-                                </form>
+                                </form>@endif
                             @endif
                         </td>
                     @endif

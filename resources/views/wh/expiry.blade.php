@@ -40,7 +40,7 @@
         @php $bucket = $buckets[$key] ?? collect(); @endphp
         <div class="kpi">
             <div class="lbl">{{ $meta['icon'] }} {{ $meta['label'] }}</div>
-            <div class="val {{ $meta['val'] }}">{{ $fmt($bucket->sum('qty')) }}</div>
+            <div class="val {{ $meta['val'] }}">{{ $fmt($bucket->sum('qty_remaining')) }}</div>
             <div class="sub2">{{ __('stock.units') }} • {{ __('stock.batch_countable', ['count' => $bucket->count()]) }}</div>
         </div>
     @endforeach
@@ -51,46 +51,50 @@
     @if ($bucket->isNotEmpty())
         <div class="card">
             <h3>{{ $meta['icon'] }} {{ $meta['label'] }}
-                <span class="side">{{ $fmt($bucket->sum('qty')) }} {{ __('stock.units') }}</span></h3>
+                <span class="side">{{ $fmt($bucket->sum('qty_remaining')) }} {{ __('stock.units') }}</span></h3>
             <div class="tablewrap">
                 <table>
                     <tr>
-                        <th>{{ __('stock.location') }}</th>
                         <th>{{ __('stock.item') }}</th>
                         <th>{{ __('stock.batch_no') }}</th>
                         <th>{{ __('stock.expires_on') }}</th>
                         <th>{{ __('stock.expiry') }}</th>
-                        <th>{{ __('common.qty') }}</th>
+                        <th class="num">{{ __('common.qty') }}</th>
+                        <th>{{ __('stock.locations') }}</th>
                     </tr>
-                    @foreach ($bucket as $r)
+                    @foreach ($bucket as $b)
+                        @php
+                            $shelved = $b->locations->where('qty', '>', 0);
+                            $unshelved = (int) $b->qty_remaining - (int) $shelved->sum('qty');
+                        @endphp
                         <tr>
                             <td>
-                                <b style="font-size:16px;letter-spacing:.4px">{{ $r->location?->code ?? '—' }}</b>
-                                @if ($r->location?->is_pick_face)
-                                    <span class="badge b-purple">★ {{ __('stock.pick_face') }}</span>
+                                <b>{{ $b->product?->displayName() ?? '—' }}</b>
+                                @if ($b->product)
+                                    <br><span style="font-size:10.5px;color:var(--muted)">{{ $b->product->code }} • {{ $b->product->unitLabel() }}</span>
                                 @endif
-                                @if ($r->location)
-                                    <br><span style="font-size:10.5px;color:var(--muted)">
-                                        {{ __('stock.stand') }} {{ $r->location->stand }} • {{ __('stock.level') }} {{ $r->location->level }}
+                            </td>
+                            <td class="num"><b>{{ $b->batch_no }}</b></td>
+                            <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
+                            <td><span class="badge {{ $b->expiryClass() }}">{{ $b->expiryLabel() }}</span></td>
+                            <td class="num"><b>{{ $fmt($b->qty_remaining) }}</b></td>
+                            <td>
+                                {{-- الأرفف تفصيلة جوه الباتش — واللي لسه على الأرض باين صريح --}}
+                                @foreach ($shelved as $bl)
+                                    <span class="badge b-blue" style="font-size:10.5px">
+                                        {{ $bl->location?->code ?? '—' }} × {{ $fmt($bl->qty) }}
+                                        @if ($bl->location?->is_pick_face) ★ @endif
+                                    </span>
+                                @endforeach
+                                @if ($unshelved > 0)
+                                    <span class="badge b-orange" style="font-size:10.5px">
+                                        {{ __('stock.unshelved') }} × {{ $fmt($unshelved) }}
                                     </span>
                                 @endif
-                            </td>
-                            <td>
-                                <b>{{ $r->product?->displayName() ?? $r->batch?->product?->displayName() ?? '—' }}</b>
-                                @if ($r->batch?->product)
-                                    <br><span style="font-size:10.5px;color:var(--muted)">{{ $r->batch->product->code }} • {{ $r->batch->product->unitLabel() }}</span>
+                                @if ($shelved->isEmpty() && $unshelved <= 0)
+                                    —
                                 @endif
                             </td>
-                            <td class="num"><b>{{ $r->batch?->batch_no ?? '—' }}</b></td>
-                            <td class="num">{{ $r->batch?->expires_on?->format('Y-m-d') ?? '—' }}</td>
-                            <td>
-                                @if ($r->batch)
-                                    <span class="badge {{ $r->batch->expiryClass() }}">{{ $r->batch->expiryLabel() }}</span>
-                                @else
-                                    <span class="badge b-gray">—</span>
-                                @endif
-                            </td>
-                            <td class="num"><b>{{ $fmt($r->qty) }}</b></td>
                         </tr>
                     @endforeach
                 </table>

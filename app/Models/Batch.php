@@ -123,6 +123,12 @@ class Batch extends Model
     /** expired | danger | warn | ok */
     public function expiryState(): string
     {
+        // ⚠️ باتش من غير تاريخ انتهاء (رصيد أول مدة مثلاً) مش «خطر» —
+        // daysLeft بترجع 0 للـnull وكان بيطلع أحمر في كل التقارير.
+        if ($this->expires_on === null) {
+            return 'ok';
+        }
+
         $days = $this->daysLeft();
 
         return match (true) {

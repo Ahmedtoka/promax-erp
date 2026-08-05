@@ -27,7 +27,7 @@
 @endphp
 
 @section('actions')
-    @if ($manager)<button class="btn gold" onclick="openDlg('dlgNewP')">+ {{ __('stock.new_item') }}</button>@endif
+    @if (\App\Support\Access::action(auth()->user(), 'act.products.edit'))<button class="btn gold" onclick="openDlg('dlgNewP')">+ {{ __('stock.new_item') }}</button>@endif
 @endsection
 
 @section('content')

@@ -202,6 +202,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/import-template/{kind}', [\App\Http\Controllers\ImportController::class, 'template'])
             ->middleware('role:admin')->name('import.template');
 
+        // ===== الصلاحيات وتسكين عملاء المديرين — أدمن بس (2026-08-05) =====
+        Route::get('/permissions', [\App\Http\Controllers\PermissionController::class, 'index'])
+            ->middleware('role:admin')->name('perms');
+        Route::post('/permissions/{user}', [\App\Http\Controllers\PermissionController::class, 'save'])
+            ->middleware('role:admin')->name('perms.save');
+        Route::get('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'index'])
+            ->middleware('role:admin')->name('managers.clients');
+        Route::post('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'assign'])
+            ->middleware('role:admin')->name('managers.assign');
+        Route::delete('/manager-clients/{client}', [\App\Http\Controllers\ManagerClientController::class, 'unassign'])
+            ->middleware('role:admin')->name('managers.unassign');
+
         // ===== الفروع والعربيات =====
         // ⚠️ **العرض للمديرين بس** — الشاشات بتوري أرقام كل فرع.
         // والتعديل للأدمن ومدير القنوات: مدير الفرع لو قدر يعدّل

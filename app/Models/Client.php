@@ -261,6 +261,33 @@ public function zone(): BelongsTo
         return $live($fromGroup) ? $fromGroup : null;
     }
 
+    /**
+     * سكوب التشانل مانجر (قرار المالك 2026-08-05): المدير بيشوف
+     * **عملاءه المسكّنين له بس** — `manager_id` اللي بيتظبط من شاشة
+     * «عملاء المديرين» أو من فورم العميل. أي شاشة فيها عملاء أو
+     * أرقام مبنية عليهم لازم تعدي من هنا.
+     *
+     * ⚠️ نفس نمط `Branch::scope` — بيرجع الكويري زي ما هو لغير المدير.
+     */
+    public static function visibleTo($query, ?User $user = null)
+    {
+        $user = $user ?? auth()->user();
+
+        if ($user !== null && $user->role === 'manager') {
+            $query->where('manager_id', $user->id);
+        }
+
+        return $query;
+    }
+
+    /** المدير ده يقدر يشوف العميل ده؟ — لحراسة صفحات العميل الواحد */
+    public function visibleBy(?User $user): bool
+    {
+        return $user === null
+            || $user->role !== 'manager'
+            || (int) $this->manager_id === (int) $user->id;
+    }
+
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class)->orderBy('date');

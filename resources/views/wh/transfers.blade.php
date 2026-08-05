@@ -54,7 +54,7 @@
 @section('actions')
     <a class="btn" href="{{ route('wh.index') }}">🏭 {{ __('stock.warehouse_overview') }}</a>
     @if ($manager)
-        <button class="btn gold" onclick="openDlg('dlgNewTr')">+ {{ __('stock.new_transfer') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.transfer'))<button class="btn gold" onclick="openDlg('dlgNewTr')">+ {{ __('stock.new_transfer') }}</button>@endif
     @endif
 @endsection
 

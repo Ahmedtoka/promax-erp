@@ -27,7 +27,7 @@
 @section('actions')
     <a class="btn" href="{{ route('wh.index') }}">🏭 {{ __('stock.warehouse_overview') }}</a>
     @if ($manager)
-        <a class="btn gold" href="{{ route('wh.picks.create') }}">+ {{ __('stock.new_pick_order') }}</a>
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.pick'))<a class="btn gold" href="{{ route('wh.picks.create') }}">+ {{ __('stock.new_pick_order') }}</a>@endif
     @endif
 @endsection
 

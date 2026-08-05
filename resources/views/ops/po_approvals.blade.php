@@ -103,14 +103,14 @@
 
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px">
                     {{-- تعديل كامل (أصناف/مندوب/معاد) — مفتوح للحسابات ولصاحب الأمر --}}
-                    <a class="btn" href="{{ route('ops.po.edit', $po) }}">✏️ {{ __('ops.po_edit') }}</a>
+                    @if (\App\Support\Access::action(auth()->user(), 'act.ka.edit'))<a class="btn" href="{{ route('ops.po.edit', $po) }}">✏️ {{ __('ops.po_edit') }}</a>@endif
                     <input type="text" name="note" maxlength="500" style="flex:1;min-width:220px"
                            placeholder="{{ __('ops.decision_note_ph') }}">
                     {{-- زرارين بنفس الفورم — قيمة decision بتحدد المسار --}}
-                    <button class="btn gold" name="decision" value="approved"
+                    @if (\App\Support\Access::action(auth()->user(), 'act.ka.decide'))<button class="btn gold" name="decision" value="approved"
                             onclick="return confirm(@json(__('ops.po_approve_confirm')))">✅ {{ __('ops.approve_and_prep') }}</button>
                     <button class="btn red" name="decision" value="rejected"
-                            onclick="return confirm(@json(__('ops.po_reject_confirm')))">⛔ {{ __('common.reject') }}</button>
+                            onclick="return confirm(@json(__('ops.po_reject_confirm')))">⛔ {{ __('common.reject') }}</button>@endif
                 </div>
                 <div style="font-size:11px;color:var(--muted);margin-top:6px">{{ __('ops.po_edit_hint') }}</div>
             </form>

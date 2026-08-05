@@ -20,6 +20,21 @@ class EnsureRole
             return redirect()->route('login');
         }
 
+        // ⚠️ **استثناء اليوزر بيغلب بوابة الرول** (قرار المالك 2026-08-05).
+        // الأدمن لو دّى المحاسب زرار «تسليم عهدة»، الـPOST لازم يعدّي
+        // رغم إن `role:admin,manager` — والعكس: المنع الصريح بيقفل
+        // حتى لو الرول أصلاً مسموح.
+        $routeName = $request->route()?->getName();
+
+        if ($routeName !== null
+            && ($override = \App\Support\Access::userOverride($user, $routeName)) !== null) {
+            if ($override === false) {
+                abort(403, __('common.forbidden'));
+            }
+
+            return $next($request);
+        }
+
         if ($roles && ! in_array($user->role, $roles, true) && ! $user->isAdmin()) {
             abort(403, __('common.forbidden'));
         }

@@ -25,7 +25,14 @@ class DuesController extends Controller
 {
     public function index(Request $request)
     {
-        $q = ContractDue::with(['client', 'contract', 'clause']);
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): استحقاقات عملائه بس —
+        // نفس الفلتر على الجدول والـKPIs عشان مايختلفوش (نطاق واحد).
+        $u = auth()->user();
+        $vis = fn ($q, string $col = 'client_id') => $u?->role === 'manager'
+            ? $q->whereIn($col, Client::visibleTo(Client::query(), $u)->select('id'))
+            : $q;
+
+        $q = $vis(ContractDue::with(['client', 'contract', 'clause']));
 
         $filters = $request->only(['status', 'client', 'kind']);
 
@@ -47,12 +54,12 @@ class DuesController extends Controller
             ->paginate(50)
             ->withQueryString();
 
-        // ⚠️ الإجماليات على الكل مش على الصفحة المعروضة
-        $allDue = ContractDue::due();
-        $allSettled = ContractDue::settled();
+        // ⚠️ الإجماليات على الكل مش على الصفحة المعروضة — وبنفس السكوب
+        $allDue = $vis(ContractDue::due());
+        $allSettled = $vis(ContractDue::settled());
 
         // العملاء اللي عندهم فلوسنا محجوزة
-        $withheld = Client::where('withheld', '>', 0)
+        $withheld = Client::visibleTo(Client::where('withheld', '>', 0))
             ->with('contract')
             ->orderByDesc('withheld')
             ->get();
@@ -67,7 +74,7 @@ class DuesController extends Controller
                 'due_amount' => (float) (clone $allDue)->sum('amount'),
                 'settled_amount' => (float) (clone $allSettled)->sum('amount'),
                 'clients' => (clone $allDue)->distinct('client_id')->count('client_id'),
-                'withheld_total' => (float) Client::sum('withheld'),
+                'withheld_total' => (float) Client::visibleTo(Client::query())->sum('withheld'),
                 'withheld_clients' => $withheld->count(),
             ],
             // أكبر العملاء استحقاقاً — ده اللي بيهم القرار
@@ -92,7 +99,7 @@ class DuesController extends Controller
                 ->where('is_uncertain', false)
                 ->whereHas('contract', fn ($q) => $q->where('active', true))
                 ->get(),
-            'clients' => Client::whereHas('dues')->orderBy('name')->get(['id', 'name', 'name_en']),
+            'clients' => Client::visibleTo(Client::whereHas('dues'))->orderBy('name')->get(['id', 'name', 'name_en']),
         ]);
     }
 

@@ -15,8 +15,8 @@
 @section('actions')
     @if (auth()->user()->isAdmin())
         {{-- فلو التيست (قرار المالك 2026-08-04): ديمو ← تجربة ← مسح ← استيراد رصيد أول المدة --}}
-        <button class="btn" onclick="openDlg('dlgDemo')">🧪 {{ __('ops.demo_btn') }}</button>
-        <button class="btn red" onclick="openDlg('dlgWipe')">🧨 {{ __('ops.wipe_btn') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.overview.wipe'))<button class="btn" onclick="openDlg('dlgDemo')">🧪 {{ __('ops.demo_btn') }}</button>@endif
+        @if (\App\Support\Access::action(auth()->user(), 'act.overview.wipe'))<button class="btn red" onclick="openDlg('dlgWipe')">🧨 {{ __('ops.wipe_btn') }}</button>@endif
     @endif
 @endsection
 

@@ -58,9 +58,16 @@
 </div>
 
 <div class="card">
+    {{-- ترتيب الفلاتر (2026-08-05): بحث ← الحالة ← السلسلة ← المحافظة ← الناقص --}}
     <form class="searchbar" method="GET">
         <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
                placeholder="{{ __('client.search_ph') }}" style="flex:1;min-width:200px">
+
+        <select name="status" style="min-width:130px">
+            <option value="waiting" @selected(($f['status'] ?? 'waiting') === 'waiting')>{{ __('client.status_waiting') }}</option>
+            <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('client.status_active') }}</option>
+            <option value="all" @selected(($f['status'] ?? '') === 'all')>{{ __('client.status_all') }}</option>
+        </select>
 
         <select name="group" style="min-width:180px">
             <option value="">— {{ __('nav.chains') }} —</option>
@@ -78,12 +85,6 @@
             @endforeach
         </select>
 
-        <select name="status" style="min-width:130px">
-            <option value="waiting" @selected(($f['status'] ?? 'waiting') === 'waiting')>{{ __('client.status_waiting') }}</option>
-            <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('client.status_active') }}</option>
-            <option value="all" @selected(($f['status'] ?? '') === 'all')>{{ __('client.status_all') }}</option>
-        </select>
-
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;white-space:nowrap">
             <input type="checkbox" name="incomplete" value="1" @checked($f['incomplete'] ?? false)>
             {{ __('client.incomplete_only') }}
@@ -92,6 +93,29 @@
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.clients.activate') }}">{{ __('common.clear') }}</a>
     </form>
+
+    {{-- ⚠️ **عدادات المناطق بنفس فلاتر القايمة** — كل بادج فلتر بضغطة.
+         محافظة مختارة؟ بتظهر مناطقها بعدادها تحتها. --}}
+    @if ($govCounts->isNotEmpty())
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px">
+            <span style="font-size:11.5px;font-weight:800;color:var(--muted)">{{ __('client.geo_counts') }}:</span>
+            @foreach ($govCounts as $g => $n)
+                <a class="badge {{ ($f['gov'] ?? '') === $g ? 'b-blue' : 'b-gray' }}"
+                   style="text-decoration:none"
+                   href="{{ request()->fullUrlWithQuery(['gov' => ($f['gov'] ?? '') === $g ? null : $g, 'page' => 1]) }}">
+                    {{ $g ? Governorates::label($g) : '—' }} · <b>{{ $fmt($n) }}</b>
+                </a>
+            @endforeach
+        </div>
+    @endif
+    @if ($zoneCounts->isNotEmpty())
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px">
+            <span style="font-size:11.5px;font-weight:800;color:var(--muted)">{{ __('client.zone') }}:</span>
+            @foreach ($zoneCounts as $z)
+                <span class="badge b-purple">{{ $z['zone']?->displayName() ?? '—' }} · <b>{{ $fmt($z['n']) }}</b></span>
+            @endforeach
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('erp.clients.activate.do') }}" id="actForm">
         @csrf
@@ -155,9 +179,9 @@
                 <span style="font-size:12.5px;color:var(--muted)">
                     <b id="selCount">0</b> {{ __('client.selected') }}
                 </span>
-                <button class="btn gold" type="submit" id="actBtn" disabled>
-                    ✅ {{ __('client.activate_selected') }}
-                </button>
+                @if (\App\Support\Access::action(auth()->user(), 'act.clients.activate'))<button class="btn gold" type="submit" id="actBtn" disabled>
+                    ✅ {{ __('client.activate_apply') }}
+                </button>@endif
             </div>
         </div>
 
@@ -165,11 +189,9 @@
             <table>
                 <tr>
                     <th style="width:34px">
-                        {{-- ⚠️ في عرض المفعّلين مفيش تعليم — الفورم
-                             بيفعّل بس، والمفعّل مالوش تشيك بوكس --}}
-                        @unless (($f['status'] ?? 'waiting') === 'active')
-                            <input type="checkbox" id="allBox" onchange="toggleAll(this)">
-                        @endunless
+                        {{-- الشغّال بقى بيتعلّم عليه برضو — للتوزيع
+                             (منطقة/مندوب/مدير) من غير ما حالته تتلمس --}}
+                        <input type="checkbox" id="allBox" onchange="toggleAll(this)">
                     </th>
                     <th>{!! $sortLink('code', __('common.code')) !!}</th>
                     <th>{!! $sortLink('name', __('client.client')) !!}</th>
@@ -197,10 +219,8 @@
                     @endphp
                     <tr>
                         <td>
-                            @if ($c->status !== 'active')
-                                <input type="checkbox" name="ids[]" value="{{ $c->id }}"
-                                       class="rowBox" onchange="syncCount()">
-                            @endif
+                            <input type="checkbox" name="ids[]" value="{{ $c->id }}"
+                                   class="rowBox" onchange="syncCount()">
                         </td>
                         <td class="num"><b>{{ $c->code }}</b></td>
                         <td>
@@ -225,9 +245,9 @@
                                              مش جوه فورم التفعيل عشان مايبعتوش مع
                                              بعض. `form` attribute بيربطه بفورم
                                              مستقل معرّف تحت الجدول. --}}
-                                        <button class="btn sm" type="submit"
+                                        @if (\App\Support\Access::action(auth()->user(), 'act.clients.activate'))<button class="btn sm" type="submit"
                                                 form="deact-{{ $c->id }}"
-                                                onclick="return confirm(DEACT_CONFIRM)">⏸ {{ __('client.deactivate') }}</button>
+                                                onclick="return confirm(DEACT_CONFIRM)">⏸ {{ __('client.deactivate') }}</button>@endif
                                     @endif
                                 @else
                                     <span class="badge b-orange">{{ __('client.status_waiting') }}</span>
@@ -267,7 +287,7 @@
         @endforeach
     @endif
 
-    <div class="pag">{{ $clients->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $clients])
 </div>
 
 @endsection

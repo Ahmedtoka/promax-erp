@@ -12,11 +12,11 @@
 @section('actions')
     <a class="btn" href="{{ route('erp.suppliers') }}">← {{ __('supplier.all_suppliers') }}</a>
     @if ($manager)
-        <button class="btn" onclick="openDlg('dlgEditSup')">✎ {{ __('common.edit') }}</button>
-        <button class="btn" onclick="openDlg('dlgOpening')">{{ __('client.opening_balance') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.suppliers.manage'))<button class="btn" onclick="openDlg('dlgEditSup')">✎ {{ __('common.edit') }}</button>@endif
+        @if (\App\Support\Access::action(auth()->user(), 'act.suppliers.manage'))<button class="btn" onclick="openDlg('dlgOpening')">{{ __('client.opening_balance') }}</button>@endif
     @endif
     @if ($canPay)
-        <button class="btn green" onclick="openDlg('dlgPay')">+ {{ __('supplier.pay') }}</button>
+        @if (\App\Support\Access::action(auth()->user(), 'act.suppliers.pay'))<button class="btn green" onclick="openDlg('dlgPay')">+ {{ __('supplier.pay') }}</button>@endif
     @endif
 @endsection
 

@@ -27,7 +27,8 @@ class ClientActivationController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Client::query()->with(['group', 'zone', 'rep']);
+        // ⚠️ سكوب التشانل مانجر (2026-08-05): بيراجع ويفعّل عملاءه بس
+        $q = Client::visibleTo(Client::query()->with(['group', 'zone', 'rep']));
 
         // ⚠️ **`status` مش `active`.** الجدول مافيهوش عمود `active` —
         // الحالة enum في `status`. الافتراضي «المستني» لأن ده شغل
@@ -86,15 +87,45 @@ class ClientActivationController extends Controller
             default => $q->orderBy('code', $dir),
         };
 
+        // ⚠️ **عدادات المناطق بنفس فلاتر القايمة** (طلب المالك 2026-08-05):
+        // عدد العملاء بكل محافظة، ولو محافظة مختارة — عدد كل منطقة فيها.
+        // كلون قبل الترقيم عشان العداد على الكل مش على الصفحة.
+        $govCounts = (clone $q)->reorder()
+            ->selectRaw('governorate, COUNT(*) as n')
+            ->groupBy('governorate')
+            ->pluck('n', 'governorate')
+            ->sortDesc();
+
+        $zoneCounts = collect();
+
+        if ($gov) {
+            $byZone = (clone $q)->reorder()
+                ->selectRaw('zone_id, COUNT(*) as n')
+                ->groupBy('zone_id')
+                ->pluck('n', 'zone_id');
+            // ⚠️ كويري واحدة للمناطق — مش Zone::find جوه لوب
+            $zoneRows = Zone::whereIn('id', $byZone->keys()->filter())->get()->keyBy('id');
+            $zoneCounts = $byZone
+                ->map(fn ($n, $zid) => ['zone' => $zoneRows->get($zid), 'n' => (int) $n])
+                ->values()
+                ->sortByDesc('n')
+                ->values();
+        }
+
         return view('erp.client_activate', [
             'clients' => $q->paginate(50)->withQueryString(),
+            'govCounts' => $govCounts,
+            'zoneCounts' => $zoneCounts,
             'groups' => ClientGroup::withCount([
                 'clients as off_count' => fn ($w) => $w->where('status', '!=', 'active'),
             ])->orderBy('name')->get(),
             'zones' => Zone::where('active', true)->orderBy('name')->get(),
             'reps' => User::whereIn('role', ['sales_agent', 'promoter'])
                 ->where('active', true)->orderBy('name')->get(),
-            'managers' => User::whereIn('role', ['manager', 'branch_manager', 'admin'])
+            // ⚠️ **من غير الأدمنز** (قرار المالك 2026-08-05) — الدروب داون
+            // للتشانل مانجرز اللي بيتوزّع عليهم العملاء، والأدمن مش موظف
+            // توزيع. وده نفس مصدر شاشة «عملاء المديرين» والسكوبينج.
+            'managers' => User::where('role', 'manager')
                 ->where('active', true)->orderBy('name')->get(),
             'lists' => $this->priceLists(),
             // ⚠️ `array_merge` مش `+` — المعامل `+` بيسيب قيمة الشمال،
@@ -103,8 +134,8 @@ class ClientActivationController extends Controller
                 $request->only(['q', 'group', 'gov', 'incomplete', 'sort', 'dir']),
                 ['status' => $status],
             ),
-            'waiting' => Client::where('status', '!=', 'active')->count(),
-            'live' => Client::where('status', 'active')->count(),
+            'waiting' => Client::visibleTo(Client::where('status', '!=', 'active'))->count(),
+            'live' => Client::visibleTo(Client::where('status', 'active'))->count(),
         ]);
     }
 
@@ -128,12 +159,16 @@ class ClientActivationController extends Controller
             'category' => ['nullable', 'string', 'max:20'],
         ]);
 
-        // ⚠️ **الموقوفين بس.** الـids بتيجي من الفورم، والتاب اللي
-        // فضلت مفتوحة من قبل ما حد يفعّل بتبعت أكواد اتفعّلت خلاص —
-        // وإعادة تفعيلها كانت هتدوس على منطقتها ومندوبها بقيم الفورم.
-        $ids = Client::whereIn('id', $data['ids'])->where('status', '!=', 'active')->pluck('id');
+        // ⚠️ **الشاشة بقت تفعيل وتوزيع** (قرار المالك 2026-08-05):
+        // المستني بيتفعّل بالقيم المختارة، والشغّال أصلاً بتتطبّق عليه
+        // القيم بس — منطقة/مندوب/تشانل مانجر/قايمة — من غير ما نلمس
+        // حالته ولا تاريخ أول نشاطه.
+        // ⚠️ وسكوب التشانل مانجر — مايوزّعش عميل مش بتاعه حتى لو بعت الـid
+        $rows = Client::visibleTo(Client::whereIn('id', $data['ids']))->get(['id', 'status', 'zone_id']);
+        $toActivate = $rows->where('status', '!=', 'active')->pluck('id');
+        $activeOnes = $rows->where('status', 'active')->pluck('id');
 
-        if ($ids->isEmpty()) {
+        if ($rows->isEmpty()) {
             return back()->withErrors(['ids' => __('client.activate_none')]);
         }
 
@@ -145,11 +180,11 @@ class ClientActivationController extends Controller
             'category' => $data['category'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
-        // ⚠️ **العميل من غير منطقة مايبانش لأي مندوب.** بنرفض بدل ما
-        // نفعّله ويقعد شهر محدش زاره ومحدش عارف ليه.
-        $noZone = Client::whereIn('id', $ids)
+        // ⚠️ **العميل من غير منطقة مايبانش لأي مندوب.** بنرفض التفعيل
+        // بدل ما يقعد شهر محدش زاره — الشرط على اللي بيتفعّل بس.
+        $noZone = $rows->where('status', '!=', 'active')
             ->whereNull('zone_id')
-            ->when(isset($payload['zone_id']), fn ($w) => $w->whereRaw('1 = 0'))
+            ->when(isset($payload['zone_id']), fn ($c) => $c->take(0))
             ->count();
 
         if ($noZone > 0) {
@@ -158,14 +193,31 @@ class ClientActivationController extends Controller
             ])->withInput();
         }
 
-        DB::transaction(function () use ($ids, $payload) {
-            Client::whereIn('id', $ids)->update($payload + [
-                'status' => 'active',
-                'first_activity_at' => now(),
-            ]);
+        // التوزيع على الشغّالين من غير قيم مختارة مالوش معنى
+        if ($toActivate->isEmpty() && $payload === []) {
+            return back()->withErrors(['ids' => __('client.nothing_to_apply')]);
+        }
+
+        DB::transaction(function () use ($toActivate, $activeOnes, $payload) {
+            if ($toActivate->isNotEmpty()) {
+                Client::whereIn('id', $toActivate)->update($payload + [
+                    'status' => 'active',
+                    'first_activity_at' => now(),
+                ]);
+            }
+
+            if ($activeOnes->isNotEmpty() && $payload !== []) {
+                Client::whereIn('id', $activeOnes)->update($payload);
+            }
         });
 
-        return back()->with('ok', __('client.activated', ['count' => $ids->count()]));
+        $msg = collect([
+            $toActivate->isNotEmpty() ? __('client.activated', ['count' => $toActivate->count()]) : null,
+            $activeOnes->isNotEmpty() && $payload !== []
+                ? __('client.distributed', ['count' => $activeOnes->count()]) : null,
+        ])->filter()->implode(' ');
+
+        return back()->with('ok', $msg);
     }
 
     /** إيقاف عميل — الرجوع من التفعيل */
