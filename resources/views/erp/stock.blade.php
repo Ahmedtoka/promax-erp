@@ -58,15 +58,15 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">💰 {{ __('stock.value_by_family') }}</div>
-            <canvas id="chFam" height="210"></canvas>
+            <div class="chartbox"><canvas id="chFam"></canvas></div>
         </div>
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">📦 {{ __('stock.units_by_family') }}</div>
-            <canvas id="chFamQty" height="210"></canvas>
+            <div class="chartbox"><canvas id="chFamQty"></canvas></div>
         </div>
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">🏭 {{ __('stock.wh_distribution') }}</div>
-            <canvas id="chWh" height="210"></canvas>
+            <div class="chartbox"><canvas id="chWh"></canvas></div>
         </div>
     </div>
 </div>

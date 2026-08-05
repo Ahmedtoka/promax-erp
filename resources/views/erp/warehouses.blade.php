@@ -49,15 +49,15 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">📦 {{ __('stock.units_per_wh') }}</div>
-            <canvas id="chWhUnits" height="210"></canvas>
+            <div class="chartbox"><canvas id="chWhUnits"></canvas></div>
         </div>
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">💰 {{ __('stock.value_share') }}</div>
-            <canvas id="chWhValue" height="210"></canvas>
+            <div class="chartbox"><canvas id="chWhValue"></canvas></div>
         </div>
         <div>
             <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">🏷️ {{ __('stock.sku_per_wh') }}</div>
-            <canvas id="chWhSkus" height="210"></canvas>
+            <div class="chartbox"><canvas id="chWhSkus"></canvas></div>
         </div>
     </div>
 </div>
