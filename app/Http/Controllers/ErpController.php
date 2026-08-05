@@ -196,6 +196,16 @@ class ErpController extends Controller
                 ->whereDoesntHave('group.contract', $liveContract);
         }
 
+        // ═══ KPIs بمعنى (قرار المالك 2026-08-05): بدل كروت التصنيف
+        // التجاري اللي محدش فاهمها — كام عميل، كام سلسلة، كام في كل
+        // قناة، ومين عليه فلوس ومين ليه. كلها بنفس سكوب الفرع والمدير.
+        $scoped = fn () => Client::visibleTo(\App\Models\Branch::scope(Client::query()));
+
+        $debt = $scoped()->where('balance', '>', 0.009)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(balance), 0) as s')->first();
+        $credit = $scoped()->where('balance', '<', -0.009)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(balance), 0) as s')->first();
+
         return view('erp.clients', [
             // ⚠️ فورم الإضافة اتنقل لصفحة مستقلة (`erp.clients.new`)،
             // فالقايمة دي مابقتش محتاجة الفروع والسلاسل والمناديب.
@@ -203,6 +213,13 @@ class ErpController extends Controller
             // حد يستخدمهم.
             'clients' => $q->with('channel')->orderByDesc('purchases')
                 ->paginate(40)->withQueryString(),
+            'kpi' => [
+                'chains' => $scoped()->whereNotNull('group_id')->distinct()->count('group_id'),
+                'debt_n' => (int) $debt->n,
+                'debt_sum' => (float) $debt->s,
+                'credit_n' => (int) $credit->n,
+                'credit_sum' => abs((float) $credit->s),
+            ],
             'zones' => Zone::orderBy('code')->get(),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'catCounts' => Client::visibleTo(Client::query())->selectRaw('category, COUNT(*) as n')

@@ -18,29 +18,53 @@
 
 @section('content')
 
+{{-- KPIs بمعنى (2026-08-05): كام عميل، كام سلسلة، كام في كل قناة،
+     ومين عليه فلوس ومين ليه — وكل كارت فلتر بضغطة --}}
 <div class="kpis">
-    @foreach (Client::CATEGORIES as $key => [$label, $cls])
-        @if ($key !== 'internal')
-            <div class="kpi">
-                <div class="lbl">{{ __('enums.category.'.$key) }}</div>
-                <div class="val">{{ $catCounts[$key] ?? 0 }}</div>
-                <div class="sub2"><a href="{{ route('erp.clients', ['cat' => $key]) }}" style="color:var(--blue);font-weight:700">{{ __('common.show_them') }} ←</a></div>
-            </div>
-        @endif
+    <a class="kpi" href="{{ route('erp.clients') }}" style="text-decoration:none;color:inherit">
+        <div class="lbl">👥 {{ __('client.clients') }}</div>
+        <div class="val">{{ $fmt(array_sum($statusCounts)) }}</div>
+        <div class="sub2">{{ __('client.status_active') }} <b>{{ $fmt($statusCounts['active'] ?? 0) }}</b>
+            • {{ __('client.status_waiting') }} <b>{{ $fmt($statusCounts['pending'] ?? 0) }}</b></div>
+    </a>
+    <a class="kpi" href="{{ route('erp.groups') }}" style="text-decoration:none;color:inherit">
+        <div class="lbl">🏬 {{ __('nav.chains') }}</div>
+        <div class="val">{{ $fmt($kpi['chains']) }}</div>
+        <div class="sub2">{{ __('client.chains_hint') }}</div>
+    </a>
+    @foreach ($channels as $ch)
+        <a class="kpi" style="text-decoration:none;color:inherit;{{ (int) ($filters['channel'] ?? 0) === $ch->id ? 'outline:2px solid var(--royal-blue)' : '' }}"
+           href="{{ route('erp.clients', ['channel' => (int) ($filters['channel'] ?? 0) === $ch->id ? null : $ch->id]) }}">
+            <div class="lbl">🎯 {{ $ch->displayName() }}</div>
+            <div class="val">{{ $fmt($channelCounts[$ch->id] ?? 0) }}</div>
+            <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+        </a>
     @endforeach
+    <div class="kpi">
+        <div class="lbl">💸 {{ __('client.owe_us') }}</div>
+        <div class="val neg">{{ $fmt($kpi['debt_sum']) }}</div>
+        <div class="sub2">{{ __('client.client_countable', ['count' => $kpi['debt_n']]) }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">💰 {{ __('client.credit_balance') }}</div>
+        <div class="val pos">{{ $fmt($kpi['credit_sum']) }}</div>
+        <div class="sub2">{{ __('client.client_countable', ['count' => $kpi['credit_n']]) }}</div>
+    </div>
 </div>
 
 <div class="card">
-    {{-- ملحوظة: الفلاتر هنا لازم تطابق اللي ErpController::clients() بيقراه بالظبط --}}
+    {{-- ملحوظة: الفلاتر هنا لازم تطابق اللي ErpController::clients() بيقراه بالظبط
+         الترتيب (2026-08-05): بحث ← الحالة ← القناة ← القسم ← التصنيف
+         ← المحافظة ← الزون ← العقود --}}
     <form class="searchbar" method="GET">
-        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('client.search_client') }}">
-        <select name="cat">
-            <option value="">{{ __('client.all_categories') }}</option>
-            @foreach (Client::CATEGORIES as $k => $v)
-                <option value="{{ $k }}" @selected(($filters['cat'] ?? '') === $k)>{{ __('enums.category.'.$k) }}</option>
-            @endforeach
+        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
+               placeholder="🔍 {{ __('client.search_client') }}" style="flex:1;min-width:220px">
+        <select name="status" style="min-width:120px">
+            <option value="">{{ __('client.status_all') }} ({{ array_sum($statusCounts) }})</option>
+            <option value="active" @selected(($filters['status'] ?? '') === 'active')>{{ __('client.status_active') }} ({{ $statusCounts['active'] ?? 0 }})</option>
+            <option value="pending" @selected(($filters['status'] ?? '') === 'pending')>{{ __('client.status_waiting') }} ({{ $statusCounts['pending'] ?? 0 }})</option>
         </select>
-        <select name="channel">
+        <select name="channel" style="min-width:140px">
             <option value="">{{ __('client.all_channels') }}</option>
             @foreach ($channels as $ch)
                 <option value="{{ $ch->id }}" @selected((int) ($filters['channel'] ?? 0) === $ch->id)>
@@ -48,13 +72,19 @@
                 </option>
             @endforeach
         </select>
-        <select name="sub">
+        <select name="sub" style="min-width:130px">
             <option value="">{{ __('client.all_segments') }}</option>
             @foreach (\App\Models\Channel::SUB_CHANNELS as $k => $lbl)
                 <option value="{{ $k }}" @selected(($filters['sub'] ?? '') === $k)>{{ __('enums.sub_channel.'.$k) }}</option>
             @endforeach
         </select>
-        <select name="gov">
+        <select name="cat" style="min-width:130px">
+            <option value="">{{ __('client.all_categories') }}</option>
+            @foreach (Client::CATEGORIES as $k => $v)
+                <option value="{{ $k }}" @selected(($filters['cat'] ?? '') === $k)>{{ __('enums.category.'.$k) }}</option>
+            @endforeach
+        </select>
+        <select name="gov" style="min-width:130px">
             <option value="">{{ __('geo.governorate') }}: {{ __('common.all') }}</option>
             @foreach (\App\Support\Governorates::options() as $gk => $gLabel)
                 <option value="{{ $gk }}" @selected(($filters['gov'] ?? '') === $gk)>{{ $gLabel }}</option>
@@ -66,29 +96,28 @@
             'selected' => $filters['zone'] ?? null,
             'placeholder' => __('client.all_zones'),
         ])
-        <select name="contract">
+        <select name="contract" style="min-width:110px">
             <option value="">{{ __('client.contracts_all') }}</option>
             <option value="yes" @selected(($filters['contract'] ?? '') === 'yes')>{{ __('client.with_contract') }}</option>
             <option value="no" @selected(($filters['contract'] ?? '') === 'no')>{{ __('client.without_contract') }}</option>
-        </select>
-        <select name="status">
-            <option value="">{{ __('client.status_all') }} ({{ array_sum($statusCounts) }})</option>
-            <option value="active" @selected(($filters['status'] ?? '') === 'active')>{{ __('client.status_active') }} ({{ $statusCounts['active'] ?? 0 }})</option>
-            <option value="pending" @selected(($filters['status'] ?? '') === 'pending')>{{ __('client.status_waiting') }} ({{ $statusCounts['pending'] ?? 0 }})</option>
         </select>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.clients') }}">{{ __('common.clear') }}</a>
         <span class="badge b-gray">{{ __('client.client_countable', ['count' => $clients->total()]) }}</span>
     </form>
 
-    <div class="tablewrap">
+    {{-- الهيدر ثابت — الجدول طويل والأعمدة بتضيع وانت نازل --}}
+    <div class="tablewrap" style="max-height:65vh;overflow-y:auto">
         <table>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
                 <th>{{ __('client.client') }}</th><th>{{ __('common.status') }}</th><th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.category') }}</th>
-                <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th><th>{{ __('client.discount') }}</th>
-                <th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.returns') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.collection_rate') }}</th><th>{{ __('client.last_payment') }}</th>
+                <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th><th class="num">{{ __('client.discount') }}</th>
+                <th class="num">{{ __('client.purchases') }}</th><th class="num">{{ __('client.collected') }}</th><th class="num">{{ __('client.returns') }}</th><th class="num">{{ __('client.balance') }}</th><th class="num">{{ __('client.collection_rate') }}</th><th class="num">{{ __('client.last_payment') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
+            </thead>
+            <tbody>
             @forelse ($clients as $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                     <td><b>{{ $c->fullName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</span></td>
@@ -147,10 +176,11 @@
             @empty
                 <tr><td colspan="{{ $manager ? 15 : 14 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('client.no_clients') }}</td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 
-    <div class="pag">{{ $clients->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $clients])
 </div>
 
 

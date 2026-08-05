@@ -5,6 +5,10 @@ return [
 
     // ---------- Headings ----------
     'clients' => 'Clients',
+    'chains_hint' => 'Chains with registered branches',
+    'tap_to_filter' => 'Tap to filter',
+    'owe_us' => 'They owe us',
+    'credit_balance' => 'Credit balance',
     'client' => 'Client',
     'client_card' => 'Client Card',
     'new_client' => 'New Client',
