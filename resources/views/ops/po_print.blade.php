@@ -20,6 +20,10 @@
 
 @section('content')
 
+{{-- ⚠️ ستايل المستندات مش في اللاي أوت — من غير الإنكلود ده اللوجو
+     بيطلع بحجمه الكامل (640px) والصفحة كلها بتتبعثر --}}
+@include('partials._doc_style')
+
 <div class="doc has-bolt">
     <img class="bolt-mark lg" src="{{ asset('brand/bolt.svg') }}" alt="">
 
