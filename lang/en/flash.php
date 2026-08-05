@@ -40,6 +40,7 @@ return [
     'po_approved' => 'Order approved and the pick order went to the warehouse.',
     'po_updated' => 'Order updated and repriced - review and approve.',
     'pos_imported' => ':count orders created and queued for accounting approval.',
+    'pos_bulk_approved' => ':count orders approved and their pick orders sent to the warehouse.',
     'wiped_done' => ':n movement rows wiped - stock and balances zeroed, master data untouched.',
     'demo_loaded' => 'Demo data loaded - a receipt and a full custody for the rep.',
     'memo_po_partial' => 'PO :number delivered - :diff pcs short of the order',

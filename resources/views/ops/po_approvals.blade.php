@@ -20,6 +20,25 @@
 
 @section('title', __('ops.po_approvals'))
 
+@section('actions')
+    @if ($pending->isNotEmpty())
+        {{-- طباعة الكل: كل المعروض حالياً — أمر في صفحة --}}
+        <a class="btn" target="_blank"
+           href="{{ route('ops.po.print.batch', ['ids' => $pending->pluck('id')->join(',')]) }}">🖨️ {{ __('ops.print_all') }} ({{ $pending->count() }})</a>
+        @if (\App\Support\Access::action(auth()->user(), 'act.ka.decide'))
+            {{-- موافقة جماعية على المعروض — كل أمر في ترانزاكشن لوحده --}}
+            <form method="POST" action="{{ route('ops.po.decide.all') }}" style="display:inline"
+                  onsubmit="return confirm(@js(__('ops.approve_all_confirm', ['count' => $pending->count()])))">
+                @csrf
+                @foreach ($pending as $po)
+                    <input type="hidden" name="ids[]" value="{{ $po->id }}">
+                @endforeach
+                <button class="btn gold" type="submit">✅ {{ __('ops.approve_all') }} ({{ $pending->count() }})</button>
+            </form>
+        @endif
+    @endif
+@endsection
+
 @section('content')
 
 <div class="card">

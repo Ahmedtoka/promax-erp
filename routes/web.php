@@ -487,11 +487,20 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('po.import.preview');
         Route::post('/po-import', [OpsController::class, 'poImportStore'])
             ->middleware('role:admin,manager')->name('po.import.store');
+        // إنشاء أمر واحد من المعاينة — AJAX البروجريس (2026-08-06)
+        Route::post('/po-import/one', [OpsController::class, 'poImportStoreOne'])
+            ->middleware('role:admin,manager')->name('po.import.one');
         // مستند الأمر للطباعة — الحسابات بتطبع نسختين وتختمهم
         Route::get('/pos/{purchaseOrder}/print', [OpsController::class, 'printPo'])
             ->middleware('role:admin,manager,accountant')->name('po.print');
+        // طباعة مجمعة: ?ids=1,2,3 — أمر في صفحة (2026-08-06)
+        Route::get('/pos-print-batch', [OpsController::class, 'printPoBatch'])
+            ->middleware('role:admin,manager,accountant')->name('po.print.batch');
         Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
             ->middleware('role:admin,accountant')->name('po.approvals');
+        // ⚠️ البلك قبل الراوت البارامتري — /po-approvals-bulk مساره مختلف أصلاً
+        Route::post('/po-approvals-bulk', [OpsController::class, 'decideAllPoApprovals'])
+            ->middleware('role:admin,accountant')->name('po.decide.all');
         Route::post('/po-approvals/{purchaseOrder}', [OpsController::class, 'decidePoApproval'])
             ->middleware('role:admin,accountant')->name('po.decide');
 

@@ -506,6 +506,63 @@ class OpsController extends Controller
     }
 
     /**
+     * إنشاء أمر واحد من المعاينة — AJAX (2026-08-06): الشاشة بتنشئ
+     * الأوامر واحد ورا الثاني ببروجريس بار، فكل نداء بيرجع JSON
+     * برقم الأمر أو رسالة الرفض. نفس منطق `poImportStore` بالظبط.
+     */
+    public function poImportStoreOne(Request $request)
+    {
+        $data = $request->validate([
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'assigned_to' => ['required', 'exists:users,id'],
+            'due_at' => ['required', 'date'],
+            'client_id' => ['required', 'exists:clients,id'],
+            'source' => ['nullable', 'string', 'max:40'],
+            'items' => ['required', 'string'],
+        ]);
+
+        // أرقام صحيحة بس — أي حاجة تانية في الـJSON بتتداس
+        $qty = collect(json_decode($data['items'], true) ?: [])
+            ->mapWithKeys(fn ($q, $pid) => [(int) $pid => (int) $q])
+            ->filter(fn ($q, $pid) => $pid > 0 && $q > 0)->all();
+
+        if ($qty === []) {
+            return response()->json(['message' => __('ops.po_no_items')], 422);
+        }
+
+        try {
+            $po = DB::transaction(function () use ($data, $qty, $request) {
+                $client = Client::findOrFail($data['client_id']);
+
+                // ⚠️ سكوب التشانل مانجر — حارس الراوت زي الرفع الجماعي
+                abort_unless($client->visibleBy($request->user()), 403);
+
+                $po = PurchaseOrder::create([
+                    'number' => PurchaseOrder::nextNumber(),
+                    'client_id' => $client->id,
+                    'source' => $data['source'] ?? null,
+                    'assigned_to' => $data['assigned_to'],
+                    'price_mode' => $client->priceList(),
+                    'approval_status' => 'pending',
+                    'due_at' => $data['due_at'],
+                    'warehouse_id' => $data['warehouse_id'],
+                    'created_by' => $request->user()->id,
+                    'status' => 'pending',
+                    'total' => 0,
+                ]);
+
+                $this->fillPoItems($po, $client, $qty, 'channel');
+
+                return $po;
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'id' => $po->id, 'number' => $po->number]);
+    }
+
+    /**
      * بارس شيت PO واحد — صيغة رابت: أزواج (ليبل، قيمة) في الهيدر،
      * وبعدين جدول أصناف عموده الفاصل «Barcode»، ولحد صف «Total».
      *
@@ -598,6 +655,86 @@ class OpsController extends Controller
         $purchaseOrder->load(['client.group', 'client.zone', 'courier', 'items.product', 'warehouse', 'creator']);
 
         return view('ops.po_print', ['po' => $purchaseOrder]);
+    }
+
+    /**
+     * طباعة مجمعة (2026-08-06) — كل الأوامر المطلوبة في مستند واحد،
+     * أمر في صفحة A4 لوحده. الحسابات بتطبع دفعة السلسلة كلها بضغطة.
+     */
+    public function printPoBatch(Request $request)
+    {
+        $ids = collect(explode(',', (string) $request->query('ids')))
+            ->map(fn ($v) => (int) $v)->filter()->unique()->take(100);
+
+        $pos = PurchaseOrder::with(['client.group', 'client.zone', 'courier', 'items.product', 'warehouse', 'creator'])
+            ->whereIn('id', $ids)->orderBy('id')->get();
+
+        abort_if($pos->isEmpty(), 404);
+
+        return view('ops.po_print_batch', ['pos' => $pos]);
+    }
+
+    /**
+     * موافقة جماعية (2026-08-06) — كل أمر في ترانزاكشن لوحده:
+     * أمر واقع (عجز رف مثلاً) مايوقّعش باقي الدفعة، وبيتبلغ عنه
+     * بالاسم. مفيش تعديل كميات هنا — التعديل من صف الأمر نفسه.
+     */
+    public function decideAllPoApprovals(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $done = 0;
+        $errors = [];
+
+        $orders = PurchaseOrder::with(['items.product', 'warehouse', 'courier'])
+            ->whereIn('id', $data['ids'])
+            ->where('approval_status', 'pending')
+            ->get();
+
+        foreach ($orders as $po) {
+            if ($po->warehouse === null || $po->courier === null) {
+                $errors[] = $po->number.': '.__('ops.po_needs_rep_wh');
+
+                continue;
+            }
+
+            try {
+                DB::transaction(function () use ($po, $request) {
+                    // ⚠️ **أمر التجهيز بيتعمل هنا** — نفس فلو الموافقة
+                    // الفردية بالظبط: requested بينزل شاشة التجهيز،
+                    // وتأكيد المخزن هو اللي بيخصم ويبلغ المندوب.
+                    $result = \App\Models\PickOrder::raise(
+                        $po->warehouse,
+                        $po->courier,
+                        $po->items->pluck('qty', 'product_id')->all(),
+                        \App\Models\PickOrder::PURPOSE_VAN_LOAD,
+                        $request->user(),
+                    );
+
+                    if ($result['error']) {
+                        throw new \App\Exceptions\Rejected($result['error']);
+                    }
+
+                    $po->update([
+                        'approval_status' => 'approved',
+                        'approved_by' => $request->user()->id,
+                        'approved_at' => now(),
+                        'pick_order_id' => $result['order']->id,
+                    ]);
+                });
+
+                $done++;
+            } catch (\App\Exceptions\Rejected $e) {
+                $errors[] = $po->number.': '.$e->getMessage();
+            }
+        }
+
+        $resp = back()->with('ok', __('flash.pos_bulk_approved', ['count' => $done]));
+
+        return $errors === [] ? $resp : $resp->withErrors($errors);
     }
 
     // ═══════════ أوامر توريد الكي أكاونت — 2026-08-04 ═══════════

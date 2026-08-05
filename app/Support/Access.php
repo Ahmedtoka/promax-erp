@@ -307,8 +307,8 @@ class Access
 
         // ═══ العهدة وتوريد الكي أكاونت ═══
         'act.custody.handout' => ['perm.act_custody_handout', 'ops.handout', null, ['ops.handout.store']],
-        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store']],
-        'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide']],
+        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
+        'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide', 'ops.po.decide.all']],
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 
         // ═══ الميدان ═══
