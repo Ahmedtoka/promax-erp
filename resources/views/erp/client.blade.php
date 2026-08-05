@@ -339,9 +339,9 @@
         <span class="badge b-blue">{{ __('client.billed_on') }}: {{ $c->priceListLabel() }}</span>
         <span class="badge b-gold">{{ __('client.discount') }} {{ number_format($c->effectiveDiscount() * 100, 1) }}% — {{ $c->discountSource() }}</span>
     </div>
-    <div class="tablewrap">
+    <div class="tablewrap" style="max-height:60vh;overflow-y:auto">
         <table>
-            <thead>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
                 <tr>
                     <th>{{ __('common.code') }}</th><th>{{ __('stock.item') }}</th><th>{{ __('stock.unit') }}</th>
                     <th>{{ __('client.list_price') }}</th><th>{{ __('client.discount_pct') }}</th>
@@ -392,13 +392,13 @@
 @if ($c->invoices->isNotEmpty())
 <div class="card">
     <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>
-    <div class="tablewrap">
+    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
-            <tr>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)"><tr>
                 <th>{{ __('ops.invoice') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('ops.payment') }}</th>
                 <th>{{ __('client.price_list') }}</th><th>{{ __('stock.batch_no') }}</th>
                 <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th>{{ __('common.date') }}</th>
-            </tr>
+            </tr></thead><tbody>
             @foreach ($c->invoices->take(20) as $inv)
                 @php
                     $batches = $inv->relationLoaded('items')
@@ -420,16 +420,16 @@
                     <td class="num">{{ $inv->created_at->format('Y-m-d H:i') }}</td>
                 </tr>
             @endforeach
-        </table>
+        </tbody></table>
     </div>
 </div>
 @endif
 
 <div class="card">
     <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
-    <div class="tablewrap">
+    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
-            <tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)"><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
             @foreach ($txns as $t)
                 <tr>
                     <td class="num">{{ $t->date->format('Y-m-d') }}</td>
@@ -439,9 +439,9 @@
                     <td class="num pos">{{ $t->credit > 0 ? $fmt($t->credit) : '—' }}</td>
                 </tr>
             @endforeach
-        </table>
+        </tbody></table>
     </div>
-    <div class="pag">{{ $txns->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $txns])
 </div>
 
 
