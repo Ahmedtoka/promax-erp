@@ -119,6 +119,12 @@ class ErpController extends Controller
             'todayInvoices' => $only(Invoice::whereDate('created_at', today()))->sum('total'),
             'todayPos' => $only(PurchaseOrder::whereDate('delivered_at', today()))->sum('total'),
             'openRequests' => \App\Models\ClientRequest::whereIn('status', ['pending', 'review'])->count(),
+            // خريطة الانتشار (2026-08-05): كل زون ليه إحداثيات من المرجع
+            // الجغرافي + عدد عملائه الشغّالين — والعدّ متسكوب للمدير برضه
+            'mapZones' => Zone::whereNotNull('lat')->whereNotNull('lng')
+                ->where('active', true)
+                ->withCount(['clients as active_clients' => fn ($q) => Client::visibleTo($q)->where('status', 'active')])
+                ->get(['id', 'code', 'name', 'name_en', 'governorate', 'lat', 'lng']),
         ]);
     }
 
@@ -1734,6 +1740,12 @@ class ErpController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'name_en' => ['required', 'string', 'max:120'],
+            'capital' => ['nullable', 'string', 'max:120'],
+            'capital_en' => ['nullable', 'string', 'max:120'],
+            'region' => ['nullable', 'string', 'max:120'],
+            'region_en' => ['nullable', 'string', 'max:120'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $key = \Illuminate\Support\Str::slug($data['name_en'], '_');
@@ -1762,6 +1774,12 @@ class ErpController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'name_en' => ['required', 'string', 'max:120'],
+            'capital' => ['nullable', 'string', 'max:120'],
+            'capital_en' => ['nullable', 'string', 'max:120'],
+            'region' => ['nullable', 'string', 'max:120'],
+            'region_en' => ['nullable', 'string', 'max:120'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $governorate->update($data);
@@ -1777,6 +1795,9 @@ class ErpController extends Controller
             'name_en' => ['nullable', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
             'day_label' => ['nullable', 'string', 'max:60'],
+            'type' => ['nullable', 'string', 'max:40'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         // ⚠️ **الإيقاف مرفوض والمنطقة عليها عملاء شغّالين** — المنطقة
@@ -1805,6 +1826,9 @@ class ErpController extends Controller
             'name_en' => ['nullable', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
             'day_label' => ['nullable', 'string', 'max:60'],
+            'type' => ['nullable', 'string', 'max:40'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $base = 'Z'.str_pad((string) (Zone::count() + 1), 2, '0', STR_PAD_LEFT);

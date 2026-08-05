@@ -14,7 +14,10 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Governorate extends Model
 {
-    protected $fillable = ['key', 'name', 'name_en', 'sort', 'active'];
+    protected $fillable = [
+        'key', 'name', 'name_en', 'iso_code', 'capital', 'capital_en',
+        'region', 'region_en', 'lat', 'lng', 'sort', 'active',
+    ];
 
     protected function casts(): array
     {

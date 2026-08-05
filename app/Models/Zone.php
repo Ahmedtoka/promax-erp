@@ -12,7 +12,7 @@ class Zone extends Model
 {
     use HasBilingualName, HasFactory;
 
-    protected $fillable = ['code', 'name', 'name_en', 'day_label', 'branch_id', 'governorate', 'active'];
+    protected $fillable = ['code', 'name', 'name_en', 'day_label', 'branch_id', 'governorate', 'type', 'lat', 'lng', 'active'];
 
     /**
      * كود منطقة جديد مضمون إنه فاضي.

@@ -71,6 +71,31 @@
     @endif
 @endif
 
+{{-- ═══════════ خريطة الانتشار (2026-08-05) — من المرجع الجغرافي ═══════════ --}}
+@php
+    $covered = $mapZones->where('active_clients', '>', 0);
+@endphp
+<div class="card">
+    <h3>🗺️ {{ __('geo.coverage_map') }}
+        <span class="side">{{ __('geo.coverage_hint') }}</span>
+        <span style="margin-inline-start:auto;display:inline-flex;gap:12px;align-items:center;font-size:12px;font-weight:800">
+            <span>📍 {{ number_format($covered->count()) }} {{ __('geo.covered_zones') }}</span>
+            <span style="color:var(--royal-blue)">🏪 {{ number_format($covered->sum('active_clients')) }} {{ __('geo.active_shops') }}</span>
+            <label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer;font-weight:600;color:var(--muted)">
+                <input type="checkbox" id="mapEmptyToggle" onchange="covToggleEmpty(this.checked)">
+                {{ __('geo.show_empty_zones') }}
+            </label>
+        </span>
+    </h3>
+    <div id="covMap" style="height:440px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
+    <div style="display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--muted);flex-wrap:wrap">
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#12399B"></span> 1–4</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#602D90"></span> 5–14</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#B8860B"></span> 15+</span>
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9aa3b2;opacity:.55"></span> 0</span>
+    </div>
+</div>
+
 <div class="kpis">
     <div class="kpi">
         <div class="lbl">{{ __('report.total_purchases_ledger') }}</div>
@@ -172,7 +197,70 @@
     $lblSales = json_encode(__('report.sales'), $jsonFlags);
     $lblCollections = json_encode(__('report.collections'), $jsonFlags);
 @endphp
+@php
+    // خريطة الانتشار — [كود، اسم، محافظة، خط عرض، خط طول، عدد الشغّالين]
+    $covPayload = $mapZones->map(fn ($z) => [
+        'code' => $z->code,
+        'name' => app()->getLocale() === 'ar' ? $z->name : ($z->name_en ?: $z->name),
+        'gov' => $z->governorate ? \App\Support\Governorates::label($z->governorate) : '',
+        'lat' => (float) $z->lat, 'lng' => (float) $z->lng,
+        'n' => (int) $z->active_clients,
+    ])->values();
+@endphp
 <script>
+// ═══════════ خريطة الانتشار ═══════════
+(function () {
+    const zones = {!! json_encode($covPayload, $jsonFlags) !!};
+    const map = L.map('covMap', { scrollWheelZoom: false }).setView([28.5, 30.8], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18, attribution: '© OpenStreetMap',
+    }).addTo(map);
+
+    // الألوان بتصاعد الكثافة: أزرق ← بنفسجي ← دهبي (هوية البراند)
+    const color = n => n >= 15 ? '#B8860B' : n >= 5 ? '#602D90' : '#12399B';
+    const emptyLayer = L.layerGroup();
+    const bounds = [];
+
+    zones.forEach(function (z) {
+        const tip = '<b>' + z.name + '</b>' + (z.gov ? ' — ' + z.gov : '')
+            + '<br><span dir="ltr">' + z.code + '</span> · ' + z.n + ' {{ __('geo.active_shops') }}';
+
+        if (z.n > 0) {
+            // دايرة بحجم على قد العملاء وجواها العدد نفسه
+            const r = Math.min(34, 13 + Math.round(Math.sqrt(z.n) * 3.4));
+            L.marker([z.lat, z.lng], {
+                icon: L.divIcon({
+                    className: '',
+                    iconSize: [r * 2, r * 2],
+                    iconAnchor: [r, r],
+                    html: '<div style="width:' + (r * 2) + 'px;height:' + (r * 2) + 'px;border-radius:50%;'
+                        + 'background:' + color(z.n) + 'E6;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);'
+                        + 'display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;'
+                        + 'font-size:' + (z.n >= 100 ? 11 : 13) + 'px;font-family:Cairo,Poppins,sans-serif">' + z.n + '</div>',
+                }),
+            }).bindTooltip(tip, { direction: 'top', offset: [0, -r] }).addTo(map);
+            bounds.push([z.lat, z.lng]);
+        } else {
+            // المناطق الفاضية نقط رمادية خفيفة — مقفولة افتراضياً
+            L.circleMarker([z.lat, z.lng], {
+                radius: 3.5, color: '#9aa3b2', weight: 1, fillColor: '#9aa3b2', fillOpacity: .45,
+            }).bindTooltip(tip, { direction: 'top' }).addTo(emptyLayer);
+        }
+    });
+
+    if (bounds.length) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 });
+    }
+
+    window.covToggleEmpty = function (show) {
+        show ? emptyLayer.addTo(map) : map.removeLayer(emptyLayer);
+    };
+
+    // السكرول جوه الكارت بيلخبط الصفحة — زوم بالكليك مرتين أو بالأزرار
+    map.on('focus', () => map.scrollWheelZoom.enable());
+    map.on('blur', () => map.scrollWheelZoom.disable());
+})();
+
 new Chart(document.getElementById('chFam'), {
     type:'doughnut',
     data:{ labels:{!! json_encode($famLabels, $jsonFlags) !!},
