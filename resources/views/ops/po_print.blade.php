@@ -5,9 +5,10 @@
     الموافقة: نسخة بتمشي مع السواق للفرع، ونسخة بترجع مختومة
     من الفرع (شرط رابت وأمثالها: مفيش استلام من غير أمر مختوم).
 
-    ⚠️ بنفس مفردات ستايل الورق (`_doc_style`): doc-head/doc-body/
-    doc-parties/doc-table/doc-totals/doc-sign — أي هيكل تاني بيطلع
-    بمسافات مكسورة على A4 (حصلت 2026-08-05).
+    ⚠️ تصميم شبه أحادي اللون عن قصد (قرار المالك 2026-08-05):
+    الطباعة الفعلية أبيض وأسود، فالألوان لمسات براندينج خفيفة بس —
+    خط أزرق تحت الهيدر والعنوان وخط الإجمالي. والصاعقة في نص الورقة
+    بأوباسيتي أخف. والفوتر لاصق في آخر الورقة (flex column).
 --}}
 
 @php
@@ -24,8 +25,8 @@
 
 @section('content')
 
-<div class="doc has-bolt">
-    <img class="bolt-mark lg" src="{{ asset('brand/bolt.svg') }}" alt="">
+<div class="doc po-doc has-bolt">
+    <img class="bolt-mark po-bolt" src="{{ asset('brand/bolt.svg') }}" alt="">
 
     <header class="doc-head">
         <div class="doc-brand">
@@ -33,17 +34,16 @@
             <div class="doc-corp">{{ __('ops.corp_name') }}</div>
         </div>
         <div class="doc-id">
-            <div class="doc-kind">{{ __('ops.po_doc') }}</div>
             <div class="doc-no">{{ $po->number }}</div>
-            <div class="doc-date">
-                @if ($po->source){{ __('ops.po_source_no') }}: {{ $po->source }} · @endif
-                {{ $po->created_at->format('Y-m-d — H:i') }}
-            </div>
-            @if ($po->approval_status)
-                <span class="badge {{ $po->approvalClass() }}">{{ $po->approvalLabel() }}</span>
+            @if ($po->source)
+                <div class="doc-date">{{ __('ops.po_source_no') }}: <b>{{ $po->source }}</b></div>
             @endif
+            <div class="doc-date">{{ $po->created_at->format('Y-m-d — H:i') }}</div>
         </div>
     </header>
+
+    {{-- العنوان الكبير في نص الورقة --}}
+    <div class="po-title">{{ __('ops.po_doc') }}</div>
 
     <div class="doc-body">
         <div class="doc-parties">
@@ -103,7 +103,7 @@
 
         <div class="doc-totals">
             @if ((float) $po->tax_total > 0)
-                <div class="row tax"><span>{{ __('ops.tax_line') }}</span><span>{{ $fmt($po->tax_total) }}</span></div>
+                <div class="row"><span>{{ __('ops.tax_line') }}</span><span>{{ $fmt($po->tax_total) }}</span></div>
             @endif
             <div class="row grand"><span>{{ __('ops.po_amount') }}</span><span>{{ $fmt($po->payable()) }}</span></div>
         </div>
@@ -126,4 +126,51 @@
 
 @section('scripts')
 @include('partials._doc_style')
+<style>
+/* ═══ أمر التوريد: شبه أحادي اللون + فوتر لاصق + صاعقة في النص ═══ */
+
+/* الفوتر في آخر الورقة — المستند عمود والجسم بياخد الفراغ */
+.po-doc{display:flex;flex-direction:column}
+.po-doc .doc-body{flex:1}
+
+/* الهيدر: أبيض بدل التدرج — لمسة البراند خط تحته بس */
+.po-doc .doc-head{
+  background:#fff;color:var(--ink);
+  border-bottom:3px solid var(--royal-blue);
+  padding:18px 26px 14px;
+}
+.po-doc .doc-corp{color:var(--muted);opacity:1}
+.po-doc .doc-no{color:var(--ink)}
+.po-doc .doc-date{color:var(--muted);opacity:1}
+
+/* العنوان الكبير في نص الورقة */
+.po-title{
+  position:relative;z-index:1;text-align:center;
+  font-size:25px;font-weight:900;letter-spacing:-.3px;
+  color:var(--royal-blue);margin:20px 0 2px;
+}
+
+/* بلوك الأطراف: أبيض ببرواز بدل الخلفية الزرقا */
+.po-doc .doc-parties{background:#fff;border:1px solid var(--border)}
+.po-doc .doc-parties .k{color:var(--muted)}
+
+/* الأرقام كلها بلون الحبر — مفيش أزرق في الجدول */
+.po-doc .doc-table td,
+.po-doc .doc-totals .row{color:var(--ink)}
+.po-doc .doc-totals .row.grand{border-top-color:var(--ink)}
+
+/* الصاعقة: في نص الورقة، أخف، مش متاكلة من الجنب */
+.po-doc .bolt-mark.po-bolt{
+  width:480px;top:32%;
+  inset-inline-start:50%;margin-inline-start:-240px;
+  opacity:.04;transform:rotate(8deg);
+}
+
+@media print{
+  /* ورقة A4 كاملة: 297mm − هوامش 12mm×2 — الفوتر بينزل آخرها */
+  .po-doc{min-height:273mm}
+  .po-doc .doc-head{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .po-doc .bolt-mark.po-bolt{opacity:.035 !important}
+}
+</style>
 @endsection

@@ -307,8 +307,17 @@ class OpsController extends Controller
      */
     public function poImport()
     {
+        // السلاسل ومين منها في أنهي قناة — عشان سيلكت «العميل الأساسي»
+        // يتفلتر بالقناة المختارة في الشاشة
+        $groupChannels = Client::visibleTo(Client::query())
+            ->whereNotNull('group_id')->whereNotNull('channel_id')
+            ->distinct()->get(['group_id', 'channel_id']);
+
         return view('ops.po_import', [
             'channels' => \App\Models\Channel::orderBy('id')->get(),
+            'groups' => \App\Models\ClientGroup::whereIn('id', $groupChannels->pluck('group_id')->unique())
+                ->orderBy('name')->get(['id', 'name', 'name_en']),
+            'groupChannels' => $groupChannels,
             'warehouses' => Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
             'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver'])
                 ->where('active', true))->orderBy('name')->get(['id', 'name']),
@@ -320,6 +329,9 @@ class OpsController extends Controller
     {
         $data = $request->validate([
             'channel_id' => ['required', 'exists:channels,id'],
+            // السلسلة (العميل الأساسي) — اختيارية: بتحصر الديتكشن
+            // والقوايم في فروعها بدل القناة كلها
+            'group_id' => ['nullable', 'exists:client_groups,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
             'assigned_to' => ['required', 'exists:users,id'],
             'due_at' => ['required', 'date'],
@@ -327,10 +339,15 @@ class OpsController extends Controller
             'files.*' => ['file', 'mimes:xlsx,xls', 'max:10240'],
         ]);
 
-        // فروع القناة المختارة — وبسكوب التشانل مانجر
+        // فروع القناة (أو السلسلة المختارة منها) — وبسكوب التشانل مانجر
         $clients = Client::visibleTo(Client::where('channel_id', $data['channel_id'])
+            ->when($data['group_id'] ?? null, fn ($q, $g) => $q->where('group_id', $g))
             ->where('status', 'active'))->orderBy('name')
             ->get(['id', 'name', 'name_en', 'code']);
+
+        if ($clients->isEmpty()) {
+            return back()->withErrors(['group_id' => __('ops.po_no_branches')])->withInput();
+        }
 
         $entries = [];
 
