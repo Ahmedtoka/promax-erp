@@ -235,6 +235,45 @@ class WarehouseController extends Controller
     // ==================== الترصيف ====================
 
     /** ترصيف كمية من باتش على رف */
+    /**
+     * تعديل بيانات باتش من صفحة الإذن (2026-08-05): رقم الباتش
+     * وتاريخي الإنتاج والانتهاء والتكلفة — **الكميات لأ.** الكمية
+     * بتتحرك من الجرد والحركات بس، وتعديلها بالإيد هنا كان هيكسر
+     * مطابقة الباتشات مع stocks والأرفف.
+     */
+    public function updateBatch(Request $request, Batch $batch)
+    {
+        $this->guardWarehouse($request, $batch->warehouse_id);
+
+        $data = $request->validate([
+            'batch_no' => ['required', 'string', 'max:40'],
+            'produced_on' => ['nullable', 'date'],
+            // ⚠️ expires_on عمود NOT NULL — أساس الـFEFO
+            'expires_on' => ['required', 'date', 'after_or_equal:produced_on'],
+            'cost' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        // نفس رقم الباتش لنفس الصنف في نفس المخزن = صف تاني بيتخلط بيه
+        $dup = Batch::where('product_id', $batch->product_id)
+            ->where('warehouse_id', $batch->warehouse_id)
+            ->where('batch_no', $data['batch_no'])
+            ->where('id', '!=', $batch->id)
+            ->exists();
+
+        if ($dup) {
+            return back()->withErrors(['batch_no' => __('stock.batch_exists')]);
+        }
+
+        $batch->update([
+            'batch_no' => $data['batch_no'],
+            'produced_on' => $data['produced_on'] ?? null,
+            'expires_on' => $data['expires_on'],
+            'cost' => $data['cost'] ?? $batch->cost,
+        ]);
+
+        return back()->with('ok', __('stock.batch_updated', ['batch' => $batch->batch_no]));
+    }
+
     public function putAway(Request $request, Batch $batch)
     {
         // ⚠️ الرف بيتحدد من `$batch->warehouse_id` مش من الطلب — يعني

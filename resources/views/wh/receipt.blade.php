@@ -103,13 +103,18 @@
                     <td style="font-size:11.5px;color:var(--muted);white-space:normal;max-width:240px">{{ $b->locationCodes() }}</td>
                     @if ($manager)
                         <td>
-                            @if ($left > 0)
-                                <button class="btn sm gold" type="button" onclick="openDlg('dlgPut{{ $b->id }}')">
-                                    {{ __('stock.put_away') }}
-                                </button>
-                            @else
-                                <span class="badge b-green">{{ __('stock.fully_shelved') }}</span>
-                            @endif
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                                @if ($left > 0)
+                                    <button class="btn sm gold" type="button" onclick="openDlg('dlgPut{{ $b->id }}')">
+                                        {{ __('stock.put_away') }}
+                                    </button>
+                                @else
+                                    <span class="badge b-green">{{ __('stock.fully_shelved') }}</span>
+                                @endif
+                                {{-- تعديل التواريخ/الرقم/التكلفة — الكميات من الجرد بس --}}
+                                <button class="btn sm" type="button" onclick="openDlg('dlgEditB{{ $b->id }}')"
+                                        title="{{ __('stock.edit_batch') }}">✎</button>
+                            </div>
                         </td>
                     @endif
                 </tr>
@@ -130,6 +135,45 @@
 </datalist>
 
 @if ($manager)
+    {{-- ═══ تعديل الباتش: رقم + تواريخ + تكلفة (2026-08-05) ═══ --}}
+    @foreach ($receipt->batches as $b)
+        <dialog id="dlgEditB{{ $b->id }}">
+            <form class="dlg" method="POST" action="{{ route('wh.batch.update', $b) }}">
+                @csrf
+                <h4>✎ {{ __('stock.edit_batch') }} — {{ $b->product?->displayName() }}</h4>
+                <div class="alert info" style="margin-bottom:12px">
+                    <span>ℹ️</span><span>{{ __('stock.batch_edit_hint') }}</span>
+                </div>
+                <div class="frow">
+                    <div>
+                        <label class="f">{{ __('stock.batch_no') }}</label>
+                        <input type="text" name="batch_no" required maxlength="40"
+                               value="{{ $b->batch_no }}" style="width:100%">
+                    </div>
+                    <div>
+                        <label class="f">{{ __('stock.produced_on') }}</label>
+                        <input type="date" name="produced_on"
+                               value="{{ $b->produced_on?->format('Y-m-d') }}" style="width:100%">
+                    </div>
+                    <div>
+                        <label class="f">{{ __('stock.expires_on') }} <b class="req-star">*</b></label>
+                        <input type="date" name="expires_on" required
+                               value="{{ $b->expires_on?->format('Y-m-d') }}" style="width:100%">
+                    </div>
+                    <div>
+                        <label class="f">{{ __('stock.cost') }}</label>
+                        <input type="number" name="cost" min="0" step="0.01"
+                               value="{{ (float) $b->cost }}" style="width:100%">
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                    <button class="btn" type="button" onclick="closeDlg('dlgEditB{{ $b->id }}')">{{ __('common.cancel') }}</button>
+                    <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+                </div>
+            </form>
+        </dialog>
+    @endforeach
+
     @foreach ($receipt->batches as $b)
         @if ($b->unshelvedQty() > 0)
             <dialog id="dlgPut{{ $b->id }}">

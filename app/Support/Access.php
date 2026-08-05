@@ -295,7 +295,7 @@ class Access
         'act.prices.activate' => ['perm.act_prices_activate', 'erp.prices', null, ['erp.prices.activate', 'erp.prices.deactivate', 'erp.prices.default']],
 
         // ═══ المخزن ═══
-        'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', null, ['wh.receipts.store']],
+        'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', null, ['wh.receipts.store', 'wh.batch.update']],
         'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', null, ['wh.putaway', 'wh.move', 'wh.locations.store']],
         'act.wh.transfer' => ['perm.act_wh_transfer', 'wh.transfers', null, ['wh.transfers.store', 'wh.transfers.receive']],
         'act.wh.count' => ['perm.act_wh_count', 'wh.counts', null, ['wh.counts.store', 'wh.count.record', 'wh.count.approve', 'wh.count.cancel']],
