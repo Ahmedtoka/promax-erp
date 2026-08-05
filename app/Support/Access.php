@@ -43,7 +43,7 @@ class Access
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
-            'erp.prices', 'erp.govs',
+            'erp.prices', 'erp.govs', 'erp.families',
             'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
@@ -183,6 +183,8 @@ class Access
         // ═══ ١. المنتجات والتسعير — أول السايكل: تعريف الصنف ═══
         'nav.group_products' => [
             ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            // العائلات والصلاحية (2026-08-06) — بتحكم مدة انتهاء منتجاتها
+            ['erp.families', '🧬', 'nav.families', 'erp.families*', null],
             ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
         ],
 

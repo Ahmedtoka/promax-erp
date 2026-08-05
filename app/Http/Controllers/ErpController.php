@@ -1255,7 +1255,7 @@ class ErpController extends Controller
 
         return view('erp.stock', [
             'products' => $products,
-            'families' => Product::FAMILIES,
+            'families' => \App\Models\ProductFamily::options(),
             // ⚠️ **المفعّل + أي موقوف لسه فيه رصيد.**
             // لو عرضنا المفعّل بس، بضاعة قاعدة في مخزن اتوقف بتختفي
             // من الأعمدة بينما `qtyTotal()` بتعدّها — فمجموع الأعمدة
@@ -1449,7 +1449,7 @@ class ErpController extends Controller
             'p' => $product,
             'batches' => $batches,
             'buyers' => $buyers,
-            'families' => Product::FAMILIES,
+            'families' => \App\Models\ProductFamily::options(),
             // ⚠️ سعر الصنف في **كل** قايمة مسمّاة — الفواتير بتتسعّر
             // من القوايم دلوقتي، فكارت بيوري عمودين قديمين بس بيكدب.
             // ⚠️ الـeager load مقيّد بالصنف ده — `priceFor` بتلمس

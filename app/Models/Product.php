@@ -173,12 +173,8 @@ class Product extends Model
 
     public function familyLabel(): string
     {
-        // المسمى بييجي من lang/{ar,en}/enums.php — والثابت القديم fallback
-        $key = 'enums.family.'.$this->family;
-
-        return \Illuminate\Support\Facades\Lang::has($key)
-            ? __($key)
-            : (self::FAMILIES[$this->family] ?? $this->family);
+        // المسمى من جدول العائلات (بكاش) — و lang/الثوابت fallback
+        return \App\Models\ProductFamily::label($this->family);
     }
 
     /** الوحدة باللغة الحالية */
@@ -235,7 +231,12 @@ class Product extends Model
 
     public function shelfLife(): int
     {
-        return (int) ($this->shelf_life_months ?: self::DEFAULT_SHELF_LIFE);
+        // الدوكترين (2026-08-06): **العائلة هي مصدر مدة الصلاحية.**
+        // شاشة العائلات بتحدد المدة، وأي منتج فيها بياخدها — وخانة
+        // المنتج نفسه (shelf_life_months) بقت استثناء فردي لو اتكتبت.
+        return (int) ($this->shelf_life_months
+            ?: \App\Models\ProductFamily::monthsFor($this->family)
+            ?: (self::SHELF_LIFE[$this->family] ?? self::DEFAULT_SHELF_LIFE));
     }
 
     /** تاريخ الانتهاء المتوقع من تاريخ إنتاج */

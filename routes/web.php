@@ -293,6 +293,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::put('/stock/{product}', [ErpController::class, 'updateProduct'])
             ->middleware('role:admin,manager')->name('products.update');
 
+        // ═════ العائلات والصلاحية (2026-08-06) — العائلة بتحكم مدة
+        // الانتهاء، والحفظ بيعيد حساب انتهاء كل الباتشات ═════
+        Route::get('/families', [\App\Http\Controllers\ProductFamilyController::class, 'index'])
+            ->middleware('role:admin,manager')->name('families');
+        Route::post('/families', [\App\Http\Controllers\ProductFamilyController::class, 'save'])
+            ->middleware('role:admin,manager')->name('families.save');
+        Route::post('/families/assign', [\App\Http\Controllers\ProductFamilyController::class, 'assign'])
+            ->middleware('role:admin,manager')->name('families.assign');
+
         Route::get('/reports', [ErpController::class, 'reports'])->name('reports');
 
         // ═════ إدارة المخازن — التعريف والأرصدة اليدوية =════

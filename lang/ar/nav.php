@@ -32,6 +32,7 @@ return [
     'channels' => 'القنوات',
     'contracts' => 'العقود',
     'inventory' => 'المنتجات',
+    'families' => 'العائلات والصلاحية',
     'warehouse' => 'عمليات المخزن',
     'receipts' => 'أذون الاستلام',
     'shelves' => 'الأرفف',

@@ -67,7 +67,7 @@ class PriceListController extends Controller
         return view('erp.price_list', [
             'list' => $priceList,
             'products' => $q->orderBy('family')->orderBy('code')->get(),
-            'families' => Product::FAMILIES,
+            'families' => \App\Models\ProductFamily::options(),
             'filters' => $request->only(['q', 'family', 'missing']),
             'missing' => $priceList->missingCount(),
             'total' => Product::where('active', true)->count(),

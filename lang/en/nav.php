@@ -32,6 +32,7 @@ return [
     'channels' => 'Channels',
     'contracts' => 'Contracts',
     'inventory' => 'Products',
+    'families' => 'Families & Shelf Life',
     'warehouse' => 'Warehouse Ops',
     'receipts' => 'Goods Receipts',
     'shelves' => 'Shelves',

@@ -88,7 +88,7 @@ class WarehouseAdminController extends Controller
         return view('erp.warehouse_stock', [
             'w' => $warehouse,
             'products' => $products,
-            'families' => Product::FAMILIES,
+            'families' => \App\Models\ProductFamily::options(),
             'filters' => $request->only(['q', 'family']),
         ]);
     }

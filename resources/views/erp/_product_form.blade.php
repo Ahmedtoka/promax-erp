@@ -96,8 +96,9 @@
                     <label class="f">{{ __('stock.family') }} <b class="req-star">*</b></label>
                     <select name="family" required style="width:100%">
                         <option value="">— {{ __('stock.family') }} —</option>
+                        {{-- المسمى من جدول العائلات — العائلات الجديدة مالهاش مفتاح lang --}}
                         @foreach ($families as $k => $lbl)
-                            <option value="{{ $k }}" @selected(old('family') === $k)>{{ __('enums.family.'.$k) }}</option>
+                            <option value="{{ $k }}" @selected(old('family') === $k)>{{ $lbl }}</option>
                         @endforeach
                     </select>
                     @error('family')<div class="errline">{{ $message }}</div>@enderror
