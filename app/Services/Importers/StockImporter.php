@@ -205,6 +205,97 @@ class StockImporter extends Importer
     }
 
     /**
+     * تنفيذ الصفوف جوه **إذن محدد** (2026-08-05) — زرار «رفع شيت
+     * استلام» في صفحة الأذون: المستخدم اختار المخزن والتاريخ بنفسه،
+     * فعمود «المخزن» في الشيت بيتتجاهل والباتشات كلها بتتربط بالإذن.
+     *
+     * ⚠️ نفس قواعد `apply()`: الصلاحية من الإنتاج + مدة الصنف لو مش
+     * صريحة، الكميات بتتجمع للباتش المكرر، والترصيف لو عمود «الرف»
+     * متملي، و`stocks` بتتزامن من الباتشات في الآخر.
+     *
+     * @return array{batches: int, shelved: int, qty: int, products: int}
+     */
+    public function applyToReceipt(array $rows, GoodsReceipt $receipt): array
+    {
+        $batches = $shelved = $qtyTotal = 0;
+        $touched = [];
+        $warehouse = $receipt->warehouse;
+
+        DB::transaction(function () use ($rows, $receipt, $warehouse, &$batches, &$shelved, &$qtyTotal, &$touched) {
+            $locCache = [];
+
+            foreach ($rows as $row) {
+                $product = $this->findProduct($row);
+                if ($product === null) {
+                    continue;
+                }
+
+                $qty = (int) Sheet::number($row['qty']);
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $produced = Sheet::date($row['produced_on'] ?? null);
+                $expires = Sheet::date($row['expires_on'] ?? null);
+                if ($expires === null) {
+                    $base = $produced ?? new \DateTimeImmutable('today');
+                    $expires = $base->modify('+'.$product->shelfLife().' months');
+                }
+
+                $batchNo = $row['batch_no']
+                    ?? ($produced ? 'B'.$produced->format('ymd') : 'B'.now()->format('ymd'));
+
+                $key = [
+                    'product_id' => $product->id,
+                    'batch_no' => $batchNo,
+                    'warehouse_id' => $warehouse->id,
+                ];
+
+                $batch = Batch::where($key)->first();
+
+                if ($batch === null) {
+                    $batch = Batch::create($key + [
+                        'goods_receipt_id' => $receipt->id,
+                        'produced_on' => $produced?->format('Y-m-d'),
+                        'expires_on' => $expires->format('Y-m-d'),
+                        'qty_received' => $qty,
+                        'qty_remaining' => $qty,
+                        'cost' => Sheet::number($row['cost'] ?? null) ?? $product->cost,
+                        'blocked' => Sheet::bool($row['hold'] ?? null),
+                    ]);
+                } else {
+                    $batch->qty_received = (int) $batch->qty_received + $qty;
+                    $batch->qty_remaining = (int) $batch->qty_remaining + $qty;
+
+                    if (Sheet::bool($row['hold'] ?? null)) {
+                        $batch->blocked = true;
+                    }
+
+                    $batch->save();
+                }
+
+                $batches++;
+                $qtyTotal += $qty;
+                $touched[$product->id] = true;
+
+                $locName = $row['location'] ?? null;
+                if ($locName !== null) {
+                    $loc = $this->location($warehouse, $locName, $locCache);
+                    if ($loc && BatchLocation::putAway($batch, $loc, $qty) === null) {
+                        $shelved++;
+                    }
+                }
+            }
+
+            foreach (array_keys($touched) as $productId) {
+                $this->syncStock($productId);
+            }
+        });
+
+        return ['batches' => $batches, 'shelved' => $shelved, 'qty' => $qtyTotal, 'products' => count($touched)];
+    }
+
+    /**
      * ⚠️ الشيتات الحقيقية بتكتب في عمود «الصنف» **اسم** المنتج مش كوده.
      * فبندوّر بالكود، وبعدين بالباركود، وبعدين بالاسم بلغتيه. من غير
      * البحث بالاسم كل صف في شيت المصنع بيترفض.

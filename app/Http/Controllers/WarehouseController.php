@@ -236,6 +236,74 @@ class WarehouseController extends Controller
 
     /** ترصيف كمية من باتش على رف */
     /**
+     * إذن استلام من شيت (2026-08-05): المخزن والتاريخ من الفورم،
+     * والأصناف من الشيت — نفس أعمدة ملف التصدير، فالباك أب بيرجع
+     * يتسحب من هنا مباشرة كإذن كامل.
+     *
+     * ⚠️ **التحقق على كل الصفوف قبل ما يتكتب أي حاجة** — نفس دوكترين
+     * شاشة الاستيراد: استيراد نصّي أسوأ من فشل كامل.
+     */
+    public function importReceipt(Request $request)
+    {
+        $data = $request->validate([
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'received_on' => ['required', 'date'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
+        ]);
+
+        $this->guardWarehouse($request, (int) $data['warehouse_id']);
+
+        $importer = new \App\Services\Importers\StockImporter;
+        $read = $importer->read($request->file('file')->getRealPath());
+
+        if ($read['errors'] !== [] || $read['missing'] !== []) {
+            $msgs = $read['errors'];
+
+            if ($read['missing'] !== []) {
+                $msgs[] = __('import.missing_columns', ['columns' => implode('، ', $read['missing'])]);
+            }
+
+            return back()->withErrors($msgs);
+        }
+
+        $errors = [];
+        foreach ($read['rows'] as $i => $row) {
+            foreach ($importer->validateRow($row, $i + 2) as $e) {
+                $errors[] = __('import.line_error', ['line' => $i + 2, 'error' => $e]);
+            }
+        }
+
+        if ($errors !== []) {
+            return back()->withErrors(array_slice($errors, 0, 12));
+        }
+
+        $receipt = GoodsReceipt::create([
+            'number' => GoodsReceipt::nextNumber(),
+            'warehouse_id' => (int) $data['warehouse_id'],
+            'received_on' => $data['received_on'],
+            'status' => 'posted',
+            'reference' => $request->file('file')->getClientOriginalName(),
+            'created_by' => $request->user()->id,
+        ]);
+
+        $result = $importer->applyToReceipt($read['rows'], $receipt);
+
+        // شيت اتقري بس مطلعش منه ولا باتش (أصناف مش معروفة مثلاً)
+        if ($result['batches'] === 0) {
+            $receipt->delete();
+
+            return back()->withErrors(['file' => __('stock.import_no_rows')]);
+        }
+
+        return redirect()->route('wh.receipt', $receipt)
+            ->with('ok', __('stock.receipt_imported', [
+                'number' => $receipt->number,
+                'count' => $result['batches'],
+                'qty' => number_format($result['qty']),
+            ]));
+    }
+
+    /**
      * تعديل بيانات باتش من صفحة الإذن (2026-08-05): رقم الباتش
      * وتاريخي الإنتاج والانتهاء والتكلفة — **الكميات لأ.** الكمية
      * بتتحرك من الجرد والحركات بس، وتعديلها بالإيد هنا كان هيكسر

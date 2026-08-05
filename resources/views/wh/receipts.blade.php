@@ -24,11 +24,49 @@
 @section('actions')
     <a class="btn" href="{{ route('wh.index', $warehouse ? ['warehouse' => $warehouse->id] : []) }}">🏭 {{ __('stock.warehouse_overview') }}</a>
     @if ($manager)
-        @if (\App\Support\Access::action(auth()->user(), 'act.wh.receive'))<button class="btn gold" onclick="openDlg('dlgNewGrn')">+ {{ __('stock.new_receipt') }}</button>@endif
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.receive'))
+            <button class="btn" onclick="openDlg('dlgImpGrn')">⬆️ {{ __('stock.import_receipt') }}</button>
+            <button class="btn gold" onclick="openDlg('dlgNewGrn')">+ {{ __('stock.new_receipt') }}</button>
+        @endif
     @endif
 @endsection
 
 @section('content')
+
+{{-- ═══ إذن استلام من شيت (2026-08-05) — نفس أعمدة ملف التصدير ═══ --}}
+@if ($manager && \App\Support\Access::action(auth()->user(), 'act.wh.receive'))
+<dialog id="dlgImpGrn">
+    <form class="dlg" method="POST" action="{{ route('wh.receipts.import') }}" enctype="multipart/form-data">
+        @csrf
+        <h4>⬆️ {{ __('stock.import_receipt') }}</h4>
+        <div class="alert info" style="margin-bottom:12px">
+            <span>ℹ️</span><span>{{ __('stock.import_receipt_hint') }}</span>
+        </div>
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('stock.warehouse') }} <b class="req-star">*</b></label>
+                <select name="warehouse_id" required style="width:100%">
+                    @foreach ($warehouses as $w)
+                        <option value="{{ $w->id }}" @selected($warehouse && $warehouse->id === $w->id)>{{ $w->displayName() }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="f">{{ __('stock.received_on') }} <b class="req-star">*</b></label>
+                <input type="date" name="received_on" required value="{{ today()->toDateString() }}" style="width:100%">
+            </div>
+        </div>
+        <div style="margin-top:10px">
+            <label class="f">{{ __('stock.import_file') }} <b class="req-star">*</b></label>
+            <input type="file" name="file" required accept=".xlsx,.xls,.csv" style="width:100%">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgImpGrn')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">⬆️ {{ __('stock.import_receipt') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
 
 @if ($warehouses->count() > 1)
     <div class="searchbar">

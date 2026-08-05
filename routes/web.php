@@ -411,6 +411,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // إن حد بيديله باسورد المدير وخلاص، والصلاحيات كلها بتبقى ورق.
         Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
             Route::post('/receipts', [WarehouseController::class, 'storeReceipt'])->name('receipts.store');
+            // إذن استلام من شيت — نفس أعمدة ملف التصدير (2026-08-05)
+            Route::post('/receipts/import', [WarehouseController::class, 'importReceipt'])->name('receipts.import');
             Route::post('/batches/{batch}/put-away', [WarehouseController::class, 'putAway'])->name('putaway');
             // تعديل تواريخ/رقم/تكلفة الباتش من صفحة الإذن — الكميات لأ
             Route::post('/batches/{batch}/update', [WarehouseController::class, 'updateBatch'])->name('batch.update');
