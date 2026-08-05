@@ -262,7 +262,7 @@ return [
     'no_family' => 'من غير عائلة',
     'effective_life' => 'الصلاحية الفعالة',
     'save_assignment' => 'حفظ التسكين',
-    'product_override' => 'المنتج ليه مدة خاصة بتغلب مدة العائلة',
+    'product_override' => 'المنتج ليه مدة قديمة على كارته — شغالة بس لأن العائلة لسه من غير مدة',
     'month_unit' => 'شهر',
     'year_unit' => 'سنة',
     'putaway_exceeds_batch' => 'الباتش :batch فاضل منه :available وحدة للترصيف.',

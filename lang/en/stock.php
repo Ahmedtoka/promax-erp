@@ -262,7 +262,7 @@ return [
     'no_family' => 'No family',
     'effective_life' => 'Effective life',
     'save_assignment' => 'Save assignment',
-    'product_override' => 'This product has its own life that overrides the family',
+    'product_override' => "This product carries an old life of its own - active only because its family has no life set",
     'month_unit' => 'months',
     'year_unit' => 'years',
     'putaway_exceeds_batch' => 'Batch :batch only has :available units left to shelve.',

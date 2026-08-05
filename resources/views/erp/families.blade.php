@@ -142,10 +142,11 @@
                                     @endforeach
                                 </select>
                             </td>
-                            {{-- المدة الفعالة النهارده — من العائلة (أو استثناء المنتج) --}}
+                            {{-- المدة الفعالة النهارده — العائلة بتغلب، وخانة المنتج
+                                 القديمة بتشتغل بس لو العائلة من غير مدة --}}
                             <td class="s">
                                 <span class="badge b-blue">{{ $p->shelfLife() }} {{ __('stock.month_unit') }}</span>
-                                @if ($p->shelf_life_months)
+                                @if ($p->shelf_life_months && ! \App\Models\ProductFamily::monthsFor($p->family))
                                     <span class="badge b-orange" style="font-size:9px" title="{{ __('stock.product_override') }}">!</span>
                                 @endif
                             </td>

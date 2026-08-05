@@ -231,11 +231,13 @@ class Product extends Model
 
     public function shelfLife(): int
     {
-        // الدوكترين (2026-08-06): **العائلة هي مصدر مدة الصلاحية.**
-        // شاشة العائلات بتحدد المدة، وأي منتج فيها بياخدها — وخانة
-        // المنتج نفسه (shelf_life_months) بقت استثناء فردي لو اتكتبت.
-        return (int) ($this->shelf_life_months
-            ?: \App\Models\ProductFamily::monthsFor($this->family)
+        // الدوكترين (2026-08-06): **العائلة هي مصدر مدة الصلاحية —
+        // ولما تكون محددة بتغلب أي حاجة.** خانة المنتج القديمة
+        // (shelf_life_months، من السيدر) بتشتغل بس لو العائلة لسه
+        // ماتحددلهاش مدة — كانت الأولوية معكوسة فالمالك ظبط العائلة
+        // على 12 وفضلت الشاشات تقول 18 من خانات المنتجات (2026-08-06).
+        return (int) (\App\Models\ProductFamily::monthsFor($this->family)
+            ?: $this->shelf_life_months
             ?: (self::SHELF_LIFE[$this->family] ?? self::DEFAULT_SHELF_LIFE));
     }
 
