@@ -76,6 +76,8 @@ return [
     'po_pick_files' => 'Choose files',
     'po_files_count' => ':count files selected',
     'po_opening_print' => 'Opening print-all…',
+    'po_dup_badge' => 'Already uploaded - :number (marked to skip)',
+    'po_dup_reject' => 'This chain PO number was already uploaded for this branch as :number - not duplicated.',
     'approve_and_prep' => 'Approve & prep',
     'po_approve_confirm' => 'Approve? The pick order goes to the warehouse immediately.',
     'po_reject_confirm' => 'Reject this order? It will be cancelled and the channel manager notified.',

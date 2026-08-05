@@ -76,6 +76,8 @@ return [
     'po_pick_files' => 'اختيار الملفات',
     'po_files_count' => ':count ملف متختار',
     'po_opening_print' => 'بنفتح طباعة الكل…',
+    'po_dup_badge' => 'مرفوع قبل كده — :number (متعلّم تخطي)',
+    'po_dup_reject' => 'رقم الـPO ده مرفوع قبل كده لنفس الفرع بالأمر :number — مش هيتكرر.',
     'approve_and_prep' => 'موافقة وتجهيز',
     'po_approve_confirm' => 'موافقة؟ أمر التجهيز هينزل المخزن فوراً.',
     'po_reject_confirm' => 'رفض الأمر ده؟ هيتلغي ومدير القناة هيتبلغ.',

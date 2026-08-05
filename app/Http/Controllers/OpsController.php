@@ -417,6 +417,20 @@ class OpsController extends Controller
             $dir = 'po-sheets/'.now()->format('Y-m');
             $file->move(storage_path('app/'.$dir), $safe);
 
+            // ⚠️ منع التكرار (2026-08-06): نفس رقم PO السلسلة اترفع قبل
+            // كده لفرع من فروع الاختيار؟ الملف بيتعلم «مكرر» وبيتعمله
+            // skip أوتوماتيك — والمرفوض/الملغي مش بيمنع إعادة الرفع.
+            $dup = null;
+
+            if ($parsed['po_no']) {
+                // ⚠️ `!= 'rejected'` لوحدها بتستبعد الـNULL (الفلو القديم) في SQL
+                $dup = PurchaseOrder::where('source', $parsed['po_no'])
+                    ->whereIn('client_id', $clients->pluck('id'))
+                    ->where(fn ($w) => $w->whereNull('approval_status')->orWhere('approval_status', '!=', 'rejected'))
+                    ->where('status', '!=', 'cancelled')
+                    ->first();
+            }
+
             $entries[] = [
                 'file' => $origName,
                 'sheet_path' => $dir.'/'.$safe,
@@ -427,6 +441,7 @@ class OpsController extends Controller
                 'items' => $parsed['items'],
                 'qty_total' => array_sum(array_column($parsed['items'], 'qty')),
                 'unknown' => $parsed['unknown'],
+                'dup' => $dup?->number,
             ];
         }
 
@@ -465,6 +480,13 @@ class OpsController extends Controller
 
         foreach ($data['orders'] as $order) {
             if (! empty($order['skip']) || empty($order['client_id'])) {
+                continue;
+            }
+
+            // نفس حارس التكرار بتاع المسار المتتابع (2026-08-06)
+            if ($dupErr = $this->duplicatePoError((int) $order['client_id'], $order['source'] ?? null)) {
+                $errors[] = ($order['source'] ?: '—').': '.$dupErr;
+
                 continue;
             }
 
@@ -555,6 +577,13 @@ class OpsController extends Controller
             return response()->json(['message' => __('ops.po_no_items')], 422);
         }
 
+        // ⚠️ منع التكرار (2026-08-06): نفس رقم PO السلسلة لنفس الفرع
+        // مايتعملوش مرتين — الشيت اللي بيترفع تاني بيترفض برقم الأمر
+        // الموجود. المرفوض/الملغي مش بيمنع إعادة الرفع.
+        if ($dupErr = $this->duplicatePoError($data['client_id'], $data['source'] ?? null)) {
+            return response()->json(['message' => $dupErr], 422);
+        }
+
         try {
             $po = DB::transaction(function () use ($data, $qty, $sheet, $request) {
                 $client = Client::findOrFail($data['client_id']);
@@ -587,6 +616,31 @@ class OpsController extends Controller
         }
 
         return response()->json(['ok' => true, 'id' => $po->id, 'number' => $po->number]);
+    }
+
+    /**
+     * فيه أمر شغّال بنفس رقم PO السلسلة لنفس الفرع؟ بترجع رسالة
+     * الرفض برقم الأمر الموجود، أو null لو مفيش تكرار.
+     *
+     * ⚠️ المرفوض والملغي مش بيمنعوا — رفض الحسابات لازم يسمح
+     * بإعادة رفع الشيت بعد التصحيح.
+     */
+    private function duplicatePoError(int $clientId, ?string $source): ?string
+    {
+        $source = trim((string) $source);
+
+        if ($source === '') {
+            return null;
+        }
+
+        $dup = PurchaseOrder::where('client_id', $clientId)
+            ->where('source', $source)
+            // ⚠️ `!= 'rejected'` لوحدها بتستبعد الـNULL (الفلو القديم) في SQL
+            ->where(fn ($w) => $w->whereNull('approval_status')->orWhere('approval_status', '!=', 'rejected'))
+            ->where('status', '!=', 'cancelled')
+            ->first();
+
+        return $dup ? __('ops.po_dup_reject', ['number' => $dup->number]) : null;
     }
 
     /**

@@ -63,10 +63,13 @@
                         );
                         $ok = $e['client_id'] !== null && $e['items'] !== [];
                     @endphp
-                    <tr class="pi-row" id="piRow{{ $i }}" style="{{ $ok ? '' : 'background:#FFF7ED' }}">
+                    @php $isDup = $e['dup'] ?? null; @endphp
+                    <tr class="pi-row" id="piRow{{ $i }}"
+                        style="{{ $isDup ? 'background:#FEF2F2;opacity:.8' : ($ok ? '' : 'background:#FFF7ED') }}">
                         <td>
-                            {{-- استبعاد ملف من الدفعة --}}
-                            <input type="checkbox" data-pi="skip" value="1" title="{{ __('ops.po_skip_file') }}">
+                            {{-- استبعاد ملف من الدفعة — المكرر متعلّم أوتوماتيك --}}
+                            <input type="checkbox" data-pi="skip" value="1" @checked($isDup)
+                                   title="{{ __('ops.po_skip_file') }}">
                         </td>
                         <td>
                             <b style="font-size:12px">{{ $e['file'] }}</b>
@@ -74,6 +77,12 @@
                                 {{ $e['store_name'] ?? '—' }}
                                 @if ($e['store_id']) · Store {{ $e['store_id'] }} @endif
                             </div>
+                            {{-- مرفوع قبل كده — نفس رقم PO لنفس الفرع (2026-08-06) --}}
+                            @if ($isDup)
+                                <div class="badge b-red" style="font-size:10px;margin-top:4px">
+                                    ⛔ {{ __('ops.po_dup_badge', ['number' => $isDup]) }}
+                                </div>
+                            @endif
                             @if ($e['unknown'] !== [])
                                 <div class="badge b-red" style="font-size:10px;margin-top:4px">
                                     {{ __('ops.po_unknown_barcodes', ['codes' => implode('، ', $e['unknown'])]) }}
