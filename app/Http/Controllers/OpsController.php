@@ -29,17 +29,21 @@ class OpsController extends Controller
     {
         // ⚠️ سكوب الفرع على لوحة العمليات
         $field = \App\Models\Branch::scope(
-            User::whereIn('role', User::FIELD_ROLES)->with('zone'),
+            User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES)->with('zone')),
         )->get();
+
+        // ⚠️ أرقام اللوحة من نفس الفريق المعروض — للمدير ده فريقه بس،
+        // وللأدمن كل الميدان. رقم فوق وكروت تحت من نطاقين = شاشة بتكدب.
+        $teamIds = $field->pluck('id');
 
         return view('ops.dashboard', [
             'field' => $field->map(fn ($u) => $this->userStats($u)),
-            'todaySales' => Invoice::whereDate('created_at', today())->sum('total'),
-            'todayPos' => PurchaseOrder::whereDate('delivered_at', today())->sum('total'),
-            'openRequests' => ClientRequest::whereIn('status', ['pending', 'review'])->count(),
-            'visitsDone' => DB::table('visits')->whereDate('created_at', today())
+            'todaySales' => Invoice::whereIn('user_id', $teamIds)->whereDate('created_at', today())->sum('total'),
+            'todayPos' => PurchaseOrder::whereIn('assigned_to', $teamIds)->whereDate('delivered_at', today())->sum('total'),
+            'openRequests' => ClientRequest::whereIn('created_by', $teamIds)->whereIn('status', ['pending', 'review'])->count(),
+            'visitsDone' => DB::table('visits')->whereIn('user_id', $teamIds)->whereDate('created_at', today())
                 ->whereNotNull('checked_out_at')->count(),
-            'events' => TrackEvent::with('user')->whereDate('happened_at', today())
+            'events' => TrackEvent::with('user')->whereIn('user_id', $teamIds)->whereDate('happened_at', today())
                 ->orderByDesc('happened_at')->take(30)->get(),
         ]);
     }
@@ -72,6 +76,9 @@ class OpsController extends Controller
     {
         // ⚠️ نفس القاعدة: الشاشة بتوري عهدة المندوب وفواتيره وتحركاته
         abort_unless($request->user()->canSeeBranch($user->branch_id), 403);
+        // ⚠️ وسكوب التشانل مانجر — مندوب مش من فريقه مايتفتحش بالـid
+        abort_unless($request->user()->role !== 'manager'
+            || (int) $user->manager_id === (int) $request->user()->id, 403);
 
         $custody = $user->todayCustody();
         $custody?->load('items.product');
@@ -118,7 +125,7 @@ class OpsController extends Controller
 
         return view('ops.pos', [
             'pos' => $q->latest()->paginate(30)->withQueryString(),
-            'couriers' => User::where('role', 'driver')->get(),
+            'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
             'clients' => Client::visibleTo(Client::orderBy('name'))->get(['id', 'name']),
             'products' => Product::orderBy('code')->get(),
             'filters' => $request->only('status'),
@@ -392,7 +399,7 @@ class OpsController extends Controller
             'clients' => Client::visibleTo(Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
                 ->where('status', 'active'))->orderBy('name')
                 ->get(['id', 'name', 'name_en', 'group_id', 'balance', 'price_list', 'price_list_id']),
-            'reps' => User::whereIn('role', ['sales_agent', 'driver'])
+            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver']))
                 ->where('active', true)->orderBy('name')->get(['id', 'name']),
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
             'products' => Product::where('active', true)->orderBy('code')->get(),
@@ -660,7 +667,7 @@ class OpsController extends Controller
 
         return view('ops.tracking', [
             'events' => $q->orderByDesc('happened_at')->get(),
-            'field' => User::whereIn('role', User::FIELD_ROLES)->get(),
+            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))->get(),
             'userId' => $userId,
             'date' => $date->toDateString(),
         ]);
@@ -688,7 +695,7 @@ class OpsController extends Controller
 
         return view('ops.invoices', [
             'invoices' => $q->latest()->paginate(40)->withQueryString(),
-            'field' => User::whereIn('role', User::FIELD_ROLES)->get(),
+            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))->get(),
             'filters' => $request->only(['user', 'from', 'to']),
             'sum' => (clone $q)->sum('total'),
         ]);

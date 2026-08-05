@@ -34,6 +34,14 @@ return [
     'clients_assigned' => 'اتسكّن :count عميل للمدير :name.',
     'client_unassigned' => ':name اتشال من مديره.',
     'not_a_manager' => 'اليوزر ده مش تشانل مانجر.',
+    'his_team' => 'فريقه الميداني',
+    'his_team_hint' => 'المناديب والسواقين اللي بيشوفهم في شاشاته',
+    'unassigned_team' => 'ميدان من غير مدير',
+    'team_pool_hint' => 'مناديب وسواقين وبروموترز لسه ماتسكّنوش',
+    'no_team_assigned' => 'لسه مفيش فريق متسكّن له.',
+    'team_assigned' => 'اتسكّن :count موظف للمدير :name.',
+    'team_unassigned' => ':name اتشال من مديره.',
+    'team_unassign_confirm' => 'تشيل الموظف ده من المدير؟ هيرجع لقايمة «من غير مدير».',
 
     // ---------- ليبلات الأزرار ----------
     'act_overview_wipe' => 'مسح وتفضية السيستم + الديمو',

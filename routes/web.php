@@ -213,6 +213,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('managers.assign');
         Route::delete('/manager-clients/{client}', [\App\Http\Controllers\ManagerClientController::class, 'unassign'])
             ->middleware('role:admin')->name('managers.unassign');
+        // تسكين فريق الميدان (مناديب/سواقين) للمدير — 2026-08-05
+        Route::post('/manager-team', [\App\Http\Controllers\ManagerClientController::class, 'assignTeam'])
+            ->middleware('role:admin')->name('managers.team.assign');
+        Route::delete('/manager-team/{user}', [\App\Http\Controllers\ManagerClientController::class, 'unassignTeam'])
+            ->middleware('role:admin')->name('managers.team.unassign');
 
         // ===== الفروع والعربيات =====
         // ⚠️ **العرض للمديرين بس** — الشاشات بتوري أرقام كل فرع.

@@ -34,6 +34,14 @@ return [
     'clients_assigned' => 'Assigned :count clients to :name.',
     'client_unassigned' => ':name removed from his manager.',
     'not_a_manager' => 'This user is not a channel manager.',
+    'his_team' => 'His field team',
+    'his_team_hint' => 'The reps and drivers he sees on his screens',
+    'unassigned_team' => 'Unassigned field staff',
+    'team_pool_hint' => 'Reps, drivers and promoters not yet assigned',
+    'no_team_assigned' => 'No team assigned to him yet.',
+    'team_assigned' => 'Assigned :count staff to :name.',
+    'team_unassigned' => ':name removed from his manager.',
+    'team_unassign_confirm' => 'Remove this employee from the manager? He goes back to the unassigned pool.',
 
     // ---------- Action labels ----------
     'act_overview_wipe' => 'Wipe system data + demo',

@@ -31,7 +31,7 @@ class CustodyHandoutController extends Controller
         return view('ops.handout', [
             'warehouse' => $warehouse,
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->orderBy('code')->get(),
-            'reps' => User::whereIn('role', ['sales_agent', 'driver', 'promoter'])
+            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver', 'promoter']))
                 ->where('active', true)->orderBy('name')->get(),
             // ⚠️ **المتاح من الأرفف مش من `stocks`.** أمر التجهيز
             // بيخصم من الأرفف، فالرقم اللي بيتعرض لازم يكون هو نفسه

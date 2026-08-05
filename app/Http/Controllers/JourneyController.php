@@ -28,7 +28,7 @@ class JourneyController extends Controller
     public function index(Request $request)
     {
         // ⚠️ سكوب الفرع — مدير المعادي بيشوف فريق المعادي بس
-        $reps = Branch::scope(User::with('zone'))
+        $reps = User::fieldVisibleTo(Branch::scope(User::with('zone')))
             ->whereIn('role', User::FIELD_ROLES)
             ->where('active', true)
             ->orderBy('name')
@@ -202,7 +202,7 @@ class JourneyController extends Controller
 
     public function assignments(Request $request)
     {
-        $reps = Branch::scope(User::with(['zone', 'zones']))
+        $reps = User::fieldVisibleTo(Branch::scope(User::with(['zone', 'zones'])))
             ->whereIn('role', User::FIELD_ROLES)
             ->where('active', true)
             ->orderBy('name')

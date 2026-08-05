@@ -51,6 +51,11 @@ class ClientImporter extends Importer
             'opening_balance' => ['الرصيد الافتتاحي', 'opening_balance', 'opening'],
             'opening_date' => ['تاريخ الرصيد', 'opening_date'],
             'tax_id' => ['الرقم الضريبي', 'tax_id'],
+            // إضافات 2026-08-05 — شيتات محمد حجر المنظمة
+            'governorate' => ['المحافظة', 'governorate'],
+            'manager' => ['الأكونت مانجر', 'مدير الحساب', 'manager', 'account manager'],
+            'contact' => ['اسم المسؤول', 'الكونتاكت', 'contact', 'اسم المسؤول / الكونتاكت'],
+            'phone2' => ['أرقام إضافية', 'phone2', 'تليفون إضافي'],
         ];
     }
 
@@ -151,9 +156,6 @@ class ClientImporter extends Importer
                     'zone_id' => $zoneId,
                     'group_id' => $groupId,
                     'category' => $this->category($row['category'] ?? null) ?? 'ok',
-                    // الشيت بالنسبة، الداتابيز بالكسر — القسمة مرة واحدة
-                    'discount' => ($discount ?? 0) / 100,
-                    'uses_channel_discount' => ($discount ?? 0) <= 0,
                     'price_list' => $this->priceList($row['price_list'] ?? null),
                     'lat' => Sheet::number($row['lat'] ?? null),
                     'lng' => Sheet::number($row['lng'] ?? null),
@@ -172,12 +174,45 @@ class ClientImporter extends Importer
                         ?? 'pending',
                 ];
 
+                // ⚠️ **الخصم بيتكتب بس لو موجود في الشيت** (إصلاح 2026-08-05).
+                // كان دايماً في الـpayload بـ(discount ?? 0) — يعني شيت من
+                // غير عمود خصم كان بيصفّر خصومات العملاء الموجودين في صمت.
+                if ($discount !== null) {
+                    // الشيت بالنسبة، الداتابيز بالكسر — القسمة مرة واحدة
+                    $payload['discount'] = $discount / 100;
+                    $payload['uses_channel_discount'] = $discount <= 0;
+                }
+
+                // ⚠️ ونفس المبدأ للإضافات — الفاضي مايمسحش الموجود
+                if (($gov = $this->governorate($row['governorate'] ?? null)) !== null) {
+                    $payload['governorate'] = $gov;
+                }
+
+                if (($managerId = $this->managerId($row['manager'] ?? null)) !== null) {
+                    $payload['manager_id'] = $managerId;
+                }
+
+                $contact = trim((string) ($row['contact'] ?? ''));
+                $phone2 = trim((string) ($row['phone2'] ?? ''));
+
+                if ($contact !== '' || $phone2 !== '') {
+                    $payload['contacts'] = [[
+                        'name' => $contact !== '' ? $contact : null,
+                        'role' => null,
+                        'phone' => $phone2 !== '' ? $phone2 : null,
+                    ]];
+                }
+
                 if ($existing) {
                     $existing->update($payload);
                     $client = $existing;
                     $updated++;
                 } else {
-                    $client = Client::create($payload);
+                    // الجديد من غير عمود خصم بياخد صفر وبيرجع لخصم القناة
+                    $client = Client::create($payload + [
+                        'discount' => ($discount ?? 0) / 100,
+                        'uses_channel_discount' => ($discount ?? 0) <= 0,
+                    ]);
                     $created++;
                 }
 
@@ -192,6 +227,50 @@ class ClientImporter extends Importer
             'channels' => count($channels), 'zones' => count($zones), 'groups' => count($groups),
         ];
     }
+
+    /** المحافظة من مفتاحها أو اسمها العربي/الإنجليزي — null لو مش معروفة */
+    private function governorate(?string $v): ?string
+    {
+        $v = trim((string) $v);
+
+        if ($v === '') {
+            return null;
+        }
+
+        foreach (\App\Support\Governorates::KEYS as $key) {
+            if (strcasecmp($v, $key) === 0
+                || $v === \App\Support\Governorates::label($key)
+                || $v === __('geo.gov.'.$key, [], 'ar')
+                || strcasecmp($v, __('geo.gov.'.$key, [], 'en')) === 0) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * التشانل مانجر بالاسم (عربي/إنجليزي) أو الكود.
+     *
+     * ⚠️ رول `manager` بس — الشيت مايقدرش يسكّن عميل على مندوب أو أدمن.
+     */
+    private function managerId(?string $v): ?int
+    {
+        $v = trim((string) $v);
+
+        if ($v === '') {
+            return null;
+        }
+
+        return $this->managerCache[$v] ??= \App\Models\User::where('role', 'manager')
+            ->where(fn ($q) => $q->where('name', 'like', "%$v%")
+                ->orWhere('name_en', 'like', "%$v%")
+                ->orWhere('code', $v))
+            ->value('id');
+    }
+
+    /** @var array<string, ?int> */
+    private array $managerCache = [];
 
     /** حالة صريحة من الشيت — null يعني الافتراضي (pending للجديد) */
     private function status(?string $v): ?string

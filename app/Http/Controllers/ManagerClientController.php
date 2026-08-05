@@ -57,13 +57,62 @@ class ManagerClientController extends Controller
             ->limit(300)
             ->get();
 
+        // ═══ فريق الميدان (2026-08-05): مناديب وسواقين وبروموترز ═══
+        $myTeam = $manager
+            ? User::whereIn('role', User::FIELD_ROLES)
+                ->where('manager_id', $manager->id)
+                ->orderBy('role')->orderBy('name')->get()
+            : collect();
+
+        $teamPool = User::whereIn('role', User::FIELD_ROLES)
+            ->whereNull('manager_id')
+            ->where('active', true)
+            ->orderBy('role')->orderBy('name')
+            ->get();
+
         return view('erp.manager_clients', [
             'managers' => $managers,
             'manager' => $manager,
             'mine' => $mine,
             'pool' => $pool,
+            'myTeam' => $myTeam,
+            'teamPool' => $teamPool,
             'channels' => \App\Models\Channel::orderBy('id')->get(['id', 'name', 'name_en']),
         ]);
+    }
+
+    /** تسكين مناديب/سواقين لمدير — نفس منطق تسكين العملاء بالظبط */
+    public function assignTeam(Request $request)
+    {
+        $data = $request->validate([
+            'manager_id' => ['required', 'exists:users,id'],
+            'user_ids' => ['required', 'array'],
+            'user_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $manager = User::findOrFail($data['manager_id']);
+
+        abort_if($manager->role !== 'manager', 422, __('perm.not_a_manager'));
+
+        $count = 0;
+
+        DB::transaction(function () use ($data, $manager, &$count) {
+            // ⚠️ رولز الميدان بس — مايتسكّنش محاسب ولا أمين مخزن لمدير
+            $count = User::whereIn('id', $data['user_ids'])
+                ->whereIn('role', User::FIELD_ROLES)
+                ->update(['manager_id' => $manager->id]);
+        });
+
+        return back()->with('ok', __('perm.team_assigned', ['count' => $count, 'name' => $manager->name]));
+    }
+
+    public function unassignTeam(User $user)
+    {
+        abort_unless(in_array($user->role, User::FIELD_ROLES, true), 422);
+
+        $user->update(['manager_id' => null]);
+
+        return back()->with('ok', __('perm.team_unassigned', ['name' => $user->name]));
     }
 
     public function assign(Request $request)

@@ -125,6 +125,83 @@
         </form>
     </div>
 </div>
+
+{{-- ═══ فريق الميدان: مناديب وسواقين وبروموترز (2026-08-05) ═══ --}}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-top:14px">
+
+    <div class="card">
+        <h3>🚚 {{ __('perm.his_team') }} — {{ $manager->name }}
+            <span class="side">{{ __('perm.his_team_hint') }}</span></h3>
+        <div class="tablewrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{{ __('perm.pick_user') }}</th>
+                        <th>{{ __('team.role') }}</th>
+                        <th style="width:44px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($myTeam as $u2)
+                        <tr>
+                            <td><b>{{ $u2->displayName() }}</b>
+                                <div style="font-size:10.5px;color:var(--muted)">{{ $u2->code }}</div></td>
+                            <td><span class="badge b-purple">{{ $u2->roleLabel() }}</span></td>
+                            <td>
+                                <form method="POST" action="{{ route('erp.managers.team.unassign', $u2) }}"
+                                      onsubmit="return confirm(@json(__('perm.team_unassign_confirm')))">
+                                    @csrf @method('DELETE')
+                                    <button class="btn sm red" type="submit">✕</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">
+                            {{ __('perm.no_team_assigned') }}</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📥 {{ __('perm.unassigned_team') }}
+            <span class="side">{{ __('perm.team_pool_hint') }}</span></h3>
+        <form method="POST" action="{{ route('erp.managers.team.assign') }}">
+            @csrf
+            <input type="hidden" name="manager_id" value="{{ $manager->id }}">
+            <div class="tablewrap" style="max-height:48vh;overflow-y:auto">
+                <table>
+                    <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+                        <tr>
+                            <th style="width:34px">
+                                <input type="checkbox" onchange="document.querySelectorAll('.pickt').forEach(c => c.checked = this.checked)">
+                            </th>
+                            <th>{{ __('perm.pick_user') }}</th>
+                            <th>{{ __('team.role') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($teamPool as $u2)
+                            <tr>
+                                <td><input type="checkbox" class="pickt" name="user_ids[]" value="{{ $u2->id }}"></td>
+                                <td><b>{{ $u2->displayName() }}</b>
+                                    <div style="font-size:10.5px;color:var(--muted)">{{ $u2->code }}</div></td>
+                                <td><span class="badge b-purple">{{ $u2->roleLabel() }}</span></td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">
+                                {{ __('common.no_results') }}</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                <button class="btn gold" type="submit">➕ {{ __('perm.assign_selected') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
 @endif
 
 @endsection

@@ -62,6 +62,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name', 'name_en', 'email', 'password', 'role', 'code', 'phone',
         'zone_id', 'channel_id', 'branch_id', 'warehouse_id', 'active', 'locale',
+        'manager_id',
     ];
 
     /** اللغات المدعومة — أي قيمة تانية بترجع للافتراضي */
@@ -162,6 +163,33 @@ class User extends Authenticatable
     public function permissions(): HasMany
     {
         return $this->hasMany(UserPermission::class);
+    }
+
+    /** التشانل مانجر اللي الموظف الميداني متسكّن له (2026-08-05) */
+    public function teamManager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    public function teamMembers(): HasMany
+    {
+        return $this->hasMany(User::class, 'manager_id');
+    }
+
+    /**
+     * سكوب فريق التشانل مانجر — زي `Client::visibleTo` بالظبط:
+     * المدير بيشوف المناديب والسواقين المتسكّنين له بس، وغيره
+     * بيعدّي من غير فلترة. تتحط على أي كويري بيجيب فريق الميدان.
+     */
+    public static function fieldVisibleTo($query, ?User $viewer = null)
+    {
+        $viewer = $viewer ?? auth()->user();
+
+        if ($viewer !== null && $viewer->role === 'manager') {
+            $query->where('manager_id', $viewer->id);
+        }
+
+        return $query;
     }
 
     /**
