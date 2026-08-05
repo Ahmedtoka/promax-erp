@@ -106,8 +106,11 @@
                     <div style="background:var(--card);border:1px solid var(--border);
                                 border-inline-start:5px solid {{ $edge }};border-radius:12px;
                                 padding:10px 13px;min-width:132px;box-shadow:var(--shadow)">
-                        <div style="display:flex;align-items:center;gap:6px">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                             <b style="font-size:14px">{{ $loc->code }}</b>
+                            @if ($loc->life_band)
+                                <span class="badge {{ $loc->bandBadge() }}" style="font-size:9.5px">{{ $loc->bandLabel() }}</span>
+                            @endif
                             @if ($loc->is_pick_face)
                                 <span class="badge b-purple" title="{{ __('stock.pick_face') }}">★ {{ __('stock.pick_face') }}</span>
                             @endif
@@ -159,6 +162,9 @@
                     <tr>
                         <td>
                             <b style="font-size:14px">{{ $loc->code }}</b>
+                            @if ($loc->life_band)
+                                <span class="badge {{ $loc->bandBadge() }}" style="font-size:9.5px">{{ $loc->bandLabel() }}</span>
+                            @endif
                             @if ($loc->is_pick_face)
                                 <span class="badge b-purple">★ {{ __('stock.pick_face') }}</span>
                             @endif
@@ -193,7 +199,7 @@
 
 <datalist id="whLocCodes">
     @foreach ($locations as $loc)
-        <option value="{{ $loc->code }}">{{ $loc->is_pick_face ? __('stock.pick_face') : __('stock.location') }}</option>
+        <option value="{{ $loc->code }}">{{ $loc->life_band ? $loc->bandLabel() : ($loc->is_pick_face ? __('stock.pick_face') : __('stock.location')) }}</option>
     @endforeach
 </datalist>
 
@@ -264,9 +270,21 @@
                     <input type="number" name="capacity" min="1" step="1" style="width:100%">
                 </div>
             </div>
-            <div style="margin-bottom:10px">
-                <label class="f">{{ __('common.notes') }}</label>
-                <textarea name="notes" rows="2" style="width:100%"></textarea>
+            <div class="frow" style="margin-top:10px">
+                <div>
+                    {{-- بلوك FEFO — فاضي يعني رف حر بيقبل أي حاجة --}}
+                    <label class="f">{{ __('stock.life_band') }}</label>
+                    <select name="life_band" style="width:100%">
+                        <option value="">{{ __('stock.band_free') }}</option>
+                        @foreach (\App\Support\LifeBands::options() as $bk => $bLbl)
+                            <option value="{{ $bk }}">{{ $bLbl }} ({{ \App\Support\LifeBands::PREFIX[$bk] }})</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="f">{{ __('common.notes') }}</label>
+                    <textarea name="notes" rows="2" style="width:100%"></textarea>
+                </div>
             </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12.5px">
                 <input type="checkbox" name="is_pick_face" value="1"> ★ {{ __('stock.pick_face') }}

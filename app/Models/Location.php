@@ -16,8 +16,19 @@ class Location extends Model
     use HasFactory;
 
     protected $fillable = [
-        'warehouse_id', 'code', 'stand', 'level', 'is_pick_face', 'capacity', 'notes', 'active',
+        'warehouse_id', 'code', 'stand', 'level', 'is_pick_face', 'life_band', 'capacity', 'notes', 'active',
     ];
+
+    /** مسمى نطاق العمر — «بروماكس سنة» أو «رف حر» */
+    public function bandLabel(): string
+    {
+        return \App\Support\LifeBands::label($this->life_band);
+    }
+
+    public function bandBadge(): string
+    {
+        return \App\Support\LifeBands::badgeClass($this->life_band);
+    }
 
     protected function casts(): array
     {

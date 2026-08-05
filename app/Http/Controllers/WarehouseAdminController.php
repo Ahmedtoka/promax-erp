@@ -40,8 +40,19 @@ class WarehouseAdminController extends Controller
             ->orderBy('code')
             ->get();
 
+        // قيمة بضاعة كل مخزن (كمية × سعر البيع الجديد) — للداشبورد
+        // التحليلي (2026-08-06). نفس مصدر stockValue في النظرة العامة.
+        $values = DB::table('stocks')
+            ->join('products', 'products.id', '=', 'stocks.product_id')
+            ->selectRaw('stocks.warehouse_id as wid,
+                         SUM(stocks.qty * products.price_new) as val,
+                         SUM(stocks.hold_qty * products.price_new) as hold_val')
+            ->groupBy('stocks.warehouse_id')
+            ->get()->keyBy('wid');
+
         return view('erp.warehouses', [
             'warehouses' => $warehouses,
+            'values' => $values,
             // ⚠️ **بضاعة خرجت وماوصلتش.** من غير العمود ده، اللي بيبص
             // على المخزن بيلاقي الرصيد قلّ ومايعرفش إن الفرق ماشي على
             // الطريق — ويفتكر إنه عجز ويفتح تحقيق في حاجة طبيعية.

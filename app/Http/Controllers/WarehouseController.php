@@ -54,6 +54,13 @@ class WarehouseController extends Controller
             // وبعد استيراد رصيد أول مدة كله بيبقى لسه على الأرض فالمتاح
             // صفر والمخزن مليان. الرقمين جنب بعض بيوضّحوا الصورة.
             'stockUnits' => (int) \App\Models\Stock::where('warehouse_id', $warehouse->id)->sum('qty'),
+            // بلوكات FEFO (2026-08-06): البلوك المقترح لكل باتش مستني —
+            // بيتملى في خانة الكود تلقائياً والحارس بيرفض أي بلوك غلط
+            'suggestions' => $pending->mapWithKeys(function (Batch $b) {
+                $loc = \App\Support\LifeBands::suggest($b->warehouse_id, $b);
+
+                return [$b->id => $loc?->code];
+            }),
         ]);
     }
 
@@ -529,6 +536,8 @@ class WarehouseController extends Controller
             'stand' => ['required', 'string', 'max:5'],
             'level' => ['required', 'integer', 'min:1', 'max:99'],
             'is_pick_face' => ['nullable', 'boolean'],
+            // بلوك FEFO — فاضي يعني رف حر بيقبل أي حاجة
+            'life_band' => ['nullable', 'in:'.implode(',', array_keys(\App\Support\LifeBands::BANDS))],
             'capacity' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -545,6 +554,7 @@ class WarehouseController extends Controller
                 'stand' => strtoupper($data['stand']),
                 'level' => $data['level'],
                 'is_pick_face' => $request->boolean('is_pick_face'),
+                'life_band' => ($data['life_band'] ?? null) ?: null,
                 'capacity' => $data['capacity'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'active' => true,
@@ -557,7 +567,11 @@ class WarehouseController extends Controller
     /** تقرير المخزون بالأرفف والصلاحية — الأقرب انتهاءً فوق */
     public function expiryReport(Request $request)
     {
-        $warehouse = $this->currentWarehouse($request);
+        // «كل المخازن» (2026-08-06) — لغير أمين المخزن (مقفول على مخزنه)
+        $all = $request->query('warehouse') === 'all'
+            && ! ($request->user()?->isWarehouseKeeper() && $request->user()->warehouse_id);
+        $warehouse = $all ? null : $this->currentWarehouse($request);
+        $visibleIds = $this->visibleWarehouses($request)->pluck('id');
 
         // ⚠️ **المصدر الباتشات مش الأرفف** (إصلاح 2026-08-05). التقرير
         // كان بيقرا `batch_locations` بس — يعني بضاعة مستلمة لسه
@@ -566,8 +580,9 @@ class WarehouseController extends Controller
         // الباتش هو اللي شايل تاريخ الانتهاء، والأرفف تفصيلة جواه.
         $rows = Batch::query()
             ->where('qty_remaining', '>', 0)
-            ->when($warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
-            ->with(['product', 'locations.location'])
+            ->when(! $all && $warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
+            ->when($all, fn ($q) => $q->whereIn('warehouse_id', $visibleIds))
+            ->with(['product', 'locations.location', 'warehouse:id,name,name_en'])
             ->get()
             ->sortBy(fn (Batch $b) => $b->expires_on?->timestamp ?? PHP_INT_MAX)
             ->values();
@@ -579,11 +594,39 @@ class WarehouseController extends Controller
             'ok' => $rows->filter(fn ($b) => $b->expiryState() === 'ok'),
         ];
 
+        // ═══ بلوكات FEFO: اللي قعد وعمره قل عن نطاق بلوكه (2026-08-06) ═══
+        // بضاعة على بلوك «سنة» بقى فاضل لها 3 شهور — تتنقل بضغطة عشان
+        // التقسيمة تفضل صادقة. ده «تقرير النقل الأسبوعي» بس لايف دايماً.
+        $relocations = [];
+
+        foreach ($rows as $b) {
+            $need = \App\Support\LifeBands::bandForBatch($b);
+
+            if ($need === null) {
+                continue;
+            }
+
+            foreach ($b->locations->where('qty', '>', 0) as $bl) {
+                $locBand = $bl->location?->life_band;
+
+                if ($locBand !== null && $locBand !== $need) {
+                    $relocations[] = [
+                        'bl' => $bl,
+                        'batch' => $b,
+                        'target' => \App\Support\LifeBands::suggest($b->warehouse_id, $b),
+                    ];
+                }
+            }
+        }
+
         return view('wh.expiry', [
             'warehouse' => $warehouse,
+            'all' => $all,
             'warehouses' => $this->visibleWarehouses($request),
             'rows' => $rows,
             'buckets' => $buckets,
+            'relocations' => $relocations,
+            'bucketFilter' => $request->string('bucket')->value(),
         ]);
     }
 
@@ -593,36 +636,59 @@ class WarehouseController extends Controller
     {
         $user = $request->user();
 
+        // ⚠️ **مفلترة بمخزن أمين المخزن.** كانت `latest()` على طول،
+        // يعني أمين مخزن المعادي يشوف كل شحنة بين أي مخزنين
+        // بأرقام باتشاتها وكمياتها وصلاحياتها — ويطبع ورق مخزن
+        // مش بتاعه. الشحنة تخصّه لو هو الطرف المرسل أو المستقبل.
+        $base = fn () => StockTransfer::query()
+            ->when(
+                $user?->isWarehouseKeeper() && $user->warehouse_id,
+                fn ($q) => $q->where(fn ($w) => $w
+                    ->where('from_warehouse_id', $user->warehouse_id)
+                    ->orWhere('to_warehouse_id', $user->warehouse_id)),
+            )
+            ->when($request->string('q')->trim()->value(),
+                fn ($q, $s) => $q->where('number', 'like', "%$s%"))
+            ->when($request->integer('wh'), fn ($q, $w) => $q->where(fn ($x) => $x
+                ->where('from_warehouse_id', $w)->orWhere('to_warehouse_id', $w)));
+
+        $q = $base()->with(['fromWarehouse', 'toWarehouse', 'items.product', 'sender']);
+
+        if ($status = $request->string('status')->value()) {
+            $q->where('status', $status);
+        }
+
         return view('wh.transfers', [
-            // ⚠️ **مفلترة بمخزن أمين المخزن.** كانت `latest()` على طول،
-            // يعني أمين مخزن المعادي يشوف كل شحنة بين أي مخزنين
-            // بأرقام باتشاتها وكمياتها وصلاحياتها — ويطبع ورق مخزن
-            // مش بتاعه. الشحنة تخصّه لو هو الطرف المرسل أو المستقبل.
-            'transfers' => StockTransfer::with([
-                'fromWarehouse', 'toWarehouse', 'items.product', 'sender',
-            ])
-                ->when(
-                    $user?->isWarehouseKeeper() && $user->warehouse_id,
-                    fn ($q) => $q->where(fn ($w) => $w
-                        ->where('from_warehouse_id', $user->warehouse_id)
-                        ->orWhere('to_warehouse_id', $user->warehouse_id)),
-                )
-                ->latest()->paginate(20),
+            'transfers' => $q->latest()->paginate(20)->withQueryString(),
+            // KPIs من نفس الأساس المفلتر — رقم فوق وجدول تحت من نطاقين = شاشة بتكدب
+            'kpi' => [
+                'total' => $base()->count(),
+                'sent' => $base()->where('status', 'sent')->count(),
+                'received' => $base()->where('status', 'received')->count(),
+                'transit_units' => (int) StockTransferItem::whereHas('transfer',
+                    fn ($t) => $t->where('status', 'sent'))->sum('qty_sent'),
+            ],
+            'warehouses' => $this->visibleWarehouses($request),
+            'filters' => $request->only(['q', 'status', 'wh']),
+        ]);
+    }
+
+    /**
+     * صفحة تحويل جديد (2026-08-06) — بدل الدايالوج: بحث بالصور،
+     * جدول بهيدر ثابت، وملخصات لايف. بتبعت لنفس `storeTransfer`.
+     */
+    public function newTransfer(Request $request)
+    {
+        return view('wh.transfer_new', [
             'warehouses' => $this->visibleWarehouses($request),
             'products' => Product::where('active', true)->orderBy('code')->get(),
-            // ⚠️ **الباتشات الحقيقية بتغذّي الفورم.** قبل كده كان
-            // بيتكتب رقم باتش وتاريخ إنتاج بالإيد — يعني نفس الكرتونة
-            // بتاخد رقم في العاشر ورقم تاني في المعادي، فترتيب الصلاحية
-            // (FEFO) بيتكسر، والأهم: مافيش أي ضمان إن الكمية دي موجودة
-            // أصلاً عشان تتبعت.
-            // ⚠️ **مفلترة بالمخازن اللي المستخدم بيشوفها.** كانت بتحمّل
-            // كل باتش قابل للبيع في الشركة وتسلسله JSON في الصفحة —
-            // مع بضع آلاف باتش ده ميجابايتات في كل فتحة، ولمستخدم
-            // مايقدرش يفتح الفورم أصلاً.
+            // ⚠️ **الباتشات الحقيقية بتغذّي الفورم** — الباتش لازم يكون
+            // موجود فعلاً في المخزن المرسل، مش رقم بيتكتب بالإيد.
+            // ومفلترة بالمخازن اللي المستخدم بيشوفها.
             'batches' => Batch::query()
                 ->sellable()
                 ->whereIn('warehouse_id', $this->visibleWarehouses($request)->pluck('id'))
-                ->with('product:id,code,name,name_en')
+                ->orderBy('expires_on')
                 ->get(['id', 'product_id', 'warehouse_id', 'batch_no',
                     'produced_on', 'expires_on', 'qty_remaining']),
         ]);

@@ -1,71 +1,78 @@
 @extends('layouts.system')
 
-@section('title', __('stock.transfers'))
+{{--
+    أوامر التحويل — القايمة المتطورة (2026-08-06):
+    KPIs من نفس الأساس المفلتر + فلاتر (رقم/مخزن/حالة) + بنود كل
+    شحنة تحت صفها. الإنشاء بقى صفحة كاملة (`wh.transfers.new`)
+    بالبحث بالصور — الدايالوج القديم اتشال.
+--}}
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
 
     // ⚠️ **`isManager()` مش نفس `role:admin,manager`.** الأولى بتشمل
-    // `branch_manager` كمان (`User::MANAGER_ROLES`)، وراوت إنشاء
-    // التحويل مقفول على أدمن ومدير القناة بس. فمدير الفرع كان بيشوف
-    // الزرار، يملا الفورم بكل سطوره، يدوس حفظ، وياخد 403.
+    // `branch_manager` كمان، وراوت إنشاء التحويل مقفول على أدمن
+    // ومدير القناة بس.
     $u = auth()->user();
     $manager = $u->isAdmin() || $u->role === 'manager';
-
-    // ⚠️ قايمة الأصناف بتتبني هنا مرة واحدة كـ HTML وبتتحط في قالب البند.
-    // ممنوع نلف على $products جوه الجافاسكريبت — البليد مابيشتغلش هناك.
-    $productOptions = '<option value="">'.e(__('stock.choose_item')).'</option>';
-    foreach ($products as $p) {
-        $productOptions .= '<option value="'.(int) $p->id.'">'
-            .e($p->code.' — '.$p->displayName())
-            .'</option>';
-    }
-
-    // ⚠️ **الباتشات الحقيقية بتغذّي قايمة الباتش.** قبل كده كان
-    // رقم الباتش وتاريخ الإنتاج نص حر — يعني نفس الكرتونة بتاخد رقم
-    // في العاشر ورقم تاني في المعادي فترتيب الصلاحية بيتكسر، والأهم
-    // إن مافيش أي ضمان إن الكمية دي موجودة عشان تتبعت أصلاً.
-    //
-    // ⚠️ **`json_encode` هنا مش توجيه JSON في الـHTML.** التوجيه
-    // بمصفوفة بيكسّر بارسر البليد؛ والفلاجز ضرورية لأن الناتج بيقع
-    // جوه سمة HTML.
-    // (وممنوع نكتب اسم دايركتيف بليد في تعليق — نفس القاعدة المكتوبة تحت.)
-    // ⚠️ **بتتبني للي بيقدر يفتح الفورم بس.** كانت بتتبعت لكل من
-    // يفتح الصفحة، جوه `@section('scripts')` اللي بره شرط المدير —
-    // يعني أرصدة كل المخازن (أرقام الباتشات وكمياتها وصلاحياتها)
-    // كانت بتنزل في سورس الصفحة لأمين مخزن مالوش دعوة بيها.
-    $batchData = ! $manager ? null : json_encode($batches->map(fn ($b) => [
-        'id' => $b->id,
-        'w' => (int) $b->warehouse_id,
-        'p' => (int) $b->product_id,
-        'no' => $b->batch_no,
-        'prod' => $b->produced_on?->toDateString(),
-        'exp' => $b->expires_on?->toDateString(),
-        'left' => (int) $b->qty_remaining,
-    ])->values(), JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
-
-    // وحدات الإدخال لكل صنف — العرض بس؛ الضرب الحقيقي في السيرفر (storeTransfer)
-    $trUnits = ! $manager ? null : json_encode(
-        $products->mapWithKeys(fn ($p) => [$p->id => $p->unitFactors()]),
-        JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
-    );
+    $f = $filters;
 @endphp
+
+@section('title', __('stock.transfers'))
 
 @section('actions')
     <a class="btn" href="{{ route('wh.index') }}">🏭 {{ __('stock.warehouse_overview') }}</a>
-    @if ($manager)
-        @if (\App\Support\Access::action(auth()->user(), 'act.wh.transfer'))<button class="btn gold" onclick="openDlg('dlgNewTr')">+ {{ __('stock.new_transfer') }}</button>@endif
+    @if ($manager && \App\Support\Access::action(auth()->user(), 'act.wh.transfer'))
+        <a class="btn gold" href="{{ route('wh.transfers.new') }}">+ {{ __('stock.new_transfer') }}</a>
     @endif
 @endsection
 
 @section('content')
 
+<div class="kpis">
+    <div class="kpi">
+        <div class="lbl">🚚 {{ __('stock.transfers_total') }}</div>
+        <div class="val">{{ $fmt($kpi['total']) }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">📦 {{ __('stock.in_transit') }}</div>
+        <div class="val mid">{{ $fmt($kpi['sent']) }}</div>
+        <div class="sub2">{{ $fmt($kpi['transit_units']) }} {{ __('stock.units') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">✅ {{ __('stock.received_count') }}</div>
+        <div class="val pos">{{ $fmt($kpi['received']) }}</div>
+    </div>
+</div>
+
 <div class="card">
     <h3>🚚 {{ __('stock.transfers') }}
         <span class="side">{{ __('stock.transfer_hint') }}</span></h3>
 
-    <div class="tablewrap">
+    @if (session('ok'))
+        <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
+    @endif
+
+    <form class="searchbar" method="GET" style="margin-bottom:12px">
+        <input type="search" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('stock.transfer') }}…" style="max-width:220px">
+        <select name="wh" style="min-width:160px">
+            <option value="">{{ __('stock.all_warehouses') }}</option>
+            @foreach ($warehouses as $w)
+                <option value="{{ $w->id }}" @selected((int) ($f['wh'] ?? 0) === $w->id)>{{ $w->displayName() }}</option>
+            @endforeach
+        </select>
+        <select name="status">
+            <option value="">{{ __('common.status') }}: {{ __('common.all') }}</option>
+            <option value="sent" @selected(($f['status'] ?? '') === 'sent')>{{ __('stock.in_transit') }}</option>
+            <option value="received" @selected(($f['status'] ?? '') === 'received')>{{ __('stock.received_count') }}</option>
+        </select>
+        <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+        <a class="btn" href="{{ route('wh.transfers') }}">{{ __('common.clear') }}</a>
+    </form>
+
+    <div class="tablewrap" style="max-height:64vh;overflow-y:auto">
         <table>
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
                 <th>{{ __('stock.transfer') }}</th>
                 <th>{{ __('stock.from_warehouse') }}</th>
@@ -76,7 +83,8 @@
                 <th>{{ __('common.status') }}</th>
                 <th></th>
             </tr>
-
+            </thead>
+            <tbody>
             @forelse ($transfers as $t)
                 <tr>
                     <td class="num">
@@ -138,283 +146,11 @@
                     {{ __('stock.no_transfers') }}
                 </td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 
     <div class="pag">{{ $transfers->links('pagination::simple-default') }}</div>
 </div>
 
-@if ($manager)
-{{-- ═══════════════ تحويل جديد ═══════════════ --}}
-<dialog id="dlgNewTr">
-    <form class="dlg" method="POST" action="{{ route('wh.transfers.store') }}" style="width:min(1040px,96vw)">
-        @csrf
-        <h4>🚚 {{ __('stock.new_transfer') }}</h4>
-
-        <div class="frow">
-            <div>
-                <label class="f">{{ __('stock.from_warehouse') }}</label>
-                <select name="from_warehouse_id" required style="width:100%">
-                    @foreach ($warehouses as $w)
-                        <option value="{{ $w->id }}">{{ $w->displayName() }} — {{ $w->typeLabel() }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="f">{{ __('stock.to_warehouse') }}</label>
-                <select name="to_warehouse_id" required style="width:100%">
-                    @foreach ($warehouses as $w)
-                        <option value="{{ $w->id }}">{{ $w->displayName() }} — {{ $w->typeLabel() }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="f">{{ __('stock.sent_on') }}</label>
-                <input type="date" name="sent_on" value="{{ today()->toDateString() }}" required style="width:100%">
-            </div>
-            <div>
-                {{-- ⚠️ اللي بيشيل مش دايماً يوزر في السيستم (عربية
-                     مؤجّرة، سواق من بره)، فاسم نصي مش قايمة. --}}
-                <label class="f">{{ __('stock.carrier') }}</label>
-                <input type="text" name="carrier_name" maxlength="120" style="width:100%"
-                       placeholder="{{ __('stock.carrier_ph') }}">
-            </div>
-        </div>
-
-        <div class="alert info" style="margin-bottom:10px">{{ __('stock.transfer_hint') }}</div>
-
-        <div class="tablewrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>{{ __('stock.item') }}</th>
-                        <th>{{ __('stock.batch_no') }}</th>
-                        <th>{{ __('stock.produced_on') }}</th>
-                        <th class="num">{{ __('stock.available') }}</th>
-                        <th>{{ __('stock.entry_unit') }}</th>
-                        <th class="num">{{ __('stock.qty') }}</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="trRows"></tbody>
-            </table>
-        </div>
-
-        <div style="margin-top:10px">
-            <button class="btn" type="button" onclick="trAddLine()">+ {{ __('stock.add_line') }}</button>
-        </div>
-
-        <div style="margin:12px 0">
-            <label class="f">{{ __('common.notes') }}</label>
-            <textarea name="notes" rows="2" style="width:100%"></textarea>
-        </div>
-
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-            <button class="btn" type="button" onclick="closeDlg('dlgNewTr')">{{ __('common.cancel') }}</button>
-            <button class="btn gold" type="submit">{{ __('common.save') }}</button>
-        </div>
-    </form>
-</dialog>
-
-{{-- قالب البند — الأوبشنز مبنية مرة واحدة في PHP فوق --}}
-<template id="trTpl">
-    <tr>
-        <td>
-            <select name="lines[IDX][product_id]" required style="width:100%"
-                    data-role="prod" onchange="trFillBatches(this)">{!! $productOptions !!}</select>
-        </td>
-        {{-- ⚠️ **قايمة مش خانة كتابة.** الباتش لازم يكون موجود فعلاً في
-             المخزن المرسل — ده اللي بيخلّي التحويل يخصم بضاعة حقيقية
-             بدل ما يخلق كمية من العدم. --}}
-        <td>
-            <select name="lines[IDX][source_batch_id]" required style="width:150px"
-                    data-role="batch" onchange="trShowBatch(this)"></select>
-        </td>
-        {{-- تاريخ الإنتاج بيجي من الباتش — مش بيتكتب. المستلم هو اللي
-             يقدر يصححه وقت الاستلام لو الورقة على الكرتونة مختلفة. --}}
-        <td class="num" data-role="prodOn" style="color:var(--muted);font-size:11.5px">—</td>
-        <td class="num" data-role="left" style="color:var(--muted);font-size:11.5px">—</td>
-        <td>
-            <select name="lines[IDX][unit]" data-role="unit" style="width:100px" onchange="trUnitHint(this)">
-                <option value="piece">{{ __('stock.unit_piece') }}</option>
-            </select>
-        </td>
-        <td class="num">
-            <input type="number" min="1" name="lines[IDX][qty]" required style="width:90px"
-                   data-role="qty" oninput="trUnitHint(this)">
-            <div data-role="eq" style="font-size:10.5px;color:var(--muted);margin-top:3px"></div>
-        </td>
-        <td class="num"><button class="btn sm" type="button" onclick="this.closest('tr').remove()">×</button></td>
-    </tr>
-</template>
-
-@endif
-
-@endsection
-
-@section('scripts')
-<script>
-    let trIdx = 0;
-
-    /**
-     * كل الباتشات القابلة للبيع في كل المخازن.
-     * ⚠️ الفلترة بتتعمل هنا مش بكويري لكل سطر — الفورم بيتملّى
-     * وانت بتكتب، وطلب سيرفر لكل تغيير في قايمة الصنف بيخلّي
-     * الشاشة تتلكّك على اتصال ضعيف في المخزن.
-     */
-    const TR_BATCHES = @if ($batchData) {!! $batchData !!} @else [] @endif;
-
-    // وحدات الإدخال لكل صنف — العرض بس؛ السيرفر بيعيد الضرب بنفسه
-    const TR_UNITS = @if ($trUnits) {!! $trUnits !!} @else {} @endif;
-    const TR_UNIT_LABELS = {
-        piece: @json(__('stock.unit_piece')),
-        box: @json(__('stock.unit_box')),
-        'case': @json(__('stock.unit_case'))
-    };
-
-    /** قايمة الوحدات المتاحة لصنف السطر (قطعة دايماً + علبة/كرتونة لو معرّفين) */
-    function trFillUnits(row) {
-        const pid = row.querySelector('[data-role="prod"]').value;
-        const sel = row.querySelector('[data-role="unit"]');
-        const factors = TR_UNITS[pid] || { piece: 1 };
-        const current = sel.value;
-
-        sel.innerHTML = '';
-        Object.keys(factors).forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u;
-            opt.textContent = TR_UNIT_LABELS[u] + (factors[u] > 1 ? ' (' + factors[u] + ')' : '');
-            sel.appendChild(opt);
-        });
-
-        sel.value = factors[current] ? current : 'piece';
-    }
-
-    /** مضاعِف وحدة السطر بالقطع */
-    function trFactor(row) {
-        const pid = row.querySelector('[data-role="prod"]').value;
-        const unit = row.querySelector('[data-role="unit"]').value;
-
-        return (TR_UNITS[pid] || {})[unit] || 1;
-    }
-
-    /**
-     * «= N قطعة» تحت الكمية + الحد الأقصى **بوحدة السطر**:
-     * باتش فيه 100 قطعة والوحدة كرتونة (12) ← أقصى كمية 8 كراتين.
-     */
-    function trUnitHint(el) {
-        const row = el.closest('tr');
-        const qtyEl = row.querySelector('[data-role="qty"]');
-        const eq = row.querySelector('[data-role="eq"]');
-        const factor = trFactor(row);
-        const batch = TR_BATCHES.find(b => String(b.id) === String(row.querySelector('[data-role="batch"]').value));
-        const qty = Number(qtyEl.value || 0);
-
-        qtyEl.max = batch ? Math.floor(batch.left / factor) : '';
-        eq.textContent = (factor > 1 && qty > 0)
-            ? '= ' + (qty * factor).toLocaleString() + ' ' + TR_UNIT_LABELS.piece
-            : '';
-    }
-
-    /** المخزن اللي بنبعت منه دلوقتي */
-    function trFromWarehouse() {
-        const el = document.querySelector('[name="from_warehouse_id"]');
-
-        return el ? Number(el.value || 0) : 0;
-    }
-
-    /** بيملا قايمة الباتشات المتاحة للصنف ده في المخزن المرسل */
-    function trFillBatches(sel) {
-        const row = sel.closest('tr');
-        const batchSel = row.querySelector('[data-role="batch"]');
-        const productId = Number(sel.value || 0);
-        const warehouseId = trFromWarehouse();
-
-        batchSel.innerHTML = '';
-        row.querySelector('[data-role="prodOn"]').textContent = '—';
-        row.querySelector('[data-role="left"]').textContent = '—';
-
-        // ⚠️ **الكمية لازم تتفضّى مع الباتش.** تغيير المخزن المرسل
-        // بيعيد ملا القايمة وبيختار أول باتش تلقائياً — لو الكمية
-        // فضلت مكتوبة، السطر بقى بيبعت كمية اتكتبت لباتش، من باتش
-        // تاني خالص برقم وصلاحية مختلفين، والمستخدم مش واخد باله.
-        const qty = row.querySelector('[data-role="qty"]');
-
-        if (qty) {
-            qty.value = '';
-        }
-
-        trFillUnits(row);
-
-        const rows = TR_BATCHES.filter(b => b.p === productId && b.w === warehouseId);
-
-        if (rows.length === 0) {
-            // ⚠️ الرسالة دي مهمة: القايمة الفاضية من غير سبب بتخلّي
-            // اللي قدامها يفتكر إن الشاشة بايظة، والسبب الحقيقي إن
-            // المخزن مافيهوش رصيد من الصنف ده أصلاً.
-            batchSel.innerHTML = '<option value="">'
-                + @json(__('stock.no_batches_here')) + '</option>';
-
-            return;
-        }
-
-        rows.forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b.id;
-            opt.textContent = b.no + ' · ' + (b.exp || '—') + ' · ' + b.left.toLocaleString();
-            batchSel.appendChild(opt);
-        });
-
-        trShowBatch(batchSel);
-    }
-
-    /** بيعرض تاريخ الإنتاج والمتاح للباتش المختار ويحدّ الكمية بيه */
-    function trShowBatch(sel) {
-        const row = sel.closest('tr');
-        const batch = TR_BATCHES.find(b => String(b.id) === String(sel.value));
-        const qty = row.querySelector('[data-role="qty"]');
-
-        row.querySelector('[data-role="prodOn"]').textContent = batch ? (batch.prod || '—') : '—';
-        row.querySelector('[data-role="left"]').textContent = batch ? batch.left.toLocaleString() : '—';
-
-        // ⚠️ السيرفر بيرفض الزيادة برضه، بس الشاشة بتقولها قبل ما
-        // اللي بيجهّز الشحنة يخلّص كل السطور ويترمي عليه خطأ.
-        // الحد بوحدة السطر (كرتونة = المتاح ÷ 12) — في trUnitHint.
-        if (qty) {
-            trUnitHint(qty);
-        }
-    }
-
-    /** تغيير المخزن المرسل بيغيّر كل قوايم الباتشات */
-    function trReloadAll() {
-        document.querySelectorAll('#trRows [data-role="prod"]').forEach(trFillBatches);
-    }
-
-    function trAddLine() {
-        const tpl = document.getElementById('trTpl');
-        if (! tpl) { return; }   // غير المدير مايشوفش فورم التحويل خالص
-        const row = tpl.content.cloneNode(true);
-        row.querySelectorAll('[name]').forEach(el => {
-            el.name = el.name.replace('IDX', trIdx);
-        });
-        document.getElementById('trRows').appendChild(row);
-        trIdx++;
-    }
-
-    // ⚠️ الفورم كله متغلّف بشرط المدير، والراوت مفتوح للكل.
-    // من غير الشرط ده أي مندوب يفتح الصفحة ياخد TypeError في الكونسول.
-    // (وممنوع نكتب اسم دايركتيف بليد في تعليق — البليد بيقراه ويكسّر الصفحة.)
-    if (document.getElementById('trRows')) {
-        trAddLine();
-
-        // ⚠️ لازم تتربط بعد ما السطر الأول يتعمل — من غير كده أول
-        // تغيير للمخزن بيلاقي جدول فاضي ومابيعملش حاجة، واللي قدامه
-        // بيفضل شايف باتشات المخزن القديم.
-        const from = document.querySelector('[name="from_warehouse_id"]');
-
-        if (from) {
-            from.addEventListener('change', trReloadAll);
-        }
-    }
-</script>
 @endsection

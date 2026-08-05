@@ -54,6 +54,12 @@ class BatchLocation extends Model
             return __('stock.location_other_warehouse');
         }
 
+        // ⚠️ بلوكات FEFO (2026-08-06): **منع نهائي** — الباتش بيترصّف
+        // في البلوك المطابق لعمره المتبقي بس، والرسالة بتقول البلوك الصح.
+        if ($err = \App\Support\LifeBands::guard($location, $batch)) {
+            return $err;
+        }
+
         // ممنوع نرصّف أكتر من اللي مستلم فعلاً في الباتش
         $unshelved = $batch->qty_remaining - $batch->shelvedQty();
         if ($qty > $unshelved) {
@@ -90,6 +96,12 @@ class BatchLocation extends Model
         }
         if ($target->warehouse_id !== $this->location->warehouse_id) {
             return __('stock.location_other_warehouse');
+        }
+
+        // ⚠️ نفس حارس البلوكات — النقل لبلوك النطاق الصح بس (وده اللي
+        // بيخلي «إعادة التوزين» تنقل البضاعة اللي كبرت لنطاق أقل وتقف)
+        if ($this->batch && ($err = \App\Support\LifeBands::guard($target, $this->batch))) {
+            return $err;
         }
 
         $free = $target->freeCapacity();

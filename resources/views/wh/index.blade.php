@@ -163,8 +163,15 @@
                                                min="1" max="{{ $left }}" value="{{ $left }}" style="width:100%">
                                     </td>
                                     <td>
+                                        {{-- الكود متملي بالبلوك المقترح من نطاق عمر الباتش (FEFO) --}}
                                         <input type="text" name="rows[{{ $b->id }}][code]" list="locCodes"
+                                               value="{{ $suggestions[$b->id] ?? '' }}"
                                                placeholder="{{ __('stock.shelf_code') }}" style="width:100%">
+                                        @if ($suggestions[$b->id] ?? null)
+                                            <div style="font-size:9.5px;color:var(--muted);margin-top:2px">
+                                                💡 {{ __('stock.suggested_block') }}: <b dir="ltr">{{ $suggestions[$b->id] }}</b>
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>
                                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">

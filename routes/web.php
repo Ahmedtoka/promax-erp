@@ -381,6 +381,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/shelves', [WarehouseController::class, 'locations'])->name('locations');
         Route::get('/expiry', [WarehouseController::class, 'expiryReport'])->name('expiry');
         Route::get('/transfers', [WarehouseController::class, 'transfers'])->name('transfers');
+        // ⚠️ قبل `{transfer}` — وإلا «new» بتتفسر كـid ياخد 404
+        Route::get('/transfers/new', [WarehouseController::class, 'newTransfer'])
+            ->middleware('role:admin,manager')->name('transfers.new');
         // ⚠️ **العرض والطباعة مفتوحين لكل اللي بيدخل شاشة المخزن.**
         // أمين المخزن المستقبِل لازم يفتح الشحنة ويطبع الورقة اللي
         // هيمضي عليها — لو محتاج المدير يفتحها له، الورقة مش هتتطبع

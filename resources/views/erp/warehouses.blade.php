@@ -36,6 +36,30 @@
         <div class="val">{{ $fmt(array_sum($transit)) }}</div>
         <div class="sub2">{{ __('stock.in_transit_hint') }}</div>
     </div>
+    <div class="kpi">
+        <div class="lbl">💰 {{ __('stock.wh_value') }}</div>
+        <div class="val pos">{{ $fmt($values->sum('val')) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('stock.wh_value_hint') }}</div>
+    </div>
+</div>
+
+{{-- ═══ التحليل البصري (2026-08-06): فين البضاعة وفين الفلوس بنظرة ═══ --}}
+<div class="card">
+    <h3>📊 {{ __('stock.warehouses') }} — {{ __('report.overview') }}</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
+        <div>
+            <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">📦 {{ __('stock.units_per_wh') }}</div>
+            <canvas id="chWhUnits" height="210"></canvas>
+        </div>
+        <div>
+            <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">💰 {{ __('stock.value_share') }}</div>
+            <canvas id="chWhValue" height="210"></canvas>
+        </div>
+        <div>
+            <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">🏷️ {{ __('stock.sku_per_wh') }}</div>
+            <canvas id="chWhSkus" height="210"></canvas>
+        </div>
+    </div>
 </div>
 
 <div class="card">
@@ -46,6 +70,7 @@
                 <th>{{ __('common.code') }}</th><th>{{ __('stock.warehouse') }}</th>
                 <th>{{ __('stock.type') }}</th><th>{{ __('stock.keeper') }}</th>
                 <th>{{ __('stock.skus') }}</th><th>{{ __('stock.qty') }}</th><th>{{ __('stock.hold') }}</th>
+                <th>{{ __('stock.wh_value') }}</th>
                 <th>{{ __('stock.in_transit') }}</th>
                 <th>{{ __('common.status') }}</th>
                 @if ($manager)<th></th>@endif
@@ -80,6 +105,7 @@
                     <td class="num">{{ $fmt($w->sku_count) }}</td>
                     <td class="num"><b>{{ $fmt($w->qty_total) }}</b></td>
                     <td class="num mid">{{ $fmt($w->hold_total) }}</td>
+                    <td class="num pos"><b>{{ $fmt($values[$w->id]->val ?? 0) }}</b></td>
                     <td class="num">
                         @php $tr = $transit[$w->id] ?? 0; @endphp
                         @if ($tr > 0)
@@ -105,7 +131,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $manager ? 12 : 11 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('stock.no_warehouses') }}
                 </td></tr>
             @endforelse
@@ -121,7 +147,45 @@
 @endsection
 
 @section('scripts')
+@php
+    // داتا الشارتات — نفس أرقام الجدول بالظبط (مصدر واحد)
+    $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
+    $chLabels = json_encode($warehouses->map(fn ($w) => $w->displayName())->values(), $jsonFlags);
+    $chUnits = json_encode($warehouses->map(fn ($w) => (int) $w->qty_total)->values());
+    $chHold = json_encode($warehouses->map(fn ($w) => (int) $w->hold_total)->values());
+    $chValues = json_encode($warehouses->map(fn ($w) => round((float) ($values[$w->id]->val ?? 0)))->values());
+    $chSkus = json_encode($warehouses->map(fn ($w) => (int) $w->sku_count)->values());
+    $lblUnits = json_encode(__('stock.qty'), $jsonFlags);
+    $lblHold = json_encode(__('stock.hold'), $jsonFlags);
+@endphp
 <script>
+const WH_COLORS = ['#12399B', '#602D90', '#D74297', '#1B7A3D', '#B86E00', '#0E7490'];
+
+new Chart(document.getElementById('chWhUnits'), {
+    type: 'bar',
+    data: { labels: {!! $chLabels !!}, datasets: [
+        { label: {!! $lblUnits !!}, data: {!! $chUnits !!}, backgroundColor: '#12399B', borderRadius: 6 },
+        { label: {!! $lblHold !!}, data: {!! $chHold !!}, backgroundColor: '#B86E00', borderRadius: 6 },
+    ]},
+    options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } },
+});
+
+new Chart(document.getElementById('chWhValue'), {
+    type: 'doughnut',
+    data: { labels: {!! $chLabels !!}, datasets: [
+        { data: {!! $chValues !!}, backgroundColor: WH_COLORS, borderColor: '#fff', borderWidth: 3, hoverOffset: 6 },
+    ]},
+    options: { cutout: '58%', plugins: { legend: { position: 'bottom' } } },
+});
+
+new Chart(document.getElementById('chWhSkus'), {
+    type: 'bar',
+    data: { labels: {!! $chLabels !!}, datasets: [
+        { data: {!! $chSkus !!}, backgroundColor: '#602D90', borderRadius: 6 },
+    ]},
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+});
+
 /**
  * ⚠️ **مودال واحد بيتملى بالجافاسكربت** بدل مودال لكل مخزن.
  * الصفحة فيها مخزنين دلوقتي بس ممكن تبقى 20 — و20 مودال في الصفحة
