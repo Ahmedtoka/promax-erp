@@ -57,6 +57,10 @@ return [
 
     'dues' => 'Contract Dues',
     'repclose' => 'Rep Settlements',
+    'dayclose' => 'Day Close',
+    'targets' => 'Targets',
+    'performance' => 'Performance Board',
+    'incentives' => 'Incentive Settings',
     'import' => 'Import Data',
     'tax' => 'Tax settings',
     'eta' => 'E-invoicing',

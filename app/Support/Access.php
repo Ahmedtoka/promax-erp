@@ -44,6 +44,8 @@ class Access
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices', 'erp.govs', 'erp.families',
+            // الحوافز: التارجتات ولوحة الأداء — شغل مدير القناة (2026-08-06)
+            'erp.targets', 'erp.performance',
             'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
@@ -92,6 +94,8 @@ class Access
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
             // تصفية المناديب — ده شغل الحسابات الأساسي (2026-08-06)
             'erp.repclose',
+            // قفل اليوم + لوحة الأداء (قراءة) — يومية الحسابات
+            'erp.dayclose', 'erp.performance',
             // ⚠️ المحاسب بيشوف الموردين ويدفع لهم — المستحقات شغله.
             // أوامر الشراء نفسها (بضاعة) مش له، وتعريف المورد
             // والافتتاحي قرارات إدارة (`role:admin,manager` في الراوت).
@@ -244,6 +248,9 @@ class Access
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
             ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
             ['ops.live', '📡', 'nav.live', 'ops.live', null],
+            // الحوافز (2026-08-06): التارجتات الشهرية + لوحة الأداء
+            ['erp.targets', '🎯', 'nav.targets', 'erp.targets*', null],
+            ['erp.performance', '🏆', 'nav.performance', 'erp.performance*', null],
         ],
 
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══
@@ -251,6 +258,8 @@ class Access
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
             // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
             ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
+            // قفل اليوم — سامري اليومية الشامل (2026-08-06)
+            ['erp.dayclose', '📅', 'nav.dayclose', 'erp.dayclose*', null],
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
         ],
@@ -271,6 +280,8 @@ class Access
             ['erp.vehicles', '🚚', 'nav.vehicles', 'erp.vehicles*', null],
             ['erp.import', '📥', 'nav.import', 'erp.import*', null],
             ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
+            // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
+            ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
         ],
     ];

@@ -275,6 +275,28 @@ Route::middleware(['auth', 'screen'])->group(function () {
         });
 
         // ===== مستحقات العقود =====
+        // ═════ الحوافز (2026-08-06): تارجتات + أداء + إعدادات ═════
+        Route::get('/targets', [\App\Http\Controllers\IncentiveController::class, 'targets'])
+            ->middleware('role:admin,manager')->name('targets');
+        Route::post('/targets', [\App\Http\Controllers\IncentiveController::class, 'saveTargets'])
+            ->middleware('role:admin,manager')->name('targets.save');
+        Route::post('/targets/copy', [\App\Http\Controllers\IncentiveController::class, 'copyTargets'])
+            ->middleware('role:admin,manager')->name('targets.copy');
+        Route::get('/performance', [\App\Http\Controllers\IncentiveController::class, 'performance'])
+            ->middleware('role:admin,manager,accountant')->name('performance');
+        Route::post('/performance/points', [\App\Http\Controllers\IncentiveController::class, 'storePoints'])
+            ->middleware('role:admin,manager')->name('performance.points');
+        Route::get('/incentives', [\App\Http\Controllers\IncentiveController::class, 'settings'])
+            ->middleware('role:admin')->name('incentives');
+        Route::post('/incentives', [\App\Http\Controllers\IncentiveController::class, 'saveSettings'])
+            ->middleware('role:admin')->name('incentives.save');
+
+        // ═════ قفل اليوم — يومية الحسابات (2026-08-06) ═════
+        Route::get('/day-close', [\App\Http\Controllers\DayCloseController::class, 'index'])
+            ->middleware('role:admin,accountant')->name('dayclose');
+        Route::post('/day-close', [\App\Http\Controllers\DayCloseController::class, 'store'])
+            ->middleware('role:admin,accountant')->name('dayclose.store');
+
         // ═════ تصفية المناديب (2026-08-06) — قفلة الحسابات اليومية ═════
         Route::get('/rep-close', [\App\Http\Controllers\RepSettlementController::class, 'index'])
             ->middleware('role:admin,accountant')->name('repclose');
