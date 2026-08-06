@@ -27,7 +27,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();   // المندوب
             // نافذة الفترة — من آخر تصفية (أو البداية) لحد لحظة القفل
             $table->timestamp('from_at')->nullable();
-            $table->timestamp('to_at');
+            $table->timestamp('to_at')->nullable(); // بيتحط دايماً وقت القفل — nullable علشان strict mode بتاع MySQL اللايف
             $table->unsignedInteger('invoices_count')->default(0);
             $table->decimal('cash_sales', 14, 2)->default(0);     // فواتير كاش (بالإجمالي)
             $table->decimal('credit_sales', 14, 2)->default(0);   // آجل — للعرض والمطابقة بس
