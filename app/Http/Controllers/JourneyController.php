@@ -486,14 +486,35 @@ class JourneyController extends Controller
     {
         $rows = $this->liveRows($request);
 
-        // زونات المناديب اللي ليها إحداثيات — دواير متقطعة على الخريطة
-        $zones = $rows->map(fn ($r) => $r['rep']->zone)
-            ->filter(fn ($z) => $z !== null && $z->lat !== null && $z->lng !== null)
-            ->unique('id')
+        // ═══ خريطة التغطية (2026-08-06) ═══
+        // مغطي = زون فيه عملاء مفعّلين. مستهدف = فيه عملاء مستنيين
+        // تفعيل أو ليدز بس لسه مفيش أكتيف — دي الزونات اللي ناويين
+        // نغطيها. زون مالوش لا دول ولا دول مش بيترسم — 362 دايرة
+        // فاضية هتغرق الخريطة.
+        $activeByZone = \App\Models\Client::where('status', 'active')
+            ->whereNotNull('zone_id')
+            ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
+        $pendingByZone = \App\Models\Client::where('status', 'pending')
+            ->whereNotNull('zone_id')
+            ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
+        $leadsByZone = \App\Models\Lead::whereNotNull('zone_id')
+            ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
+
+        $zoneIds = $activeByZone->keys()
+            ->merge($pendingByZone->keys())
+            ->merge($leadsByZone->keys())
+            ->unique();
+
+        $zones = \App\Models\Zone::whereIn('id', $zoneIds)
+            ->whereNotNull('lat')->whereNotNull('lng')
+            ->get()
             ->map(fn ($z) => [
                 'name' => $z->displayName(),
                 'lat' => (float) $z->lat,
                 'lng' => (float) $z->lng,
+                'kind' => ($activeByZone[$z->id] ?? 0) > 0 ? 'covered' : 'target',
+                'active' => (int) ($activeByZone[$z->id] ?? 0),
+                'potential' => (int) (($pendingByZone[$z->id] ?? 0) + ($leadsByZone[$z->id] ?? 0)),
             ])->values();
 
         return [

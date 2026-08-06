@@ -110,4 +110,11 @@ return [
     'alert_sale' => ':rep sold to ":client" for :value EGP',
     'alert_checkin' => ':rep checked in at ":client"',
     'alert_checkout' => ':rep closed the visit at ":client"',
+
+    // Coverage map & tape (2026-08-06)
+    'covered_zone' => 'Covered',
+    'target_zone' => 'Target',
+    'active_clients_n' => ':count active clients',
+    'potential_n' => ':count potential',
+    'market_tape' => 'Tape',
 ];

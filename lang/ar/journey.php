@@ -110,4 +110,11 @@ return [
     'alert_sale' => ':rep باع لـ«:client» بقيمة :value ج.م',
     'alert_checkin' => ':rep دخل زيارة عند «:client»',
     'alert_checkout' => ':rep قفل زيارة «:client»',
+
+    // خريطة التغطية والبورصة (2026-08-06)
+    'covered_zone' => 'مغطي',
+    'target_zone' => 'مستهدف',
+    'active_clients_n' => ':count عميل شغال',
+    'potential_n' => ':count محتمل',
+    'market_tape' => 'شريط الحركة',
 ];

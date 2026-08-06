@@ -29,6 +29,9 @@
         <div class="lv-kpis" id="lvKpis"></div>
     </div>
 
+    {{-- ═════ شريط الحركة — تيكر البورصة ═════ --}}
+    <div class="lv-tape"><div class="lv-tape-track" id="lvTape"></div></div>
+
     <div class="lv-grid">
 
         {{-- ═════ سايدبار المناديب ═════ --}}
@@ -61,6 +64,9 @@
                 <span><i class="dot d-moving"></i>{{ __('journey.moving') }}</span>
                 <span><i class="dot d-idle"></i>{{ __('journey.idle') }}</span>
                 <span><i class="dot d-off"></i>{{ __('journey.offline') }}</span>
+                <span style="border-inline-start:1px solid var(--line);padding-inline-start:12px">
+                    <i class="dot" style="background:var(--green)"></i>{{ __('journey.covered_zone') }}</span>
+                <span><i class="dot" style="background:var(--orange)"></i>{{ __('journey.target_zone') }}</span>
             </div>
         </div>
 
@@ -78,24 +84,59 @@
 </div>
 
 <style>
-/* ═════ ثيم غرفة التحكم — داكن، للشاشة دي بس ═════ */
+/* ═════ ثيم غرفة التحكم — مشتق من هوية PROMAX ═════
+   الأساس نيلي معتم من Royal Blue #12399B (مش رمادي عام)، والأكسنتات
+   نسخ مفتحة من ألوان البراند علشان الكونتراست على الخلفية الداكنة:
+   royal ← #5B7BE8، purple heart ← #9B6BDB. أخضر/أحمر بدلالة البورصة. */
 #lvRoom{
-    --bg:#0D1022; --panel:#151936; --panel2:#1C2144; --line:#262C55;
-    --txt:#E8EAF6; --dim:#8B90B5;
-    --royal:#4D6FE3; --purple:#9D6FE0; --green:#2EDE8B; --orange:#FFB020; --red:#FF5D73; --gray:#5A5F85;
-    background:var(--bg); color:var(--txt);
-    margin:-18px; padding:14px; min-height:calc(100vh - 60px);
+    --bg:#080C1E; --panel:#101635; --panel2:#171E45; --line:#232B5C;
+    --txt:#EDF0FB; --dim:#8A92C0;
+    --royal:#5B7BE8; --purple:#9B6BDB; --green:#22C55E; --orange:#F59E0B; --red:#F43F5E;
+    --gray:#5A6190; --sky:#38BDF8;
+    --grad:linear-gradient(90deg,#12399B,#602D90);
+    --grad-lite:linear-gradient(90deg,#5B7BE8,#9B6BDB);
+    background:
+        radial-gradient(1100px 500px at 85% -10%, rgba(18,57,155,.28), transparent 60%),
+        radial-gradient(900px 450px at 10% 110%, rgba(96,45,144,.22), transparent 60%),
+        var(--bg);
+    color:var(--txt);
+    margin:-18px -24px -40px; padding:14px 18px 22px; min-height:calc(100vh - 60px);
     font-variant-numeric:tabular-nums;
 }
 #lvRoom *{box-sizing:border-box}
-.lv-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+#lvRoom ::-webkit-scrollbar{width:8px;height:8px}
+#lvRoom ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+.lv-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .lv-title{display:flex;align-items:center;gap:10px;font-size:17px}
-.lv-clock{font-size:13px;color:var(--dim);direction:ltr}
-.lv-live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:lvBlink 1.4s infinite}
+.lv-clock{font-size:13px;color:var(--dim);direction:ltr;letter-spacing:.5px}
+.lv-live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lvBlink 1.4s infinite}
+
+/* KPIs — كل رقم بلونه الدال + خط علوي بجراديان البراند */
 .lv-kpis{display:flex;gap:8px;flex-wrap:wrap}
-.lv-kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 13px;text-align:center;min-width:86px}
-.lv-kpi .v{font-size:16.5px;font-weight:700}
+.lv-kpi{
+    position:relative;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:8px 14px 7px;text-align:center;min-width:92px;overflow:hidden;
+    transition:transform .15s, border-color .15s;
+}
+.lv-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--kc,var(--grad-lite))}
+.lv-kpi:hover{transform:translateY(-2px);border-color:var(--kc-b,var(--royal))}
+.lv-kpi .v{font-size:17px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px}
 .lv-kpi .l{font-size:10px;color:var(--dim);margin-top:1px;white-space:nowrap}
+.k-royal{--kc:#5B7BE8;--kc-b:#8FA5F0} .k-green{--kc:#22C55E;--kc-b:#4ADE80}
+.k-red{--kc:#F43F5E;--kc-b:#FB7185}  .k-orange{--kc:#F59E0B;--kc-b:#FBBF24}
+.k-purple{--kc:#9B6BDB;--kc-b:#B794E8} .k-sky{--kc:#38BDF8;--kc-b:#7DD3FC}
+
+/* شريط الحركة — تيكر البورصة */
+.lv-tape{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px;position:relative}
+.lv-tape::before,.lv-tape::after{content:'';position:absolute;top:0;bottom:0;width:46px;z-index:2;pointer-events:none}
+.lv-tape::before{inset-inline-start:0;background:linear-gradient(to left,transparent,var(--panel))}
+.lv-tape::after{inset-inline-end:0;background:linear-gradient(to right,transparent,var(--panel))}
+.lv-tape-track{display:inline-flex;gap:34px;white-space:nowrap;padding:7px 0;animation:lvTape 40s linear infinite;will-change:transform}
+.lv-tape:hover .lv-tape-track{animation-play-state:paused}
+.lv-tk{font-size:11.5px;display:inline-flex;gap:7px;align-items:center}
+.lv-tk .sym{font-weight:700}
+.lv-tk .up{color:var(--green)} .lv-tk .dn{color:var(--dim)}
+@keyframes lvTape{0%{transform:translateX(0)}100%{transform:translateX({{ app()->getLocale() === 'ar' ? '' : '-' }}50%)}}
 
 .lv-grid{display:grid;grid-template-columns:250px 1fr 300px;gap:12px;align-items:start}
 @media(max-width:1200px){.lv-grid{grid-template-columns:1fr}.lv-side,.lv-detail{max-height:none}}
@@ -109,9 +150,11 @@
 .lv-chip{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:3px 10px;font-size:10.5px;cursor:pointer}
 .lv-chip.on{background:var(--royal);border-color:var(--royal);color:#fff}
 .lv-replist{overflow-y:auto;display:flex;flex-direction:column;gap:6px;flex:1}
-.lv-rep{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;gap:9px;align-items:center}
-.lv-rep:hover{border-color:var(--royal)}
-.lv-rep.sel{border-color:var(--royal);box-shadow:0 0 0 1px var(--royal)}
+.lv-rep{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;gap:9px;align-items:center;transition:border-color .15s, transform .15s;position:relative;overflow:hidden}
+.lv-rep::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:transparent}
+.lv-rep:hover{border-color:var(--royal);transform:translateX({{ app()->getLocale() === 'ar' ? '-2px' : '2px' }})}
+.lv-rep.sel{border-color:var(--royal);box-shadow:0 0 0 1px var(--royal), 0 0 18px rgba(91,123,232,.25)}
+.lv-rep.sel::before{background:var(--grad-lite)}
 .lv-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;color:#fff}
 .lv-rep .nm{font-size:12.5px;font-weight:600}
 .lv-rep .mt{font-size:10px;color:var(--dim);margin-top:2px}
@@ -134,7 +177,8 @@
 
 /* بانل التفاصيل */
 .lv-detail{display:flex;flex-direction:column;gap:12px;max-height:78vh;overflow-y:auto}
-.lv-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.lv-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;position:relative;overflow:hidden}
+.lv-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--grad)}
 .lv-card-h{font-size:13px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
 .lv-dim{color:var(--dim);font-size:10.5px;font-weight:400}
 .lv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
@@ -182,14 +226,18 @@ const T = {
         off: {!! json_encode(__('journey.offline'), JSON_UNESCAPED_UNICODE) !!},
     },
     kpis: [
-        ['reps', {!! json_encode(__('journey.rep'), JSON_UNESCAPED_UNICODE) !!}],
-        ['in_zone', {!! json_encode(__('journey.in_zone'), JSON_UNESCAPED_UNICODE) !!}],
-        ['out_zone', {!! json_encode(__('journey.out_zone'), JSON_UNESCAPED_UNICODE) !!}],
-        ['idle', {!! json_encode(__('journey.stopped'), JSON_UNESCAPED_UNICODE) !!}],
-        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}],
-        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}],
-        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}],
+        ['reps', {!! json_encode(__('journey.rep'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal'],
+        ['in_zone', {!! json_encode(__('journey.in_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
+        ['out_zone', {!! json_encode(__('journey.out_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-red'],
+        ['idle', {!! json_encode(__('journey.stopped'), JSON_UNESCAPED_UNICODE) !!}, 'k-orange'],
+        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple'],
+        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}, 'k-sky'],
+        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
     ],
+    covered: {!! json_encode(__('journey.covered_zone'), JSON_UNESCAPED_UNICODE) !!},
+    target: {!! json_encode(__('journey.target_zone'), JSON_UNESCAPED_UNICODE) !!},
+    activeN: {!! json_encode(__('journey.active_clients_n'), JSON_UNESCAPED_UNICODE) !!},
+    potentialN: {!! json_encode(__('journey.potential_n'), JSON_UNESCAPED_UNICODE) !!},
     inZone: {!! json_encode(__('journey.in_zone'), JSON_UNESCAPED_UNICODE) !!},
     outZone: {!! json_encode(__('journey.out_zone'), JSON_UNESCAPED_UNICODE) !!},
     speedU: {!! json_encode(__('journey.speed_unit'), JSON_UNESCAPED_UNICODE) !!},
@@ -228,17 +276,44 @@ function drawZones() {
     zoneShapes.length = 0;
     if (!zonesOn) return;
 
+    // مغطي = أخضر ثابت · مستهدف = برتقالي متقطع — بعدّاداتهم على اللابل
     (data.zones || []).forEach(z => {
+        const covered = z.kind === 'covered';
         const c = L.circle([z.lat, z.lng], {
-            radius: 2500, color: '#8B90B5', weight: 1.2, dashArray: '6 7',
-            fillColor: '#4D6FE3', fillOpacity: .05,
+            radius: 2500,
+            color: covered ? '#22C55E' : '#F59E0B',
+            weight: covered ? 1.6 : 1.3,
+            dashArray: covered ? null : '5 8',
+            fillColor: covered ? '#22C55E' : '#F59E0B',
+            fillOpacity: covered ? .08 : .05,
         }).addTo(map);
+
+        const sub = covered
+            ? T.activeN.replace(':count', z.active)
+            : T.potentialN.replace(':count', z.potential);
         const lbl = L.marker([z.lat, z.lng], {
-            icon: L.divIcon({ className: 'lv-zone-label', html: z.name, iconSize: null }),
+            icon: L.divIcon({
+                className: 'lv-zone-label',
+                html: `<div style="text-align:center">${z.name}<br>
+                        <span style="font-size:9px;color:${covered ? '#4ADE80' : '#FBBF24'}">${covered ? '● ' + T.covered : '◌ ' + T.target} · ${sub}</span></div>`,
+                iconSize: null,
+            }),
             interactive: false,
         }).addTo(map);
         zoneShapes.push(c, lbl);
     });
+}
+
+/* شريط الحركة — كل مندوب سهم بورصة: أخضر بيبيع، رمادي ساكن */
+function renderTape() {
+    const items = (data.reps || []).map(r => {
+        const up = r.sales > 0;
+        return `<span class="lv-tk"><span class="sym">${r.name}</span>
+            <span class="${up ? 'up' : 'dn'}">${up ? '▲' : '—'} ${fmt(r.sales)}</span>
+            <span class="lv-dim">${r.done}/${r.planned}</span></span>`;
+    }).join('');
+    // المحتوى مكرر — التيكر بيلف نصه فبيبان متواصل
+    document.getElementById('lvTape').innerHTML = items + items;
 }
 
 function repIcon(r) {
@@ -256,9 +331,11 @@ function repIcon(r) {
 
 /* ═════ الرسم ═════ */
 function render() {
-    // KPIs
-    document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l]) =>
-        `<div class="lv-kpi"><div class="v">${fmt(data.totals[k])}</div><div class="l">${l}</div></div>`).join('');
+    // KPIs — كل بوكس بلونه الدال وخطه العلوي
+    document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l, cls]) =>
+        `<div class="lv-kpi ${cls}"><div class="v">${fmt(data.totals[k])}</div><div class="l">${l}</div></div>`).join('');
+
+    renderTape();
 
     // قايمة المناديب
     const q = search.trim().toLowerCase();
