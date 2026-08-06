@@ -6,113 +6,103 @@ use App\Models\Zone;
 use App\Support\Governorates;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * ═══════════════════════════════════════════════════════════════
- * مراجعة المناطق — ضد مرجع جغرافي مصري صحيح
+ * مراجعة المناطق — ضد المرجع الجغرافي الرسمي (geo.json)
  * ═══════════════════════════════════════════════════════════════
  *
- * ⚠️ **المناطق جت من 24 شيت مكتوبين بإيد ناس مختلفة** — فيها:
- * «Noarth Coast» و«North Coast» منطقتين، والإسكندرية بأربع أسماء
- * (Alexandria / Alex / اسكندرية / الاسكندرية)، و«6 أكتوبر» متسجلة
- * قاهرة، والسخنة قاهرة، والعبور قاهرة. المرجع اللي تحت هو الجغرافيا
- * الصح، والأمر بيقارن ويقول — ومايصلحش غير بأمرك.
+ * ⚠️ **المناطق بتتلوث من مصدرين:** الشيتات القديمة المكتوبة بإيد ناس
+ * مختلفة («Noarth Coast»، الإسكندرية بأربع أسماء)، واستيراد العملاء
+ * اللي بيعمل منطقة جديدة بأي اسم مش لاقيه («ستون بارك - القاهرة
+ * الجديدة»، «الشروق (يحتاج تأكيد)»). المرجع الوحيد للحقيقة هو
+ * `database/data/geo.json` — الـ362 منطقة بأكوادها وأسماءها الرسمية.
+ *
+ * المطابقة بالترتيب (إعادة كتابة 2026-08-06):
+ *  1. تطابق تام مع اسم رسمي (عربي أو إنجليزي، بعد التطبيع).
+ *  2. الأسماء البديلة المعروفة (ALIASES) — أخطاء الشيتات التاريخية.
+ *  3. الاحتواء: الاسم الرسمي جوه اسم المنطقة («التجمع الخامس -
+ *     التسعين الشمالي» → «التجمع الخامس») — بس لو مرشح واحد محدد،
+ *     لو أكتر من مرشح بنبلّغ ومابنلمسش.
+ *
+ * التنفيذ لكل منطقة متطابقة:
+ *  · نفس الصف هو حامل الكود الرسمي  ← تصحيح الاسمين والمحافظة.
+ *  · فيه صف تاني بالكود الرسمي      ← دمج فيه (كل المراجع بتتنقل).
+ *  · مفيش حامل للكود الرسمي         ← الصف ده «يتبنّى» الكود والأسماء
+ *    الرسمية — علشان promax:geo بعد كده يلاقيه بالكود ومايعملش نسخة
+ *    تانية بنفس الاسم.
  *
  * التشغيل:
  *   promax:zones            تقرير بس — مفيش أي كتابة
- *   promax:zones --fix      تصحيح المحافظات والأسماء (عربي + إنجليزي)
- *   promax:zones --merge    دمج المكرر: العملاء والمناديب بيتنقلوا
- *                           للمنطقة الأساسية والمكررة بتتمسح
+ *   promax:zones --fix      إعادة التسمية والتبنّي (من غير دمج)
+ *   promax:zones --merge    الدمج كمان: المراجع بتتنقل والمكرر بيتمسح
  */
 class AuditZones extends Command
 {
     protected $signature = 'promax:zones {--fix} {--merge}';
 
-    protected $description = 'مراجعة المناطق ضد المرجع الجغرافي: محافظات غلط، أسماء مكررة، لغة مخلوطة';
+    protected $description = 'مراجعة المناطق ضد المرجع الجغرافي: تسمية غلط، مكرر، لغة مخلوطة — وإصلاحها';
+
+    /** الجداول اللي فيها zone_id — بتتلم كلها عند الدمج (زي promax:geo) */
+    private const ZONE_REF_TABLES = ['clients', 'users', 'client_requests', 'leads', 'journey_plans'];
 
     /**
-     * المرجع: المفتاح المطبّع ⇒ [الاسم العربي، الإنجليزي، المحافظة].
-     *
-     * ⚠️ **المفتاح الأول في كل مجموعة أسماء هو الأساسي** — الباقي
-     * أسماء بديلة بتتحوّل ليه. المحافظات من الجغرافيا الفعلية مش من
-     * الشيتات: أكتوبر والشيخ زايد والدقي جيزة، العبور قليوبية،
-     * السخنة سويس، العاشر شرقية، الساحل مطروح.
+     * أخطاء الشيتات التاريخية: البديل المطبّع ⇒ الاسم العربي الرسمي.
+     * الاسم الرسمي لازم يبقى موجود في geo.json — لو مش موجود البديل
+     * بيتساب والمنطقة بتتبلّغ «مش في المرجع».
      */
-    private const REFERENCE = [
-        // القاهرة
-        'cairo_city' => ['القاهرة', 'Cairo', 'cairo', ['القاهرة', 'cairo']],
-        'heliopolis' => ['مصر الجديدة', 'Heliopolis', 'cairo', ['heliopolis', 'مصر الجديدة']],
-        'nasr_city' => ['مدينة نصر', 'Nasr City', 'cairo', ['nasr city', 'مدينة نصر']],
-        'new_cairo' => ['القاهرة الجديدة', 'New Cairo', 'cairo',
-            ['new cairo', 'tagamou3', 'tagamou', 'التجمع', 'التجمع الخامس', 'القاهرة الجديدة']],
-        'rehab' => ['الرحاب', 'Rehab', 'cairo', ['rehab', 'الرحاب', 'الرحاب والتجمع الأول']],
-        'madinaty' => ['مدينتي', 'Madinaty', 'cairo', ['madinaty', 'مدينتي']],
-        'shorouk' => ['الشروق', 'Shorouk', 'cairo', ['shorouk', 'الشروق', 'الشروق والمستقبل']],
-        'new_capital' => ['العاصمة الإدارية', 'New Capital', 'cairo', ['new capital', 'العاصمة الإدارية']],
-        'maadi' => ['المعادي', 'Maadi', 'cairo', ['maadi', 'المعادي']],
-        'katameya' => ['القطامية', 'Katameya', 'cairo', ['elkatamya', 'katameya', 'القطامية']],
-        'mokattam' => ['المقطم', 'Mokattam', 'cairo', ['mokkatam', 'mokattam', 'المقطم']],
-        'helwan' => ['حلوان', 'Helwan', 'cairo', ['helwan', 'حلوان']],
-        'zamalek' => ['الزمالك', 'Zamalek', 'cairo', ['zamalek', 'الزمالك']],
-        'downtown' => ['وسط البلد', 'Downtown', 'cairo', ['downtown', 'وسط البلد']],
-        'abbasia' => ['العباسية', 'Abbasia', 'cairo', ['abbasia', 'العباسية']],
-        'ring_road' => ['الطريق الدائري', 'Ring Road', 'cairo', ['ring road', 'الدائري']],
-        'autostrad' => ['الأوتوستراد', 'Autostrad', 'cairo', ['autostourad', 'autostrad', 'الأوتوستراد']],
-        'mehwar_shahed' => ['محور الشهيد', 'Mehwar El Shahed', 'cairo', ['mehwar elshahed', 'محور الشهيد']],
-        'mehwar_moshir' => ['محور المشير', 'Mehwar El Moshir', 'cairo', ['mehwar elmoshier', 'محور المشير']],
-
-        // الجيزة
-        'giza_city' => ['الجيزة', 'Giza', 'giza', ['الجيزة', 'giza']],
-        'october' => ['السادس من أكتوبر', '6th of October', 'giza',
-            ['6th of october city', '6th of october', 'october', 'أكتوبر', 'السادس من أكتوبر']],
-        'zayed' => ['الشيخ زايد', 'Sheikh Zayed', 'giza', ['zayed', 'sheikh zayed', 'الشيخ زايد']],
-        'dokki' => ['الدقي', 'Dokki', 'giza', ['dokki', 'الدقي']],
-        'fayoum_road' => ['طريق الفيوم', 'Fayoum Road', 'giza', ['fayioum road', 'fayoum road', 'طريق الفيوم']],
-
-        // القليوبية والشرقية
-        'obour' => ['العبور', 'Obour', 'qalyubia', ['obour city', 'obour', 'العبور']],
-        'tenth_ramadan' => ['العاشر من رمضان', '10th of Ramadan', 'sharqia',
-            ['10th of ramadan', 'العاشر من رمضان', 'العاشر']],
-        'zagazig' => ['الزقازيق', 'Zagazig', 'sharqia', ['zagazig', 'الزقازيق']],
-        'sharqia_gov' => ['الشرقية', 'Sharqia', 'sharqia', ['sharqia', 'الشرقية']],
-
-        // الإسكندرية والساحل ومطروح
-        'alexandria' => ['الإسكندرية', 'Alexandria', 'alexandria',
-            ['alexandria', 'alex', 'اسكندرية', 'الاسكندرية', 'الإسكندرية']],
-        'north_coast' => ['الساحل الشمالي', 'North Coast', 'matrouh',
-            ['north coast', 'noarth coast', 'الساحل الشمالي', 'الساحل']],
-        'matrouh_city' => ['مطروح', 'Matrouh', 'matrouh', ['matrouh', 'مطروح']],
-
-        // الدلتا
-        'mansoura' => ['المنصورة', 'Mansoura', 'dakahlia', ['mansoura', 'المنصورة']],
-        'dakahlia_gov' => ['الدقهلية', 'Dakahlia', 'dakahlia', ['الدقهلية', 'dakahlia']],
-        'tanta' => ['طنطا', 'Tanta', 'gharbia', ['tanta', 'طنطا']],
-        'mahalla' => ['المحلة الكبرى', 'El Mahalla', 'gharbia', ['el mahala', 'el mahalla', 'المحلة', 'المحلة الكبرى']],
-        'kafr_sheikh' => ['كفر الشيخ', 'Kafr El Sheikh', 'kafr_el_sheikh', ['kafr elsheikh', 'kafr el sheikh', 'كفر الشيخ']],
-        'damietta_city' => ['دمياط', 'Damietta', 'damietta', ['damietta', 'دمياط']],
-
-        // القناة وسيناء
-        'ismailia_city' => ['الإسماعيلية', 'Ismailia', 'ismailia',
-            ['ismailia', 'ismallia', 'الإسماعيلية', 'الاسماعيلية']],
-        'port_said_city' => ['بورسعيد', 'Port Said', 'port_said', ['port said', 'بورسعيد']],
-        'sokhna' => ['العين السخنة', 'Ain Sokhna', 'suez', ['sokhna', 'ain sokhna', 'السخنة', 'العين السخنة']],
-        'sharm' => ['شرم الشيخ', 'Sharm El Sheikh', 'south_sinai',
-            ['sharm elsheikh', 'sharm el sheikh', 'شرم الشيخ']],
-        'south_sinai_gov' => ['جنوب سيناء', 'South Sinai', 'south_sinai', ['جنوب سيناء', 'south sinai']],
-
-        // اللي ظهروا في أول تشغيل على اللايف
-        'monufia_gov' => ['المنوفية', 'Monufia', 'monufia', ['المنوفية', 'monufia', 'منوفيه']],
-        'mostakbal' => ['مدينة المستقبل', 'Mostakbal City', 'cairo',
-            ['المستقبل', 'mostakbal', 'mostakbal city', 'مدينة المستقبل']],
-
-        // البحر الأحمر والصعيد
-        'gouna' => ['الجونة', 'El Gouna', 'red_sea', ['gouna', 'el gouna', 'الجونة']],
-        'red_sea_gov' => ['البحر الأحمر', 'Red Sea', 'red_sea', ['البحر الاحمر', 'البحر الأحمر', 'red sea']],
-        'asyut_city' => ['أسيوط', 'Asyut', 'asyut', ['assuit', 'asyut', 'أسيوط', 'اسيوط']],
+    private const ALIASES = [
+        'noarth coast' => 'الساحل الشمالي',
+        'north coast' => 'الساحل الشمالي',
+        'ساحل' => 'الساحل الشمالي',
+        'alex' => 'الإسكندرية',
+        'اسكندريه' => 'الإسكندرية',
+        'tagamou3' => 'التجمع الخامس',
+        'tagamou' => 'التجمع الخامس',
+        'تجمع' => 'التجمع الخامس',
+        'اكتوبر' => 'السادس من أكتوبر',
+        'october' => 'السادس من أكتوبر',
+        '6th of october' => 'السادس من أكتوبر',
+        '6th of october city' => 'السادس من أكتوبر',
+        'zayed' => 'الشيخ زايد',
+        'سخنه' => 'العين السخنة',
+        'sokhna' => 'العين السخنة',
+        'عاشر' => 'العاشر من رمضان',
+        '10th of ramadan' => 'العاشر من رمضان',
+        'obour city' => 'العبور',
+        'mokkatam' => 'المقطم',
+        'elkatamya' => 'القطامية',
+        'ismallia' => 'الإسماعيلية',
+        'el mahala' => 'المحلة الكبرى',
+        'محله' => 'المحلة الكبرى',
+        'assuit' => 'أسيوط',
+        'fayioum road' => 'طريق الفيوم',
+        'autostourad' => 'الأوتوستراد',
+        'mehwar elshahed' => 'محور الشهيد',
+        'mehwar elmoshier' => 'محور المشير',
+        'sharm elsheikh' => 'شرم الشيخ',
+        'kafr elsheikh' => 'كفر الشيخ',
+        'mostakbal' => 'مدينة المستقبل',
+        'مستقبل' => 'مدينة المستقبل',
+        'شروق والمستقبل' => 'الشروق',
+        'رحاب والتجمع الاول' => 'الرحاب',
+        'gouna' => 'الجونة',
+        'منوفيه' => 'المنوفية',
     ];
+
+    /** @var array<string, array{code: string, name: string, name_en: ?string, gov: string, type: ?string, lat: ?float, lng: ?float}> بالكود */
+    private array $reference = [];
+
+    /** @var array<string, string> الاسم المطبّع (عربي/إنجليزي) ⇒ الكود */
+    private array $byName = [];
 
     public function handle(): int
     {
+        if (! $this->loadReference()) {
+            return self::FAILURE;
+        }
+
         $zones = Zone::withCount('clients')->get();
 
         if ($zones->isEmpty()) {
@@ -121,43 +111,73 @@ class AuditZones extends Command
             return self::SUCCESS;
         }
 
-        // مفتاح مرجعي لكل منطقة (لو اتعرفت)
-        $matched = [];   // zone_id => ref_key
+        // كل منطقة بتتحكم عليها: كود رسمي أو null (مش في المرجع)
+        $matched = [];        // zone_id => canonical code
+        $how = [];            // zone_id => طريقة المطابقة (للتقرير)
 
         foreach ($zones as $z) {
-            foreach ([$z->name, $z->name_en] as $candidate) {
-                if ($key = $this->refKey((string) $candidate)) {
-                    $matched[$z->id] = $key;
+            [$code, $method] = $this->match($z);
 
-                    break;
-                }
+            if ($code !== null) {
+                $matched[$z->id] = $code;
+                $how[$z->id] = $method;
             }
         }
 
+        // التجميع بالكود الرسمي — بيحدد مين يتسمى ومين يندمج في مين
+        $plan = $this->plan($zones, $matched);
+
         $this->reportUnknown($zones, $matched);
-        $wrongGov = $this->reportGovernorates($zones, $matched);
-        $langIssues = $this->reportLanguage($zones, $matched);
-        $groups = $this->reportDuplicates($zones, $matched);
+        $this->reportPlan($plan, $how);
+        $this->reportLanguage($zones);
 
-        if ($this->option('fix')) {
-            $this->fix($zones, $matched);
-        }
-
-        if ($this->option('merge')) {
-            $this->merge($zones, $matched, $groups);
-        }
-
-        if (! $this->option('fix') && ! $this->option('merge')) {
+        if ($this->option('fix') || $this->option('merge')) {
+            $this->apply($plan, applyMerges: (bool) $this->option('merge'));
+        } else {
             $this->newLine();
-            $this->line('  💡 ده تقرير بس. التصحيح: <fg=yellow>--fix</> · الدمج: <fg=yellow>--merge</> (اعمل fix الأول)');
+            $this->line('  💡 ده تقرير بس. التصحيح والتبنّي: <fg=yellow>--fix</> · مع الدمج: <fg=yellow>--merge</>');
         }
 
         return self::SUCCESS;
     }
 
     // ═══════════════════════════════════════════════════════════
-    //  التطبيع والمطابقة
+    //  المرجع
     // ═══════════════════════════════════════════════════════════
+
+    private function loadReference(): bool
+    {
+        $path = database_path('data/geo.json');
+
+        if (! is_file($path)) {
+            $this->error("مفيش ملف $path — المرجع الجغرافي مش موجود.");
+
+            return false;
+        }
+
+        $geo = json_decode((string) file_get_contents($path), true);
+
+        if (! is_array($geo) || empty($geo['zones'])) {
+            $this->error('ملف geo.json بايظ أو من غير مناطق.');
+
+            return false;
+        }
+
+        foreach ($geo['zones'] as $z) {
+            $this->reference[$z['code']] = $z;
+            $this->byName[$this->norm($z['name'])] = $z['code'];
+
+            if (! empty($z['name_en'])) {
+                // الأولوية للعربي — الإنجليزي مايكسبش لو اتسجل قبله عربي
+                $en = $this->norm($z['name_en']);
+                $this->byName[$en] ??= $z['code'];
+            }
+        }
+
+        $this->line('  المرجع: '.count($this->reference).' منطقة رسمية من geo.json');
+
+        return true;
+    }
 
     /** تطبيع اسم للمقارنة: صغير، من غير ال التعريف، همزات موحدة */
     private function norm(string $s): string
@@ -165,30 +185,120 @@ class AuditZones extends Command
         $s = mb_strtolower(trim($s));
         $s = str_replace(['أ', 'إ', 'آ'], 'ا', $s);
         $s = str_replace('ة', 'ه', $s);
+        $s = str_replace('ى', 'ي', $s);
+        $s = preg_replace('/[()\x{FF08}\x{FF09}]/u', ' ', $s) ?? $s;
+        $s = preg_replace('/[\s\-_.،,\/]+/u', ' ', $s) ?? $s;
+        $s = trim($s);
         $s = preg_replace('/^(ال)/u', '', $s) ?? $s;
-        $s = preg_replace('/[\s\-_.]+/u', ' ', $s) ?? $s;
 
         return trim($s);
     }
 
-    /** المنطقة دي مين في المرجع؟ */
-    private function refKey(string $name): ?string
+    /**
+     * المنطقة دي مين في المرجع؟
+     *
+     * @return array{0: ?string, 1: string} [الكود، طريقة المطابقة]
+     */
+    private function match(Zone $z): array
     {
-        $n = $this->norm($name);
+        $candidates = array_filter([(string) $z->name, (string) $z->name_en]);
 
-        if ($n === '') {
-            return null;
+        // الكود نفسه رسمي؟ — أوثق مطابقة على الإطلاق
+        if (isset($this->reference[$z->code])) {
+            return [$z->code, 'بالكود'];
         }
 
-        foreach (self::REFERENCE as $key => [$ar, $en, $gov, $aliases]) {
-            foreach ($aliases as $alias) {
-                if ($this->norm($alias) === $n) {
-                    return $key;
+        // 1) تطابق تام
+        foreach ($candidates as $c) {
+            $n = $this->norm($c);
+
+            if ($n !== '' && isset($this->byName[$n])) {
+                return [$this->byName[$n], 'تطابق تام'];
+            }
+        }
+
+        // 2) الأسماء البديلة المعروفة
+        foreach ($candidates as $c) {
+            $alias = self::ALIASES[$this->norm($c)] ?? null;
+
+            if ($alias !== null && isset($this->byName[$this->norm($alias)])) {
+                return [$this->byName[$this->norm($alias)], 'اسم بديل'];
+            }
+        }
+
+        // 3) الاحتواء: اسم رسمي جوه اسم المنطقة — مرشح واحد محدد بس.
+        //    ⚠️ أقل من 4 حروف بيلقط صدف («حي»، «مصر») — مستبعد.
+        $hits = [];
+
+        foreach ($candidates as $c) {
+            $n = $this->norm($c);
+
+            if (mb_strlen($n) < 4) {
+                continue;
+            }
+
+            foreach ($this->byName as $refName => $code) {
+                if (mb_strlen($refName) >= 4 && str_contains($n, $refName)) {
+                    $hits[$code] = max($hits[$code] ?? 0, mb_strlen($refName));
                 }
             }
         }
 
-        return null;
+        if ($hits !== []) {
+            arsort($hits);
+            $codes = array_keys($hits);
+
+            // مرشحين بنفس طول المطابقة = التباس — بلاش تخمين
+            if (count($codes) === 1 || $hits[$codes[0]] > $hits[$codes[1]]) {
+                return [$codes[0], 'احتواء'];
+            }
+        }
+
+        return [null, ''];
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  الخطة: مين يتسمى، مين يتبنّى الكود، مين يندمج في مين
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * @return array{renames: list<array{zone: Zone, ref: array}>,
+     *               adoptions: list<array{zone: Zone, ref: array}>,
+     *               merges: list<array{loser: Zone, survivor: Zone}>}
+     */
+    private function plan($zones, array $matched): array
+    {
+        $renames = $adoptions = $merges = [];
+
+        // ⚠️ preserveKeys — من غيرها groupBy بترمي مفاتيح المصفوفة
+        // (أرقام الزونات) وبنجمع بـ[0,1,..] فالخطة بتطلع غلط في صمت
+        foreach (collect($matched)->groupBy(fn ($code) => $code, preserveKeys: true) as $code => $group) {
+            $ref = $this->reference[$code];
+            $members = $zones->whereIn('id', array_keys($group->all()))->values();
+
+            // الناجي: حامل الكود الرسمي لو موجود، وإلا صاحب أكبر عدد عملاء
+            $survivor = $members->firstWhere('code', $code)
+                ?? $members->sortByDesc('clients_count')->first();
+
+            if ($survivor->code === $code) {
+                // اسمه أو محافظته ممكن يكونوا محتاجين تصحيح
+                if ($survivor->name !== $ref['name']
+                    || $survivor->name_en !== ($ref['name_en'] ?? null)
+                    || $survivor->governorate !== $ref['gov']) {
+                    $renames[] = ['zone' => $survivor, 'ref' => $ref];
+                }
+            } else {
+                $adoptions[] = ['zone' => $survivor, 'ref' => $ref];
+            }
+
+            foreach ($members as $m) {
+                if ($m->id !== $survivor->id) {
+                    $merges[] = ['loser' => $m, 'survivor' => $survivor];
+                }
+            }
+        }
+
+        return ['renames' => $renames, 'adoptions' => $adoptions, 'merges' => $merges];
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -204,41 +314,47 @@ class AuditZones extends Command
         }
 
         $this->newLine();
-        $this->warn('  ❓ مش في المرجع ('.$unknown->count().') — راجعهم بإيدك أو زوّدهم في REFERENCE:');
+        $this->warn('  ❓ مش في المرجع ('.$unknown->count().') — مش هتتلمس، راجعها بإيدك أو زوّد المرجع/الأسماء البديلة:');
 
         foreach ($unknown as $z) {
             $this->line("     · {$z->code}: {$z->name} / {$z->name_en} ({$z->clients_count} عميل)");
         }
     }
 
-    private function reportGovernorates($zones, array $matched): int
+    private function reportPlan(array $plan, array $how): void
     {
         $this->newLine();
-        $this->line('  ── المحافظات ──');
-        $n = 0;
+        $this->line('  ── التسمية والتصحيح ──');
 
-        foreach ($zones as $z) {
-            $key = $matched[$z->id] ?? null;
-
-            if ($key === null) {
-                continue;
-            }
-
-            $correct = self::REFERENCE[$key][2];
-
-            if ($z->governorate !== $correct) {
-                $from = $z->governorate ? Governorates::label($z->governorate) : '—';
-                $this->line("     ✗ {$z->name} ({$z->code}): {$from} ← المفروض ".Governorates::label($correct));
-                $n++;
-            }
+        if ($plan['renames'] === [] && $plan['adoptions'] === []) {
+            $this->line('     ✓ الأسماء كلها مطابقة للمرجع');
         }
 
-        $this->line($n === 0 ? '     ✓ كلها صح' : "     {$n} محافظة غلط");
+        foreach ($plan['renames'] as $r) {
+            $z = $r['zone'];
+            $this->line("     ✎ {$z->code}: «{$z->name}» ← «{$r['ref']['name']}» / «{$r['ref']['name_en']}» (".($how[$z->id] ?? '')                .')');
+        }
 
-        return $n;
+        foreach ($plan['adoptions'] as $a) {
+            $z = $a['zone'];
+            $this->line("     ⇢ «{$z->name}» ({$z->code}, {$z->clients_count} عميل) هيتبنّى الكود الرسمي {$a['ref']['code']} «{$a['ref']['name']}» (".($how[$z->id] ?? '').')');
+        }
+
+        $this->newLine();
+        $this->line('  ── الدمج ──');
+
+        if ($plan['merges'] === []) {
+            $this->line('     ✓ مفيش تكرار');
+
+            return;
+        }
+
+        foreach ($plan['merges'] as $m) {
+            $this->line("     ⇒ «{$m['loser']->name}» ({$m['loser']->code}, {$m['loser']->clients_count} عميل) هتندمج في «{$m['survivor']->name}» ({$m['survivor']->code})");
+        }
     }
 
-    private function reportLanguage($zones, array $matched): int
+    private function reportLanguage($zones): void
     {
         $this->newLine();
         $this->line('  ── اللغة ──');
@@ -246,13 +362,11 @@ class AuditZones extends Command
 
         foreach ($zones as $z) {
             $issues = [];
-            $nameHasLatin = (bool) preg_match('/[a-z]/i', (string) $z->name);
-            $enHasArabic = (bool) preg_match('/[\x{0600}-\x{06FF}]/u', (string) $z->name_en);
 
-            if ($nameHasLatin) {
+            if (preg_match('/[a-z]/i', (string) $z->name)) {
                 $issues[] = 'الاسم العربي فيه إنجليزي';
             }
-            if ($enHasArabic) {
+            if (preg_match('/[\x{0600}-\x{06FF}]/u', (string) $z->name_en)) {
                 $issues[] = 'الاسم الإنجليزي فيه عربي';
             }
             if (! $z->name_en) {
@@ -265,132 +379,80 @@ class AuditZones extends Command
             }
         }
 
-        $this->line($n === 0 ? '     ✓ اللغة نضيفة' : "     {$n} منطقة لغتها مخلوطة");
-
-        return $n;
-    }
-
-    /** @return array<string, \Illuminate\Support\Collection> مجموعات المكرر */
-    private function reportDuplicates($zones, array $matched): array
-    {
-        $this->newLine();
-        $this->line('  ── المكرر ──');
-
-        $groups = collect($matched)
-            ->map(fn ($key, $zoneId) => ['key' => $key, 'zone' => $zones->firstWhere('id', $zoneId)])
-            ->groupBy('key')
-            ->filter(fn ($g) => $g->count() > 1)
-            ->map(fn ($g) => $g->pluck('zone'));
-
-        if ($groups->isEmpty()) {
-            $this->line('     ✓ مفيش تكرار');
-
-            return [];
-        }
-
-        foreach ($groups as $key => $group) {
-            [$ar, $en] = self::REFERENCE[$key];
-            $names = $group->map(fn ($z) => "{$z->name} ({$z->clients_count})")->join(' + ');
-            $this->line("     ✗ {$ar} / {$en}: {$names}");
-        }
-
-        $this->line('     '.$groups->count().' منطقة متسجلة بأكتر من اسم');
-
-        return $groups->all();
+        $this->line($n === 0 ? '     ✓ اللغة نضيفة' : "     {$n} منطقة لغتها مخلوطة — المتطابقة بتتصلح مع --fix");
     }
 
     // ═══════════════════════════════════════════════════════════
-    //  التصحيح
+    //  التنفيذ
     // ═══════════════════════════════════════════════════════════
 
-    private function fix($zones, array $matched): void
+    private function apply(array $plan, bool $applyMerges): void
     {
         $this->newLine();
-        $this->line('  ── التصحيح ──');
-        $n = 0;
+        $this->line('  ── التنفيذ ──');
 
-        DB::transaction(function () use ($zones, $matched, &$n) {
-            foreach ($zones as $z) {
-                $key = $matched[$z->id] ?? null;
+        DB::transaction(function () use ($plan, $applyMerges) {
+            foreach ($plan['renames'] as $r) {
+                $this->applyRef($r['zone'], $r['ref'], adoptCode: false);
+                $this->line("     ✓ {$r['zone']->code}: اتسمت «{$r['ref']['name']}»");
+            }
 
-                if ($key === null) {
-                    continue;
-                }
+            foreach ($plan['adoptions'] as $a) {
+                $this->applyRef($a['zone'], $a['ref'], adoptCode: true);
+                $this->line("     ✓ «{$a['ref']['name']}» تبنّت الكود الرسمي {$a['ref']['code']}");
+            }
 
-                [$ar, $en, $gov] = self::REFERENCE[$key];
+            if (! $applyMerges) {
+                return;
+            }
 
-                // ⚠️ الاسم العربي في `name` والإنجليزي في `name_en` —
-                // من المرجع مباشرة، مش تنضيف نص الشيت.
-                $dirty = [];
-
-                if ($z->name !== $ar) {
-                    $dirty['name'] = $ar;
-                }
-                if ($z->name_en !== $en) {
-                    $dirty['name_en'] = $en;
-                }
-                if ($z->governorate !== $gov) {
-                    $dirty['governorate'] = $gov;
-                }
-
-                if ($dirty !== []) {
-                    $z->update($dirty);
-                    $n++;
-                }
+            foreach ($plan['merges'] as $m) {
+                $this->mergeInto($m['loser'], $m['survivor']);
+                $this->line("     ✓ «{$m['loser']->name}» ({$m['loser']->code}) اندمجت في «{$m['survivor']->name}» ({$m['survivor']->code})");
             }
         });
 
-        $this->info("     ✓ اتصلح: {$n} منطقة");
+        if (! $applyMerges && $plan['merges'] !== []) {
+            $this->warn('     ⚠ فيه '.count($plan['merges']).' دمج مستني — شغّل --merge علشان ينفذ.');
+        }
+
+        $this->info('     ✓ خلص.');
+    }
+
+    /** كتابة بيانات المرجع على الصف — الإحداثيات بتتحدث لو المرجع أدق */
+    private function applyRef(Zone $z, array $ref, bool $adoptCode): void
+    {
+        $z->update(array_filter([
+            'code' => $adoptCode ? $ref['code'] : null,
+            'name' => $ref['name'],
+            'name_en' => $ref['name_en'] ?? null,
+            'governorate' => $ref['gov'],
+            'type' => $ref['type'] ?? null,
+            'lat' => $ref['lat'] ?? null,
+            'lng' => $ref['lng'] ?? null,
+        ], fn ($v) => $v !== null));
     }
 
     /**
-     * دمج المكرر — العيال بتتنقل للأساسي والمكرر بيتمسح.
+     * دمج منطقة في الرسمية — كل المراجع بتتنقل وبعدين المكررة بتتمسح.
      *
-     * ⚠️ **الأساسي = اللي عليه عملاء أكتر.** وكل حاجة بتشاور على
-     * المكرر بتتنقل: العملاء، المناديب (العمود والجدول الوسيط)،
-     * الليدز، وطلبات العملاء. المسح من غير النقل كان بيسيب
-     * `nullOnDelete` يفضّي مناطق كل دول في صمت.
+     * ⚠️ نفس جداول promax:geo بالظبط + `zone_user` بحماية الـUNIQUE —
+     * المسح من غير النقل بيسيب nullOnDelete يفضّي مناطق العملاء في صمت.
      */
-    private function merge($zones, array $matched, array $groups): void
+    private function mergeInto(Zone $loser, Zone $survivor): void
     {
-        $this->newLine();
-        $this->line('  ── الدمج ──');
-
-        if ($groups === []) {
-            $this->line('     مفيش حاجة تتدمج.');
-
-            return;
+        foreach (self::ZONE_REF_TABLES as $table) {
+            if (Schema::hasTable($table) && Schema::hasColumn($table, 'zone_id')) {
+                DB::table($table)->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
+            }
         }
 
-        DB::transaction(function () use ($groups) {
-            foreach ($groups as $key => $group) {
-                $survivor = $group->sortByDesc('clients_count')->first();
-                $losers = $group->where('id', '!=', $survivor->id);
+        if (Schema::hasTable('zone_user')) {
+            $dupUsers = DB::table('zone_user')->where('zone_id', $survivor->id)->pluck('user_id');
+            DB::table('zone_user')->where('zone_id', $loser->id)->whereIn('user_id', $dupUsers)->delete();
+            DB::table('zone_user')->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
+        }
 
-                foreach ($losers as $loser) {
-                    DB::table('clients')->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
-                    DB::table('users')->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
-                    DB::table('leads')->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
-                    DB::table('client_requests')->where('zone_id', $loser->id)->update(['zone_id' => $survivor->id]);
-
-                    // الجدول الوسيط: انقل اللي مش موجود وامسح الباقي —
-                    // النقل الأعمى بيكسر الـUNIQUE لو المندوب على الاتنين
-                    $repIds = DB::table('zone_user')->where('zone_id', $loser->id)->pluck('user_id');
-
-                    foreach ($repIds as $repId) {
-                        DB::table('zone_user')->updateOrInsert(
-                            ['zone_id' => $survivor->id, 'user_id' => $repId],
-                        );
-                    }
-
-                    DB::table('zone_user')->where('zone_id', $loser->id)->delete();
-
-                    $loser->delete();
-                    $this->line("     ✓ «{$loser->name}» ({$loser->code}) اندمجت في «{$survivor->name}» ({$survivor->code})");
-                }
-            }
-        });
-
-        $this->info('     ✓ الدمج خلص — الأرقام كلها اتنقلت للمناطق الأساسية');
+        $loser->delete();
     }
 }
