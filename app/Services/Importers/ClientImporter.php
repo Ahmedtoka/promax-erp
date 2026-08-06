@@ -56,6 +56,8 @@ class ClientImporter extends Importer
             'manager' => ['الأكونت مانجر', 'مدير الحساب', 'manager', 'account manager'],
             'contact' => ['اسم المسؤول', 'الكونتاكت', 'contact', 'اسم المسؤول / الكونتاكت'],
             'phone2' => ['أرقام إضافية', 'phone2', 'تليفون إضافي'],
+            // إضافة 2026-08-06 — شيتات السلاسل بلينكات جوجل ماب (كيو ماركت)
+            'location_url' => ['لينك اللوكيشن', 'اللوكيشن', 'رابط الخريطة', 'location', 'location_url', 'map link'],
         ];
     }
 
@@ -181,6 +183,22 @@ class ClientImporter extends Importer
                     // الشيت بالنسبة، الداتابيز بالكسر — القسمة مرة واحدة
                     $payload['discount'] = $discount / 100;
                     $payload['uses_channel_discount'] = $discount <= 0;
+                }
+
+                // لينك اللوكيشن (2026-08-06): بيتخزن على العميل، ولو الشيت
+                // من غير إحداثيات بنحاول نفكه من السيرفر (نفس مسار زرار
+                // «اكتشف اللوكيشن» — الدومين بيتفحص جوه MapLink قبل أي اتصال).
+                // فشل الفك مش بيوقف الاستيراد — الزرار موجود في كارت العميل.
+                $link = trim((string) ($row['location_url'] ?? ''));
+
+                if ($link !== '') {
+                    $payload['location_url'] = $link;
+
+                    if ($payload['lat'] === null && $payload['lng'] === null
+                        && ($pt = \App\Support\MapLink::resolve($link)) !== null) {
+                        $payload['lat'] = $pt['lat'];
+                        $payload['lng'] = $pt['lng'];
+                    }
                 }
 
                 // ⚠️ ونفس المبدأ للإضافات — الفاضي مايمسحش الموجود
