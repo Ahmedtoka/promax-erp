@@ -51,20 +51,38 @@
         <span class="badge b-gray">{{ __('client.chain_countable', ['count' => $groups->count()]) }}</span>
     </form>
 
-    <div class="tablewrap">
-        <table>
+    {{-- فريز الهيدر + سورت بالضغط على العمود (2026-08-06) —
+         نفس نمط شاشة المنتجات: الحاوية هي اللي بتسكرول والهيدر sticky --}}
+    <div class="tablewrap" style="max-height:66vh;overflow-y:auto">
+        <table id="chainsTbl">
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
-                <th>{{ __('client.chain') }}</th><th>{{ __('client.channel') }}</th><th>{{ __('client.segment') }}</th><th>{{ __('client.branch_count') }}</th>
-                <th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.collection_rate') }}</th>
+                <th class="srt" data-k="name" data-t="s">{{ __('client.chain') }}<span class="arw"></span></th>
+                <th class="srt" data-k="channel" data-t="s">{{ __('client.channel') }}<span class="arw"></span></th>
+                <th class="srt" data-k="segment" data-t="s">{{ __('client.segment') }}<span class="arw"></span></th>
+                <th class="srt" data-k="branches" data-t="n">{{ __('client.branch_count') }}<span class="arw">▼</span></th>
+                <th class="srt" data-k="purchases" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
+                <th class="srt" data-k="collected" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
+                <th class="srt" data-k="balance" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
+                <th class="srt" data-k="rate" data-t="n">{{ __('client.collection_rate') }}<span class="arw"></span></th>
             </tr>
+            </thead>
+            <tbody>
             @forelse ($groups as $g)
                 @php
                     $s = $stats->get($g->id);
                     $p = (float) ($s->purchases ?? 0);
                     $c = (float) ($s->collections ?? 0);
                     $b = (float) ($s->balance ?? 0);
+                    $rate = $p > 0 ? $c / $p * 100 : 0;
                 @endphp
-                <tr class="clickable" onclick="location.href='{{ route('erp.groups.show', $g) }}'">
+                <tr class="clickable" onclick="location.href='{{ route('erp.groups.show', $g) }}'"
+                    data-name="{{ mb_strtolower($g->displayName()) }}"
+                    data-channel="{{ mb_strtolower($g->channel?->displayName() ?? '') }}"
+                    data-segment="{{ mb_strtolower($g->subChannelLabel() ?? '') }}"
+                    data-branches="{{ $g->clients_count }}"
+                    data-purchases="{{ $p }}" data-collected="{{ $c }}"
+                    data-balance="{{ $b }}" data-rate="{{ round($rate, 2) }}">
                     <td>
                         <b>{{ $g->displayName() }}</b>
                         @if (! $g->active)<span class="badge b-gray">{{ __('client.suspended') }}</span>@endif
@@ -80,16 +98,55 @@
                     <td class="num">{{ $fmt($p) }}</td>
                     <td class="num pos">{{ $fmt($c) }}</td>
                     <td class="num {{ $b > 0 ? 'neg' : 'pos' }}">{{ $fmt($b) }}</td>
-                    <td class="num">{{ $p > 0 ? number_format($c / $p * 100, 1) : '0.0' }}%</td>
+                    <td class="num">{{ number_format($rate, 1) }}%</td>
                 </tr>
             @empty
                 <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('client.no_chains') }}
                 </td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 </div>
+
+<style>
+    #chainsTbl th.srt{cursor:pointer;user-select:none;white-space:nowrap}
+    #chainsTbl th.srt:hover{color:var(--primary)}
+    #chainsTbl th.srt .arw{font-size:9px;margin-inline-start:4px;color:var(--primary)}
+</style>
+
+<script>
+(function () {
+    'use strict';
+    const tbl = document.getElementById('chainsTbl');
+    if (!tbl) return;
+    const tbody = tbl.tBodies[0];
+    // الترتيب الحالي: جاي من السيرفر بأكتر الفروع تنازلي
+    let cur = 'branches', dir = -1;
+
+    tbl.querySelectorAll('th.srt').forEach(function (th) {
+        th.addEventListener('click', function () {
+            const k = th.dataset.k, numeric = th.dataset.t === 'n';
+            // نفس العمود = اقلب الاتجاه؛ عمود جديد = الأرقام تنازلي والنصوص تصاعدي
+            dir = (k === cur) ? -dir : (numeric ? -1 : 1);
+            cur = k;
+
+            const rows = Array.from(tbody.rows).filter(function (r) { return r.dataset[k] !== undefined; });
+            rows.sort(function (a, b) {
+                const va = a.dataset[k], vb = b.dataset[k];
+                return dir * (numeric
+                    ? (parseFloat(va) || 0) - (parseFloat(vb) || 0)
+                    : va.localeCompare(vb, ['ar', 'en']));
+            });
+            rows.forEach(function (r) { tbody.appendChild(r); });
+
+            tbl.querySelectorAll('th.srt .arw').forEach(function (s) { s.textContent = ''; });
+            th.querySelector('.arw').textContent = dir === -1 ? '▼' : '▲';
+        });
+    });
+})();
+</script>
 
 @if ($manager)
 <dialog id="dlgNewG">

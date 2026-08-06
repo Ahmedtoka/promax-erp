@@ -89,6 +89,9 @@ class AuditZones extends Command
         'رحاب والتجمع الاول' => 'الرحاب',
         'gouna' => 'الجونة',
         'منوفيه' => 'المنوفية',
+        // فروع كيو ماركت (2026-08-06) — حي البساتين هو Z668 في المرجع
+        'بساتين الشرقيه' => 'البساتين - عزبة جبريل',
+        'عزبه فهمي قسم البساتين' => 'البساتين - عزبة جبريل',
     ];
 
     /** @var array<string, array{code: string, name: string, name_en: ?string, gov: string, type: ?string, lat: ?float, lng: ?float}> بالكود */
@@ -96,6 +99,14 @@ class AuditZones extends Command
 
     /** @var array<string, string> الاسم المطبّع (عربي/إنجليزي) ⇒ الكود */
     private array $byName = [];
+
+    /**
+     * @var array<string, string> نفس byName لكن لمطابقة الاحتواء بس —
+     * من غير زونات «محافظة/عام». «البساتين الشرقية» كانت بتندمج في
+     * «الشرقية» (المحافظة!) لمجرد إن الكلمة جوه الاسم (باج 2026-08-06).
+     * زون المحافظة بيتطابق بالتطابق التام والأسماء البديلة بس.
+     */
+    private array $containable = [];
 
     public function handle(): int
     {
@@ -172,6 +183,14 @@ class AuditZones extends Command
                 $en = $this->norm($z['name_en']);
                 $this->byName[$en] ??= $z['code'];
             }
+
+            if (($z['type'] ?? null) !== 'محافظة/عام') {
+                $this->containable[$this->norm($z['name'])] = $z['code'];
+
+                if (! empty($z['name_en'])) {
+                    $this->containable[$this->norm($z['name_en'])] ??= $z['code'];
+                }
+            }
         }
 
         $this->line('  المرجع: '.count($this->reference).' منطقة رسمية من geo.json');
@@ -237,7 +256,7 @@ class AuditZones extends Command
                 continue;
             }
 
-            foreach ($this->byName as $refName => $code) {
+            foreach ($this->containable as $refName => $code) {
                 if (mb_strlen($refName) >= 4 && str_contains($n, $refName)) {
                     $hits[$code] = max($hits[$code] ?? 0, mb_strlen($refName));
                 }

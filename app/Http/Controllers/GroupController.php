@@ -25,7 +25,9 @@ class GroupController extends Controller
             $q->where('channel_id', $ch);
         }
 
-        $groups = $q->orderBy('name')->get();
+        // الافتراضي: أكتر الفروع الأول (قرار المالك 2026-08-06) —
+        // السلاسل الكبيرة هي اللي بتتراجع كل يوم
+        $groups = $q->orderByDesc('clients_count')->orderBy('name')->get();
 
         // أرقام كل سلسلة في استعلام واحد
         $stats = Client::query()
