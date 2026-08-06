@@ -316,15 +316,17 @@ class JourneyController extends Controller
             ->orderBy('name')
             ->get();
 
-        // ⚠️ آخر موقع لكل مندوب في كويري واحدة. لوب بيسأل عن آخر
-        // حدث لكل مندوب = كويري لكل صف، والصفحة دي بتترفرش لوحدها.
-        $lastEvents = TrackEvent::whereIn('user_id', $reps->pluck('id'))
+        // ⚠️ آخر موقعين لكل مندوب في كويري واحدة — الأول للمكان
+        // والتاني لحساب السرعة اللحظية. لوب بيسأل لكل مندوب = كويري
+        // لكل صف، والصفحة دي بتترفرش لوحدها.
+        $eventsByUser = TrackEvent::whereIn('user_id', $reps->pluck('id'))
             ->whereDate('created_at', today())
             ->whereNotNull('lat')
             ->orderByDesc('created_at')
             ->get()
-            ->unique('user_id')
-            ->keyBy('user_id');
+            ->groupBy('user_id');
+
+        $lastEvents = $eventsByUser->map(fn ($g) => $g->first());
 
         // ═══ التيرمينال (2026-08-06): مبيعات اليوم + كيلومترات + حالة ═══
         // مبيعات كل مندوب النهارده — كويري واحدة مجمعة (grand = المدفوع)
@@ -339,7 +341,7 @@ class JourneyController extends Controller
             ->whereNull('checked_out_at')
             ->pluck('user_id')->flip();
 
-        $rows = $reps->map(function (User $rep) use ($lastEvents, $salesToday, $inVisit) {
+        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $inVisit) {
             // من العلاقة المحمّلة فوق — مش كويري جديدة
             $custody = $rep->custodies->first();
             $summary = Journeys::summary($rep);
@@ -354,6 +356,47 @@ class JourneyController extends Controller
                 default => 'off',
             };
 
+            // ═══ غرفة التحكم (2026-08-06) ═══
+            // السرعة اللحظية من آخر نقطتين — بس لو الفرق أقل من 15 دقيقة،
+            // وبسقف 120 كم/س: قفزة GPS بتطلع أرقام خرافية مش سرعة.
+            $speed = null;
+            $pair = $eventsByUser->get($rep->id)?->take(2);
+
+            if ($pair && $pair->count() === 2) {
+                [$a, $b] = [$pair[0], $pair[1]];
+                $mins = abs($a->created_at->diffInSeconds($b->created_at)) / 60;
+
+                if ($mins > 0.2 && $mins < 15) {
+                    // ⚠️ haversine بترجع **كيلومترات** (r=6371) مش أمتار
+                    $km = \App\Services\RepKpis::haversine(
+                        (float) $a->lat, (float) $a->lng, (float) $b->lat, (float) $b->lng,
+                    );
+                    $speed = min(120, (int) round($km / ($mins / 60)));
+                }
+            }
+
+            // داخل/خارج زونه — لو الزون له إحداثيات والمندوب له إشارة.
+            // 2.5 كم نصف قطر افتراضي: الزونات مالهاش حدود مرسومة.
+            $inZone = null;
+
+            if ($last && $rep->zone?->lat !== null && $rep->zone?->lng !== null) {
+                // بالكيلومتر — نفس نصف قطر دايرة الزون على الخريطة (2.5 كم)
+                $inZone = \App\Services\RepKpis::haversine(
+                    (float) $last->lat, (float) $last->lng,
+                    (float) $rep->zone->lat, (float) $rep->zone->lng,
+                ) <= 2.5;
+            }
+
+            // تفاصيل العهدة للبانل — أعلى 6 أصناف بالمتبقي والمباع
+            $items = $custody
+                ? $custody->items->sortByDesc('assigned')->take(6)->map(fn ($i) => [
+                    'name' => $i->product->displayName(),
+                    'assigned' => (int) $i->assigned,
+                    'sold' => (int) $i->sold,
+                    'remaining' => (int) $i->remaining(),
+                ])->values()->all()
+                : [];
+
             return [
                 'rep' => $rep,
                 'custody' => $custody,
@@ -367,20 +410,67 @@ class JourneyController extends Controller
                 'status' => $status,
                 'sales_today' => round((float) ($salesToday[$rep->id] ?? 0), 2),
                 'km_today' => \App\Services\RepKpis::kmForDay($rep, now()),
+                'speed' => $speed,
+                'in_zone' => $inZone,
+                'items' => $items,
             ];
         });
 
         return $rows;
     }
 
+    /**
+     * فيد التنبيهات — آخر أحداث اليوم الحقيقية: فواتير وزيارات.
+     *
+     * ⚠️ مفيش أحداث مصطنعة — الفيد بيقرا من نفس جداول الأرقام
+     * (فواتير + زيارات) فكل سطر فيه وراه فلوس أو تشيك إن فعلي.
+     *
+     * @return list<array{t: string, kind: string, text: string}>
+     */
+    private function liveAlerts($reps): array
+    {
+        $ids = $reps->pluck('id');
+
+        $sales = \App\Models\Invoice::with(['user:id,name,name_en', 'client:id,name,name_en'])
+            ->whereDate('created_at', today())
+            ->whereIn('user_id', $ids)
+            ->latest()->take(10)->get()
+            ->map(fn ($inv) => [
+                'at' => $inv->created_at,
+                'kind' => 'sale',
+                'text' => __('journey.alert_sale', [
+                    'rep' => $inv->user?->displayName() ?? '—',
+                    'client' => $inv->client?->displayName() ?? '—',
+                    'value' => number_format((float) $inv->grand_total),
+                ]),
+            ]);
+
+        $visits = \App\Models\Visit::with(['user:id,name,name_en', 'client:id,name,name_en'])
+            ->whereDate('checked_in_at', today())
+            ->whereIn('user_id', $ids)
+            ->orderByDesc('checked_in_at')->take(8)->get()
+            ->map(fn ($v) => [
+                'at' => $v->checked_out_at ?? $v->checked_in_at,
+                'kind' => $v->checked_out_at ? 'checkout' : 'checkin',
+                'text' => __($v->checked_out_at ? 'journey.alert_checkout' : 'journey.alert_checkin', [
+                    'rep' => $v->user?->displayName() ?? '—',
+                    'client' => $v->client?->displayName() ?? '—',
+                ]),
+            ]);
+
+        return $sales->concat($visits)
+            ->sortByDesc('at')
+            ->take(14)
+            ->map(fn ($a) => ['t' => $a['at']->format('H:i'), 'kind' => $a['kind'], 'text' => $a['text']])
+            ->values()->all();
+    }
+
     public function live(Request $request)
     {
-        $rows = $this->liveRows($request);
-
+        // ⚠️ نفس حمولة الرفرش بالظبط — الشاشة بترسم فوراً من غير
+        // فلاشة فاضية، وأول fetch بعد 15 ثانية بيكمل عادي.
         return view('ops.live', [
-            'rows' => $rows,
-            'onMap' => $rows->filter(fn ($r) => $r['lat'] !== null)->values(),
-            'totals' => $this->liveTotals($rows),
+            'initial' => $this->livePayload($request),
             'date' => today()->toDateString(),
         ]);
     }
@@ -388,10 +478,28 @@ class JourneyController extends Controller
     /** داتا التيرمينال JSON — الشاشة بتسحبها كل 15 ثانية من غير ريلود */
     public function liveData(Request $request)
     {
+        return response()->json($this->livePayload($request));
+    }
+
+    /** الحمولة الموحدة لغرفة التحكم — أول رسمة والرفرش من نفس المصدر */
+    private function livePayload(Request $request): array
+    {
         $rows = $this->liveRows($request);
 
-        return response()->json([
+        // زونات المناديب اللي ليها إحداثيات — دواير متقطعة على الخريطة
+        $zones = $rows->map(fn ($r) => $r['rep']->zone)
+            ->filter(fn ($z) => $z !== null && $z->lat !== null && $z->lng !== null)
+            ->unique('id')
+            ->map(fn ($z) => [
+                'name' => $z->displayName(),
+                'lat' => (float) $z->lat,
+                'lng' => (float) $z->lng,
+            ])->values();
+
+        return [
             'totals' => $this->liveTotals($rows),
+            'zones' => $zones,
+            'alerts' => $this->liveAlerts($rows->map(fn ($r) => $r['rep'])),
             'reps' => $rows->map(fn ($r) => [
                 'id' => $r['rep']->id,
                 'name' => $r['rep']->displayName(),
@@ -409,9 +517,12 @@ class JourneyController extends Controller
                 'value' => $r['remaining_value'],
                 'sales' => $r['sales_today'],
                 'km' => $r['km_today'],
+                'speed' => $r['speed'],
+                'in_zone' => $r['in_zone'],
+                'items' => $r['items'],
                 'url' => route('ops.rep_day', $r['rep']),
             ])->values(),
-        ]);
+        ];
     }
 
     private function liveTotals($rows): array
@@ -423,6 +534,11 @@ class JourneyController extends Controller
             'done' => $rows->sum(fn ($r) => $r['summary']['done']),
             'value' => round($rows->sum(fn ($r) => $r['remaining_value']), 2),
             'sales' => round($rows->sum(fn ($r) => $r['sales_today']), 2),
+            // غرفة التحكم (2026-08-06)
+            'units' => (int) $rows->sum(fn ($r) => $r['remaining_units']),
+            'in_zone' => $rows->filter(fn ($r) => $r['in_zone'] === true)->count(),
+            'out_zone' => $rows->filter(fn ($r) => $r['in_zone'] === false)->count(),
+            'idle' => $rows->filter(fn ($r) => $r['status'] === 'idle')->count(),
         ];
     }
 

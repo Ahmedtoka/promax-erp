@@ -212,13 +212,36 @@ class ErpController extends Controller
         $credit = $scoped()->where('balance', '<', -0.009)
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(balance), 0) as s')->first();
 
+        // ⚠️ **السورت من السيرفر مش الجافاسكريبت** (2026-08-06) —
+        // القايمة paginated، وسورت الصفحة الحالية بس بيوهم إن أعلى
+        // 40 هم أعلى السيستم. القايمة البيضا هي الأعمدة الحقيقية بس.
+        $sortable = ['name', 'code', 'status', 'category', 'purchases', 'collections',
+            'returns', 'balance', 'discount', 'last_payment_at'];
+        $sort = $request->string('sort')->value();
+        $sort = in_array($sort, $sortable, true) ? $sort : 'purchases';
+        $dir = $request->string('dir')->value() === 'asc' ? 'asc' : 'desc';
+
+        // كام سلسلة وكام مستقل في كل قناة — الرقم الشامل على الكروت
+        $chainsByChannel = $scoped()->whereNotNull('group_id')
+            ->selectRaw('channel_id, COUNT(DISTINCT group_id) as n')
+            ->groupBy('channel_id')->pluck('n', 'channel_id')->all();
+        $indepByChannel = $scoped()->whereNull('group_id')
+            ->selectRaw('channel_id, COUNT(*) as n')
+            ->groupBy('channel_id')->pluck('n', 'channel_id')->all();
+
         return view('erp.clients', [
             // ⚠️ فورم الإضافة اتنقل لصفحة مستقلة (`erp.clients.new`)،
             // فالقايمة دي مابقتش محتاجة الفروع والسلاسل والمناديب.
             // سيبانهم هنا كان بيحمّل 4 كويريز في كل صفحة من غير ما
             // حد يستخدمهم.
-            'clients' => $q->with('channel')->orderByDesc('purchases')
+            // ⚠️ ترتيب ثانوي بالـid — من غيره الصفوف المتساوية بتتنطط
+            // بين الصفحات والعميل بيظهر مرتين أو ولا مرة.
+            'clients' => $q->with('channel')->orderBy($sort, $dir)->orderBy('id')
                 ->paginate(40)->withQueryString(),
+            'sort' => $sort,
+            'dir' => $dir,
+            'chainsByChannel' => $chainsByChannel,
+            'indepByChannel' => $indepByChannel,
             'kpi' => [
                 'chains' => $scoped()->whereNotNull('group_id')->distinct()->count('group_id'),
                 'debt_n' => (int) $debt->n,

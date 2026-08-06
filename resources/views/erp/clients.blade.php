@@ -32,12 +32,19 @@
         <div class="val">{{ $fmt($kpi['chains']) }}</div>
         <div class="sub2">{{ __('client.chains_hint') }}</div>
     </a>
+    {{-- الرقم الشامل الأول وبعدين الفرعي (قرار المالك 2026-08-06):
+         الكبير = الكيانات (سلاسل + مستقلين) — أونلاين فيها رابت بس
+         يبقى 1، والفرعي = الفروع (13). الفرع مش عميل تجاري مستقل. --}}
     @foreach ($channels as $ch)
+        @php
+            $entities = ($chainsByChannel[$ch->id] ?? 0) + ($indepByChannel[$ch->id] ?? 0);
+            $branchesN = $channelCounts[$ch->id] ?? 0;
+        @endphp
         <a class="kpi" style="text-decoration:none;color:inherit;{{ (int) ($filters['channel'] ?? 0) === $ch->id ? 'outline:2px solid var(--royal-blue)' : '' }}"
            href="{{ route('erp.clients', ['channel' => (int) ($filters['channel'] ?? 0) === $ch->id ? null : $ch->id]) }}">
             <div class="lbl">🎯 {{ $ch->displayName() }}</div>
-            <div class="val">{{ $fmt($channelCounts[$ch->id] ?? 0) }}</div>
-            <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+            <div class="val">{{ $fmt($entities) }}</div>
+            <div class="sub2">{{ __('client.branch_countable', ['count' => $branchesN]) }} • {{ __('client.tap_to_filter') }}</div>
         </a>
     @endforeach
     <div class="kpi">
@@ -109,11 +116,33 @@
     {{-- الهيدر ثابت — الجدول طويل والأعمدة بتضيع وانت نازل --}}
     <div class="tablewrap" style="max-height:65vh;overflow-y:auto">
         <table>
+            {{-- سورت من السيرفر (2026-08-06): العمود لينك بيحافظ على كل
+                 الفلاتر، وأول ضغطة على الأرقام تنازلي وبعدين بتتقلب --}}
+            @php
+                $thSort = function ($key, $label, $numericDefault = true) use ($sort, $dir) {
+                    $active = $sort === $key;
+                    $nextDir = $active ? ($dir === 'desc' ? 'asc' : 'desc') : ($numericDefault ? 'desc' : 'asc');
+                    $url = request()->fullUrlWithQuery(['sort' => $key, 'dir' => $nextDir, 'page' => null]);
+                    $arrow = $active ? ($dir === 'desc' ? ' ▼' : ' ▲') : '';
+
+                    return '<a href="'.$url.'" style="color:'.($active ? 'var(--primary)' : 'inherit').';text-decoration:none;white-space:nowrap">'
+                        .e($label).$arrow.'</a>';
+                };
+            @endphp
             <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
-                <th>{{ __('client.client') }}</th><th>{{ __('common.status') }}</th><th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.category') }}</th>
-                <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th><th class="num">{{ __('client.discount') }}</th>
-                <th class="num">{{ __('client.purchases') }}</th><th class="num">{{ __('client.collected') }}</th><th class="num">{{ __('client.returns') }}</th><th class="num">{{ __('client.balance') }}</th><th class="num">{{ __('client.collection_rate') }}</th><th class="num">{{ __('client.last_payment') }}</th>
+                <th>{!! $thSort('name', __('client.client'), false) !!}</th>
+                <th>{!! $thSort('status', __('common.status'), false) !!}</th>
+                <th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th>
+                <th>{!! $thSort('category', __('client.category'), false) !!}</th>
+                <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th>
+                <th class="num">{!! $thSort('discount', __('client.discount')) !!}</th>
+                <th class="num">{!! $thSort('purchases', __('client.purchases')) !!}</th>
+                <th class="num">{!! $thSort('collections', __('client.collected')) !!}</th>
+                <th class="num">{!! $thSort('returns', __('client.returns')) !!}</th>
+                <th class="num">{!! $thSort('balance', __('client.balance')) !!}</th>
+                <th class="num">{{ __('client.collection_rate') }}</th>
+                <th class="num">{!! $thSort('last_payment_at', __('client.last_payment')) !!}</th>
                 @if ($manager)<th></th>@endif
             </tr>
             </thead>
