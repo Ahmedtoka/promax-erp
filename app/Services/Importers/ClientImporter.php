@@ -66,6 +66,135 @@ class ClientImporter extends Importer
         return ['name'];
     }
 
+    /** ملاحظات التنفيذ (تخطي/جيوكودينج) — بتتعرض مع أخطاء الاستيراد */
+    private array $notes = [];
+
+    /** @return list<string> */
+    public function notes(): array
+    {
+        return $this->notes;
+    }
+
+    /** مفتاح الاسم — من `Dupes` عشان الاستيراد والشاشة يحكموا بنفس المنطق */
+    private function nameKey(?string $name): string
+    {
+        return \App\Support\Dupes::nameKey($name);
+    }
+
+    /** تطبيع تليفون للمقارنة — من `Dupes` برضو */
+    private function phoneKey(?string $phone): string
+    {
+        return \App\Support\Dupes::phoneKey($phone);
+    }
+
+    /**
+     * ⚠️ **حارس التكرار (2026-08-06)** — فوق فحوصات الصفوف الفردية:
+     *
+     *  1. جوه الشيت: اسم مطبّع أو كود أو تليفون متكرر في صفين ⇒
+     *     الصف اللاحق بيترفض. شيت فيه نفس الفرع مرتين مايدخلش مرتين.
+     *  2. ضد الداتابيز: الاسم موجود لعميل كوده **مختلف** عن كود الصف ⇒
+     *     رفض — التحديث بالاسم كان هيكتب فوق عميل تاني بكوده.
+     *  3. ضد الداتابيز: التليفون مسجل لعميل تاني (غير اللي الصف بيحدثه
+     *     بالكود/الاسم) ⇒ رفض بإسم صاحب الرقم.
+     *
+     * الرفض هنا أحسن من التخمين — الشاشة بتقول بالظبط مين المتكرر مع مين.
+     */
+    public function validateAll(array $rows): array
+    {
+        // فهارس الداتابيز مرة واحدة — العملاء مئات مش ملايين
+        $db = Client::query()->get(['id', 'code', 'name', 'phone']);
+        $dbByName = [];
+        $dbByPhone = [];
+
+        foreach ($db as $c) {
+            $dbByName[$this->nameKey($c->name)] ??= $c;
+
+            if (($pk = $this->phoneKey($c->phone)) !== '') {
+                $dbByPhone[$pk] ??= $c;
+            }
+        }
+
+        $seenNames = $seenCodes = $seenPhones = [];
+        $ok = [];
+        $checked = ['errors' => []];
+
+        foreach ($rows as $i => $row) {
+            // +2: سطر العناوين + الترقيم بيبدأ من واحد — نفس الأب بالظبط
+            $line = $i + 2;
+
+            // فحوصات الصف الفردية الأول (نفس اللي الأب كان بيعملها)
+            $problems = $this->validateRow($row, $line);
+
+            if ($problems !== []) {
+                foreach ($problems as $p) {
+                    $checked['errors'][] = __('import.line_error', ['line' => $line, 'error' => $p]);
+                }
+
+                continue;
+            }
+
+            $nk = $this->nameKey($row['name'] ?? null);
+            $code = trim((string) ($row['code'] ?? ''));
+            $pk = $this->phoneKey($row['phone'] ?? null);
+            $bad = false;
+
+            // 1) التكرار جوه الشيت نفسه
+            if ($nk !== '' && isset($seenNames[$nk])) {
+                $checked['errors'][] = __('import.dup_in_sheet_name', ['line' => $line, 'other' => $seenNames[$nk]]);
+                $bad = true;
+            }
+            if ($code !== '' && isset($seenCodes[$code])) {
+                $checked['errors'][] = __('import.dup_in_sheet_code', ['line' => $line, 'code' => $code, 'other' => $seenCodes[$code]]);
+                $bad = true;
+            }
+            if ($pk !== '' && isset($seenPhones[$pk])) {
+                $checked['errors'][] = __('import.dup_in_sheet_phone', ['line' => $line, 'other' => $seenPhones[$pk]]);
+                $bad = true;
+            }
+
+            // 2) الاسم موجود لعميل بكود مختلف — تصادم مش تحديث
+            $byName = $nk !== '' ? ($dbByName[$nk] ?? null) : null;
+
+            if (! $bad && $byName !== null && $code !== '' && $byName->code !== $code) {
+                $checked['errors'][] = __('import.name_taken_other_code', [
+                    'line' => $line, 'name' => $byName->name, 'code' => $byName->code, 'row_code' => $code,
+                ]);
+                $bad = true;
+            }
+
+            // 3) التليفون مسجل لعميل تاني غير اللي الصف بيحدثه
+            $byPhone = $pk !== '' ? ($dbByPhone[$pk] ?? null) : null;
+            $target = $code !== ''
+                ? $db->firstWhere('code', $code)
+                : $byName;
+
+            if (! $bad && $byPhone !== null && $byPhone->id !== ($target->id ?? null)) {
+                $checked['errors'][] = __('import.phone_taken', [
+                    'line' => $line, 'name' => $byPhone->name, 'code' => $byPhone->code,
+                ]);
+                $bad = true;
+            }
+
+            if ($bad) {
+                continue;
+            }
+
+            if ($nk !== '') {
+                $seenNames[$nk] = $line;
+            }
+            if ($code !== '') {
+                $seenCodes[$code] = $line;
+            }
+            if ($pk !== '') {
+                $seenPhones[$pk] = $line;
+            }
+
+            $ok[] = $row;
+        }
+
+        return ['ok' => $ok, 'errors' => $checked['errors']];
+    }
+
     public function validateRow(array $row, int $line): array
     {
         $out = [];
@@ -124,19 +253,41 @@ class ClientImporter extends Importer
 
     public function apply(array $rows): array
     {
-        $created = $updated = $opened = 0;
+        $created = $updated = $opened = $skipped = $geocoded = 0;
         $channels = $zones = $groups = [];
+        $this->notes = [];
 
-        DB::transaction(function () use ($rows, &$created, &$updated, &$opened, &$channels, &$zones, &$groups) {
+        // فهرس الاسم المطبّع + إحداثيات الموجودين — لحارس القرب
+        $nameIndex = [];
+        $points = [];
+
+        foreach (Client::query()->get(['id', 'code', 'name', 'lat', 'lng']) as $c) {
+            $nameIndex[$this->nameKey($c->name)] ??= $c->id;
+
+            if ($c->lat !== null && $c->lng !== null) {
+                $points[] = [(float) $c->lat, (float) $c->lng, $c->name, (string) $c->code];
+            }
+        }
+
+        // ⚠️ **نداءات الشبكة قبل الترانزاكشن** — فك اللينكات والجيوكودينج
+        // بياخدوا ثواني لكل صف، وترانزاكشن مفتوحة طول الوقت ده بتقفل
+        // جدول العملاء على كل السيستم. المرور التمهيدي بيحل الإحداثيات
+        // والترانزاكشن بتفضل داتابيز صافي.
+        $rows = $this->resolveCoordinates($rows, $geocoded);
+
+        DB::transaction(function () use ($rows, &$created, &$updated, &$opened, &$skipped, &$channels, &$zones, &$groups, &$nameIndex, &$points) {
             foreach ($rows as $row) {
                 $name = (string) $row['name'];
                 $code = $row['code'] ?? null;
 
-                // ⚠️ المطابقة بالكود لو موجود، وإلا بالاسم. الكود أدق —
-                // العميل ممكن يتغير اسمه بس كوده بيفضل.
-                $existing = $code
-                    ? Client::where('code', $code)->first()
-                    : Client::where('name', $name)->first();
+                // ⚠️ المطابقة بالترتيب: الكود ← الاسم الحرفي ← الاسم
+                // المطبّع («المعادى ١» = «فرع المعادي 1»). الكود أدق —
+                // العميل ممكن يتغير اسمه بس كوده بيفضل. التصادمات
+                // (اسم موجود بكود تاني / تليفون واخده حد) اترفضت في
+                // validateAll قبل ما نوصل هنا.
+                $existing = ($code ? Client::where('code', $code)->first() : null)
+                    ?? Client::where('name', $name)->first()
+                    ?? (($nid = $nameIndex[$this->nameKey($name)] ?? null) ? Client::find($nid) : null);
 
                 $channelId = $this->channelId($row['channel'] ?? null, $channels);
                 $zoneId = $this->zoneId($row['zone'] ?? null, $zones);
@@ -185,19 +336,30 @@ class ClientImporter extends Importer
                     $payload['uses_channel_discount'] = $discount <= 0;
                 }
 
-                // لينك اللوكيشن (2026-08-06): بيتخزن على العميل، ولو الشيت
-                // من غير إحداثيات بنحاول نفكه من السيرفر (نفس مسار زرار
-                // «اكتشف اللوكيشن» — الدومين بيتفحص جوه MapLink قبل أي اتصال).
-                // فشل الفك مش بيوقف الاستيراد — الزرار موجود في كارت العميل.
+                // لينك اللوكيشن بيتخزن على العميل كمرجع — الإحداثيات
+                // نفسها اتحلت في المرور التمهيدي قبل الترانزاكشن
                 $link = trim((string) ($row['location_url'] ?? ''));
 
                 if ($link !== '') {
                     $payload['location_url'] = $link;
+                }
 
-                    if ($payload['lat'] === null && $payload['lng'] === null
-                        && ($pt = \App\Support\MapLink::resolve($link)) !== null) {
-                        $payload['lat'] = $pt['lat'];
-                        $payload['lng'] = $pt['lng'];
+                // ⚠️ **حارس القرب (2026-08-06)**: عميل جديد على بعد أقل من
+                // ~120 متر من عميل موجود — غالباً نفس الفرع باسم مختلف.
+                // بنتخطى ونبلّغ بالاسمين، ومحدش بيتمسح ولا بيتكتب فوقه.
+                if ($existing === null && $payload['lat'] !== null && $payload['lng'] !== null) {
+                    $near = $this->nearest($points, (float) $payload['lat'], (float) $payload['lng']);
+
+                    if ($near !== null && $near['m'] <= 120) {
+                        $skipped++;
+                        $this->notes[] = __('import.too_close_skip', [
+                            'name' => $name,
+                            'other' => $near['name'],
+                            'code' => $near['code'],
+                            'meters' => (int) round($near['m']),
+                        ]);
+
+                        continue;
                     }
                 }
 
@@ -232,6 +394,14 @@ class ClientImporter extends Importer
                         'uses_channel_discount' => ($discount ?? 0) <= 0,
                     ]);
                     $created++;
+
+                    // الفهارس بتتحدث — فرعين قراب لبعض في نفس الشيت
+                    // لازم التاني فيهم يقع على حارس القرب برضو
+                    $nameIndex[$this->nameKey($client->name)] ??= $client->id;
+
+                    if ($client->lat !== null && $client->lng !== null) {
+                        $points[] = [(float) $client->lat, (float) $client->lng, $client->name, (string) $client->code];
+                    }
                 }
 
                 if ($this->openBalance($client, $row)) {
@@ -242,8 +412,93 @@ class ClientImporter extends Importer
 
         return [
             'created' => $created, 'updated' => $updated, 'opening' => $opened,
+            'skipped' => $skipped, 'geocoded' => $geocoded,
             'channels' => count($channels), 'zones' => count($zones), 'groups' => count($groups),
         ];
+    }
+
+    /** سقف الجيوكودينج في الرفعة الواحدة — كل محاولة ثانية+ (شرط Nominatim) */
+    private const MAX_GEOCODE = 40;
+
+    /**
+     * المرور التمهيدي: حل الإحداثيات لكل صف ناقصها — من اللينك الأول
+     * (نفس مسار زرار «اكتشف») وبعدين من نص العنوان (Nominatim).
+     *
+     * ⚠️ السقف مقصود: شيت 300 صف من غير إحداثيات = 5 دقايق جيوكودينج
+     * والريكوست بيموت. اللي فوق السقف بيتسجل عادي من غير نقطة،
+     * وإعادة رفع نفس الشيت بتكمّل الباقي (المطابقة بالكود بتحدّث).
+     */
+    private function resolveCoordinates(array $rows, int &$geocoded): array
+    {
+        $budget = self::MAX_GEOCODE;
+
+        foreach ($rows as &$row) {
+            if (\App\Services\Sheet::number($row['lat'] ?? null) !== null) {
+                continue;
+            }
+
+            // 1) اللينك — رخيص نسبياً (ريدايركت واحد)
+            $link = trim((string) ($row['location_url'] ?? ''));
+
+            if ($link !== '' && ($pt = \App\Support\MapLink::resolve($link)) !== null) {
+                $row['lat'] = $pt['lat'];
+                $row['lng'] = $pt['lng'];
+
+                continue;
+            }
+
+            // 2) العنوان — Nominatim بحد أقصى للرفعة
+            if (trim((string) ($row['address'] ?? '')) === '' || $budget <= 0) {
+                continue;
+            }
+
+            $budget--;
+            $geo = \App\Support\Geocoder::search(
+                (string) $row['address'],
+                (string) ($row['zone'] ?? ''),
+                (string) ($row['governorate'] ?? ''),
+            );
+
+            if ($geo !== null) {
+                $row['lat'] = $geo['lat'];
+                $row['lng'] = $geo['lng'];
+                $geocoded++;
+                $this->notes[] = __('import.geocoded_note', [
+                    'name' => (string) ($row['name'] ?? ''),
+                    'precision' => __('import.geo_'.$geo['precision']),
+                ]);
+            }
+        }
+
+        // ⚠️ فك المرجع إجباري — من غيره آخر صف بيفضل مربوط بالمتغير
+        // وأي لمسة ليه بعدين بتكتب فوق الصف الأخير في المصفوفة
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * أقرب عميل موجود للنقطة دي — هافرساين مبسط، العملاء مئات.
+     *
+     * @param  list<array{0: float, 1: float, 2: string, 3: string}>  $points
+     * @return array{m: float, name: string, code: string}|null
+     */
+    private function nearest(array $points, float $lat, float $lng): ?array
+    {
+        $best = null;
+
+        foreach ($points as [$plat, $plng, $pname, $pcode]) {
+            $dLat = deg2rad($plat - $lat);
+            $dLng = deg2rad($plng - $lng);
+            $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat)) * cos(deg2rad($plat)) * sin($dLng / 2) ** 2;
+            $m = 6371000 * 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+            if ($best === null || $m < $best['m']) {
+                $best = ['m' => $m, 'name' => $pname, 'code' => $pcode];
+            }
+        }
+
+        return $best;
     }
 
     /** المحافظة من مفتاحها أو اسمها العربي/الإنجليزي — null لو مش معروفة */

@@ -517,4 +517,17 @@ return [
     'activated' => ':count clients activated.',
     'deactivated' => '":name" was deactivated.',
     'cannot_stop_with_balance' => 'This client has a balance of :balance — deactivating hides them from every screen while the debt stays in the totals. Settle the account first.',
+
+    // Manual-create duplicate guard (2026-08-06)
+    'dup_name' => 'This client is already registered as ":name" (code :code) — it cannot be registered twice. Search for it on the clients screen.',
+    'dup_phone' => 'This phone is registered to client ":name" (code :code) — two clients cannot share a number.',
+
+    // Chain page upgrade (2026-08-06)
+    'zones_covered' => 'Zones covered',
+    'governorates_covered' => 'across :count governorates',
+    'avg_branch_purchases' => 'Avg. branch purchases',
+    'biggest_branch' => 'Biggest branch',
+    'by_governorate' => 'Branches by Governorate',
+    'category_split' => 'Category Split',
+    'top_branches' => 'Top 10 Branches by Purchases',
 ];

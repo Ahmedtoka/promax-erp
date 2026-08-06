@@ -164,11 +164,15 @@ class ImportController extends Controller
             return back()->withErrors(['status' => __('import.failed', ['error' => $e->getMessage()])]);
         }
 
+        // ملاحظات التنفيذ (تخطي القرب الجغرافي / الجيوكودينج) —
+        // بتتعرض مع الأخطاء عشان تبان في كارت الاستيراد
+        $notes = method_exists($importer, 'notes') ? $importer->notes() : [];
+
         $import->update([
             'status' => Import::STATUS_APPLIED,
             'rows_ok' => count($checked['ok']),
             'rows_failed' => count($read['rows']) - count($checked['ok']),
-            'errors' => array_slice($checked['errors'], 0, 60),
+            'errors' => array_slice(array_merge($checked['errors'], $notes), 0, 60),
             'summary' => array_merge($import->summary ?? [], ['result' => $summary]),
             'applied_at' => now(),
         ]);

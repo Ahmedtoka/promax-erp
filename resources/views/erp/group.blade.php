@@ -16,6 +16,21 @@
     $collections = $branches->sum('collections');
     $balance = $branches->sum('balance');
     $returns = $branches->sum('returns');
+
+    // سامري إضافي (2026-08-06) — كله من الكولكشن المحمّل، صفر استعلامات زيادة
+    $zonesCovered = $branches->pluck('zone_id')->filter()->unique()->count();
+    $govsCovered = $branches->pluck('governorate')->filter()->unique()->count();
+    $avgPurchases = $branches->count() > 0 ? $purchases / $branches->count() : 0;
+    $topBranch = $branches->sortByDesc('purchases')->first();
+    $govCounts = $branches->groupBy(fn ($b) => $b->governorateLabel())->map->count()->sortDesc();
+
+    // التصنيفات: الليبل المترجم من الموديل نفسه + لون البادج بتاعه
+    $catColorMap = ['danger' => 'red', 'watch' => 'orange', 'grow' => 'green', 'ok' => 'blue', 'idle' => 'muted', 'internal' => 'purple', 'credit' => 'violet'];
+    $catData = $branches->groupBy('category')->map(fn ($grp, $key) => [
+        'label' => $grp->first()->categoryLabel(),
+        'count' => $grp->count(),
+        'color' => $catColorMap[$key] ?? 'muted',
+    ])->values();
 @endphp
 
 @section('actions')
@@ -51,6 +66,13 @@
         <div class="val {{ $balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($balance) }} {{ __('common.currency') }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($returns) }} {{ __('common.currency') }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('report.sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('client.zones_covered') }}</div><div class="val">{{ $zonesCovered }}</div>
+        <div class="sub2">{{ __('client.governorates_covered', ['count' => $govsCovered]) }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('client.avg_branch_purchases') }}</div>
+        <div class="val" style="color:var(--primary)">{{ $fmt($avgPurchases) }} {{ __('common.currency') }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('client.biggest_branch') }}</div>
+        <div class="val" style="font-size:15px">{{ $topBranch?->displayName() ?? '—' }}</div>
+        <div class="sub2">{{ $fmt($topBranch?->purchases ?? 0) }} {{ __('common.currency') }}</div></div>
 </div>
 
 <div class="grid2">
@@ -65,20 +87,73 @@
     </div>
 </div>
 
+<div class="grid2">
+    <div class="card">
+        <h3>🗾 {{ __('client.by_governorate') }}</h3>
+        <div class="chartbox"><canvas id="chGov"></canvas></div>
+    </div>
+    <div class="card">
+        <h3>🏷️ {{ __('client.category_split') }}</h3>
+        <div class="chartbox"><canvas id="chCat"></canvas></div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>🏆 {{ __('client.top_branches') }}</h3>
+    <div class="chartbox"><canvas id="chTop"></canvas></div>
+</div>
+
 <div class="card">
     <h3>🏬 {{ __('client.branches') }} <span class="side">{{ __('client.branch_countable', ['count' => $branches->count()]) }}</span></h3>
+    {{-- فلاتر + فريز + سورت (2026-08-06) — كله client-side، الداتا محمّلة أصلاً --}}
     <div class="searchbar">
         <input type="text" id="qBr" placeholder="🔍 {{ __('client.search_branch') }}" oninput="filterBranches()">
+        <select id="fZone" onchange="filterBranches()">
+            <option value="">{{ __('client.all_zones') }}</option>
+            @foreach ($branches->map(fn ($b) => $b->zone?->displayName())->filter()->unique()->sort() as $zn)
+                <option value="{{ $zn }}">{{ $zn }}</option>
+            @endforeach
+        </select>
+        <select id="fCat" onchange="filterBranches()">
+            <option value="">{{ __('client.all_categories') }}</option>
+            @foreach ($branches->map(fn ($b) => $b->categoryLabel())->filter()->unique()->sort() as $cl)
+                <option value="{{ $cl }}">{{ $cl }}</option>
+            @endforeach
+        </select>
+        <select id="fCon" onchange="filterBranches()">
+            <option value="">{{ __('client.contract') }}: {{ __('common.all') }}</option>
+            <option value="1">{{ __('client.with_contract') }}</option>
+            <option value="0">{{ __('client.without_contract') }}</option>
+        </select>
+        <span class="badge b-gray" id="brCount">{{ $branches->count() }}</span>
     </div>
-    <div class="tablewrap">
+    <div class="tablewrap" style="max-height:66vh;overflow-y:auto">
         <table id="brTbl">
+            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
             <tr>
-                <th>{{ __('client.branch') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.discount') }}</th><th>{{ __('client.contract') }}</th>
-                <th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.last_activity') }}</th>
+                <th class="srt" data-k="name" data-t="s">{{ __('client.branch') }}<span class="arw"></span></th>
+                <th class="srt" data-k="zone" data-t="s">{{ __('client.zone') }}<span class="arw"></span></th>
+                <th class="srt" data-k="cat" data-t="s">{{ __('client.category') }}<span class="arw"></span></th>
+                <th class="srt" data-k="disc" data-t="n">{{ __('client.discount') }}<span class="arw"></span></th>
+                <th class="srt" data-k="con" data-t="n">{{ __('client.contract') }}<span class="arw"></span></th>
+                <th class="srt" data-k="pur" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
+                <th class="srt" data-k="col" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
+                <th class="srt" data-k="bal" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
+                <th class="srt" data-k="act" data-t="s">{{ __('client.last_activity') }}<span class="arw"></span></th>
                 @if ($manager)<th></th>@endif
             </tr>
+            </thead>
+            <tbody>
             @forelse ($branches as $b)
-                <tr data-txt="{{ $b->displayName() }} {{ $b->address }}">
+                <tr data-txt="{{ $b->displayName() }} {{ $b->address }}"
+                    data-name="{{ mb_strtolower($b->displayName()) }}"
+                    data-zone="{{ $b->zone?->displayName() ?? '' }}"
+                    data-cat="{{ $b->categoryLabel() }}"
+                    data-disc="{{ round($b->effectiveDiscount() * 100, 2) }}"
+                    data-con="{{ $b->contract ? 1 : 0 }}"
+                    data-pur="{{ (float) $b->purchases }}" data-col="{{ (float) $b->collections }}"
+                    data-bal="{{ (float) $b->balance }}"
+                    data-act="{{ $b->last_activity_at?->format('Y-m-d') ?? '' }}">
                     <td onclick="location.href='{{ route('erp.clients.show', $b) }}'" style="cursor:pointer">
                         {{-- ⚠️ اسم السلسلة من `$g` مش من `$b->fullName()` —
                              الـ199 صف كلهم نفس السلسلة، و`fullName()` كانت
@@ -123,9 +198,16 @@
                     {{ __('client.no_branches') }}
                 </td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 </div>
+
+<style>
+    #brTbl th.srt{cursor:pointer;user-select:none;white-space:nowrap}
+    #brTbl th.srt:hover{color:var(--primary)}
+    #brTbl th.srt .arw{font-size:9px;margin-inline-start:4px;color:var(--primary)}
+</style>
 
 @if ($contracts->isNotEmpty())
 <div class="card">
@@ -294,12 +376,85 @@ new Chart(document.getElementById('chG'), {
     options: { plugins:{ legend:{ position:'bottom' } }, scales: AXES },
 });
 
+// ═══ شارتات السامري (2026-08-06) ═══
+@php
+    $top = $branches->sortByDesc('purchases')->take(10)->values();
+@endphp
+new Chart(document.getElementById('chGov'), {
+    type: 'bar',
+    data: {
+        labels: {!! json_encode($govCounts->keys(), JSON_UNESCAPED_UNICODE) !!},
+        datasets: [{ label: {!! json_encode(__('client.branch_count'), JSON_UNESCAPED_UNICODE) !!},
+                     data: {!! json_encode($govCounts->values()) !!},
+                     backgroundColor: BRAND.royal, borderRadius: 6, maxBarThickness: 34 }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: AXES },
+});
+
+new Chart(document.getElementById('chCat'), {
+    type: 'doughnut',
+    data: {
+        labels: {!! json_encode($catData->pluck('label'), JSON_UNESCAPED_UNICODE) !!},
+        datasets: [{ data: {!! json_encode($catData->pluck('count')) !!},
+                     backgroundColor: {!! json_encode($catData->pluck('color')) !!}.map(c => BRAND[c]) }],
+    },
+    options: { plugins: { legend: { position: 'bottom' } } },
+});
+
+new Chart(document.getElementById('chTop'), {
+    type: 'bar',
+    data: {
+        labels: {!! json_encode($top->map(fn ($b) => $b->displayName())->values(), JSON_UNESCAPED_UNICODE) !!},
+        datasets: [{ label: {!! json_encode(__('client.purchases'), JSON_UNESCAPED_UNICODE) !!},
+                     data: {!! json_encode($top->map(fn ($b) => round((float) $b->purchases))->values()) !!},
+                     backgroundColor: BRAND.purple, borderRadius: 6, maxBarThickness: 22 }],
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: AXES },
+});
+
+// ═══ فلترة مركبة: بحث + زون + تصنيف + عقد ═══
 function filterBranches() {
     const q = document.getElementById('qBr').value.trim().toLowerCase();
-    document.querySelectorAll('#brTbl tr[data-txt]').forEach(tr => {
-        tr.style.display = (!q || tr.dataset.txt.toLowerCase().includes(q)) ? '' : 'none';
+    const zn = document.getElementById('fZone').value;
+    const ct = document.getElementById('fCat').value;
+    const cn = document.getElementById('fCon').value;
+    let shown = 0;
+
+    document.querySelectorAll('#brTbl tbody tr[data-txt]').forEach(tr => {
+        const ok = (!q || tr.dataset.txt.toLowerCase().includes(q))
+            && (!zn || tr.dataset.zone === zn)
+            && (!ct || tr.dataset.cat === ct)
+            && (cn === '' || tr.dataset.con === cn);
+        tr.style.display = ok ? '' : 'none';
+        if (ok) shown++;
     });
+
+    document.getElementById('brCount').textContent = shown;
 }
+
+// ═══ سورت بالضغط على العمود — نفس نمط صفحة السلاسل ═══
+(function () {
+    const tbl = document.getElementById('brTbl');
+    const tbody = tbl.tBodies[0];
+    let cur = null, dir = 1;
+
+    tbl.querySelectorAll('th.srt').forEach(function (th) {
+        th.addEventListener('click', function () {
+            const k = th.dataset.k, numeric = th.dataset.t === 'n';
+            dir = (k === cur) ? -dir : (numeric ? -1 : 1);
+            cur = k;
+
+            const rows = Array.from(tbody.rows).filter(r => r.dataset[k] !== undefined);
+            rows.sort((a, b) => dir * (numeric
+                ? (parseFloat(a.dataset[k]) || 0) - (parseFloat(b.dataset[k]) || 0)
+                : a.dataset[k].localeCompare(b.dataset[k], ['ar', 'en'])));
+            rows.forEach(r => tbody.appendChild(r));
+
+            tbl.querySelectorAll('th.srt .arw').forEach(s => s.textContent = '');
+            th.querySelector('.arw').textContent = dir === -1 ? '▼' : '▲';
+        });
+    });
+})();
 function filterAttach() {
     const q = document.getElementById('qAtt').value.trim().toLowerCase();
     document.querySelectorAll('#dlgAttach tr[data-txt]').forEach(tr => {

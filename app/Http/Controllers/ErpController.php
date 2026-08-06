@@ -766,6 +766,19 @@ class ErpController extends Controller
         $data = $request->validate($this->clientRules());
         $this->checkContractDuration($data);
 
+        // ⚠️ **حارس التكرار (2026-08-06)** — نفس منطق الاستيراد بالظبط
+        // (Dupes): اسم مطبّع («المعادى ١» = «فرع المعادي 1») أو تليفون
+        // مسجل لعميل تاني ⇒ رفض برسالة بتقول مين الموجود. عمر ما
+        // عميل يتسجل مرتين من الشاشة ولا من الشيت.
+        if ($dupe = \App\Support\Dupes::existing($data['name'] ?? null, $data['phone'] ?? null)) {
+            $field = $dupe['by'] === 'name' ? 'name' : 'phone';
+
+            return back()->withInput()->withErrors([$field => __('client.dup_'.$dupe['by'], [
+                'name' => $dupe['client']->name,
+                'code' => $dupe['client']->code,
+            ])]);
+        }
+
         $data = $this->guardBranch($request, $data, creating: true);
 
         $client = DB::transaction(function () use ($data, $request) {

@@ -89,4 +89,17 @@ return [
     'sheet_name' => 'Sheet name (optional)',
     'sheet_hint' => 'Leave empty for the first sheet',
     'opening_date_required' => 'an opening balance needs an opening date, otherwise all legacy debt looks new',
+
+    // Duplicate guard & geocoding (2026-08-06)
+    'dup_in_sheet_name' => 'row :line — duplicate name inside the sheet (same as row :other) — row rejected',
+    'dup_in_sheet_code' => 'row :line — code :code is duplicated inside the sheet (already used on row :other) — row rejected',
+    'dup_in_sheet_phone' => 'row :line — duplicate phone inside the sheet (same as row :other) — row rejected',
+    'name_taken_other_code' => 'row :line — the name ":name" is already registered under code :code while the row carries a different code (:row_code) — rejected so we never overwrite another client',
+    'phone_taken' => 'row :line — this phone is registered to client ":name" (:code) — row rejected',
+    'too_close_skip' => '":name" skipped — only :meters meters away from ":other" (:code), most likely the same branch. Review it and upload it alone if it really is different',
+    'geocoded_note' => '":name" — coordinates were resolved from the address (precision: :precision), review them on the client card',
+    'geo_address' => 'full address',
+    'geo_zone' => 'approximate area centre',
+    'result_skipped' => 'skipped (near existing)',
+    'result_geocoded' => 'geocoded from address',
 ];
