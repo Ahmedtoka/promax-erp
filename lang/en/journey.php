@@ -117,4 +117,11 @@ return [
     'active_clients_n' => ':count active clients',
     'potential_n' => ':count potential',
     'market_tape' => 'Tape',
+
+    // Map layers (2026-08-06)
+    'map_layers' => 'Map layers',
+    'layer_reps' => 'Reps',
+    'layer_covered' => 'Covered zones',
+    'layer_target' => 'Target zones',
+    'layer_govs' => 'Governorates',
 ];

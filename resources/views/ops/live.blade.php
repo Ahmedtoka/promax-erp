@@ -54,8 +54,20 @@
         {{-- ═════ الخريطة ═════ --}}
         <div class="lv-maparea">
             <div class="lv-mapbar">
+                {{-- طبقات الخريطة (2026-08-06): شيك بوكسات مرنة —
+                     الديفولت المناديب بس، والاختيارات بتتحفظ في المتصفح --}}
+                <div class="lv-layers">
+                    <span class="lv-layers-t">🗺️ {{ __('journey.map_layers') }}:</span>
+                    <label class="lv-layer"><input type="checkbox" data-layer="reps" checked>
+                        <i style="background:var(--royal)"></i>{{ __('journey.layer_reps') }}</label>
+                    <label class="lv-layer"><input type="checkbox" data-layer="covered">
+                        <i style="background:var(--green)"></i>{{ __('journey.layer_covered') }}</label>
+                    <label class="lv-layer"><input type="checkbox" data-layer="target">
+                        <i style="background:var(--orange)"></i>{{ __('journey.layer_target') }}</label>
+                    <label class="lv-layer"><input type="checkbox" data-layer="govs">
+                        <i style="background:var(--sky)"></i>{{ __('journey.layer_govs') }}</label>
+                </div>
                 <button class="lv-btn" id="lvFollowBtn">🎯 {{ __('journey.follow_rep') }}</button>
-                <button class="lv-btn on" id="lvZonesBtn">{{ __('journey.zones_shown') }}</button>
                 <button class="lv-btn" id="lvPauseBtn">⏸ {{ __('journey.pause_updates') }}</button>
             </div>
             <div id="lvMap"></div>
@@ -111,20 +123,36 @@
 .lv-clock{font-size:13px;color:var(--dim);direction:ltr;letter-spacing:.5px}
 .lv-live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lvBlink 1.4s infinite}
 
-/* KPIs — كل رقم بلونه الدال + خط علوي بجراديان البراند */
+/* KPIs — أيقونة بهالة لونية + رقم بلونه الدال + خط علوي */
 .lv-kpis{display:flex;gap:8px;flex-wrap:wrap}
 .lv-kpi{
-    position:relative;background:var(--panel);border:1px solid var(--line);
-    border-radius:11px;padding:8px 14px 7px;text-align:center;min-width:92px;overflow:hidden;
-    transition:transform .15s, border-color .15s;
+    position:relative;background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel);
+    border:1px solid var(--line);border-radius:12px;
+    padding:9px 14px 8px;min-width:104px;overflow:hidden;
+    display:flex;align-items:center;gap:10px;
+    transition:transform .18s, border-color .18s, box-shadow .18s;
 }
 .lv-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--kc,var(--grad-lite))}
-.lv-kpi:hover{transform:translateY(-2px);border-color:var(--kc-b,var(--royal))}
-.lv-kpi .v{font-size:17px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px}
-.lv-kpi .l{font-size:10px;color:var(--dim);margin-top:1px;white-space:nowrap}
+.lv-kpi:hover{transform:translateY(-2px);border-color:var(--kc,var(--royal));box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.lv-kpi .ic{
+    width:30px;height:30px;border-radius:9px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:14px;
+    background:color-mix(in srgb, var(--kc) 16%, transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--kc) 35%, transparent);
+}
+.lv-kpi .v{font-size:17.5px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px;line-height:1.1}
+.lv-kpi .l{font-size:9.5px;color:var(--dim);white-space:nowrap;margin-top:1px}
 .k-royal{--kc:#5B7BE8;--kc-b:#8FA5F0} .k-green{--kc:#22C55E;--kc-b:#4ADE80}
 .k-red{--kc:#F43F5E;--kc-b:#FB7185}  .k-orange{--kc:#F59E0B;--kc-b:#FBBF24}
 .k-purple{--kc:#9B6BDB;--kc-b:#B794E8} .k-sky{--kc:#38BDF8;--kc-b:#7DD3FC}
+
+/* طبقات الخريطة */
+.lv-layers{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 12px;flex-wrap:wrap}
+.lv-layers-t{font-size:11px;color:var(--dim)}
+.lv-layer{display:flex;align-items:center;gap:5px;font-size:11.5px;cursor:pointer;user-select:none}
+.lv-layer input{accent-color:var(--royal);width:14px;height:14px;cursor:pointer}
+.lv-layer i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.lv-gov-label{background:transparent;border:0;box-shadow:none;color:#7DD3FC;font-size:13px;font-weight:800;letter-spacing:1px;white-space:nowrap;text-shadow:0 0 12px rgba(56,189,248,.5)}
 
 /* شريط الحركة — تيكر البورصة */
 .lv-tape{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px;position:relative}
@@ -215,8 +243,15 @@
 
 /* ═════ الحالة ═════ */
 let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE) !!};
-let selectedId = null, followId = null, paused = false, zonesOn = true, filter = '', search = '';
-const markers = {}, zoneShapes = [];
+let selectedId = null, followId = null, paused = false, filter = '', search = '';
+const markers = {}, zoneShapes = [], govShapes = [];
+
+// طبقات الخريطة — الديفولت المناديب بس، والاختيار محفوظ في المتصفح
+let layers = { reps: true, covered: false, target: false, govs: false };
+try {
+    const saved = JSON.parse(localStorage.getItem('lvLayers') || 'null');
+    if (saved && typeof saved === 'object') layers = Object.assign(layers, saved);
+} catch (e) { /* تخزين بايظ — الديفولت */ }
 
 const T = {
     statuses: {
@@ -274,11 +309,12 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 function drawZones() {
     zoneShapes.forEach(s => map.removeLayer(s));
     zoneShapes.length = 0;
-    if (!zonesOn) return;
 
-    // مغطي = أخضر ثابت · مستهدف = برتقالي متقطع — بعدّاداتهم على اللابل
+    // مغطي = أخضر ثابت · مستهدف = برتقالي متقطع — كل نوع بطبقته
     (data.zones || []).forEach(z => {
         const covered = z.kind === 'covered';
+        if (covered && !layers.covered) return;
+        if (!covered && !layers.target) return;
         const c = L.circle([z.lat, z.lng], {
             radius: 2500,
             color: covered ? '#22C55E' : '#F59E0B',
@@ -301,6 +337,26 @@ function drawZones() {
             interactive: false,
         }).addTo(map);
         zoneShapes.push(c, lbl);
+    });
+}
+
+/* طبقة المحافظات — اسم كبير متوهج + عدد العملاء الشغالين */
+function drawGovs() {
+    govShapes.forEach(s => map.removeLayer(s));
+    govShapes.length = 0;
+    if (!layers.govs) return;
+
+    (data.governorates || []).forEach(g => {
+        const m = L.marker([g.lat, g.lng], {
+            icon: L.divIcon({
+                className: 'lv-gov-label',
+                html: `<div style="text-align:center">${g.name}${g.clients > 0
+                    ? `<br><span style="font-size:9.5px;font-weight:600;color:#BAE6FD">${fmt(g.clients)} ●</span>` : ''}</div>`,
+                iconSize: null,
+            }),
+            interactive: false,
+        }).addTo(map);
+        govShapes.push(m);
     });
 }
 
@@ -330,10 +386,15 @@ function repIcon(r) {
 }
 
 /* ═════ الرسم ═════ */
+const KICONS = { reps: '🧑‍💼', in_zone: '🎯', out_zone: '⚠️', idle: '🛑', units: '📦', value: '🚚', sales: '💰' };
+
 function render() {
-    // KPIs — كل بوكس بلونه الدال وخطه العلوي
+    // KPIs — أيقونة بهالة + رقم بلونه الدال
     document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l, cls]) =>
-        `<div class="lv-kpi ${cls}"><div class="v">${fmt(data.totals[k])}</div><div class="l">${l}</div></div>`).join('');
+        `<div class="lv-kpi ${cls}">
+            <div class="ic">${KICONS[k] || '•'}</div>
+            <div><div class="v">${fmt(data.totals[k])}</div><div class="l">${l}</div></div>
+        </div>`).join('');
 
     renderTape();
 
@@ -360,10 +421,10 @@ function render() {
     document.querySelectorAll('#lvRepList .lv-rep').forEach(el =>
         el.addEventListener('click', () => selectRep(parseInt(el.dataset.id, 10))));
 
-    // الماركرز — بتتحرك مش بتتمسح
+    // الماركرز — بتتحرك مش بتتمسح، وطبقة المناديب ممكن تتقفل
     const seen = new Set();
     (data.reps || []).forEach(r => {
-        if (r.lat === null) return;
+        if (r.lat === null || !layers.reps) return;
         seen.add(r.id);
         if (markers[r.id]) {
             markers[r.id].setLatLng([r.lat, r.lng]);
@@ -448,11 +509,16 @@ document.querySelectorAll('#lvChips .lv-chip').forEach(ch => ch.addEventListener
     render();
 }));
 
-document.getElementById('lvZonesBtn').addEventListener('click', function () {
-    zonesOn = !zonesOn;
-    this.classList.toggle('on', zonesOn);
-    this.textContent = zonesOn ? T.zShown : T.zHidden;
-    drawZones();
+// شيك بوكسات الطبقات — بترسم فوراً وبتتحفظ في المتصفح
+document.querySelectorAll('.lv-layer input').forEach(cb => {
+    cb.checked = !!layers[cb.dataset.layer];
+    cb.addEventListener('change', () => {
+        layers[cb.dataset.layer] = cb.checked;
+        try { localStorage.setItem('lvLayers', JSON.stringify(layers)); } catch (e) {}
+        drawZones();
+        drawGovs();
+        render();
+    });
 });
 
 document.getElementById('lvFollowBtn').addEventListener('click', function () {
@@ -479,6 +545,7 @@ async function refresh() {
         if (!res.ok) return;
         data = await res.json();
         drawZones();
+        drawGovs();
         render();
     } catch (e) { /* الشبكة وقعت — المحاولة الجاية بعد 15 ثانية */ }
 }
@@ -486,6 +553,7 @@ setInterval(refresh, 15000);
 
 /* أول رسمة من الحمولة المدمجة */
 drawZones();
+drawGovs();
 render();
 
 const first = (data.reps || []).find(r => r.lat !== null);

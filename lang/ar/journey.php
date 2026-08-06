@@ -117,4 +117,11 @@ return [
     'active_clients_n' => ':count عميل شغال',
     'potential_n' => ':count محتمل',
     'market_tape' => 'شريط الحركة',
+
+    // طبقات الخريطة (2026-08-06)
+    'map_layers' => 'طبقات الخريطة',
+    'layer_reps' => 'المناديب',
+    'layer_covered' => 'مناطق مغطاة',
+    'layer_target' => 'مناطق مستهدفة',
+    'layer_govs' => 'المحافظات',
 ];

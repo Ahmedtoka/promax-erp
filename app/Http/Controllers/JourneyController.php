@@ -517,9 +517,24 @@ class JourneyController extends Controller
                 'potential' => (int) (($pendingByZone[$z->id] ?? 0) + ($leadsByZone[$z->id] ?? 0)),
             ])->values();
 
+        // طبقة المحافظات — اسم + مركز + كام عميل شغال فيها
+        $activeByGov = \App\Models\Client::where('status', 'active')
+            ->whereNotNull('governorate')
+            ->selectRaw('governorate, COUNT(*) as n')->groupBy('governorate')->pluck('n', 'governorate');
+
+        $governorates = \App\Models\Governorate::whereNotNull('lat')->whereNotNull('lng')
+            ->get()
+            ->map(fn ($g) => [
+                'name' => app()->getLocale() === 'ar' ? $g->name : ($g->name_en ?: $g->name),
+                'lat' => (float) $g->lat,
+                'lng' => (float) $g->lng,
+                'clients' => (int) ($activeByGov[$g->key] ?? 0),
+            ])->values();
+
         return [
             'totals' => $this->liveTotals($rows),
             'zones' => $zones,
+            'governorates' => $governorates,
             'alerts' => $this->liveAlerts($rows->map(fn ($r) => $r['rep'])),
             'reps' => $rows->map(fn ($r) => [
                 'id' => $r['rep']->id,
