@@ -591,6 +591,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])
                 ->name('assignments');
             Route::get('/live', [\App\Http\Controllers\JourneyController::class, 'live'])->name('live');
+            // داتا التيرمينال JSON — رفرش كل 15 ثانية من غير ريلود (2026-08-06)
+            Route::get('/live/data', [\App\Http\Controllers\JourneyController::class, 'liveData'])->name('live.data');
             Route::get('/live/{user}', [\App\Http\Controllers\JourneyController::class, 'repDay'])
                 ->name('rep_day');
 

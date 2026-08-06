@@ -63,6 +63,12 @@ Route::middleware(['api.token', 'locale'])->group(function () {
 
         // المندوب بيستلم عهدته من المخزن
         Route::post('/picks/{pick}/receive', [PickApiController::class, 'receive']);
+
+        // ═══ الحوافز والليدز — الأبديت الكبير (2026-08-06) ═══
+        Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
+        Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
+        Route::post('/leads/{lead}/action', [\App\Http\Controllers\Api\IncentiveApiController::class, 'leadAction']);
+        Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
     });
 
     // ⚠️ **العرض بس** — والكنترولر بيفلتر بالمستخدم أصلاً، فالمحاسب

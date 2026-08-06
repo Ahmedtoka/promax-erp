@@ -302,7 +302,8 @@ class JourneyController extends Controller
 
     // ═══════════════════════ الشاشة اللايف ═══════════════════════
 
-    public function live(Request $request)
+    /** صفوف التيرمينال — مشتركة بين العرض الأول والـJSON (2026-08-06) */
+    private function liveRows(Request $request)
     {
         // ⚠️ العهدة بتتحمّل مفلترة على النهارده. `todayCustody()` بتعمل
         // كويري جديدة في كل نداء، والشاشة دي بتترفرش لوحدها كل دقيقة.
@@ -325,11 +326,33 @@ class JourneyController extends Controller
             ->unique('user_id')
             ->keyBy('user_id');
 
-        $rows = $reps->map(function (User $rep) use ($lastEvents) {
+        // ═══ التيرمينال (2026-08-06): مبيعات اليوم + كيلومترات + حالة ═══
+        // مبيعات كل مندوب النهارده — كويري واحدة مجمعة (grand = المدفوع)
+        $salesToday = \App\Models\Invoice::whereDate('created_at', today())
+            ->whereIn('user_id', $reps->pluck('id'))
+            ->selectRaw('user_id, COALESCE(SUM(grand_total),0) as s')
+            ->groupBy('user_id')->pluck('s', 'user_id');
+
+        // اللي جوه زيارة مفتوحة دلوقتي — بينوّر بنفسجي على الخريطة
+        $inVisit = \App\Models\Visit::whereIn('user_id', $reps->pluck('id'))
+            ->whereDate('checked_in_at', today())
+            ->whereNull('checked_out_at')
+            ->pluck('user_id')->flip();
+
+        $rows = $reps->map(function (User $rep) use ($lastEvents, $salesToday, $inVisit) {
             // من العلاقة المحمّلة فوق — مش كويري جديدة
             $custody = $rep->custodies->first();
             $summary = Journeys::summary($rep);
             $last = $lastEvents->get($rep->id);
+            $minutes = $last ? (int) round(abs(now()->diffInMinutes($last->created_at))) : null;
+
+            // الحالة: زيارة ← متحرك (إشارة < 10 دقايق) ← واقف ← مفيش إشارة
+            $status = match (true) {
+                $inVisit->has($rep->id) => 'visit',
+                $minutes !== null && $minutes < 10 => 'moving',
+                $minutes !== null => 'idle',
+                default => 'off',
+            };
 
             return [
                 'rep' => $rep,
@@ -340,24 +363,67 @@ class JourneyController extends Controller
                 'last' => $last,
                 'lat' => $last?->lat,
                 'lng' => $last?->lng,
-                'minutes_ago' => $last
-                    ? (int) round(abs(now()->diffInMinutes($last->created_at)))
-                    : null,
+                'minutes_ago' => $minutes,
+                'status' => $status,
+                'sales_today' => round((float) ($salesToday[$rep->id] ?? 0), 2),
+                'km_today' => \App\Services\RepKpis::kmForDay($rep, now()),
             ];
         });
+
+        return $rows;
+    }
+
+    public function live(Request $request)
+    {
+        $rows = $this->liveRows($request);
 
         return view('ops.live', [
             'rows' => $rows,
             'onMap' => $rows->filter(fn ($r) => $r['lat'] !== null)->values(),
-            'totals' => [
-                'reps' => $rows->count(),
-                'active' => $rows->filter(fn ($r) => $r['last'] !== null)->count(),
-                'planned' => $rows->sum(fn ($r) => $r['summary']['planned']),
-                'done' => $rows->sum(fn ($r) => $r['summary']['done']),
-                'value' => round($rows->sum(fn ($r) => $r['remaining_value']), 2),
-            ],
+            'totals' => $this->liveTotals($rows),
             'date' => today()->toDateString(),
         ]);
+    }
+
+    /** داتا التيرمينال JSON — الشاشة بتسحبها كل 15 ثانية من غير ريلود */
+    public function liveData(Request $request)
+    {
+        $rows = $this->liveRows($request);
+
+        return response()->json([
+            'totals' => $this->liveTotals($rows),
+            'reps' => $rows->map(fn ($r) => [
+                'id' => $r['rep']->id,
+                'name' => $r['rep']->displayName(),
+                'role' => $r['rep']->roleLabel(),
+                'zone' => $r['rep']->zone?->displayName(),
+                'lat' => $r['lat'] !== null ? (float) $r['lat'] : null,
+                'lng' => $r['lng'] !== null ? (float) $r['lng'] : null,
+                'status' => $r['status'],
+                'minutes' => $r['minutes_ago'],
+                'done' => $r['summary']['done'],
+                'planned' => $r['summary']['planned'],
+                'pct' => $r['summary']['pct'],
+                'off_plan' => $r['summary']['off_plan'],
+                'units' => $r['remaining_units'],
+                'value' => $r['remaining_value'],
+                'sales' => $r['sales_today'],
+                'km' => $r['km_today'],
+                'url' => route('ops.rep_day', $r['rep']),
+            ])->values(),
+        ]);
+    }
+
+    private function liveTotals($rows): array
+    {
+        return [
+            'reps' => $rows->count(),
+            'active' => $rows->filter(fn ($r) => $r['last'] !== null)->count(),
+            'planned' => $rows->sum(fn ($r) => $r['summary']['planned']),
+            'done' => $rows->sum(fn ($r) => $r['summary']['done']),
+            'value' => round($rows->sum(fn ($r) => $r['remaining_value']), 2),
+            'sales' => round($rows->sum(fn ($r) => $r['sales_today']), 2),
+        ];
     }
 
     /** يوم مندوب واحد — بيتفتح من الشاشة اللايف */

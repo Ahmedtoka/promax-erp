@@ -74,6 +74,7 @@ return [
     'event_check_out' => 'تشيك أوت — :client',
     'event_visit_minutes' => 'مدة الزيارة :minutes دقيقة',
     'event_invoice' => 'فاتورة :number — :client',
+    'event_app_open' => 'فتح الأبلكيشن',
     'event_return' => 'مرتجع من :client',
     'gift_new_request' => 'طلب جديد',
     'gift_not_your_request' => 'الطلب ده مش من تسجيلك.',

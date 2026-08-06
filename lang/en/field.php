@@ -75,6 +75,7 @@ return [
     'event_check_out' => 'Check-out — :client',
     'event_visit_minutes' => 'Visit lasted :minutes minutes',
     'event_invoice' => 'Invoice :number — :client',
+    'event_app_open' => 'App opened',
     'event_return' => 'Return from :client',
     'gift_new_request' => 'New request',
     'gift_not_your_request' => 'This request was not registered by you.',
