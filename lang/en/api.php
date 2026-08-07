@@ -6,6 +6,7 @@ return [
     // ---------- Authentication ----------
     'token_missing' => 'Authentication token is missing.',
     'token_invalid' => 'Your session has expired — please sign in again.',
+    'account_blocked' => "Your app access has been suspended. Please contact management.",
     'not_signed_in' => 'You are not signed in.',
     'bad_credentials' => 'Wrong login or password.',
     'no_app_access' => 'This account has no access to the app.',

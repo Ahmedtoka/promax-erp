@@ -20,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'locale' => App\Http\Middleware\SetLocale::class,
             // مفيش شغل قبل تسجيل الحضور (HR 2026-08-08)
             'attendance' => App\Http\Middleware\RequireAttendance::class,
+            // ⚠️ مفيش استلام بضاعة من غير دخول مخزن (2026-08-08)
+            'in.warehouse' => App\Http\Middleware\RequireWarehouseVisit::class,
         ]);
 
         // لغة الواجهة لازم تتحدد على كل طلب ويب قبل ما أي فيو يترسم،

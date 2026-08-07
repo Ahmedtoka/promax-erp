@@ -23,8 +23,24 @@ class AuthenticateApiToken
 
         $record = ApiToken::with('user')->where('token', $token)->first();
 
-        if (! $record || ! $record->user || ! $record->user->active) {
+        if (! $record || ! $record->user) {
             return response()->json(['message' => __('api.token_invalid')], 401);
+        }
+
+        // ⚠️ **الموقوف غير المنتهية جلسته** (2026-08-08). الاتنين كانوا
+        // بيرجعوا نفس الرسالة، فالموظف اللي الإدارة وقفته كان بيشوف
+        // «الجلسة انتهت» ويفضل يحاول يسجّل دخول ويتصل بالدعم يقول
+        // «الأبلكيشن بايظ». الكود ده بيخلّي الأبلكيشن يوري شاشة
+        // بتقول الحقيقة وتوجّهه للإدارة.
+        //
+        // ⚠️ و**403 مش 401**: الـ401 معناها «اتصرّف وسجّل دخول تاني»،
+        // وهو ده اللي الأبلكيشن كان بيعمله — بيمسح التوكن ويرجّعه
+        // للوجين فيدخل ويتوقف تاني في لفة لا نهائية.
+        if (! $record->user->active) {
+            return response()->json([
+                'message' => __('api.account_blocked'),
+                'code' => 'account_blocked',
+            ], 403);
         }
 
         $record->forceFill(['last_used_at' => now()])->saveQuietly();

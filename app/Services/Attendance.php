@@ -102,6 +102,14 @@ final class Attendance
         }
 
         DB::transaction(function () use ($day, $user, $type, $lat, $lng, $auto) {
+            // ⚠️ **الانصراف بيقفل زيارة المخزن المفتوحة** (2026-08-08).
+            // الزيارة المفتوحة هي إذن الاستلام — والموظف اللي انصرف
+            // مش في المخزن بالتعريف. سيبانها مفتوحة كان معناه إن
+            // الإذن بيفضل معاه بعد ما يمشي ويقدر يستلم من بيته.
+            if ($type === AttendancePunch::OUT) {
+                WarehouseVisits::closeOpenFor($user);
+            }
+
             AttendancePunch::create([
                 'attendance_day_id' => $day->id,
                 'user_id' => $user->id,
@@ -217,6 +225,12 @@ final class Attendance
         }
 
         DB::transaction(function () use ($day) {
+            // ⚠️ نفس سبب الانصراف اليدوي — اليوم اللي اتقفل تلقائياً
+            // مايسيبش إذن استلام مفتوح لليوم اللي بعده
+            if ($day->user !== null) {
+                WarehouseVisits::closeOpenFor($day->user);
+            }
+
             AttendancePunch::create([
                 'attendance_day_id' => $day->id,
                 'user_id' => $day->user_id,

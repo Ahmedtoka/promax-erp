@@ -75,11 +75,25 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);
 
+        // ═══ دخول وخروج المخزن (2026-08-08) ═══
+        // ⚠️ **بره حارس `in.warehouse` طبعاً** — دي الحاجة اللي
+        // بتفتحه أصلاً. حطها جوّاه كان هيعمل دايرة مقفولة: مايقدرش
+        // يدخل المخزن لأنه مش داخل المخزن.
+        Route::post('/warehouse-visits', [\App\Http\Controllers\Api\WarehouseVisitApiController::class, 'checkIn']);
+        Route::post('/warehouse-visits/out', [\App\Http\Controllers\Api\WarehouseVisitApiController::class, 'checkOut']);
+
         // طلبات العملاء الجدد
         Route::post('/client-requests', [FieldApiController::class, 'storeClientRequest']);
 
-        // المندوب بيستلم عهدته من المخزن
-        Route::post('/picks/{pick}/receive', [PickApiController::class, 'receive']);
+        // ═══ اللي لازم يكون جوّه المخزن عشان يعمله (2026-08-08) ═══
+        //
+        // ⚠️ **الاستلام بس مش التسليم.** المندوب بيستلم العهدة والـPO
+        // **من المخزن**، لكن بيسلّم الـPO **عند العميل** — فلو حطينا
+        // `deliver` هنا كان الحارس هيمنعه يسلّم وهو واقف عند العميل.
+        Route::middleware('in.warehouse')->group(function () {
+            // المندوب بيستلم عهدته من المخزن
+            Route::post('/picks/{pick}/receive', [PickApiController::class, 'receive']);
+        });
 
         // ═══ الحوافز والليدز — الأبديت الكبير (2026-08-06) ═══
         Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);

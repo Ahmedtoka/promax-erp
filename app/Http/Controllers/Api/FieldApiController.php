@@ -72,6 +72,14 @@ class FieldApiController extends Controller
             ->whereDate('date', today())
             ->selectRaw('status, updated_at')->first();
 
+        // ⚠️ **إصدار الأبلكيشن في البصمة** (2026-08-08). لما المدير
+        // يرفع إصدار جديد من الداشبورد، المندوب الشغال كان بيفضل
+        // على النسخة القديمة لحد ما يقفل الأبلكيشن ويفتحه — يعني
+        // ممكن يوم كامل. دلوقتي البلس (كل 10 ثواني) بيلاقي البصمة
+        // اتغيّرت، والأبلكيشن يعيد الفحص ويقفل نفسه لو لازم.
+        $ver = \App\Models\Setting::read('app_version');
+        $minVer = \App\Models\Setting::read('app_min_version');
+
         return response()->json([
             'stamp' => implode('|', [
                 (int) ($picks->ready ?? 0), $picks->t ?? '',
@@ -81,7 +89,12 @@ class FieldApiController extends Controller
                 (int) ($reqs->n ?? 0), $reqs->t ?? '',
                 (int) ($visits->n ?? 0), $visits->t ?? '',
                 $att->status ?? '', $att->updated_at ?? '',
+                $ver, $minVer,
             ]),
+            // ⚠️ بيتبعتوا صريحين كمان — الأبلكيشن بيقارن بنفسه من
+            // غير ما يعمل ريكوست تاني لـ`/app-version`
+            'app_version' => $ver,
+            'app_min_version' => $minVer,
             // الأبلكيشن بيستخدمهم للتنبيه الداخلي من غير ما يستنى
             // البوت ستراب يرجع
             'ready_picks' => (int) ($picks->ready ?? 0),
@@ -120,6 +133,28 @@ class FieldApiController extends Controller
             // استنى ريكوست تاني كان المندوب هيشوف الشاشة ثانية
             // ويبدأ يدوس قبل ما البوب أب يظهر.
             'attendance' => \App\Services\Attendance::payload($user),
+
+            // ═══ زيارة المخزن المفتوحة + المخازن المتاحة (2026-08-08) ═══
+            //
+            // ⚠️ **مع البوت ستراب لنفس سبب الحضور.** الأبلكيشن لازم
+            // يرسم بانر «انت جوه مخزن المعادي من 9:12» من أول رسمة —
+            // ولو استنى ريكوست تاني، المندوب بيدوس استلام ويتفاجئ
+            // بالرفض وهو شايف نفسه مسجّل.
+            'warehouse_visit' => \App\Services\WarehouseVisits::open($user)?->payload(),
+
+            // ⚠️ **القايمة كلها مش المسكّن له.** المندوب بيستلم من
+            // أي مخزن حسب اللي جهّزوا له فيه — وتقييدها على مخزن
+            // فرعه كان بيمنع الاستلام من المخزن المركزي.
+            'warehouses' => \App\Models\Warehouse::where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'name_en', 'address', 'lat', 'lng'])
+                ->map(fn ($w) => [
+                    'id' => $w->id,
+                    'name' => $w->displayName(),
+                    'address' => $w->address,
+                    'lat' => $w->lat === null ? null : (float) $w->lat,
+                    'lng' => $w->lng === null ? null : (float) $w->lng,
+                ])->values(),
             // ⚠️ **`is_read` لازم تتبعت** (إصلاح 2026-08-07). الأبلكيشن
             // كان بيعد الإشعارات كلها في الشارة عشان مكانش عارف
             // المقروء من غيره — فالمندوب يفتحها ويقفلها والرقم زي ما
@@ -271,6 +306,12 @@ class FieldApiController extends Controller
                     'discount' => $c->effectiveDiscount(),
                     'discount_source' => $c->discountSource(),
                     'channel' => $c->channel?->displayName(),
+                    // ⚠️ **المنطقة والمحافظة للفاتورة اللي بتتبعت للعميل**
+                    // (2026-08-08). العنوان لوحده «7 شارع 9» مالوش معنى
+                    // على ورقة بتتبعت واتساب — العميل لازم يشوف الفرع
+                    // اللي الفاتورة دي بتاعته.
+                    'zone' => $c->zone?->displayName(),
+                    'governorate' => $c->governorateLabel(),
                     'cash_only' => $c->cashOnly(),
                     // كاش/آجل — قرار الأدمن؛ الأبلكيشن بيعرضها ومابيسألش
                     'payment_terms' => $c->paymentTerms(),
