@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.token' => App\Http\Middleware\AuthenticateApiToken::class,
             'api.role' => App\Http\Middleware\EnsureApiRole::class,
             'locale' => App\Http\Middleware\SetLocale::class,
+            // مفيش شغل قبل تسجيل الحضور (HR 2026-08-08)
+            'attendance' => App\Http\Middleware\RequireAttendance::class,
         ]);
 
         // لغة الواجهة لازم تتحدد على كل طلب ويب قبل ما أي فيو يترسم،

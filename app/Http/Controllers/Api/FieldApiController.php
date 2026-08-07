@@ -65,6 +65,13 @@ class FieldApiController extends Controller
             ->whereDate('created_at', today())
             ->selectRaw('COUNT(*) n, MAX(updated_at) t')->first();
 
+        // ⚠️ الحضور في البصمة كمان (2026-08-08): المدير ممكن يقفل
+        // شيفت من السيستم، والأبلكيشن لازم يعرف فوراً وإلا المندوب
+        // بيفضل شايف نفسه شغال والأكشنز بترجع 423 من غير سبب باين.
+        $att = DB::table('attendance_days')->where('user_id', $id)
+            ->whereDate('date', today())
+            ->selectRaw('status, updated_at')->first();
+
         return response()->json([
             'stamp' => implode('|', [
                 (int) ($picks->ready ?? 0), $picks->t ?? '',
@@ -73,6 +80,7 @@ class FieldApiController extends Controller
                 (int) ($custody->n ?? 0), $custody->t ?? '',
                 (int) ($reqs->n ?? 0), $reqs->t ?? '',
                 (int) ($visits->n ?? 0), $visits->t ?? '',
+                $att->status ?? '', $att->updated_at ?? '',
             ]),
             // الأبلكيشن بيستخدمهم للتنبيه الداخلي من غير ما يستنى
             // البوت ستراب يرجع
@@ -107,6 +115,11 @@ class FieldApiController extends Controller
             'purchase_orders' => ($user->isDriver() || $user->isSalesAgent())
                 ? $this->posPayload($user) : [],
             'today' => $this->todayPayload($user),
+            // ⚠️ **مع البوت ستراب مش ريكوست منفصل** — الأبلكيشن
+            // بيقرر من أول رسمة يعرض بوب أب الحضور ولا لأ، ولو
+            // استنى ريكوست تاني كان المندوب هيشوف الشاشة ثانية
+            // ويبدأ يدوس قبل ما البوب أب يظهر.
+            'attendance' => \App\Services\Attendance::payload($user),
             // ⚠️ **`is_read` لازم تتبعت** (إصلاح 2026-08-07). الأبلكيشن
             // كان بيعد الإشعارات كلها في الشارة عشان مكانش عارف
             // المقروء من غيره — فالمندوب يفتحها ويقفلها والرقم زي ما

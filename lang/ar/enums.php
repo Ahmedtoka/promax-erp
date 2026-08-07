@@ -119,6 +119,10 @@ return [
         'deliver' => 'سلّم أمر توريد',
         'refill' => 'ريفيل رف',
         'request' => 'طلب عميل جديد',
+        'shift_in' => 'بدأ شغل',
+        'shift_break' => 'بريك',
+        'shift_back' => 'رجع من البريك',
+        'shift_out' => 'خلّص شغل',
     ],
 
 ];

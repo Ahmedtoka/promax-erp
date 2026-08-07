@@ -75,4 +75,5 @@ return [
 
     'audit' => 'Activity Log',
     'app_version' => 'App Version',
+    'attendance' => 'Attendance',
 ];

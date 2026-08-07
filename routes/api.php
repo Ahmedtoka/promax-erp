@@ -42,13 +42,23 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // كل اللي الأبلكيشن محتاجه في ريكوست واحد
     Route::get('/bootstrap', [FieldApiController::class, 'bootstrap']);
 
+    // ═══ الحضور والانصراف — HR (2026-08-08) ═══
+    // ⚠️ **بره حارس `attendance` عن قصد.** لو الحارس اتحط عليها،
+    // الموظف اللي لسه ما حضرش مش هيقدر يسجّل حضور — مصيدة مقفولة
+    // على نفسها. ودي الراوتس الوحيدة المسموحة قبل الحضور مع القراءة.
+    Route::get('/attendance', [\App\Http\Controllers\Api\AttendanceApiController::class, 'show']);
+    Route::post('/attendance/punch', [\App\Http\Controllers\Api\AttendanceApiController::class, 'punch']);
+
     // ═════════ شغل الشارع — المناديب والسواقين بس ═════════
     // ⚠️ **الراوتس دي كانت مفتوحة لأي توكن.** مع دخول المحاسب وأمين
     // المخزن على الأبلكيشن، ده بقى ثغرة حقيقية: محاسب معاه توكن كان
     // يقدر يبعت `POST /invoices` ويعمل فاتورة بيع باسمه، تخصم من عهدة
     // مش بتاعته وتنزل قيد على حساب عميل. مافيش شاشة بتوريله الزرار —
     // بس الـAPI مابتسألش عن الشاشة.
-    Route::middleware('api.role:sales_agent,driver,promoter,admin,manager')->group(function () {
+    // ⚠️ **`attendance` مع `api.role`** — كل أكشن في المجموعة دي
+    // بيتوقف لو الموظف مش مسجّل حضور (أو في بريك). القراءة اللي بره
+    // المجموعة بتفضل مفتوحة: يتصفّح عهدته وخط سيره عادي.
+    Route::middleware(['api.role:sales_agent,driver,promoter,admin,manager', 'attendance'])->group(function () {
         // الزيارات
         Route::post('/visits/check-in', [FieldApiController::class, 'checkIn']);
         Route::post('/visits/{visit}/check-out', [FieldApiController::class, 'checkOut']);
@@ -94,7 +104,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ═══ الهدايا — المندوب بيسجّل اداها لمين ═══
     // ⚠️ من غير التسجيل ده، «صرفنا 200 عينة» رقم مالوش تفصيل.
     Route::get('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'index']);
-    Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store']);
+    Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store'])
+        ->middleware('attendance');
 
     // ═══ البلس — بصمة الحالة، الأبلكيشن بينده عليها كل 10 ثواني ═══
     // ⚠️ لازم تفضل رخيصة. أي حاجة تتضاف هنا بتتضرب في عدد المناديب
@@ -108,21 +119,25 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     Route::post('/notifications/read', [FieldApiController::class, 'readNotifications']);
 
     // ===== البروموتر =====
+    // ⚠️ الحضور بينطبق على البروموتر برضه — القراءة مفتوحة والأكشن لأ
     Route::prefix('promoter')->middleware('api.role:promoter,admin,manager')->group(function () {
         Route::get('/bootstrap', [PromoterApiController::class, 'bootstrap']);
+        Route::middleware('attendance')->group(function () {
         Route::post('/visits', [PromoterApiController::class, 'startVisit']);
         Route::post('/visits/{merchVisit}/photo', [PromoterApiController::class, 'uploadPhoto']);
         Route::post('/visits/{merchVisit}/refill', [PromoterApiController::class, 'saveRefill']);
         Route::post('/visits/{merchVisit}/replenishment',
             [PromoterApiController::class, 'requestReplenishment']);
         Route::post('/visits/{merchVisit}/close', [PromoterApiController::class, 'closeVisit']);
+        });
     });
 
     // ===== الأدمن / الـ Channel Manager =====
     Route::prefix('manager')->middleware('api.role:admin,manager')->group(function () {
         Route::get('/bootstrap', [ManagerApiController::class, 'bootstrap']);
         Route::get('/reps/{user}', [ManagerApiController::class, 'rep']);
-        Route::post('/requests/{clientRequest}/decide', [ManagerApiController::class, 'decide']);
+        Route::post('/requests/{clientRequest}/decide', [ManagerApiController::class, 'decide'])
+            ->middleware('attendance');
 
         // طلبات الريفيل بتاعت البروموتر — موافقة وتنزيل على مندوب
         Route::get('/replenishments', [ManagerApiController::class, 'replenishments']);

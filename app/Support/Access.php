@@ -46,6 +46,8 @@ class Access
             'erp.prices', 'erp.govs', 'erp.families',
             // الحوافز: التارجتات ولوحة الأداء — شغل مدير القناة (2026-08-06)
             'erp.targets', 'erp.performance',
+            // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
+            'erp.attendance',
             'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
@@ -96,6 +98,9 @@ class Access
             'erp.repclose',
             // قفل اليوم + لوحة الأداء (قراءة) — يومية الحسابات
             'erp.dayclose', 'erp.performance',
+            // ⚠️ الحضور **قراءة بس** للمحاسب — الساعات بتروح للمرتبات
+            // فلازم يشوفها، بس الاعتماد قرار إداري (`role:admin,manager`)
+            'erp.attendance', '!erp.attendance.approve',
             // ⚠️ المحاسب بيشوف الموردين ويدفع لهم — المستحقات شغله.
             // أوامر الشراء نفسها (بضاعة) مش له، وتعريف المورد
             // والافتتاحي قرارات إدارة (`role:admin,manager` في الراوت).
@@ -282,6 +287,8 @@ class Access
             ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
             // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
             ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
+            // الحضور والانصراف — أول موديول HR
+            ['erp.attendance', '🕒', 'nav.attendance', 'erp.attendance*', ['manager', 'accountant']],
             // إصدار الأبلكيشن: رفع APK وإجبار التحديث
             ['erp.app_version', '📲', 'nav.app_version', 'erp.app_version*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],

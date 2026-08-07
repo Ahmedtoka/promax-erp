@@ -291,6 +291,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/incentives', [\App\Http\Controllers\IncentiveController::class, 'saveSettings'])
             ->middleware('role:admin')->name('incentives.save');
 
+        // ═════ الحضور والانصراف — أول موديول HR (2026-08-08) ═════
+        // ⚠️ المحاسب داخل معاهم: الساعات دي بتروح للمرتبات
+        Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'board'])
+            ->middleware('role:admin,manager,accountant')->name('attendance');
+        Route::get('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])
+            ->middleware('role:admin,manager,accountant')->name('attendance.log');
+        Route::get('/attendance/review', [\App\Http\Controllers\AttendanceController::class, 'review'])
+            ->middleware('role:admin,manager,accountant')->name('attendance.review');
+        // ⚠️ الاعتماد للأدمن والمدير بس — المحاسب بيقرا مايعتمدش
+        Route::post('/attendance/{day}/approve', [\App\Http\Controllers\AttendanceController::class, 'approve'])
+            ->middleware('role:admin,manager')->name('attendance.approve');
+
         // ═════ إصدار الأبلكيشن (2026-08-07) — أدمن بس ═════
         // ⚠️ رفع APK بيعدّي على الفورم، فالـPOST لازم يكون multipart
         Route::get('/app-version', [\App\Http\Controllers\AppVersionController::class, 'edit'])

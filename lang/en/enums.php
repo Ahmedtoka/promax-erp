@@ -117,6 +117,10 @@ return [
         'deliver' => 'PO delivered',
         'refill' => 'Shelf Refill',
         'request' => 'New client request',
+        'shift_in' => 'Shift start',
+        'shift_break' => 'Break',
+        'shift_back' => 'Back from break',
+        'shift_out' => 'Shift end',
     ],
 
 ];
