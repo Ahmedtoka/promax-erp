@@ -34,7 +34,7 @@ class PurchaseOrder extends Model
         'price_mode', 'total', 'tax_total', 'grand_total',
         'arrived_at', 'delivered_at', 'due_date',
         'approval_status', 'approved_by', 'approved_at', 'approval_note',
-        'was_edited', 'edited_by', 'edited_at', 'due_at', 'warehouse_id', 'pick_order_id', 'created_by',
+        'was_edited', 'edited_by', 'edited_at', 'due_at', 'pickup_at', 'warehouse_id', 'pick_order_id', 'created_by',
     ];
 
     protected function casts(): array
@@ -47,6 +47,8 @@ class PurchaseOrder extends Model
             'delivered_at' => 'datetime',
             'due_date' => 'date',
             'due_at' => 'datetime',
+            // موعد وصول المندوب المخزن — غير موعد التسليم للفرع
+            'pickup_at' => 'datetime',
             'approved_at' => 'datetime',
             'was_edited' => 'boolean',
             'edited_at' => 'datetime',

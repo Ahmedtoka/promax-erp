@@ -26,7 +26,8 @@ class PickApiController extends Controller
         $history = $request->boolean('history');
 
         $orders = PickOrder::forRep($request->user()->id)
-            ->with(['warehouse', 'items.product', 'items.batch', 'items.location'])
+            ->with(['warehouse', 'items.product', 'items.batch', 'items.location',
+                'purchaseOrder:id,client_id,due_at', 'purchaseOrder.client:id,name,name_en'])
             ->when(
                 $history,
                 fn ($q) => $q->where('status', 'handed')->latest('handed_at')->take(60),
@@ -106,6 +107,13 @@ class PickApiController extends Controller
             'can_receive' => $o->status === 'ready',
             'has_variance' => (bool) $o->has_variance,
             'needed_on' => $o->needed_on?->toDateString(),
+            // ⚠️ **موعد وصول المندوب المخزن** (2026-08-08) —
+            // يوم وساعة. `needed_on` فولباك للأوامر القديمة.
+            'pickup_at' => $o->pickup_at?->toIso8601String(),
+            // وللتوريد: الفرع ومعاد تسليمه — المندوب لازم يعرف
+            // البضاعة دي رايحة فين قبل ما يستلمها
+            'po_client' => $o->purchaseOrder?->client?->displayName(),
+            'po_due_at' => $o->purchaseOrder?->due_at?->toIso8601String(),
             'ready_at' => $o->ready_at?->toIso8601String(),
             'handed_at' => $o->handed_at?->toIso8601String(),
             'time' => $o->created_at->toIso8601String(),

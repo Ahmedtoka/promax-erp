@@ -129,10 +129,24 @@
                     @endforeach
                 </select>
             </div>
+            {{--
+                ⚠️ **المعادين جنب بعض عن قصد** (2026-08-08). الخانة
+                الواحدة كانت بتخلي المدير يحط معاد ويفتكر إنه غطّى
+                الاتنين — والمندوب يوصل الفرع يوم التسليم وهو أصلاً
+                ماخدش البضاعة من المخزن.
+            --}}
             <div>
-                <label class="f">{{ __('ops.due_at') }} <b class="req-star">*</b></label>
+                <label class="f" style="color:#0E7C5A">📦 {{ __('ops.pickup_at') }}</label>
+                {{-- المندوب ييجي المخزن إمتى — يوم وساعة --}}
+                <input type="datetime-local" name="pickup_at" style="width:100%"
+                       value="{{ old('pickup_at', $edit?->pickup_at?->format('Y-m-d\\TH:i')) }}">
+                <div class="side" style="font-size:10.5px">{{ __('ops.pickup_at_hint') }}</div>
+            </div>
+            <div>
+                <label class="f" style="color:#7C3AED">🚚 {{ __('ops.due_at') }} <b class="req-star">*</b></label>
                 {{-- باليوم **والساعة** — معاد استلام الفرع للبضاعة --}}
                 <input type="datetime-local" name="due_at" required style="width:100%" value="{{ old('due_at', $edit?->due_at?->format('Y-m-d\\TH:i')) }}">
+                <div class="side" style="font-size:10.5px">{{ __('ops.due_at_hint') }}</div>
             </div>
             <div>
                 <label class="f">{{ __('ops.source') }}</label>

@@ -27,7 +27,15 @@
 @section('actions')
     <a class="btn" href="{{ route('wh.index') }}">🏭 {{ __('stock.warehouse_overview') }}</a>
     @if ($manager)
-        @if (\App\Support\Access::action(auth()->user(), 'act.wh.pick'))<a class="btn gold" href="{{ route('wh.picks.create') }}">+ {{ __('stock.new_pick_order') }}</a>@endif
+        {{-- ⚠️ **زرار «أمر تجهيز جديد» اتشال** (2026-08-08).
+             الأمر بيتخلق من «تسليم عهدة» أو من موافقة الحسابات على
+             أمر توريد — والشاشة دي بقت تنفيذ وعرض بس. --}}
+        <a class="btn" href="{{ route('wh.handout') }}">📦 {{ __('stock.go_handout') }}</a>
+        {{-- ⚠️ أمر التوريد `role:admin,manager` — أمين المخزن الراوت
+             بيرفضه، فاللينك لازم يتخفي عنه بدل ما يدوس وياخد 403 --}}
+        @if (\App\Support\Access::allows(auth()->user(), 'ops.po.handout'))
+            <a class="btn" href="{{ route('ops.po.handout') }}">🚚 {{ __('stock.go_po') }}</a>
+        @endif
     @endif
 @endsection
 
@@ -67,6 +75,7 @@
                 <th>{{ __('stock.warehouse') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th>{{ __('stock.pick_purpose') }}</th>
+                <th>{{ __('stock.pickup_at') }}</th>
                 <th>{{ __('stock.qty_requested') }}</th>
                 <th>{{ __('stock.qty_picked') }}</th>
                 <th>{{ __('stock.qty_received_col') }}</th>
@@ -81,10 +90,39 @@
                     <td>{{ $o->warehouse?->displayName() ?? '—' }}</td>
                     <td>{{ $o->rep?->name ?? '—' }}</td>
                     <td>
-                        @if ($o->purpose)
-                            <span class="badge b-purple">{{ $o->purposeLabel() }}</span>
+                        {{-- ⚠️ **الفرق بين عهدة وتوريد لازم يبان من نظرة**
+                             (2026-08-08). كل الأوامر كانت بنفس الشكل
+                             والبادج البنفسجي، وأمين المخزن مايعرفش
+                             البضاعة دي رايحة عربية ولا فرع كي أكاونت. --}}
+                        @if ($o->purchase_order_id)
+                            <span class="badge b-purple">🚚 {{ __('stock.pick_purpose_customer_po') }}</span>
+                            <div style="font-size:10.5px;color:var(--muted)">
+                                {{ $o->purchaseOrder?->client?->displayName() ?? '—' }}
+                            </div>
                         @else
-                            <span class="badge b-gray">—</span>
+                            <span class="badge b-blue">📦 {{ __('stock.pick_purpose_van_load') }}</span>
+                        @endif
+                    </td>
+                    <td>
+                        {{-- موعد وصول المندوب المخزن --}}
+                        @if ($o->pickup_at)
+                            <span dir="ltr" style="font-weight:800;font-size:11.5px;
+                                {{ $o->pickup_at->isPast() && $o->isOpen() ? 'color:#B00020' : '' }}">
+                                {{ $o->pickup_at->format('d/m h:i A') }}
+                            </span>
+                        @elseif ($o->needed_on)
+                            <span dir="ltr" style="font-size:11.5px;color:var(--muted)">
+                                {{ $o->needed_on->format('d/m') }}
+                            </span>
+                        @else
+                            <span class="side">—</span>
+                        @endif
+
+                        {{-- وللتوريد: معاد تسليم الفرع كمان --}}
+                        @if ($o->purchaseOrder?->due_at)
+                            <div dir="ltr" style="font-size:10px;color:#7C3AED">
+                                🚚 {{ $o->purchaseOrder->due_at->format('d/m h:i A') }}
+                            </div>
                         @endif
                     </td>
                     <td class="num">{{ $fmt($o->qtyRequested()) }}</td>

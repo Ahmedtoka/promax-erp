@@ -23,7 +23,13 @@ class PickOrderController extends Controller
 {
     public function index(Request $request)
     {
-        $q = PickOrder::with(['warehouse', 'rep', 'requester', 'items.product']);
+        // ⚠️ `purchaseOrder.client` لازم تتحمّل مع القايمة — العمود
+        // بيعرض اسم الفرع لأوامر التوريد، ومن غيرها بيبقى
+        // كويري لكل صف (N+1) على صفحة فيها 25 أمر.
+        $q = PickOrder::with([
+            'warehouse', 'rep', 'requester', 'items.product',
+            'purchaseOrder:id,number,client_id,due_at', 'purchaseOrder.client:id,name,name_en',
+        ]);
 
         if ($status = $request->string('status')->value()) {
             $status === 'open' ? $q->open() : $q->where('status', $status);
@@ -45,72 +51,16 @@ class PickOrderController extends Controller
         ]);
     }
 
-    /** شاشة إنشاء أمر تجهيز — بتعرض المتاح وأقرب صلاحية لكل صنف */
-    public function create(Request $request)
-    {
-        $warehouse = $request->integer('warehouse')
-            ? Warehouse::find($request->integer('warehouse'))
-            : Warehouse::defaultBranch();
-
-        $products = Product::where('active', true)->orderBy('code')->get()
-            ->map(function (Product $p) use ($warehouse) {
-                $available = $warehouse ? $warehouse->availableFor($p->id) : 0;
-                $next = $warehouse
-                    ? $p->batches()->where('warehouse_id', $warehouse->id)->sellable()->first()
-                    : null;
-
-                return [
-                    'model' => $p,
-                    'available' => $available,
-                    'next_batch' => $next?->batch_no,
-                    'next_expiry' => $next?->expires_on?->format('Y-m-d'),
-                    'expiry_class' => $next?->expiryClass() ?? 'b-gray',
-                    'days_left' => $next?->daysLeft(),
-                ];
-            });
-
-        return view('wh.pick_create', [
-            'warehouse' => $warehouse,
-            'warehouses' => Warehouse::where('active', true)
-                ->where('type', Warehouse::TYPE_BRANCH)->get(),
-            'products' => $products,
-            'reps' => User::whereIn('role', User::FIELD_ROLES)->where('active', true)
-                ->with('zone')->orderBy('name')->get(),
-        ]);
-    }
-
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'warehouse_id' => ['required', 'exists:warehouses,id'],
-            'assigned_to' => ['required', 'exists:users,id'],
-            'purpose' => ['nullable', 'in:van_load,customer_po,replenishment'],
-            'needed_on' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string'],
-            'qty' => ['required', 'array'],
-            'qty.*' => ['nullable', 'integer', 'min:0'],
-        ]);
-
-        $result = PickOrder::raise(
-            Warehouse::findOrFail($data['warehouse_id']),
-            User::findOrFail($data['assigned_to']),
-            $data['qty'],
-            $data['purpose'] ?? PickOrder::PURPOSE_VAN_LOAD,
-            $request->user(),
-            [
-                'needed_on' => $data['needed_on'] ?? null,
-                'notes' => $data['notes'] ?? null,
-            ],
-        );
-
-        if ($result['error']) {
-            return back()->withInput()->withErrors(['qty' => $result['error']]);
-        }
-
-        return redirect()
-            ->route('wh.picks.show', $result['order'])
-            ->with('ok', __('stock.pick_created', ['number' => $result['order']->number]));
-    }
+    // ⚠️ **`create()` و`store()` اتشالوا** (قرار المالك 2026-08-08).
+    //
+    // كان فيه تلات أماكن بتعمل أمر تجهيز: الشاشة دي، و«تسليم عهدة»،
+    // وموافقة الحسابات على أمر توريد. التلاتة بيكتبوا في نفس الجدول
+    // بأغراض مختلفة — والشاشة دي كانت بتحط `van_load` دايماً حتى لو
+    // البضاعة رايحة لفرع كي أكاونت، فمحدش يعرف الأمر ده عهدة ولا توريد.
+    //
+    // دلوقتي: **العهدة** من `CustodyHandoutController` · **التوريد**
+    // من موافقة الحسابات في `OpsController`. والمخزن هنا بينفّذ بس:
+    // `start` → `ready` → المندوب يستلم من الأبلكيشن.
 
     public function show(PickOrder $pick)
     {

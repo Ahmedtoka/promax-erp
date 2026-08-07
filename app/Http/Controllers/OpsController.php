@@ -191,7 +191,12 @@ class OpsController extends Controller
             'due_date' => ['nullable', 'date'],
             // ═══ فلو الكي أكاونت (2026-08-04): موعد بالساعة + مخزن
             // التجهيز + فلاج «محتاج موافقة الحسابات» ═══
+            // ⚠️ **معادين مختلفين — الخلط بينهم بيوقّف المندوب.**
+            // `due_at` = البضاعة توصل **الفرع** إمتى.
+            // `pickup_at` = المندوب ييجي **المخزن** ياخدها إمتى.
+            // ممكن يبقى بينهم أيام (خد بكره، سلّم بعد 3 أيام).
             'due_at' => ['nullable', 'date'],
+            'pickup_at' => ['nullable', 'date'],
             'warehouse_id' => ['nullable', 'exists:warehouses,id'],
             'approval' => ['nullable', 'boolean'],
             'qty' => ['required', 'array'],
@@ -252,6 +257,9 @@ class OpsController extends Controller
                 // ═══ فلو الكي أكاونت: مستني الحسابات ═══
                 'approval_status' => $needsApproval ? 'pending' : null,
                 'due_at' => $data['due_at'] ?? null,
+                // ⚠️ بيتخزن هنا وبيتنسخ لأمر التجهيز وقت موافقة
+                // الحسابات — أمر التجهيز مابيتعملش قبلها
+                'pickup_at' => $data['pickup_at'] ?? null,
                 'warehouse_id' => $data['warehouse_id'] ?? null,
                 'created_by' => $request->user()->id,
                 'status' => 'pending',
@@ -810,8 +818,17 @@ class OpsController extends Controller
                         $po->warehouse,
                         $po->courier,
                         $po->items->pluck('qty', 'product_id')->all(),
-                        \App\Models\PickOrder::PURPOSE_VAN_LOAD,
+                        \App\Models\PickOrder::PURPOSE_CUSTOMER_PO,
                         $request->user(),
+                        [
+                            // ⚠️ **الأمر ده لأمر توريد مش عهدة** — الغرض
+                            // كان متسجّل `van_load` غلط، فالمندوب وأمين
+                            // المخزن مكانش عندهم أي طريقة يفرّقوا.
+                            'purchase_order_id' => $po->id,
+                            // موعد وصول المندوب المخزن — اتحدد وقت
+                            // إنشاء الأمر واستنى لحد الموافقة
+                            'pickup_at' => $po->pickup_at,
+                        ],
                     );
 
                     if ($result['error']) {
@@ -1163,8 +1180,12 @@ class OpsController extends Controller
                     $purchaseOrder->warehouse,
                     $purchaseOrder->courier,
                     $purchaseOrder->items->pluck('qty', 'product_id')->all(),
-                    \App\Models\PickOrder::PURPOSE_VAN_LOAD,
+                    \App\Models\PickOrder::PURPOSE_CUSTOMER_PO,
                     $request->user(),
+                    [
+                        'purchase_order_id' => $purchaseOrder->id,
+                        'pickup_at' => $purchaseOrder->pickup_at,
+                    ],
                 );
 
                 if ($result['error']) {

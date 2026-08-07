@@ -475,7 +475,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         // ===== أوامر التجهيز =====
         Route::get('/picks', [PickOrderController::class, 'index'])->name('picks');
-        Route::get('/picks/new', [PickOrderController::class, 'create'])->name('picks.create');
+        // ⚠️ **شاشة «أمر تجهيز جديد» اتشالت** (قرار المالك 2026-08-08).
+        // كان فيه تلات أماكن بتعمل أمر تجهيز: الشاشة دي، و«تسليم
+        // عهدة»، وموافقة الحسابات على أمر توريد — والتلاتة بيكتبوا
+        // في نفس الجدول بأغراض مختلفة، فمحدش عارف الأمر ده عهدة
+        // ولا توريد. دلوقتي الإنشاء من مكانين بس حسب النوع،
+        // والمخزن **بينفّذ** مش بينشئ.
         Route::get('/picks/{pick}', [PickOrderController::class, 'show'])->name('picks.show');
 
         // ═════ شغل المخزن اليومي — أمين المخزن بيعمله بنفسه ═════
@@ -516,7 +521,6 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/counts/{stockCount}/cancel',
                 [\App\Http\Controllers\StockCountController::class, 'cancel'])->name('count.cancel');
 
-            Route::post('/picks', [PickOrderController::class, 'store'])->name('picks.store');
             Route::post('/picks/{pick}/cancel', [PickOrderController::class, 'cancel'])->name('picks.cancel');
             Route::post('/po/{purchaseOrder}/fulfil', [PickOrderController::class, 'fulfilPurchaseOrder'])
                 ->name('picks.po');

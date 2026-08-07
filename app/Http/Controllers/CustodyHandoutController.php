@@ -75,6 +75,8 @@ class CustodyHandoutController extends Controller
             'warehouse_id' => ['required', 'exists:warehouses,id'],
             'rep_id' => ['required', 'exists:users,id'],
             'carrier_note' => ['nullable', 'string', 'max:190'],
+            // موعد وصول المندوب المخزن — يوم وساعة
+            'pickup_at' => ['nullable', 'date'],
             'qty' => ['nullable', 'array'],
             'qty.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
             'gift' => ['nullable', 'array'],
@@ -129,6 +131,7 @@ class CustodyHandoutController extends Controller
             $data['gift'] ?? [],
             $request->user(),
             $data['carrier_note'] ?? null,
+            $data['pickup_at'] ?? null,
         );
 
         if ($result['error'] !== null) {

@@ -47,7 +47,7 @@ class PickOrder extends Model
     protected $fillable = [
         'number', 'warehouse_id', 'assigned_to', 'requested_by', 'picked_by',
         'purpose', 'status', 'purchase_order_id', 'replenishment_request_id',
-        'custody_id', 'needed_on', 'ready_at', 'issued_at', 'carrier_note',
+        'custody_id', 'needed_on', 'pickup_at', 'ready_at', 'issued_at', 'carrier_note',
         'handed_at', 'has_variance', 'notes',
     ];
 
@@ -55,6 +55,8 @@ class PickOrder extends Model
     {
         return [
             'needed_on' => 'date',
+            // موعد وصول المندوب المخزن — يوم **وساعة** (2026-08-08)
+            'pickup_at' => 'datetime',
             'ready_at' => 'datetime',
             'issued_at' => 'datetime',
             'handed_at' => 'datetime',
@@ -277,6 +279,9 @@ class PickOrder extends Model
         array $giftByProduct = [],
         ?User $requestedBy = null,
         ?string $carrierNote = null,
+        // ⚠️ **موعد وصول المندوب المخزن** (2026-08-08). من غيره
+        // المندوب مايعرفش ييجي إمتى وأمين المخزن مايعرفش يستنى مين.
+        ?string $pickupAt = null,
     ): array {
         $qtyByProduct = array_map('intval', array_filter($qtyByProduct, fn ($q) => (int) $q > 0));
         $giftByProduct = array_map('intval', array_filter($giftByProduct, fn ($q) => (int) $q > 0));
@@ -294,6 +299,7 @@ class PickOrder extends Model
 
         $raised = self::raise($warehouse, $rep, $total, self::PURPOSE_VAN_LOAD, $requestedBy, [
             'carrier_note' => $carrierNote,
+            'pickup_at' => $pickupAt,
         ]);
 
         if ($raised['error'] !== null) {
@@ -490,7 +496,19 @@ class PickOrder extends Model
 
         // جزء المعاد بيتبني هنا مش في ملف اللغة — الشرط (النهارده /
         // يوم كذا / مفيش معاد) مايتعبّرش عنه بـplaceholder واحد
+        // ⚠️ **الميعاد بالساعة** (2026-08-08): «استلمها النهارده» من
+        // غير ساعة خلّت المندوب يوصل المخزن قبل ما الشيفت يبدأ.
+        // `pickup_at` هو المصدر، و`needed_on` فولباك للأوامر القديمة.
+        $at = $this->pickup_at;
+
         $due = match (true) {
+            $at !== null && $at->isToday() => __('stock.notif_pick_due_today_at', [
+                't' => $at->format('h:i A'),
+            ]),
+            $at !== null => __('stock.notif_pick_due_on_at', [
+                'date' => $at->format('d/m'),
+                't' => $at->format('h:i A'),
+            ]),
             $this->needed_on === null => '',
             $this->needed_on->isToday() => __('stock.notif_pick_due_today'),
             default => __('stock.notif_pick_due_on', [

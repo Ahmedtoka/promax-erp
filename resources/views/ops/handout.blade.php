@@ -86,6 +86,15 @@
                 </select>
             </div>
             <div>
+                {{-- ⚠️ **موعد وصول المندوب المخزن** (2026-08-08). من
+                     غيره أمين المخزن مايعرفش يجهّز لمين الأول،
+                     والمندوب مايعرفش ييجي إمتى — وكل الاتنين بيستنوا. --}}
+                <label class="f" style="color:#0E7C5A">📦 {{ __('ops.pickup_at') }}</label>
+                <input type="datetime-local" name="pickup_at" style="width:100%"
+                       value="{{ old('pickup_at') }}">
+                <div class="side" style="font-size:10.5px">{{ __('ops.pickup_at_hint') }}</div>
+            </div>
+            <div>
                 <label class="f">{{ __('field.carrier_note') }}</label>
                 <input type="text" name="carrier_note" maxlength="190" style="width:100%"
                        value="{{ old('carrier_note') }}" placeholder="{{ __('field.carrier_note_ph') }}">

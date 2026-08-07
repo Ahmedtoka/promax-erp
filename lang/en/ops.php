@@ -265,4 +265,7 @@ return [
 
     'check_in' => 'Check-in',
     'check_out' => 'Check-out',
+    'pickup_at' => 'Rep pickup from warehouse',
+    'pickup_at_hint' => 'When the rep comes to the warehouse - day and time',
+    'due_at_hint' => 'When the goods reach the branch',
 ];

@@ -507,4 +507,9 @@ return [
     'transfer_legacy' => 'This shipment was created before transfers deducted from the sending warehouse, so receiving it would create stock out of nothing. Cancel it and raise it again.',
     'count_open_transfers' => 'This warehouse has :count shipment(s) sent but not yet received. The goods have already left the balance but may still be on the floor — counting them puts them back and they get counted in both warehouses.',
     'product' => 'Product',
+    'notif_pick_due_today_at' => ' - pick up today at :t',
+    'notif_pick_due_on_at' => ' - pick up :date at :t',
+    'pickup_at' => 'Pickup time',
+    'go_handout' => 'Custody handout',
+    'go_po' => 'Supply order',
 ];
