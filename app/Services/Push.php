@@ -88,7 +88,17 @@ final class Push
                     'data' => array_map(fn ($v) => (string) $v, $data),
                     'android' => [
                         'priority' => 'high',
-                        'notification' => ['channel_id' => 'promax_default', 'sound' => 'default'],
+                        'notification' => [
+                            // ⚠️ **لازم يطابق القناة اللي الأبلكيشن بيعملها**
+                            // في `MainActivity.ensureNotificationChannel()`
+                            // وفي `AndroidManifest` (2026-08-07). كان
+                            // `promax_default` وماحدش بيعملها — أندرويد
+                            // بيرمي الإشعار ساعتها في قناة افتراضية
+                            // بأهمية منخفضة: من غير صوت ومن غير ظهور على
+                            // شاشة القفل. المندوب في الشارع مش هيحسّ بيه.
+                            'channel_id' => 'promax_ops',
+                            'sound' => 'default',
+                        ],
                     ],
                 ],
             ];
