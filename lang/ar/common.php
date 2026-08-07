@@ -52,6 +52,7 @@ return [
     'rows_count' => ':n صف',
     'subtotal' => 'قبل الخصم',
     'qty' => 'الكمية',
+    'piece' => 'قطعة',
     'price' => 'السعر',
     'amount' => 'المبلغ',
     'discount' => 'الخصم',

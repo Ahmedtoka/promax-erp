@@ -52,6 +52,7 @@ return [
     'rows_count' => ':n rows',
     'subtotal' => 'Subtotal',
     'qty' => 'Qty',
+    'piece' => 'pieces',
     'price' => 'Price',
     'amount' => 'Amount',
     'discount' => 'Discount',

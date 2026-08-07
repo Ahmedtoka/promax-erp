@@ -63,8 +63,16 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('settle.received') }} <b class="req-star">*</b></label>
+                {{-- ⚠️ **الخانة بتفضل فاضية** (قرار المالك 2026-08-08).
+                     كانت بتتملي بالمطلوب سلفاً — فالمحاسب المستعجل
+                     بيدوس «قفل» على طول والتصفية بتقفل بصفر فرق مهما
+                     كان اللي استلمه فعلاً. الرقم ده لازم يتكتب بإيد
+                     اللي عدّ الفلوس، وده كل معنى التصفية.
+                     و`autocomplete="off"` عشان المتصفح مايقترحش رقم
+                     تصفية امبارح. --}}
                 <input type="number" name="received" id="stReceived" step="0.01" min="0" required dir="ltr"
-                       value="{{ old('received', $due_total > 0 ? $due_total : 0) }}"
+                       value="{{ old('received') }}" autocomplete="off"
+                       placeholder="{{ __('settle.received_ph') }}"
                        style="width:100%;font-weight:900;font-size:16px;text-align:center"
                        oninput="stDiff()">
             </div>
@@ -82,6 +90,131 @@
             <button class="btn gold" type="submit">🤝 {{ __('settle.close_btn') }}</button>
         </div>
     </form>
+</div>
+
+{{-- ═══════════════════════════════════════════════════════════
+     الفلوس دي لمين؟ — تفصيلة الكاش والآجل بالعميل
+     ═══════════════════════════════════════════════════════════
+     ⚠️ **السؤال ده بيتسأل في كل تصفية.** «الـ2,590 آجل دول على
+     مين؟» — وقايمة 14 فاتورة مابتجاوبش، بينما 3 عملاء بأرقامهم
+     بيجاوبوا في ثانية. --}}
+<div class="grid2">
+    @foreach ([
+        ['rows' => $cashByClient, 'title' => __('settle.cash_sales'), 'icon' => '💵', 'cls' => 'pos'],
+        ['rows' => $creditByClient, 'title' => __('settle.credit_sales'), 'icon' => '📄', 'cls' => 'mid'],
+    ] as $box)
+        <div class="card">
+            <h3>{{ $box['icon'] }} {{ $box['title'] }}
+                <span class="side">{{ __('settle.client_countable', ['count' => $box['rows']->count()]) }}</span></h3>
+            <div class="tablewrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>{{ __('client.client') }}</th>
+                        <th>{{ __('settle.invoices') }}</th>
+                        <th>{{ __('common.qty') }}</th>
+                        <th>{{ __('common.total') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse ($box['rows'] as $r)
+                        <tr class="clickable"
+                            onclick="location.href='{{ route('erp.clients.show', $r['client']) }}'">
+                            <td><b>{{ $r['client']?->fullName() ?? '—' }}</b></td>
+                            <td class="num">{{ $r['count'] }}</td>
+                            {{-- ⚠️ القطع مجموع `invoice_items.qty` — بالقطعة
+                                 دايماً، لأن الفاتورة بتتخزن بالقطع مهما كانت
+                                 الوحدة اللي المندوب كتب بيها --}}
+                            <td class="num">{{ number_format($r['qty']) }}</td>
+                            <td class="num {{ $box['cls'] }}">{{ number_format($r['total'], 2) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:22px">
+                            {{ __('settle.none') }}</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endforeach
+</div>
+
+{{-- ═══════════════════════════════════════════════════════════
+     مطابقة العهدة — بالقطع مش بالفلوس
+     ═══════════════════════════════════════════════════════════
+     ⚠️ **التصفية كانت بتقفل الفلوس وتسيب البضاعة.** المحاسب بيستلم
+     كاش ويمضي، والعربية فيها بضاعة محدش عدّها — فالعجز مابيظهرش غير
+     في الجرد الشهري، وساعتها محدش يعرف حصل إمتى ولا مع مين. --}}
+<div class="card">
+    <h3>📦 {{ __('settle.goods_match') }}
+        <span class="side">{{ __('settle.goods_formula') }}</span></h3>
+
+    <div class="kpis">
+        <div class="kpi"><div class="lbl">{{ __('settle.loaded') }}</div>
+            <div class="val">{{ number_format($goods['assigned']) }}</div>
+            <div class="sub2">{{ __('common.piece') }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.sold_cash') }}</div>
+            <div class="val pos">{{ number_format($goods['cash_qty']) }}</div>
+            <div class="sub2">{{ number_format($goods['cash_value'], 2) }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.sold_credit') }}</div>
+            <div class="val mid">{{ number_format($goods['credit_qty']) }}</div>
+            <div class="sub2">{{ number_format($goods['credit_value'], 2) }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.gifts') }}</div>
+            <div class="val">{{ number_format($goods['gift_qty']) }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.returned_in') }}</div>
+            <div class="val">{{ number_format($goods['returned_qty']) }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.still_on_van') }}</div>
+            <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div></div>
+        {{-- ⚠️ **الفرق مش خطأ حسابي.** فرق ≠ صفر معناه بضاعة خرجت من
+             العربية من غير فاتورة ولا هدية ولا مرتجع — عجز حقيقي. --}}
+        <div class="kpi">
+            <div class="lbl">{{ __('settle.shortage') }}</div>
+            <div class="val {{ $goods['diff_qty'] == 0 ? 'pos' : 'neg' }}">
+                {{ $goods['diff_qty'] == 0 ? '0 ✓' : number_format($goods['diff_qty']) }}
+            </div>
+            @if ($goods['diff_qty'] != 0)
+                <div class="sub2" style="color:var(--red)">{{ __('settle.shortage_hint') }}</div>
+            @endif
+        </div>
+    </div>
+
+    <div class="tablewrap">
+        <table>
+            <thead>
+            <tr>
+                <th>{{ __('stock.product') }}</th>
+                <th>{{ __('settle.loaded') }}</th>
+                <th>{{ __('settle.sold_cash') }}</th>
+                <th>{{ __('settle.sold_credit') }}</th>
+                <th>{{ __('settle.gifts') }}</th>
+                <th>{{ __('settle.returned_in') }}</th>
+                <th>{{ __('settle.still_on_van') }}</th>
+                <th>{{ __('settle.shortage') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            @forelse ($goods['lines'] as $l)
+                <tr>
+                    <td><b>{{ $l['product']?->displayName() ?? '—' }}</b></td>
+                    <td class="num">{{ number_format($l['assigned']) }}</td>
+                    <td class="num">{{ number_format($l['cash_qty']) }}
+                        <br><span style="font-size:10px;color:var(--muted)">{{ number_format($l['cash_value'], 2) }}</span></td>
+                    <td class="num">{{ number_format($l['credit_qty']) }}
+                        <br><span style="font-size:10px;color:var(--muted)">{{ number_format($l['credit_value'], 2) }}</span></td>
+                    <td class="num">{{ number_format($l['gift_given']) }}</td>
+                    <td class="num">{{ number_format($l['returned_in']) }}</td>
+                    <td class="num" style="color:var(--primary);font-weight:900">{{ number_format($l['remaining']) }}</td>
+                    <td class="num {{ $l['diff'] == 0 ? '' : 'neg' }}">
+                        {{ $l['diff'] == 0 ? '—' : number_format($l['diff']) }}
+                    </td>
+                </tr>
+            @empty
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:26px">
+                    {{ __('settle.no_custody') }}</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
 </div>
 
 {{-- ═══ الفواتير للمطابقة — المحاسب بيراجعها مع المندوب ورقة ورقة ═══ --}}

@@ -16,12 +16,14 @@ class RepSettlement extends Model
     protected $fillable = [
         'number', 'user_id', 'from_at', 'to_at', 'invoices_count',
         'cash_sales', 'credit_sales', 'cash_refunds', 'expected',
-        'prev_balance', 'received', 'balance', 'note', 'created_by',
+        'prev_balance', 'received', 'balance', 'note', 'created_by', 'goods_json',
     ];
 
     protected function casts(): array
     {
         return [
+            // ⚠️ لقطة تاريخية — بتترسم زي ما هي وقت التوقيع
+            'goods_json' => 'array',
             'from_at' => 'datetime',
             'to_at' => 'datetime',
             'cash_sales' => 'decimal:2',
