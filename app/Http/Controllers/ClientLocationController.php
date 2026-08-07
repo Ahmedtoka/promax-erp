@@ -130,7 +130,7 @@ class ClientLocationController extends Controller
             'source' => ['nullable', Rule::in(['visit', 'manual', 'map'])],
         ]);
 
-        if (! MapLink::valid((float) $data['lat'], (float) $data['lng'])) {
+        if (! MapLink::inEgypt((float) $data['lat'], (float) $data['lng'])) {
             return back()->withErrors(['lat' => __('geo.bad_point')]);
         }
 

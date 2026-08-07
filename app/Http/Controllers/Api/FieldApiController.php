@@ -518,8 +518,8 @@ class FieldApiController extends Controller
             'client_id' => $client->id,
             'journey_plan_id' => $plan,
             'checked_in_at' => now(),
-            'lat' => $data['lat'] ?? null,
-            'lng' => $data['lng'] ?? null,
+            'lat' => $this->egyptPoint($data)[0],
+            'lng' => $this->egyptPoint($data)[1],
         ]);
 
         TrackEvent::log($user, 'check_in',
@@ -701,8 +701,8 @@ class FieldApiController extends Controller
                     'grand_total' => $grandTotal,
                     'eta_status' => $taxTotal > 0 ? 'ready' : 'none',
                     'cost_total' => round($costTotal, 2),
-                    'lat' => $data['lat'] ?? null,
-                    'lng' => $data['lng'] ?? null,
+                    'lat' => $this->egyptPoint($data)[0],
+                    'lng' => $this->egyptPoint($data)[1],
                 ]);
 
                 foreach ($rows as $r) {
@@ -1339,5 +1339,31 @@ class FieldApiController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * ⚠️ **النقطة بره مصر بتتبلع** (2026-08-08).
+     *
+     * أندرويد إميوليتر لوكيشنه الافتراضي مقر جوجل في كاليفورنيا
+     * (37.42, -122.08). كل تشيك إن من جهاز تيست كان بيكتب نقطة في
+     * أمريكا في `visits` — وبعدين تطلع في اللايف تراكر كدبوس في نص
+     * المحيط، وفي شاشة تأكيد لوكيشن العملاء كـ«نقطة مقترحة».
+     *
+     * **بنخزّن `null` بدل ما نرفض العملية.** التشيك إن نفسه مايتعطلش
+     * عشان الـGPS — الزيارة بتتسجل من غير إحداثيات، وشاشة الـERP
+     * بتوري «مفيش لوكيشن» بدل ما توري نقطة كدّابة.
+     *
+     * @return array{0: ?float, 1: ?float}
+     */
+    private function egyptPoint(?array $data): array
+    {
+        $lat = isset($data['lat']) ? (float) $data['lat'] : null;
+        $lng = isset($data['lng']) ? (float) $data['lng'] : null;
+
+        if ($lat === null || $lng === null || ! \App\Support\MapLink::inEgypt($lat, $lng)) {
+            return [null, null];
+        }
+
+        return [round($lat, 7), round($lng, 7)];
     }
 }

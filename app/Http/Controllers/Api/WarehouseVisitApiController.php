@@ -37,8 +37,7 @@ class WarehouseVisitApiController extends Controller
         [$err, $visit] = WarehouseVisits::checkIn(
             $request->user(),
             $warehouse,
-            isset($data['lat']) ? (float) $data['lat'] : null,
-            isset($data['lng']) ? (float) $data['lng'] : null,
+            ...static::egyptPoint($data),
         );
 
         if ($err !== null) {
@@ -62,12 +61,25 @@ class WarehouseVisitApiController extends Controller
             return response()->json(['message' => __('warehouse.not_inside')], 422);
         }
 
-        $closed = WarehouseVisits::close(
-            $visit,
-            isset($data['lat']) ? (float) $data['lat'] : null,
-            isset($data['lng']) ? (float) $data['lng'] : null,
-        );
+        $closed = WarehouseVisits::close($visit, ...static::egyptPoint($data));
 
         return response()->json(['visit' => $closed->payload()]);
+    }
+
+    /**
+     * ⚠️ **نفس فلتر `FieldApiController::egyptPoint`.** الإميوليتر
+     * بيدي كاليفورنيا، والنقطة دي بتتخزن في `warehouse_visits` وبعدين
+     * بتتحسب منها «المسافة من المخزن» فتطلع 9000 كيلومتر.
+     *
+     * @return array{0: ?float, 1: ?float}
+     */
+    private static function egyptPoint(array $data): array
+    {
+        $lat = isset($data['lat']) ? (float) $data['lat'] : null;
+        $lng = isset($data['lng']) ? (float) $data['lng'] : null;
+
+        return $lat !== null && $lng !== null && \App\Support\MapLink::inEgypt($lat, $lng)
+            ? [round($lat, 7), round($lng, 7)]
+            : [null, null];
     }
 }

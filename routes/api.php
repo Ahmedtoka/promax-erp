@@ -63,9 +63,6 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/visits/check-in', [FieldApiController::class, 'checkIn']);
         Route::post('/visits/{visit}/check-out', [FieldApiController::class, 'checkOut']);
 
-        // خط سير النهارده — بيجي مع /bootstrap كمان، ده للريفريش
-        Route::get('/journey', [FieldApiController::class, 'journey']);
-
         Route::post('/invoices', [FieldApiController::class, 'storeInvoice']);
 
         // مرتجع من العميل — قيد دائن + بضاعة مفصولة في العهدة
@@ -95,10 +92,31 @@ Route::middleware(['api.token', 'locale'])->group(function () {
             Route::post('/picks/{pick}/receive', [PickApiController::class, 'receive']);
         });
 
-        // ═══ الحوافز والليدز — الأبديت الكبير (2026-08-06) ═══
-        Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
-        Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
+        // ═══ الليدز: القرار أكشن (القراءة بره الحارس تحت) ═══
         Route::post('/leads/{lead}/action', [\App\Http\Controllers\Api\IncentiveApiController::class, 'leadAction']);
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // بره حارس الحضور بقصد — دي **مش أكشنز** (تصحيح 2026-08-08)
+    // ═══════════════════════════════════════════════════════════
+    //
+    // ⚠️ **الحاجات دي بينده عليها الأبلكيشن لوحده عند الفتح وكل شوية**،
+    // مش لما الموظف يدوس حاجة. وهي كانت جوّه الحارس — فأول ما
+    // الأبلكيشن يفتح، `app-open` و`device-token` و`leads/nearby`
+    // يرجعوا 423 والبوابة تفتح بوب أب «سجّل حضورك» على شاشة
+    // اللودينج، قبل ما الموظف يلمس أي حاجة. البوب أب المفروض
+    // يطلع **على الأكشن بس** (قرار المالك 2026-08-08).
+    //
+    // ⚠️ ومفيش أي منهم بيغيّر داتا شغل: بينج عدّاد، تسجيل توكن
+    // إشعارات، وقراءتين. فمنعهم قبل الحضور ماكانش بيحمي حاجة.
+    Route::middleware('api.role:sales_agent,driver,promoter,admin,manager')->group(function () {
+        // خط سير النهارده — قراءة، بيجي مع /bootstrap كمان
+        Route::get('/journey', [FieldApiController::class, 'journey']);
+
+        // بينج فتح الأبلكيشن — عدّاد في لوحة الأداء
+        Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
+
+        Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
 
         // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) ═══

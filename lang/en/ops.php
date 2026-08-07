@@ -134,6 +134,8 @@ return [
         'Visits, live tracking and stock counts',
         'Gifts, points, rep settlements and day closes',
         'Supplier movement and contract dues',
+        'Attendance punches and warehouse visits',
+        'The audit log (every edit and page open)',
         'Notifications and the import file log',
     ],
     'wipe_stays_title' => 'What stays',
