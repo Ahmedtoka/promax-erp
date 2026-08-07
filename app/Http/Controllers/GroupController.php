@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Channel;
 use App\Models\Client;
 use App\Models\ClientGroup;
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
@@ -97,9 +98,61 @@ class GroupController extends Controller
     {
         $request->validate([
             'apply_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // ⚠️ **`channel` قيمة صريحة مش فاضي.** الفاضي معناه
+            // «ماتلمسش الفروع»، و«حسب القناة» قرار حقيقي بيتخزن
+            // `null` في العمود — لو الاتنين اتخلطوا، مافيش طريقة
+            // تقول للسيستم «رجّع الفروع دي لافتراضي قناتها».
+            'apply_payment_terms' => ['nullable', 'in:channel,'.implode(',', Client::PAY_TERMS)],
+            'apply_payment_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'apply_payment_days_from' => ['nullable', 'in:'.implode(',', Contract::DAYS_FROM)],
         ]);
 
         $group->update($this->validated($request));
+
+        // ═══ شروط الدفع على كل الفروع ═══
+        //
+        // ⚠️ **نفس نمط الخصم بالظبط** (قرار 2026-08-08): السلسلة
+        // تجميعة مش كيان تجاري، فالشروط بتتختم على كل فرع كقيمة
+        // بتاعته هو — مش عمود على السلسلة بيتوَرَّث. كده الفرع اللي
+        // هيتفاوض لوحده بعدين يتعدّل لوحده من غير ما يخرج من السلسلة.
+        //
+        // ⚠️ **والعقد الساري لسه بيغلب.** `Client::paymentDays()`
+        // بتقرا العقد الأول — فختم مدة على فرع ليه عقد بمدة تانية
+        // مابيغيّرش حاجة في الحساب الفعلي، بيملا خانته الاحتياطية بس.
+        if ($request->filled('apply_payment_terms')) {
+            $terms = $request->string('apply_payment_terms')->toString();
+
+            $fields = [
+                // «حسب القناة» = فضّي العمود
+                'payment_terms' => $terms === 'channel' ? null : $terms,
+            ];
+
+            // ⚠️ **الكاش مالوش مدة سداد — بنمسحها.** لو سيبناها،
+            // الفرع بيفضل شايل «30 يوم» وهو كاش، وخانة «المتأخر»
+            // بتتحسب من رقم مالوش معنى (نفس الباج اللي اتصلح على
+            // مستوى العميل).
+            if (in_array($fields['payment_terms'], [Client::PAY_CREDIT, Client::PAY_BOTH], true)) {
+                $days = $request->input('apply_payment_days');
+
+                if ($days !== null && $days !== '') {
+                    $fields['payment_days'] = (int) $days;
+                    $fields['payment_days_from'] = $request->input('apply_payment_days_from')
+                        ?: Contract::DAYS_FROM_FIRST_SUPPLY;
+                }
+            } else {
+                $fields['payment_days'] = null;
+                $fields['payment_days_from'] = null;
+            }
+
+            $n = $group->clients()->update($fields);
+
+            return back()->with('ok', __('client.chain_payment_applied', [
+                'terms' => $fields['payment_terms'] === null
+                    ? __('client.terms_by_channel')
+                    : __('client.terms_'.$fields['payment_terms']),
+                'count' => $n,
+            ]));
+        }
 
         // ⚠️ **الخانة الفاضية غير الصفر.** فاضية = ماتلمسش خصومات
         // الفروع (الوضع الطبيعي لأي حفظ)؛ صفر مكتوب = صفّرهم كلهم

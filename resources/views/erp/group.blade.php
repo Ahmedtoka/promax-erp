@@ -135,6 +135,10 @@
                 <th class="srt" data-k="zone" data-t="s">{{ __('client.zone') }}<span class="arw"></span></th>
                 <th class="srt" data-k="cat" data-t="s">{{ __('client.category') }}<span class="arw"></span></th>
                 <th class="srt" data-k="disc" data-t="n">{{ __('client.discount') }}<span class="arw"></span></th>
+                {{-- ⚠️ العمود ده هو اللي بيثبت إن «طبّق على كل الفروع»
+                     اشتغل فعلاً — من غيره اللي بيدوس الزرار مايعرفش
+                     وصل لمين وبكام يوم إلا لو فتح كل فرع لوحده. --}}
+                <th class="srt" data-k="pay" data-t="s">{{ __('client.pay_terms_col') }}<span class="arw"></span></th>
                 <th class="srt" data-k="con" data-t="n">{{ __('client.contract') }}<span class="arw"></span></th>
                 <th class="srt" data-k="pur" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
                 <th class="srt" data-k="col" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
@@ -150,6 +154,7 @@
                     data-zone="{{ $b->zone?->displayName() ?? '' }}"
                     data-cat="{{ $b->categoryLabel() }}"
                     data-disc="{{ round($b->effectiveDiscount() * 100, 2) }}"
+                    data-pay="{{ $b->paymentTermsLabel() }}"
                     data-con="{{ $b->contract ? 1 : 0 }}"
                     data-pur="{{ (float) $b->purchases }}" data-col="{{ (float) $b->collections }}"
                     data-bal="{{ (float) $b->balance }}"
@@ -165,6 +170,17 @@
                     <td><span class="badge {{ $b->categoryClass() }}">{{ $b->categoryLabel() }}</span></td>
                     <td class="num">{{ number_format($b->effectiveDiscount() * 100, 1) }}%
                         <br><span style="font-size:10px;color:var(--muted)">{{ $b->discountSource() }}</span></td>
+                    <td>
+                        <span class="badge {{ ['cash' => 'b-green', 'credit' => 'b-orange', 'both' => 'b-purple'][$b->paymentTerms()] ?? 'b-gray' }}">
+                            {{ $b->paymentTermsLabel() }}
+                        </span>
+                        @if ($b->allowsCredit() && $b->paymentDays() !== null)
+                            <br><span style="font-size:10px;color:var(--muted)">
+                                {{ __('client.days_countable', ['count' => $b->paymentDays()]) }}
+                                — {{ $b->paymentBasisLabel() }}
+                            </span>
+                        @endif
+                    </td>
                     <td>
                         @if ($b->contract)
                             <span class="badge b-green">{{ $b->contract->typeLabel() ?: __('client.contract') }}</span>
@@ -194,7 +210,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 10 : 9 }}" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $manager ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('client.no_branches') }}
                 </td></tr>
             @endforelse
@@ -298,6 +314,43 @@
             </div>
         </div>
 
+        {{-- ═════ شروط الدفع على كل الفروع ═════ --}}
+        {{-- ⚠️ **نفس نمط الخصم فوق:** الخانة الفاضية معناها «ماتلمسش
+             الفروع» — ده الوضع الطبيعي لأي حفظ عادي للاسم أو الملاحظات.
+             و«حسب القناة» اختيار حقيقي بيفضّي العمود، عشان يبقى فيه
+             طريقة ترجّع السلسلة كلها لافتراضي قناتها. --}}
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
+            <label class="f">💵 {{ __('client.chain_apply_payment') }}</label>
+            <select name="apply_payment_terms" id="chPay" style="width:100%" onchange="chainPayDays()">
+                <option value="">— {{ __('client.chain_apply_none') }} —</option>
+                <option value="channel">{{ __('client.terms_by_channel') }}</option>
+                @foreach (\App\Models\Client::PAY_TERMS as $pt)
+                    <option value="{{ $pt }}">{{ __('client.terms_'.$pt) }}</option>
+                @endforeach
+            </select>
+            <div class="frow chainPayDays" style="display:none;margin-top:9px">
+                <div>
+                    <label class="f">{{ __('client.pay_days') }}</label>
+                    <input type="number" name="apply_payment_days" min="0" max="365"
+                           style="width:100%" value="" placeholder="{{ __('client.pay_days_ph') }}">
+                </div>
+                <div>
+                    <label class="f">{{ __('client.pay_days_from') }}</label>
+                    <select name="apply_payment_days_from" style="width:100%">
+                        @foreach (\App\Models\Contract::DAYS_FROM as $df)
+                            <option value="{{ $df }}"
+                                @selected($df === \App\Models\Contract::DAYS_FROM_FIRST_SUPPLY)>
+                                {{ __('client.days_from_'.$df) }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                {{ __('client.chain_apply_payment_hint', ['count' => $g->clients()->count()]) }}
+            </div>
+        </div>
+
         <div class="alert info" style="margin-bottom:12px">
             <span>ℹ️</span><span>{{ __('client.chain_is_a_grouping') }}</span>
         </div>
@@ -365,6 +418,22 @@
 @endphp
 <script>
 promaxMap('mapGroup', {!! json_encode($pins, JSON_UNESCAPED_UNICODE) !!});
+
+/**
+ * ⚠️ **مدة السداد بتبان للآجل والمختلط بس.** لو اخترنا «كاش» على
+ * السلسلة، الكنترولر بيمسح المدة من كل الفروع — فعرض الخانتين هنا
+ * كان هيوحي إن اللي فيهم هيتحفظ، وهو هيتشال.
+ */
+function chainPayDays() {
+    const v = document.getElementById('chPay').value;
+    const show = v === 'credit' || v === 'both';
+
+    document.querySelectorAll('.chainPayDays').forEach(function (b) {
+        b.style.display = show ? '' : 'none';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', chainPayDays);
 
 new Chart(document.getElementById('chG'), {
     type: 'bar',
