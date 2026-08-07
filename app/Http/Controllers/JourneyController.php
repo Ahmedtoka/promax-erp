@@ -13,6 +13,7 @@ use App\Services\Journeys;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * خطط السير + تخصيص المناطق والعملاء + الشاشة اللايف.
@@ -475,10 +476,79 @@ class JourneyController extends Controller
         ]);
     }
 
-    /** داتا التيرمينال JSON — الشاشة بتسحبها كل 15 ثانية من غير ريلود */
+    /** داتا التيرمينال JSON — فولباك البولينج لو الـSSE مش شغال */
     public function liveData(Request $request)
     {
         return response()->json($this->livePayload($request));
+    }
+
+    /**
+     * لايف فوري بـServer-Sent Events — الشاشة بتتحدث كل ٣ ثواني
+     * من غير ما تسأل، بدل ما تدق كل ١٥ ثانية على الفاضي.
+     *
+     * ⚠️ **ليه سقف مدة وقطع عند فقد الاتصال؟** كل اتصال SSE ماسك
+     * عملية PHP كاملة من الـpool طول ما هو مفتوح. على استضافة
+     * مشتركة تلات شاشات مفتوحة ومنسية كفيلة تخنق السيرفر. فالاتصال
+     * بيموت لوحده بعد خمس دقايق، والواجهة بتفتح واحد جديد — وده
+     * كمان بيحرّر أي ذاكرة اتجمعت في العملية.
+     */
+    public function liveStream(Request $request): StreamedResponse
+    {
+        // ⚠️ **قفل السيشن قبل ما اللوب يبدأ.** لارافيل بيقفل ملف
+        // السيشن طول الريكوست — وريكوست عايش خمس دقايق معناه إن أي
+        // صفحة تانية في نفس المتصفح هتفضل معلقة مستنية القفل يتفك.
+        if ($request->hasSession()) {
+            $request->session()->save();
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $response = new StreamedResponse(function () use ($request) {
+            // اللوب طويل بطبيعته — حد التنفيذ الافتراضي هيقتله في نص الشغل
+            @set_time_limit(0);
+
+            // ⚠️ **false** عشان العملية تموت لما اليوزر يقفل التاب،
+            // مش تفضل بتحسب داتا محدش هيشوفها.
+            ignore_user_abort(false);
+
+            $deadline = time() + 300;   // سقف خمس دقايق ثم الواجهة بتعيد الاتصال
+
+            while (true) {
+                echo 'data: '.json_encode($this->livePayload($request), JSON_UNESCAPED_UNICODE)."\n\n";
+
+                // نبضة كتعليق — البروكسي بيشوف حركة فمابيقطعش الاتصال
+                echo ": ping\n\n";
+
+                // الفلاش هو اللي بيوصّل البايتات فعلاً — من غيره الحمولة
+                // بتفضل في البافر والشاشة مش بتتحرك
+                if (ob_get_level() > 0) {
+                    @ob_flush();
+                }
+                flush();
+
+                // اليوزر قفل التاب أو عدّينا السقف — نسيب العملية تخلص
+                if (connection_aborted() || time() >= $deadline) {
+                    break;
+                }
+
+                sleep(3);
+
+                if (connection_aborted()) {
+                    break;
+                }
+            }
+        });
+
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache');
+        // ⚠️ nginx بيبفّر الردود افتراضياً — من غير الهيدر ده الشاشة
+        // مش هتستقبل حاجة غير لما الاتصال يقفل
+        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('Connection', 'keep-alive');
+
+        return $response;
     }
 
     /** الحمولة الموحدة لغرفة التحكم — أول رسمة والرفرش من نفس المصدر */

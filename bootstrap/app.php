@@ -20,9 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'locale' => App\Http\Middleware\SetLocale::class,
         ]);
 
-        // لغة الواجهة لازم تتحدد على كل طلب ويب قبل ما أي فيو يترسم
+        // لغة الواجهة لازم تتحدد على كل طلب ويب قبل ما أي فيو يترسم،
+        // وبعدها تسجيل الزيارة (2026-08-07) — بيشتغل بعد الاستجابة
+        // فمابيأخّرش الصفحة، ومحمي بـrescue فمابيقعش الطلب أبداً
         $middleware->web(append: [
             App\Http\Middleware\SetLocale::class,
+            App\Http\Middleware\TrackVisit::class,
         ]);
 
         // نفس الحكاية للـ API — رسايل الأبلكيشن لازم تطلع بلغة اليوزر.

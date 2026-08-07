@@ -291,6 +291,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/incentives', [\App\Http\Controllers\IncentiveController::class, 'saveSettings'])
             ->middleware('role:admin')->name('incentives.save');
 
+        // ═════ سجل حركة اليوزرات (2026-08-07) — أدمن بس، قراءة فقط ═════
+        Route::get('/audit', [\App\Http\Controllers\AuditController::class, 'index'])
+            ->middleware('role:admin')->name('audit');
+
         // ═════ قفل اليوم — يومية الحسابات (2026-08-06) ═════
         Route::get('/day-close', [\App\Http\Controllers\DayCloseController::class, 'index'])
             ->middleware('role:admin,accountant')->name('dayclose');
@@ -591,8 +595,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])
                 ->name('assignments');
             Route::get('/live', [\App\Http\Controllers\JourneyController::class, 'live'])->name('live');
-            // داتا التيرمينال JSON — رفرش كل 15 ثانية من غير ريلود (2026-08-06)
+            // داتا التيرمينال JSON — فولباك البولينج لو الـSSE مش شغال (2026-08-06)
             Route::get('/live/data', [\App\Http\Controllers\JourneyController::class, 'liveData'])->name('live.data');
+            // لايف فوري بـSSE — تدفق مفتوح بيبعت الحمولة كل 3 ثواني (2026-08-07)
+            Route::get('/live/stream', [\App\Http\Controllers\JourneyController::class, 'liveStream'])->name('live.stream');
             Route::get('/live/{user}', [\App\Http\Controllers\JourneyController::class, 'repDay'])
                 ->name('rep_day');
 

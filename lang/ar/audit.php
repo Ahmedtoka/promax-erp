@@ -1,0 +1,50 @@
+<?php
+
+return [
+    // سجل حركة اليوزرات (2026-08-07)
+    'page' => 'سجل الحركة',
+    'page_sub' => 'مين عمل إيه وإمتى ومن فين',
+    'today' => 'حركات النهارده',
+    'users_today' => 'يوزرات نشطة',
+    'edits_today' => 'تعديلات النهارده',
+    'logins_today' => 'مرات دخول',
+    'total' => 'إجمالي السجل',
+    'when' => 'إمتى',
+    'who' => 'مين',
+    'what' => 'عمل إيه',
+    'on' => 'على',
+    'details' => 'التفاصيل',
+    'from_ip' => 'من',
+    'all_users' => 'كل اليوزرات',
+    'all_events' => 'كل الأحداث',
+    'all_models' => 'كل الأقسام',
+    'from' => 'من تاريخ',
+    'to' => 'لحد تاريخ',
+    'no_rows' => 'مفيش حركة في النطاق ده',
+    'changed_fields' => ':count حقل اتغيّر',
+    'nothing' => '—',
+    'retention_hint' => 'فتح الصفحات بيتمسح بعد 21 يوم، والتعديلات والدخول بعد 180 يوم.',
+
+    // الأحداث
+    'event_created' => 'أضاف',
+    'event_updated' => 'عدّل',
+    'event_deleted' => 'مسح',
+    'event_login' => 'دخل',
+    'event_logout' => 'خرج',
+    'event_viewed' => 'فتح',
+    'event_action' => 'نفّذ',
+
+    // أسماء الموديلز
+    'model_Client' => 'عميل',
+    'model_Product' => 'صنف',
+    'model_User' => 'موظف',
+    'model_Contract' => 'عقد',
+    'model_Zone' => 'منطقة',
+    'model_ClientGroup' => 'سلسلة',
+    'model_Channel' => 'قناة',
+    'model_PurchaseOrder' => 'أمر توريد',
+    'model_Invoice' => 'فاتورة',
+    'model_Custody' => 'عهدة',
+    'model_Warehouse' => 'مخزن',
+    'model_Setting' => 'إعداد',
+];

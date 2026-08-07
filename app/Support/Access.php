@@ -283,6 +283,8 @@ class Access
             // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
             ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
+            // سجل الحركة: مين عمل إيه وإمتى — أدمن بس
+            ['erp.audit', '🧾', 'nav.audit', 'erp.audit*', null],
         ],
     ];
 

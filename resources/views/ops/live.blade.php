@@ -7,8 +7,9 @@
      ثيم داكن خاص بالشاشة دي بس، خريطة داكنة بدواير الزونات، سايدبار
      مناديب ببحث وفلاتر، بانل تفاصيل المندوب المختار بعهدته وبارات
      الأصناف، وفيد تنبيهات حقيقي من الفواتير والزيارات.
-     الرفرش كل 15 ثانية زي ما كان — مع إيقاف مؤقت وتتبع مندوب.
-     ⚠️ الداتا كلها من `livePayload` — أول رسمة والرفرش نفس المصدر. --}}
+     التحديث لايف بـSSE كل ٣ ثواني (2026-08-07)، وبيرجع للبولينج
+     كل ١٥ ثانية لوحده لو التدفق مش شغال — مع إيقاف مؤقت وتتبع مندوب.
+     ⚠️ الداتا كلها من `livePayload` — أول رسمة والتحديث نفس المصدر. --}}
 
 @section('actions')
     <a class="btn" href="{{ route('ops.journeys') }}">🗓️ {{ __('journey.page') }}</a>
@@ -25,6 +26,8 @@
             <span class="lv-live-dot"></span>
             <b>{{ __('journey.control_room') }}</b>
             <span class="lv-clock" id="lvClock">--:--:--</span>
+            {{-- مؤشر وضع التحديث — اليوزر يعرف الشاشة لايف ولا بولينج --}}
+            <span class="lv-mode" id="lvMode">{{ __('journey.realtime_off') }}</span>
         </div>
         <div class="lv-kpis" id="lvKpis"></div>
     </div>
@@ -122,6 +125,9 @@
 .lv-title{display:flex;align-items:center;gap:10px;font-size:17px}
 .lv-clock{font-size:13px;color:var(--dim);direction:ltr;letter-spacing:.5px}
 .lv-live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lvBlink 1.4s infinite}
+/* مؤشر وضع التحديث — رمادي = بولينج، أخضر = تدفق لايف */
+.lv-mode{font-size:10px;border-radius:999px;padding:2px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.lv-mode.on{color:#4ADE80;border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.12)}
 
 /* KPIs — أيقونة بهالة لونية + رقم بلونه الدال + خط علوي */
 .lv-kpis{display:flex;gap:8px;flex-wrap:wrap}
@@ -294,6 +300,8 @@ const T = {
     zHidden: {!! json_encode(__('journey.zones_hidden'), JSON_UNESCAPED_UNICODE) !!},
     pause: '⏸ ' + {!! json_encode(__('journey.pause_updates'), JSON_UNESCAPED_UNICODE) !!},
     resume: '▶ ' + {!! json_encode(__('journey.resume_updates'), JSON_UNESCAPED_UNICODE) !!},
+    rtOn: {!! json_encode(__('journey.realtime_on'), JSON_UNESCAPED_UNICODE) !!},
+    rtOff: {!! json_encode(__('journey.realtime_off'), JSON_UNESCAPED_UNICODE) !!},
 };
 
 const SC = { visit: '#9D6FE0', moving: '#2EDE8B', idle: '#FFB020', off: '#5A5F85' };
@@ -531,30 +539,119 @@ document.getElementById('lvPauseBtn').addEventListener('click', function () {
     paused = !paused;
     this.classList.toggle('on', paused);
     this.textContent = paused ? T.resume : T.pause;
+    // ⚠️ «إيقاف مؤقت» لازم يقطع التدفق نفسه مش يوقف البولينج بس —
+    // وإلا العملية على السيرفر فاضلة شغالة والشاشة بتتحدث برضه.
+    if (paused) { stopStream(); stopPolling(); setMode(false); } else { startLive(); }
 });
 
-/* ═════ الساعة + الرفرش ═════ */
+/* ═════ الساعة ═════ */
 setInterval(() => {
     document.getElementById('lvClock').textContent = new Date().toLocaleTimeString('en-GB');
 }, 1000);
 
+/* ═══════════════ التحديث: تدفق لايف + فولباك بولينج ═══════════════
+   التدفق (SSE) هو الأصل، والبولينج شبكة أمان. الاتنين عمرهم ما
+   يشتغلوا مع بعض: أول حمولة توصل من التدفق البولينج بيقف. */
+const LV_STREAM = {!! json_encode(route('ops.live.stream')) !!};
+const LV_DATA = {!! json_encode(route('ops.live.data')) !!};
+
+let es = null, pollTimer = null, retryTimer = null, retryMs = 5000;
+
+function setMode(on) {
+    const el = document.getElementById('lvMode');
+    el.textContent = on ? T.rtOn : T.rtOff;
+    el.classList.toggle('on', on);
+}
+
+function apply(payload) {
+    data = payload;
+    drawZones();
+    drawGovs();
+    render();
+}
+
 async function refresh() {
     if (paused || document.hidden) return;
     try {
-        const res = await fetch({!! json_encode(route('ops.live.data')) !!}, { headers: { Accept: 'application/json' } });
+        const res = await fetch(LV_DATA, { headers: { Accept: 'application/json' } });
         if (!res.ok) return;
-        data = await res.json();
-        drawZones();
-        drawGovs();
-        render();
+        apply(await res.json());
     } catch (e) { /* الشبكة وقعت — المحاولة الجاية بعد 15 ثانية */ }
 }
-setInterval(refresh, 15000);
+
+function startPolling() {
+    if (pollTimer !== null || paused) return;
+    pollTimer = setInterval(refresh, 15000);
+    setMode(false);
+}
+
+function stopPolling() {
+    if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function stopStream() {
+    if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
+    if (es !== null) { try { es.close(); } catch (e) {} es = null; }
+}
+
+function retryStream(ms) {
+    if (retryTimer !== null) clearTimeout(retryTimer);
+    retryTimer = setTimeout(function () { retryTimer = null; startStream(); }, ms);
+}
+
+function startStream() {
+    // ⚠️ اتصال واحد بس — اتنين معناهم عمليتين PHP لنفس الشاشة
+    if (es !== null || paused || document.hidden) return;
+    if (typeof window.EventSource !== 'function') { startPolling(); return; }
+
+    let got = false, src;
+    try { src = new EventSource(LV_STREAM); } catch (e) { startPolling(); return; }
+    es = src;
+
+    src.onmessage = function (e) {
+        let payload;
+        try { payload = JSON.parse(e.data); } catch (err) { return; }
+        got = true;
+        retryMs = 5000;
+        stopPolling();          // التدفق شغال — البولينج مالوش لزمة
+        setMode(true);
+        if (!paused && !document.hidden) apply(payload);
+    };
+
+    src.onerror = function () {
+        stopStream();
+        // اتصال جاب داتا وقفل = سقف المدة في السيرفر، بنفتح واحد جديد
+        // على طول. اتصال مجابش حاجة أصلاً = التدفق مش شغال على
+        // الاستضافة دي، فبنرجع للبولينج ونجرب تاني بعد فترة بتطول.
+        if (got) { retryStream(800); return; }
+        setMode(false);
+        startPolling();
+        retryStream(retryMs);
+        retryMs = Math.min(retryMs * 2, 300000);
+    };
+}
+
+function startLive() {
+    if (paused || document.hidden) return;
+    startPolling();   // شبكة أمان لحد ما أول حمولة توصل من التدفق
+    startStream();
+}
+
+// ⚠️ تاب متسيّب في الخلفية كان هيفضل ماسك عملية على السيرفر —
+// بنقفل الاتصال لما الشاشة تختفي وبنفتحه لما ترجع.
+document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { stopStream(); stopPolling(); setMode(false); return; }
+    refresh();      // رسمة فورية بدل ما نستنى أول حمولة
+    startLive();
+});
 
 /* أول رسمة من الحمولة المدمجة */
 drawZones();
 drawGovs();
 render();
+
+/* وبعدها التدفق يمسك الشاشة */
+startLive();
 
 const first = (data.reps || []).find(r => r.lat !== null);
 if (first) {

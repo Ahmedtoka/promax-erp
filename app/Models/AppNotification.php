@@ -47,12 +47,23 @@ class AppNotification extends Model
             $body instanceof Closure ? $body() : $body,
         ]);
 
-        return static::create([
+        $note = static::create([
             'user_id' => $user->id,
             'title' => $title,
             'body' => $body,
             'is_good' => $good,
         ]);
+
+        // ⚠️ **الدفع للتليفون من هنا بالظبط** (2026-08-07) — نقطة
+        // واحدة لكل إشعارات السيستم، فأي إشعار جديد بيتبعت أوتوماتيك
+        // من غير ما حد يفتكر ينادي الدفع. الخدمة بتتخطى بأمان لو
+        // فاير بيز لسه مااتظبطش، والشبكة مابتوقّفش العملية الأصلية.
+        \App\Services\Push::toUser($user, $title, $body, [
+            'id' => (string) $note->id,
+            'good' => $good ? '1' : '0',
+        ]);
+
+        return $note;
     }
 
     /** تنفيذ الكولباك بلغة اليوزر ورجوع اللغة زي ما كانت بعدها */

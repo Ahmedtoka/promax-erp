@@ -407,6 +407,97 @@ function promaxMap(elId, points, opts = {}) {
 
   return map;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   أدوات الجداول العامة (بوليش 2026-08-06) — بتشتغل على كل الشاشات:
+   1) فريز: أي جدول أطول من 62vh حاويته بتتقفل والهيدر بيثبت.
+   2) سورت: ضغطة على أي عمود بترتب صفوف الصفحة (رقمي/نصي أوتوماتيك).
+   3) بحث سريع: جدول فيه أكتر من 12 صف من غير سيرش بياخد خانة فلترة.
+   الاستثناءات: جداول المودالات، والجداول المعلّمة data-plain،
+   والعمود اللي جواه لينك (سورت السيرفر بتاعه أولى).
+   ⚠️ الترتيب هنا على صفوف الصفحة الحالية بس — القوايم المقسمة صفحات
+   اللي محتاجة ترتيب على كل الداتا ليها سورت سيرفر خاص (زي العملاء).
+   ═══════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', function () {
+  'use strict';
+  const Q = {!! json_encode(__('common.search'), JSON_UNESCAPED_UNICODE) !!};
+
+  document.querySelectorAll('.tablewrap').forEach(function (wrap) {
+    if (wrap.closest('dialog')) return;
+    const table = wrap.querySelector('table');
+    if (!table || table.hasAttribute('data-plain')) return;
+
+    const headRow = table.tHead ? table.tHead.rows[0] : table.querySelector('tr');
+    if (!headRow || !headRow.querySelector('th')) return;
+    const bodyRows = () => Array.from(table.querySelectorAll('tr')).filter(r => r !== headRow && r.querySelector('td'));
+
+    /* 1) الفريز — بس لو الجدول فعلاً طويل */
+    if (!wrap.style.maxHeight && table.offsetHeight > window.innerHeight * .62) {
+      wrap.style.maxHeight = '66vh';
+      wrap.style.overflowY = 'auto';
+    }
+    if (wrap.style.maxHeight) {
+      headRow.querySelectorAll('th').forEach(function (th) {
+        if (!th.style.position) {
+          th.style.position = 'sticky';
+          th.style.top = '0';
+          th.style.zIndex = '5';
+          th.style.background = 'var(--card, #fff)';
+          th.style.boxShadow = '0 1px 0 var(--border)';
+        }
+      });
+    }
+
+    /* 2) السورت — العمود اللي مالوش سورت سيرفر ولا هاندلر خاص */
+    if (!table.querySelector('th.srt')) {
+      let cur = -1, dir = 1;
+      Array.from(headRow.cells).forEach(function (th, idx) {
+        if (th.querySelector('a, input, button') || th.textContent.trim() === '') return;
+        th.style.cursor = 'pointer';
+        th.title = '⇅';
+        th.addEventListener('click', function () {
+          dir = (idx === cur) ? -dir : 1;
+          cur = idx;
+          const rows = bodyRows();
+          const val = r => (r.cells[idx] ? r.cells[idx].textContent.trim() : '');
+          const num = s => parseFloat(s.replace(/[,%\s]/g, ''));
+          const numeric = rows.length > 0 && rows.every(r => val(r) === '' || val(r) === '—' || !isNaN(num(val(r))));
+          rows.sort(function (a, b) {
+            const x = val(a), y = val(b);
+            return dir * (numeric
+              ? ((isNaN(num(x)) ? -Infinity : num(x)) - (isNaN(num(y)) ? -Infinity : num(y)))
+              : x.localeCompare(y, ['ar', 'en']));
+          });
+          const parent = rows[0] && rows[0].parentNode;
+          if (parent) rows.forEach(r => parent.appendChild(r));
+          headRow.querySelectorAll('.gs-arw').forEach(s => s.remove());
+          const arw = document.createElement('span');
+          arw.className = 'gs-arw';
+          arw.style.cssText = 'font-size:9px;margin-inline-start:4px;color:var(--primary)';
+          arw.textContent = dir === 1 ? '▲' : '▼';
+          th.appendChild(arw);
+        });
+      });
+    }
+
+    /* 3) البحث السريع — للجداول الكبيرة اللي فوقها مفيش سيرش أصلاً */
+    const card = wrap.closest('.card');
+    const hasSearch = card && (card.querySelector('.searchbar') || card.querySelector('input[type="text"], input[type="search"]'));
+    if (!hasSearch && bodyRows().length > 12) {
+      const inp = document.createElement('input');
+      inp.type = 'search';
+      inp.placeholder = '🔍 ' + Q;
+      inp.style.cssText = 'width:100%;max-width:320px;margin-bottom:8px;display:block';
+      inp.addEventListener('input', function () {
+        const q = inp.value.trim().toLowerCase();
+        bodyRows().forEach(function (r) {
+          r.style.display = (!q || r.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        });
+      });
+      wrap.parentNode.insertBefore(inp, wrap);
+    }
+  });
+});
 </script>
 @yield('scripts')
 </body>

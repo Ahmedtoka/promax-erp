@@ -69,6 +69,16 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
         Route::post('/leads/{lead}/action', [\App\Http\Controllers\Api\IncentiveApiController::class, 'leadAction']);
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
+
+        // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) ═══
+        // ⚠️ المسح بيتنده عند الخروج — تليفون موظف خرج عمره ما ياخد
+        // إشعارات شغل، وخصوصاً لو التليفون اتسلّم لحد تاني.
+        Route::post('/device-token', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'store']);
+        // ⚠️ **مسار POST كمان للمسح** — كلاس `Api` في الأبلكيشن مافيهوش
+        // ميثود DELETE عامة، وإضافة واحدة عشان نداء واحد أكبر من اللزوم.
+        Route::match(['post', 'delete'], '/device-token/forget',
+            [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'destroy']);
+        Route::delete('/device-token', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'destroy']);
     });
 
     // ⚠️ **العرض بس** — والكنترولر بيفلتر بالمستخدم أصلاً، فالمحاسب

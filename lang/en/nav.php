@@ -72,4 +72,6 @@ return [
     'reps' => 'Reps',
     'branches' => 'Branches',
     'vehicles' => 'Vehicles',
+
+    'audit' => 'Activity Log',
 ];

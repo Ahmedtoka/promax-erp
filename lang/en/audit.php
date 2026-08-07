@@ -1,0 +1,50 @@
+<?php
+
+return [
+    // User activity log (2026-08-07)
+    'page' => 'Activity Log',
+    'page_sub' => 'who did what, when and from where',
+    'today' => 'Actions today',
+    'users_today' => 'Active users',
+    'edits_today' => 'Edits today',
+    'logins_today' => 'Logins',
+    'total' => 'Total records',
+    'when' => 'When',
+    'who' => 'Who',
+    'what' => 'Action',
+    'on' => 'On',
+    'details' => 'Details',
+    'from_ip' => 'from',
+    'all_users' => 'All users',
+    'all_events' => 'All events',
+    'all_models' => 'All sections',
+    'from' => 'From date',
+    'to' => 'To date',
+    'no_rows' => 'No activity in this range',
+    'changed_fields' => ':count fields changed',
+    'nothing' => '—',
+    'retention_hint' => 'Page views are pruned after 21 days, edits and logins after 180 days.',
+
+    // Events
+    'event_created' => 'created',
+    'event_updated' => 'updated',
+    'event_deleted' => 'deleted',
+    'event_login' => 'logged in',
+    'event_logout' => 'logged out',
+    'event_viewed' => 'opened',
+    'event_action' => 'ran',
+
+    // Model names
+    'model_Client' => 'Client',
+    'model_Product' => 'Product',
+    'model_User' => 'Employee',
+    'model_Contract' => 'Contract',
+    'model_Zone' => 'Zone',
+    'model_ClientGroup' => 'Chain',
+    'model_Channel' => 'Channel',
+    'model_PurchaseOrder' => 'Purchase order',
+    'model_Invoice' => 'Invoice',
+    'model_Custody' => 'Custody',
+    'model_Warehouse' => 'Warehouse',
+    'model_Setting' => 'Setting',
+];

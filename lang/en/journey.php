@@ -124,4 +124,8 @@ return [
     'layer_covered' => 'Covered zones',
     'layer_target' => 'Target zones',
     'layer_govs' => 'Governorates',
+
+    // Update-mode indicator (2026-08-07)
+    'realtime_on' => 'Realtime',
+    'realtime_off' => 'Polling every 15s',
 ];
