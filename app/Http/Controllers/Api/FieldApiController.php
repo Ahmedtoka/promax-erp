@@ -22,6 +22,66 @@ use Illuminate\Support\Facades\DB;
  */
 class FieldApiController extends Controller
 {
+    /**
+     * GET /api/pulse — بصمة حالة المندوب في ريكوست شبه مجاني.
+     *
+     * ⚠️ **ده اللي بيخلّي الأبلكيشن لايف من غير ما يولّع الشبكة.**
+     * البوت ستراب بيجيب العهدة والزونز وخط السير والفواتير — تقيل
+     * جداً لو اتنادى كل 10 ثواني × كل مندوب في الشارع. البلس ده
+     * `COUNT` و`MAX(id)` بس، والأبلكيشن بينده البوت ستراب **بس**
+     * لما البصمة تتغير فعلاً.
+     *
+     * أي حاجة المندوب مستنيها لازم تكون في البصمة — لو مش هنا،
+     * التغيير مش هيوصله غير في المزامنة الكاملة بعد 45 ثانية.
+     */
+    public function pulse(Request $request): JsonResponse
+    {
+        $id = $request->user()->id;
+
+        // ⚠️ MAX(id) مش COUNT بس: أمر اتقفل واتفتح غيره = نفس العدد
+        // وبصمة مختلفة. الاتنين مع بعض بيمسكوا الحالتين.
+        $picks = DB::table('pick_orders')->where('assigned_to', $id)
+            ->selectRaw("SUM(status = 'ready') ready, MAX(updated_at) t")->first();
+
+        $notif = DB::table('app_notifications')->where('user_id', $id)
+            ->selectRaw('COUNT(*) n, SUM(read_at IS NULL) unread, MAX(id) mx')->first();
+
+        $pos = DB::table('purchase_orders')->where('assigned_to', $id)
+            ->whereIn('status', ['pending', 'arrived'])
+            ->selectRaw('COUNT(*) n, MAX(updated_at) t')->first();
+
+        // ⚠️ العبرة بالبنود مش برأس العهدة: صنف نزل أو اتباع بيغيّر
+        // `custody_items` بس، و`custodies.updated_at` بتفضل مكانها.
+        $custody = DB::table('custodies')->where('custodies.user_id', $id)
+            ->whereDate('custodies.date', today())
+            ->leftJoin('custody_items', 'custody_items.custody_id', '=', 'custodies.id')
+            ->selectRaw('COUNT(custody_items.id) n, MAX(custody_items.updated_at) t')
+            ->first();
+
+        $reqs = DB::table('client_requests')->where('created_by', $id)
+            ->selectRaw('COUNT(*) n, MAX(updated_at) t')->first();
+
+        $visits = DB::table('visits')->where('user_id', $id)
+            ->whereDate('created_at', today())
+            ->selectRaw('COUNT(*) n, MAX(updated_at) t')->first();
+
+        return response()->json([
+            'stamp' => implode('|', [
+                (int) ($picks->ready ?? 0), $picks->t ?? '',
+                (int) ($notif->n ?? 0), (int) ($notif->unread ?? 0), (int) ($notif->mx ?? 0),
+                (int) ($pos->n ?? 0), $pos->t ?? '',
+                (int) ($custody->n ?? 0), $custody->t ?? '',
+                (int) ($reqs->n ?? 0), $reqs->t ?? '',
+                (int) ($visits->n ?? 0), $visits->t ?? '',
+            ]),
+            // الأبلكيشن بيستخدمهم للتنبيه الداخلي من غير ما يستنى
+            // البوت ستراب يرجع
+            'ready_picks' => (int) ($picks->ready ?? 0),
+            'unread' => (int) ($notif->unread ?? 0),
+            'last_notification_id' => (int) ($notif->mx ?? 0),
+        ]);
+    }
+
     // ================= بوت ستراب: كل اللي الأبلكيشن محتاجه في ريكوست واحد =================
 
     public function bootstrap(Request $request): JsonResponse

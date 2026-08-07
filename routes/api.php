@@ -89,6 +89,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     Route::get('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'index']);
     Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store']);
 
+    // ═══ البلس — بصمة الحالة، الأبلكيشن بينده عليها كل 10 ثواني ═══
+    // ⚠️ لازم تفضل رخيصة. أي حاجة تتضاف هنا بتتضرب في عدد المناديب
+    // × 6 مرات في الدقيقة — مافيش `with()` ولا payload هنا أبداً.
+    Route::get('/pulse', [FieldApiController::class, 'pulse']);
+
     Route::get('/picks', [PickApiController::class, 'index']);
     Route::get('/picks/{pick}', [PickApiController::class, 'show']);
 
