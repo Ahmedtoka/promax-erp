@@ -57,13 +57,43 @@ class AttendanceDay extends Model
     }
 
     /**
+     * آخر بانش في اليوم — **المصدر الوحيد لحالة الموظف**.
+     *
+     * ⚠️ **`reorder()` مش اختيارية — دي كانت أخطر باج في الموديول**
+     * (إصلاح 2026-08-08).
+     *
+     * العلاقة `punches()` عليها `orderBy('at')` تصاعدي. إضافة
+     * `->latest('at')` عليها **مابتلغيش** الترتيب الأول — بتضيف عليه:
+     *
+     *     ORDER BY at ASC, at DESC   ← الأول هو اللي بيحكم
+     *
+     * يعني `first()` كانت بترجّع **أقدم** بانش مش أحدث واحد. والنتيجة
+     * إن الحالة كانت بتتقري من أول بانش في اليوم (`in` دايماً):
+     *
+     *   • الشاشة بتقول «شغال دلوقتي» بعد الانصراف
+     *   • الأزرار مابتتقلبش — «خد بريك» بتفضل مكانها بعد البريك
+     *   • آلة الحالات بتقبل بريك بعد انصراف (الحالة «working» غلط)
+     *   • العدّاد بيفضل ماشي للأبد لأن `openSince()` بترجّع أول `in`
+     *
+     * `reorder()` بتمسح الترتيب القديم قبل ما تحط الجديد.
+     */
+    public function lastPunch(): ?AttendancePunch
+    {
+        return $this->punches()
+            ->reorder()
+            ->orderByDesc('at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
      * حالة الموظف دلوقتي — **من آخر بانش مش من عمود**.
      *
      * بترجع: `working` · `break` · `off`
      */
     public function state(): string
     {
-        $last = $this->punches()->latest('at')->latest('id')->first();
+        $last = $this->lastPunch();
 
         return match ($last?->type) {
             AttendancePunch::IN, AttendancePunch::BACK => 'working',
@@ -130,7 +160,7 @@ class AttendanceDay extends Model
         $extra = 0;
 
         if ($this->status === self::STATUS_OPEN) {
-            $last = $this->punches()->latest('at')->latest('id')->first();
+            $last = $this->lastPunch();
 
             if ($last !== null
                 && in_array($last->type, [AttendancePunch::IN, AttendancePunch::BACK], true)) {
@@ -148,7 +178,7 @@ class AttendanceDay extends Model
             return null;
         }
 
-        $last = $this->punches()->latest('at')->latest('id')->first();
+        $last = $this->lastPunch();
 
         return $last !== null
             && in_array($last->type, [AttendancePunch::IN, AttendancePunch::BACK], true)

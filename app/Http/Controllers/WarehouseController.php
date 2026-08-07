@@ -48,7 +48,10 @@ class WarehouseController extends Controller
             'receipts' => $warehouse->receipts()->with('batches.product')->take(10)->get(),
             'locationCount' => $warehouse->locations()->count(),
             // للترصيف المباشر من الشاشة — باتشات الاستيراد القديمة مالهاش إذن
-            'locationCodes' => $warehouse->locations()->orderBy('code')->pluck('code'),
+            // ⚠️ `reorder()` — العلاقة عليها `stand` ثم `level`، وإضافة
+            // `code` عليهم كانت بتتجاهل وترتّب بالحامل. القايمة دي
+            // دروب داون بيتدوّر فيها بالكود، فلازم يبقى هو الترتيب.
+            'locationCodes' => $warehouse->locations()->reorder()->orderBy('code')->pluck('code'),
             'availableUnits' => $warehouse->availableUnits(),
             // ⚠️ الرصيد الكلي من `stocks` — «المتاح» بيعدّ المرصوف بس،
             // وبعد استيراد رصيد أول مدة كله بيبقى لسه على الأرض فالمتاح

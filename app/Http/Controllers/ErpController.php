@@ -561,7 +561,14 @@ class ErpController extends Controller
                              SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) as sales,
                              SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) as coll")
                 ->groupBy('m')->orderBy('m')->get(),
-            'txns' => $client->transactions()->orderByDesc('date')->paginate(60),
+            // ⚠️ **`reorder()` قبل الترتيب** (إصلاح 2026-08-08). علاقة
+            // `transactions()` عليها `orderBy('date')` تصاعدي، وإضافة
+            // `orderByDesc` عليها بتنتج `ORDER BY date ASC, date DESC`
+            // — والأول هو اللي بيحكم. النتيجة إن كشف الحساب كان
+            // بيفتح على أقدم حركة والصفحة الأولى فيها قيود سنة فاتت،
+            // واللي بيدوّر على آخر تحصيل بيروح لآخر صفحة.
+            'txns' => $client->transactions()->reorder()
+                ->orderByDesc('date')->orderByDesc('id')->paginate(60),
             // ⚠️ مسكوبين بالفرع — نفس سبب `clientFormData()`: القوايم دي
             // بتكشف مناطق وفريق فرع تاني، و`exists:` مابيسألش عن الفرع
             // فالتخصيص ليهم كان بيعدّي.
