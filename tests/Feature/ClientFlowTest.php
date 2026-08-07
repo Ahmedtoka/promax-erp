@@ -544,6 +544,68 @@ class ClientFlowTest extends TestCase
             'سطور الشرح مش بتترندر في الشاشة خالص');
     }
 
+    // ═══════════════════ 8. الحفظ من أي خطوة ═══════════════════
+
+    /**
+     * ⚠️ **زرار حفظ في كل خطوة مش في آخر واحدة بس.** اللي بيعدّل تليفون
+     * في خطوة «تعريف العميل» ماينفعش يمشي على العقد والضريبة عشان
+     * يوصل للزرار — وده كان بيخلّي الناس تسيب التعديل من غير حفظ.
+     *
+     * والحارس في الجافاسكربت بيفحص **المراحل التلاتة** قبل الإرسال،
+     * فالحفظ من الخطوة الأولى مابيخلقش عميل ناقص: أول خانة إجبارية
+     * فاضية بيفتح مرحلتها ويقف عليها.
+     */
+    public function test_the_save_button_appears_on_every_step(): void
+    {
+        $client = $this->makeClient();
+
+        $html = $this->actingAs($this->makeAdmin())
+            ->get('/erp/clients/'.$client->id.'/edit')
+            ->assertOk()
+            ->getContent();
+
+        $panes = preg_split('/<div class="card step-pane"/', $html);
+
+        // العنصر الأول قبل أول مرحلة — بنشيله
+        array_shift($panes);
+
+        $this->assertCount(3, $panes, 'المراحل مش تلاتة — الفورم اتغيّر');
+
+        foreach ($panes as $i => $pane) {
+            $this->assertStringContainsString('type="submit"', $pane,
+                'الخطوة '.($i + 1).' مافيهاش زرار حفظ — المستخدم لازم يمشي لآخر صفحة');
+        }
+    }
+
+    /**
+     * ⚠️ الحفظ من الخطوة الأولى لازم يوصل للسيرفر كامل — مش بيبعت
+     * خانات المرحلة اللي المستخدم ماوصلهاش فاضية.
+     */
+    public function test_saving_from_the_first_step_keeps_the_later_steps_data(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->post('/erp/clients', $this->fullPayload())
+            ->assertSessionHasNoErrors();
+
+        $c = $this->created();
+
+        // المستخدم غيّر التليفون في الخطوة 1 ودَاس حفظ من هناك —
+        // المتصفح بيبعت الفورم كله لأن المراحل `display:none` مش `disabled`
+        $this->actingAs($admin)->put('/erp/clients/'.$c->id, $this->fullPayload([
+            'phone' => '01055556666',
+            'zone_id' => $c->zone_id,
+            'channel_id' => $c->channel_id,
+            'price_list_id' => $c->price_list_id,
+        ]))->assertSessionHasNoErrors();
+
+        $after = $c->fresh();
+
+        $this->assertSame('01055556666', $after->phone);
+        $this->assertSame('123-456-789', $after->tax_id, 'بيانات خطوة الضريبة اتمسحت');
+        $this->assertSame(45, (int) $after->payment_days, 'شروط الدفع اتمسحت');
+    }
+
     // ═══════════════════ 8. الصلاحيات ═══════════════════
 
     /** ⚠️ الشاشة دي بتحدد أسعار وشروط دفع — مش لأي حد */

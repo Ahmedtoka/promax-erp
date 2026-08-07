@@ -538,7 +538,14 @@
         </div>
         <button type="button" class="btn sm" onclick="addContact()">+ {{ __('client.add_contact') }}</button>
 
-        <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        {{-- ⚠️ **الحفظ موجود في الخطوات التلاتة** (2026-08-08). كان في
+             آخر خطوة بس — يعني تعديل تليفون في الخطوة الأولى كان
+             بيستلزم المرور على العقد والضريبة عشان توصل للزرار.
+             وحارس الإرسال بيفحص المراحل التلاتة على أي حال، فالحفظ
+             من هنا آمن: أول خانة ناقصة بيفتح مرحلتها ويقف عليها. --}}
+        <div class="formbar">
+            <span class="formbar-sp"></span>
+            <button type="submit" class="btn gold">💾 {{ $editing ? __('client.save_changes') : __('client.save_client') }}</button>
             <button type="button" class="btn gold" onclick="goStep(2)">{{ __('client.step_contract') }} →</button>
         </div>
     </div>
@@ -931,8 +938,10 @@
             </div>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px">
+        <div class="formbar">
             <button type="button" class="btn" onclick="goStep(1)">← {{ __('client.step_identity') }}</button>
+            <span class="formbar-sp"></span>
+            <button type="submit" class="btn gold">💾 {{ $editing ? __('client.save_changes') : __('client.save_client') }}</button>
             <button type="button" class="btn gold" onclick="goStep(3)">{{ __('client.step_tax') }} →</button>
         </div>
     </div>
@@ -1008,9 +1017,10 @@
             <textarea name="notes" dir="ltr" rows="2" style="width:100%">{{ old('notes', $src?->notes) }}</textarea>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
+        <div class="formbar">
             <button type="button" class="btn" onclick="goStep(2)">← {{ __('client.step_contract') }}</button>
-            <button type="submit" class="btn gold">{{ $editing ? __('client.save_changes') : __('client.save_client') }}</button>
+            <span class="formbar-sp"></span>
+            <button type="submit" class="btn gold">💾 {{ $editing ? __('client.save_changes') : __('client.save_client') }}</button>
         </div>
     </div>
 </form>
@@ -1053,6 +1063,29 @@
     $presetKeys = json_encode(array_keys(App\Models\Contract::CLAUSE_PRESETS));
 @endphp
 <style>
+/* ═══ شريط إجراءات الفورم ═══
+   ⚠️ **ملزوق في آخر الشاشة عن قصد.** خطوة العقد بتطول لتحت أوي
+   (البنود والتواريخ والمرفق)، وزرار حفظ في آخر الصفحة معناه إن
+   اللي عدّل خانة واحدة فوق لازم يسكرول لتحت خالص عشان يحفظ.
+   ⚠️ و`z-index` أقل من المودالات — الدايالوج بتاع «سلسلة جديدة»
+   و«منطقة جديدة» لازم يغطّي الشريط مش العكس. */
+.formbar{
+  position:sticky;bottom:0;z-index:20;
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin:16px -18px -16px;padding:12px 18px;
+  background:var(--card);
+  border-top:1px solid var(--border);
+  border-radius:0 0 var(--r-md) var(--r-md);
+  box-shadow:0 -6px 18px rgba(0,0,0,.06);
+}
+/* بيدفع الحفظ والتالي لآخر الشريط والرجوع فاضل في أوله */
+.formbar-sp{flex:1}
+
+@media (max-width:640px){
+  /* على الموبايل الأزرار بتنزل سطر تاني — الفاصل مالوش لازمة */
+  .formbar-sp{flex-basis:100%;height:0}
+}
+
 .step-btn{display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:10px;border:1px solid var(--border);
           background:var(--card);cursor:pointer;font-family:inherit;font-weight:800;font-size:12.5px;color:var(--muted)}
 .step-btn .step-n{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;
