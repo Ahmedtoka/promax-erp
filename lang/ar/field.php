@@ -153,4 +153,5 @@ return [
     'gift_left' => 'الباقي',
     'gift_given' => 'اتوزّع',
     'record_handout' => 'سجّل التوزيع',
+    'track_gift' => 'هدية :qty × :product',
 ];

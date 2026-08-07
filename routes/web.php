@@ -291,6 +291,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/incentives', [\App\Http\Controllers\IncentiveController::class, 'saveSettings'])
             ->middleware('role:admin')->name('incentives.save');
 
+        // ═════ إصدار الأبلكيشن (2026-08-07) — أدمن بس ═════
+        // ⚠️ رفع APK بيعدّي على الفورم، فالـPOST لازم يكون multipart
+        Route::get('/app-version', [\App\Http\Controllers\AppVersionController::class, 'edit'])
+            ->middleware('role:admin')->name('app_version');
+        Route::post('/app-version', [\App\Http\Controllers\AppVersionController::class, 'save'])
+            ->middleware('role:admin')->name('app_version.save');
+
         // ═════ سجل حركة اليوزرات (2026-08-07) — أدمن بس، قراءة فقط ═════
         Route::get('/audit', [\App\Http\Controllers\AuditController::class, 'index'])
             ->middleware('role:admin')->name('audit');

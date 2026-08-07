@@ -282,6 +282,8 @@ class Access
             ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
             // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
             ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
+            // إصدار الأبلكيشن: رفع APK وإجبار التحديث
+            ['erp.app_version', '📲', 'nav.app_version', 'erp.app_version*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
             // سجل الحركة: مين عمل إيه وإمتى — أدمن بس
             ['erp.audit', '🧾', 'nav.audit', 'erp.audit*', null],

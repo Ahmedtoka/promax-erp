@@ -39,8 +39,25 @@ class ResetTransactions
         'gift_handouts',
         // ⚠️ الأوامر قبل التجهيز — `purchase_orders.pick_order_id`
         'purchase_order_items', 'purchase_orders',
+        // ⚠️ **التصفيات قبل العهد.** `rep_settlements` بتشير للعهدة
+        // وللترانزاكشنز — ولو فضلت، المندوب بيفتح الأبلكيشن بعد
+        // التفضية ويلاقي «عليك 4,300 ج.م» من تصفية مالهاش فواتير.
+        // كانت ناقصة من القايمة دي خالص (اتضافت 2026-08-07).
+        'rep_settlements',
         'custody_items', 'custodies', 'visits', 'transactions',
         'client_requests',
+
+        // قفل اليوم — ملخص محسوب من الفواتير، لازم يروح معاها
+        'day_closes',
+
+        // الحوافز: النقاط حركة، والتارجتات إعداد بيفضل
+        'rep_points',
+
+        // بينجات الليدز — سجل «ظهر لمين ومين قبل»
+        'lead_pings',
+
+        // قراءات العداد — حركة يومية مربوطة بالعهدة
+        'odometer_readings',
 
         // الجرد — بيشير للباتشات
         'stock_count_items', 'stock_counts',
@@ -110,6 +127,19 @@ class ResetTransactions
             // ونفس القاعدة للموردين — رصيدهم تجميعة من دفترهم اللي اتمسح
             if (Schema::hasTable('suppliers')) {
                 DB::table('suppliers')->update(['balance' => 0]);
+            }
+
+            // ⚠️ **الليدز بترجع «جديد» بعد التفضية** (2026-08-07).
+            // الليد اللي اتقبل أو اتحوّل لعميل بيفضل `status` بتاعه
+            // متغيّر، والبينجات اتمسحت — فمابيظهرش لأي مندوب تاني
+            // ولا بيرجع في التيست. الليد نفسه ماستر (مصدره شيت)،
+            // اللي بيتصفّر هو حالته بس.
+            if (Schema::hasTable('leads')) {
+                DB::table('leads')->update([
+                    'status' => 'new',
+                    'assigned_to' => null,
+                    'lost_reason' => null,
+                ]);
             }
         });
 

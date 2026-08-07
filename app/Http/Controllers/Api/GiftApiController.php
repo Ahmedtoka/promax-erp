@@ -134,6 +134,25 @@ class GiftApiController extends Controller
             return response()->json(['error' => $error], 422);
         }
 
+        // ⚠️ **الهدية حركة زي البيع بالظبط** (2026-08-07): بضاعة خرجت
+        // من العربية. كانت الشاشة الوحيدة اللي مابتسجّلش حدث تتبع
+        // خالص، فالمدير يشوف الرصيد ناقص في غرفة التحكم من غير أي
+        // سطر يقول راح فين. الحدث ده هو الرابط.
+        $product = \App\Models\Product::find($data['product_id']);
+        $client = isset($data['client_id']) ? Client::find($data['client_id']) : null;
+
+        \App\Models\TrackEvent::log(
+            $request->user(),
+            'gift',
+            __('field.track_gift', [
+                'qty' => $data['qty'],
+                'product' => $product?->displayName() ?? '',
+            ]),
+            $client?->displayName(),
+            $request->float('lat') ?: null,
+            $request->float('lng') ?: null,
+        );
+
         return response()->json(['ok' => true]);
     }
 

@@ -421,48 +421,43 @@ class JourneyController extends Controller
     }
 
     /**
-     * فيد التنبيهات — آخر أحداث اليوم الحقيقية: فواتير وزيارات.
+     * فيد التنبيهات — **كل حركة المندوب من سجل التتبع**.
      *
-     * ⚠️ مفيش أحداث مصطنعة — الفيد بيقرا من نفس جداول الأرقام
-     * (فواتير + زيارات) فكل سطر فيه وراه فلوس أو تشيك إن فعلي.
+     * ⚠️ **كان بيقرا من الفواتير والزيارات بس** (اتغيّر 2026-08-07).
+     * يعني المدير كان بيشوف البيع والتشيك إن/أوت وخلاص: المرتجع
+     * والهدايا واستلام العهدة وتسليم أوامر التوريد وطلبات العملاء
+     * الجديدة كانت بتحصل في الشارع ومحدش شايفها في غرفة التحكم.
      *
-     * @return list<array{t: string, kind: string, text: string}>
+     * `track_events` هو السجل الوحيد اللي فيه **كل** الحركات بترتيبها
+     * الزمني وبإحداثياتها — فالفيد بيتبني منه، والفواتير والزيارات
+     * بتفضل مصدر الأرقام زي ما هي.
+     *
+     * ⚠️ **`happened_at` مش `created_at`.** الحدث ممكن يتسجّل متأخر
+     * (الأبلكيشن كان أوفلاين ورفع لما النت رجع) — الترتيب بوقت
+     * الحصول الفعلي وإلا الفيد بيبقى كذّاب.
+     *
+     * @return list<array{t: string, kind: string, icon: string, color: string, rep: string, text: string}>
      */
     private function liveAlerts($reps): array
     {
-        $ids = $reps->pluck('id');
+        $names = $reps->pluck('name', 'id');
 
-        $sales = \App\Models\Invoice::with(['user:id,name,name_en', 'client:id,name,name_en'])
-            ->whereDate('created_at', today())
-            ->whereIn('user_id', $ids)
-            ->latest()->take(10)->get()
-            ->map(fn ($inv) => [
-                'at' => $inv->created_at,
-                'kind' => 'sale',
-                'text' => __('journey.alert_sale', [
-                    'rep' => $inv->user?->displayName() ?? '—',
-                    'client' => $inv->client?->displayName() ?? '—',
-                    'value' => number_format((float) $inv->grand_total),
-                ]),
-            ]);
-
-        $visits = \App\Models\Visit::with(['user:id,name,name_en', 'client:id,name,name_en'])
-            ->whereDate('checked_in_at', today())
-            ->whereIn('user_id', $ids)
-            ->orderByDesc('checked_in_at')->take(8)->get()
-            ->map(fn ($v) => [
-                'at' => $v->checked_out_at ?? $v->checked_in_at,
-                'kind' => $v->checked_out_at ? 'checkout' : 'checkin',
-                'text' => __($v->checked_out_at ? 'journey.alert_checkout' : 'journey.alert_checkin', [
-                    'rep' => $v->user?->displayName() ?? '—',
-                    'client' => $v->client?->displayName() ?? '—',
-                ]),
-            ]);
-
-        return $sales->concat($visits)
-            ->sortByDesc('at')
-            ->take(14)
-            ->map(fn ($a) => ['t' => $a['at']->format('H:i'), 'kind' => $a['kind'], 'text' => $a['text']])
+        return \App\Models\TrackEvent::whereIn('user_id', $reps->pluck('id'))
+            ->whereDate('happened_at', today())
+            // فتح الأبلكيشن مش حركة شغل — بيتسجّل للإحصاء بس، ولو
+            // دخل الفيد هيغرقه (المندوب بيفتح الأبلكيشن 50 مرة في اليوم)
+            ->where('type', '!=', 'open')
+            ->orderByDesc('happened_at')
+            ->take(25)
+            ->get()
+            ->map(fn ($e) => [
+                't' => $e->happened_at->format('H:i'),
+                'kind' => $e->type,
+                'icon' => $e->icon(),
+                'color' => $e->color(),
+                'rep' => $names[$e->user_id] ?? '—',
+                'text' => trim($e->title.($e->subtitle ? ' · '.$e->subtitle : '')),
+            ])
             ->values()->all();
     }
 

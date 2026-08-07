@@ -49,13 +49,23 @@ class TaxController extends Controller
             'eta_client_id' => ['nullable', 'string', 'max:120'],
         ]);
 
+        // ⚠️ **الشاشة دي بتحفظ مفاتيحها هي بس** (إصلاح 2026-08-07).
+        // كانت بتلفّ على `Setting::DEFAULTS` كلها وتكتب `''` لأي مفتاح
+        // مش في الفورم — يعني **حفظ إعدادات الضريبة كان بيمسح إعدادات
+        // الحوافز** (قيمة النقطة، نقاط الزيارة، نطاق الليدز) وكل مفتاح
+        // جديد يتضاف للسيستم. الحلقة على مفاتيح الفورم نفسها.
+        //
         // ⚠️ المفاتيح الاختيارية بتختفي من `$data` خالص لما تكون فاضية،
         // فلازم `??` — من غيرها مسح حقل مابيتحفظش وبيفضل بقيمته القديمة.
+        $own = [
+            'tax_rate', 'company_name', 'company_name_en', 'company_tax_id',
+            'company_activity_code', 'company_branch_code', 'company_governorate',
+            'company_city', 'company_street', 'company_building', 'company_phone',
+            'eta_client_id',
+        ];
+
         $pairs = [];
-        foreach (array_keys(Setting::DEFAULTS) as $key) {
-            if ($key === 'tax_enabled') {
-                continue;
-            }
+        foreach ($own as $key) {
             $pairs[$key] = (string) ($data[$key] ?? '');
         }
 

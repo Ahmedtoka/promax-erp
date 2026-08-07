@@ -154,4 +154,5 @@ return [
     'gift_left' => 'Left',
     'gift_given' => 'Given',
     'record_handout' => 'Record hand-out',
+    'track_gift' => 'Gift :qty × :product',
 ];

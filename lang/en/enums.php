@@ -107,13 +107,16 @@ return [
     ],
 
     'track' => [
-        'start' => 'Day Start',
-        'check_in' => 'Check-in',
-        'check_out' => 'Check-out',
-        'sale' => 'Invoice',
-        'deliver' => 'Delivery',
+        'start' => 'Custody received',
+        'open' => 'App opened',
+        'check_in' => 'Checked in',
+        'check_out' => 'Checked out',
+        'sale' => 'Sale',
+        'return' => 'Return',
+        'gift' => 'Gift',
+        'deliver' => 'PO delivered',
         'refill' => 'Shelf Refill',
-        'request' => 'Request',
+        'request' => 'New client request',
     ],
 
 ];

@@ -226,7 +226,8 @@
 .lv-alerts{display:flex;flex-direction:column;gap:7px;max-height:34vh;overflow-y:auto}
 .lv-alert{display:flex;gap:8px;font-size:11px;line-height:1.5;border-inline-start:2px solid var(--line);padding-inline-start:8px}
 .lv-alert .tm{color:var(--dim);font-size:10px;direction:ltr;white-space:nowrap}
-.a-sale{border-color:var(--green)} .a-checkin{border-color:var(--purple)} .a-checkout{border-color:var(--royal)}
+.lv-alert .ic{font-size:12px;line-height:1.3}
+.lv-alert .rp{color:var(--dim);white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis}
 
 /* الماركرز */
 .lv-marker{position:relative}
@@ -307,6 +308,11 @@ const T = {
 const SC = { visit: '#9D6FE0', moving: '#2EDE8B', idle: '#FFB020', off: '#5A5F85' };
 const AV = ['#4D6FE3','#9D6FE0','#2EDE8B','#FFB020','#FF5D73','#38BDF8','#F472B6','#A3E635'];
 const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+/* ⚠️ **إجباري قبل أي نص داتا في innerHTML.** أسماء العملاء والمناديب
+   بتتكتب بإيد المستخدم، واسم فيه `<` كان بيكسّر الفيد أو أسوأ. */
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ═════ الخريطة الداكنة ═════ */
 const map = L.map('lvMap', { zoomControl: true }).setView([30.05, 31.25], 11);
@@ -504,7 +510,16 @@ function renderAlerts() {
     const list = data.alerts || [];
     document.getElementById('lvAlertCount').textContent = list.length ? T.latest.replace(':count', list.length) : '';
     document.getElementById('lvAlerts').innerHTML = list.length
-        ? list.map(a => `<div class="lv-alert a-${a.kind}"><span class="tm">${a.t}</span><span>${a.text}</span></div>`).join('')
+        /* ⚠️ اللون والأيقونة جايين **من السيرفر** مش من كلاس CSS
+           (2026-08-07). كانت `.a-sale/.a-checkin/.a-checkout` تلات
+           كلاسات مكتوبة بالإيد، فأي نوع حدث جديد (مرتجع، هدية،
+           استلام عهدة) بيطلع بلا لون ومحدش واخد باله إنه ناقص.
+           دلوقتي `TrackEvent::TYPES` هو المصدر الوحيد للاتنين. */
+        ? list.map(a => `<div class="lv-alert" style="border-color:${a.color}">
+             <span class="tm">${a.t}</span>
+             <span class="ic">${a.icon || ''}</span>
+             <span class="rp">${esc(a.rep)}</span>
+             <span>${esc(a.text)}</span></div>`).join('')
         : `<div class="lv-dim">${T.noAlerts}</div>`;
 }
 

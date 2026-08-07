@@ -74,4 +74,5 @@ return [
     'vehicles' => 'Vehicles',
 
     'audit' => 'Activity Log',
+    'app_version' => 'App Version',
 ];

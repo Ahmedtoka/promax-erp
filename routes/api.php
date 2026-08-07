@@ -25,6 +25,13 @@ Route::post('/login', [AuthApiController::class, 'login'])
     // افتراضياً، فالراوت ده كان مفتوح تماماً للتخمين.
     ->middleware('throttle:5,1');
 
+// ═══ إصدار الأبلكيشن — **من غير توكن عن قصد** (2026-08-07) ═══
+// شاشة «لازم تحدّث» بتظهر قبل اللوجين كمان: المندوب اللي نسخته
+// قديمة ممكن يكون خارج الجلسة، ولو الإندبوينت محمي هيتقفل عليه
+// الأبلكيشن من غير ما يعرف السبب ولا يقدر يحدّث. مفيش أي داتا
+// حساسة هنا — أرقام إصدار ورابط تنزيل عام.
+Route::get('/app-version', [\App\Http\Controllers\AppVersionController::class, 'api']);
+
 // 'locale' بيتنادى تاني بعد api.token عشان اليوزر يكون اتحدد
 // وناخد users.locale — مجموعة الـ api في bootstrap بتشتغل قبل التوكن
 Route::middleware(['api.token', 'locale'])->group(function () {
