@@ -72,7 +72,8 @@ class Client extends Model
         'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',
         'channel_id', 'group_id', 'branch_id', 'sub_channel', 'parent_id', 'uses_channel_discount',
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
-        'governorate', 'location_url', 'lat', 'lng',
+        'governorate', 'location_url', 'lat', 'lng', 'address_ar',
+        'location_confirmed_at', 'location_confirmed_by', 'location_source',
         'discount', 'is_new', 'photo_path', 'docs_path', 'docs_type', 'has_docs',
         'purchases', 'collections', 'returns', 'rebates', 'settlements', 'balance', 'withheld',
         'first_activity_at', 'last_activity_at', 'last_payment_at',
@@ -102,6 +103,7 @@ class Client extends Model
             'first_activity_at' => 'date',
             'last_activity_at' => 'date',
             'last_payment_at' => 'date',
+            'location_confirmed_at' => 'datetime',
         ];
     }
 
@@ -696,6 +698,51 @@ public function zone(): BelongsTo
         // ⚠️ `null` لو لسه مفيش أول توريد — الافتراض إن أول توريد هو
         // النهارده كان بيدي ميعاد استحقاق بيتحرك كل يوم (نفس فخ العقد)
         return $this->first_activity_at?->copy()->addDays($days);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * اللوكيشن والعنوان (2026-08-08)
+     * ═══════════════════════════════════════════════════════════
+     */
+
+    /**
+     * العنوان بلغة الواجهة.
+     *
+     * ⚠️ **`address` إنجليزي و`address_ar` عربي** — مش `address` +
+     * `address_en` زي الأسماء. السبب في المايجريشن: العمود القديم
+     * إنجليزي أصلاً وعليه داتا حية، وإعادة تسميته كانت مخاطرة
+     * مالهاش مكسب. الدالة دي هي المكان الوحيد اللي بيعرف الفرق ده.
+     */
+    public function displayAddress(): string
+    {
+        $ar = trim((string) $this->address_ar);
+        $en = trim((string) $this->address);
+
+        return app()->getLocale() === 'ar'
+            ? ($ar !== '' ? $ar : $en)
+            : ($en !== '' ? $en : $ar);
+    }
+
+    /** «7 شارع 9 — المعادي — القاهرة» — الأجزاء الفاضية بتتشال */
+    public function fullAddress(): string
+    {
+        return implode(' — ', array_filter([
+            $this->displayAddress(),
+            $this->zone?->displayName(),
+            $this->governorateLabel(),
+        ], fn ($p) => trim((string) $p) !== ''));
+    }
+
+    /**
+     * ⚠️ **موثوق ≠ موجود.** الإحداثيات ممكن تكون جاية من استيراد أو
+     * من جيوكودينج تقريبي على نص عنوان — والاتنين تخمين. الموثوق هو
+     * اللي بني آدم أكّده من زيارة فعلية، وده اللي الفيريفاي هيتبني
+     * عليه بعدين.
+     */
+    public function locationTrusted(): bool
+    {
+        return $this->hasLocation() && $this->location_confirmed_at !== null;
     }
 
     public function collectionRate(): float

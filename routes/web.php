@@ -204,6 +204,19 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/{import}', [\App\Http\Controllers\ImportController::class, 'preview'])->name('.preview');
             Route::post('/{import}/apply', [\App\Http\Controllers\ImportController::class, 'apply'])->name('.apply');
         });
+        // ═══ تأكيد لوكيشن العملاء من زيارات المناديب (2026-08-08) ═══
+        //
+        // ⚠️ **`suggest` بره صلاحية التأكيد عن قصد.** هي بتقرا من
+        // الخريطة ومابتكتبش أي حاجة — وتقييدها كان بيمنع المدير من
+        // يشوف الاقتراح قبل ما يقرر يوصّله لمين.
+        Route::get('/client-locations', [\App\Http\Controllers\ClientLocationController::class, 'index'])
+            ->name('client_locations');
+        Route::post('/client-locations/suggest', [\App\Http\Controllers\ClientLocationController::class, 'suggest'])
+            ->name('client_locations.suggest');
+        Route::post('/client-locations/{client}', [\App\Http\Controllers\ClientLocationController::class, 'confirm'])
+            ->middleware('role:admin,manager,branch_manager')
+            ->name('client_locations.confirm');
+
         Route::get('/import-template/{kind}', [\App\Http\Controllers\ImportController::class, 'template'])
             ->middleware('role:admin')->name('import.template');
 

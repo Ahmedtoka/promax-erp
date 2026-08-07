@@ -28,6 +28,7 @@ return [
     // ---------- الروابط ----------
     'overview' => 'نظرة عامة',
     'clients' => 'العملاء',
+    'client_locations' => 'لوكيشن العملاء',
     'chains' => 'السلاسل',
     'channels' => 'القنوات',
     'contracts' => 'العقود',

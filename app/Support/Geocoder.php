@@ -23,6 +23,8 @@ final class Geocoder
 {
     private const ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 
+    private const REVERSE = 'https://nominatim.openstreetmap.org/reverse';
+
     /** آخر طلب اتبعت إمتى — لضمان فاصل ثانية بين الطلبات */
     private static float $lastCall = 0.0;
 
@@ -102,5 +104,114 @@ final class Geocoder
         $lng = (float) $hit['lon'];
 
         return MapLink::valid($lat, $lng) ? ['lat' => round($lat, 7), 'lng' => round($lng, 7)] : null;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * عكس الجيوكودينج — من إحداثيات لعنوان (2026-08-08)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * المندوب بيعمل تشيك إن عند العميل، والسيستم بياخد نقطته. الشاشة
+     * بتاعت تأكيد اللوكيشن بتستخدم دي عشان تملا العنوان بدل ما اللي
+     * بيراجع يكتب 300 عنوان بإيده.
+     *
+     * ⚠️ **OSM مش جوجل.** السيستم كله شغال على OpenStreetMap من غير
+     * أي مفتاح API (نفس الخرايط في كل الشاشات) — جوجل بتحتاج حساب
+     * فوترة ومفتاح ينتهي، وبتمنع تخزين نتايجها في قواعد بيانات، وده
+     * بالظبط اللي إحنا بنعمله هنا.
+     *
+     * ⚠️ **بيرجّع اللغتين في نداءين.** Nominatim بترجّع لغة واحدة لكل
+     * طلب (`accept-language`)، والشاشة محتاجة الاتنين — فبنسأل مرتين
+     * بفاصل الثانية المفروض عليهم.
+     *
+     * ⚠️ **النتيجة اقتراح مش حقيقة.** OSM بتدي أقرب معلَم مش عنوان
+     * المحل — واللي بيراجع بيصلّح بإيده. عشان كده الشاشة بتحط النص
+     * في خانة قابلة للتعديل مش بتحفظه على طول.
+     *
+     * @return array{ar: string, en: string, governorate: ?string}|null
+     */
+    public static function reverse(float $lat, float $lng): ?array
+    {
+        if (! MapLink::valid($lat, $lng)) {
+            return null;
+        }
+
+        $ar = self::reverseIn($lat, $lng, 'ar');
+        $en = self::reverseIn($lat, $lng, 'en');
+
+        if ($ar === null && $en === null) {
+            return null;
+        }
+
+        return [
+            // ⚠️ لو لغة وقعت، بنحط التانية مكانها — نص بلغة غلط أحسن
+            // من خانة فاضية والمستخدم مش عارف إذا كان الزرار اشتغل
+            'ar' => $ar['label'] ?? $en['label'] ?? '',
+            'en' => $en['label'] ?? $ar['label'] ?? '',
+            'governorate' => $ar['governorate'] ?? $en['governorate'] ?? null,
+        ];
+    }
+
+    /** @return array{label: string, governorate: ?string}|null */
+    private static function reverseIn(float $lat, float $lng, string $lang): ?array
+    {
+        $wait = self::$lastCall + 1.1 - microtime(true);
+
+        if ($wait > 0) {
+            usleep((int) ($wait * 1_000_000));
+        }
+
+        self::$lastCall = microtime(true);
+
+        $url = self::REVERSE.'?'.http_build_query([
+            'lat' => $lat,
+            'lon' => $lng,
+            'format' => 'json',
+            // ⚠️ **18 = مستوى المبنى.** الافتراضي بيرجّع المدينة كلها،
+            // وعنوان «القاهرة» على عميل مالوش أي فايدة.
+            'zoom' => 18,
+            'addressdetails' => 1,
+            'accept-language' => $lang,
+        ]);
+
+        $ctx = stream_context_create(['http' => [
+            'method' => 'GET',
+            'timeout' => 8,
+            'ignore_errors' => true,
+            'header' => "User-Agent: PROMAX-ERP (erp.promaxfoods.com)\r\n",
+        ]]);
+
+        $body = rescue(fn () => file_get_contents($url, false, $ctx), null, false);
+
+        if (! is_string($body)) {
+            return null;
+        }
+
+        $json = json_decode($body, true);
+
+        if (! is_array($json) || ! isset($json['display_name'])) {
+            return null;
+        }
+
+        $a = $json['address'] ?? [];
+
+        // ⚠️ **بنبني السطر بنفسنا مش بناخد `display_name`.** الأخيرة
+        // بترجّع 8 أجزاء آخرهم «مصر» و«الشرق الأوسط» والرقم البريدي —
+        // سطر مالوش لازمة على ورقة فاتورة.
+        $parts = array_filter([
+            $a['house_number'] ?? null,
+            $a['road'] ?? null,
+            $a['neighbourhood'] ?? $a['suburb'] ?? null,
+            $a['city_district'] ?? null,
+        ]);
+
+        $label = $parts !== []
+            ? implode('، ', $parts)
+            : (string) $json['display_name'];
+
+        return [
+            'label' => $label,
+            'governorate' => $a['state'] ?? $a['governorate'] ?? null,
+        ];
     }
 }

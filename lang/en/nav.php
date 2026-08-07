@@ -28,6 +28,7 @@ return [
     // ---------- Links ----------
     'overview' => 'Overview',
     'clients' => 'Clients',
+    'client_locations' => 'Client locations',
     'chains' => 'Chains',
     'channels' => 'Channels',
     'contracts' => 'Contracts',

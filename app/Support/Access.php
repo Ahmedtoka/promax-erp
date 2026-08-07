@@ -39,7 +39,7 @@ class Access
     public const SCREENS = [
         // ═══ Channel Manager — الشركة كلها ما عدا الإعدادات ═══
         'manager' => [
-            'erp.overview', 'erp.clients', 'erp.groups', 'erp.channels',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
@@ -61,7 +61,7 @@ class Access
         // ⚠️ الفلترة نفسها مش هنا. دي بتحصل في الكويري بـ`canSeeBranch`.
         // الخريطة بتقول «الشاشة دي مسموحة»، والكويري بتقول «الصفوف دي».
         'branch_manager' => [
-            'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             'erp.leads', 'erp.stock', 'erp.batches', 'erp.reports',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
@@ -92,7 +92,7 @@ class Access
         // مش بيوزّع شغل ولا بيحرّك بضاعة. ولو شاف زرار «نزّل أمر توريد»
         // هيدوس عليه يوم ويطلّع بضاعة محدش طلبها.
         'accountant' => [
-            'erp.overview', 'erp.clients', 'erp.groups', 'erp.contracts',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
             // تصفية المناديب — ده شغل الحسابات الأساسي (2026-08-06)
             'erp.repclose',
@@ -237,6 +237,9 @@ class Access
         'nav.group_clients' => [
             ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
             ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
+            // ⚠️ العدّاد `null` مش رولز — الخانة دي مفتاح عدّاد
+            // (`?string`)، وحطّ أراي فيها كان بيرمي 500 على كل صفحة
+            ['erp.client_locations', '📍', 'nav.client_locations', 'erp.client_locations', null],
             ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
