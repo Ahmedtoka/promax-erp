@@ -65,8 +65,26 @@ class Pricing
         return PriceList::default();
     }
 
+    /**
+     * كود قايمة السعر المعتمدة — للعرض والتوافق القديم.
+     *
+     * ⚠️ **مشتقة من `listRowFor` أولاً** (إصلاح 2026-08-07). كانت
+     * بتقرا عمود `price_list` النصي لوحده، فكانت بتخالف اللي
+     * الفاتورة بتتحاسب بيه لما العميل يبقى على قايمة مسمّاة.
+     * دلوقتي مصدر واحد، والقراءة النصية بقت احتياطي للداتابيز
+     * اللي لسه ماهاجرتش.
+     *
+     * ⚠️ **بترجّع كود القايمة زي ما هو حتى لو مش `old`/`new`.**
+     * اللي بيمرّرها لـ`listPrice` كنص لازم يبقى فاهم إن القايمة
+     * المسمّاة أسعارها في `price_list_items` — عشان كده كل مسارات
+     * البيع بتمرّر صف القايمة نفسه مش الكود.
+     */
     public static function listFor(Client $client): string
     {
+        if (($row = self::listRowFor($client)) !== null) {
+            return $row->code;
+        }
+
         // ⚠️ liveContract() هي المصدر الوحيد للعقد: بتاع العميل لو موجود
         // وسارٍ، وإلا بتاع سلسلته. وبتتأكد إنه active ومش منتهي — لولا كده
         // كان ممكن العميل ياخد قائمة سعر من عقد ميت.
@@ -229,12 +247,22 @@ class Pricing
         ];
     }
 
-    /** سعر الوحدة للعميل بعد الخصم — الاستخدام السريع */
+    /**
+     * سعر الوحدة للعميل بعد الخصم — الاستخدام السريع.
+     *
+     * ⚠️ **بتمرّ من `listRowFor` زي `quote` بالظبط** (إصلاح 2026-08-07).
+     * كانت بتنادي `listFor` النصية اللي بتقرا عمود `price_list`
+     * (`old`/`new`) بس، بينما الفاتورة بتتعمل من `quote` اللي بتقرا
+     * `price_list_id`. النتيجة: عميل على قايمة مسمّاة (أو قايمته
+     * القديمة على العمود بس) كان المندوب يشوف سعر في الشاشة
+     * والفاتورة تطلع بسعر تاني — فرق مابيبانش غير في مراجعة آخر
+     * الشهر. **الدالتين دلوقتي بيقروا من نفس المُحدِّد.**
+     */
     public static function unitPrice(Client $client, Product $product): float
     {
-        $list = self::listFor($client);
+        $row = self::listRowFor($client);
 
-        return round(self::listPrice($product, $list) * (1 - $client->effectiveDiscount()), 2);
+        return round(self::listPrice($product, $row ?? self::listFor($client)) * (1 - $client->effectiveDiscount()), 2);
     }
 
     /**
@@ -254,8 +282,20 @@ class Pricing
         return $price > 0 ? round(($price - (float) $product->cost) / $price, 4) : 0.0;
     }
 
+    /**
+     * اسم القايمة للعرض.
+     *
+     * ⚠️ **القوايم المسمّاة بتظهر باسمها الحقيقي** (2026-08-07) —
+     * قبل كده أي كود مش `old`/`new` كان بيتعرض «الجديد»، فالعميل
+     * اللي على «قائمة الجملة» كانت الشاشة تقول عنه «الجديد».
+     */
     public static function listLabel(string $list): string
     {
-        return __('stock.price_list_'.(in_array($list, self::LISTS, true) ? $list : self::LIST_NEW));
+        if (in_array($list, self::LISTS, true)) {
+            return __('stock.price_list_'.$list);
+        }
+
+        return PriceList::where('code', $list)->first()?->displayName()
+            ?? __('stock.price_list_'.self::LIST_NEW);
     }
 }

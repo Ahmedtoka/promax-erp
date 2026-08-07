@@ -87,7 +87,7 @@
      * والمستخدم بيشوف صفحة سليمة ومش فاهم ليه الحفظ مانفعش.
      */
     $stepFields = [
-        2 => ['price_list', 'discount', 'has_contract', 'contract_type',
+        2 => ['price_list_id', 'discount', 'has_contract', 'contract_type',
               'contract_payment_days', 'contract_payment_days_from',
               'contract_starts_at', 'contract_ends_at', 'contract_note',
               'contract_clauses', 'contract_file', 'clause'],
@@ -460,16 +460,25 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('client.price_list') }} {!! $star !!}</label>
-                <select name="price_list" style="width:100%" data-req class="{{ trim($bad('price_list')) }}">
-                    {{-- ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
-                         الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
-                         غير ما يقرا — والعميل اللي المفروض على القائمة
-                         القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
+                {{-- ⚠️ **القوايم من الداتابيز مش متبتّتة** (2026-08-07).
+                     كانت «قديم/جديد» مكتوبين في الفيو، فأي قايمة جديدة
+                     بتتعمل من شاشة التسعير ماكانش فيه طريقة يتسكّن
+                     عليها عميل. والقيمة بقت `price_list_id` لأن ده
+                     اللي الفاتورة بتتحاسب منه فعلاً.
+
+                     ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
+                     الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
+                     غير ما يقرا — والعميل اللي المفروض على القائمة
+                     القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
+                <select name="price_list_id" style="width:100%" data-req class="{{ trim($bad('price_list_id')) }}">
                     <option value="">— {{ __('client.pick_price_list') }} —</option>
-                    <option value="new" @selected($v('price_list') === 'new')>{{ __('stock.price_list_new') }}</option>
-                    <option value="old" @selected($v('price_list') === 'old')>{{ __('stock.price_list_old') }}</option>
+                    @foreach ($priceLists as $pl)
+                        <option value="{{ $pl->id }}" @selected((int) $v('price_list_id') === $pl->id)>
+                            {{ $pl->displayName() }}@unless ($pl->active) — {{ __('common.inactive') }}@endunless
+                        </option>
+                    @endforeach
                 </select>
-                {!! $err('price_list') !!}
+                {!! $err('price_list_id') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
             </div>
             <div>

@@ -466,6 +466,19 @@ class ErpController extends Controller
             'zones' => \App\Models\Branch::scope(Zone::query(), $request->user())
                 ->orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
+            // ⚠️ **قوايم الأسعار الحقيقية من الداتابيز** (2026-08-07).
+            // الفورم كان بيعرض «قديم/جديد» متبتّتين، فأي قايمة جديدة
+            // بيتعملها المستخدم من شاشة التسعير ماكانش فيه طريقة
+            // يسكّن عليها عميل — والسيستم متبني على قوايم مفتوحة العدد.
+            // القايمة الموقوفة بتتضاف لو العميل عليها، وإلا الـselect
+            // بيبعت فاضي وأول حفظة بتفكّه منها في صمت.
+            'priceLists' => (function () use ($src) {
+                $lists = \App\Models\PriceList::where('active', true)->orderBy('id')->get();
+
+                return $src?->priceListRow && ! $lists->contains('id', $src->price_list_id)
+                    ? $lists->push($src->priceListRow)
+                    : $lists;
+            })(),
             // ⚠️ **سلسلة العميل بتتضاف حتى لو موقوفة.** القايمة بتعرض
             // المفعّل بس، فالعميل اللي سلسلته اتوقفت مافيش أوبشن
             // بتطابقه — الـselect بيبعت فاضي وأول حفظ بيفك ربطه
@@ -731,8 +744,13 @@ class ErpController extends Controller
             // كاش/آجل — فاضي = حسب القناة، و`danger` كاش إجباري
             'payment_terms' => ['nullable', 'in:cash,credit'],
             'discount' => ['required', 'numeric', 'min:0', 'max:100'],
-            // قائمة السعر اللي العميل بيتحاسب بيها — إجبارية
-            'price_list' => ['required', 'in:old,new'],
+            // ⚠️ **قائمة السعر بقت بالـid مش بالنص** (2026-08-07).
+            // الفاتورة بتتحاسب من `price_list_id` (عبر `Pricing::listRowFor`)،
+            // والفورم كان بيحفظ عمود `price_list` النصي بس — فالعميل
+            // الجديد كان `price_list_id` بتاعه null والفاتورة تاخد
+            // القايمة الافتراضية بدل اللي المستخدم اختارها.
+            // إجبارية: البيع من غير قايمة معتمدة = سعر محدش أقرّه.
+            'price_list_id' => ['required', 'exists:price_lists,id'],
             'taxable' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax_id' => ['nullable', 'string', 'max:40'],
@@ -869,6 +887,20 @@ class ErpController extends Controller
         $fields['discount'] = (float) ($data['discount'] ?? 0) / 100;
         // خصم صفر معناه «خُد خصم السلسلة أو القناة»
         $fields['uses_channel_discount'] = $fields['discount'] <= 0;
+
+        // ⚠️ **مزامنة عمود `price_list` النصي مع القايمة المختارة**
+        // (2026-08-07). الفورم بقى بيبعت `price_list_id` بس، والعمود
+        // النصي لسه بيتقرا في مسارات قديمة (`price_mode` في أوامر
+        // التوريد وتقارير). سيبانه بقيمة قديمة كان معناه إن العميل
+        // اتنقل لقايمة جديدة والمسارات دي فاضلة على القديمة.
+        // القايمة المسمّاة (مش `old`/`new`) بتتخزن `new` لأن العمود
+        // enum — و`price_list_id` هو المرجع الحقيقي في كل الأحوال.
+        if (! empty($data['price_list_id'])) {
+            $code = \App\Models\PriceList::find($data['price_list_id'])?->code;
+            $fields['price_list'] = in_array($code, \App\Services\Pricing::LISTS, true)
+                ? $code
+                : \App\Services\Pricing::LIST_NEW;
+        }
 
         $fields['taxable'] = (bool) ($data['taxable'] ?? false);
         $fields['tax_rate'] = (float) ($data['tax_rate'] ?? 0) / 100;

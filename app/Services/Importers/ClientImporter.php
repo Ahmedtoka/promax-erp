@@ -309,7 +309,13 @@ class ClientImporter extends Importer
                     'zone_id' => $zoneId,
                     'group_id' => $groupId,
                     'category' => $this->category($row['category'] ?? null) ?? 'ok',
+                    // ⚠️ **العمودين مع بعض** (إصلاح 2026-08-07): الفاتورة
+                    // بتتحاسب من `price_list_id`، والعمود النصي لسه بيتقرا
+                    // في مسارات قديمة. المستورد كان بيكتب النصي بس —
+                    // فالعميل المستورد كان بياخد القايمة الافتراضية في
+                    // الفاتورة مهما كان مكتوب في الشيت.
                     'price_list' => $this->priceList($row['price_list'] ?? null),
+                    'price_list_id' => $this->priceListId($row['price_list'] ?? null),
                     'lat' => Sheet::number($row['lat'] ?? null),
                     'lng' => Sheet::number($row['lng'] ?? null),
                     // ⚠️ وجود رقم ضريبي معناه العميل مسجّل، فبيبقى خاضع.
@@ -584,6 +590,36 @@ class ClientImporter extends Importer
             'old', 'قديم' => 'old',
             default => 'new',
         };
+    }
+
+    /**
+     * صف قايمة السعر من الشيت — بالكود أو بالاسم أو بالعربي.
+     *
+     * ⚠️ **الشيت ممكن يكتب اسم قايمة مسمّاة** («قائمة الجملة») مش بس
+     * قديم/جديد — والمطابقة بالاسم كمان عشان اللي بيملا الشيت
+     * مايبقاش مضطر يعرف الأكواد. مش لاقي حاجة ⇒ الافتراضية، عشان
+     * العميل مايتسجلش من غير قايمة ويتباع بصفر.
+     */
+    private function priceListId(?string $v): ?int
+    {
+        $key = trim((string) $v);
+
+        if ($key === '') {
+            return \App\Models\PriceList::default()?->id;
+        }
+
+        $code = match ($key) {
+            'قديم' => 'old',
+            'جديد' => 'new',
+            default => $key,
+        };
+
+        $row = \App\Models\PriceList::where('code', $code)
+            ->orWhere('name', $key)
+            ->orWhere('name_en', $key)
+            ->first();
+
+        return ($row?->id) ?? \App\Models\PriceList::default()?->id;
     }
 
     private function channelId(?string $name, array &$cache): ?int
