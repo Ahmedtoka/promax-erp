@@ -480,12 +480,34 @@ class PickOrder extends Model
             return $error ?? $e->getMessage();
         }
 
+        // ⚠️ **الإشعار ده بيتقرا من مسافة ذراع وفي الشمس** (طلب
+        // المالك 2026-08-07). المندوب لازم يعرف من غير ما يفتح
+        // الأبلكيشن: بضاعة إيه، **فين**، قد إيه، وبمعاد إمتى.
+        // النسخة القديمة كانت «الأمر PCK-1010 جاهز» — رقم مالوش
+        // معنى لواحد واقف في الشارع.
+        $fresh = $this->fresh(['items']);
+        $items = $fresh->items->where('qty_picked', '>', 0)->count();
+
+        // جزء المعاد بيتبني هنا مش في ملف اللغة — الشرط (النهارده /
+        // يوم كذا / مفيش معاد) مايتعبّرش عنه بـplaceholder واحد
+        $due = match (true) {
+            $this->needed_on === null => '',
+            $this->needed_on->isToday() => __('stock.notif_pick_due_today'),
+            default => __('stock.notif_pick_due_on', [
+                'date' => $this->needed_on->format('d/m'),
+            ]),
+        };
+
         AppNotification::send(
             $this->rep,
-            fn () => __('stock.notif_pick_ready_title', ['number' => $this->number]),
-            fn () => __('stock.notif_pick_ready_body', [
+            fn () => __('stock.notif_pick_ready_title', [
                 'warehouse' => $this->warehouse->displayName(),
-                'qty' => $this->fresh()->qtyPicked(),
+            ]),
+            fn () => __('stock.notif_pick_ready_body', [
+                'qty' => $fresh->qtyPicked(),
+                'items' => $items,
+                'number' => $this->number,
+                'due' => $due,
             ]),
             good: true,
         );
