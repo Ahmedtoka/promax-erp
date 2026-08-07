@@ -103,6 +103,10 @@ img{display:block;max-width:100%}
    ⚠️ في اللياوت مش في شاشة واحدة: كل فورم في السيستم بيستخدم نفس
    الكلاسات، ونسخة لكل شاشة بتفضل تفرق عن التانية مع الوقت. */
 input.bad, select.bad, textarea.bad{border-color:var(--red)!important;background:#FDECEC!important}
+/* شرح تحت الخانة — بيقول القيمة دي بتروح فين.
+   ⚠️ أصغر وأخفت من سطر الخطأ عن قصد: الخطأ لازم يخطف العين والشرح
+   لازم يتقرا لما حد يدوّر عليه بس. */
+.fhint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}
 .errline{color:var(--red);font-size:11px;font-weight:800;margin-top:5px;line-height:1.6}
 .req-star{color:var(--red);font-weight:900}
 .alert.info{border-inline-start-color:var(--blue)}

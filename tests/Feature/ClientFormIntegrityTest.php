@@ -268,13 +268,25 @@ class ClientFormIntegrityTest extends TestCase
 
     public function test_the_leanest_possible_form_still_saves(): void
     {
-        // ⚠️ الطرف التاني: مندوب مستعجل كتب الاسم وضغط حفظ. لازم يعدّي
-        // بقيم افتراضية معقولة مش يرمي خطأ على 12 خانة.
+        // ⚠️ الطرف التاني: مندوب مستعجل كتب اللي الشاشة بتطلبه بنجمة
+        // وضغط حفظ. لازم يعدّي بقيم افتراضية معقولة مش يرمي خطأ على
+        // 12 خانة.
+        //
+        // ⚠️ **الحد الأدنى اتوسّع** (قرار المالك 2026-08-08): الاسم
+        // الإنجليزي والقناة بقوا إجباريين على السيرفر كمان. الفورم كان
+        // عليه `data-req` ونجمة من زمان — يعني المتصفح بيمنع واللي
+        // بيبعت من غير المتصفح بيعدّي، والقاعدة الجديدة: **أي حاجة
+        // الشاشة بتقول عليها إجبارية لازم السيرفر يرفضها فاضية**.
+        //
+        // الباقي لسه بيتملّى لوحده: التصنيف `grow`، الحالة `pending`،
+        // الكود، وشروط الدفع من القناة.
         $admin = $this->makeAdmin();
 
         $this->actingAs($admin)->post('/erp/clients', [
             'name' => 'محل صغير',
-            'price_list' => 'new',
+            'name_en' => 'Small Shop',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
         ])->assertRedirect();
 
@@ -471,6 +483,8 @@ class ClientFormIntegrityTest extends TestCase
             'address' => 'شارع 9، المعادي',
             'notes' => 'ملاحظة مهمة اتكتبت بإيد',
             'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 5,
             'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
@@ -514,7 +528,9 @@ class ClientFormIntegrityTest extends TestCase
         $this->actingAs($this->makeAdmin());
 
         $base = ['name' => 'عميل من غير عقد', 'name_en' => 'No Contract Co',
-            'price_list' => 'new', 'discount' => 0];
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0];
 
         // من غير عقد → بيعدّي
         $this->post(route('erp.clients.store'), $base)
@@ -535,7 +551,9 @@ class ClientFormIntegrityTest extends TestCase
         // بعقد بنوع → بيعدّي
         $this->post(route('erp.clients.store'), [
             'name' => 'عميل بعقد كامل', 'name_en' => 'Full Contract Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -557,7 +575,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $base = [
             'name' => 'عميل', 'name_en' => 'Client A',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -585,7 +605,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $this->post(route('erp.clients.store'), [
             'name' => 'عميل', 'name_en' => 'Days Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -662,7 +684,9 @@ class ClientFormIntegrityTest extends TestCase
         $this->from(route('erp.clients.new'))
             ->post(route('erp.clients.store'), [
                 'name' => 'عميل', 'name_en' => 'Tax Co',
-                'price_list' => 'new', 'discount' => 0,
+                'price_list' => 'new',
+                'channel_id' => $this->makeChannel()->id,
+                'price_list_id' => $this->makePriceList()->id, 'discount' => 0,
                 'tax_rate' => 999,   // فوق الـ100
             ])->assertSessionHasErrors('tax_rate');
 
@@ -713,6 +737,8 @@ class ClientFormIntegrityTest extends TestCase
             'name' => 'محل من غير عقد',
             'name_en' => 'No Contract Shop',
             'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
             'has_contract' => 0,
             'clause' => ['invoice_discount' => ['on' => 1, 'value' => '']],
@@ -723,6 +749,8 @@ class ClientFormIntegrityTest extends TestCase
             'name' => 'محل من غير عقد',
             'name_en' => 'No Contract Shop',
             'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
             'has_contract' => 0,
         ])->assertSessionHasNoErrors();
@@ -900,7 +928,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $base = [
             'name' => 'عميل عقد', 'name_en' => 'Duration Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -932,7 +962,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $this->post(route('erp.clients.store'), [
             'name' => 'عميل', 'name_en' => 'No Duration Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -954,7 +986,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $this->post(route('erp.clients.store'), [
             'name' => 'عميل بالطلب', 'name_en' => 'Per Order Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -978,7 +1012,9 @@ class ClientFormIntegrityTest extends TestCase
 
         $this->post(route('erp.clients.store'), [
             'name' => 'عميل مفتوح', 'name_en' => 'Open Co',
-            'price_list' => 'new', 'discount' => 0, 'has_contract' => 1,
+            'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
@@ -1097,6 +1133,8 @@ class ClientFormIntegrityTest extends TestCase
             'name' => 'عميل بخانات فاضية',
             'name_en' => 'Empty Selects Co',
             'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
             // كل الاختياري فاضي — زي فورم اتساب من غير ما حد يلمسه
             'phone' => '',

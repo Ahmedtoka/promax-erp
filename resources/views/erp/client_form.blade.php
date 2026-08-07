@@ -81,6 +81,25 @@
     $star = '<b class="req-star">*</b>';
 
     /**
+     * سطر الشرح تحت الخانة — **بيقول القيمة دي بتروح فين**.
+     *
+     * ⚠️ **مش وصف للخانة، ده وصف لأثرها.** «اسم العميل» مالهاش لازمة
+     * كشرح؛ اللي بيدخّل الداتا محتاج يعرف إن الاسم الإنجليزي ده هو
+     * اللي هيطلع على الفاتورة قدام العميل، وإن القناة بتحدد سعره.
+     * الشروح اللي بتعيد اسم الخانة بتتقري كضوضاء وبيتوقف عن قراية
+     * كل الشروح بعد كام واحدة.
+     *
+     * ⚠️ والمفتاح ناقص = الخانة مابيبانش تحتها حاجة، مش خطأ. عشان
+     * إضافة خانة جديدة مايبقاش شرطها إن حد يفتكر يكتب شرحها.
+     */
+    $hint = function (string $key) {
+        $k = 'client.hint_'.$key;
+        $t = __($k);
+
+        return $t === $k ? '' : '<div class="fhint">'.e($t).'</div>';
+    };
+
+    /**
      * المرحلة اللي فيها أول خطأ — الصفحة بتفتح عليها.
      *
      * ⚠️ من غير ده، الفورم بيرجع على مرحلة 1 والخطأ في مرحلة 3،
@@ -203,6 +222,7 @@
                        class="{{ trim($bad('name_en')) }}"
                        placeholder="{{ __('client.name_en_ph') }}">
                 {!! $err('name_en') !!}
+                {!! $hint('name_en') !!}
             </div>
             <div>
                 <label class="f">{{ __('client.name_ar_field') }} {!! $star !!}</label>
@@ -211,6 +231,7 @@
                        value="{{ $own('name') }}" style="width:100%"
                        placeholder="{{ __('client.name_ar_ph') }}">
                 {!! $err('name') !!}
+                {!! $hint('name') !!}
             </div>
         </div>
 
@@ -231,6 +252,7 @@
                     @endforeach
                 </select>
                 {!! $err('channel_id') !!}
+                {!! $hint('channel_id') !!}
             </div>
             {{-- ⚠️ بتبدأ **مخفية** والـJS بيظهرها للكي أكاونت بس. لو
                  بدأت ظاهرة، بتبان وميضة على كل عميل أونلاين أو كاش فان
@@ -244,6 +266,7 @@
                     @endforeach
                 </select>
                 {!! $err('sub_channel') !!}
+                {!! $hint('sub_channel') !!}
             </div>
             <div>
                 <label class="f">{{ __('common.phone') }}</label>
@@ -251,6 +274,7 @@
                        class="{{ trim($bad('phone')) }}"
                        value="{{ $own('phone') }}" style="width:100%">
                 {!! $err('phone') !!}
+                {!! $hint('phone') !!}
             </div>
         </div>
 
@@ -265,6 +289,7 @@
                     @endforeach
                 </select>
                 {!! $err('governorate') !!}
+                {!! $hint('governorate') !!}
             </div>
             <div>
                 <label class="f">{{ __('geo.zone') }}</label>
@@ -286,6 +311,7 @@
                             title="{{ __('geo.add_zone') }}">+</button>
                 </div>
                 {!! $err('zone_id') !!}
+                {!! $hint('zone_id') !!}
                 <div id="zoneHint" style="font-size:11px;color:var(--muted);margin-top:5px"></div>
             </div>
         </div>
@@ -326,6 +352,7 @@
                        class="{{ trim($bad('address')) }}"
                        style="width:100%" placeholder="{{ __('client.address_ph') }}">
                 {!! $err('address') !!}
+                {!! $hint('address') !!}
             </div>
         </div>
 
@@ -341,6 +368,7 @@
                 </div>
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('geo.location_url_hint') }}</div>
                 {!! $err('location_url') !!}
+                {!! $hint('location_url') !!}
                 <div id="locMsg" style="font-size:11.5px;font-weight:700;margin-top:6px"></div>
 
                 {{-- ⚠️ الإحداثيات بتتحفظ في حقول مخفية. الرابط ممكن يتغيّر
@@ -363,6 +391,7 @@
                     @endforeach
                 </select>
                 {!! $err('branch_id') !!}
+                {!! $hint('branch_id') !!}
             </div>
             <div>
                 <label class="f">{{ __('client.chain') }}</label>
@@ -377,6 +406,7 @@
                             title="{{ __('client.new_chain') }}">+</button>
                 </div>
                 {!! $err('group_id') !!}
+                {!! $hint('group_id') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.chain_hint') }}</div>
             </div>
             <div>
@@ -391,6 +421,7 @@
                     @endforeach
                 </select>
                 {!! $err('manager_id') !!}
+                {!! $hint('manager_id') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.account_manager_hint') }}</div>
             </div>
         </div>
@@ -434,6 +465,7 @@
                     @endforeach
                 </select>
                 {!! $err('payment_terms') !!}
+                {!! $hint('payment_terms') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.pay_method_hint') }}</div>
             </div>
             <div class="payDaysBox">
@@ -443,6 +475,7 @@
                        value="{{ old('payment_days', $src?->payment_days) }}"
                        placeholder="{{ __('client.pay_days_ph') }}">
                 {!! $err('payment_days') !!}
+                {!! $hint('payment_days') !!}
             </div>
             <div class="payDaysBox">
                 <label class="f">{{ __('client.pay_days_from') }}</label>
@@ -455,6 +488,7 @@
                     @endforeach
                 </select>
                 {!! $err('payment_days_from') !!}
+                {!! $hint('payment_days_from') !!}
             </div>
         </div>
         {{-- ⚠️ **العقد يغلب الخانتين دول.** العقد ورقة موقّعة والخانة
@@ -549,6 +583,7 @@
                     @endforeach
                 </select>
                 {!! $err('price_list_id') !!}
+                {!! $hint('price_list_id') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
             </div>
             <div>
@@ -557,6 +592,7 @@
                        class="{{ trim($bad('discount')) }}"
                        value="{{ old('discount', $src ? round((float) $src->discount * 100, 2) : 0) }}">
                 {!! $err('discount') !!}
+                {!! $hint('discount') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
             </div>
             {{-- ⚠️ **شروط الدفع اتنقلت لخطوة ١** (2026-08-08). كانت هنا
@@ -581,6 +617,7 @@
                         @endforeach
                     </select>
                     {!! $err('category') !!}
+                    {!! $hint('category') !!}
                 </div>
             @endif
         </div>
@@ -665,6 +702,7 @@
                         @endforeach
                     </select>
                     {!! $err('contract_type') !!}
+                    {!! $hint('contract_type') !!}
                 </div>
                 {{-- ⚠️ **خصم الفاتورة حقل أساسي مش تشيك بوكس.** هو البند
                      الوحيد اللي بينزل على سعر البيع فعلاً، وكل عقد تقريباً
@@ -693,6 +731,7 @@
                            name="clause[invoice_discount][value]"
                            value="{{ $presetVal('invoice_discount') !== '' ? $presetVal('invoice_discount') : '' }}">
                     {!! $err('clause.invoice_discount.value') !!}
+                    {!! $hint('cl_invoice_discount_value') !!}
                     <div style="font-size:11px;color:var(--muted);margin-top:5px">
                         {{ $locked('invoice_discount') ? '🔒 '.__('client.clause_locked_hint') : __('client.invoice_discount_hint') }}
                     </div>
@@ -730,6 +769,7 @@
                         @endforeach
                     </select>
                     {!! $err('contract_duration') !!}
+                    {!! $hint('contract_duration') !!}
                     <div id="durationHint" style="font-size:11px;color:var(--muted);margin-top:5px"></div>
                 </div>
                 <div id="startsAtBox" style="display:none">
@@ -741,11 +781,16 @@
                          المستخدم بيختار 3 شهور، النهاية بتتحسب صح، وبعدين
                          بيغيّر البداية فالنهاية بتفضل مكانها والفرق يبقى
                          67 يوم — والحفظ بيترفض وهو مش فاهم ليه. --}}
+                    {{-- ⚠️ `data-req-contract` مش `data-req`: البوكس بيتخبّى
+                         في «تعامل بالطلب»، و`hiddenInPane` بتستثني
+                         المخبّي — فالنوع ده بيعدّي والباقي لأ. --}}
                     <input type="date" name="contract_starts_at" id="startsAt" style="width:100%"
+                           data-req-contract
                            class="{{ trim($bad('contract_starts_at')) }}"
                            onchange="syncDuration()"
                            value="{{ old('contract_starts_at', $ct?->starts_at?->toDateString() ?? today()->toDateString()) }}">
                     {!! $err('contract_starts_at') !!}
+                    {!! $hint('contract_starts_at') !!}
                 </div>
                 <div id="endsAtBox" style="display:none">
                     <label class="f">{{ __('client.ends_at') }}</label>
@@ -754,6 +799,7 @@
                            onchange="showSpan()"
                            value="{{ old('contract_ends_at', $ct?->ends_at?->toDateString()) }}">
                     {!! $err('contract_ends_at') !!}
+                    {!! $hint('contract_ends_at') !!}
                     <div id="spanHint" style="font-size:11px;color:var(--muted);margin-top:5px"></div>
                 </div>
             </div>
@@ -821,6 +867,7 @@
                            id="paymentDays" class="{{ trim($bad('contract_payment_days')) }}"
                            value="{{ old('contract_payment_days', $ct?->paymentDays()) }}">
                     {!! $err('contract_payment_days') !!}
+                    {!! $hint('contract_payment_days') !!}
                 </div>
                 <div>
                     <label class="f">{{ __('client.days_counted_from') }}</label>
@@ -840,6 +887,7 @@
                         @endforeach
                     </select>
                     {!! $err('contract_payment_days_from') !!}
+                    {!! $hint('contract_payment_days_from') !!}
                 </div>
             </div>
 
@@ -911,6 +959,7 @@
                            class="{{ trim($bad('tax_rate')) }}"
                            value="{{ old('tax_rate', $src ? round((float) $src->tax_rate * 100, 2) : 14) }}">
                     {!! $err('tax_rate') !!}
+                    {!! $hint('tax_rate') !!}
                 </div>
                 <div>
                     <label class="f">{{ __('client.tax_cycle') }}</label>
@@ -921,6 +970,7 @@
                         @endforeach
                     </select>
                     {!! $err('tax_cycle') !!}
+                    {!! $hint('tax_cycle') !!}
                 </div>
                 <div>
                     <label class="f">{{ __('client.tax_id') }}</label>
@@ -933,6 +983,7 @@
                                 كله متعلّق بيه. --}}
                            value="{{ $own('tax_id') }}">
                     {!! $err('tax_id') !!}
+                    {!! $hint('tax_id') !!}
                 </div>
                 <div>
                     <label class="f">{{ __('client.eta_type') }}</label>
@@ -942,6 +993,7 @@
                         <option value="P" @selected($v('eta_type') === 'P')>{{ __('client.eta_type_p') }}</option>
                     </select>
                     {!! $err('eta_type') !!}
+                    {!! $hint('eta_type') !!}
                 </div>
             </div>
 

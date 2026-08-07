@@ -340,7 +340,12 @@ class ErpController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:190'],
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
         ]);
 
@@ -381,7 +386,12 @@ class ErpController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:190'],
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
         ]);
 
         // ⚠️ نفس منطق `GroupController::store` — الكود من الاسم، وبيتزوّد
@@ -711,7 +721,12 @@ class ErpController extends Controller
             // ⚠️ الإنجليزي هو الأساس في تعريف العميل — بس فاضل
             // `nullable` هنا عشان الـ103 عميل القدام اتعملوا قبل
             // القاعدة دي، وأي حفظ لواحد فيهم كان هيترفض.
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'name' => ['required', 'string', 'max:190'],
             'phone' => ['nullable', 'string', 'max:30'],
             'governorate' => ['nullable', Governorates::rule()],
@@ -729,7 +744,11 @@ class ErpController extends Controller
             'contacts.*.name' => ['nullable', 'string', 'max:120'],
             'contacts.*.role' => ['nullable', 'string', 'max:120'],
             'contacts.*.phone' => ['nullable', 'string', 'max:30'],
-            'channel_id' => ['nullable', 'exists:channels,id'],
+            // ⚠️ **إجباري** — القناة بتحدد التسعير والافتراضي بتاع
+            // كاش/آجل ومين بيخدم العميل. عميل من غير قناة بياخد
+            // «آجل» افتراضياً ومابيظهرش لأي مندوب — يعني بيتخلق
+            // ويختفي، وده اللي كان بيحصل فعلاً.
+            'channel_id' => ['required', 'exists:channels,id'],
             'group_id' => ['nullable', 'exists:client_groups,id'],
             'sub_channel' => ['nullable', 'in:chain,convenience'],
             // ⚠️ **مش في فورم العميل الجديد.** التصنيف نتيجة سلوك مش
@@ -796,7 +815,12 @@ class ErpController extends Controller
             // محدش قرره.
             'contract_duration' => ['nullable', 'required_if:has_contract,1',
                 'in:'.implode(',', array_keys(Contract::DURATIONS))],
-            'contract_starts_at' => ['nullable', 'date'],
+            // ⚠️ **`required_with:contract_ends_at` مش `required_if`
+            // على العقد.** «تعامل بالطلب» عقد بجد بس مالوش تواريخ
+            // خالص (الحقول بتتخبّى)، فإجبار تاريخ بداية على كل عقد
+            // كان بيمنع النوع ده. لكن نهاية من غير بداية = مدة مالهاش
+            // أول، و`after_or_equal` بتاعت النهاية بتتقارن بلا شيء.
+            'contract_starts_at' => ['nullable', 'required_with:contract_ends_at', 'date'],
             'contract_ends_at' => ['nullable', 'date', 'after_or_equal:contract_starts_at'],
             'contract_note' => ['nullable', 'string'],
             'contract_clauses' => ['nullable', 'array'],
@@ -1409,7 +1433,12 @@ class ErpController extends Controller
             // ⚠️ الاسم والوحدة الإنجليزيين. الصنف بيتعرض في الفاتورة
             // وفي أبلكيشن المندوب وفي التصدير للمصلحة — و«كرتونة» جوه
             // فاتورة إنجليزية بتخلّي المستند يترفض.
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'unit' => ['required', 'string', 'max:40'],
             'unit_en' => ['nullable', 'string', 'max:40'],
 
@@ -1766,7 +1795,12 @@ class ErpController extends Controller
     {
         return [
             'name' => ['required', 'string', 'max:190'],
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'email' => ['required', 'email', 'max:190',
                 \Illuminate\Validation\Rule::unique('users', 'email')->ignore($user?->id)],
             'code' => ['nullable', 'string', 'max:30',
@@ -1897,7 +1931,12 @@ class ErpController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:190'],
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
             'day_label' => ['nullable', 'string', 'max:60'],
             'type' => ['nullable', 'string', 'max:40'],
@@ -1928,7 +1967,12 @@ class ErpController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:190'],
-            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
+            // `data-req` ونجمة، والسيرفر كان `nullable` — يعني المتصفح
+            // بيمنع واللي بيبعت من غير المتصفح (استيراد، tinker، فورم
+            // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
+            // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
+            'name_en' => ['required', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
             'day_label' => ['nullable', 'string', 'max:60'],
             'type' => ['nullable', 'string', 'max:40'],

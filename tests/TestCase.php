@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Models\Channel;
 use App\Models\Client;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
@@ -89,6 +90,27 @@ abstract class TestCase extends BaseTestCase
             'name_en' => 'Test zone',
             'active' => true,
         ]);
+    }
+
+    /**
+     * قايمة سعر — **بترجّع الموجودة لو موجودة**.
+     *
+     * ⚠️ `price_list_id` بقى `required` على فورم العميل (2026-08-07)،
+     * فأي تيست بيحفظ عميل محتاج قايمة حقيقية. و`is_default` بتتحط على
+     * واحدة بس — التانية بتتعمل من غيرها عشان `Pricing::listRowFor`
+     * ماتلاقيش افتراضيتين.
+     */
+    protected function makePriceList(string $code = 'new'): PriceList
+    {
+        return PriceList::firstOrCreate(
+            ['code' => $code],
+            [
+                'name' => 'قايمة '.$code,
+                'name_en' => 'List '.$code,
+                'active' => true,
+                'is_default' => ! PriceList::where('is_default', true)->exists(),
+            ],
+        );
     }
 
     protected function makeClient(array $attrs = []): Client

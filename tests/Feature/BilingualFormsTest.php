@@ -243,6 +243,8 @@ class BilingualFormsTest extends TestCase
             'address' => '90th Street, New Cairo',
             'notes' => 'Pays on time',
             'price_list' => 'new',
+            'channel_id' => $this->makeChannel()->id,
+            'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
             'contacts' => [
                 3 => ['name' => 'Mohamed Ahmed', 'role' => 'Branch Manager', 'phone' => '01000000000'],
