@@ -21,7 +21,20 @@ class SetLocale
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $locale = $request->user()?->locale
+        // ⚠️ **لغة الأبلكيشن تغلب لغة اليوزر** (2026-08-08).
+        //
+        // فيه نصوص بتتولد عند السيرفر وبتتعرض جوه شاشة الأبلكيشن —
+        // ليبل البانش في حركة اليوم، أسماء الحالات، رسايل الأخطاء.
+        // المندوب اللي بدّل **الأبلكيشن** لعربي كان لسه بياخدها
+        // إنجليزي لأن `users.locale` بتاعه إنجليزي، فالشاشة بتطلع
+        // نصها عربي ونصها إنجليزي.
+        //
+        // ⚠️ والهيدر بيتقرا **بس لو فيه هيدر** — الويب مابيبعتوش،
+        // فلغة الجلسة في الـERP مابتتأثرش خالص.
+        $fromApp = $request->header('X-App-Locale');
+
+        $locale = ($fromApp !== null && array_key_exists($fromApp, User::LOCALES) ? $fromApp : null)
+            ?? $request->user()?->locale
             ?? ($request->hasSession() ? $request->session()->get('locale') : null)
             ?? config('app.locale');
 
