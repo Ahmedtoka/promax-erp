@@ -41,6 +41,24 @@ class Client extends Model
     ];
 
     /**
+     * ═══════════════════════════════════════════════════════════
+     * شروط الدفع
+     * ═══════════════════════════════════════════════════════════
+     *
+     * ⚠️ **`both` مش «مش محدد».** «مش محدد» هي `null` في العمود ومعناها
+     * «امشي على القناة»؛ و`both` قرار صريح إن العميل ده بيتعامل
+     * بالطريقتين والمندوب هو اللي بيحدد في كل فاتورة. الخلط بينهم كان
+     * هيخلّي كل عميل مالوش إعداد يوري المندوب سويتش مالوش لازمة.
+     *
+     * ⚠️ ومترتّبين من الأضيق للأوسع — أي فحص `in_array` بيمشي عليهم
+     * لازم يقرا القيمة الصريحة الأول قبل ما يرجع لافتراضي القناة.
+     */
+    public const PAY_CASH = 'cash';
+    public const PAY_CREDIT = 'credit';
+    public const PAY_BOTH = 'both';
+    public const PAY_TERMS = [self::PAY_CASH, self::PAY_CREDIT, self::PAY_BOTH];
+
+    /**
      * دورة الإقرار الضريبي للعميل.
      *
      * ⚠️ دي **مش** بتغيّر حساب الضريبة على الفاتورة — الضريبة بتتحسب
@@ -51,7 +69,7 @@ class Client extends Model
 
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
-        'contacts', 'category', 'payment_terms', 'status',
+        'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',
         'channel_id', 'group_id', 'branch_id', 'sub_channel', 'parent_id', 'uses_channel_discount',
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng',
@@ -540,7 +558,7 @@ public function zone(): BelongsTo
             return 'cash';
         }
 
-        if (in_array($this->payment_terms, ['cash', 'credit'], true)) {
+        if (in_array($this->payment_terms, self::PAY_TERMS, true)) {
             return $this->payment_terms;
         }
 
@@ -557,10 +575,127 @@ public function zone(): BelongsTo
         return __('client.terms_'.$this->paymentTerms());
     }
 
-    /** العميل اللي بيشتري كاش بس — من `paymentTerms()` مش من التصنيف لوحده */
+    /**
+     * العميل اللي بيشتري كاش بس — من `paymentTerms()` مش من التصنيف لوحده.
+     *
+     * ⚠️ **`both` مش `cashOnly`.** العميل المختلط مسموح له الآجل،
+     * فالحارس ده لازم يفضل `false` ليه وإلا الأبلكيشن هيقفل عليه
+     * الآجل اللي المدير سمح بيه بإيده.
+     */
     public function cashOnly(): bool
     {
-        return $this->paymentTerms() === 'cash';
+        return $this->paymentTerms() === self::PAY_CASH;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * شروط الدفع ومواعيد السداد (2026-08-08)
+     * ═══════════════════════════════════════════════════════════
+     */
+
+    /**
+     * ⚠️ **`both` معناها المندوب بيختار وقت البيع** — وده الاستثناء
+     * الوحيد لقاعدة «كاش/آجل قرار إدارة». الفرق إن الإدارة هي اللي
+     * سمحت بالاختيار أصلاً وهي بتعرّف العميل؛ اللي مش `both` المندوب
+     * مايشوفش السويتش خالص فمفيش فرصة يغلط.
+     */
+    public function paymentIsChoice(): bool
+    {
+        return $this->paymentTerms() === self::PAY_BOTH;
+    }
+
+    /** الآجل مسموح؟ — `credit` أو `both` */
+    public function allowsCredit(): bool
+    {
+        return in_array($this->paymentTerms(), [self::PAY_CREDIT, self::PAY_BOTH], true);
+    }
+
+    /**
+     * أيام السداد — **العقد الساري يغلب العميل**.
+     *
+     * ⚠️ الترتيب ده مش تفصيلة: العقد ورقة موقّعة، والخانة على العميل
+     * إعداد داخلي. لو عكسناهم، تعديل بسيط على كارت العميل بيغيّر مدة
+     * سداد متفق عليها في عقد — من غير ما حد يفتح العقد.
+     *
+     * ⚠️ ولازم `hasLiveContract()` مش `->contract` — العقد المنتهي
+     * شروطه ماتتطبقش، والعميل بيرجع لإعداده الخاص.
+     */
+    public function paymentDays(): ?int
+    {
+        $ct = $this->liveContract();
+
+        if ($ct !== null && $ct->paymentDays() !== null) {
+            return $ct->paymentDays();
+        }
+
+        return $this->payment_days === null ? null : (int) $this->payment_days;
+    }
+
+    /** أساس العد — نفس مفردات العقد بالظبط */
+    public function paymentBasis(): string
+    {
+        $ct = $this->liveContract();
+
+        if ($ct !== null && $ct->paymentDays() !== null) {
+            return $ct->paymentBasis();
+        }
+
+        // ⚠️ **نفس افتراضي العقد** (`first_supply`) مش `invoice`
+        // (إصلاح 2026-08-08). لما الاتنين كانوا مختلفين، نفس الداتا
+        // (أيام من غير أساس) كان معناها تاريخ استحقاق مختلف حسب إن
+        // كان العميل ليه عقد ولا لأ — وده بالظبط اللي المايجريشن
+        // بتوعد بعكسه: «نفس مفردات العقد بالظبط».
+        return in_array($this->payment_days_from, Contract::DAYS_FROM, true)
+            ? $this->payment_days_from
+            : Contract::DAYS_FROM_FIRST_SUPPLY;
+    }
+
+    public function paymentBasisLabel(): string
+    {
+        return __('client.days_from_'.$this->paymentBasis());
+    }
+
+    /** مصدر الشروط — عشان الشاشة تقول للمستخدم الرقم جه منين */
+    public function paymentSourceKey(): string
+    {
+        $ct = $this->liveContract();
+
+        return $ct !== null && $ct->paymentDays() !== null
+            ? 'client.pay_from_contract'
+            : 'client.pay_from_client';
+    }
+
+    /**
+     * ميعاد استحقاق فاتورة.
+     *
+     * ⚠️ **بيعدّي على العقد لو سارٍ** عشان يفضل حساب واحد في السيستم
+     * كله — `Contract::dueDateFor()` هي اللي بتعرف تفرق بين العد من
+     * أول توريد والعد من الفاتورة، ونسخ منطقها هنا كان هيخلي شاشتين
+     * يقولوا تاريخين لنفس الفاتورة.
+     */
+    public function dueDateFor($invoiceDate = null): ?\Illuminate\Support\Carbon
+    {
+        $ct = $this->liveContract();
+
+        if ($ct !== null && $ct->paymentDays() !== null) {
+            return $ct->dueDateFor($this, $invoiceDate);
+        }
+
+        $days = $this->paymentDays();
+
+        if ($days === null) {
+            return null;
+        }
+
+        if ($this->paymentBasis() === Contract::DAYS_FROM_INVOICE) {
+            return $invoiceDate
+                ? \Illuminate\Support\Carbon::parse($invoiceDate)->copy()->addDays($days)
+                : null;
+        }
+
+        // ⚠️ `null` لو لسه مفيش أول توريد — الافتراض إن أول توريد هو
+        // النهارده كان بيدي ميعاد استحقاق بيتحرك كل يوم (نفس فخ العقد)
+        return $this->first_activity_at?->copy()->addDays($days);
     }
 
     public function collectionRate(): float
@@ -583,8 +718,8 @@ public function zone(): BelongsTo
         // نمشي من الأحدث للأقدم ونوزّع الرصيد على الفواتير غير المسددة
         // (لو الحركات محمّلة مسبقاً بنستخدمها من غير كويري جديد)
         $sales = $this->relationLoaded('transactions')
-            ? $this->transactions->where('debit', '>', 0)->sortByDesc('date')
-            : $this->transactions()->where('debit', '>', 0)->orderByDesc('date')->get();
+            ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortByDesc('date')
+            : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->orderByDesc('date')->get();
 
         foreach ($sales as $t) {
             if ($balance <= 0) {
@@ -631,10 +766,20 @@ public function zone(): BelongsTo
     {
         $out = ['amount' => 0.0, 'days' => null, 'due_on' => null, 'has_terms' => false];
 
-        $contract = $this->liveContract();
-        $days = $contract?->paymentDays();
+        // ⚠️ **من `paymentDays()` مش من العقد مباشرة** (2026-08-08).
+        // كانت بتقرا `liveContract()->paymentDays()` بس — يعني العميل
+        // الآجل اللي مالوش عقد (كل الكاش فان والجملة تقريباً) كان
+        // `has_terms = false` والشاشة تقول «مفيش أيام سداد»، مهما كان
+        // عليه فلوس بقالها شهور. `paymentDays()` بتقرا العقد الأول
+        // وترجع لخانة العميل — فالتأخير بقى بيتحسب للكل.
+        $days = $this->paymentDays();
 
-        if ($days === null) {
+        // ⚠️ **`allowsCredit()` كمان** (2026-08-08). `togglePayDays()`
+        // في الفورم بيخبّي الخانتين ومابيمسحش قيمتهم — فعميل اتحوّل
+        // كاش (أو اتصنّف `danger`) بيفضل شايل `payment_days` قديمة.
+        // من غير الحارس ده، نفس الكارت كان بيقول «كاش» في الشارة
+        // و«متأخر من 40 يوم» في الـKPI جنبها.
+        if ($days === null || ! $this->allowsCredit()) {
             return $out;
         }
 
@@ -646,8 +791,8 @@ public function zone(): BelongsTo
         }
 
         // ═══ الأساس «أول توريد» = ميعاد واحد للحساب كله ═══
-        if ($contract->paymentBasis() !== Contract::DAYS_FROM_INVOICE) {
-            $due = $contract->dueDateFor($this);
+        if ($this->paymentBasis() !== Contract::DAYS_FROM_INVOICE) {
+            $due = $this->dueDateFor();
             $out['due_on'] = $due;
 
             // ⚠️ مفيش أول توريد لسه = مفيش ميعاد. الافتراض إن النهارده
@@ -664,8 +809,8 @@ public function zone(): BelongsTo
 
         // ═══ الأساس «تاريخ كل فاتورة» = FIFO زي `aging()` ═══
         $sales = $this->relationLoaded('transactions')
-            ? $this->transactions->where('debit', '>', 0)->sortByDesc('date')
-            : $this->transactions()->where('debit', '>', 0)->orderByDesc('date')->get();
+            ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortByDesc('date')
+            : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->orderByDesc('date')->get();
 
         $oldest = null;
 

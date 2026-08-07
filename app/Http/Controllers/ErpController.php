@@ -741,8 +741,19 @@ class ErpController extends Controller
             // الفيو، فإضافة تصنيف جديد كانت بتوري أوبشن الفاليديشن
             // يرفضها.
             'category' => ['nullable', Rule::in(array_keys(Client::CATEGORIES))],
-            // كاش/آجل — فاضي = حسب القناة، و`danger` كاش إجباري
-            'payment_terms' => ['nullable', 'in:cash,credit'],
+            // كاش/آجل/الاتنين — فاضي = حسب القناة، و`danger` كاش إجباري.
+            // ⚠️ من الثابت مش مكتوبة بالنص — `both` اتضافت 2026-08-08
+            // والقايمة المكتوبة بالإيد كانت هترفضها في صمت.
+            'payment_terms' => ['nullable', Rule::in(Client::PAY_TERMS)],
+            // ⚠️ **`nullable` مش `required` حتى للآجل.** فيه عملاء آجل
+            // بالفعل من غير مدة متفق عليها، وإجبار رقم هنا كان معناه
+            // إن اللي بيعدّل أي حاجة تانية على العميل ده يتحبس لحد ما
+            // يخترع مدة — فيكتب 30 عشوائي وتبقى داتا غلط بالورقة.
+            'payment_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            // ⚠️ **`required_with`** — رقم أيام من غير نقطة بداية مالوش
+            // معنى، وكان بيروح لافتراضي مختلف في العميل عن العقد فنفس
+            // الداتا تطلع تاريخين. نفس القاعدة بتاعة العقد بالظبط.
+            'payment_days_from' => ['nullable', 'required_with:payment_days', Rule::in(Contract::DAYS_FROM)],
             'discount' => ['required', 'numeric', 'min:0', 'max:100'],
             // ⚠️ **قائمة السعر بقت بالـid مش بالنص** (2026-08-07).
             // الفاتورة بتتحاسب من `price_list_id` (عبر `Pricing::listRowFor`)،
@@ -979,7 +990,11 @@ class ErpController extends Controller
                 ?: Contract::DAYS_FROM_FIRST_SUPPLY,
             // ⚠️ لو الحقل اتفضّى لازم terms تتفضّى معاه. لو سيبناها زي ما هي،
             // Contract::paymentDays() بترجع تقرا الرقم القديم من النص وتوريه تاني.
-            'terms' => ($data['contract_payment_days'] ?? null)
+            //
+            // ⚠️ **`!== null` مش truthy** (إصلاح 2026-08-08) — عقد بصفر
+            // يوم (مستحق فوراً) كان بيتكتب `terms = null`، وده اللي
+            // كان بيخلّي `paymentDays()` ترجّع `null` وتسيب العقد يتداس.
+            'terms' => ($data['contract_payment_days'] ?? null) !== null
                 ? __('client.days_countable', ['count' => $data['contract_payment_days']])
                 : null,
             // ⚠️ **«تعامل بالطلب» مالوش تاريخ بداية.** الـ`?: today()`

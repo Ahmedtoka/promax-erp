@@ -56,6 +56,20 @@
     <span class="badge {{ $c->categoryClass() }}">{{ $c->categoryLabel() }}</span>
     <span class="badge b-blue">💳 {{ __('client.billed_on') }}: {{ $c->priceListLabel() }}</span>
     <span class="badge b-gold">{{ __('client.discount') }} {{ number_format($c->effectiveDiscount() * 100, 1) }}% — {{ $c->discountSource() }}</span>
+    {{-- ⚠️ **الشارة دي بتقول للمندوب والمحاسب نفس الحقيقة.** الأبلكيشن
+         بيقفل الآجل على عميل الكاش، والمحاسب بيحسب التأخير من نفس
+         المدة — فلو الاتنين قروا من مكانين، حد فيهم هيتفاجئ. --}}
+    <span class="badge {{ ['cash' => 'b-green', 'credit' => 'b-orange', 'both' => 'b-purple'][$c->paymentTerms()] ?? 'b-gray' }}">
+        💵 {{ $c->paymentTermsLabel() }}
+        @if ($c->allowsCredit())
+            @if ($c->paymentDays() !== null)
+                — {{ __('client.pay_days') }} {{ $c->paymentDays() }} ({{ $c->paymentBasisLabel() }})
+                • {{ __($c->paymentSourceKey()) }}
+            @else
+                — {{ __('client.pay_not_set') }}
+            @endif
+        @endif
+    </span>
     @if ($ct)
         <span class="badge {{ $ct->statusClass() }}">📜 {{ __('client.contract') }} {{ $ct->number }} — {{ $ct->statusLabel() }}</span>
     @else

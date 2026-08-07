@@ -45,6 +45,7 @@ class ClientImporter extends Importer
             'discount' => ['نسبة الخصم', 'discount', 'الخصم'],
             'price_list' => ['قائمة السعر', 'price_list'],
             'payment_days' => ['أجل السداد', 'payment_days', 'credit days'],
+            'payment_terms' => ['طريقة الدفع', 'payment_terms', 'payment'],
             'lat' => ['خط العرض', 'lat', 'latitude'],
             'lng' => ['خط الطول', 'lng', 'longitude'],
             'status' => ['الحالة', 'status'],
@@ -336,6 +337,38 @@ class ClientImporter extends Importer
                 // ⚠️ **الخصم بيتكتب بس لو موجود في الشيت** (إصلاح 2026-08-05).
                 // كان دايماً في الـpayload بـ(discount ?? 0) — يعني شيت من
                 // غير عمود خصم كان بيصفّر خصومات العملاء الموجودين في صمت.
+                // ⚠️ **`payment_days` كان بيتقرا ويتحقق ويترمي** (إصلاح
+                // 2026-08-08). العمود متعرّف من زمان في `COLUMNS`
+                // والفاليديشن بترفض لو مش رقم — بس الـ`payload`
+                // ماكانش فيه، فاللي بيملا الشيت بياخد «اتحفظ» أخضر
+                // والرقم بيروح في السكات.
+                //
+                // ⚠️ **بنكتبه بس لو موجود في الشيت** — نفس قاعدة الخصم
+                // بالظبط. لو كتبناه دايماً، شيت مالوش عمود أجل كان
+                // هيمسح مدد السداد المتفق عليها لكل عميل في الملف.
+                $payDays = Sheet::number($row['payment_days'] ?? null);
+
+                if ($payDays !== null) {
+                    $payload['payment_days'] = (int) $payDays;
+                    // ⚠️ الأساس لازم يتكتب مع الرقم — رقم من غير نقطة
+                    // بداية بيروح لافتراضي، والافتراضي المعتمد هو نفسه
+                    // بتاع العقد عشان نفس الداتا يبقى ليها نفس المعنى.
+                    $payload['payment_days_from'] = \App\Models\Contract::DAYS_FROM_FIRST_SUPPLY;
+                }
+
+                $terms = strtolower(trim((string) ($row['payment_terms'] ?? '')));
+
+                // كاش / آجل / الاتنين — بالعربي أو بالإنجليزي
+                $termsMap = [
+                    'cash' => Client::PAY_CASH, 'كاش' => Client::PAY_CASH, 'نقدي' => Client::PAY_CASH,
+                    'credit' => Client::PAY_CREDIT, 'اجل' => Client::PAY_CREDIT, 'آجل' => Client::PAY_CREDIT,
+                    'both' => Client::PAY_BOTH, 'الاتنين' => Client::PAY_BOTH, 'الاثنين' => Client::PAY_BOTH,
+                ];
+
+                if (isset($termsMap[$terms])) {
+                    $payload['payment_terms'] = $termsMap[$terms];
+                }
+
                 if ($discount !== null) {
                     // الشيت بالنسبة، الداتابيز بالكسر — القسمة مرة واحدة
                     $payload['discount'] = $discount / 100;

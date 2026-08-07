@@ -110,7 +110,10 @@
     // ⚠️ الخطأ في مرحلة 1 له أولوية — بنبدأ من أول مرحلة فيها خطأ
     $step1 = ['name', 'name_en', 'phone', 'governorate', 'zone_id', 'address',
               'location_url', 'channel_id', 'sub_channel', 'branch_id',
-              'group_id', 'manager_id', 'lat', 'lng', 'contacts'];
+              'group_id', 'manager_id', 'lat', 'lng', 'contacts',
+              // ⚠️ شروط الدفع اتنقلت لخطوة ١ — لو فضلت في قايمة خطوة ٢
+              // الفورم كان هيفتح على خطوة العقد وخطأ الفاليديشن في خطوة ١
+              'payment_terms', 'payment_days', 'payment_days_from'];
 
     foreach ($step1 as $f) {
         if ($errors->has($f) || $errors->hasAny([$f.'.*'])) {
@@ -411,6 +414,65 @@
             </div>
         </div>
 
+        {{-- ═════ شروط الدفع ═════ --}}
+        <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.pay_section') }}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.pay_section_hint') }}</div>
+        <div class="frow">
+            <div>
+                {{-- ⚠️ **قرار إدارة مش قرار مندوب.** الأبلكيشن بياخد
+                     كاش/آجل من هنا ومابيسألش المندوب — إلا لو المدير
+                     اختار «الاتنين»، وساعتها بس بيظهر سويتش في شاشة
+                     البيع. الافتراضي حسب القناة: كاش فان وجملة كاش،
+                     كي أكاونت وأونلاين آجل. و`danger` كاش إجباري مهما
+                     اتكتب هنا. --}}
+                <label class="f">{{ __('client.pay_method') }}</label>
+                <select name="payment_terms" id="payTerms" style="width:100%"
+                        onchange="togglePayDays()" class="{{ trim($bad('payment_terms')) }}">
+                    <option value="" @selected($v('payment_terms') === null || $v('payment_terms') === '')>{{ __('client.terms_by_channel') }}</option>
+                    @foreach (\App\Models\Client::PAY_TERMS as $pt)
+                        <option value="{{ $pt }}" @selected($v('payment_terms') === $pt)>{{ __('client.terms_'.$pt) }}</option>
+                    @endforeach
+                </select>
+                {!! $err('payment_terms') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.pay_method_hint') }}</div>
+            </div>
+            <div class="payDaysBox">
+                <label class="f">{{ __('client.pay_days') }}</label>
+                <input type="number" min="0" max="365" name="payment_days" style="width:100%"
+                       class="{{ trim($bad('payment_days')) }}"
+                       value="{{ old('payment_days', $src?->payment_days) }}"
+                       placeholder="{{ __('client.pay_days_ph') }}">
+                {!! $err('payment_days') !!}
+            </div>
+            <div class="payDaysBox">
+                <label class="f">{{ __('client.pay_days_from') }}</label>
+                <select name="payment_days_from" style="width:100%" class="{{ trim($bad('payment_days_from')) }}">
+                    @foreach (\App\Models\Contract::DAYS_FROM as $df)
+                        <option value="{{ $df }}"
+                            @selected(old('payment_days_from', $src?->payment_days_from ?? \App\Models\Contract::DAYS_FROM_INVOICE) === $df)>
+                            {{ __('client.days_from_'.$df) }}
+                        </option>
+                    @endforeach
+                </select>
+                {!! $err('payment_days_from') !!}
+            </div>
+        </div>
+        {{-- ⚠️ **العقد يغلب الخانتين دول.** العقد ورقة موقّعة والخانة
+             إعداد داخلي — فلو العميل ليه عقد سارٍ فيه مدة سداد، المدة
+             دي هي اللي بتمشي و`Client::paymentDays()` بترجّعها. --}}
+        {{-- ⚠️ `liveContract()` مش `->contract` — العقد ممكن ييجي من
+             السلسلة، و`->contract` بترجّع عقد الفرع لوحده. --}}
+        @php $payCt = $src?->liveContract(); @endphp
+        @if ($payCt !== null && $payCt->paymentDays() !== null)
+            <div class="alert info" style="margin-top:10px">
+                <span>📄</span>
+                <span>{{ __('client.pay_contract_wins', [
+                    'days' => $payCt->paymentDays(),
+                    'basis' => $payCt->paymentBasisLabel(),
+                ]) }}</span>
+            </div>
+        @endif
+
         {{-- ═════ طرق التواصل عند العميل ═════ --}}
         <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.contacts') }}</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.contacts_hint') }}</div>
@@ -497,20 +559,11 @@
                 {!! $err('discount') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
             </div>
-            <div>
-                {{-- ⚠️ **قرار إدارة مش قرار مندوب** — الأبلكيشن بياخد
-                     كاش/آجل من هنا ومابيسألش المندوب. الافتراضي حسب
-                     القناة: كاش فان وجملة كاش، كي أكاونت وأونلاين آجل.
-                     و`danger` كاش إجباري مهما اتكتب هنا. --}}
-                <label class="f">{{ __('client.pay_method') }}</label>
-                <select name="payment_terms" style="width:100%" class="{{ trim($bad('payment_terms')) }}">
-                    <option value="" @selected($v('payment_terms') === null || $v('payment_terms') === '')>{{ __('client.terms_by_channel') }}</option>
-                    <option value="cash" @selected($v('payment_terms') === 'cash')>{{ __('client.terms_cash') }}</option>
-                    <option value="credit" @selected($v('payment_terms') === 'credit')>{{ __('client.terms_credit') }}</option>
-                </select>
-                {!! $err('payment_terms') !!}
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.pay_method_hint') }}</div>
-            </div>
+            {{-- ⚠️ **شروط الدفع اتنقلت لخطوة ١** (2026-08-08). كانت هنا
+                 في خطوة «التعاقد»، وعميل الكاش فان مابيوصلش للخطوة دي
+                 أصلاً — فالمدير التجاري كان بيدوّر على الخانة ومايلاقيهاش
+                 ويفتكرها مش موجودة. كاش/آجل قرار تجاري أساسي زي القناة
+                 والتصنيف، مش بند من بنود العقد. --}}
             {{-- ⚠️ **في التعديل بس.** التصنيف نتيجة سلوك مش مدخل،
                  فمالوش لازمة وقت التعريف (الشرح فوق). بس المودال
                  القديم كان **المكان الوحيد في السيستم كله** اللي
@@ -1278,6 +1331,30 @@ function toggleContract() {
     });
 }
 
+/**
+ * ⚠️ **مدة السداد للآجل بس.** العميل الكاش بياخد فلوسه في إيده —
+ * «30 يوم من الفاتورة» على عميل كاش رقم بيتخزن ومابيتطبقش، وبعد
+ * شهور حد بيفتح كارته ويفتكر إن ليه مهلة سداد. و«الاتنين» بتوري
+ * الخانتين لأن نص تعاملاته ممكن يكون آجل.
+ *
+ * ⚠️ **إخفاء بس من غير تعطيل** — عكس بلوك العقد. الخانتين دول
+ * `nullable` في الفاليديشن، فإرسالهم فاضيين مش مشكلة؛ والتعطيل كان
+ * هيمسح قيمة موجودة على عميل اتحوّل من آجل لكاش **مؤقتاً** وهو
+ * بيعدّل حاجة تانية خالص.
+ */
+function togglePayDays() {
+    const el = document.getElementById('payTerms');
+    if (!el) return;
+
+    // فاضي = «حسب القناة» — مانعرفش هيطلع كاش ولا آجل، فبنوري
+    // الخانتين بدل ما نخبّي حاجة ممكن تكون مطلوبة
+    const show = el.value !== 'cash';
+
+    document.querySelectorAll('.payDaysBox').forEach(function (b) {
+        b.style.display = show ? '' : 'none';
+    });
+}
+
 function toggleTax() {
     const on = document.getElementById('taxable').checked;
     document.getElementById('taxBox').style.display = on ? '' : 'none';
@@ -1600,6 +1677,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // على تاريخ نهاية متخزن.
     syncDuration(true);
     toggleTax();
+    togglePayDays();
     syncSubChannel();
     filterZones();
     PRESETS.forEach(toggleClause);

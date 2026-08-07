@@ -436,10 +436,20 @@ public function client(): BelongsTo
         return $this->ends_at !== null && $this->ends_at->isPast();
     }
 
-    /** أيام السداد — الرقم لو متسجل، وإلا نستخرجه من نص terms */
+    /**
+     * أيام السداد — الرقم لو متسجل، وإلا نستخرجه من نص terms.
+     *
+     * ⚠️ **`!== null` مش فحص truthy** (إصلاح 2026-08-08). «صفر يوم»
+     * (مستحق فوراً) قرار حقيقي بيتكتب في عقود، والفحص القديم كان
+     * بيعتبره «مش متسجل» — فبيروح يقرا من نص `terms` اللي بيتكتب
+     * `null` أصلاً لما الأيام صفر، وبيرجّع `null`. النتيجة إن
+     * `Client::paymentDays()` كانت بتنزل على خانة العميل، يعني
+     * **العقد الموقّع اتداس عليه بإعداد داخلي** — وهو عكس الترتيب
+     * اللي الدوكترين كلها قايمة عليه.
+     */
     public function paymentDays(): ?int
     {
-        if ($this->payment_days) {
+        if ($this->payment_days !== null) {
             return (int) $this->payment_days;
         }
 

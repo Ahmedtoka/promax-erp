@@ -274,6 +274,12 @@ class FieldApiController extends Controller
                     'cash_only' => $c->cashOnly(),
                     // كاش/آجل — قرار الأدمن؛ الأبلكيشن بيعرضها ومابيسألش
                     'payment_terms' => $c->paymentTerms(),
+                    // ⚠️ **الاستثناء الوحيد لقاعدة «المندوب مابيختارش».**
+                    // `true` بس لما الإدارة تختار «الاتنين» على العميل —
+                    // وساعتها بس الأبلكيشن بيوري سويتش. أي عميل تاني
+                    // الشاشة مافيهاش اختيار خالص، فمفيش فرصة يغلط.
+                    'payment_choice' => $c->paymentIsChoice(),
+                    'payment_days' => $c->paymentDays(),
                     'is_new' => $c->is_new,
                     'taxable' => (bool) $c->taxable,
                     'tax_rate' => \App\Services\Tax::rate($c),
@@ -384,6 +390,8 @@ class FieldApiController extends Controller
                 'balance' => (float) $r['client']->balance,
                 'cash_only' => $r['client']->cashOnly(),
                 'payment_terms' => $r['client']->paymentTerms(),
+                'payment_choice' => $r['client']->paymentIsChoice(),
+                'payment_days' => $r['client']->paymentDays(),
                 'discount' => $r['client']->effectiveDiscount(),
                 // كارت المحطة بيوري تاريخ العميل: مبيعاته وآخر مرة اتزار
                 'purchases' => (float) $r['client']->purchases,
@@ -529,7 +537,22 @@ class FieldApiController extends Controller
         // ⚠️ **كاش/آجل من تعريف العميل مش من المندوب** (قرار المالك
         // 2026-08-03). اللي الأبلكيشن بيبعته بيتطنش — توكن معدّل كان
         // يقدر يبعت `credit` لعميل كاش ويفتح مديونية محدش قررها.
-        $data['payment'] = $client->paymentTerms();
+        //
+        // ⚠️ **إلا لو الإدارة اختارت «الاتنين»** (2026-08-08). ساعتها
+        // بس اللي جاي من الأبلكيشن بيتقرا — والحارس فاضل زي ما هو
+        // لباقي العملاء. لاحظ إن الفحص على `paymentIsChoice()` مش على
+        // اللي الأبلكيشن بعته: لو اتعكس، أي توكن يبعت `payment` وياخد
+        // اللي هو عايزه.
+        $terms = $client->paymentTerms();
+
+        // ⚠️ الافتراضي **كاش** لو العميل مختلط والأبلكيشن مابعتش —
+        // نسخة قديمة من الأبلكيشن مش عارفة السويتش لازم تفتح أضيق
+        // الاحتمالين، مش تفتح مديونية من غير ما حد يختارها.
+        $data['payment'] = $terms === Client::PAY_BOTH
+            ? (in_array($data['payment'] ?? null, [Client::PAY_CASH, Client::PAY_CREDIT], true)
+                ? $data['payment']
+                : Client::PAY_CASH)
+            : $terms;
 
         // ⚠️ **وحدة البيع بتتضرب هنا مش في الأبلكيشن** — التفاصيل في itemsToPieces. «2 كرتونة»
         // بتتحول 24 قطعة قبل الخصم من العهدة والتسعير — والسعر سعر
@@ -862,7 +885,32 @@ class FieldApiController extends Controller
                 // بيسيب رصيد دائن وهمي على كل مرتجع كاش — والحقيقة إن
                 // المندوب ردّ القيمة نقداً في اللحظة. الآجل بيفضل
                 // القيد الدائن يقلل مديونيته عادي.
-                if ($client->paymentTerms() === 'cash') {
+                // ⚠️ **العميل المختلط بيتحدد من الفاتورة مش من إعداده**
+                // (2026-08-08). `paymentTerms()` بترجّع `both` ليه —
+                // وهي مش `cash` ولا `credit`، فالمقارنة النصية القديمة
+                // كانت هتقول «مش كاش» على طول وتسيب رصيد دائن وهمي على
+                // كل مرتجع كاش لعميل مختلط. الحقيقة مكتوبة في
+                // `invoices.payment` بتاعة نفس الزيارة.
+                //
+                // ⚠️ ولو مفيش فاتورة على الزيارة دي (مرتجع من غير بيع)،
+                // بنعتبره **آجل** — يعني قيد دائن بس. القيد المدين
+                // الوهمي بيزوّد مديونية العميل برقم محدش قبضه، وده
+                // أصعب في الاكتشاف من رصيد دائن ظاهر في كشف الحساب.
+                $paidCash = match ($client->paymentTerms()) {
+                    Client::PAY_CASH => true,
+                    // ⚠️ **`latest('id')` مش أي فاتورة.** الزيارة ممكن
+                    // يكون فيها أكتر من فاتورة للعميل المختلط — واحدة
+                    // كاش وواحدة آجل — والقراءة من غير ترتيب كانت
+                    // بتاخد اللي الداتابيز تديها. لو طلعت الكاش
+                    // والمرتجع أصله آجل، القيد المدين بيلغي القيد
+                    // الدائن: البضاعة رجعت والمديونية ماقلّتش ومحدش
+                    // دفع كاش.
+                    Client::PAY_BOTH => Invoice::where('visit_id', $data['visit_id'])
+                        ->latest('id')->value('payment') === Client::PAY_CASH,
+                    default => false,
+                };
+
+                if ($paidCash) {
                     Transaction::create([
                         'client_id' => $client->id,
                         'date' => today(),
