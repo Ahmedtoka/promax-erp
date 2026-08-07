@@ -25,7 +25,7 @@
     <div>
         <label class="f">{{ __('hr.employee') }}</label>
         <select name="user">
-            <option value="">{{ __('all') }}</option>
+            <option value="">{{ __('common.all') }}</option>
             @foreach ($users as $u)
                 <option value="{{ $u->id }}" @selected(request('user') == $u->id)>{{ $u->displayName() }}</option>
             @endforeach
@@ -34,25 +34,26 @@
     <div>
         <label class="f">{{ __('hr.state') }}</label>
         <select name="status">
-            <option value="">{{ __('all') }}</option>
+            <option value="">{{ __('common.all') }}</option>
             <option value="open" @selected(request('status') === 'open')>{{ __('hr.status_open') }}</option>
             <option value="closed" @selected(request('status') === 'closed')>{{ __('hr.status_closed') }}</option>
             <option value="auto" @selected(request('status') === 'auto')>{{ __('hr.status_auto') }}</option>
         </select>
     </div>
-    <button class="btn primary" type="submit">{{ __('search') }}</button>
+    <button class="btn primary" type="submit">{{ __('common.search') }}</button>
 </form>
 
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="n">{{ $rows->count() }}</div><div class="l">{{ __('hr.log') }}</div></div>
-    <div class="kpi"><div class="n" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div><div class="l">{{ __('hr.total_hours') }}</div></div>
-    <div class="kpi"><div class="n" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div><div class="l">{{ __('hr.avg_hours') }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('hr.log') }}</div><div class="val">{{ $rows->count() }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('hr.total_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('hr.avg_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div></div>
 </div>
 
 <div class="card">
     @if ($rows->isEmpty())
         <div class="empty">{{ __('hr.no_rows') }}</div>
     @else
+        <div class="tablewrap">
         <table>
             <thead>
                 <tr>
@@ -104,6 +105,7 @@
                 @endforeach
             </tbody>
         </table>
+        </div>
     @endif
 </div>
 

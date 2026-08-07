@@ -104,7 +104,7 @@
 
             <div class="tablewrap" style="max-height:60vh;overflow-y:auto">
                 <table>
-                    <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+                    <thead>
                         <tr>
                             <th style="width:34px">
                                 @if ($canPutaway)

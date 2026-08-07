@@ -341,7 +341,7 @@
     </div>
     <div class="tablewrap" style="max-height:60vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
                 <tr>
                     <th>{{ __('common.code') }}</th><th>{{ __('stock.item') }}</th><th>{{ __('stock.unit') }}</th>
                     <th>{{ __('client.list_price') }}</th><th>{{ __('client.discount_pct') }}</th>
@@ -394,7 +394,7 @@
     <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)"><tr>
+            <thead><tr>
                 <th>{{ __('ops.invoice') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('ops.payment') }}</th>
                 <th>{{ __('client.price_list') }}</th><th>{{ __('stock.batch_no') }}</th>
                 <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th>{{ __('common.date') }}</th>
@@ -429,7 +429,7 @@
     <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)"><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
+            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
             @foreach ($txns as $t)
                 <tr>
                     <td class="num">{{ $t->date->format('Y-m-d') }}</td>

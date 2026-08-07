@@ -65,7 +65,7 @@
 
     <div class="tablewrap" style="max-height:68vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th>{{ __('audit.when') }}</th><th>{{ __('audit.who') }}</th><th>{{ __('audit.what') }}</th>
                 <th>{{ __('audit.on') }}</th><th>{{ __('audit.details') }}</th><th>{{ __('audit.from_ip') }}</th>

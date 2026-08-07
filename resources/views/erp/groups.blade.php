@@ -55,7 +55,7 @@
          نفس نمط شاشة المنتجات: الحاوية هي اللي بتسكرول والهيدر sticky --}}
     <div class="tablewrap" style="max-height:66vh;overflow-y:auto">
         <table id="chainsTbl">
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th class="srt" data-k="name" data-t="s">{{ __('client.chain') }}<span class="arw"></span></th>
                 <th class="srt" data-k="channel" data-t="s">{{ __('client.channel') }}<span class="arw"></span></th>

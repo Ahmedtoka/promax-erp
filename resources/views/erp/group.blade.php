@@ -129,7 +129,7 @@
     </div>
     <div class="tablewrap" style="max-height:66vh;overflow-y:auto">
         <table id="brTbl">
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th class="srt" data-k="name" data-t="s">{{ __('client.branch') }}<span class="arw"></span></th>
                 <th class="srt" data-k="zone" data-t="s">{{ __('client.zone') }}<span class="arw"></span></th>
@@ -327,6 +327,7 @@
         <h4>{{ __('client.attach_branches_to', ['chain' => $g->displayName()]) }}</h4>
         <input type="text" id="qAtt" placeholder="🔍 {{ __('client.find_client') }}" oninput="filterAttach()" style="width:100%;margin-bottom:10px">
         <div style="max-height:46vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
+            <div class="tablewrap">
             <table>
                 @foreach (Client::whereNull('group_id')->where('category', '!=', 'internal')->orderBy('name')->get() as $c)
                     <tr data-txt="{{ $c->displayName() }}">
@@ -336,6 +337,7 @@
                     </tr>
                 @endforeach
             </table>
+            </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
             <button class="btn" type="button" onclick="closeDlg('dlgAttach')">{{ __('common.cancel') }}</button>

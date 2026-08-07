@@ -129,7 +129,7 @@
                         .e($label).$arrow.'</a>';
                 };
             @endphp
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th>{!! $thSort('name', __('client.client'), false) !!}</th>
                 <th>{!! $thSort('status', __('common.status'), false) !!}</th>

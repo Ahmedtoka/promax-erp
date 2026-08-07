@@ -288,7 +288,7 @@
 
     <div class="tablewrap loc-tbl" style="max-height:62vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th>{{ __('stock.location') }}</th>
                 <th style="text-align:start">{{ __('stock.item') }}</th>

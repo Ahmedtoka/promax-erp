@@ -95,7 +95,7 @@
             <input type="hidden" name="manager_id" value="{{ $manager->id }}">
             <div class="tablewrap" style="max-height:56vh;overflow-y:auto">
                 <table>
-                    <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+                    <thead>
                         <tr>
                             <th style="width:34px">
                                 <input type="checkbox" onchange="document.querySelectorAll('.pickc').forEach(c => c.checked = this.checked)">
@@ -172,7 +172,7 @@
             <input type="hidden" name="manager_id" value="{{ $manager->id }}">
             <div class="tablewrap" style="max-height:48vh;overflow-y:auto">
                 <table>
-                    <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+                    <thead>
                         <tr>
                             <th style="width:34px">
                                 <input type="checkbox" onchange="document.querySelectorAll('.pickt').forEach(c => c.checked = this.checked)">

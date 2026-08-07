@@ -90,7 +90,7 @@
         <span class="side">{{ __('settle.invoice_count', ['count' => $invoices->count()]) }}</span></h3>
     <div class="tablewrap st-tbl" style="max-height:52vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
                 <tr>
                     <th>#</th>
                     <th style="text-align:start">{{ __('client.client') }}</th>

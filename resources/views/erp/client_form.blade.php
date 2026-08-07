@@ -421,12 +421,20 @@
             {{-- ⚠️ `(array)` لازم: القيمة اللي بترجع من `old()` بتيجي زي ما
                          المستخدم بعتها. لو بعت `contacts` كنص، الـ`foreach`
                          بترمي 500 أبيض بدل صفحة الأخطاء. --}}
-                    @foreach ((array) old('contacts', $src?->contactList() ?? []) as $i => $ct)
+                    {{-- ⚠️ **الاسم `$contact` مش `$ct`** (إصلاح 2026-08-08).
+                         `$ct` هو **عقد العميل** المستخدم تحت في بلوك
+                         العقد — ومتغيّر الـ`@foreach` في بليد بيفضل
+                         موجود بعد ما اللوب تخلص. فالعميل اللي عنده جهات
+                         تواصل كان `$ct` بتاعه بيتحوّل لآخر جهة تواصل
+                         (أراي)، و`$ct?->type_key` ترمي 500 على شاشة
+                         التعديل. العميل اللي مالوش جهات تواصل كان بيفتح
+                         عادي — عشان كده الباج عاش. --}}
+                    @foreach ((array) old('contacts', $src?->contactList() ?? []) as $i => $contact)
                 <div class="frow contact-row" style="margin-bottom:6px">
-                    <div><input type="text" name="contacts[{{ $i }}][name]" dir="ltr" maxlength="120" value="{{ $ct['name'] ?? '' }}" placeholder="{{ __('client.contact_name_ph') }}" style="width:100%"></div>
-                    <div><input type="text" name="contacts[{{ $i }}][role]" dir="ltr" maxlength="120" value="{{ $ct['role'] ?? '' }}" placeholder="{{ __('client.contact_role_ph') }}" style="width:100%"></div>
+                    <div><input type="text" name="contacts[{{ $i }}][name]" dir="ltr" maxlength="120" value="{{ $contact['name'] ?? '' }}" placeholder="{{ __('client.contact_name_ph') }}" style="width:100%"></div>
+                    <div><input type="text" name="contacts[{{ $i }}][role]" dir="ltr" maxlength="120" value="{{ $contact['role'] ?? '' }}" placeholder="{{ __('client.contact_role_ph') }}" style="width:100%"></div>
                     <div style="display:flex;gap:6px">
-                        <input type="text" name="contacts[{{ $i }}][phone]" dir="ltr" maxlength="30" value="{{ $ct['phone'] ?? '' }}" placeholder="01000000000" style="flex:1;min-width:0">
+                        <input type="text" name="contacts[{{ $i }}][phone]" dir="ltr" maxlength="30" value="{{ $contact['phone'] ?? '' }}" placeholder="01000000000" style="flex:1;min-width:0">
                         <button type="button" class="btn sm red" onclick="this.closest('.contact-row').remove()">&times;</button>
                     </div>
                 </div>

@@ -73,7 +73,15 @@ img{display:block;max-width:100%}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .kpi::before{content:"";position:absolute;inset-block-start:0;inset-inline-start:0;width:100%;height:3px;background:var(--brand-gradient);opacity:.85}
 .kpi .lbl{color:var(--muted);font-size:11.5px;font-weight:700}
-.kpi .val{font-size:22px;font-weight:900;margin-top:4px;letter-spacing:-.5px}
+.kpi .val{
+  font-size:22px;font-weight:900;margin-top:4px;letter-spacing:-.5px;
+  /* ⚠️ **`plaintext` مش `ltr`.** الاتجاه بيتحدد من أول حرف قوي في
+     النص نفسه: «20,372 ج» بيبدأ برقم فيتقرا شمال-يمين والعملة
+     بتفضل في آخره، و«2 مستنية» بيفضل عربي طبيعي. لو فرضنا `ltr`
+     على الكل كانت الكروت اللي قيمتها جملة عربية هتتقلب. */
+  unicode-bidi:plaintext;
+  font-variant-numeric:tabular-nums;
+}
 .kpi .sub2{font-size:11px;color:var(--muted);margin-top:3px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .grid2 > .card{min-width:0}
@@ -99,14 +107,63 @@ input.bad, select.bad, textarea.bad{border-color:var(--red)!important;background
 .req-star{color:var(--red);font-weight:900}
 .alert.info{border-inline-start-color:var(--blue)}
 .alert.good{border-inline-start-color:var(--green)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{color:var(--muted);font-weight:800;text-align:start;padding:10px 8px;border-bottom:1.5px solid var(--border);white-space:nowrap;background:var(--card2)}
-td{padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+/* ═══════════════════════════════════════════════════════════════
+   الجداول — طبقة واحدة لكل السيستم (بوليش 2026-08-08)
+   ═══════════════════════════════════════════════════════════════
+   ⚠️ **ممنوع تظبيط جدول في بليد واحد.** أي قاعدة هنا بتتطبق على
+   الـ50 جدول مرة واحدة؛ والتظبيط الموضعي هو اللي خلّى نص الجداول
+   محاذاتها مختلفة عن التانية. */
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
+
+/* ⚠️ **الهيدر بأزرق البراند وكلام أبيض** (قرار المالك 2026-08-08).
+   كان رمادي باهت على أبيض — بيضيع وسط الصفوف، والعين مابتعرفش
+   الجدول بدأ فين خصوصاً بعد سكرول. */
+th{
+  color:#fff;font-weight:800;text-align:start;padding:11px 9px;
+  background:var(--primary);white-space:nowrap;
+  border-bottom:2px solid rgba(0,0,0,.12);
+  border-inline-end:1px solid rgba(255,255,255,.13);
+}
+th:last-child{border-inline-end:none}
+thead tr:first-child th:first-child{border-start-start-radius:10px}
+thead tr:first-child th:last-child{border-start-end-radius:10px}
+
+/* ⚠️ **`max-width` + قصّ** — من غيرها عمود العنوان أو الملاحظات
+   بياخد نص الجدول والباقي يتزنق. النص الكامل بيفضل في `title`
+   (السكريبت بيحطه) فمفيش معلومة بتضيع. */
+td{
+  padding:9px;border-bottom:1px solid var(--border);white-space:nowrap;
+  max-width:320px;overflow:hidden;text-overflow:ellipsis;
+}
 tr:last-child td{border-bottom:none}
 tr.clickable{cursor:pointer;transition:.12s}
 tr.clickable:hover{background:var(--card2)}
-.tablewrap{overflow-x:auto}
-.num{font-variant-numeric:tabular-nums;direction:ltr;text-align:left}
+tbody tr:nth-child(even){background:rgba(0,0,0,.014)}
+.tablewrap{overflow-x:auto;border-radius:10px}
+
+/* ⚠️ **الأرقام في النص — الهيدر والمحتوى بنفس المحاذاة بالظبط**
+   (إصلاح 2026-08-08). كان `.num` بـ`text-align:left` والهيدر
+   بـ`text-align:start` (= يمين في العربي)، فالرقم في ناحية
+   والعنوان بتاعه في الناحية التانية على عرض العمود كله — ومستحيل
+   تعرف الرقم ده تحت أنهي عمود.
+   `direction:ltr` باقية عشان «1,234.50» تترسم صح في واجهة عربي. */
+.num, th.num{font-variant-numeric:tabular-nums;direction:ltr;text-align:center}
+
+/* صف الإجماليات — بيتولّد من السكريبت */
+tfoot td{
+  background:var(--card2);font-weight:900;border-top:2px solid var(--primary);
+  border-bottom:none;position:sticky;bottom:0;
+}
+tfoot td.num{color:var(--primary)}
+
+/* الباجينيشن المحلي */
+.gs-pager{display:flex;gap:5px;align-items:center;justify-content:center;
+  flex-wrap:wrap;margin-top:10px;font-size:12px}
+.gs-pager button{border:1px solid var(--border);background:var(--card);
+  border-radius:8px;padding:5px 10px;cursor:pointer;font-weight:800;font-size:12px}
+.gs-pager button[disabled]{opacity:.4;cursor:default}
+.gs-pager button.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.gs-pager .gs-info{color:var(--muted);margin-inline-end:6px}
 .pos{color:var(--green)}.neg{color:var(--red)}.mid{color:var(--orange)}.muted{color:var(--muted)}
 .badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800}
 .b-red{background:#FDECEC;color:var(--red)}
@@ -420,7 +477,27 @@ function promaxMap(elId, points, opts = {}) {
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
-  const Q = {!! json_encode(__('common.search'), JSON_UNESCAPED_UNICODE) !!};
+
+  const T = {
+    search: {!! json_encode(__('common.search'), JSON_UNESCAPED_UNICODE) !!},
+    total:  {!! json_encode(__('common.total'), JSON_UNESCAPED_UNICODE) !!},
+    rows:   {!! json_encode(__('common.rows_count'), JSON_UNESCAPED_UNICODE) !!},
+  };
+
+  /* عدد صفوف الصفحة في الباجينيشن المحلي */
+  const PAGE = 25;
+
+  /* ⚠️ **تحويل نص الخلية لرقم** — بيشيل الفواصل والعملة والنسبة.
+     بيرجع NaN للنص العادي، وده اللي بيفرّق العمود الرقمي عن غيره. */
+  const toNum = function (s) {
+    if (s === '' || s === '—' || s === '-') return NaN;
+    const clean = s.replace(/[^\d.,\-]/g, '').replace(/,/g, '');
+    return clean === '' || clean === '-' ? NaN : parseFloat(clean);
+  };
+
+  const fmtNum = function (n) {
+    return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
 
   document.querySelectorAll('.tablewrap').forEach(function (wrap) {
     if (wrap.closest('dialog')) return;
@@ -429,26 +506,124 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const headRow = table.tHead ? table.tHead.rows[0] : table.querySelector('tr');
     if (!headRow || !headRow.querySelector('th')) return;
-    const bodyRows = () => Array.from(table.querySelectorAll('tr')).filter(r => r !== headRow && r.querySelector('td'));
 
-    /* 1) الفريز — بس لو الجدول فعلاً طويل */
+    const allRows = () => Array.from(table.querySelectorAll('tr'))
+      .filter(r => r !== headRow && r.querySelector('td') && !r.closest('tfoot'));
+
+    const cols = headRow.cells.length;
+    const rows0 = allRows();
+
+    /* ═══════════════════════════════════════════════════════════
+       1) محاذاة الهيدر = محاذاة المحتوى
+       ═══════════════════════════════════════════════════════════
+       ⚠️ **ده كان أكبر باج بصري في السيستم.** العمود الرقمي خلاياه
+       `.num` (وسط)، وهيدره `text-align:start` (يمين في العربي) —
+       فالرقم في ناحية وعنوانه في الناحية التانية على عرض العمود
+       كله. بنمشّي على كل عمود ونسأل خلاياه، والهيدر بياخد نفس
+       الكلاس. القاعدة دي كمان بتمسك الأعمدة اللي البليد نسي يحط
+       `.num` على خلاياها أصلاً. */
+    const numericCol = [];
+
+    for (let c = 0; c < cols; c++) {
+      const cells = rows0.map(r => r.cells[c]).filter(Boolean);
+      if (cells.length === 0) { numericCol[c] = false; continue; }
+
+      /* العمود رقمي لو الخلايا معلّمة `.num`، **أو** أغلب قيمها أرقام
+         ومفيش فيها لينكات/بادجات (دي أعمدة حالة مش أرقام) */
+      const marked = cells.some(td => td.classList.contains('num'));
+      const rich = cells.some(td => td.querySelector('a, .badge, img, input, select, button'));
+      const nums = cells.filter(td => !isNaN(toNum(td.textContent.trim()))).length;
+
+      const isNum = marked || (!rich && nums >= cells.length * 0.8 && nums > 0);
+      numericCol[c] = isNum;
+
+      if (isNum) {
+        headRow.cells[c].classList.add('num');
+        cells.forEach(td => td.classList.add('num'));
+      }
+
+      /* ⚠️ النص الكامل في `title` — الخلية بتتقص بـellipsis والقص
+         من غير tooltip معناه معلومة ضاعت من غير ما حد ياخد باله */
+      cells.forEach(function (td) {
+        if (!td.title && td.scrollWidth > td.clientWidth) td.title = td.textContent.trim();
+      });
+    }
+
+    /* ═══ 2) الفريز — الهيدر ثابت فوق ═══ */
     if (!wrap.style.maxHeight && table.offsetHeight > window.innerHeight * .62) {
       wrap.style.maxHeight = '66vh';
       wrap.style.overflowY = 'auto';
     }
     if (wrap.style.maxHeight) {
       headRow.querySelectorAll('th').forEach(function (th) {
-        if (!th.style.position) {
-          th.style.position = 'sticky';
-          th.style.top = '0';
-          th.style.zIndex = '5';
-          th.style.background = 'var(--card, #fff)';
-          th.style.boxShadow = '0 1px 0 var(--border)';
-        }
+        th.style.position = 'sticky';
+        th.style.top = '0';
+        th.style.zIndex = '5';
       });
     }
 
-    /* 2) السورت — العمود اللي مالوش سورت سيرفر ولا هاندلر خاص */
+    /* ⚠️ **وجود باجينيشن سيرفر بيغيّر كل اللي بعده.** الجدول ده
+       الصفحة الواحدة منه جزء من النتيجة — فمينفعش نجمعه ولا نضيف
+       عليه ترقيم تاني. */
+    const card = wrap.closest('.card') || wrap.parentNode;
+    const serverPager = card && card.querySelector('.pagination, nav[role="navigation"]');
+
+    /* ═══════════════════════════════════════════════════════════
+       3) صف الإجماليات
+       ═══════════════════════════════════════════════════════════
+       ⚠️ **بيجمع كل الصفوف مش الظاهرة بس** — الجدول اللي فيه فلتر
+       أو باجينيشن محلي، الإجمالي بيتحدث مع الفلتر (منطقي: انت
+       بتشوف مجموع اللي فلترته) بس مابيتأثرش بالصفحة الحالية.
+       ⚠️ وأعمدة زي «كود» و«رقم» و«سنة» بتتشال — مجموع الأكواد رقم
+       مالوش أي معنى وبيلخبط اللي بيقرا. */
+    const sumCols = [];
+
+    for (let c = 0; c < cols; c++) {
+      if (!numericCol[c]) continue;
+      const head = (headRow.cells[c].textContent || '').trim().toLowerCase();
+      const skip = /كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|ساعة|time/.test(head);
+      if (!skip) sumCols.push(c);
+    }
+
+    let foot = null;
+
+    /* ⚠️ **مابنلمسش `tfoot` مكتوب في البليد.** الصفحة اللي حاطة
+       إجمالياتها بإيدها بتجيبها من السيرفر على **كل** الصفوف —
+       ولو دهسنا عليها بمجموع الصفوف اللي في الـDOM، الرقم يقل
+       ويختلف عن باقي الشاشات. ونفس السبب بيمنع التجميع لو
+       الباجينيشن من السيرفر: احنا شايفين صفحة مش النتيجة كلها.
+       (دوكترين الأرقام: مايتعرضش رقم مالوش نفس المصدر.) */
+    if (sumCols.length && rows0.length > 1 && !table.tFoot && !serverPager) {
+      foot = table.createTFoot();
+      const tr = foot.insertRow();
+
+      for (let c = 0; c < cols; c++) {
+        const td = tr.insertCell();
+        if (sumCols.includes(c)) td.className = 'num';
+        else if (c === 0) td.textContent = 'Σ ' + T.total;
+      }
+    }
+
+    /* ⚠️ **الإجمالي على المفلتر مش على الظاهر.** لو جمعنا الصفوف
+       الظاهرة بس، الجدول اللي فيه باجينيشن كان هيقول إجمالي الصفحة
+       — واللي بيقرا فاكره إجمالي الجدول كله. الفلتر بيغيّر الإجمالي
+       (منطقي)، والصفحة لأ. */
+    const refreshTotals = function () {
+      if (!foot || !sumCols.length) return;
+      const visible = filtered();
+      const cells = foot.rows[0].cells;
+
+      sumCols.forEach(function (c) {
+        let sum = 0, any = false;
+        visible.forEach(function (r) {
+          const v = toNum((r.cells[c] || {}).textContent || '');
+          if (!isNaN(v)) { sum += v; any = true; }
+        });
+        if (cells[c]) cells[c].textContent = any ? fmtNum(sum) : '';
+      });
+    };
+
+    /* ═══ 4) السورت ═══ */
     if (!table.querySelector('th.srt')) {
       let cur = -1, dir = 1;
       Array.from(headRow.cells).forEach(function (th, idx) {
@@ -458,44 +633,113 @@ document.addEventListener('DOMContentLoaded', function () {
         th.addEventListener('click', function () {
           dir = (idx === cur) ? -dir : 1;
           cur = idx;
-          const rows = bodyRows();
+          const rows = allRows();
           const val = r => (r.cells[idx] ? r.cells[idx].textContent.trim() : '');
-          const num = s => parseFloat(s.replace(/[,%\s]/g, ''));
-          const numeric = rows.length > 0 && rows.every(r => val(r) === '' || val(r) === '—' || !isNaN(num(val(r))));
           rows.sort(function (a, b) {
             const x = val(a), y = val(b);
-            return dir * (numeric
-              ? ((isNaN(num(x)) ? -Infinity : num(x)) - (isNaN(num(y)) ? -Infinity : num(y)))
-              : x.localeCompare(y, ['ar', 'en']));
+            if (numericCol[idx]) {
+              const nx = toNum(x), ny = toNum(y);
+              return dir * ((isNaN(nx) ? -Infinity : nx) - (isNaN(ny) ? -Infinity : ny));
+            }
+            return dir * x.localeCompare(y, ['ar', 'en']);
           });
           const parent = rows[0] && rows[0].parentNode;
           if (parent) rows.forEach(r => parent.appendChild(r));
           headRow.querySelectorAll('.gs-arw').forEach(s => s.remove());
           const arw = document.createElement('span');
           arw.className = 'gs-arw';
-          arw.style.cssText = 'font-size:9px;margin-inline-start:4px;color:var(--primary)';
+          arw.style.cssText = 'font-size:9px;margin-inline-start:4px;color:#fff';
           arw.textContent = dir === 1 ? '▲' : '▼';
           th.appendChild(arw);
+          applyPage(1);
         });
       });
     }
 
-    /* 3) البحث السريع — للجداول الكبيرة اللي فوقها مفيش سيرش أصلاً */
-    const card = wrap.closest('.card');
-    const hasSearch = card && (card.querySelector('.searchbar') || card.querySelector('input[type="text"], input[type="search"]'));
-    if (!hasSearch && bodyRows().length > 12) {
+    /* ═══════════════════════════════════════════════════════════
+       5) الباجينيشن المحلي
+       ═══════════════════════════════════════════════════════════
+       ⚠️ **بس لو مفيش باجينيشن سيرفر.** الجدول اللي بيقسّم من
+       لارافيل ليه لينكات صفحاته؛ لو حطينا واحد محلي فوقه، اللي
+       بيدوس «التالي» بيروح لصفحة سيرفر وبيلاقي الترقيم المحلي
+       اتصفّر — تجربة مكسورة. */
+    let pager = null, page = 1;
+
+    const filtered = () => allRows().filter(r => r.dataset.hidden !== '1');
+
+    const applyPage = function (p) {
+      const rows = filtered();
+
+      /* ⚠️ **بنخفي الكل الأول حتى من غير باجينيشن** — البحث لوحده
+         محتاج يخفي اللي مش مطابق، ولو عرضنا المفلتر بس من غير ما
+         نخفي الباقي كان الفلتر مابيعملش أي حاجة. */
+      allRows().forEach(r => r.style.display = 'none');
+
+      if (!pager) { rows.forEach(r => r.style.display = ''); refreshTotals(); return; }
+
+      const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+      page = Math.min(Math.max(1, p), pages);
+
+      rows.slice((page - 1) * PAGE, page * PAGE).forEach(r => r.style.display = '');
+
+      pager.innerHTML = '';
+
+      const info = document.createElement('span');
+      info.className = 'gs-info';
+      info.textContent = T.rows.replace(':n', rows.length);
+      pager.appendChild(info);
+
+      const btn = function (label, target, on, dis) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        if (on) b.className = 'on';
+        if (dis) b.disabled = true;
+        else b.addEventListener('click', () => applyPage(target));
+        pager.appendChild(b);
+      };
+
+      btn('‹', page - 1, false, page === 1);
+
+      /* نافذة صفحات حوالين الحالية — 30 صفحة في سطر مالهاش لازمة */
+      const from = Math.max(1, page - 2), to = Math.min(pages, page + 2);
+      if (from > 1) btn('1', 1, page === 1, false);
+      if (from > 2) pager.appendChild(document.createTextNode('…'));
+      for (let i = from; i <= to; i++) btn(String(i), i, i === page, false);
+      if (to < pages - 1) pager.appendChild(document.createTextNode('…'));
+      if (to < pages) btn(String(pages), pages, page === pages, false);
+
+      btn('›', page + 1, false, page === pages);
+
+      refreshTotals();
+    };
+
+    if (!serverPager && rows0.length > PAGE) {
+      pager = document.createElement('div');
+      pager.className = 'gs-pager';
+      wrap.parentNode.insertBefore(pager, wrap.nextSibling);
+    }
+
+    /* ═══ 6) البحث السريع ═══ */
+    const hasSearch = card && (card.querySelector('.searchbar')
+      || card.querySelector('input[type="text"], input[type="search"]'));
+
+    if (!hasSearch && rows0.length > 12) {
       const inp = document.createElement('input');
       inp.type = 'search';
-      inp.placeholder = '🔍 ' + Q;
+      inp.placeholder = '🔍 ' + T.search;
       inp.style.cssText = 'width:100%;max-width:320px;margin-bottom:8px;display:block';
       inp.addEventListener('input', function () {
         const q = inp.value.trim().toLowerCase();
-        bodyRows().forEach(function (r) {
-          r.style.display = (!q || r.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        allRows().forEach(function (r) {
+          r.dataset.hidden = (!q || r.textContent.toLowerCase().includes(q)) ? '0' : '1';
         });
+        applyPage(1);
       });
       wrap.parentNode.insertBefore(inp, wrap);
     }
+
+    applyPage(1);
   });
 });
 </script>

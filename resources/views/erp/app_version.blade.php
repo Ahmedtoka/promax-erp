@@ -80,7 +80,7 @@
         <div class="side" style="font-size:11px">{{ __('appver.apk_hint') }}</div>
     </div>
 
-    <button class="btn primary" type="submit">{{ __('save') }}</button>
+    <button class="btn primary" type="submit">{{ __('common.save') }}</button>
 </form>
 
 <div class="card" style="margin-top:14px">
@@ -90,6 +90,7 @@
     @if (empty($devices))
         <div class="empty">{{ __('appver.no_devices') }}</div>
     @else
+        <div class="tablewrap">
         <table>
             <thead>
                 <tr>
@@ -116,6 +117,7 @@
                 @endforeach
             </tbody>
         </table>
+        </div>
     @endif
 </div>
 

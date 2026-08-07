@@ -24,13 +24,14 @@
 </form>
 
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="n" style="color:#16A34A">{{ $working }}</div><div class="l">🟢 {{ __('hr.working_now') }}</div></div>
-    <div class="kpi"><div class="n" style="color:#B86E00">{{ $onBreak }}</div><div class="l">⏸️ {{ __('hr.on_break_now') }}</div></div>
-    <div class="kpi"><div class="n">{{ $done }}</div><div class="l">✅ {{ __('hr.done_today') }}</div></div>
-    <div class="kpi"><div class="n" style="color:#B00020">{{ $notIn }}</div><div class="l">⚪ {{ __('hr.not_in_yet') }}</div></div>
+    <div class="kpi"><div class="lbl">🟢 {{ __('hr.working_now') }}</div><div class="val" style="color:#16A34A">{{ $working }}</div></div>
+    <div class="kpi"><div class="lbl">⏸️ {{ __('hr.on_break_now') }}</div><div class="val" style="color:#B86E00">{{ $onBreak }}</div></div>
+    <div class="kpi"><div class="lbl">✅ {{ __('hr.done_today') }}</div><div class="val">{{ $done }}</div></div>
+    <div class="kpi"><div class="lbl">⚪ {{ __('hr.not_in_yet') }}</div><div class="val" style="color:#B00020">{{ $notIn }}</div></div>
 </div>
 
 <div class="card">
+    <div class="tablewrap">
     <table>
         <thead>
             <tr>
@@ -76,6 +77,7 @@
             @endforeach
         </tbody>
     </table>
+    </div>
 </div>
 
 @endsection

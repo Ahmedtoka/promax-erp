@@ -113,7 +113,7 @@
     {{-- هيدر ثابت — القايمة طويلة والأعمدة بتضيع وانت نازل --}}
     <div class="tablewrap" style="max-height:62vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
             <tr>
                 <th>{{ __('ops.order') }}</th>
                 <th>{{ __('ops.branch_client') }}</th>

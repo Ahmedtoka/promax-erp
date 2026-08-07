@@ -141,7 +141,7 @@
                 <span class="side">{{ $fmt($bucket->sum('qty_remaining')) }} {{ __('stock.units') }}</span></h3>
             <div class="tablewrap exp-tbl" style="max-height:64vh;overflow-y:auto">
                 <table>
-                    <thead style="position:sticky;top:0;z-index:5;background:var(--card,#fff);box-shadow:0 1px 0 var(--border)">
+                    <thead>
                         <tr>
                             <th style="text-align:start">{{ __('stock.item') }}</th>
                             @if ($all)<th>{{ __('stock.warehouse') }}</th>@endif

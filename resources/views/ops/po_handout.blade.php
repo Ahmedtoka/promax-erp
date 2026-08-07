@@ -166,7 +166,7 @@
         {{-- الهيدر ثابت + الصورة جوه خانة الصنف — نفس نمط تسليم العهدة --}}
         <div class="tablewrap" style="margin-top:12px;max-height:56vh;overflow-y:auto">
             <table>
-                <thead style="position:sticky;top:0;z-index:5;background:var(--card, #fff);box-shadow:0 1px 0 var(--border)">
+                <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>
                         <th class="num">{{ __('stock.available') }}</th>

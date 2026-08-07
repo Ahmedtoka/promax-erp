@@ -49,6 +49,7 @@ return [
     'time' => 'Time',
     'today' => 'Today',
     'total' => 'Total',
+    'rows_count' => ':n rows',
     'subtotal' => 'Subtotal',
     'qty' => 'Qty',
     'price' => 'Price',

@@ -85,7 +85,7 @@
     @endphp
     <div class="tablewrap" style="max-height:70vh;overflow-y:auto">
         <table>
-            <thead style="position:sticky;top:0;z-index:5;background:var(--card, #fff);box-shadow:0 1px 0 var(--border)">
+            <thead>
                 <tr>
                     <th>{{ __('stock.pick_order') }}</th>
                     <th>{{ __('ops.branch_client') }}</th>
