@@ -47,9 +47,14 @@ class FieldApiController extends Controller
             'purchase_orders' => ($user->isDriver() || $user->isSalesAgent())
                 ? $this->posPayload($user) : [],
             'today' => $this->todayPayload($user),
+            // ⚠️ **`is_read` لازم تتبعت** (إصلاح 2026-08-07). الأبلكيشن
+            // كان بيعد الإشعارات كلها في الشارة عشان مكانش عارف
+            // المقروء من غيره — فالمندوب يفتحها ويقفلها والرقم زي ما
+            // هو، ويفضل حاسس إن فيه حاجة مستنياه على طول.
             'notifications' => $user->appNotifications()->take(20)->get()->map(fn ($n) => [
                 'id' => $n->id, 'title' => $n->title, 'body' => $n->body,
                 'is_good' => $n->is_good, 'time' => $n->created_at->toIso8601String(),
+                'is_read' => $n->read_at !== null,
             ]),
             // ⚠️ خطة اليوم بتيجي مع البوت ستراب مش في ريكوست منفصل —
             // المندوب بيفتح الأبلكيشن على شبكة موبايل ضعيفة، وكل
