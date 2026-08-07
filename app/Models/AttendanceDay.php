@@ -72,10 +72,15 @@ class AttendanceDay extends Model
         };
     }
 
-    /** الدقايق اللي هيتحاسب عليها — الاعتماد بيغلب المحسوب */
+    /**
+     * الدقايق اللي هيتحاسب عليها — الاعتماد بيغلب المحسوب.
+     *
+     * ⚠️ اللحظي مش المخزّن — يوم لسه مفتوح لازم يعدّ لحد دلوقتي في
+     * إجمالي السجل، وإلا مجموع الشهر بيبقى ناقص شيفت النهارده.
+     */
     public function payableMinutes(): int
     {
-        return $this->approved_minutes ?? $this->worked_minutes;
+        return $this->approved_minutes ?? $this->liveMinutes();
     }
 
     /** «7:45» — الشاشات كلها بتعرض كده */
@@ -84,12 +89,21 @@ class AttendanceDay extends Model
         return sprintf('%d:%02d', intdiv(max($minutes, 0), 60), max($minutes, 0) % 60);
     }
 
+    /** ⚠️ لحظي — كل الشاشات بتعرض منه */
     public function workedLabel(): string
     {
-        return self::hhmm($this->worked_minutes);
+        return self::hhmm($this->liveMinutes());
     }
 
-    public function needsReview(): bool
+    /**
+     * ⚠️ **الاسم مش `needsReview`** (إصلاح 2026-08-08). كان فيه ميثود
+     * إنستانس بنفس اسم السكوب — و`AttendanceDay::needsReview()` في
+     * PHP بتحاول تنادي الإنستانس ستاتيك وترمي «Non-static method
+     * cannot be called statically»، ومابتوصلش لـ`__callStatic` اللي
+     * لارافيل بتحوّل بيه السكوبات أصلاً. القاعدة: **ممنوع اسم ميثود
+     * يطابق اسم سكوب في نفس الموديل.**
+     */
+    public function isPendingReview(): bool
     {
         return $this->status === self::STATUS_AUTO && $this->approved_at === null;
     }
@@ -98,5 +112,47 @@ class AttendanceDay extends Model
     public function scopeNeedsReview(Builder $q): Builder
     {
         return $q->where('status', self::STATUS_AUTO)->whereNull('approved_at');
+    }
+
+    /**
+     * الدقايق المشتغلة **دلوقتي** — المخزّن + الفترة المفتوحة.
+     *
+     * ⚠️ **`worked_minutes` بيخزّن الفترات المقفولة بس** (قرار
+     * 2026-08-08). كان بيخزّن الفترة المفتوحة كمان لحد لحظة الحفظ،
+     * فالعدّاد كان بيقف عند آخر بانش ومايتحركش — الموظف بيشتغل
+     * ساعتين والشاشة بتقول 0:00 لأن مفيش بانش تاني حصل.
+     *
+     * الفصل ده بيخلّي المخزّن **حقيقة ثابتة** والمحسوب **لحظي**،
+     * وكل الشاشات بتنادي هنا بدل ما تقرا العمود مباشرة.
+     */
+    public function liveMinutes(): int
+    {
+        $extra = 0;
+
+        if ($this->status === self::STATUS_OPEN) {
+            $last = $this->punches()->latest('at')->latest('id')->first();
+
+            if ($last !== null
+                && in_array($last->type, [AttendancePunch::IN, AttendancePunch::BACK], true)) {
+                $extra = max((int) $last->at->diffInMinutes(now(), absolute: false), 0);
+            }
+        }
+
+        return $this->worked_minutes + $extra;
+    }
+
+    /** آخر بانش شغل مفتوح — الأبلكيشن بيعدّ منه محلياً */
+    public function openSince(): ?\Carbon\CarbonInterface
+    {
+        if ($this->status !== self::STATUS_OPEN) {
+            return null;
+        }
+
+        $last = $this->punches()->latest('at')->latest('id')->first();
+
+        return $last !== null
+            && in_array($last->type, [AttendancePunch::IN, AttendancePunch::BACK], true)
+                ? $last->at
+                : null;
     }
 }

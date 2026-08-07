@@ -41,7 +41,8 @@ class AttendanceController extends Controller
                 'user' => $u,
                 'day' => $day,
                 'state' => $day?->state() ?? 'off',
-                'worked' => $day ? AttendanceDay::hhmm($day->worked_minutes) : '—',
+                // ⚠️ لحظي — الموظف الشغال دلوقتي رقمه بيزيد
+                'worked' => $day ? AttendanceDay::hhmm($day->liveMinutes()) : '—',
                 'breaks' => $day ? AttendanceDay::hhmm($day->break_minutes) : '—',
                 'in' => $day?->first_in_at,
                 'out' => $day?->last_out_at,

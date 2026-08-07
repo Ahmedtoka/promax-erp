@@ -175,24 +175,25 @@ final class Attendance
     }
 
     /**
-     * نهاية الفترة المفتوحة.
+     * نهاية الفترة المفتوحة — **`null` دايماً**.
      *
-     * ⚠️ **بترجع `null` لليوم المقفول** — يعني الفترة المفتوحة في
-     * يوم مقفول مالهاش وزن. ده بيحصل لو حد قفل اليوم يدوي من غير
-     * بانش انصراف؛ من غير الحارس ده كانت الساعات هتفضل بتزيد للأبد.
+     * ⚠️ **الفترة المفتوحة مابتتخزنش خالص** (إصلاح 2026-08-08). كانت
+     * بترجع `now()`، يعني `worked_minutes` كان بيتحسب لحد **لحظة
+     * آخر بانش وبس** — وبعدها الرقم يفضل واقف. الموظف يشتغل ساعتين
+     * والشاشة تقول نفس الرقم لأن مفيش بانش تاني حصل يعيد الحساب.
      *
-     * ⚠️ ولليوم القديم المفتوح بترجع آخر ثانية في يومه مش `now()` —
-     * وإلا الموظف اللي نسي من إمبارح بيطلع شغال 30 ساعة.
+     * دلوقتي الفصل واضح:
+     *   • `worked_minutes` المخزّن = **الفترات المقفولة بس** — حقيقة
+     *     ثابتة مابتتغيّرش إلا ببانش جديد.
+     *   • `AttendanceDay::liveMinutes()` = المخزّن + الفترة المفتوحة
+     *     محسوبة **وقت العرض** — ده اللي كل الشاشات بتنادي عليه.
+     *
+     * والأبلكيشن بياخد `open_since` ويعدّ محلياً، فالعدّاد بيمشي من
+     * غير ما يضرب السيرفر كل ثانية.
      */
     private static function openEnd(AttendanceDay $day, CarbonInterface $from): ?CarbonInterface
     {
-        if ($day->status !== AttendanceDay::STATUS_OPEN) {
-            return null;
-        }
-
-        $endOfDay = $day->date->copy()->endOfDay();
-
-        return now()->lt($endOfDay) ? now() : $endOfDay;
+        return null;
     }
 
     /**
@@ -250,13 +251,23 @@ final class Attendance
     {
         $day = self::today($user);
 
+        $live = $day->liveMinutes();
+
         return [
             'state' => $day->state(),
             'status' => $day->status,
+            // ⚠️ **`worked_minutes` = المقفول بس، مش اللحظي.**
+            // الأبلكيشن بيضيف عليه الفترة المفتوحة من `open_since`
+            // بنفسه عشان العدّاد يمشي — فلو بعتنا اللحظي هنا، الفترة
+            // المفتوحة كانت هتتعدّ **مرتين** والرقم يجري بالضعف.
             'worked_minutes' => $day->worked_minutes,
             'break_minutes' => $day->break_minutes,
-            'worked_label' => AttendanceDay::hhmm($day->worked_minutes),
+            // ⚠️ الليبل لحظي — لأي حاجة بتعرضه من غير حساب
+            'worked_label' => AttendanceDay::hhmm($live),
             'break_label' => AttendanceDay::hhmm($day->break_minutes),
+            // ⚠️ الأبلكيشن بيعدّ من الوقت ده محلياً — من غيره العدّاد
+            // بيفضل واقف لحد الريكوست الجاي
+            'open_since' => $day->openSince()?->toIso8601String(),
             'sessions' => $day->sessions,
             'first_in_at' => $day->first_in_at?->toIso8601String(),
             'last_out_at' => $day->last_out_at?->toIso8601String(),
