@@ -288,7 +288,14 @@ class Access
             // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
             ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
             // الحضور والانصراف — أول موديول HR
-            ['erp.attendance', '🕒', 'nav.attendance', 'erp.attendance*', ['manager', 'accountant']],
+            //
+            // ⚠️ **الخانة الخامسة مفتاح عدّاد مش رولز** (إصلاح
+            // 2026-08-08). حطيت فيها `['manager','accountant']`
+            // فالسايدبار وقع بـ«Cannot access offset of type array on
+            // array» — `system.blade.php` بتعمل `pluck(4)` وبعدين
+            // `in_array` على القيم دي. مين بيشوف اللينك بيتحدد من
+            // `SCREENS` مش من هنا.
+            ['erp.attendance', '🕒', 'nav.attendance', 'erp.attendance*', null],
             // إصدار الأبلكيشن: رفع APK وإجبار التحديث
             ['erp.app_version', '📲', 'nav.app_version', 'erp.app_version*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
