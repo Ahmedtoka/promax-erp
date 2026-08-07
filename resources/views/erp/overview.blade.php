@@ -15,7 +15,7 @@
 @section('actions')
     @if (auth()->user()->isAdmin())
         {{-- فلو التيست (قرار المالك 2026-08-04): ديمو ← تجربة ← مسح ← استيراد رصيد أول المدة --}}
-        @if (\App\Support\Access::action(auth()->user(), 'act.overview.wipe'))<button class="btn" onclick="openDlg('dlgDemo')">🧪 {{ __('ops.demo_btn') }}</button>@endif
+        @if (\App\Support\Access::action(auth()->user(), 'act.overview.demo'))<button class="btn" onclick="openDlg('dlgDemo')">🧪 {{ __('ops.demo_btn') }}</button>@endif
         @if (\App\Support\Access::action(auth()->user(), 'act.overview.wipe'))<button class="btn red" onclick="openDlg('dlgWipe')">🧨 {{ __('ops.wipe_btn') }}</button>@endif
     @endif
 @endsection
@@ -31,10 +31,36 @@
             <div class="alert warn" style="margin:10px 0">
                 <span>⚠️</span><span>{{ __('ops.wipe_warning') }}</span>
             </div>
-            <ul style="font-size:12px;color:var(--muted);margin:0 0 10px;padding-inline-start:18px;line-height:1.9">
-                <li>{{ __('ops.wipe_goes') }}</li>
-                <li>{{ __('ops.wipe_stays') }}</li>
-            </ul>
+
+            {{--
+                ⚠️ **العمودين دول مش زينة** (2026-08-07). الزرار ده
+                مالوش رجعة، والسطر الواحد اللي كان مكتوب قبل كده
+                («بيتمسح كل الحركة») ماكانش بيطمّن حد إن العملاء
+                والموظفين هيفضلوا. اللي هيدوس لازم يشوف الحاجتين
+                جنب بعض قبل ما يكتب WIPE.
+            --}}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px">
+                <div style="border:1px solid #F3C2C2;background:#FFF6F6;border-radius:10px;padding:10px">
+                    <div style="font-weight:900;font-size:12px;color:#B00020;margin-bottom:6px">
+                        🧨 {{ __('ops.wipe_goes_title') }}
+                    </div>
+                    <ul style="font-size:11.5px;color:var(--muted);margin:0;padding-inline-start:16px;line-height:1.95">
+                        @foreach (__('ops.wipe_goes_list') as $line)
+                            <li>{{ $line }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+                <div style="border:1px solid #C6E6D2;background:#F5FBF7;border-radius:10px;padding:10px">
+                    <div style="font-weight:900;font-size:12px;color:#0E7C5A;margin-bottom:6px">
+                        ✅ {{ __('ops.wipe_stays_title') }}
+                    </div>
+                    <ul style="font-size:11.5px;color:var(--muted);margin:0;padding-inline-start:16px;line-height:1.95">
+                        @foreach (__('ops.wipe_stays_list') as $line)
+                            <li>{{ $line }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            </div>
             <label class="f">{{ __('ops.wipe_type_confirm') }}</label>
             <input type="text" name="confirm" dir="ltr" autocomplete="off" required
                    placeholder="WIPE" style="width:100%;font-weight:900;letter-spacing:2px">

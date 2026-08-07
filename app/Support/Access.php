@@ -305,7 +305,11 @@ class Access
      */
     public const ACTIONS = [
         // ═══ النظرة العامة ═══
-        'act.overview.wipe' => ['perm.act_overview_wipe', 'erp.overview', [], ['erp.wipe', 'erp.demo']],
+        // ⚠️ **الاتنين كانوا مفتاح واحد** (اتفصلوا 2026-08-07). يعني
+        // اللي عايز يحمّل داتا ديمو كان لازم تديله صلاحية **المسح**
+        // كمان — أخطر زرار في السيستم مقابل أخف حاجة فيه.
+        'act.overview.wipe' => ['perm.act_overview_wipe', 'erp.overview', [], ['erp.wipe']],
+        'act.overview.demo' => ['perm.act_overview_demo', 'erp.overview', [], ['erp.demo']],
 
         // ═══ العملاء ═══
         'act.clients.create' => ['perm.act_clients_create', 'erp.clients', ['manager', 'branch_manager'], ['erp.clients.new', 'erp.clients.store', 'erp.clients.clone']],

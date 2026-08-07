@@ -46,12 +46,27 @@ class ResetSystem extends Command
         // على «Cannot delete or update a parent row» وسط الترانزاكشن
         // والسيستم بيفضل نص مفضّي.
 
+        // ⚠️ **الـFK بتتقفل أثناء المسح** (`disableForeignKeyConstraints`)
+        // — يعني `cascadeOnDelete` **مابيشتغلش**. أي جدول مش مذكور
+        // هنا بيفضل بصفوفه شايلة `user_id`/`client_id` لكيانات
+        // اتمسحت، والسيستم بيبدأ «من الصفر» وهو شايل خردة.
+        // (17 جدول كانوا ناقصين — اتضافوا 2026-08-07.)
+
         // الحركات اليومية
         'track_events', 'app_notifications', 'shelf_refills',
         'replenishment_items', 'replenishment_requests', 'merch_visits',
         'invoice_items', 'invoices', 'purchase_order_items', 'purchase_orders',
+        'gift_handouts',
+        'rep_settlements',
         'custody_items', 'custodies', 'visits', 'transactions',
-        'client_requests', 'api_tokens',
+        'client_requests', 'api_tokens', 'device_tokens',
+
+        // الحوافز والليدز والعداد وقفل اليوم
+        'day_closes', 'rep_points', 'rep_targets', 'commission_tiers',
+        'lead_pings', 'odometer_readings', 'vehicle_assignments',
+
+        // سجل حركة اليوزرات + صلاحياتهم
+        'activity_logs', 'user_permissions',
 
         // الجرد — بيشير للباتشات والمخازن واليوزرز
         'stock_count_items', 'stock_counts',
@@ -78,7 +93,14 @@ class ResetSystem extends Command
 
         // التأسيس
         'zone_user', 'channel_user',
-        'clients', 'client_groups', 'products', 'zones', 'channels',
+        'price_list_items', 'price_lists',
+        'clients', 'client_groups',
+        'products', 'product_families',
+        'zones', 'governorates', 'channels',
+
+        // ⚠️ الإعدادات بترجع للافتراضي في `Setting::DEFAULTS` —
+        // مش بتضيع. مسحها جزء من «من الصفر» عن قصد.
+        'settings',
 
         // المستخدمين
         'users',

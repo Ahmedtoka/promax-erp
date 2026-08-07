@@ -44,7 +44,8 @@ return [
     'team_unassign_confirm' => 'تشيل الموظف ده من المدير؟ هيرجع لقايمة «من غير مدير».',
 
     // ---------- ليبلات الأزرار ----------
-    'act_overview_wipe' => 'مسح وتفضية السيستم + الديمو',
+    'act_overview_wipe' => 'مسح الحركة والمخزون (تفضية)',
+    'act_overview_demo' => 'تحميل داتا ديمو',
     'act_clients_create' => 'إضافة واستنساخ عميل',
     'act_clients_edit' => 'تعديل بيانات العميل',
     'act_clients_collect' => 'تحصيل ورصيد افتتاحي',

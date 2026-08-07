@@ -44,7 +44,8 @@ return [
     'team_unassign_confirm' => 'Remove this employee from the manager? He goes back to the unassigned pool.',
 
     // ---------- Action labels ----------
-    'act_overview_wipe' => 'Wipe system data + demo',
+    'act_overview_wipe' => 'Wipe movement & stock',
+    'act_overview_demo' => 'Load demo data',
     'act_clients_create' => 'Add & clone clients',
     'act_clients_edit' => 'Edit client data',
     'act_clients_collect' => 'Collections & opening balance',
