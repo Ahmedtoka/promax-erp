@@ -52,27 +52,73 @@ img{display:block;max-width:100%}
 .logo .brandmark{width:150px;height:auto;margin-bottom:7px}
 .logo .sub{font-size:9.5px;color:rgba(255,255,255,.62);letter-spacing:1.4px;font-weight:600}
 .logo .sub span{color:var(--brand-yellow);font-weight:800}
-.navgrp{font-size:10px;color:rgba(255,255,255,.5);font-weight:800;padding:12px 10px 5px;letter-spacing:.6px}
-/* ═══ المنيو الأكورديون (قرار المالك ٨/٨/٢٠٢٦) ═══
+/* ═══════════════════════════════════════════════════════════
+   المنيو الأكورديون (قرار المالك ٨/٨/٢٠٢٦ + بوليش)
+   ═══════════════════════════════════════════════════════════
+
+   ⚠️ **عنوان المجموعة كان أصغر من اللينكات اللي جواه** — ١٠px
+   رمادي باهت جنب لينكات ١٣px بيضا. العين كانت بتقرا العناوين
+   كأنها هوامش، والمستخدم بيسكرول يدوّر بدل ما يمسح المجموعات.
+   دلوقتي العنوان **أكبر وأبيض وبأيقونة** واللينك اللي جواه أصغر —
+   التسلسل البصري بقى مطابق للتسلسل المنطقي.
+
    ⚠️ `list-style:none` + `::-webkit-details-marker` — المثلث
    الافتراضي بيبان بشكلين مختلفين في كروم وفايرفوكس وبيكسر
-   المحاذاة في الواجهة العربية. --*/
-.navgrp-acc>summary{display:flex;align-items:center;gap:6px;cursor:pointer;
-  list-style:none;user-select:none;border-radius:var(--r-sm);transition:.15s}
+   المحاذاة في الواجهة العربية. */
+.navgrp{font-size:10px;color:rgba(255,255,255,.5);font-weight:800;padding:12px 10px 5px;letter-spacing:.6px}
+
+.navgrp-acc{margin-bottom:3px;border-radius:var(--r-sm);transition:background .15s}
+
+.navgrp-acc>summary{
+  display:flex;align-items:center;gap:9px;cursor:pointer;
+  list-style:none;user-select:none;
+  /* أكبر من اللينك (١٣px) عشان يبان إنه أب مش أخ */
+  font-size:13.5px;font-weight:800;color:#fff;
+  padding:9px 12px;border-radius:var(--r-sm);
+  transition:.15s;
+}
 .navgrp-acc>summary::-webkit-details-marker{display:none}
-.navgrp-acc>summary:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.85)}
-/* ⚠️ **التاب النشط ملوّن** (طلب المالك) — المستخدم لازم يعرف هو
-   فين من غير ما يفتح المجموعات واحدة واحدة. */
+.navgrp-acc>summary:hover{background:rgba(255,255,255,.10)}
+
+/* أيقونة المجموعة — عرض ثابت عشان النصوص تتراص على خط واحد
+   مهما اختلف عرض الإيموجي */
+.navgrp-acc>summary .gi{
+  width:20px;flex-shrink:0;text-align:center;font-size:15px;line-height:1;
+}
+.navgrp-acc>summary .gt{flex:1;min-width:0}
+
+/* ⚠️ **المجموعة النشطة ملوّنة** — المستخدم لازم يعرف هو فين من غير
+   ما يفتح المجموعات واحدة واحدة. */
 .navgrp-acc>summary.on{color:var(--brand-yellow)}
-/* السهم بيلف مع الفتح — إشارة إن ده قابل للطي */
-.navgrp-acc>summary::after{content:'▾';margin-inline-start:auto;font-size:11px;
-  opacity:.6;transition:transform .15s}
-.navgrp-acc[open]>summary::after{transform:rotate(180deg)}
-/* عدّاد المجموعة المقفولة — الشغل المستني مايختفيش وراء الطي */
-.navgrp-acc>summary .cnt{background:var(--brand-yellow);color:var(--ink);
+
+/* ⚠️ **السهم آخر حاجة في السطر دايماً** — كان `margin-inline-start:auto`
+   على السهم وعلى العدّاد الاتنين، فأول ما يبقى فيه عدّاد كان بياخد
+   المساحة والسهم يلزق جنبه في النص. دلوقتي السهم `order:99` والعدّاد
+   `order:98`، فالترتيب ثابت: أيقونة · اسم · عدّاد · سهم. */
+.navgrp-acc>summary::after{
+  content:'▾';order:99;
+  font-size:11px;opacity:.55;transition:transform .15s;flex-shrink:0;
+}
+.navgrp-acc[open]>summary::after{transform:rotate(180deg);opacity:.9}
+.navgrp-acc>summary .cnt{
+  order:98;background:var(--brand-yellow);color:var(--ink);
   font-weight:800;border-radius:20px;padding:1px 8px;font-size:10.5px;
-  margin-inline-start:auto}
-.navgrp-acc>summary::after{margin-inline-start:6px}
+  margin-inline-end:2px;flex-shrink:0;
+}
+
+/* ═══ جسم المجموعة المفتوحة — أغمق عشان تبان إنها جوّه ═══
+   ⚠️ **ده اللي المستخدم طلبه**: من غير خلفية، اللينكات المفتوحة
+   بتسبح على نفس تدرج السايدبار ومفيش حد بصري بيقول «دول تبع اللي
+   فوق». الطبقة الغامقة + الخط الجانبي بيعملوا الحد ده. */
+.navgrp-acc[open]{background:rgba(8,12,30,.28)}
+.navgrp-acc[open]>summary{background:rgba(8,12,30,.22)}
+.navgrp-acc .navbody{
+  padding:4px 6px 7px;
+  border-inline-start:2px solid rgba(255,255,255,.14);
+  margin-inline-start:20px;   /* بمحاذاة أيقونة المجموعة */
+}
+/* اللينك جوّه المجموعة أصغر من العنوان — التسلسل البصري */
+.navgrp-acc .navbody .navlink{font-size:12px;padding:7px 10px}
 .navlink{display:flex;align-items:center;gap:9px;padding:8.5px 12px;border-radius:var(--r-sm);font-weight:600;font-size:13px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
 .navlink:hover{background:rgba(255,255,255,.12);color:#fff}
 .navlink.active{background:#fff;color:var(--royal-blue);font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.18)}
@@ -332,21 +378,30 @@ dialog h4{font-size:16px;font-weight:900;margin-bottom:14px}
                 ->sum(fn ($l) => $l[4] ? ($navCounts[$l[4]] ?? 0) : 0);
         @endphp
         <details class="navgrp-acc" data-acc @if ($groupActive) open @endif>
-            <summary class="navgrp {{ $groupActive ? 'on' : '' }}">
-                <span>{{ __($group) }}</span>
+            {{-- ⚠️ **الأيقونة من `Access::GROUP_ICONS`** — جنب الاسم
+                 مش بدله. الاسم لوحده بيتقري، والأيقونة بتخلّي العين
+                 تلاقي المجموعة من غير ما تقرا. --}}
+            <summary class="{{ $groupActive ? 'on' : '' }}">
+                <span class="gi">{{ \App\Support\Access::GROUP_ICONS[$group] ?? '•' }}</span>
+                <span class="gt">{{ __($group) }}</span>
                 @if ($groupCount > 0)
                     <span class="cnt">{{ $groupCount }}</span>
                 @endif
             </summary>
-            @foreach ($links as [$route, $icon, $label, $pattern, $counter])
-                <a class="navlink {{ request()->routeIs($pattern) ? 'active' : '' }}"
-                   href="{{ route($route) }}">
-                    {{ $icon }} {{ __($label) }}
-                    @if ($counter && ($navCounts[$counter] ?? 0) > 0)
-                        <span class="cnt">{{ $navCounts[$counter] }}</span>
-                    @endif
-                </a>
-            @endforeach
+            {{-- ⚠️ **`.navbody` مش لينكات سايبة** — هي اللي شايلة
+                 الخلفية الغامقة والخط الجانبي اللي بيقولوا «دول جوّه
+                 المجموعة اللي فوق». --}}
+            <div class="navbody">
+                @foreach ($links as [$route, $icon, $label, $pattern, $counter])
+                    <a class="navlink {{ request()->routeIs($pattern) ? 'active' : '' }}"
+                       href="{{ route($route) }}">
+                        {{ $icon }} {{ __($label) }}
+                        @if ($counter && ($navCounts[$counter] ?? 0) > 0)
+                            <span class="cnt">{{ $navCounts[$counter] }}</span>
+                        @endif
+                    </a>
+                @endforeach
+            </div>
         </details>
     @endforeach
 

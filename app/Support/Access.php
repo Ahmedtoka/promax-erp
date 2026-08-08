@@ -189,6 +189,34 @@ class Access
      *
      * @var array<string, list<array{0:string,1:string,2:string,3:string,4:?string}>>
      */
+    /**
+     * أيقونة كل مجموعة في السايدبار.
+     *
+     * ⚠️ **مفصولة عن `NAV` عن قصد.** مفتاح المجموعة في `NAV` هو
+     * مفتاح الترجمة نفسه (`nav.group_x`)، فمفيش مكان أحط فيه أيقونة
+     * من غير ما أحوّل المجموعة لأراي متداخلة وأكسر كل اللي بيقرا منها
+     * (`PermissionController` بيمشي على `array_keys` و`array_merge`).
+     *
+     * ⚠️ **الأيقونة جنب الاسم مش بدله** — الاسم بيتقري، والأيقونة
+     * بتخلّي العين تلاقي المجموعة من غير ما تقرا. مفتاح مش موجود
+     * هنا بياخد `•` بدل ما الصف يقع.
+     *
+     * @var array<string, string>
+     */
+    public const GROUP_ICONS = [
+        'nav.group_home' => '🏠',
+        'nav.group_products' => '🏷️',
+        'nav.group_wh' => '🏭',
+        'nav.group_custody' => '🚐',
+        'nav.group_ka' => '🚚',
+        'nav.group_purchasing' => '🤝',
+        'nav.group_clients' => '👥',
+        'nav.group_field' => '🗺️',
+        'nav.group_money' => '💰',
+        'nav.group_reports' => '📑',
+        'nav.group_settings' => '⚙️',
+    ];
+
     public const NAV = [
         // ⚠️ **الترتيب هو سايكل الشغل نفسه (قرار المالك 2026-08-04).**
         // الصنف يتعرّف بوحداته ويتسعّر → يتشري من المورد → يدخل
