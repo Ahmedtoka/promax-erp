@@ -42,6 +42,27 @@ class AppNotification extends Model
         return 'request:'.$id;
     }
 
+    /**
+     * ترجمة نفس الوجهة القصيرة لصفحة ويب — للجرس في الداش بورد
+     * (٩ أغسطس ٢٠٢٦). نفس مبدأ الأبلكيشن: وجهة مش معروفة = null
+     * والجرس بيعرض الإشعار من غير لينك بدل ما يرمي 404.
+     */
+    public function webUrl(): ?string
+    {
+        $link = (string) $this->link;
+        [$kind, $id] = array_pad(explode(':', $link, 2), 2, null);
+
+        return match ($kind) {
+            'po' => route('ops.pos', ['q' => '']).'#po-'.$id,
+            'pick' => route('wh.picks'),
+            'request' => route('ops.requests'),
+            'replenishment' => route('ops.replenishments'),
+            'collections' => route('erp.collections'),
+            'custody' => route('ops.handout'),
+            default => null,
+        };
+    }
+
     protected function casts(): array
     {
         return ['is_good' => 'boolean', 'read_at' => 'datetime'];

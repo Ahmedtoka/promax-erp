@@ -357,6 +357,33 @@ class OpsController extends Controller
                 );
             }
 
+            // ⚠️ **الخصم بيتسجّل على السطر مش بيتقرا وقت الطباعة.**
+            // خصم العميل بيتغيّر (عقد بينتهي، نسبة بتتظبط)، والورقة
+            // اللي الفرع بيمضي عليها لازم تفضل شاهدة على اللحظة اللي
+            // الأمر اتسعّر فيها. `list_price` قبل الخصم، و`price`
+            // فضل بعد الخصم زي ما هو عشان `total` مايتحركش.
+            //
+            // ⚠️ وضع `old`/`new` **مالوش خصم أصلاً** — ده سعر قايمة
+            // صافي متفق عليه مع السلسلة. اشتقاق النسبة من الفرق
+            // بين القايمتين كان هيطبع «خصم 8%» على أمر محدش اتفق
+            // فيه على خصم.
+            //
+            // ⚠️ **النسبة بتتاخد من العميل مباشرة، مش بتتعكس من السعر.**
+            // `Pricing::unitPrice` بتقرّب لقرشين قبل ما نقسم، فعكسها
+            // (`1 - price/list`) كان بيطلّع 9.98% لعقد 10% على صنف
+            // سعره 13.33 — ومستند بيتمضى عليه بيقول نسبة مختلفة عن
+            // العقد وعن فاتورة نفس العميل (اللي بتخزّن الكسر الصح).
+            $discountPct = $priceMode === 'channel' ? $client->effectiveDiscount() : 0.0;
+
+            $listPrice = $priceMode === 'channel'
+                ? \App\Services\Pricing::listPriceFor($client, $product)
+                : (float) $price;
+
+            // القايمة الناقصة بترجّع 0 — ساعتها السعر المطبوع هو المتاح
+            if ($listPrice <= 0) {
+                $listPrice = (float) $price;
+            }
+
             $lineTotal = round($qty * $price, 2);
 
             // الضريبة سطر بسطر من `Tax` — نفس قاعدة الفاتورة بالظبط
@@ -368,6 +395,8 @@ class OpsController extends Controller
                 'product_id' => $product->id,
                 'qty' => $qty,
                 'price' => $price,
+                'list_price' => $listPrice,
+                'discount_pct' => $discountPct,
                 'total' => $lineTotal,
                 'tax_rate' => $taxRate,
                 'tax' => $lineTax,

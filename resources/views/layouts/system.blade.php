@@ -142,6 +142,51 @@ img{display:block;max-width:100%}
 .topbar h1{font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--ink)}
 .topbar .meta{display:flex;align-items:center;gap:8px}
 
+/* ═══ جرس الإشعارات (2026-08-09) ═══ */
+.bell{position:relative}
+.bell summary{
+  list-style:none;cursor:pointer;position:relative;display:flex;
+  align-items:center;justify-content:center;width:38px;height:38px;
+  border:1px solid var(--border);border-radius:12px;background:var(--card);
+  font-size:17px;user-select:none;
+}
+.bell summary::-webkit-details-marker{display:none}
+.bell[open] summary{border-color:var(--royal-blue);box-shadow:var(--shadow)}
+.bell-badge{
+  position:absolute;top:-6px;inset-inline-end:-6px;background:var(--red);
+  color:#fff;font-size:9.5px;font-weight:800;border-radius:99px;
+  padding:2px 5.5px;line-height:1.2;border:2px solid var(--card);
+}
+.bell-panel{
+  position:absolute;top:calc(100% + 8px);inset-inline-end:0;z-index:60;
+  width:340px;max-height:430px;overflow:auto;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);
+}
+.bell-head{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 13px;border-bottom:1px solid var(--border);font-size:12.5px;
+  position:sticky;top:0;background:var(--card);z-index:1;
+}
+.bell-clear{
+  border:0;background:none;color:var(--royal-blue);font-size:11px;
+  font-weight:700;cursor:pointer;font-family:inherit;
+}
+.bell-item{
+  display:flex;gap:9px;padding:10px 13px;border-bottom:1px solid var(--border);
+  text-decoration:none;color:var(--ink);align-items:flex-start;
+}
+.bell-item:hover{background:var(--card2)}
+.bell-item.unread{background:var(--blue-050)}
+.bell-dot{width:8px;height:8px;border-radius:99px;margin-top:5px;flex:none}
+.bell-dot.good{background:var(--green)}
+.bell-dot.bad{background:var(--red)}
+.bell-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bell-txt b{font-size:12px;line-height:1.5}
+.bell-txt span{font-size:11px;color:var(--muted);line-height:1.55}
+.bell-txt small{font-size:10px;color:var(--muted);opacity:.8}
+.bell-empty{padding:26px;text-align:center;color:var(--muted);font-size:12px}
+@media print{.bell{display:none !important}}
+
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .kpi::before{content:"";position:absolute;inset-block-start:0;inset-inline-start:0;width:100%;height:3px;background:var(--brand-gradient);opacity:.85}
@@ -479,7 +524,49 @@ dialog .formbar-sp{flex:1}
   <main class="main">
     <div class="topbar">
       <h1>@yield('title')</h1>
-      <div class="meta">@yield('actions')</div>
+      <div class="meta">
+        @yield('actions')
+
+        {{-- ═══ جرس الإشعارات (2026-08-09) — نفس صفوف الموبايل ═══
+             ⚠️ استعلامين خفاف لكل صفحة (عدّاد + آخر 12) — مقبول.
+             لو بقوا تقال، كاش دقيقة بمفتاح اليوزر. --}}
+        @php
+            $bellUnread = auth()->user()->appNotifications()->whereNull('read_at')->count();
+            $bellItems = auth()->user()->appNotifications()->latest()->take(12)->get();
+        @endphp
+        <details class="bell">
+          <summary title="{{ __('common.notifications') }}">
+            🔔
+            @if ($bellUnread > 0)
+                <span class="bell-badge">{{ $bellUnread > 99 ? '99+' : $bellUnread }}</span>
+            @endif
+          </summary>
+          <div class="bell-panel">
+            <div class="bell-head">
+              <b>{{ __('common.notifications') }}</b>
+              @if ($bellUnread > 0)
+                  <form method="POST" action="{{ route('notifications.read') }}">
+                      @csrf
+                      <button class="bell-clear">{{ __('common.mark_all_read') }}</button>
+                  </form>
+              @endif
+            </div>
+            @forelse ($bellItems as $note)
+                <a class="bell-item {{ $note->read_at ? '' : 'unread' }}"
+                   href="{{ route('notifications.go', $note) }}">
+                    <span class="bell-dot {{ $note->is_good ? 'good' : 'bad' }}"></span>
+                    <span class="bell-txt">
+                        <b>{{ $note->title }}</b>
+                        @if ($note->body)<span>{{ $note->body }}</span>@endif
+                        <small>{{ $note->created_at->diffForHumans() }}</small>
+                    </span>
+                </a>
+            @empty
+                <div class="bell-empty">{{ __('common.no_notifications') }}</div>
+            @endforelse
+          </div>
+        </details>
+      </div>
     </div>
 
     {{-- ⚠️ **تحذير المايجريشن المعلّقة.** اتحط بعد ما شاشة حفظ عميل

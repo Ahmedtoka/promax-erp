@@ -46,7 +46,7 @@ return [
     'reference' => 'Reference',
     'reference_ph' => 'Transfer / cheque no.',
 
-    'purchase_orders' => 'Supplier Orders',
+    'purchase_orders' => 'Purchase Orders',
     'new_order' => 'New supplier order',
     'no_orders' => 'No purchase orders yet.',
     'order_created' => 'Purchase order :number created.',

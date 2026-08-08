@@ -107,14 +107,14 @@ return [
     ],
 
     'track' => [
-        'start' => 'Custody received',
+        'start' => 'Van stock received',
         'open' => 'App opened',
         'check_in' => 'Checked in',
         'check_out' => 'Checked out',
         'sale' => 'Sale',
         'return' => 'Return',
         'gift' => 'Gift',
-        'deliver' => 'PO delivered',
+        'deliver' => 'Sales order delivered',
         'refill' => 'Shelf Refill',
         'request' => 'New client request',
         'shift_in' => 'Shift start',

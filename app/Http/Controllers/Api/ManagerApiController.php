@@ -467,6 +467,13 @@ class ManagerApiController extends Controller
                     'address' => $r->client?->address,
                     'channel' => $r->client?->channel?->displayName(),
                     'promoter' => $r->promoter?->displayName(),
+                    // ═══ مصدر الطلب (2026-08-09): بروموتر من زيارة رف،
+                    // ولا مندوب واقف عند العميل. الشاشة بتوري بادج،
+                    // وطلب المندوب بيترشّح **هو نفسه** يستلمه —
+                    // «يرجع تاني للمندوب» زي ما المالك طلب.
+                    'origin' => $r->origin(),
+                    'origin_label' => $r->originLabel(),
+                    'requested_by_id' => (int) $r->requested_by,
                     'assignee' => $r->assignee?->displayName(),
                     'status' => $r->status,
                     'status_label' => $r->statusLabel(),

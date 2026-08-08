@@ -38,7 +38,13 @@
                     <td class="num"><b>{{ $r->number }}</b><br>
                         <span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d H:i') }}</span></td>
                     <td><b>{{ $r->client->displayName() }}</b></td>
-                    <td>{{ $r->promoter?->displayName() ?? '—' }}</td>
+                    <td>
+                        {{ $r->promoter?->displayName() ?? '—' }}
+                        {{-- مصدر الطلب (2026-08-09): مندوب واقف عند
+                             العميل ولا بروموتر من زيارة رف --}}
+                        <br><span class="badge {{ $r->origin() === 'rep' ? 'b-blue' : 'b-gray' }}"
+                              style="font-size:9.5px">{{ $r->originLabel() }}</span>
+                    </td>
                     <td style="white-space:normal;max-width:260px;font-size:11.5px">
                         @foreach ($r->items as $i)
                             <div>{{ $i->product->displayName() }} — <b>{{ $i->qty }}</b></div>

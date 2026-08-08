@@ -79,4 +79,8 @@ return [
     'missing_address' => 'The company address is incomplete (governorate/city/street/building)',
     'product_no_code' => 'Item :product has neither a barcode nor a tax authority code',
     'export_failed' => 'Building the file failed — try again',
+
+    'print_address' => 'Print address',
+    'print_address_hint' => 'The line printed in the footer of sales orders and invoices — separate from the address fields below, which go to the tax authority.',
+    'bank_hint' => 'Printed beside the totals on the sales order',
 ];

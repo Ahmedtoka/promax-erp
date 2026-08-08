@@ -92,7 +92,66 @@
                 <label class="f">{{ __('tax.phone') }}</label>
                 <input type="text" name="company_phone" value="{{ $s['company_phone'] ?? '' }}" style="width:100%">
             </div>
+            <div>
+                <label class="f">{{ __('doc.cr') }}</label>
+                <input type="text" name="company_cr" value="{{ $s['company_cr'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.email') }}</label>
+                <input type="email" name="company_email" value="{{ $s['company_email'] ?? '' }}" style="width:100%">
+            </div>
         </div>
+
+        {{-- ⚠️ سطر واحد **للطباعة**، منفصل عن حقول العنوان المفكوكة تحت.
+             المفكوكة بتروح لمصلحة الضرائب بصيغتها المطلوبة، وده اللي
+             بيتقرا بعين بشرية على الورقة. --}}
+        <div style="margin-top:12px">
+            <label class="f">{{ __('tax.print_address') }}</label>
+            <input type="text" name="company_address" value="{{ $s['company_address'] ?? '' }}" style="width:100%">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('tax.print_address_hint') }}</div>
+        </div>
+    </div>
+
+    {{-- ═══════════ بيانات البنك ═══════════ --}}
+    <div class="card">
+        <h3>🏦 {{ __('doc.bank_details') }}
+            <span class="side">{{ __('tax.bank_hint') }}</span></h3>
+
+        {{-- ⚠️ التحذير قبل الحقول مش بعدها: مستند بيقول «حوّل على
+             الحساب المدرج فقط» وفيه رقم حساب وهمي أخطر من مستند
+             من غير بيانات بنك خالص. --}}
+        @if (\App\Models\Setting::bankIsDemo())
+            <div class="alert warn">{{ __('doc.bank_demo') }}</div>
+        @endif
+
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('doc.bank_name') }}</label>
+                <input type="text" name="bank_name" value="{{ $s['bank_name'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.bank_branch') }}</label>
+                <input type="text" name="bank_branch" value="{{ $s['bank_branch'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.bank_account_name') }}</label>
+                <input type="text" name="bank_account_name" value="{{ $s['bank_account_name'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.bank_account_no') }}</label>
+                <input type="text" name="bank_account_no" value="{{ $s['bank_account_no'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.bank_iban') }}</label>
+                <input type="text" name="bank_iban" value="{{ $s['bank_iban'] ?? '' }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('doc.bank_swift') }}</label>
+                <input type="text" name="bank_swift" value="{{ $s['bank_swift'] ?? '' }}" style="width:100%">
+            </div>
+        </div>
+
+        <div class="alert info">{{ __('doc.bank_note') }}</div>
     </div>
 
     {{-- ═══════════ العنوان ═══════════ --}}

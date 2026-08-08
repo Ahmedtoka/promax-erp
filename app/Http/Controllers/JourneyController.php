@@ -719,12 +719,22 @@ class JourneyController extends Controller
             report: false,
         );
 
+        // ═══ صور ترتيب الرفوف بتاعة اليوم (2026-08-09) ═══
+        // المدير بيشوف شغل المندوب على الرف قبل وبعد — مجمّعة بالعميل.
+        $shelfPhotos = \App\Models\VisitPhoto::with('visit.client')
+            ->whereIn('visit_id', \App\Models\Visit::where('user_id', $user->id)
+                ->whereDate('created_at', $date)->select('id'))
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn ($p) => $p->visit->client?->displayName() ?? '—');
+
         return view('ops.rep_day', [
             'rep' => $user,
             'date' => $date,
             'rows' => Journeys::forDay($user, $date),
             'offPlan' => Journeys::offPlan($user, $date),
             'summary' => Journeys::summary($user, $date),
+            'shelfPhotos' => $shelfPhotos,
         ]);
     }
 }

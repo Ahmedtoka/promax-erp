@@ -95,4 +95,9 @@ return [
     'no' => 'No',
     'note' => 'Note',
     'minutes' => 'minutes',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'notifications' => 'Notifications',
+    'mark_all_read' => 'Mark all read',
+    'no_notifications' => 'No notifications yet',
 ];

@@ -16,7 +16,7 @@ return [
     'min_above_latest' => 'Minimum cannot be higher than the latest version — that locks every device onto an update that does not exist',
 
     'note' => 'Update message',
-    'note_ph' => 'e.g. Fixed supply orders + new notifications screen',
+    'note_ph' => 'e.g. Fixed sales orders + new notifications screen',
     'note_hint' => 'Shown to the rep on the update screen — tell them what changed',
 
     'apk' => 'Install file (APK)',

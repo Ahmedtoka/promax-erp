@@ -39,6 +39,24 @@ Route::post('/locale/{locale}', [LocaleController::class, 'switch'])->name('loca
 // بيرسم منه، فمستحيل اللينك يبان لواحد والصفحة ترفضه.
 Route::middleware(['auth', 'screen'])->group(function () {
 
+    // ═══ جرس الإشعارات في الداش بورد (2026-08-09) ═══
+    //
+    // ⚠️ **نفس صفوف `app_notifications` بتاعة الموبايل** — مصدر واحد،
+    // فالإشعار اللي بيوصل للتليفون بيبان في الداش بورد والعكس.
+    // «go» بيعلّم مقروء ويحوّل لصفحة الويب المقابلة للوجهة القصيرة.
+    Route::post('/notifications/read-all', function () {
+        auth()->user()->appNotifications()->whereNull('read_at')->update(['read_at' => now()]);
+
+        return back();
+    })->name('notifications.read');
+
+    Route::get('/notifications/{note}/go', function (\App\Models\AppNotification $note) {
+        abort_unless((int) $note->user_id === (int) auth()->id(), 403);
+        $note->update(['read_at' => now()]);
+
+        return redirect($note->webUrl() ?? url()->previous());
+    })->name('notifications.go');
+
     // ================= الـ ERP =================
     Route::prefix('erp')->name('erp.')->group(function () {
         Route::get('/', [ErpController::class, 'overview'])->name('overview');
@@ -332,6 +350,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,accountant')->name('dayclose');
         Route::post('/day-close', [\App\Http\Controllers\DayCloseController::class, 'store'])
             ->middleware('role:admin,accountant')->name('dayclose.store');
+
+        // ═════ تحصيلات الميدان (2026-08-09) — للمطابقة، عرض بس ═════
+        Route::get('/collections', [\App\Http\Controllers\CollectionController::class, 'index'])
+            ->middleware('role:admin,manager,accountant')->name('collections');
 
         // ═════ تصفية المناديب (2026-08-06) — قفلة الحسابات اليومية ═════
         Route::get('/rep-close', [\App\Http\Controllers\RepSettlementController::class, 'index'])

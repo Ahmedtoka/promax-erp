@@ -28,13 +28,13 @@ return [
     'return_consignment' => 'Consignment client — returns are settled from the branch sales report, not here.',
     'qty_too_large' => 'Quantity exceeds the allowed limit — check the unit and the number.',
     'po_over_delivery' => 'You cannot deliver more than the order asks - extras go on a regular invoice.',
-    'po_item_not_in_order' => 'This product is not part of the purchase order.',
+    'po_item_not_in_order' => 'This product is not part of the sales order.',
     'po_nothing_delivered' => 'Nothing was delivered - if the branch refused the whole delivery, tell management.',
-    'order_not_yours' => 'This purchase order is not assigned to you.',
+    'order_not_yours' => 'This sales order is not assigned to you.',
     'not_your_channel' => 'This request belongs to a channel you do not manage.',
 
     // ---------- State ----------
-    'order_not_pending' => 'This purchase order is not pending.',
+    'order_not_pending' => 'This sales order is not pending.',
     'request_already_decided' => 'This request has already been decided.',
     'request_already_assigned' => 'This request has already been assigned.',
     'unknown_price_mode' => 'Unknown price mode.',

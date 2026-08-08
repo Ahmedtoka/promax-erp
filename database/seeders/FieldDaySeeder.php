@@ -286,13 +286,23 @@ class FieldDaySeeder extends Seeder
                 if (! $product) {
                     continue;
                 }
-                $price = $product->priceFor('old');
+                // ⚠️ الديمو بيتحسب بقايمة `old` (سعر صافي بدون خصم)،
+                // بس ورقة أمر التوريد فيها عمود خصم. من غير خصم في
+                // الديمو، العمود بيطلع «—» في كل سطر والمالك بيفتكر
+                // الفيتشر مش شغالة. خصم صغير على البضاعة الديمو
+                // بيخلّي الورقة تتعرض بالشكل الحقيقي بتاعها.
+                $listPrice = round((float) $product->priceFor('old'), 2);
+                $demoDiscount = 0.05;
+                $price = round($listPrice * (1 - $demoDiscount), 2);
+
                 PurchaseOrderItem::create([
                     'purchase_order_id' => $po->id,
                     'product_id' => $product->id,
                     'qty' => $qty,
                     'delivered_qty' => $status === 'delivered' ? $qty : 0,
                     'price' => $price,
+                    'list_price' => $listPrice,
+                    'discount_pct' => $demoDiscount,
                     'total' => $qty * $price,
                 ]);
                 $total += $qty * $price;

@@ -260,9 +260,29 @@ class Pricing
      */
     public static function unitPrice(Client $client, Product $product): float
     {
+        return round(self::listPriceFor($client, $product) * (1 - $client->effectiveDiscount()), 2);
+    }
+
+    /**
+     * سعر القايمة للعميل **قبل الخصم** — الأساس اللي `unitPrice`
+     * بتضرب فيه.
+     *
+     * ⚠️ **موجودة عشان الاتنين مايفترقوش.** أوامر التوريد بتخزّن
+     * السعر قبل الخصم على البند عشان الورقة تطبع «سعر / خصم / سعر بعد
+     * الخصم». أول نسخة كتبت الاشتقاق بإيدها (`listPrice($product,
+     * listRowFor($client))`) وسابت الـfallback لـ`listFor()` اللي
+     * في `unitPrice` — يعني عميل من غير صف قايمة على قايمة `old`
+     * كان هياخد `price_new` كسعر «قبل الخصم» وسعر `old` بعد الخصم،
+     * وتطلع نسبة خصم مالهاش وجود على مستند بيتمضى عليه.
+     *
+     * ⚠️ **مش هي `priceForClient`.** دي بترجّع `null` للصنف المش
+     * متسعّر عشان البيع يترفض؛ ودي بترجّع الرقم الخام للعرض.
+     */
+    public static function listPriceFor(Client $client, Product $product): float
+    {
         $row = self::listRowFor($client);
 
-        return round(self::listPrice($product, $row ?? self::listFor($client)) * (1 - $client->effectiveDiscount()), 2);
+        return self::listPrice($product, $row ?? self::listFor($client));
     }
 
     /**

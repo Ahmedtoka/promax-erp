@@ -227,7 +227,30 @@ class RepSettlementController extends Controller
         $refundRows = $refundRows->concat($erpRefunds);
         $cashRefunds = round((float) $refundRows->sum('debit'), 2);
 
-        $expected = round($cashSales - $cashRefunds, 2);
+        // ═══ التحصيلات الميدانية (٩ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **المندوب بقى بيحصّل من المديونية أثناء الزيارة** — قيود
+        // `collection` مصدرها زياراته (نفس مرساة الـ`refund` فوق).
+        //
+        // ⚠️⚠️ **الكاش بس هو اللي بيدخل «المتوقع».** الشيك والتحويل
+        // والكارت فلوس **ماوصلتش إيده** — دخلت البنك أو في الدرج
+        // كورقة. حسابها عليه كان معناه إن كل شيك يستلمه يطلع عجز
+        // نقدي بنفس قيمته في تصفيته. غير الكاش بيتعرض قايمة مستقلة
+        // بمرجعها وصورة إثباتها — تسليم مستندات مش فلوس.
+        $collectionRows = Transaction::where('kind', 'collection')
+            ->where('source_type', Visit::class)
+            ->whereIn('source_id', Visit::where('user_id', $rep->id)->select('id'))
+            ->when($from, fn ($q) => $q->where('created_at', '>', $from))
+            ->where('created_at', '<=', $now)
+            ->with('client')
+            ->get();
+
+        $cashCollections = round((float) $collectionRows
+            ->where('method', Transaction::METHOD_CASH)->sum('credit'), 2);
+        $otherCollections = $collectionRows
+            ->where('method', '!=', Transaction::METHOD_CASH)->values();
+
+        $expected = round($cashSales + $cashCollections - $cashRefunds, 2);
         $prev = round((float) ($last?->balance ?? 0), 2);
 
         return [
@@ -242,6 +265,10 @@ class RepSettlementController extends Controller
             'cash_sales' => $cashSales,
             'credit_sales' => $creditSales,
             'cash_refunds' => $cashRefunds,
+            'collection_rows' => $collectionRows,
+            'cash_collections' => $cashCollections,
+            'other_collections' => $otherCollections,
+            'other_collections_value' => round((float) $otherCollections->sum('credit'), 2),
             'expected' => $expected,
             'prev_balance' => $prev,
             'due_total' => round($prev + $expected, 2),

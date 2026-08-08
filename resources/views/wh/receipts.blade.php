@@ -135,7 +135,7 @@
 @endif
 
 @if ($manager)
-<dialog id="dlgNewGrn">
+<dialog id="dlgNewGrn" class="wide">
     <form class="dlg" method="POST" action="{{ route('wh.receipts.store') }}" style="width:min(1040px,96vw)"
           onsubmit="return grnBeforeSubmit()">
         @csrf

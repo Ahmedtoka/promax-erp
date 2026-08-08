@@ -26,8 +26,14 @@ class AuthApiController extends Controller
             return response()->json(['message' => __('api.bad_credentials')], 401);
         }
 
-        // الأدمن والمدير بيدخلوا الأبلكيشن كمان (شاشة متابعة وموافقات)
-        if (! in_array($user->role, ['sales_agent', 'driver', 'promoter', 'manager', 'admin'], true)) {
+        // الأدمن والمدير بيدخلوا الأبلكيشن كمان (شاشة متابعة وموافقات).
+        // ⚠️ **أمين المخزن اتفتح له** (2026-08-09) — بقت له شاشة
+        // تجهيز حقيقية على الموبايل. والمحاسب بيشوف إشعاراته
+        // (تحصيلات الشيكات والتحويلات) من `OfficeHome`.
+        if (! in_array($user->role, [
+            'sales_agent', 'driver', 'promoter', 'manager', 'admin',
+            'warehouse_keeper', 'accountant',
+        ], true)) {
             return response()->json(['message' => __('api.no_app_access')], 403);
         }
 

@@ -130,4 +130,40 @@
 </div>
 @endif
 
+{{-- ═══════════ صور ترتيب الرفوف (2026-08-09) ═══════════
+     شغل المندوب على الرف قبل وبعد — مجمّعة بالعميل، والصورة
+     بتفتح بالحجم الكامل في تاب. --}}
+@if ($shelfPhotos->isNotEmpty())
+<div class="card">
+    <h3>🖼️ {{ __('field.shelf_photos') }} <span class="side">{{ $shelfPhotos->flatten()->count() }}</span></h3>
+
+    @foreach ($shelfPhotos as $clientName => $photos)
+        <div style="margin-bottom:14px">
+            <div style="font-weight:800;font-size:12.5px;margin-bottom:7px">{{ $clientName }}</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+                @foreach (['before', 'after'] as $stage)
+                    @php $stagePhotos = $photos->where('stage', $stage); @endphp
+                    @if ($stagePhotos->isNotEmpty())
+                        <div>
+                            <div style="font-size:10.5px;color:var(--muted);font-weight:700;margin-bottom:5px">
+                                {{ $stage === 'before' ? '📷 '.__('field.shelf_before') : '✨ '.__('field.shelf_after') }}
+                                · {{ $stagePhotos->count() }}
+                            </div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                @foreach ($stagePhotos as $p)
+                                    <a href="{{ $p->url() }}" target="_blank">
+                                        <img src="{{ $p->url() }}" alt=""
+                                             style="width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--border)">
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                @endforeach
+            </div>
+        </div>
+    @endforeach
+</div>
+@endif
+
 @endsection

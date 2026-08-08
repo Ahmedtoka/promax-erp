@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\StockShortage;
 use App\Http\Controllers\Controller;
+use App\Models\AppNotification;
 use App\Models\Client;
 use App\Models\ClientRequest;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\TrackEvent;
 use App\Models\Transaction;
@@ -706,6 +708,304 @@ class FieldApiController extends Controller
             $visit->lat, $visit->lng);
 
         return response()->json(['minutes' => $visit->minutes()]);
+    }
+
+    // ═══════════ ٣ أوبشنات الزيارة الجديدة (٩ أغسطس ٢٠٢٦) ═══════════
+
+    /**
+     * POST /api/visits/{visit}/collect — تحصيل من العميل أثناء الزيارة.
+     * multipart: amount, method, reference?, cheque_bank?, cheque_due?, proof?
+     *
+     * ⚠️ **الزيارة المفتوحة هي المرساة** — نفس دوكترين الفاتورة
+     * والمرتجع بالظبط. قيد `collection` على دفتر عميل من غير زيارة
+     * كان معناه إن أي توكن مندوب يقدر «يحصّل» من أي عميل ويصفّر
+     * مديونيته على الورق والفلوس ماوصلتش.
+     *
+     * ⚠️ **صورة الإثبات إجبارية لغير الكاش.** «تحويل 5000» من غير
+     * سكرين شوت كلمة — المحاسب في التصفية بيطابق القيد على الصورة.
+     *
+     * ⚠️ **`source` = الزيارة** — التصفية بتلم تحصيلات المندوب من
+     * قيود `collection` اللي مصدرها زياراته (زي `refund` بالظبط).
+     */
+    public function collect(Request $request, Visit $visit): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($visit->user_id !== $user->id) {
+            return response()->json(['message' => __('api.not_your_visit')], 403);
+        }
+        if (! $visit->isOpen()) {
+            return response()->json(['message' => __('field.visit_already_closed')], 422);
+        }
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1', 'max:10000000'],
+            'method' => ['required', \Illuminate\Validation\Rule::in(Transaction::METHODS)],
+            // نفس قواعد شاشة التحصيل في الـERP — السيرفر هو اللي بيرفض
+            'reference' => ['nullable', 'required_unless:method,cash', 'string', 'max:100'],
+            'cheque_bank' => ['nullable', 'required_if:method,cheque', 'string', 'max:120'],
+            'cheque_due' => ['nullable', 'required_if:method,cheque', 'date'],
+            'proof' => ['nullable', 'required_unless:method,cash', 'file', 'image', 'max:8192'],
+            'note' => ['nullable', 'string', 'max:190'],
+        ], [], [
+            'amount' => __('field.attr_collect_amount'),
+            'proof' => __('field.attr_collect_proof'),
+        ]);
+
+        $client = $visit->client;
+
+        $proofPath = $request->hasFile('proof')
+            ? $request->file('proof')->store('collection-proofs', 'public')
+            : null;
+
+        $tx = DB::transaction(function () use ($data, $client, $visit, $proofPath) {
+            $tx = Transaction::create([
+                'client_id' => $client->id,
+                'date' => today(),
+                'memo' => $data['note'] ?? __('flash.memo_field_collection'),
+                'debit' => 0,
+                'credit' => round((float) $data['amount'], 2),
+                'kind' => 'collection',
+                'method' => $data['method'],
+                'reference' => $data['reference'] ?? null,
+                'cheque_bank' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_bank'] ?? null) : null,
+                'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_due'] ?? null) : null,
+                'proof_path' => $proofPath,
+                'source_type' => Visit::class,
+                'source_id' => $visit->id,
+            ]);
+
+            $client->recalculate();
+
+            return $tx;
+        });
+
+        TrackEvent::log($user, 'collect',
+            __('field.event_collect', [
+                'amount' => number_format((float) $data['amount'], 2),
+                'client' => $client->displayName(),
+            ]),
+            $tx->methodLabel(),
+            $visit->lat, $visit->lng);
+
+        // ⚠️ **غير الكاش بيتبلّغ للمحاسبين فوراً** — الشيك محتاج
+        // يتحط في الدرج والتحويل محتاج يتطابق مع البنك. الكاش
+        // مستنّي التصفية عادي ومالوش داعي يزن.
+        if ($data['method'] !== Transaction::METHOD_CASH) {
+            foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
+                AppNotification::send(
+                    $acc,
+                    fn () => __('field.notif_collect_title', [
+                        'amount' => number_format((float) $data['amount'], 2),
+                    ]),
+                    fn () => __('field.notif_collect_body', [
+                        'method' => __('client.pay_method_'.$data['method']),
+                        'client' => $client->displayName(),
+                        'user' => $user->displayName(),
+                    ]),
+                    link: 'collections',
+                );
+            }
+        }
+
+        return response()->json([
+            'id' => $tx->id,
+            'amount' => (float) $tx->credit,
+            'method' => $tx->method,
+            'balance' => (float) $client->fresh()->balance,
+            'proof_url' => $tx->proofUrl(),
+        ], 201);
+    }
+
+    /**
+     * POST /api/visits/{visit}/shelf-photo — صورة رف قبل/بعد الترتيب.
+     *
+     * ⚠️ **متعدد الصور لكل مرحلة** (طلب المالك) — مش زي زيارة
+     * البروموتر اللي صورة واحدة لكل مرحلة. كل نداء بيضيف صورة.
+     */
+    public function shelfPhoto(Request $request, Visit $visit): JsonResponse
+    {
+        if ($visit->user_id !== $request->user()->id) {
+            return response()->json(['message' => __('api.not_your_visit')], 403);
+        }
+        if (! $visit->isOpen()) {
+            return response()->json(['message' => __('field.visit_already_closed')], 422);
+        }
+
+        $data = $request->validate([
+            'stage' => ['required', 'in:before,after'],
+            'photo' => ['required', 'file', 'image', 'max:8192'],
+        ], [], ['photo' => __('field.attr_shelf_photo')]);
+
+        $path = $request->file('photo')->store('visit-shelves', 'public');
+
+        $photo = $visit->photos()->create([
+            'stage' => $data['stage'],
+            'path' => $path,
+        ]);
+
+        // أول صورة بس بتتسجل في التايم لاين — مش كل لقطة
+        if ($visit->photos()->where('stage', $data['stage'])->count() === 1) {
+            TrackEvent::log($request->user(), 'shelf',
+                __('field.event_shelf_'.$data['stage'], [
+                    'client' => $visit->client->displayName(),
+                ]), null,
+                $visit->lat, $visit->lng);
+        }
+
+        return response()->json([
+            'id' => $photo->id,
+            'url' => $photo->url(),
+            'stage' => $data['stage'],
+            'counts' => [
+                'before' => $visit->photos()->where('stage', 'before')->count(),
+                'after' => $visit->photos()->where('stage', 'after')->count(),
+            ],
+        ], 201);
+    }
+
+    /**
+     * GET /api/clients/{client}/catalog — الكتالوج الكامل بأسعار العميل.
+     *
+     * ⚠️ **مش `clientPrices`** — دي بترجّع أصناف العهدة بس (شاشة
+     * البيع بتبيع من العربية). طلب البضاعة بيطلب من المخزن، فمحتاج
+     * الكتالوج كله بوحدات الكرتونة والعلبة عشان يكتب «٢ كرتونة».
+     */
+    public function catalog(Request $request, Client $client): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($err = $this->guardClient($user, $client)) {
+            return $err;
+        }
+
+        $items = Product::where('active', true)->orderBy('name')->get()
+            ->map(function (Product $p) use ($client) {
+                $q = \App\Services\Pricing::quote($client, $p, null, 1);
+
+                return [
+                    'product_id' => $p->id,
+                    'name' => $p->displayName(),
+                    'barcode' => $p->barcode,
+                    'price' => (float) $q['unit_price'],
+                    'units_per_case' => (int) $p->units_per_case,
+                    'box_units' => (int) $p->box_units,
+                ];
+            })->values()->all();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * POST /api/goods-requests — طلب بضاعة لعميل من عند العميل.
+     * { visit_id, items: [{product_id, qty, unit?}], note? }
+     *
+     * ⚠️ **نفس كيان طلب الريفيل** (`ReplenishmentRequest`) — الفلو
+     * بعد كده موجود ومجرّب: موافقة المدير → أمر توريد → تجهيز →
+     * «تعالى استلم» → تسليم عند العميل. الفرق الوحيد إن المرساة
+     * زيارة سيلز (`visit_id`) بدل زيارة بروموتر.
+     *
+     * ⚠️ **الزيارة المفتوحة إجبارية** — الطلب بيتعمل والمندوب واقف
+     * عند العميل (طلب المالك صراحةً)، ودي نفس مرساة الفاتورة.
+     */
+    public function storeGoodsRequest(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'visit_id' => ['required', 'exists:visits,id'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'items.*.unit' => ['nullable', 'string', 'max:20'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $user = $request->user();
+
+        $visit = Visit::findOrFail($data['visit_id']);
+
+        if ($visit->user_id !== $user->id) {
+            return response()->json(['message' => __('api.not_your_visit')], 403);
+        }
+        if (! $visit->isOpen()) {
+            return response()->json(['message' => __('field.visit_already_closed')], 422);
+        }
+
+        // الوحدات بتتحول قطع في السيرفر — نفس حارس الفاتورة بالظبط
+        if ($err = $this->itemsToPieces($data['items'])) {
+            return $err;
+        }
+
+        $req = DB::transaction(function () use ($data, $visit, $user) {
+            $req = \App\Models\ReplenishmentRequest::create([
+                'number' => \App\Models\ReplenishmentRequest::nextNumber(),
+                'client_id' => $visit->client_id,
+                'visit_id' => $visit->id,
+                'requested_by' => $user->id,
+                'status' => 'pending',
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($data['items'] as $item) {
+                \App\Models\ReplenishmentItem::create([
+                    'replenishment_request_id' => $req->id,
+                    'product_id' => $item['product_id'],
+                    'qty' => $item['qty'],
+                ]);
+            }
+
+            return $req;
+        });
+
+        $qty = (int) $req->items()->sum('qty');
+        $client = $visit->client;
+
+        TrackEvent::log($user, 'request',
+            __('field.event_goods_request', [
+                'number' => $req->number,
+                'client' => $client->displayName(),
+            ]),
+            __('field.event_qty_requested', ['qty' => $qty]),
+            $visit->lat, $visit->lng);
+
+        // ═══ النوتفيكيشن رايح جاي (طلب المالك ٩ أغسطس) ═══
+        // مدير القناة بيوافق، وأمين المخزن بياخد بال إن فيه شغل جاي —
+        // أمر التجهيز نفسه هيجيله إشعار تاني أول ما الموافقة تنزل.
+        foreach ($req->managers() as $manager) {
+            AppNotification::send(
+                $manager,
+                fn () => __('field.notif_goods_request_title', ['number' => $req->number]),
+                fn () => __('field.notif_goods_request_body', [
+                    'client' => $client->displayName(),
+                    'qty' => $qty,
+                    'user' => $user->displayName(),
+                ]),
+                link: AppNotification::replenishmentLink($req->id),
+            );
+        }
+
+        foreach (User::where('role', 'warehouse_keeper')->where('active', true)->get() as $keeper) {
+            AppNotification::send(
+                $keeper,
+                fn () => __('field.notif_goods_request_wh_title', ['number' => $req->number]),
+                fn () => __('field.notif_goods_request_wh_body', [
+                    'client' => $client->displayName(),
+                    'qty' => $qty,
+                ]),
+                link: AppNotification::replenishmentLink($req->id),
+            );
+        }
+
+        return response()->json([
+            'request' => [
+                'id' => $req->id,
+                'number' => $req->number,
+                'status' => $req->status,
+                'status_label' => $req->statusLabel(),
+                'qty' => $qty,
+            ],
+        ], 201);
     }
 
     // ================= الفواتير =================
@@ -1472,6 +1772,26 @@ class FieldApiController extends Controller
         TrackEvent::log($user, 'request',
             __('field.event_client_request', ['name' => $req->name]),
             __('field.event_awaiting_manager'));
+
+        // ═══ نوتفيكيشن للمدير — موبايل وداش بورد (2026-08-09) ═══
+        //
+        // ⚠️ **كانت ناقصة.** الطلب كان بينزل في الشاشة وخلاص، والمدير
+        // مايعرفش غير لو فتحها بنفسه — والسيلز واقف مستني الموافقة
+        // عشان يبيع. مدير المندوب المباشر + الأدمنز.
+        $recipients = User::where('active', true)
+            ->where(fn ($q) => $q
+                ->where('role', 'admin')
+                ->when($user->manager_id, fn ($w) => $w->orWhere('id', $user->manager_id)))
+            ->get();
+
+        foreach ($recipients as $recipient) {
+            AppNotification::send(
+                $recipient,
+                fn () => __('field.notif_client_request_title', ['name' => $req->name]),
+                fn () => __('field.notif_client_request_body', ['user' => $user->displayName()]),
+                link: AppNotification::requestLink($req->id),
+            );
+        }
 
         return response()->json([
             'request' => [

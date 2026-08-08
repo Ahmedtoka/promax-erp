@@ -33,9 +33,9 @@ return [
     'rep' => 'Rep',
 
     // ═══ Key-account POs — accounting approval (2026-08-04) ═══
-    'po_handout' => 'PO handout to rep',
+    'po_handout' => 'New sales order for a rep',
     'po_handout_hint' => 'Chain, branch, rep, delivery time and items - then accounting approval',
-    'po_approvals' => 'PO approvals',
+    'po_approvals' => 'Sales Order Approvals',
     'po_approvals_hint' => 'Decide based on the branch balance - approval sends the pick order to the warehouse immediately',
     'branch_client' => 'Branch',
     'due_at' => 'Delivery time',
@@ -83,7 +83,7 @@ return [
     'po_reject_confirm' => 'Reject this order? It will be cancelled and the channel manager notified.',
     'po_edit_hint' => 'Edit field is in pieces: empty = unchanged, 0 = remove the item. Any edit notifies the channel manager.',
     'po_edit' => 'Edit order',
-    'po_import' => 'Upload PO sheets',
+    'po_import' => 'Upload sales order sheets',
     'total_orders' => 'Total orders',
     'kpi_value' => 'Value',
     'kpi_pending_hint' => 'Awaiting accounting decision',
@@ -110,7 +110,7 @@ return [
     'po_confirm_hint' => "Orders go to accounting approval priced by each client's list - an unpriced item rejects its whole order.",
     'po_create_all' => 'Create orders & send to accounting',
     'po_no_items' => 'No items could be read from the file',
-    'po_doc' => 'Supply Order',
+    'po_doc' => 'Sales Order',
     'tax_line' => 'Tax',
     'stamp_accounting' => 'Accounting stamp & signature',
     'stamp_warehouse' => 'Warehouse prep',
@@ -128,8 +128,8 @@ return [
     'wipe_goes_title' => 'What goes',
     'wipe_goes_list' => [
         'Invoices, returns and client ledger entries',
-        'Custody and warehouse movement - quantities reset to zero',
-        'Picking orders, supply orders, transfers and goods receipts',
+        'Van stock and warehouse movement - quantities reset to zero',
+        'Picking orders, sales orders, transfers and goods receipts',
         'Batches and their shelf put-away',
         'Visits, live tracking and stock counts',
         'Gifts, points, rep settlements and day closes',
@@ -153,7 +153,7 @@ return [
     'wipe_bad_confirm' => 'Type WIPE exactly for the wipe to run.',
     'wipe_do' => 'Wipe now',
     'demo_btn' => 'Demo data',
-    'demo_hint' => 'Creates a real receipt + put-away + a full custody for the chosen rep - everything tagged DEMO so it is easy to remove.',
+    'demo_hint' => 'Creates a real receipt + put-away + a full van stock for the chosen rep - everything tagged DEMO so it is easy to remove.',
     'demo_do' => 'Load demo',
     'rep_card' => 'Rep Card',
     'van_stock_status' => 'Van Stock Status',
@@ -177,10 +177,10 @@ return [
     'no_activity' => 'No activity.',
     'follow' => 'Open',
 
-    // ---------- Purchase orders ----------
-    'purchase_orders' => 'Purchase Orders',
-    'purchase_order' => 'Purchase Order',
-    'new_purchase_order' => 'New Purchase Order',
+    // ---------- Sales orders ----------
+    'purchase_orders' => 'Sales Orders',
+    'purchase_order' => 'Sales Order',
+    'new_purchase_order' => 'New Sales Order',
     'order' => 'Order',
     'orders' => 'Orders',
     'source' => 'Source',
@@ -193,7 +193,7 @@ return [
     'driver' => 'Driver',
     'delivery_date' => 'Delivery Date',
     'not_yet' => 'Not yet',
-    'no_orders' => 'No purchase orders.',
+    'no_orders' => 'No sales orders.',
 
     // ---------- Invoices ----------
     'invoices' => 'Invoices',
@@ -230,7 +230,7 @@ return [
     'replenishments' => 'Replenishment Requests',
     'replenishments_from_merch' => 'Replenishment Requests from Merchandisers',
     'assign_replenishment' => 'Assign the request to a rep',
-    'replenishment_note' => 'The request becomes a purchase order and lands in the rep’s app.',
+    'replenishment_note' => 'The request becomes a sales order and lands in the rep’s app.',
     'rep_or_driver' => 'Rep / Driver',
     'by_client_channel' => "By the client's channel price (default)",
     'confirm_cancel_request' => 'Cancel this request?',
@@ -270,8 +270,17 @@ return [
     'pickup_at' => 'Rep pickup from warehouse',
     'pickup_at_hint' => 'When the rep comes to the warehouse - day and time',
     'due_at_hint' => 'When the goods reach the branch',
-    'po_image' => 'Original purchase order image',
+    'po_image' => 'Original sales order image',
     // ⚠️ دبل كوت — الأبوستروف جوه سنجل كوت = Parse error والسيستم كله واقف
     'po_image_hint' => "A photo or PDF of the chain's own sheet — the rep opens it at the branch to match",
     'po_image_current' => 'Currently uploaded image',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'method' => 'Method',
+    'reference' => 'Reference',
+    'entries' => 'entries',
+    'collections_sub' => 'Every collection with its method and proof photo — for reconciliation',
+    'collected_by' => 'Collected By',
+    'office_entry' => 'Office',
+    'no_collections' => 'No collections in this window.',
 ];

@@ -54,6 +54,8 @@ class Access
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
             // كان بيفتح العقد، يملا بنوده، يدوس حفظ، ويترمي على 403.
             'erp.clauses',
+            // جرس الإشعارات + تحصيلات الميدان (2026-08-09)
+            'notifications', 'erp.collections',
             'wh.', 'ops.',
         ],
 
@@ -85,6 +87,7 @@ class Access
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
             // فكانت بتقع بين الاتنين ومدير الفرع بيفقد قايمة الفواتير.
             'ops.merch', 'ops.invoice', 'ops.invoices', 'ops.tracking', 'ops.rep',
+            'notifications',
             // ⚠️ المرتجعات **عرض بس** لمدير الفرع — الإنشاء بيمس
             // دفتر العميل، وده قرار تجاري (`role:admin,manager,accountant`).
             'ops.returns', '!ops.returns.new', '!ops.returns.store',
@@ -131,6 +134,8 @@ class Access
             // ⚠️ وإيقاف العميل نفس القرار الإداري — البادئة نفسها
             // كانت بتغطيه (`role:admin,manager` في الراوت).
             '!erp.clients.deactivate',
+            // جرس الإشعارات + تحصيلات الميدان بصور الإثبات (2026-08-09)
+            'notifications', 'erp.collections',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -154,6 +159,8 @@ class Access
             'erp.purchasing',
             '!erp.purchasing.new', '!erp.purchasing.store', '!erp.purchasing.invoice',
             '!erp.purchasing.cancel', '!erp.purchasing.close',
+            // جرس الإشعارات — طلبات البضاعة وأوامر التجهيز بتوصله هنا
+            'notifications',
         ],
     ];
 
@@ -308,6 +315,8 @@ class Access
             // من شاشة اتبنت من غير أي زرار يوصّلها (`warehouse_visit`).
             // مكانها جنب الفواتير لأنها نفس الدفتر بالظبط، بالعكس.
             ['ops.returns', '📥', 'field.returns', 'ops.returns*', null],
+            // تحصيلات الميدان — شيكات وتحويلات بصور إثباتها (2026-08-09)
+            ['erp.collections', '🧾', 'nav.collections', 'erp.collections*', null],
             // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
             ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
             // قفل اليوم — سامري اليومية الشامل (2026-08-06)

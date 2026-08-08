@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'price_lists' => 'Price lists',
+    'price_lists' => 'Price Lists',
     'list' => 'List',
     'new_list' => 'New list',
     'price' => 'Price',

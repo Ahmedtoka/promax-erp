@@ -82,9 +82,15 @@ class Transaction extends Model
 
     protected $fillable = [
         'client_id', 'date', 'memo', 'debit', 'credit', 'tax', 'kind',
-        'method', 'reference', 'cheque_bank', 'cheque_due',
+        'method', 'reference', 'cheque_bank', 'cheque_due', 'proof_path',
         'source_type', 'source_id',
     ];
+
+    /** صورة إثبات التحصيل الميداني — شيك/تحويل/سكرين محفظة */
+    public function proofUrl(): ?string
+    {
+        return $this->proof_path ? asset('storage/'.$this->proof_path) : null;
+    }
 
     public function methodLabel(): ?string
     {

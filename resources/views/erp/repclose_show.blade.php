@@ -47,6 +47,14 @@
         <div class="lbl">↩️ {{ __('settle.cash_refunds') }}</div>
         <div class="val mid">{{ $fmt($cash_refunds) }}</div>
     </div>
+    {{-- ═══ التحصيلات الميدانية (٩ أغسطس ٢٠٢٦) ═══ --}}
+    <div class="kpi">
+        <div class="lbl">🧾 {{ __('settle.field_collections') }}</div>
+        <div class="val">{{ $fmt($cash_collections) }}</div>
+        @if ((float) $other_collections_value > 0)
+            <div class="sub2">+ {{ $fmt($other_collections_value) }} {{ __('settle.non_cash_hint') }}</div>
+        @endif
+    </div>
     <div class="kpi">
         <div class="lbl">💰 {{ __('settle.due_total') }}</div>
         <div class="val pos" style="font-size:22px">{{ $fmt($due_total) }}</div>
@@ -339,6 +347,51 @@
                         <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
                         <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d H:i') }}</td>
                         <td class="num neg"><b>{{ $fmt($t->debit) }}</b></td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+    </div>
+@endif
+
+{{-- ═══ التحصيلات الميدانية (٩ أغسطس ٢٠٢٦) ═══
+     الكاش داخل «المتوقع» فوق؛ وغير الكاش تسليم **مستندات** —
+     المحاسب بيستلم الشيك/يطابق التحويل على صورة الإثبات. --}}
+@if ($collection_rows->isNotEmpty())
+    <div class="card">
+        <h3>🧾 {{ __('settle.collections_to_match') }}
+            <span class="side">{{ __('settle.collections_hint') }}</span></h3>
+        <div class="tablewrap st-tbl">
+            <table>
+                <tr>
+                    <th style="text-align:start">{{ __('client.client') }}</th>
+                    <th>{{ __('common.date') }}</th>
+                    <th>{{ __('ops.method') }}</th>
+                    <th>{{ __('ops.reference') }}</th>
+                    <th>{{ __('settle.proof') }}</th>
+                    <th>{{ __('common.total') }}</th>
+                </tr>
+                @foreach ($collection_rows as $t)
+                    <tr>
+                        <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
+                        <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d H:i') }}</td>
+                        <td>
+                            <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
+                                {{ $t->methodLabel() ?? '—' }}</span>
+                            @if ($t->method === 'cheque' && $t->cheque_due)
+                                <div style="font-size:10px;color:var(--muted)">
+                                    {{ $t->cheque_bank }} · {{ $t->cheque_due->format('Y-m-d') }}</div>
+                            @endif
+                        </td>
+                        <td class="num" style="font-size:11px">{{ $t->reference ?: '—' }}</td>
+                        <td>
+                            @if ($t->proofUrl())
+                                <a class="btn sm" href="{{ $t->proofUrl() }}" target="_blank">📷</a>
+                            @else
+                                <span style="color:var(--muted)">—</span>
+                            @endif
+                        </td>
+                        <td class="num pos"><b>{{ $fmt($t->credit) }}</b></td>
                     </tr>
                 @endforeach
             </table>

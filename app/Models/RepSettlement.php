@@ -17,6 +17,7 @@ class RepSettlement extends Model
         'number', 'user_id', 'from_at', 'to_at', 'invoices_count',
         'cash_sales', 'credit_sales', 'cash_refunds', 'expected',
         'prev_balance', 'received', 'balance', 'note', 'created_by', 'goods_json',
+        'cash_collections', 'collections_json',
     ];
 
     protected function casts(): array

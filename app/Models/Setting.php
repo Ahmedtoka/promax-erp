@@ -27,7 +27,7 @@ class Setting extends Model
         'tax_rate' => '14',            // نسبة مئوية زي ما اليوزر بيكتبها
         'company_name' => 'PROMAX Food Industries',
         'company_name_en' => 'PROMAX Food Industries',
-        'company_tax_id' => '',
+        'company_tax_id' => '767-179-153',
         'company_activity_code' => '',
         'company_branch_code' => '0',
         'company_governorate' => '',
@@ -36,6 +36,34 @@ class Setting extends Model
         'company_building' => '',
         'company_phone' => '',
         'eta_client_id' => '',
+
+        // ═══ بيانات الترويسة والفوتر في المستندات المطبوعة (2026-08-09) ═══
+        //
+        // ⚠️ الحقول دي **قانونية** — السجل التجاري والبطاقة الضريبية
+        // لازم يظهروا على أي مستند بيتسلّم لفرع. متشيلهاش من الورقة
+        // حتى لو الشاشة سايباها فاضية؛ الورقة بتخفي السطر لو فاضي بس.
+        //
+        // ⚠️ `company_address` سطر واحد **للطباعة**، منفصل عن حقول
+        // العنوان المفكوكة فوق (محافظة/مدينة/شارع/عقار). المفكوكة
+        // دي بتروح لمصلحة الضرائب بصيغتها المطلوبة، والسطر ده بيتقرا
+        // بعين بشرية. توحيدهم كان معناه إن أي تظبيط للشكل يكسر
+        // ملف الفاتورة الإلكترونية.
+        'company_cr' => '197434',            // السجل التجاري
+        'company_email' => 'info@promaxfoods.com',
+        'company_address' => '23 ب شارع المنصور - تقسيم اللاسلكي، المعادي، القاهرة، مصر',
+
+        // ═══ بيانات البنك — ديمو لحد ما المالك يدخّل الحقيقية ═══
+        //
+        // ⚠️ **القيم دي وهمية عن قصد**، و`bankIsDemo()` تحت بتكشفها.
+        // الشاشة بتحذّر والورقة بتوسم البوكس طول ما هي زي ما هي —
+        // مستند بيقول «حوّل على الحساب المدرج فقط» وفيه رقم حساب
+        // وهمي أخطر من مستند من غير بيانات بنك أصلاً.
+        'bank_name' => 'البنك التجاري الدولي — CIB',
+        'bank_branch' => 'فرع المعادي',
+        'bank_account_name' => 'PROMAX Food Industries',
+        'bank_account_no' => '100012345678',
+        'bank_iban' => 'EG380003000100000000012345678',
+        'bank_swift' => 'CIBEEGCX',
 
         // ═══ الحوافز (2026-08-06) — بتتعدل من شاشة إعدادات الحوافز ═══
         'point_value' => '5',            // قيمة النقطة بالجنيه
@@ -94,5 +122,55 @@ class Setting extends Model
     public static function flushCache(): void
     {
         Cache::forget(self::CACHE_KEY);
+    }
+
+    /**
+     * بيانات البنك لسه على قيم الديمو؟
+     *
+     * ⚠️ المقارنة على **رقم الحساب والآيبان** بس — دول اللي الفلوس
+     * بتتحوّل عليهم. اسم البنك ممكن يكون فعلاً CIB والفرع فعلاً
+     * المعادي، فمقارنتهم كانت هتخلّي التحذير يفضل طالع للأبد بعد
+     * ما المالك يدخّل الحساب الصح ويتعوّد يتجاهله.
+     */
+    public static function bankIsDemo(?array $s = null): bool
+    {
+        // ⚠️ بتقبل المصفوفة من اللي بيناديها: `docHeader()` كانت
+        // بتقرا الكاش مرتين، والطباعة المجمعة (100 أمر) كانت بتعمل
+        // 200 قراءة ملف وdeserialize للإعدادات كلها.
+        $s ??= self::all_();
+
+        foreach (['bank_account_no', 'bank_iban'] as $key) {
+            if (($s[$key] ?? '') === self::DEFAULTS[$key]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** بيانات المستندات المطبوعة — كتلة واحدة بدل 10 قراءات في الورقة */
+    public static function docHeader(): array
+    {
+        $s = self::all_();
+
+        return [
+            'name' => app()->getLocale() === 'en'
+                ? ($s['company_name_en'] ?: $s['company_name'])
+                : $s['company_name'],
+            'tax_id' => $s['company_tax_id'] ?? '',
+            'cr' => $s['company_cr'] ?? '',
+            'phone' => $s['company_phone'] ?? '',
+            'email' => $s['company_email'] ?? '',
+            'address' => $s['company_address'] ?? '',
+            'bank' => [
+                'name' => $s['bank_name'] ?? '',
+                'branch' => $s['bank_branch'] ?? '',
+                'account_name' => $s['bank_account_name'] ?? '',
+                'account_no' => $s['bank_account_no'] ?? '',
+                'iban' => $s['bank_iban'] ?? '',
+                'swift' => $s['bank_swift'] ?? '',
+            ],
+            'bank_demo' => self::bankIsDemo($s),
+        ];
     }
 }

@@ -179,4 +179,23 @@ return [
     'return_good_units' => 'سليم',
     'return_damaged_units' => 'تالف',
     'return_entry_posted' => 'القيد اتكتب في كشف الحساب: :memo',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'attr_collect_amount' => 'مبلغ التحصيل',
+    'attr_collect_proof' => 'صورة الإثبات',
+    'event_collect' => 'حصّل :amount من :client',
+    'notif_collect_title' => 'تحصيل غير نقدي :amount',
+    'notif_collect_body' => ':method من :client — بواسطة :user. راجع الإثبات وطابقه.',
+    'event_shelf_before' => 'صوّر الرف قبل الترتيب عند :client',
+    'event_shelf_after' => 'صوّر الرف بعد الترتيب عند :client',
+    'shelf_photos' => 'صور ترتيب الرفوف',
+    'event_goods_request' => 'طلب بضاعة :number لـ :client',
+    'notif_goods_request_title' => 'طلب بضاعة جديد :number',
+    'notif_goods_request_body' => ':client — :qty قطعة، طلبها :user من عند العميل. راجع ووافق.',
+    'notif_goods_request_wh_title' => 'طلب بضاعة في السكة :number',
+    'notif_goods_request_wh_body' => ':client — :qty قطعة. أمر التجهيز هينزل أول ما الموافقة تتم.',
+    'notif_client_request_title' => 'طلب عميل جديد: :name',
+    'notif_client_request_body' => 'قدّمه :user ومستني موافقتك.',
+    'replenishment_origin_rep' => 'طلب مندوب عند العميل',
+    'replenishment_origin_promoter' => 'طلب بروموتر من زيارة رف',
 ];

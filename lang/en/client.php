@@ -533,7 +533,7 @@ return [
     'chain_apply_payment_hint' => 'Writes onto :count branches and overwrites their current terms. Any branch with a live contract still bills by that contract.',
     'chain_payment_applied' => 'Applied ":terms" to :count branches.',
     'chain_discount_applied' => 'A :pct% discount was applied to :count branches.',
-    'activate_clients' => 'Activate clients',
+    'activate_clients' => 'Activate Clients',
     'waiting_activation' => 'Awaiting activation',
     'waiting_hint' => 'Imported from sheets, not yet reviewed',
     'live_clients' => 'Live clients',
@@ -581,4 +581,7 @@ return [
     'pay_reference_ph' => 'Transaction, cheque or transfer number',
     'cheque_bank' => 'Bank',
     'cheque_due' => 'Due date',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'cheque_due_short' => 'due',
 ];

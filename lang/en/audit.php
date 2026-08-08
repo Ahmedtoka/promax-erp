@@ -42,9 +42,9 @@ return [
     'model_Zone' => 'Zone',
     'model_ClientGroup' => 'Chain',
     'model_Channel' => 'Channel',
-    'model_PurchaseOrder' => 'Purchase order',
+    'model_PurchaseOrder' => 'Sales order',
     'model_Invoice' => 'Invoice',
-    'model_Custody' => 'Custody',
+    'model_Custody' => 'Van stock',
     'model_Warehouse' => 'Warehouse',
     'model_Setting' => 'Setting',
 ];

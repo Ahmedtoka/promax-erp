@@ -34,16 +34,16 @@ return [
     'van_loaded' => 'Van stock loaded.',
     'van_closed' => "Today's van stock is closed.",
 
-    // ---------- Purchase orders ----------
-    'po_created' => 'Purchase order created.',
+    // ---------- Sales orders ----------
+    'po_created' => 'Sales order created.',
     'po_sent_accounting' => 'Order sent to accounting - the pick order drops once approved.',
     'po_approved' => 'Order approved and the pick order went to the warehouse.',
     'po_updated' => 'Order updated and repriced - review and approve.',
     'pos_imported' => ':count orders created and queued for accounting approval.',
     'pos_bulk_approved' => ':count orders approved and their pick orders sent to the warehouse.',
     'wiped_done' => ':n movement rows wiped - stock and balances zeroed, master data untouched.',
-    'demo_loaded' => 'Demo data loaded - a receipt and a full custody for the rep.',
-    'memo_po_partial' => 'PO :number delivered - :diff pcs short of the order',
+    'demo_loaded' => 'Demo data loaded - a receipt and a full van stock for the rep.',
+    'memo_po_partial' => 'Sales order :number delivered - :diff pcs short of the order',
     'po_rejected' => 'Order rejected and the channel manager was notified.',
     'po_assigned' => 'The order was assigned to the driver.',
 
@@ -54,7 +54,7 @@ return [
     'collection_recorded' => 'Collection recorded.',
 
     // ---------- Replenishment ----------
-    'replenishment_assigned' => 'The request became purchase order :number and was assigned to the rep.',
+    'replenishment_assigned' => 'The request became sales order :number and was assigned to the rep.',
     'replenishment_cancelled' => 'Request cancelled.',
 
     // ---------- Ledger memos (persisted with the transaction) ----------
@@ -62,9 +62,9 @@ return [
     'memo_cash_with_invoice' => 'Cash collection with invoice :number',
     'memo_return' => 'Return of :count units — :user',
     'memo_return_refund' => 'Return value refunded in cash — cash client',
-    'memo_po_delivered' => 'Purchase order :number delivered',
+    'memo_po_delivered' => 'Sales order :number delivered',
     'memo_return_doc' => 'Return :number — :count pcs (:user)',
-    'memo_po_cash' => 'Cash collected on delivery of purchase order :number',
+    'memo_po_cash' => 'Cash collected on delivery of sales order :number',
     'memo_cash_collection' => 'Cash collection',
 
     'clause_saved' => 'Clause saved and the contract rates were recalculated.',
@@ -76,4 +76,7 @@ return [
     'memo_rebate' => ':label — :period',
     'memo_opening' => 'Opening balance recorded on import',
     'opening_saved' => 'The opening balance was recorded.',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'memo_field_collection' => 'Field collection during a visit',
 ];

@@ -39,6 +39,12 @@ class Visit extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    /** صور ترتيب الرف — قبل وبعد، متعددة (٩ أغسطس ٢٠٢٦) */
+    public function photos(): HasMany
+    {
+        return $this->hasMany(VisitPhoto::class);
+    }
+
     public function isOpen(): bool
     {
         return $this->checked_out_at === null;

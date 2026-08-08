@@ -47,6 +47,17 @@ class TaxController extends Controller
             'company_building' => ['nullable', 'string', 'max:30'],
             'company_phone' => ['nullable', 'string', 'max:30'],
             'eta_client_id' => ['nullable', 'string', 'max:120'],
+
+            // بيانات المستندات المطبوعة (2026-08-09)
+            'company_cr' => ['nullable', 'string', 'max:40'],
+            'company_email' => ['nullable', 'email', 'max:120'],
+            'company_address' => ['nullable', 'string', 'max:250'],
+            'bank_name' => ['nullable', 'string', 'max:120'],
+            'bank_branch' => ['nullable', 'string', 'max:120'],
+            'bank_account_name' => ['nullable', 'string', 'max:190'],
+            'bank_account_no' => ['nullable', 'string', 'max:60'],
+            'bank_iban' => ['nullable', 'string', 'max:60'],
+            'bank_swift' => ['nullable', 'string', 'max:20'],
         ]);
 
         // ⚠️ **الشاشة دي بتحفظ مفاتيحها هي بس** (إصلاح 2026-08-07).
@@ -62,6 +73,9 @@ class TaxController extends Controller
             'company_activity_code', 'company_branch_code', 'company_governorate',
             'company_city', 'company_street', 'company_building', 'company_phone',
             'eta_client_id',
+            'company_cr', 'company_email', 'company_address',
+            'bank_name', 'bank_branch', 'bank_account_name',
+            'bank_account_no', 'bank_iban', 'bank_swift',
         ];
 
         $pairs = [];

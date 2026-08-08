@@ -262,7 +262,7 @@
 </div>
 
 @if ($manager && $canReady)
-    <dialog id="dlgReady">
+    <dialog id="dlgReady" class="wide">
         <form class="dlg" method="POST" action="{{ route('wh.picks.ready', $o) }}" style="width:min(720px,96vw)">
             @csrf
             <h4>{{ __('stock.mark_ready') }} — {{ $o->number }}</h4>

@@ -446,7 +446,7 @@ return [
     'last_bought' => 'Last bought',
     'batches_of' => 'Batches',
     'inactive' => 'Discontinued',
-    'active_hint' => 'A discontinued item does not appear on the sales screen or in purchase orders.',
+    'active_hint' => 'A discontinued item does not appear on the sales screen or in sales orders.',
     'back_to_stock' => 'All items',
     'units_per_case_hint' => 'Units inside one case — scanning the case barcode multiplies by this.',
     'shelf_life_hint' => 'Each incoming batch gets its expiry from this. Defaults to 12 months.',
@@ -510,8 +510,12 @@ return [
     'notif_pick_due_today_at' => ' - pick up today at :t',
     'notif_pick_due_on_at' => ' - pick up :date at :t',
     'pickup_at' => 'Pickup time',
-    'go_handout' => 'Custody handout',
-    'go_po' => 'Supply order',
+    'go_handout' => 'Van stock handout',
+    'go_po' => 'Sales order',
     'prep_duration' => 'Prep duration',
     'pick_must_start_first' => 'Press "Start picking" first — without it there is no prep duration.',
+
+    // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
+    'pick_ready_ok' => 'Order ready - the rep was notified to pick it up.',
+    'pick_not_your_warehouse' => 'This order is not on your warehouse.',
 ];

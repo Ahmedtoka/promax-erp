@@ -24,9 +24,25 @@ class ReplenishmentRequest extends Model
     ];
 
     protected $fillable = [
-        'number', 'client_id', 'merch_visit_id', 'requested_by', 'status',
+        'number', 'client_id', 'merch_visit_id', 'visit_id', 'requested_by', 'status',
         'assigned_to', 'purchase_order_id', 'assigned_at', 'delivered_at', 'note',
     ];
+
+    /**
+     * مصدر الطلب — بروموتر من زيارة رف، ولا مندوب واقف عند العميل.
+     *
+     * ⚠️ **من المرساة مش من رول الطالب** — الرول ممكن يتغير بعدين،
+     * والمرساة (زيارة رف / زيارة سيلز) بتفضل شاهدة على اللحظة.
+     */
+    public function origin(): string
+    {
+        return $this->visit_id !== null ? 'rep' : 'promoter';
+    }
+
+    public function originLabel(): string
+    {
+        return __('field.replenishment_origin_'.$this->origin());
+    }
 
     protected function casts(): array
     {
@@ -44,6 +60,12 @@ class ReplenishmentRequest extends Model
     public function merchVisit(): BelongsTo
     {
         return $this->belongsTo(MerchVisit::class);
+    }
+
+    /** زيارة السيلز اللي الطلب اتعمل منها — للطلبات من عند العميل */
+    public function visit(): BelongsTo
+    {
+        return $this->belongsTo(Visit::class);
     }
 
     public function promoter(): BelongsTo
@@ -186,11 +208,31 @@ class ReplenishmentRequest extends Model
                 $taxRate = \App\Services\Tax::rate($client, $product);
                 $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
 
+                // ⚠️ **تاني مسار بيولّد أمر توريد** — لو الخصم اتسجّل في
+                // `OpsController` بس، الأوامر الجاية من الريفيل هتتطبع
+                // بعمود خصم فاضي وكأن الفرع مخدش خصم. نفس القاعدة:
+                // `client` بياخد خصم العميل، و`old`/`new` سعر صافي.
+                $withDiscount = in_array($priceMode, ['client', 'channel'], true);
+
+                // ⚠️ من العميل مباشرة — عكسها من السعر المقرّب بيطلّع
+                // 9.98% لعقد 10% (نفس الإصلاح في `OpsController`)
+                $discountPct = $withDiscount ? $client->effectiveDiscount() : 0.0;
+
+                $listPrice = $withDiscount
+                    ? \App\Services\Pricing::listPriceFor($client, $product)
+                    : (float) $price;
+
+                if ($listPrice <= 0) {
+                    $listPrice = (float) $price;
+                }
+
                 PurchaseOrderItem::create([
                     'purchase_order_id' => $po->id,
                     'product_id' => $product->id,
                     'qty' => $item->qty,
                     'price' => $price,
+                    'list_price' => $listPrice,
+                    'discount_pct' => $discountPct,
                     'total' => $lineTotal,
                     'tax_rate' => $taxRate,
                     'tax' => $lineTax,

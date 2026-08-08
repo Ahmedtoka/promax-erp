@@ -373,7 +373,7 @@
     @csrf @method('DELETE')
 </form>
 
-<dialog id="dlgAttach">
+<dialog id="dlgAttach" class="wide">
     <form class="dlg" method="POST" action="{{ route('erp.groups.attach', $g) }}">
         @csrf
         <input type="hidden" name="action" value="attach">
