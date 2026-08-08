@@ -20,6 +20,13 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--paper);color:var(--text);font-family:{{ $isRtl ? 'Cairo,Poppins,Tahoma' : 'Poppins,Cairo,Tahoma' }},sans-serif;font-size:14px}
+/* ⚠️ **عناصر الفورم مابترثش الفونت من `body` افتراضياً** — المتصفح
+   بيديها فونت النظام. كل عنصر كان بيحط `font-family:inherit` بإيده،
+   وأي زرار أو سيلكت أو `summary` اتكتب من غيره كان بيطلع بفونت تاني
+   خالص جنب باقي الشاشة. السطر ده بيقفل الباب على مستوى المشروع. */
+button,input,select,textarea,optgroup,summary,option{
+  font-family:inherit;
+}
 /* زرار تبديل اللغة */
 .langsw{display:flex;gap:0;border:1px solid rgba(255,255,255,.18);border-radius:9px;overflow:hidden;margin-bottom:8px}
 .langsw button{flex:1;background:transparent;color:#EDEDEA;border:none;padding:6px 0;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer;transition:.15s}
@@ -73,8 +80,8 @@ img{display:block;max-width:100%}
   display:flex;align-items:center;gap:9px;cursor:pointer;
   list-style:none;user-select:none;
   /* أكبر من اللينك (١٣px) عشان يبان إنه أب مش أخ */
-  font-size:13.5px;font-weight:800;color:#fff;
-  padding:9px 12px;border-radius:var(--r-sm);
+  font-size:12.5px;font-weight:800;color:#fff;
+  padding:8px 11px;border-radius:var(--r-sm);
   transition:.15s;
 }
 .navgrp-acc>summary::-webkit-details-marker{display:none}
@@ -83,7 +90,7 @@ img{display:block;max-width:100%}
 /* أيقونة المجموعة — عرض ثابت عشان النصوص تتراص على خط واحد
    مهما اختلف عرض الإيموجي */
 .navgrp-acc>summary .gi{
-  width:20px;flex-shrink:0;text-align:center;font-size:15px;line-height:1;
+  width:19px;flex-shrink:0;text-align:center;font-size:14px;line-height:1;
 }
 .navgrp-acc>summary .gt{flex:1;min-width:0}
 
@@ -118,8 +125,8 @@ img{display:block;max-width:100%}
   margin-inline-start:20px;   /* بمحاذاة أيقونة المجموعة */
 }
 /* اللينك جوّه المجموعة أصغر من العنوان — التسلسل البصري */
-.navgrp-acc .navbody .navlink{font-size:12px;padding:7px 10px}
-.navlink{display:flex;align-items:center;gap:9px;padding:8.5px 12px;border-radius:var(--r-sm);font-weight:600;font-size:13px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
+.navgrp-acc .navbody .navlink{font-size:11.5px;padding:6.5px 10px}
+.navlink{display:flex;align-items:center;gap:8px;padding:7.5px 11px;border-radius:var(--r-sm);font-weight:600;font-size:12px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
 .navlink:hover{background:rgba(255,255,255,.12);color:#fff}
 .navlink.active{background:#fff;color:var(--royal-blue);font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 .navlink .cnt{margin-inline-start:auto;background:var(--brand-yellow);color:var(--ink);font-weight:800;border-radius:20px;padding:1px 8px;font-size:10.5px}
@@ -270,10 +277,53 @@ label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:v
 .btn.sm{padding:5px 12px;font-size:11.5px}
 .flash{background:#E7F7EE;color:#0F7A38;border-radius:12px;padding:11px 16px;font-weight:800;font-size:13px;margin-bottom:14px}
 .flash.err{background:#FDECEC;color:var(--red)}
-dialog{border:none;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(0,0,0,.25);max-width:96vw}
+/* ═══════════════════════════════════════════════════════════
+   المودالات — التوسيط والمقاس على `dialog` نفسه
+   ═══════════════════════════════════════════════════════════
+
+   ⚠️ **كان معتمد على كلاس `.dlg` اللي المستخدم لازم يفتكره.**
+   `dialog .dlg` هي اللي كانت شايلة الـpadding والعرض، فأي مودال
+   اتكتب فيه `<form>` من غير الكلاس كان بيطلع بلا حواف ولا عرض،
+   ملزوق في ركن الشاشة. الستايل بقى على العنصر نفسه، والكلاس بقى
+   زيادة مش شرط.
+
+   ⚠️ **`margin:auto` + `inset:0` مطلوبين للتوسيط الرأسي.** المتصفح
+   بيوسّط الـ`dialog` أفقياً بس افتراضياً، والرأسي بيسيبه لأعلى
+   الشاشة — وده اللي كان بيخلّي المودال يطلع فوق ملزوق.
+
+   ⚠️ **`max-height` + `overflow` على المحتوى مش على الـ`dialog`** —
+   المودال الطويل (فورم فيه جدول) كان بيتقص من تحت والأزرار
+   تختفي بره الشاشة من غير أي سكرول. */
+dialog{
+  border:none;border-radius:16px;padding:0;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+  margin:auto;inset:0;
+  max-width:96vw;max-height:92vh;
+  overflow:visible;
+  background:var(--card);color:var(--text);
+  font-family:inherit;font-size:14px;
+  direction:{{ $isRtl ? 'rtl' : 'ltr' }};
+}
 dialog::backdrop{background:rgba(10,10,10,.45)}
-dialog .dlg{padding:20px 22px;width:min(560px,92vw);font-family:inherit;direction:{{ $isRtl ? 'rtl' : 'ltr' }}}
+/* أي عنصر مباشر جوّه المودال بياخد الحواف والعرض — مش `.dlg` بس */
+dialog>form,dialog>div,dialog>section,dialog .dlg{
+  padding:20px 22px;
+  width:min(620px,92vw);
+  max-height:92vh;overflow-y:auto;
+  font-family:inherit;
+  direction:{{ $isRtl ? 'rtl' : 'ltr' }};
+  box-sizing:border-box;
+}
+/* المودال العريض — للفورمات اللي فيها جدول */
+dialog.wide>form,dialog.wide>div,dialog.wide .dlg{width:min(900px,94vw)}
+dialog h3{font-size:16px;font-weight:900;margin-bottom:6px}
 dialog h4{font-size:16px;font-weight:900;margin-bottom:14px}
+/* ⚠️ صفوف الحقول جوّه المودال بتلف على الموبايل — `.frow` الأصلية
+   بتفضل صف واحد وبتخرّج المحتوى بره الشاشة الضيقة */
+dialog .frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+dialog .frow>*{flex:1 1 220px;min-width:0}
+dialog .formbar{display:flex;align-items:center;gap:8px;margin-top:16px}
+dialog .formbar-sp{flex:1}
 .pag{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;font-size:12.5px}
 .pag a,.pag span{padding:6px 11px;border-radius:9px;border:1px solid var(--border);background:#fff}
 .pag .on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff;font-weight:800}

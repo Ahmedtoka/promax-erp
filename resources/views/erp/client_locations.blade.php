@@ -27,26 +27,44 @@
     <span>{{ __('geo.screen_hint') }}</span>
 </div>
 
+{{-- ⚠️ **الكروت بقت أربعة بدل اتنين** (طلب المالك ٨/٨/٢٠٢٦):
+     «مستنية» لوحدها كانت بتجمع شغل جاهز مع شغل ميدان في رقم واحد. --}}
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('geo.pending') }}</div>
-        <div class="val neg">{{ number_format($pendingCount) }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('geo.f_from_visit') }}</div>
+        <div class="val pos">{{ number_format($counts['from_visit']) }}</div>
+        <div class="sub2">{{ __('geo.f_from_visit_hint') }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('geo.f_unconfirmed') }}</div>
+        <div class="val mid">{{ number_format($counts['unconfirmed']) }}</div>
+        <div class="sub2">{{ __('geo.f_unconfirmed_hint') }}</div></div>
+    <div class="kpi"><div class="lbl">{{ __('geo.f_no_location') }}</div>
+        <div class="val neg">{{ number_format($counts['no_location']) }}</div>
+        <div class="sub2">{{ __('geo.f_no_location_hint') }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('geo.confirmed') }}</div>
-        <div class="val pos">{{ number_format($doneCount) }}</div></div>
+        <div class="val">{{ number_format($counts['done']) }}</div></div>
 </div>
 
 <div class="card">
     <h3>📍 {{ __('geo.confirm_locations') }}
         <span class="side">{{ __('client.client_countable', ['count' => $rows->count()]) }}</span></h3>
 
+    {{-- ⚠️ **الفلاتر مترتّبة بترتيب الشغل**: الجاهز الأول، بعده
+         المستني مراجعة، بعده اللي محتاج نزول ميدان، وآخر حاجة
+         الأرشيف. والعدّاد على كل زرار عشان محدش يفتح فلتر فاضي. --}}
     <div class="searchbar">
         @foreach ([
-            'pending' => __('geo.f_pending'),
-            'no_coords' => __('geo.f_no_coords'),
+            'from_visit' => __('geo.f_from_visit'),
+            'unconfirmed' => __('geo.f_unconfirmed'),
+            'no_location' => __('geo.f_no_location'),
             'done' => __('geo.f_done'),
             'all' => __('common.all'),
         ] as $k => $label)
             <a class="btn sm {{ $filter === $k ? 'gold' : '' }}"
-               href="{{ route('erp.client_locations', ['show' => $k]) }}">{{ $label }}</a>
+               href="{{ route('erp.client_locations', ['show' => $k]) }}">
+                {{ $label }}
+                @if (($counts[$k] ?? 0) > 0)
+                    <b style="margin-inline-start:5px">{{ number_format($counts[$k]) }}</b>
+                @endif
+            </a>
         @endforeach
     </div>
 
@@ -133,7 +151,10 @@
 
 {{-- ═══ مودال التأكيد ═══ --}}
 <dialog id="dlgGeo">
-    <form method="POST" id="geoForm">
+    {{-- ⚠️ **`.dlg` كانت ناقصة** — الحواف والعرض كانوا على الكلاس ده
+         وحده، فالمودال كان بيطلع ملزوق في ركن الشاشة بلا padding.
+         الستايل بقى على `dialog>form` كمان، والكلاس فاضل للوضوح. --}}
+    <form method="POST" id="geoForm" class="dlg">
         @csrf
         <h3 style="margin-bottom:4px">📍 {{ __('geo.confirm_for') }} <span id="geoName"></span></h3>
         <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">{{ __('geo.modal_hint') }}</div>
@@ -200,6 +221,9 @@
 <script>
 const GEO_URL = @json(route('erp.client_locations.confirm', ['client' => 0]));
 const GEO_SUGGEST = @json(route('erp.client_locations.suggest'));
+const T_F_ADDR = @json(__('geo.address'));
+const T_F_GOV  = @json(__('geo.governorate'));
+const T_F_ZONE = @json(__('client.zone'));
 const T_WAIT = @json(__('geo.fetching'));
 const T_FAIL = @json(__('geo.reverse_failed'));
 const T_NO_POINT = @json(__('geo.need_point_first'));
@@ -271,7 +295,20 @@ async function fillFromMap() {
         const gov = document.getElementById('geoGov');
         if (j.governorate && !gov.value) gov.value = j.governorate;
 
-        msg.textContent = '';
+        // ⚠️ **والمنطقة كمان** (طلب المالك ٨/٨/٢٠٢٦) — أقرب منطقة
+        // بإحداثيات جوّه المحافظة. نفس القاعدة: بتتحط لو فاضية بس،
+        // واللي بيراجع بيعدّلها لو الاقتراح غلط.
+        const zone = document.getElementById('geoZone');
+        if (j.zone_id && !zone.value) zone.value = j.zone_id;
+
+        // رسالة توضح إيه اللي اتملى فعلاً — «تمام» لوحدها مابتقولش
+        // إذا كانت المنطقة اتحطت ولا لأ
+        const filled = [];
+        if (j.en || j.ar) filled.push(T_F_ADDR);
+        if (j.governorate) filled.push(T_F_GOV);
+        if (j.zone_id) filled.push(T_F_ZONE);
+
+        msg.textContent = filled.length ? '✔ ' + filled.join(' · ') : T_FAIL;
     } catch (e) {
         msg.textContent = T_FAIL;
     } finally {

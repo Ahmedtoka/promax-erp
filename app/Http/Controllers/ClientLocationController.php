@@ -35,18 +35,47 @@ class ClientLocationController extends Controller
     /** العملاء المستنية تأكيد + النقطة اللي جت من آخر زيارة */
     public function index(Request $request)
     {
-        $filter = $request->string('show')->toString() ?: 'pending';
+        $filter = $request->string('show')->toString() ?: 'from_visit';
+
+        // ═══════════════════════════════════════════════════════════
+        // الفلاتر (اتعادت في ٨ أغسطس ٢٠٢٦ بطلب المالك)
+        // ═══════════════════════════════════════════════════════════
+        //
+        // ⚠️ **«المستنية» كانت بتخلط حالتين مختلفتين تماماً:**
+        //   • عميل **المندوب سحب نقطته** بتشيك إن → شغل جاهز، ضغطة
+        //     واحدة وخلص
+        //   • عميل **مالوش أي إحداثيات ولا زيارة** → مفيش حاجة
+        //     تتأكّد أصلاً، ده شغل ميدان مش شغل مراجعة
+        //
+        // خلطهم كان بيخلّي اللي بيراجع يفتح قايمة ٦٥٤ عميل، أغلبهم
+        // مالوش نقطة، ويدوّر بالعين على الصفوف اللي فيها شغل.
+        //
+        // ⚠️ **`from_visit` هو الافتراضي دلوقتي** — ده الشغل الجاهز.
+        $visitClientIds = Visit::whereNotNull('lat')->whereNotNull('lng')
+            ->select('client_id')->distinct();
 
         $q = Client::query()
             ->with(['zone', 'channel', 'group'])
             ->where('status', '!=', 'rejected');
 
-        // ⚠️ **الافتراضي «المستنية» مش «الكل».** الشاشة دي شغل يومي
-        // بيتفضّى — وفتحها على 300 عميل أغلبهم متأكد بيخلّي اللي
-        // بيراجع يدوّر على اللي ناقص بالعين كل مرة.
-        $q->when($filter === 'pending', fn ($qq) => $qq->whereNull('location_confirmed_at'))
-            ->when($filter === 'no_coords', fn ($qq) => $qq->whereNull('lat'))
-            ->when($filter === 'done', fn ($qq) => $qq->whereNotNull('location_confirmed_at'));
+        $q->when(
+            // ✅ جاهز للتأكيد: مندوب سحب نقطة والعميل لسه مااتأكّدش
+            $filter === 'from_visit',
+            fn ($qq) => $qq->whereNull('location_confirmed_at')
+                ->whereIn('id', $visitClientIds),
+        )->when(
+            // ⚪ مفيش أي لوكيشن: لا إحداثيات على العميل ولا زيارة
+            //    بإحداثيات — ده شغل ميدان، مش مراجعة
+            $filter === 'no_location',
+            fn ($qq) => $qq->whereNull('lat')->whereNotIn('id', $visitClientIds),
+        )->when(
+            // إحداثيات موجودة على العميل بس محدش أكّدها (استيراد/لينك)
+            $filter === 'unconfirmed',
+            fn ($qq) => $qq->whereNull('location_confirmed_at')->whereNotNull('lat'),
+        )->when(
+            $filter === 'done',
+            fn ($qq) => $qq->whereNotNull('location_confirmed_at'),
+        );
 
         $clients = Client::visibleTo($q)->orderBy('name')->get();
 
@@ -76,10 +105,22 @@ class ClientLocationController extends Controller
             // ⚠️ العدادات من استعلامات مستقلة مش من `$rows` — الأخيرة
             // مفلترة، وعدّها كان بيخلي الشارة تقول «0 مستنية» وانت
             // واقف على فلتر «المتأكدة»
-            'pendingCount' => Client::visibleTo(Client::query())
-                ->whereNull('location_confirmed_at')->count(),
-            'doneCount' => Client::visibleTo(Client::query())
-                ->whereNotNull('location_confirmed_at')->count(),
+            // ⚠️ عدّاد لكل فلتر — الشارة على الزرار بتقول فيه شغل
+            // قد إيه من غير ما تفتحه
+            'counts' => [
+                'from_visit' => Client::visibleTo(Client::query())
+                    ->where('status', '!=', 'rejected')
+                    ->whereNull('location_confirmed_at')
+                    ->whereIn('id', $visitClientIds)->count(),
+                'no_location' => Client::visibleTo(Client::query())
+                    ->where('status', '!=', 'rejected')
+                    ->whereNull('lat')->whereNotIn('id', $visitClientIds)->count(),
+                'unconfirmed' => Client::visibleTo(Client::query())
+                    ->where('status', '!=', 'rejected')
+                    ->whereNull('location_confirmed_at')->whereNotNull('lat')->count(),
+                'done' => Client::visibleTo(Client::query())
+                    ->whereNotNull('location_confirmed_at')->count(),
+            ],
         ]);
     }
 
@@ -102,16 +143,84 @@ class ClientLocationController extends Controller
             return response()->json(['message' => __('geo.reverse_failed')], 422);
         }
 
+        $gov = Governorates::match((string) ($hit['governorate'] ?? ''));
+
         return response()->json([
             'ar' => $hit['ar'],
             'en' => $hit['en'],
+            // ═══ المنطقة كمان (طلب المالك ٨/٨/٢٠٢٦) ═══
+            //
+            // ⚠️ **الزرار كان بيملا العنوان والمحافظة ويسيب المنطقة
+            // فاضية** — واللي بيراجع بيفتح الدروب داون ويدوّر في ٣٦٢
+            // منطقة بإيده في كل عميل. المنطقة أهم من المحافظة أصلاً:
+            // هي أساس تسكين المناديب.
+            'zone_id' => self::nearestZone((float) $data['lat'], (float) $data['lng'], $gov),
             // ⚠️ اسم المحافظة اللي OSM بترجّعه نص حر («محافظة القاهرة»)
             // — بنحوّله لكود السيستم، ولو مالقيناش بنسيبه للمستخدم
             // ⚠️ `match()` مش مقارنة نصية: OSM بترجّع «محافظة القاهرة»
             // أو «Cairo Governorate» حسب اللغة، وهي بتعرف تطابق
             // الاتنين مع كود السيستم — نفس الدالة اللي المستورد بيستخدمها
-            'governorate' => Governorates::match((string) ($hit['governorate'] ?? '')),
+            'governorate' => $gov,
         ]);
+    }
+
+    /**
+     * أقرب منطقة للنقطة — أو `null` لو مفيش حاجة قريبة كفاية.
+     *
+     * ⚠️ **بيتفلتر بالمحافظة الأول لو معروفة.** أقرب منطقة جغرافياً
+     * ممكن تكون في محافظة تانية على الحدود — والتسكين على منطقة في
+     * محافظة غلط أسوأ من خانة فاضية، لأنه بيبان صح.
+     *
+     * ⚠️ **٢٥ كم سقف.** المناطق اللي مالهاش إحداثيات بتتستبعد
+     * (`whereNotNull`)، ومن غير السقف كانت أي نقطة هتلاقي «أقرب»
+     * منطقة حتى لو على بعد محافظتين.
+     *
+     * ⚠️ **هافرساين بالكيلومتر** — الفخ المعروف في المشروع إن
+     * الدالة بترجّع كيلومترات والكود بيفتكرها أمتار.
+     */
+    private static function nearestZone(float $lat, float $lng, ?string $gov): ?int
+    {
+        $zones = Zone::query()
+            ->where('active', true)
+            ->whereNotNull('lat')->whereNotNull('lng')
+            ->when($gov, fn ($q) => $q->where('governorate', $gov))
+            ->get(['id', 'lat', 'lng']);
+
+        // ⚠️ المحافظة مالهاش مناطق بإحداثيات؟ نجرب من غير فلترها بدل
+        // ما نرجّع فاضي — الاقتراح بيتعدّل بالإيد على أي حال.
+        if ($zones->isEmpty() && $gov !== null) {
+            $zones = Zone::query()
+                ->where('active', true)
+                ->whereNotNull('lat')->whereNotNull('lng')
+                ->get(['id', 'lat', 'lng']);
+        }
+
+        $best = null;
+        $bestKm = 25.0;
+
+        foreach ($zones as $z) {
+            $km = self::haversineKm($lat, $lng, (float) $z->lat, (float) $z->lng);
+
+            if ($km < $bestKm) {
+                $bestKm = $km;
+                $best = (int) $z->id;
+            }
+        }
+
+        return $best;
+    }
+
+    /** المسافة بالكيلومتر بين نقطتين */
+    private static function haversineKm(float $aLat, float $aLng, float $bLat, float $bLng): float
+    {
+        $r = 6371.0;
+        $dLat = deg2rad($bLat - $aLat);
+        $dLng = deg2rad($bLng - $aLng);
+
+        $h = sin($dLat / 2) ** 2
+            + cos(deg2rad($aLat)) * cos(deg2rad($bLat)) * sin($dLng / 2) ** 2;
+
+        return $r * 2 * asin(min(1.0, sqrt($h)));
     }
 
     /** التأكيد — النقطة والعنوان بيتكتبوا على العميل مع بصمة المراجع */
