@@ -54,4 +54,5 @@ return [
     'cannot_stop_in_use' => ':count active clients use this list. Stopping it would sell to them at zero — move them to another list first.',
     'cannot_stop_default' => 'This is the default list. Make another one the default first.',
     'default_must_be_active' => 'The default list must be active.',
+    'unit_price' => 'Unit price',
 ];

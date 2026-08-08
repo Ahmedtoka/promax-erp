@@ -63,6 +63,8 @@ return [
     'memo_return' => 'مرتجع :count وحدة — :user',
     'memo_return_refund' => 'رد قيمة المرتجع نقداً — عميل كاش',
     'memo_po_delivered' => 'تسليم أمر توريد :number',
+    'memo_return_doc' => 'مرتجع :number — :count قطعة (:user)',
+    'memo_po_cash' => 'تحصيل نقدي مع تسليم أمر توريد :number',
     'memo_cash_collection' => 'تحصيل نقدي',
 
     'clause_saved' => 'البند اتحفظ ونسب العقد اتحسبت من جديد.',

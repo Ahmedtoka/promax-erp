@@ -53,6 +53,26 @@ img{display:block;max-width:100%}
 .logo .sub{font-size:9.5px;color:rgba(255,255,255,.62);letter-spacing:1.4px;font-weight:600}
 .logo .sub span{color:var(--brand-yellow);font-weight:800}
 .navgrp{font-size:10px;color:rgba(255,255,255,.5);font-weight:800;padding:12px 10px 5px;letter-spacing:.6px}
+/* ═══ المنيو الأكورديون (قرار المالك ٨/٨/٢٠٢٦) ═══
+   ⚠️ `list-style:none` + `::-webkit-details-marker` — المثلث
+   الافتراضي بيبان بشكلين مختلفين في كروم وفايرفوكس وبيكسر
+   المحاذاة في الواجهة العربية. --*/
+.navgrp-acc>summary{display:flex;align-items:center;gap:6px;cursor:pointer;
+  list-style:none;user-select:none;border-radius:var(--r-sm);transition:.15s}
+.navgrp-acc>summary::-webkit-details-marker{display:none}
+.navgrp-acc>summary:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.85)}
+/* ⚠️ **التاب النشط ملوّن** (طلب المالك) — المستخدم لازم يعرف هو
+   فين من غير ما يفتح المجموعات واحدة واحدة. */
+.navgrp-acc>summary.on{color:var(--brand-yellow)}
+/* السهم بيلف مع الفتح — إشارة إن ده قابل للطي */
+.navgrp-acc>summary::after{content:'▾';margin-inline-start:auto;font-size:11px;
+  opacity:.6;transition:transform .15s}
+.navgrp-acc[open]>summary::after{transform:rotate(180deg)}
+/* عدّاد المجموعة المقفولة — الشغل المستني مايختفيش وراء الطي */
+.navgrp-acc>summary .cnt{background:var(--brand-yellow);color:var(--ink);
+  font-weight:800;border-radius:20px;padding:1px 8px;font-size:10.5px;
+  margin-inline-start:auto}
+.navgrp-acc>summary::after{margin-inline-start:6px}
 .navlink{display:flex;align-items:center;gap:9px;padding:8.5px 12px;border-radius:var(--r-sm);font-weight:600;font-size:13px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
 .navlink:hover{background:rgba(255,255,255,.12);color:#fff}
 .navlink.active{background:#fff;color:var(--royal-blue);font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.18)}
@@ -254,6 +274,21 @@ dialog h4{font-size:16px;font-weight:900;margin-bottom:14px}
         $navCounts['dues'] = cache()->remember('nav.open_dues', 60,
             fn () => \App\Models\ContractDue::where('status', 'due')->count());
     }
+
+    // ═══ عدّادات جديدة (قرار المالك ٨ أغسطس ٢٠٢٦) ═══
+    //
+    // ⚠️ **نفس قاعدة الكسل**: الكويري بتتنفّذ بس لو اللينك ظاهر
+    // للرول ده. المحاسب مايعدّش أوامر تجهيز، وأمين المخزن مايعدّش
+    // طلبات عملاء.
+    if (in_array('picks', $shown, true)) {
+        // تجهيز الطلبات — اللي لسه مستني أو تحت التجهيز
+        $navCounts['picks'] = \App\Models\PickOrder::whereIn('status', ['requested', 'picking'])->count();
+    }
+
+    if (in_array('transfers', $shown, true)) {
+        // تحويلات مستنية استلام
+        $navCounts['transfers'] = \App\Models\StockTransfer::where('status', 'sent')->count();
+    }
 @endphp
 <div class="wrap">
 
@@ -271,17 +306,48 @@ dialog h4{font-size:16px;font-weight:900;margin-bottom:14px}
          وكان لازم تفتكر تحط `@if` على كل واحد — وأول لينك تنساه بيبان
          لواحد المفروض مايشوفوش. دلوقتي نفس الدالة اللي بتحرس الراوت
          هي اللي بتقرر اللينك يبان ولا لأ، فمستحيل يتفرقوا. --}}
+    {{-- ═══════════════════════════════════════════════════════════
+         المنيو أكورديون — تاب واحد مفتوح بس (قرار المالك ٨/٨/٢٠٢٦)
+         ═══════════════════════════════════════════════════════════
+
+         ⚠️ **كل المجموعات كانت مفتوحة على طول** — ٤٠+ لينك في عمود
+         واحد، والمستخدم بيسكرول يدوّر على شاشة يعرف مكانها. دلوقتي
+         مجموعة واحدة مفتوحة، ودوس على تانية بيقفل اللي قبلها.
+
+         ⚠️ **المجموعة اللي فيها الصفحة النشطة بتفتح لوحدها** — من
+         غير كده المستخدم بيفتح صفحة ويلاقي المنيو مقفول ومش عارف
+         هو فين.
+
+         ⚠️ **العدّاد بيتجمّع على رأس المجموعة كمان** — لو مقفولة،
+         الرقم اللي جواها لازم يفضل باين وإلا الأكورديون بيخبّي شغل
+         مستني.
+
+         ⚠️ `<details>` مش جافاسكربت: بيشتغل من غير سكربت، وبيفضل
+         شغال لو السكربت وقع. القفل التلقائي للباقي بس هو اللي
+         بالجافاسكربت. --}}
     @foreach ($nav as $group => $links)
-        <div class="navgrp">{{ __($group) }}</div>
-        @foreach ($links as [$route, $icon, $label, $pattern, $counter])
-            <a class="navlink {{ request()->routeIs($pattern) ? 'active' : '' }}"
-               href="{{ route($route) }}">
-                {{ $icon }} {{ __($label) }}
-                @if ($counter && ($navCounts[$counter] ?? 0) > 0)
-                    <span class="cnt">{{ $navCounts[$counter] }}</span>
+        @php
+            $groupActive = collect($links)->contains(fn ($l) => request()->routeIs($l[3]));
+            $groupCount = collect($links)
+                ->sum(fn ($l) => $l[4] ? ($navCounts[$l[4]] ?? 0) : 0);
+        @endphp
+        <details class="navgrp-acc" data-acc @if ($groupActive) open @endif>
+            <summary class="navgrp {{ $groupActive ? 'on' : '' }}">
+                <span>{{ __($group) }}</span>
+                @if ($groupCount > 0)
+                    <span class="cnt">{{ $groupCount }}</span>
                 @endif
-            </a>
-        @endforeach
+            </summary>
+            @foreach ($links as [$route, $icon, $label, $pattern, $counter])
+                <a class="navlink {{ request()->routeIs($pattern) ? 'active' : '' }}"
+                   href="{{ route($route) }}">
+                    {{ $icon }} {{ __($label) }}
+                    @if ($counter && ($navCounts[$counter] ?? 0) > 0)
+                        <span class="cnt">{{ $navCounts[$counter] }}</span>
+                    @endif
+                </a>
+            @endforeach
+        </details>
     @endforeach
 
     <div class="side-user">
@@ -503,6 +569,32 @@ document.addEventListener('DOMContentLoaded', function () {
     return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
   };
 
+  /* ═══════════════════════════════════════════════════════════════
+     رقم «نضيف» — النص **كله** رقم، مش «فيه أرقام» (إصلاح 2026-08-08)
+     ═══════════════════════════════════════════════════════════════
+     ⚠️ **ده كان بيطلّع أرقام خيالية في صف الإجماليات.** `toNum` بتشيل
+     أي حاجة مش رقم وتقرا الباقي — فخلية «PCK-1009» بقت `-1009`،
+     وخلية «08/08 01:42 AM» بقت `080801`. النتيجة اللي اتشافت فعلاً:
+     عمود «أمر تجهيز» إجماليه `-90,468,234` وعمود «موعد الاستلام»
+     إجماليه `2,316,035,992,645,388`.
+     ⚠️ **والحل مش إضافة كلمات تانية للقايمة السودا.** القايمة دي
+     بتفحص **عنوان** العمود، وعمرها ما هتلحق كل صيغة («موعد»،
+     «أمر تجهيز»، «بوليصة»...). القرار لازم يتاخد من **المحتوى**:
+     خلية واحدة فيها حرف أو `/` أو `:` = العمود ده مش رقم وخلاص. */
+  const PURE_NUM = /^[+-]?[0-9][0-9,]*(\.[0-9]+)?$/;
+
+  const pureNum = function (s) {
+    /* ⚠️ **أول سطر بس.** كتير من خلايا PROMAX رقم كبير وتحته وصف
+       صغير: «1,140» وتحتها «كرتونة 15 + علبة 5». لو قرينا الخلية
+       كلها الوصف بيلوّثها والعمود يتشال من الإجماليات وهو أصلاً
+       عمود كميات. الرقم دايماً في أول سطر والباقي شرح. */
+    const t = String(s || '').split('\n').map(x => x.trim()).filter(Boolean)[0] || '';
+    if (t === '' || t === '—' || t === '-' || t === '–') return NaN;
+    /* الرمز اللي بعد الرقم مسموح (2,400 ج.م) — اللي قبله وجوّاه لأ */
+    const bare = t.replace(/\s*(ج\.م|ج|جنيه|EGP|قطعة|وحدة)\s*$/u, '').trim();
+    return PURE_NUM.test(bare) ? parseFloat(bare.replace(/,/g, '')) : NaN;
+  };
+
   document.querySelectorAll('.tablewrap').forEach(function (wrap) {
     if (wrap.closest('dialog')) return;
     const table = wrap.querySelector('table');
@@ -536,7 +628,9 @@ document.addEventListener('DOMContentLoaded', function () {
          ومفيش فيها لينكات/بادجات (دي أعمدة حالة مش أرقام) */
       const marked = cells.some(td => td.classList.contains('num'));
       const rich = cells.some(td => td.querySelector('a, .badge, img, input, select, button'));
-      const nums = cells.filter(td => !isNaN(toNum(td.textContent.trim()))).length;
+      /* ⚠️ `pureNum` مش `toNum` — بالقديمة كان عمود «PCK-1009 / 2026-08-07»
+         بيتحسب رقمي، فياخد توسيط و`direction:ltr` ويدخل الإجماليات */
+      const nums = cells.filter(td => !isNaN(pureNum(td.textContent))).length;
 
       const isNum = marked || (!rich && nums >= cells.length * 0.8 && nums > 0);
       numericCol[c] = isNum;
@@ -584,9 +678,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
     for (let c = 0; c < cols; c++) {
       if (!numericCol[c]) continue;
+
+      /* أ) أعمدة أرقامها نضيفة بس مجموعها مالوش معنى (كود، سنة، نسبة) */
       const head = (headRow.cells[c].textContent || '').trim().toLowerCase();
-      const skip = /كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|ساعة|time/.test(head);
-      if (!skip) sumCols.push(c);
+      if (/كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|موعد|معاد|ساعة|time/.test(head)) continue;
+
+      /* ب) ⚠️ **الفحص الحقيقي: كل خلية لازم تكون رقم نضيف.** الفاضي
+         و«—» محايدين (خانة مش متملية مش خطأ)، لكن أي خلية فيها حرف
+         أو تاريخ أو كود بتشيل العمود كله من الإجماليات. عمود مالوش
+         مجموع بيفضل **فاضي** في صف الـTotals — أحسن من رقم غلط. */
+      let clean = 0, dirty = 0;
+      rows0.forEach(function (r) {
+        const td = r.cells[c];
+        if (!td) return;
+        const t = td.textContent.trim();
+        if (t === '' || t === '—' || t === '-' || t === '–') return;
+        if (isNaN(pureNum(t))) dirty++; else clean++;
+      });
+
+      if (dirty === 0 && clean > 0) sumCols.push(c);
     }
 
     let foot = null;
@@ -620,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function () {
       sumCols.forEach(function (c) {
         let sum = 0, any = false;
         visible.forEach(function (r) {
-          const v = toNum((r.cells[c] || {}).textContent || '');
+          const v = pureNum((r.cells[c] || {}).textContent || '');
           if (!isNaN(v)) { sum += v; any = true; }
         });
         if (cells[c]) cells[c].textContent = any ? fmtNum(sum) : '';
@@ -642,7 +752,7 @@ document.addEventListener('DOMContentLoaded', function () {
           rows.sort(function (a, b) {
             const x = val(a), y = val(b);
             if (numericCol[idx]) {
-              const nx = toNum(x), ny = toNum(y);
+              const nx = pureNum(x), ny = pureNum(y);
               return dir * ((isNaN(nx) ? -Infinity : nx) - (isNaN(ny) ? -Infinity : ny));
             }
             return dir * x.localeCompare(y, ['ar', 'en']);
@@ -746,6 +856,49 @@ document.addEventListener('DOMContentLoaded', function () {
     applyPage(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// المنيو الأكورديون — تاب واحد مفتوح بس (قرار المالك ٨/٨/٢٠٢٦)
+// ═══════════════════════════════════════════════════════════════
+//
+// ⚠️ **الفتح بيقفل الباقي.** من غير ده الأكورديون بيبقى مجرد
+// «طي اختياري» والمستخدم بيفتح الكل ويرجع لنفس العمود الطويل.
+//
+// ⚠️ **الحالة متخزنة في `localStorage`** — الصفحة بتتعاد مع كل
+// ضغطة (مفيش SPA)، فمن غير التخزين المنيو كان هيرجع لوضعه
+// الافتراضي كل مرة والمستخدم يفتح نفس المجموعة ٢٠ مرة في اليوم.
+//
+// ⚠️ **المجموعة النشطة بتغلب المخزّن** — لو المستخدم فتح صفحة من
+// مجموعة تانية (من لينك أو بحث)، المفروض يلاقي نفسه.
+(function () {
+  var accs = document.querySelectorAll('details[data-acc]');
+  if (!accs.length) return;
+
+  var KEY = 'navOpenGroup';
+
+  // اللي فيه الصفحة النشطة — `open` اتحطت من البليد
+  var activeIdx = -1;
+
+  accs.forEach(function (d, i) {
+    if (d.querySelector('.navlink.active')) activeIdx = i;
+  });
+
+  if (activeIdx < 0) {
+    var saved = parseInt(localStorage.getItem(KEY) || '-1', 10);
+
+    accs.forEach(function (d, i) { d.open = (i === saved); });
+  }
+
+  accs.forEach(function (d, i) {
+    d.addEventListener('toggle', function () {
+      if (!d.open) return;
+
+      localStorage.setItem(KEY, i);
+
+      accs.forEach(function (o) { if (o !== d) o.open = false; });
+    });
+  });
+})();
 </script>
 @yield('scripts')
 </body>

@@ -491,6 +491,33 @@
                 {!! $hint('payment_days_from') !!}
             </div>
         </div>
+        {{-- ═══ سياسة المرتجع (قرار المالك ٨ أغسطس ٢٠٢٦) ═══
+             ⚠️ **بتتعرّف على العميل مش على المندوب.** المندوب بيشوف
+             المسموح هنا **بس** ويختار قبل ما يعمل المرتجع — من غير
+             كده كل مندوب بيتصرف حسب علاقته بالعميل.
+             ⚠️ ومصفوفة مش اختيار واحد: عميل ممكن ياخد كاش فوري أو
+             تبديل حسب الموقف. --}}
+        @php
+            $curPolicies = old('return_policies', $src?->return_policies ?? []);
+            $curPolicies = is_array($curPolicies) ? $curPolicies : [];
+        @endphp
+        <div class="frow">
+            <div style="flex:2">
+                <label class="f">{{ __('client.return_policies') }}</label>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 2px">
+                    @foreach (\App\Models\Client::RETURN_POLICIES as $rp)
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px">
+                            <input type="checkbox" name="return_policies[]" value="{{ $rp }}"
+                                   @checked(in_array($rp, $curPolicies, true))>
+                            {{ __('field.return_policy_'.$rp) }}
+                        </label>
+                    @endforeach
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">
+                    {{ __('client.return_policies_hint') }}</div>
+            </div>
+        </div>
+
         {{-- ⚠️ **العقد يغلب الخانتين دول.** العقد ورقة موقّعة والخانة
              إعداد داخلي — فلو العميل ليه عقد سارٍ فيه مدة سداد، المدة
              دي هي اللي بتمشي و`Client::paymentDays()` بترجّعها. --}}

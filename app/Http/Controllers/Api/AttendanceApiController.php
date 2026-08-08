@@ -41,7 +41,11 @@ class AttendanceApiController extends Controller
         );
 
         if ($error !== null) {
-            return response()->json(['error' => $error], 422);
+            // ⚠️ **المفتاح `message` مش `error`** (تدقيق ٨/٨/٢٠٢٦).
+            // الأبلكيشن بيقرا `message` في كل رد (`Api._decode`)، فأي
+            // رد بمفتاح `error` كان بيوصل للموظف كرسالة HTTP عامة
+            // مالهاش معنى بدل السبب الحقيقي.
+            return response()->json(['message' => $error], 422);
         }
 
         // ⚠️ **الحضور بيدخل التتبع كمان** — المدير في غرفة التحكم

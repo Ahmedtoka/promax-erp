@@ -61,6 +61,14 @@ class PickApiController extends Controller
      */
     public function receive(Request $request, PickOrder $pick): JsonResponse
     {
+        // ⚠️ **الفحص ده كان ناقص في الكنترولر** (تدقيق ٨/٨/٢٠٢٦).
+        // الإندبوينت كان آمن **بالصدفة** لأن `PickOrder::handOver`
+        // بتفحص جوّه — أي إعادة ترتيب هناك كانت هتفتح استلام عهدة
+        // مندوب تاني من غير ما حد ياخد باله. الحارس صريح هنا دلوقتي.
+        if ((int) $pick->assigned_to !== (int) $request->user()->id) {
+            return response()->json(['message' => __('stock.pick_not_yours')], 403);
+        }
+
         $data = $request->validate([
             'items' => ['nullable', 'array'],
             'items.*.id' => ['required_with:items', 'integer'],

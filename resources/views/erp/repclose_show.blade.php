@@ -159,12 +159,25 @@
         <div class="kpi"><div class="lbl">{{ __('settle.sold_credit') }}</div>
             <div class="val mid">{{ number_format($goods['credit_qty']) }}</div>
             <div class="sub2">{{ number_format($goods['credit_value'], 2) }}</div></div>
+        {{-- ⚠️ **حد ناقص كان بيبلع القطع** (تدقيق ٨/٨) — المسلَّم
+             بأوامر التوريد بيخصم من العهدة من غير فاتورة. --}}
+        <div class="kpi"><div class="lbl">{{ __('settle.delivered_pos') }}</div>
+            <div class="val mid">{{ number_format($goods['po_qty']) }}</div></div>
         <div class="kpi"><div class="lbl">{{ __('settle.gifts') }}</div>
-            <div class="val">{{ number_format($goods['gift_qty']) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('settle.returned_in') }}</div>
-            <div class="val">{{ number_format($goods['returned_qty']) }}</div></div>
+            <div class="val">{{ number_format($goods['gift_qty']) }}</div>
+            <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div></div>
+        <div class="kpi"><div class="lbl">{{ __('settle.returned_wh') }}</div>
+            <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div></div>
         <div class="kpi"><div class="lbl">{{ __('settle.still_on_van') }}</div>
             <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div></div>
+        {{-- ⚠️ **بره المعادلة بقصد.** دي بضاعة العملاء اللي في العربية
+             ومالهاش أصل في المحمَّل — لازم تتسلّم مع التصفية. --}}
+        <div class="kpi"><div class="lbl">{{ __('settle.returned_in') }}</div>
+            <div class="val" style="color:var(--purple-heart)">{{ number_format($goods['returned_qty']) }}</div>
+            <div class="sub2">{{ __('settle.returned_in_hint') }}</div></div>
+        {{-- ⚠️ **التالف منفصل** — بيتسلّم للمخزن لوحده ومابيرجعش للبيع --}}
+        <div class="kpi"><div class="lbl">{{ __('field.return_damaged_units') }}</div>
+            <div class="val {{ $goods['damaged_qty'] > 0 ? 'neg' : '' }}">{{ number_format($goods['damaged_qty']) }}</div></div>
         {{-- ⚠️ **الفرق مش خطأ حسابي.** فرق ≠ صفر معناه بضاعة خرجت من
              العربية من غير فاتورة ولا هدية ولا مرتجع — عجز حقيقي. --}}
         <div class="kpi">
@@ -186,9 +199,12 @@
                 <th>{{ __('settle.loaded') }}</th>
                 <th>{{ __('settle.sold_cash') }}</th>
                 <th>{{ __('settle.sold_credit') }}</th>
+                <th>{{ __('settle.delivered_pos') }}</th>
                 <th>{{ __('settle.gifts') }}</th>
-                <th>{{ __('settle.returned_in') }}</th>
+                <th>{{ __('settle.returned_wh') }}</th>
                 <th>{{ __('settle.still_on_van') }}</th>
+                <th>{{ __('settle.returned_in') }}</th>
+                <th>{{ __('field.return_damaged_units') }}</th>
                 <th>{{ __('settle.shortage') }}</th>
             </tr>
             </thead>
@@ -196,20 +212,32 @@
             @forelse ($goods['lines'] as $l)
                 <tr>
                     <td><b>{{ $l['product']?->displayName() ?? '—' }}</b></td>
-                    <td class="num">{{ number_format($l['assigned']) }}</td>
+                    {{-- المحمَّل = عادي + هدايا --}}
+                    <td class="num">{{ number_format($l['loaded']) }}
+                        @if ($l['gift_assigned'] > 0)
+                            <br><span style="font-size:10px;color:var(--muted)">{{ __('settle.of_which_gift') }} {{ number_format($l['gift_assigned']) }}</span>
+                        @endif
+                    </td>
                     <td class="num">{{ number_format($l['cash_qty']) }}
                         <br><span style="font-size:10px;color:var(--muted)">{{ number_format($l['cash_value'], 2) }}</span></td>
                     <td class="num">{{ number_format($l['credit_qty']) }}
                         <br><span style="font-size:10px;color:var(--muted)">{{ number_format($l['credit_value'], 2) }}</span></td>
-                    <td class="num">{{ number_format($l['gift_given']) }}</td>
-                    <td class="num">{{ number_format($l['returned_in']) }}</td>
+                    <td class="num">{{ number_format($l['po_qty']) }}</td>
+                    <td class="num">{{ number_format($l['gift_given']) }}
+                        @if ($l['gift_left'] > 0)
+                            <br><span style="font-size:10px;color:var(--muted)">+{{ number_format($l['gift_left']) }}</span>
+                        @endif
+                    </td>
+                    <td class="num">{{ number_format($l['returned']) }}</td>
                     <td class="num" style="color:var(--primary);font-weight:900">{{ number_format($l['remaining']) }}</td>
+                    <td class="num" style="color:var(--purple-heart)">{{ number_format($l['returned_in']) }}</td>
+                    <td class="num {{ $l['damaged_in'] > 0 ? 'neg' : '' }}">{{ number_format($l['damaged_in']) }}</td>
                     <td class="num {{ $l['diff'] == 0 ? '' : 'neg' }}">
                         {{ $l['diff'] == 0 ? '—' : number_format($l['diff']) }}
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:26px">
+                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:26px">
                     {{ __('settle.no_custody') }}</td></tr>
             @endforelse
             </tbody>
@@ -257,6 +285,44 @@
         </table>
     </div>
 </div>
+
+{{-- ═══ مستندات المرتجع (٨ أغسطس ٢٠٢٦) ═══
+     ⚠️ **المحاسب بيستلم بضاعة مش بس فلوس.** السليم بيرجع للبيع
+     والتالف بيتسلّم للمخزن لوحده — من غير الجدول ده المحاسب
+     بيمضي على تصفية وهو مش عارف إيه اللي في العربية. --}}
+@if ($returns->isNotEmpty())
+    <div class="card">
+        <h3>📥 {{ __('field.returns') }}
+            <span class="side">
+                {{ __('field.return_good_units') }}: {{ number_format($returns_good) }} ·
+                {{ __('field.return_damaged_units') }}: {{ number_format($returns_damaged) }} ·
+                {{ $fmt($returns_value) }}
+            </span></h3>
+        <div class="tablewrap st-tbl">
+            <table>
+                <tr>
+                    <th style="text-align:start">{{ __('common.number') }}</th>
+                    <th style="text-align:start">{{ __('client.client') }}</th>
+                    <th>{{ __('field.return_policy') }}</th>
+                    <th>{{ __('field.return_good_units') }}</th>
+                    <th>{{ __('field.return_damaged_units') }}</th>
+                    <th>{{ __('common.total') }}</th>
+                </tr>
+                @foreach ($returns as $r)
+                    <tr>
+                        <td style="text-align:start"><b>{{ $r->number }}</b></td>
+                        <td style="text-align:start">{{ $r->client?->fullName() ?? '—' }}</td>
+                        <td><span class="badge b-purple">{{ $r->policyLabel() }}</span></td>
+                        <td class="num">{{ number_format($r->good_units) }}</td>
+                        <td class="num {{ $r->damaged_units > 0 ? 'neg' : '' }}">
+                            {{ number_format($r->damaged_units) }}</td>
+                        <td class="num"><b>{{ $fmt($r->grand_total) }}</b></td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+    </div>
+@endif
 
 @if ($refundRows->isNotEmpty())
     <div class="card">

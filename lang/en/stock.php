@@ -512,4 +512,6 @@ return [
     'pickup_at' => 'Pickup time',
     'go_handout' => 'Custody handout',
     'go_po' => 'Supply order',
+    'prep_duration' => 'Prep duration',
+    'pick_must_start_first' => 'Press "Start picking" first — without it there is no prep duration.',
 ];

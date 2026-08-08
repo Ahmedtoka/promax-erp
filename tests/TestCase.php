@@ -60,7 +60,10 @@ abstract class TestCase extends BaseTestCase
             'email' => 'rep'.uniqid().'@promax.test',
             'password' => bcrypt('secret'),
             'role' => 'sales_agent',
-            'code' => 'SLS-'.random_int(1000, 9999),
+            // ⚠️ `uniqid()` مش `random_int` — نفس سبب `makeAdmin`:
+            // العمود `unique`، والتيستات اللي بتعمل ٢-٣ مناديب في
+            // كل واحد كانت بتقع بتصادم عشوائي مرة كل شوية.
+            'code' => 'SLS-'.strtoupper(uniqid()),
             'active' => true,
             'locale' => 'en',
         ], $attrs));

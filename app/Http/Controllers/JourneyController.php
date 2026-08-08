@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\Zone;
 use App\Services\Journeys;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,19 @@ class JourneyController extends Controller
             'client_ids.*' => ['integer', 'exists:clients,id'],
         ]);
 
+        // ⚠️ **`store` كانت بتتجاهل فلتر `index` نفسه** (تدقيق ٨/٨):
+        // الشاشة بتوري مناديب الفريق بس، لكن الـPOST كان بيقبل أي
+        // `user_id` وأي `client_ids`. نفس حارس `assign` بالظبط.
+        $rep = User::with('zones')->findOrFail($data['user_id']);
+
+        Scope::assertRep($request->user(), $rep);
+
+        foreach (Client::whereIn('id', $data['client_ids'])->get() as $c) {
+            Scope::assertClient($request->user(), $c);
+            Scope::assertSameTeam($rep, $c);
+            Scope::assertInZone($rep, $c);
+        }
+
         $added = 0;
 
         DB::transaction(function () use ($data, &$added) {
@@ -164,8 +178,12 @@ class JourneyController extends Controller
         return back()->with('ok', __('journey.added', ['count' => $added]));
     }
 
-    public function destroy(JourneyPlan $journeyPlan)
+    public function destroy(Request $request, JourneyPlan $journeyPlan)
     {
+        // ⚠️ **كان بلا أي فحص ملكية** — أي مدير بيمسح من خطة أي
+        // مندوب في الشركة بالـid. الفحص على المندوب صاحب الخطة.
+        Scope::assertRep($request->user(), $journeyPlan->user);
+
         $journeyPlan->delete();
 
         return back()->with('ok', __('journey.removed'));
@@ -179,17 +197,21 @@ class JourneyController extends Controller
             'order.*' => ['integer', 'exists:journey_plans,id'],
         ]);
 
-        DB::transaction(function () use ($data) {
+        DB::transaction(function () use ($data, $request) {
             // ⚠️ **كل الصفوف لازم تكون نفس المندوب ونفس اليوم.**
             // `exists:` بتتأكد إن الصف موجود بس — بوست بايت أو معدّل
             // كان بيرقّم يوم مندوب تاني ويخربط خط سيره في صمت.
-            $plans = JourneyPlan::whereIn('id', $data['order'])->get();
+            $plans = JourneyPlan::with('user')->whereIn('id', $data['order'])->get();
 
             abort_if(
                 $plans->pluck('user_id')->unique()->count() > 1
                     || $plans->pluck('weekday')->unique()->count() > 1,
                 422,
             );
+
+            // ⚠️ والفحص فوق بيضمن **اتساق** الصفوف بس، مش **ملكيتها**.
+            // من غير السطر ده أي مدير بيعيد ترتيب يوم أي مندوب.
+            Scope::assertRep($request->user(), $plans->first()?->user);
 
             foreach ($data['order'] as $i => $id) {
                 JourneyPlan::whereKey($id)->update(['sort' => $i + 1]);
@@ -268,11 +290,40 @@ class JourneyController extends Controller
             'zone_ids.*' => ['integer', 'exists:zones,id'],
         ]);
 
-        $rep = User::findOrFail($data['user_id']);
+        $rep = User::with('zones')->findOrFail($data['user_id']);
         $clients = 0;
 
         // ⚠️ بره الكلوجر — `$request` مش متمرّر جواه
         $syncZones = $request->boolean('zones_form');
+
+        // ═══ الحارس (تدقيق ٨/٨/٢٠٢٦) ═══
+        // ⚠️ **دي كانت جذر السيناريو اللي حصل**: الشاشة مابتتحققش لا
+        // من سكوب المندوب ولا سكوب العميل ولا اتساق المنطقة، فعميل
+        // كان بيتسكّن على مندوب مدير تاني في منطقة تانية.
+        Scope::assertRep($request->user(), $rep);
+
+        if (! empty($data['client_ids'])) {
+            $offenders = [];
+
+            foreach (Client::whereIn('id', $data['client_ids'])->get() as $c) {
+                Scope::assertClient($request->user(), $c);
+                Scope::assertSameTeam($rep, $c);
+
+                // ⚠️ المناطق اللي بتتسكّن في **نفس** الريكوست بتتحسب،
+                // وإلا أول تسكين لمندوب جديد بيترفض.
+                if (! Scope::inZone($rep, $c, $syncZones ? ($data['zone_ids'] ?? []) : null)) {
+                    $offenders[] = $c->fullName();
+                }
+            }
+
+            // ⚠️ الأسماء بتترجع للمستخدم — رسالة «مش في المنطقة» من
+            // غير اسم العميل بتخلّي الشاشة مسدودة بلا سبب واضح.
+            if ($offenders !== []) {
+                return back()->withErrors([
+                    'client_ids' => __('perm.scope_zone_denied').' — '.implode('، ', $offenders),
+                ]);
+            }
+        }
 
         DB::transaction(function () use ($data, $rep, $syncZones, &$clients) {
             if (! empty($data['client_ids'])) {
@@ -296,6 +347,10 @@ class JourneyController extends Controller
 
     public function unassign(Request $request, Client $client)
     {
+        // ⚠️ **كان بلا فحص** — أي مدير بيفك تسكين أي عميل في الشركة
+        // بالـid، والعميل بيبقى يتيم ومحدش بيزوره.
+        Scope::assertClient($request->user(), $client);
+
         $client->update(['rep_id' => null]);
 
         return back()->with('ok', __('journey.unassigned', ['client' => $client->displayName()]));
@@ -308,10 +363,15 @@ class JourneyController extends Controller
     {
         // ⚠️ العهدة بتتحمّل مفلترة على النهارده. `todayCustody()` بتعمل
         // كويري جديدة في كل نداء، والشاشة دي بتترفرش لوحدها كل دقيقة.
-        $reps = Branch::scope(User::with([
+        // ⚠️ **`fieldVisibleTo` مش اختيارية هنا** (تدقيق ٨/٨/٢٠٢٦):
+        // الشاشة اللايف كانت أخطر تسريب في السيستم — أي تشانل مانجر
+        // بيشوف GPS وسرعة وقيمة عهدة ومبيعات **كل** مناديب الشركة.
+        // كل شاشة تانية بتجيب فريق الميدان بتستخدمها، ودي كانت الوحيدة
+        // اللي فاتت.
+        $reps = User::fieldVisibleTo(Branch::scope(User::with([
             'zone',
             'custodies' => fn ($q) => $q->whereDate('date', today())->with('items.product'),
-        ]))
+        ])), $request->user())
             ->whereIn('role', User::FIELD_ROLES)
             ->where('active', true)
             ->orderBy('name')
@@ -646,6 +706,11 @@ class JourneyController extends Controller
     /** يوم مندوب واحد — بيتفتح من الشاشة اللايف */
     public function repDay(Request $request, User $user)
     {
+        // ⚠️ **فلترة الشاشة اللايف بتخبّي الصف عن العين مش عن الراوت**
+        // — `/ops/live/{user}` كان بيفتح يوم أي مندوب بالـid: مساره
+        // وزياراته وفواتيره. الحارس هنا هو اللي بيقفلها فعلاً.
+        Scope::assertRep($request->user(), $user);
+
         // ⚠️ `Carbon::parse` على نص عبيط بترمي استثناء و500. الفحص
         // بيرجّع النهارده بدل ما الصفحة تقع من باراميتر في اللينك.
         $date = rescue(

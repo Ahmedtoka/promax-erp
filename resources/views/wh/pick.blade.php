@@ -16,8 +16,14 @@
     $picked = $o->qtyPicked();
     $received = $o->qtyReceived();
 
+    // ⚠️ **الزرارين مايظهروش مع بعض أبداً** (قرار المالك ٨/٨/٢٠٢٦).
+    // `canPick()` بترجّع true للحالتين (`requested` و`picking`)، فكان
+    // «ابدأ التجهيز» و«جاهز» جنب بعض — وأمين المخزن المستعجل بيدوس
+    // «جاهز» على طول، فمفيش بداية ومفيش **مدة تجهيز** أصلاً.
+    // دلوقتي: `requested` → «ابدأ» بس · `picking` → «جاهز» بس،
+    // والسيرفر بيرفض «جاهز» قبل البداية (`PickOrder::markReady`).
     $canStart = $o->status === 'requested';
-    $canReady = $o->canPick();
+    $canReady = $o->status === 'picking';
     // ⚠️ الإلغاء قرار مدير (`role:admin,manager` في الراوت) — من غير
     // فحص الرول أمين المخزن كان بيشوف الزرار وياخد 403.
     $canCancel = $o->status !== 'handed' && auth()->user()->canDecideOps();
@@ -85,6 +91,20 @@
             @if ($o->purpose) {{ $o->purposeLabel() }} @else — @endif
         </div>
     </div>
+    {{-- ⚠️ **مدة التجهيز بتتعرض** (قرار المالك ٨/٨/٢٠٢٦) — الرقم ده
+         هو اللي بيقيس أداء المخزن وبيفسّر ليه المندوب اتأخر قدام
+         الفرع. من غير عرضه، القياس اتسجّل ومحدش شافه. --}}
+    @if ($o->prepMinutes() !== null)
+        <div class="kpi">
+            <div class="lbl">{{ __('stock.prep_duration') }}</div>
+            <div class="val">{{ $o->prepMinutes() }}</div>
+            <div class="sub2">
+                {{ __('common.minutes') }}
+                @if ($o->started_at) · {{ $o->started_at->format('H:i') }} @endif
+                @if ($o->ready_at) → {{ $o->ready_at->format('H:i') }} @endif
+            </div>
+        </div>
+    @endif
     <div class="kpi">
         <div class="lbl">{{ __('stock.warehouse') }}</div>
         <div class="val" style="font-size:17px">{{ $o->warehouse?->displayName() ?? '—' }}</div>

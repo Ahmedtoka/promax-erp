@@ -79,7 +79,10 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ $edit ? route('ops.po.update', $edit) : route('ops.pos.store') }}" id="poForm">
+    {{-- ⚠️ **`enctype` مطلوب** — من غيره الملف مابيوصلش السيرفر
+         خالص و`$request->file()` بترجّع `null` في صمت. --}}
+    <form method="POST" enctype="multipart/form-data"
+          action="{{ $edit ? route('ops.po.update', $edit) : route('ops.pos.store') }}" id="poForm">
         @csrf
         <input type="hidden" name="approval" value="1">
         <input type="hidden" name="price_mode" value="channel">
@@ -108,6 +111,23 @@
                 </select>
                 {{-- رصيد الفرع قدام مدير القناة من دلوقتي — قبل ما الحسابات ترفض --}}
                 <div id="poBalance" style="font-size:11px;font-weight:800;margin-top:5px"></div>
+            </div>
+        </div>
+
+        {{-- ═══ صورة أمر الشراء الأصلي (طلب المالك ٨/٨/٢٠٢٦) ═══
+             ⚠️ **السلسلة بتبعت ورقتها هي.** المندوب بيقف عند الفرع
+             والفرع بيقارن بورقته — من غير الصورة مفيش مرجع مشترك
+             يحسم أي خلاف على الكميات. --}}
+        <div class="frow">
+            <div style="flex:2">
+                <label class="f">{{ __('ops.po_image') }}</label>
+                <input type="file" name="image" accept="image/*,.pdf" style="width:100%">
+                <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                    {{ __('ops.po_image_hint') }}</div>
+                @if ($edit?->imageUrl())
+                    <a href="{{ $edit->imageUrl() }}" target="_blank"
+                       style="font-size:11.5px;font-weight:800">{{ __('ops.po_image_current') }}</a>
+                @endif
             </div>
         </div>
 

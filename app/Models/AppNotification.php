@@ -12,7 +12,35 @@ class AppNotification extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'title', 'body', 'is_good', 'read_at'];
+    protected $fillable = ['user_id', 'title', 'body', 'link', 'is_good', 'read_at'];
+
+    /**
+     * ⚠️ **الوجهة نص قصير مش URL.** الأبلكيشن بيترجمه لشاشة:
+     * `po:12` · `pick:7` · `request:3` · `replenishment:9` ·
+     * `custody` · `attendance` · `home`. مفتاح مش معروف = الرئيسية،
+     * فنسخة أبلكيشن قديمة مابتكراشش على وجهة جديدة.
+     */
+    public static function poLink(int $id): string
+    {
+        return 'po:'.$id;
+    }
+
+    public static function pickLink(int $id): string
+    {
+        return 'pick:'.$id;
+    }
+
+    /** طلب ريفيل — بيفتح تاب الريفيل عند البروموتر والمدير */
+    public static function replenishmentLink(int $id): string
+    {
+        return 'replenishment:'.$id;
+    }
+
+    /** طلب عميل جديد — بيفتح تاب الموافقات عند المدير */
+    public static function requestLink(int $id): string
+    {
+        return 'request:'.$id;
+    }
 
     protected function casts(): array
     {
@@ -37,6 +65,7 @@ class AppNotification extends Model
         string|Closure $title,
         string|Closure|null $body = null,
         bool $good = true,
+        ?string $link = null,
     ): ?self {
         if ($user === null) {
             return null;
@@ -51,6 +80,7 @@ class AppNotification extends Model
             'user_id' => $user->id,
             'title' => $title,
             'body' => $body,
+            'link' => $link,
             'is_good' => $good,
         ]);
 
@@ -58,9 +88,13 @@ class AppNotification extends Model
         // واحدة لكل إشعارات السيستم، فأي إشعار جديد بيتبعت أوتوماتيك
         // من غير ما حد يفتكر ينادي الدفع. الخدمة بتتخطى بأمان لو
         // فاير بيز لسه مااتظبطش، والشبكة مابتوقّفش العملية الأصلية.
+        // ⚠️ **`link` في الـ`data` كمان** — الضغط على إشعار النظام
+        // (والأبلكيشن مقفول) بيوصل لـ`getInitialMessage` في الموبايل،
+        // وهو بيقرا الوجهة من هنا. من غيرها الإشعار بيفتح الرئيسية.
         \App\Services\Push::toUser($user, $title, $body, [
             'id' => (string) $note->id,
             'good' => $good ? '1' : '0',
+            'link' => (string) ($link ?? ''),
         ]);
 
         return $note;

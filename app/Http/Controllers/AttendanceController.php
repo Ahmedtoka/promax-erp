@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceDay;
 use App\Models\User;
 use App\Services\Attendance;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 
 /**
@@ -114,6 +115,11 @@ class AttendanceController extends Controller
             'hours' => ['nullable', 'regex:/^\d{1,2}:[0-5]\d$/'],
             'note' => ['nullable', 'string', 'max:300'],
         ], ['hours.regex' => __('hr.bad_time')]);
+
+        // ⚠️ **كان بلا سكوب فريق** — أي مدير بيعتمد (**ويعدّل ساعات**)
+        // أي موظف في الشركة. الساعات دي بتتحول فلوس، فده تعديل مالي.
+        // `assertStaff` مش `assertRep`: الحضور بيشمل موظفين مكتب كمان.
+        Scope::assertStaff($request->user(), $day->user);
 
         $minutes = null;
 

@@ -47,7 +47,7 @@ class PickOrder extends Model
     protected $fillable = [
         'number', 'warehouse_id', 'assigned_to', 'requested_by', 'picked_by',
         'purpose', 'status', 'purchase_order_id', 'replenishment_request_id',
-        'custody_id', 'needed_on', 'pickup_at', 'ready_at', 'issued_at', 'carrier_note',
+        'custody_id', 'needed_on', 'pickup_at', 'started_at', 'ready_at', 'issued_at', 'carrier_note',
         'handed_at', 'has_variance', 'notes',
     ];
 
@@ -57,6 +57,7 @@ class PickOrder extends Model
             'needed_on' => 'date',
             // موعد وصول المندوب المخزن — يوم **وساعة** (2026-08-08)
             'pickup_at' => 'datetime',
+            'started_at' => 'datetime',
             'ready_at' => 'datetime',
             'issued_at' => 'datetime',
             'handed_at' => 'datetime',
@@ -377,6 +378,15 @@ class PickOrder extends Model
             $left[$pid] -= $take;
         }
 
+        // ⚠️ **«ابدأ» قبل «جاهز» هنا كمان** — `markReady` بقت بترفض
+        // من غير بداية (قرار المالك ٨/٨/٢٠٢٦). الإصدار المباشر
+        // بيمرّ على نفس المسار بالظبط، فلو ماناديناش `startPicking`
+        // كان الفلو ده هيقف كله. المدة بتطلع ~صفر وده صحيح: الإصدار
+        // المباشر معناه إن البضاعة اتجهّزت وخرجت في نفس اللحظة.
+        if ($error = $order->startPicking($issuedBy ?? $rep)) {
+            return ['order' => null, 'error' => $error];
+        }
+
         // الخروج الفعلي من الأرفف — نفس المسار اللي المخزن بيستخدمه
         if ($error = $order->markReady($issuedBy ?? $rep)) {
             return ['order' => null, 'error' => $error];
@@ -436,9 +446,33 @@ class PickOrder extends Model
             return __('stock.pick_wrong_status');
         }
 
-        $this->update(['status' => 'picking', 'picked_by' => $picker->id]);
+        // ⚠️ **`started_at` مش بيتكتب تاني لو اتبدأ قبل كده.** لو
+        // أمين المخزن دوس «ابدأ» مرتين، المدة كانت هتترجع من الأول
+        // والرقم يطلع أقصر من الحقيقي.
+        $this->update([
+            'status' => 'picking',
+            'picked_by' => $picker->id,
+            'started_at' => $this->started_at ?? now(),
+        ]);
 
         return null;
+    }
+
+    /**
+     * مدة التجهيز بالدقايق — من «ابدأ» للجاهز.
+     *
+     * ⚠️ **بترجّع `null` لو لسه مابدأش**، مش صفر. الصفر معناه «اتجهّز
+     * في أقل من دقيقة» وده رقم حقيقي؛ الفاضي معناه «مفيش قياس».
+     *
+     * ⚠️ Carbon 3: `diffInMinutes` بترجّع float ممكن يكون سالب.
+     */
+    public function prepMinutes(): ?int
+    {
+        if ($this->started_at === null) {
+            return null;
+        }
+
+        return (int) round(abs($this->started_at->diffInMinutes($this->ready_at ?? now())));
     }
 
     /**
@@ -450,6 +484,15 @@ class PickOrder extends Model
     {
         if (! in_array($this->status, ['requested', 'picking'], true)) {
             return __('stock.pick_wrong_status');
+        }
+
+        // ⚠️ **«ابدأ التجهيز» إجباري — والسيرفر هو اللي بيرفض**
+        // (قرار المالك ٨/٨/٢٠٢٦). إخفاء الزرار في الشاشة مش حماية:
+        // الراوت مفتوح، والأهم إن من غير بداية مفيش **مدة تجهيز**
+        // — والمدة دي هي اللي بتقيس أداء المخزن وبتفسّر تأخير
+        // المندوب قدام الفرع.
+        if ($this->status !== 'picking' || $this->started_at === null) {
+            return __('stock.pick_must_start_first');
         }
 
         $this->load(['items.batch', 'items.product']);
@@ -528,6 +571,9 @@ class PickOrder extends Model
                 'due' => $due,
             ]),
             good: true,
+            // ⚠️ الوجهة = أمر التجهيز نفسه. «عهدتك جاهزة» من غير
+            // لينك معناها إن المندوب يفتح تبويب المخزن ويدوّر.
+            link: AppNotification::pickLink($this->id),
         );
 
         return null;

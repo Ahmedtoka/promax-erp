@@ -771,6 +771,13 @@ class ErpController extends Controller
             // ⚠️ من الثابت مش مكتوبة بالنص — `both` اتضافت 2026-08-08
             // والقايمة المكتوبة بالإيد كانت هترفضها في صمت.
             'payment_terms' => ['nullable', Rule::in(Client::PAY_TERMS)],
+            // ═══ سياسة المرتجع (قرار المالك ٨/٨/٢٠٢٦) ═══
+            // ⚠️ **مصفوفة مش قيمة واحدة** — العميل ممكن يكون مسموح
+            // له بأكتر من طريقة، والمندوب بيختار من المسموح وقت
+            // المرتجع. فاضية = ارجع للافتراضي حسب شروط الدفع
+            // (`Client::returnPolicies()`).
+            'return_policies' => ['nullable', 'array'],
+            'return_policies.*' => [Rule::in(Client::RETURN_POLICIES)],
             // ⚠️ **`nullable` مش `required` حتى للآجل.** فيه عملاء آجل
             // بالفعل من غير مدة متفق عليها، وإجبار رقم هنا كان معناه
             // إن اللي بيعدّل أي حاجة تانية على العميل ده يتحبس لحد ما
@@ -863,6 +870,14 @@ class ErpController extends Controller
         }
 
         $data = $this->guardBranch($request, $data, creating: true);
+
+        // ⚠️ **مدير بيعمل عميل كان بيضيّعه** (تدقيق ٨/٨/٢٠٢٦):
+        // `manager_id` اختياري في الفورم وبلا افتراضي، و`Client::visibleTo`
+        // بتفلتر المدير على `manager_id` — فالعميل كان بيختفي من شاشة
+        // اللي عمله بالظبط في اللحظة اللي بيتحفظ فيها.
+        if ($request->user()?->role === 'manager' && empty($data['manager_id'])) {
+            $data['manager_id'] = $request->user()->id;
+        }
 
         $client = DB::transaction(function () use ($data, $request) {
             $client = Client::create($this->clientFields($data) + [

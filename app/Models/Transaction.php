@@ -15,6 +15,12 @@ class Transaction extends Model
         'sale' => 'فاتورة/مبيعات',
         'collection' => 'تحصيل نقدي',
         'return' => 'مرتجع',
+        // ⚠️ **الكود بيكتب `refund` من زمان والثابت ماكانش فيه**
+        // (تدقيق ٨/٨/٢٠٢٦) — أي شاشة بتترجم النوع من `KINDS` كانت
+        // بتعرض المفتاح الخام «refund» للمحاسب، وأي فاليديشن
+        // `Rule::in(array_keys(KINDS))` كان بيرفض القيد.
+        // ده رد فلوس مرتجع كاش: مدين، بيلغي القيد الدائن بتاع المرتجع.
+        'refund' => 'رد فلوس مرتجع',
         'rebate' => 'خصم تجاري',
         'settlement' => 'تسوية/مقاصة',
         'transfer' => 'قيد تحويل',
@@ -37,15 +43,59 @@ class Transaction extends Model
      */
     public const DEBT_KINDS = ['sale', 'opening'];
 
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * طرق التحصيل (قرار المالك ٨ أغسطس ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * ⚠️ **الطريقة مش بتغيّر المحاسبة — بتغيّر المطابقة.** القيد
+     * `collection` واحد في كل الحالات، بس المحاسب بيقفل اليومية
+     * محتاج يعرف كام كاش في الخزنة وكام شيك في الدرج وكام تحويل
+     * لازم يتطابق مع كشف البنك.
+     *
+     * ⚠️ **الشيك بيدخل حساب العميل فوراً زي الكاش** (قرار المالك
+     * صراحةً) — مش مستني تاريخ الاستحقاق ولا التحصيل من البنك.
+     * أي تغيير في ده قرار مالك جديد مش تحسين تقني.
+     *
+     * ⚠️ **اللي مش نقدي بياخد ريفرنس إجباري** — رقم عملية الماكينة
+     * أو رقم الشيك أو رقم التحويل. من غيره المطابقة بتبقى مستحيلة
+     * والفرق بيتكتشف آخر الشهر.
+     */
+    public const METHOD_CASH = 'cash';
+    public const METHOD_CARD = 'card';
+    public const METHOD_CHEQUE = 'cheque';
+    public const METHOD_TRANSFER = 'transfer';
+
+    public const METHODS = [
+        self::METHOD_CASH,
+        self::METHOD_CARD,
+        self::METHOD_CHEQUE,
+        self::METHOD_TRANSFER,
+    ];
+
+    /** الطرق اللي محتاجة ريفرنس — كل حاجة ما عدا النقدي */
+    public const METHODS_NEED_REF = [
+        self::METHOD_CARD,
+        self::METHOD_CHEQUE,
+        self::METHOD_TRANSFER,
+    ];
+
     protected $fillable = [
         'client_id', 'date', 'memo', 'debit', 'credit', 'tax', 'kind',
+        'method', 'reference', 'cheque_bank', 'cheque_due',
         'source_type', 'source_id',
     ];
+
+    public function methodLabel(): ?string
+    {
+        return $this->method === null ? null : __('client.pay_method_'.$this->method);
+    }
 
     protected function casts(): array
     {
         return [
             'date' => 'date',
+            'cheque_due' => 'date',
             'debit' => 'decimal:2',
             'credit' => 'decimal:2',
         ];

@@ -85,14 +85,18 @@ class GiftApiController extends Controller
             $req = \App\Models\ClientRequest::find($data['client_request_id']);
 
             if ($req === null || (int) $req->created_by !== (int) $request->user()->id) {
-                return response()->json(['error' => __('field.gift_not_your_request')], 422);
+            // ⚠️ **المفتاح `message` مش `error`** (تدقيق ٨/٨/٢٠٢٦).
+            // الأبلكيشن بيقرا `message` في كل رد (`Api._decode`)، فأي
+            // رد بمفتاح `error` كان بيوصل للموظف كرسالة HTTP عامة
+            // مالهاش معنى بدل السبب الحقيقي.
+                return response()->json(['message' => __('field.gift_not_your_request')], 422);
             }
         }
 
         $custody = $this->custody($request);
 
         if ($custody === null) {
-            return response()->json(['error' => __('field.no_open_custody')], 422);
+            return response()->json(['message' => __('field.no_open_custody')], 422);
         }
 
         $error = null;
@@ -131,7 +135,7 @@ class GiftApiController extends Controller
         });
 
         if ($error !== null) {
-            return response()->json(['error' => $error], 422);
+            return response()->json(['message' => $error], 422);
         }
 
         // ⚠️ **الهدية حركة زي البيع بالظبط** (2026-08-07): بضاعة خرجت

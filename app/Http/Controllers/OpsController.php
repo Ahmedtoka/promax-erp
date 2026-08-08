@@ -15,6 +15,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Models\Zone;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -102,8 +103,12 @@ class OpsController extends Controller
     // الأبلكيشن — التحميل الرسمي بقى من فلو تسليم العهدة:
     // CustodyHandoutController::store ← تجهيز الطلبات ← تأكيد ← استلام.
 
-    public function closeCustody(User $user)
+    public function closeCustody(Request $request, User $user)
     {
+        // ⚠️ **كان بلا حارس** — أي مدير بيقفل يوم أي مندوب في الشركة،
+        // والمندوب بيلاقي عهدته اتقفلت وهو لسه في الشارع.
+        Scope::assertRep($request->user(), $user);
+
         $custody = $user->todayCustody();
         $custody?->update(['status' => 'closed', 'closed_at' => now()]);
 
@@ -198,6 +203,9 @@ class OpsController extends Controller
             'due_at' => ['nullable', 'date'],
             'pickup_at' => ['nullable', 'date'],
             'warehouse_id' => ['nullable', 'exists:warehouses,id'],
+            // ⚠️ **صورة أمر الشراء الأصلي** (طلب المالك ٨/٨/٢٠٢٦) —
+            // صورة أو PDF من ورقة السلسلة. `max` بالكيلوبايت.
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
             'approval' => ['nullable', 'boolean'],
             'qty' => ['required', 'array'],
             'qty.*' => ['nullable', 'integer', 'min:0'],
@@ -232,6 +240,13 @@ class OpsController extends Controller
 
         $needsApproval = $request->boolean('approval');
 
+        // ⚠️ **الرفع قبل الترانزاكشن** — كتابة الملف على الديسك مش
+        // جزء من ترانزاكشن الداتابيز، ولو حصلت جواها وحصل rollback
+        // بيفضل ملف يتيم. ولو الرفع نفسه فشل، مايتعملش أمر أصلاً.
+        $imagePath = $request->hasFile('image')
+            ? $request->file('image')->store('po-images', 'public')
+            : null;
+
         try {
         DB::transaction(function () use ($data, $request, $needsApproval) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel
@@ -239,7 +254,20 @@ class OpsController extends Controller
 
             // ⚠️ سكوب التشانل مانجر — مايعملش أمر لعميل مش بتاعه حتى
             // لو عرف الـid (القايمة في الشاشة مفلترة، وده حارس الراوت)
-            abort_unless($client->visibleBy($request->user()), 403);
+            //
+            // ⚠️ **والمندوب كمان.** `exists:users,id` كانت بتخلّي أي
+            // أمر ينزل على أي يوزر في الشركة — محاسب، مندوب مدير
+            // تاني، أو حساب موقوف. `Scope::assertRep` بتفحص الرول
+            // والنشاط والفرع والمدير، واتساق العميل مع المندوب.
+            //
+            // ⚠️ الأمر ممكن يتعمل **من غير** مندوب (`assigned_to`
+            // nullable) — ساعتها بنفحص العميل بس، والمندوب بيتفحص
+            // وقت التسكين في `assignPurchaseOrder`.
+            Scope::assertClient($request->user(), $client);
+
+            if (! empty($data['assigned_to'])) {
+                Scope::assertRep($request->user(), User::find($data['assigned_to']), $client);
+            }
 
             $po = PurchaseOrder::create([
                 'number' => PurchaseOrder::nextNumber(),
@@ -261,6 +289,7 @@ class OpsController extends Controller
                 // الحسابات — أمر التجهيز مابيتعملش قبلها
                 'pickup_at' => $data['pickup_at'] ?? null,
                 'warehouse_id' => $data['warehouse_id'] ?? null,
+                'image_path' => $imagePath,
                 'created_by' => $request->user()->id,
                 'status' => 'pending',
                 'total' => 0,
@@ -280,6 +309,9 @@ class OpsController extends Controller
                         // ⚠️ المبلغ اللي السواق هيحصّله، مش الصافي
                         'amount' => number_format($po->fresh()->payable()),
                     ]),
+                    // ⚠️ الوجهة = الأمر نفسه. من غيرها المندوب بيدوس
+                    // على الإشعار ويقع على الرئيسية ويدوّر بإيده.
+                    link: AppNotification::poLink($po->id),
                 );
             }
         });
@@ -891,6 +923,11 @@ class OpsController extends Controller
             'assigned_to' => ['required', 'exists:users,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
             'due_at' => ['required', 'date'],
+            // ⚠️ **الفورم بيبعتهم في وضع التعديل كمان** (نفس الفيو)
+            // وكانوا بيتبلعوا في صمت: المستخدم يستبدل صورة الأمر أو
+            // يصلّح موعد الاستلام، يدوس حفظ، ومايحصلش حاجة ومفيش خطأ.
+            'pickup_at' => ['nullable', 'date'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
             'source' => ['nullable', 'string', 'max:40'],
             'qty' => ['required', 'array'],
             'qty.*' => ['nullable', 'integer', 'min:0'],
@@ -915,19 +952,37 @@ class OpsController extends Controller
             $data['qty'][$productId] = (int) $data['qty'][$productId] * $factor;
         }
 
+        // ⚠️ الرفع قبل الترانزاكشن — كتابة الملف على الديسك مش جزء
+        // من ترانزاكشن الداتابيز. نفس قاعدة `storePurchaseOrder`.
+        $imagePath = $request->hasFile('image')
+            ? $request->file('image')->store('po-images', 'public')
+            : null;
+
         try {
-            DB::transaction(function () use ($purchaseOrder, $data) {
+            DB::transaction(function () use ($purchaseOrder, $data, $imagePath) {
                 $client = Client::findOrFail($data['client_id']);
 
                 // ⚠️ سكوب التشانل مانجر — نفس حارس storePurchaseOrder
-                abort_unless($client->visibleBy(auth()->user()), 403);
+                //
+                // ⚠️ **والمستلم كمان.** التعديل بيسمح بتبديل
+                // `client_id` و`assigned_to` مع بعض، والمحاسب معاه
+                // الراوت ده — من غير الحارس ينفع أمر يتنقل لعميل
+                // ومندوب بره نطاق المعدِّل في نداء واحد.
+                Scope::assertRep(auth()->user(), User::find($data['assigned_to']), $client);
 
                 $purchaseOrder->update([
                     'client_id' => $client->id,
                     'assigned_to' => $data['assigned_to'],
                     'warehouse_id' => $data['warehouse_id'],
                     'due_at' => $data['due_at'],
-                    'source' => $data['source'] ?? null,
+                    'pickup_at' => $data['pickup_at'] ?? $purchaseOrder->pickup_at,
+                    // ⚠️ **الصورة القديمة بتفضل لو مارفعش جديدة** —
+                    // `null` هنا كان هيمسحها مع أي تعديل تاني.
+                    'image_path' => $imagePath ?? $purchaseOrder->image_path,
+                    // ⚠️ **مايتمسحش لو الفورم بعته فاضي** — الأمر
+                    // المتولّد من طلب ريفيل بيتعرف بـ`source`،
+                    // ومسحه بيقطع `fromReplenishment()` في صمت.
+                    'source' => $data['source'] ?? $purchaseOrder->source,
                     'price_mode' => $client->priceList(),
                     // تراك التعديل: مين وإمتى (2026-08-05)
                     'was_edited' => true,
@@ -1198,6 +1253,11 @@ class OpsController extends Controller
                     'approved_at' => now(),
                     'approval_note' => $data['note'] ?? null,
                     'pick_order_id' => $result['order']->id,
+                    // ⚠️ **بداية عدّاد تجهيز الأمر** — من لحظة ما
+                    // الحسابات توافق وأمر التجهيز ينزل المخزن.
+                    // من غيرها `PurchaseOrder::prepMinutes()` بترجّع
+                    // `null` دايماً والعمود يبقى ميت.
+                    'prep_started_at' => $purchaseOrder->prep_started_at ?? now(),
                 ]);
 
                 // مدير القناة يعرف إن أمره اتعدل وإيه اللي اتغير
@@ -1220,12 +1280,23 @@ class OpsController extends Controller
     public function assignPurchaseOrder(Request $request, PurchaseOrder $purchaseOrder)
     {
         $data = $request->validate(['assigned_to' => ['required', 'exists:users,id']]);
+
+        // ⚠️ **الميثود دي كانت بلا أي حارس إطلاقاً** (تدقيق ٨/٨/٢٠٢٦):
+        // أي مدير كان يعيد تسكين أي أمر في الشركة على أي يوزر. الحارس
+        // بيفحص الأمر نفسه (عميله في نطاق الفاعل) والمستلم الجديد.
+        Scope::assertRep(
+            $request->user(),
+            User::find($data['assigned_to']),
+            $purchaseOrder->client,
+        );
+
         $purchaseOrder->update($data);
 
         AppNotification::send(
             User::find($data['assigned_to']),
             fn () => __('field.notif_po_assigned_title', ['number' => $purchaseOrder->number]),
             fn () => $purchaseOrder->client->displayName(),
+            link: AppNotification::poLink($purchaseOrder->id),
         );
 
         return back()->with('ok', __('flash.po_assigned'));
@@ -1235,7 +1306,20 @@ class OpsController extends Controller
 
     public function requests(Request $request)
     {
-        $q = ClientRequest::with(['rep', 'zone', 'client']);
+        // ⚠️ **سكوب الفريق** (تدقيق ٨/٨/٢٠٢٦): القايمة كانت على مستوى
+        // الشركة، فمدير بيشوف — ويقرر في — طلبات مناديب مدير تاني.
+        // الفلترة على المندوب صاحب الطلب، مش على القناة، عشان تتطابق
+        // مع `decideRequest` تحت.
+        // ⚠️ الفلتر **للمدير بس** مش لكل حد. `whereIn(created_by, ...)`
+        // على الأدمن كان هيخفي أي طلب `created_by` بتاعه null — وده
+        // بيخبّي طلبات بدل ما يحميها.
+        $q = ClientRequest::with(['rep', 'zone', 'client'])
+            ->when(
+                $request->user()?->role === 'manager',
+                fn ($w) => $w->whereIn('created_by',
+                    User::fieldVisibleTo(User::query(), $request->user())->select('id')),
+            );
+
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
         }
@@ -1256,6 +1340,11 @@ class OpsController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
+        // ⚠️ **التوأم في الأبلكيشن بيرجّع 403 والويب كان بيعدّي** —
+        // مسار الويب كان مفيهوش حارس خالص، فمدير بيعتمد عميل مندوب
+        // مدير تاني. الحارس على المندوب صاحب الطلب.
+        Scope::assertRep($request->user(), $clientRequest->rep);
+
         DB::transaction(function () use ($data, $clientRequest, $request) {
             $clientRequest->status = $data['decision'];
             $clientRequest->decided_by = $request->user()->id;
@@ -1263,15 +1352,32 @@ class OpsController extends Controller
             $clientRequest->decision_note = $data['note'] ?? null;
 
             if ($data['decision'] === 'approved') {
+                // ⚠️ **العميل المعتمد كان بيتولد يتيم** (تدقيق ٨/٨):
+                // بلا قناة ولا مندوب ولا مدير ولا فرع — فمابيظهرش في
+                // `Client::visibleTo` لأي حد، والمندوب اللي فتحه
+                // مابيلاقيهوش في الزون. الوراثة من المندوب صاحب الطلب.
+                $rep = $clientRequest->rep;
+
                 $client = Client::create([
                     'code' => Client::nextCode(),
                     'name' => $clientRequest->name,
                     'phone' => $clientRequest->phone,
                     'address' => $clientRequest->address,
-                    'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id,
+                    'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id ?? $rep?->zone_id,
+                    'rep_id' => $rep?->id,
+                    'channel_id' => $rep?->channel_id,
+                    // ⚠️ المدير بييجي من تسكين المندوب مش من الفاعل —
+                    // الأدمن بيعتمد لمناديب مديرين مختلفين.
+                    'manager_id' => $rep?->manager_id,
+                    'branch_id' => $rep?->branch_id,
                     'category' => 'grow',
                     'status' => 'active',
                     'discount' => ($data['discount'] ?? 0) / 100,
+                    // ⚠️ **توحيد مع التوأم في الـAPI** — الويب ماكانش
+                    // بيكتب العمود ده، فنفس الطلب كان بيطلّع عميل
+                    // بإعداد خصم مختلف حسب اتعتمد من الويب ولا من
+                    // الأبلكيشن.
+                    'uses_channel_discount' => ($data['discount'] ?? 0) <= 0,
                     'is_new' => true,
                     'has_docs' => $clientRequest->has_docs,
                     'photo_path' => $clientRequest->photo_path,
@@ -1285,12 +1391,14 @@ class OpsController extends Controller
                     $clientRequest->rep,
                     fn () => __('field.notif_client_approved_title', ['name' => $clientRequest->name]),
                     fn () => __('field.notif_client_approved_body'),
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             } elseif ($data['decision'] === 'review') {
                 AppNotification::send(
                     $clientRequest->rep,
                     fn () => __('field.notif_client_review_title', ['name' => $clientRequest->name]),
                     fn () => $data['note'] ?? __('field.notif_client_review_body'),
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             } else {
                 AppNotification::send(
@@ -1298,6 +1406,7 @@ class OpsController extends Controller
                     fn () => __('field.notif_client_rejected_title', ['name' => $clientRequest->name]),
                     fn () => $data['note'] ?? __('field.notif_client_rejected_body'),
                     false,
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             }
 
@@ -1389,18 +1498,43 @@ class OpsController extends Controller
             'amount' => ['required', 'numeric', 'min:1'],
             'memo' => ['nullable', 'string', 'max:190'],
             'date' => ['nullable', 'date'],
+            // ═══ طريقة التحصيل (قرار المالك ٨/٨/٢٠٢٦) ═══
+            'method' => ['required', \Illuminate\Validation\Rule::in(Transaction::METHODS)],
+            // ⚠️ **إجباري لغير النقدي** — `required_unless` مش
+            // `nullable`: من غير ريفرنس المطابقة مع البنك أو الماكينة
+            // مستحيلة، والفرق بيتكتشف آخر الشهر ومحدش يعرف مصدره.
+            'reference' => ['nullable', 'required_unless:method,cash', 'string', 'max:100'],
+            // بيانات الشيك — إجبارية للشيك بس
+            'cheque_bank' => ['nullable', 'required_if:method,cheque', 'string', 'max:120'],
+            'cheque_due' => ['nullable', 'required_if:method,cheque', 'date'],
         ]);
 
-        Transaction::create([
-            'client_id' => $client->id,
-            'date' => $data['date'] ?? today(),
-            'memo' => $data['memo'] ?? __('flash.memo_cash_collection'),
-            'debit' => 0,
-            'credit' => $data['amount'],
-            'kind' => 'collection',
-        ]);
+        // ⚠️ **جوّه ترانزاكشن** (تدقيق ٨/٨/٢٠٢٦). القيد و`recalculate()`
+        // كانوا سطرين مكشوفين — ولو الطلب اتقطع بينهم، القيد بيتكتب
+        // والأعمدة المجمّعة مابتتحدّثش. **ده السبب رقم ١ الموثّق
+        // لـ«رصيد العميل ≠ كشف حسابه»**، وكان بيتصلح بإعادة حساب
+        // يدوية من غير ما حد يعرف مصدره.
+        DB::transaction(function () use ($client, $data) {
+            Transaction::create([
+                'client_id' => $client->id,
+                'date' => $data['date'] ?? today(),
+                'memo' => $data['memo'] ?? __('flash.memo_cash_collection'),
+                'debit' => 0,
+                'credit' => $data['amount'],
+                'kind' => 'collection',
+                // ⚠️ **الشيك قيده زي الكاش بالظبط** (قرار المالك) —
+                // بيدخل حساب العميل فوراً، والفرق في البيانات
+                // المرفقة مش في المحاسبة.
+                'method' => $data['method'],
+                'reference' => $data['reference'] ?? null,
+                'cheque_bank' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_bank'] ?? null) : null,
+                'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_due'] ?? null) : null,
+            ]);
 
-        $client->recalculate();
+            $client->recalculate();
+        });
 
         return back()->with('ok', __('flash.collection_recorded'));
     }

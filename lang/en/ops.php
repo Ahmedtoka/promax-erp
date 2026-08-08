@@ -270,4 +270,8 @@ return [
     'pickup_at' => 'Rep pickup from warehouse',
     'pickup_at_hint' => 'When the rep comes to the warehouse - day and time',
     'due_at_hint' => 'When the goods reach the branch',
+    'po_image' => 'Original purchase order image',
+    // ⚠️ دبل كوت — الأبوستروف جوه سنجل كوت = Parse error والسيستم كله واقف
+    'po_image_hint' => "A photo or PDF of the chain's own sheet — the rep opens it at the branch to match",
+    'po_image_current' => 'Currently uploaded image',
 ];

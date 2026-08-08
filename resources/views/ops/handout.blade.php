@@ -123,6 +123,11 @@
                     <th class="num">{{ __('stock.available') }}</th>
                     <th style="width:110px">{{ __('stock.entry_unit') }}</th>
                     <th class="num" style="width:110px">{{ __('field.qty_sale') }}</th>
+                    {{-- ═══ وحدة الهدايا منفصلة (قرار المالك ٨/٨/٢٠٢٦) ═══
+                         ⚠️ الواقع «١٠ كراتين بيع + ٣ قطع هدية». وحدة
+                         واحدة للاتنين كانت بتخلّي الهدية تتضرب × ١٢
+                         وتخرج ٣٦ قطعة بدل ٣. --}}
+                    <th style="width:110px">🎁 {{ __('stock.entry_unit') }}</th>
                     {{-- الهدايا خانة منفصلة عن البيع — عشان الفرق مايضيعش --}}
                     <th class="num" style="width:110px">🎁 {{ __('field.qty_gift') }}</th>
                     <th class="num">{{ __('common.total') }}</th>
@@ -131,7 +136,7 @@
                 </thead>
                 <tbody id="selBody">
                     <tr id="selEmpty">
-                        <td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
+                        <td colspan="8" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('field.no_selected_hint') }}
                         </td>
                     </tr>
@@ -328,10 +333,12 @@ const UNIT_LABELS = {
  * سيلكت الوحدة — قطعة دايماً + علبة/كرتونة لو معرّفين للصنف.
  * ⚠️ العرض بس: السيرفر بيعيد ضرب الكمية والهدية بنفسه في store.
  */
-function unitSelect(p) {
+function unitSelect(p, kind) {
     const units = p.units || { piece: 1 };
+    // `unit` للبيع و`gift_unit` للهدية — نفس الودجت، خانتين مختلفتين
+    const field = kind === 'gift' ? 'gift_unit' : 'unit';
 
-    return '<select name="unit[' + p.id + ']" data-row="' + p.id + '" data-kind="unit"' +
+    return '<select name="' + field + '[' + p.id + ']" data-row="' + p.id + '" data-kind="' + field + '"' +
         ' style="width:100%" onchange="syncRow(' + p.id + ')">' +
         Object.keys(units).map(u =>
             '<option value="' + u + '">' + esc(UNIT_LABELS[u]) +
@@ -361,9 +368,10 @@ function packBd(p, n) {
 }
 
 /** مضاعِف الوحدة المختارة في صف — بالقطع */
-function rowFactor(id) {
+function rowFactor(id, kind) {
     const p = CATALOG.find(x => x.id === id);
-    const sel = document.querySelector('[data-row="' + id + '"][data-kind="unit"]');
+    const field = kind === 'gift' ? 'gift_unit' : 'unit';
+    const sel = document.querySelector('[data-row="' + id + '"][data-kind="' + field + '"]');
 
     return (p && p.units && sel && p.units[sel.value]) || 1;
 }
@@ -395,10 +403,11 @@ function addRow(id) {
         '<td class="num"><b>' + p.available.toLocaleString() + '</b>' +
             (packBd(p, p.available) ? '<div style="font-size:10px;color:var(--muted);white-space:nowrap">' + esc(packBd(p, p.available)) + '</div>' : '') +
         '</td>' +
-        '<td>' + unitSelect(p) + '</td>' +
+        '<td>' + unitSelect(p, 'sale') + '</td>' +
         '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="qty[' + id + ']" data-row="' + id + '" data-kind="qty" data-max="' + p.available + '"' +
             ' oninput="syncRow(' + id + ')"></td>' +
+        '<td>' + unitSelect(p, 'gift') + '</td>' +
         '<td class="num"><input type="number" min="0" style="width:100%"' +
             ' name="gift[' + id + ']" data-row="' + id + '" data-kind="gift" oninput="syncRow(' + id + ')"></td>' +
         '<td class="num" id="tot' + id + '">—</td>' +
@@ -426,11 +435,16 @@ function syncRow(id) {
 
     if (!qty || !gift || !cell) return;
 
-    // الإجمالي **بالقطع** — الكمية المكتوبة × مضاعِف الوحدة المختارة
-    const factor = rowFactor(id);
+    // ⚠️ **كل خانة بمضاعِفها هي** (قرار المالك ٨/٨/٢٠٢٦) — البيع
+    // بالكرتونة والهدية بالقطعة، فمضاعِف واحد للاتنين كان بيطلّع
+    // إجمالي غلط في الشاشة ويخالف اللي السيرفر بيحسبه.
+    const saleFactor = rowFactor(id, 'sale');
+    const giftFactor = rowFactor(id, 'gift');
     const max = Number(qty.dataset.max || 0);
-    const sum = (Number(qty.value || 0) + Number(gift.value || 0)) * factor;
+    const sum = Number(qty.value || 0) * saleFactor
+        + Number(gift.value || 0) * giftFactor;
     const over = sum > max;
+    const factor = Math.max(saleFactor, giftFactor);
 
     cell.innerHTML = sum === 0 ? '—'
         : '<b>' + sum.toLocaleString() + '</b>' +
@@ -446,9 +460,9 @@ function syncTotals() {
 
     document.querySelectorAll('[data-kind="qty"]').forEach(q => {
         const g = document.querySelector('[data-row="' + q.dataset.row + '"][data-kind="gift"]');
-        const f = rowFactor(Number(q.dataset.row));
-        const s = Number(q.value || 0) * f;
-        const gv = Number(g ? g.value || 0 : 0) * f;
+        const rid = Number(q.dataset.row);
+        const s = Number(q.value || 0) * rowFactor(rid, 'sale');
+        const gv = Number(g ? g.value || 0 : 0) * rowFactor(rid, 'gift');
 
         sale += s;
         gift += gv;

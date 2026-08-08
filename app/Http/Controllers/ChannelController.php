@@ -9,9 +9,11 @@ use App\Models\CustodyItem;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\MerchVisit;
+use App\Models\Product;
 use App\Models\ReplenishmentRequest;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 
 /**
@@ -93,17 +95,58 @@ class ChannelController extends Controller
         // ═══ بضاعة في عربيات مناديب القناة (عهدة مفتوحة) ═══
         // ⚠️ بسعر البيع الجديد مش بالتكلفة. الشاشة دي تجارية،
         // والمقارنة مع المبيعات لازم تكون بنفس المقياس.
-        $inVans = CustodyItem::query()
+        // ⚠️ **`returned` كان ناقص من المعادلة** (تدقيق ٨/٨/٢٠٢٦).
+        // `CustodyItem::remaining()` = `assigned − sold − returned`،
+        // والكويري دي كانت بتحسب `assigned − sold` بس — فبضاعة
+        // المندوب رجّعها للمخزن كانت لسه محسوبة كأنها في عربيته.
+        // الشاشة كانت بتقول رقم أكبر من الحقيقة كل يوم فيه مرتجع.
+        //
+        // ⚠️ **و`price_new` كانت مقروءة على طول** بدل ما تعدي على
+        // `Pricing` — العميل اللي على قايمة تانية بيتحسب بسعر مش
+        // بتاعه. القايمة هنا مالهاش عميل (دي بضاعة في عربية)، فبنقرا
+        // **سعر القايمة الافتراضية** صراحةً من `price_list_items`
+        // عن طريق `Pricing::byList` — وده الرقم اللي الشاشة بتقارن
+        // بيه المبيعات.
+        //
+        // ⚠️ الحساب اتنقل لـPHP مش SQL عن قصد: الأسعار بقت صفوف في
+        // `price_list_items` مش عمود على `products`، ونسخ منطق
+        // اختيار القايمة في SQL كان هيبقى مصدر تاني للسعر.
+        $vanRows = CustodyItem::query()
             ->join('custodies', 'custodies.id', '=', 'custody_items.custody_id')
             ->join('users', 'users.id', '=', 'custodies.user_id')
-            ->join('products', 'products.id', '=', 'custody_items.product_id')
             ->where('custodies.status', 'open')
             ->whereNotNull('users.channel_id')
-            ->selectRaw('users.channel_id,
-                SUM((custody_items.assigned - custody_items.sold) * products.price_new) as amt,
-                SUM(custody_items.assigned - custody_items.sold) as units')
-            ->groupBy('users.channel_id')
-            ->get()->keyBy('channel_id');
+            ->selectRaw('users.channel_id, custody_items.product_id,
+                SUM(custody_items.assigned - custody_items.sold - custody_items.returned) as units')
+            ->groupBy('users.channel_id', 'custody_items.product_id')
+            ->get();
+
+        $productsById = Product::whereIn('id', $vanRows->pluck('product_id')->unique())
+            ->get()->keyBy('id');
+
+        $inVans = $vanRows
+            ->groupBy('channel_id')
+            ->map(function ($rows, $channelId) use ($productsById) {
+                $amt = 0.0;
+                $units = 0;
+
+                foreach ($rows as $r) {
+                    $left = max(0, (int) $r->units);
+                    $units += $left;
+
+                    $p = $productsById->get($r->product_id);
+
+                    if ($p !== null) {
+                        $amt += $left * \App\Services\Pricing::byList($p, \App\Services\Pricing::LIST_NEW);
+                    }
+                }
+
+                return (object) [
+                    'channel_id' => $channelId,
+                    'amt' => round($amt, 2),
+                    'units' => $units,
+                ];
+            });
 
         // ═══ مبيعات النهارده ═══
         $today = Invoice::query()
@@ -238,7 +281,12 @@ class ChannelController extends Controller
 
     public function merchVisits(Request $request)
     {
-        $q = MerchVisit::with(['user', 'client.channel', 'refills.product']);
+        // ⚠️ **سكوب الفريق** (تدقيق ٨/٨/٢٠٢٦): القايمة كانت على مستوى
+        // الشركة — صور رفوف وزيارات بروموترات مديرين تانيين.
+        $team = User::fieldVisibleTo(User::query(), $request->user())->select('id');
+
+        $q = MerchVisit::with(['user', 'client.channel', 'refills.product'])
+            ->whereIn('user_id', $team);
 
         if ($userId = $request->integer('user')) {
             $q->where('user_id', $userId);
@@ -249,7 +297,8 @@ class ChannelController extends Controller
 
         return view('erp.merch_visits', [
             'visits' => $q->latest()->paginate(25)->withQueryString(),
-            'promoters' => User::where('role', 'promoter')->get(),
+            'promoters' => User::fieldVisibleTo(
+                User::where('role', 'promoter'), $request->user())->get(),
             'filters' => $request->only(['user', 'date']),
         ]);
     }
@@ -258,7 +307,11 @@ class ChannelController extends Controller
 
     public function replenishments(Request $request)
     {
-        $q = ReplenishmentRequest::with(['client', 'promoter', 'assignee', 'items.product']);
+        // ⚠️ سكوب الفريق — نفس سبب `merchVisits` فوق. الفلترة على
+        // العميل (مش على البروموتر) عشان الطلب بيتحوّل لـPO على
+        // حساب العميل، والمدير المسؤول عن العميل هو صاحب القرار.
+        $q = ReplenishmentRequest::with(['client', 'promoter', 'assignee', 'items.product'])
+            ->whereIn('client_id', Client::visibleTo(Client::query(), $request->user())->select('id'));
 
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
@@ -266,7 +319,8 @@ class ChannelController extends Controller
 
         return view('erp.replenishments', [
             'requests' => $q->latest()->paginate(25)->withQueryString(),
-            'drivers' => User::whereIn('role', ['driver', 'sales_agent'])->get(),
+            'drivers' => User::fieldVisibleTo(
+                User::whereIn('role', ['driver', 'sales_agent']), $request->user())->get(),
             'filters' => $request->only('status'),
         ]);
     }
@@ -283,9 +337,13 @@ class ChannelController extends Controller
 
         try {
             // المنطق كله في الموديل عشان الويب والأبلكيشن يمشوا بنفس الفلو
+            // ⚠️ الفاعل بيتبعت للموديل عشان الحارس يتنفّذ هناك —
+            // الراوت ده كان بلا حارس قناة ولا فحص مستلم، والتوأم في
+            // الـAPI كان بيفحص الطلب مش المستلم.
             $po = $replenishmentRequest->assignTo(
                 User::findOrFail($data['assigned_to']),
                 $data['price_mode'],
+                $request->user(),
             );
         } catch (Rejected $e) {
             // رفض متوقّع بس — خطأ SQL بيكمّل لـ 500 عن قصد
@@ -295,8 +353,13 @@ class ChannelController extends Controller
         return back()->with('ok', __('flash.replenishment_assigned', ['number' => $po->number]));
     }
 
-    public function cancelReplenishment(ReplenishmentRequest $replenishmentRequest)
+    public function cancelReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest)
     {
+        // ⚠️ **كانت بلا أي حارس إطلاقاً** — أي مدير بيلغي طلب ريفيل
+        // لأي فرع في الشركة، والبروموتر بيرجع الأسبوع الجاي يلاقي
+        // الرف فاضي وطلبه ملغي من حد مالوش علاقة.
+        Scope::assertClient($request->user(), $replenishmentRequest->client);
+
         $replenishmentRequest->update(['status' => 'cancelled']);
 
         return back()->with('ok', __('flash.replenishment_cancelled'));

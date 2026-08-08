@@ -8,6 +8,7 @@ use App\Models\RepTarget;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\RepKpis;
+use App\Support\Scope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -130,6 +131,11 @@ class IncentiveController extends Controller
             'points' => ['required', 'integer', 'between:-1000,1000', 'not_in:0'],
             'reason' => ['required', 'string', 'max:190'],
         ]);
+
+        // ⚠️ **النقاط بتتحول فلوس** (`point_value` في الإعدادات) —
+        // فمنح أو خصم نقاط لموظف مش من فريقك تعديل مالي على حافز
+        // مندوب مدير تاني. كان بلا أي سكوب.
+        Scope::assertStaff($request->user(), User::find($data['user_id']));
 
         RepPoint::create($data + ['date' => today(), 'created_by' => $request->user()->id]);
 

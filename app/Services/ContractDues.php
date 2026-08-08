@@ -244,11 +244,23 @@ class ContractDues
         // 11.4% — فرق بيخرج كاش من الشركة في كل تسوية ومحدش بيلاحظه
         // لأن الرقم بيبان معقول. عمود `transactions.tax` بيحمل نصيب
         // الضريبة من كل قيد عشان الحساب ده يبقى في كويري واحدة.
+        // ⚠️ **الضريبة لازم تتطرح بإشارة القيد** (تدقيق ٨/٨/٢٠٢٦).
+        // `SUM(tax)` بيجمع ضريبة المدين والدائن بنفس الإشارة الموجبة،
+        // والقيد الدائن أصلاً داخل بالسالب في `net` — فضريبة المرتجع
+        // كانت **بتتطرح مرتين**:
+        //
+        //     مرتجع بإجمالي 114 (صافي 100 + ضريبة 14)
+        //     الغلط:  (0 − 114) − 14 = −128   ← أقل بـ 28 = 2× الضريبة
+        //     الصح:   (0 − 114) − (−14) = −100
+        //
+        // النتيجة: أي عميل خاضع للضريبة رجّع بضاعة كان أساس عمولته
+        // بيقل بـ ٢× ضريبة المرتجع — يعني الشركة بتدفع خصم أقل من
+        // المستحق والعميل بيكتشفها في المطابقة.
         $row = Transaction::where('client_id', $client->id)
             ->whereIn('kind', ['sale', 'return', 'transfer'])
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as net')
-            ->selectRaw('COALESCE(SUM(tax), 0) as tax')
+            ->selectRaw('COALESCE(SUM(CASE WHEN credit > 0 THEN -tax ELSE tax END), 0) as tax')
             ->first();
 
         $net = (float) ($row->net ?? 0) - (float) ($row->tax ?? 0);

@@ -63,6 +63,8 @@ return [
     'memo_return' => 'Return of :count units — :user',
     'memo_return_refund' => 'Return value refunded in cash — cash client',
     'memo_po_delivered' => 'Purchase order :number delivered',
+    'memo_return_doc' => 'Return :number — :count pcs (:user)',
+    'memo_po_cash' => 'Cash collected on delivery of purchase order :number',
     'memo_cash_collection' => 'Cash collection',
 
     'clause_saved' => 'Clause saved and the contract rates were recalculated.',

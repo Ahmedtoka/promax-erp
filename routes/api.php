@@ -58,7 +58,12 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ⚠️ **`attendance` مع `api.role`** — كل أكشن في المجموعة دي
     // بيتوقف لو الموظف مش مسجّل حضور (أو في بريك). القراءة اللي بره
     // المجموعة بتفضل مفتوحة: يتصفّح عهدته وخط سيره عادي.
-    Route::middleware(['api.role:sales_agent,driver,promoter,admin,manager', 'attendance'])->group(function () {
+    // ⚠️ **`admin,manager` اتشالوا من المجموعة دي** (تدقيق ٨/٨/٢٠٢٦):
+    // توكن مدير كان يقدر يعمل `POST /invoices` و`/returns` — يعني
+    // نافذة كتابة مفتوحة على دفتر أي عميل من غير عهدة ولا زيارة.
+    // المدير مالوش عربية ولا عهدة، فمالوش لازمة في شغل الشارع أصلاً؛
+    // ولو احتاج يكتب فاتورة، مكانها الـERP بمسار وسجل واضحين.
+    Route::middleware(['api.role:sales_agent,driver,promoter', 'attendance'])->group(function () {
         // الزيارات
         Route::post('/visits/check-in', [FieldApiController::class, 'checkIn']);
         Route::post('/visits/{visit}/check-out', [FieldApiController::class, 'checkOut']);
@@ -112,6 +117,14 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     Route::middleware('api.role:sales_agent,driver,promoter,admin,manager')->group(function () {
         // خط سير النهارده — قراءة، بيجي مع /bootstrap كمان
         Route::get('/journey', [FieldApiController::class, 'journey']);
+
+        // ⚠️ **قراءة، فبره حارس الحضور** — شاشة البيع بتنده عليها أول
+        // ما المندوب يختار العميل عشان تعرض سعره هو مش سعر قائمة.
+        Route::get('/clients/{client}/prices', [FieldApiController::class, 'clientPrices']);
+
+        // المتاح للرد + السياسات المسموحة للعميل — شاشة المرتجع
+        // بتنده عليها قبل ما المندوب يكتب أي كمية.
+        Route::get('/clients/{client}/returnable', [FieldApiController::class, 'returnable']);
 
         // بينج فتح الأبلكيشن — عدّاد في لوحة الأداء
         Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
@@ -173,8 +186,12 @@ Route::middleware(['api.token', 'locale'])->group(function () {
 
         // طلبات الريفيل بتاعت البروموتر — موافقة وتنزيل على مندوب
         Route::get('/replenishments', [ManagerApiController::class, 'replenishments']);
+        // ⚠️ **`attendance` مطلوب هنا زي `requests/decide`** — الأكشن
+        // ده بيعمل PO ويحجز بضاعة، يعني قرار تشغيلي بيتحاسب عليه
+        // الفريق. كان الوحيد في المجموعة اللي بلا حارس حضور.
         Route::post('/replenishments/{replenishmentRequest}/assign',
-            [ManagerApiController::class, 'assignReplenishment']);
+            [ManagerApiController::class, 'assignReplenishment'])
+            ->middleware('attendance');
         Route::post('/replenishments/{replenishmentRequest}/cancel',
             [ManagerApiController::class, 'cancelReplenishment']);
     });

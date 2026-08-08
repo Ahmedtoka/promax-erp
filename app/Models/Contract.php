@@ -496,7 +496,33 @@ public function client(): BelongsTo
         $client ??= $this->client;
         $first = $client?->first_activity_at;
 
-        return $first ? $first->copy()->addDays($days) : null;
+        if ($first === null) {
+            return null;
+        }
+
+        // ⚠️ **دورة بتتكرر، مش تاريخ واحد مدى الحياة** (تدقيق ٨/٨/٢٠٢٦).
+        // `first + days` كان بيدي ميعاد بيعدّي مرة واحدة وبعدها كل
+        // فاتورة — حتى بتاعة النهارده — تبان متأخرة. الحساب الصح إن
+        // العميل بيسدد كل `days` يوم والعدّاد بادئ من أول توريد،
+        // فالفاتورة بتستحق في **حد الدورة اللي بعدها**.
+        //
+        // ⚠️ من غير `$invoiceDate` بنرجّع حد الدورة الجاية من النهارده
+        // — ده «الميعاد القادم للحساب»، وهو اللي الشاشة بتعرضه.
+        $anchor = $first->copy()->startOfDay();
+        $ref = ($invoiceDate ? \Illuminate\Support\Carbon::parse($invoiceDate) : today())->copy()->startOfDay();
+
+        // ⚠️ **صفر يوم = مستحق فوراً، مش قسمة على صفر.** `paymentDays()`
+        // بترجّع صفر عن قصد (عقود بتتحاسب عند التسليم)، والفاليديشن
+        // `min:0` بيسمح بيه — فأول عميل كده كان هيرمي
+        // `DivisionByZeroError` = 500 على كارته وعلى شاشة المديونية.
+        if ($days <= 0) {
+            return $ref;
+        }
+
+        $elapsed = (int) round($anchor->diffInDays($ref, false));
+        $cycles = max(1, (int) ceil($elapsed / $days));
+
+        return $anchor->copy()->addDays($days * $cycles);
     }
 
     /**

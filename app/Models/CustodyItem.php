@@ -13,7 +13,9 @@ class CustodyItem extends Model
     // ⚠️ `returned` = مرتجع المندوب **للمخزن**، و`returned_in` = مرتجع
     // **من العملاء** جوه العربية — اتنين مختلفين ومحدش يبيع من التاني
     protected $fillable = ['custody_id', 'product_id', 'batch_id', 'assigned', 'sold', 'returned',
-        'returned_in', 'gift_assigned', 'gift_given'];
+        // ⚠️ `damaged_in` = مرتجع عملاء **تالف** — بضاعة مش قابلة
+        // للبيع، بتتسلّم للمخزن لوحدها وقت التصفية
+        'returned_in', 'damaged_in', 'gift_assigned', 'gift_given'];
 
     public function custody(): BelongsTo
     {

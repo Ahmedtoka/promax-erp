@@ -594,6 +594,19 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/po-approvals/{purchaseOrder}', [OpsController::class, 'decidePoApproval'])
             ->middleware('role:admin,accountant')->name('po.decide');
 
+        // ═══ المرتجعات من الـERP (٨ أغسطس ٢٠٢٦) ═══
+        // ⚠️ العرض للكل، والإنشاء قرار تجاري بيمس دفتر العميل —
+        // فمقفول على الأدمن ومدير القناة والمحاسب.
+        Route::get('/returns', [\App\Http\Controllers\ReturnController::class, 'index'])
+            ->name('returns');
+        Route::get('/returns/new', [\App\Http\Controllers\ReturnController::class, 'create'])
+            ->middleware('role:admin,manager,accountant')->name('returns.new');
+        Route::post('/returns', [\App\Http\Controllers\ReturnController::class, 'store'])
+            ->middleware('role:admin,manager,accountant')->name('returns.store');
+        // ⚠️ **بعد `/returns/new`** — لو قبله كان `new` هيتفسّر كـid
+        Route::get('/returns/{return}', [\App\Http\Controllers\ReturnController::class, 'show'])
+            ->name('returns.show');
+
         Route::get('/requests', [OpsController::class, 'requests'])->name('requests');
         Route::post('/requests/{clientRequest}/decide', [OpsController::class, 'decideRequest'])
             ->middleware('role:admin,manager')->name('requests.decide');

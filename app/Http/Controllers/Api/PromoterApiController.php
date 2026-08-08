@@ -52,7 +52,27 @@ class PromoterApiController extends Controller
                 'role' => $user->role, 'role_label' => $user->roleLabel(),
                 'zone' => $user->zone?->displayName(),
                 'channel' => $user->channel?->displayName(),
+                // ⚠️ **`locale` كانت ناقصة** (تدقيق ٨/٨/٢٠٢٦) —
+                // الأبلكيشن بيقرا اللغة من هنا، فالرول ده كان بياخد
+                // واجهة إنجليزي كل مرة مهما اختار عربي، لأن المفتاح
+                // مش موجود في رده أصلاً.
+                'locale' => $user->locale ?: config('app.locale'),
             ],
+            // ⚠️ **`attendance` كانت ناقصة** — كارت الحضور في شاشة
+            // البروموتر بيقرا منها، ومن غيرها بيفضل «مش حاضر» مهما
+            // سجّل، والضغط على «ابدأ الشيفت» بياخد ٤٢٢ من سيرفر
+            // مسجّله حاضر خلاص.
+            'attendance' => \App\Services\Attendance::payload($user),
+            // ⚠️ **جرس الإشعارات كان مابيتملاش أبداً** (تدقيق ٨/٨):
+            // الشاشة فيها جرس وشارة، والبوت ستراب مابيبعتش إشعارات
+            // خالص — فالبروموتر بيدوس على جرس فاضي دايماً حتى لما
+            // يكون فيه قرار على طلب ريفيل بتاعه.
+            'notifications' => $user->appNotifications()->take(20)->get()->map(fn ($n) => [
+                'id' => $n->id, 'title' => $n->title, 'body' => $n->body,
+                'link' => $n->link,
+                'is_good' => $n->is_good, 'time' => $n->created_at->toIso8601String(),
+                'is_read' => $n->read_at !== null,
+            ]),
             'branches' => $branches->map(function (Client $c) use ($todayVisits) {
                 $v = $todayVisits->get($c->id);
 
@@ -163,6 +183,23 @@ class PromoterApiController extends Controller
 
         $client = Client::findOrFail($data['client_id']);
 
+        // ⚠️ **مرساة العلاقة** (تدقيق ٨/٨/٢٠٢٦): `exists:clients,id`
+        // كانت بتخلّي أي توكن بروموتر يفتح زيارة رف على أي عميل في
+        // الداتابيز. الفلتر ده **نسخة طبق الأصل** من فلتر `bootstrap`
+        // فوق — القايمة اللي البروموتر بيشوفها هي اللي مسموح له بيها.
+        // (لو الفلتر فوق اتغيّر، غيّر الاتنين مع بعض.)
+        $allowed = $user->channel_id === null
+            ? $client->channel?->code === Channel::KEY_ACCOUNT
+            : (int) $client->channel_id === (int) $user->channel_id;
+
+        if ($user->zone_id !== null && (int) $client->zone_id !== (int) $user->zone_id) {
+            $allowed = false;
+        }
+
+        if (! $allowed || $client->status !== 'active') {
+            return response()->json(['message' => __('api.not_your_client')], 403);
+        }
+
         $visit = MerchVisit::create([
             'user_id' => $user->id,
             'client_id' => $client->id,
@@ -222,6 +259,9 @@ class PromoterApiController extends Controller
             'lines.*.store_qty' => ['nullable', 'integer', 'min:0'],
             'lines.*.moved_qty' => ['nullable', 'integer', 'min:0'],
             'lines.*.out_of_stock' => ['nullable', 'boolean'],
+            // ⚠️ الموقع مع الحدث — الأبلكيشن بقى بيبعته (٨/٨/٢٠٢٦)
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
         ]);
 
         foreach ($data['lines'] as $line) {
@@ -320,6 +360,7 @@ class PromoterApiController extends Controller
                     'qty' => $qty,
                     'user' => $user->displayName(),
                 ]),
+                link: \App\Models\AppNotification::replenishmentLink($req->id),
             );
         }
 

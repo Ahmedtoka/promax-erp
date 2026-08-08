@@ -90,6 +90,9 @@ return [
     'fix_these' => ':count thing(s) need fixing before saving:',
     'required_hint' => 'Fields marked * are required.',
     'field_user_web' => 'Your work is in the mobile app, not the web. Open the PROMAX app with these same credentials.',
+    'office' => 'Office',
     'yes' => 'Yes',
     'no' => 'No',
+    'note' => 'Note',
+    'minutes' => 'minutes',
 ];

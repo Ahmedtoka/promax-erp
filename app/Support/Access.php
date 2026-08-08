@@ -85,6 +85,9 @@ class Access
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
             // فكانت بتقع بين الاتنين ومدير الفرع بيفقد قايمة الفواتير.
             'ops.merch', 'ops.invoice', 'ops.invoices', 'ops.tracking', 'ops.rep',
+            // ⚠️ المرتجعات **عرض بس** لمدير الفرع — الإنشاء بيمس
+            // دفتر العميل، وده قرار تجاري (`role:admin,manager,accountant`).
+            'ops.returns', '!ops.returns.new', '!ops.returns.store',
         ],
 
         // ═══ المحاسب — الفلوس بس ═══
@@ -107,6 +110,10 @@ class Access
             'erp.suppliers',
             '!erp.suppliers.store', '!erp.suppliers.update', '!erp.suppliers.opening',
             'ops.invoices', 'ops.invoice',
+            // ⚠️ **المرتجع من الـERP شغل الحسابات** (٨/٨/٢٠٢٦):
+            // مرتجع بييجي المخزن مباشرة أو باتفاق مع سلسلة مالوش
+            // مندوب ولا زيارة، ومكانه الوحيد الشاشة دي.
+            'ops.returns',
             // ⚠️ موافقات أوامر توريد الكي أكاونت — دي شغل الحسابات
             // الأساسي في الفلو الجديد (2026-08-04). الإنشاء نفسه
             // (`ops.po.handout`) فاضل لمدير القناة والأدمن.
@@ -137,6 +144,11 @@ class Access
             'wh.',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
+            // ⚠️ **بس عرض الأوامر مش إنشاءها ولا تسكينها** (تدقيق
+            // ٨/٨/٢٠٢٦). البادئة `ops.pos` كانت بتطابق `ops.pos.store`
+            // و`ops.pos.assign` كمان — أمين المخزن مالوش قرار إن أمر
+            // ينزل على مين، ده قرار تجاري.
+            '!ops.pos.store', '!ops.pos.assign',
             // بيستلم بضاعة الموردين — عرض الأوامر والاستلام بس،
             // الإنشاء والفوترة والإلغاء قرارات إدارة.
             'erp.purchasing',
@@ -205,7 +217,7 @@ class Access
             ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
             ['wh.locations', '🗄️', 'nav.shelves', 'wh.locations', null],
             ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
-            ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', null],
+            ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', 'transfers'],
             ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
         ],
 
@@ -214,7 +226,7 @@ class Access
         // تأكيد ← إشعار المندوب ← استلام من الأبلكيشن
         'nav.group_custody' => [
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
-            ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', null],
+            ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
         ],
 
         // ═══ ٤. توريد الكي أكاونت — السايكل كامل في مكان واحد ═══
@@ -264,6 +276,10 @@ class Access
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══
         'nav.group_money' => [
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            // ⚠️ **المرتجعات لازم يكون ليها مدخل** — اتلسعنا قبل كده
+            // من شاشة اتبنت من غير أي زرار يوصّلها (`warehouse_visit`).
+            // مكانها جنب الفواتير لأنها نفس الدفتر بالظبط، بالعكس.
+            ['ops.returns', '📥', 'field.returns', 'ops.returns*', null],
             // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
             ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
             // قفل اليوم — سامري اليومية الشامل (2026-08-06)

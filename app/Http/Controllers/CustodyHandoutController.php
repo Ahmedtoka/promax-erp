@@ -6,6 +6,7 @@ use App\Models\PickOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 
 /**
@@ -83,29 +84,38 @@ class CustodyHandoutController extends Controller
             'gift.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
             'unit' => ['nullable', 'array'],
             'unit.*' => ['nullable', 'in:piece,box,case'],
+            // ═══ وحدة الهدايا منفصلة (قرار المالك ٨/٨/٢٠٢٦) ═══
+            // ⚠️ **البيع بالكرتونة والهدية بالقطعة** — ده الواقع:
+            // «١٠ كراتين بيع + ٣ قطع هدية». وحدة واحدة للاتنين كانت
+            // بتخلّي أمين المخزن يحوّل الهدية بإيده لكراتين ويكتب
+            // كسر، أو يسيبها بوحدة البيع فتتضرب × ١٢ في السيرفر
+            // وتخرج ٣٦ قطعة هدية بدل ٣.
+            'gift_unit' => ['nullable', 'array'],
+            'gift_unit.*' => ['nullable', 'in:piece,box,case'],
         ]);
 
         // ⚠️ **وحدة الإدخال بتتضرب هنا مش في الجافاسكريبت.** المستخدم
         // كتب «5 كرتونة اسبريد» — بنحوّلها 60 قطعة قبل ما توصل
         // لـ requestLoad، والعهدة كلها بالقطعة زي ما هي. وحدة مش
         // معرّفة للصنف = رفض الأمر كله، مش افتراض إنها قطعة.
-        foreach ($request->input('unit', []) as $productId => $unit) {
-            if (! $unit || $unit === 'piece') {
-                continue;
-            }
-
-            $factor = Product::find($productId)?->unitFactor($unit);
-
-            if ($factor === null) {
-                return back()->withErrors([
-                    'qty' => __('stock.unit_not_for_product', ['name' => Product::find($productId)?->displayName() ?? $productId]),
-                ])->withInput();
-            }
-
-            foreach (['qty', 'gift'] as $key) {
-                if (! empty($data[$key][$productId])) {
-                    $data[$key][$productId] = (int) $data[$key][$productId] * $factor;
+        // ⚠️ **كل خانة بوحدتها هي** — `unit` للبيع و`gift_unit`
+        // للهدية. اللوب واحد على الاتنين عشان منطق الرفض يفضل
+        // مكتوب مرة واحدة.
+        foreach ([['qty', 'unit'], ['gift', 'gift_unit']] as [$qtyKey, $unitKey]) {
+            foreach ($request->input($unitKey, []) as $productId => $unit) {
+                if (! $unit || $unit === 'piece' || empty($data[$qtyKey][$productId])) {
+                    continue;
                 }
+
+                $factor = Product::find($productId)?->unitFactor($unit);
+
+                if ($factor === null) {
+                    return back()->withErrors([
+                        'qty' => __('stock.unit_not_for_product', ['name' => Product::find($productId)?->displayName() ?? $productId]),
+                    ])->withInput();
+                }
+
+                $data[$qtyKey][$productId] = (int) $data[$qtyKey][$productId] * $factor;
             }
         }
 
@@ -119,6 +129,12 @@ class CustodyHandoutController extends Controller
         if (! in_array($rep->role, ['sales_agent', 'driver', 'promoter'], true)) {
             return back()->withErrors(['rep_id' => __('field.not_a_field_role')])->withInput();
         }
+
+        // ⚠️ **والفريق كمان، مش الرول بس** (تدقيق ٨/٨/٢٠٢٦): الفحص
+        // فوق بيمنع تحميل عهدة على محاسب، بس كان بيسيب مدير يحمّل
+        // عربية مندوب مدير تاني — بضاعة بتخرج من مخزن وتقع في تصفية
+        // فريق مالوش علاقة.
+        Scope::assertRep($request->user(), $rep);
 
         // ⚠️ **الفلو الجديد (قرار المالك 2026-08-03): طلب مش خروج.**
         // البضاعة **مابتخرجش هنا** — بيتعمل طلب تجهيز، الورقة بتتطبع،

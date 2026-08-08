@@ -35,7 +35,38 @@ class PurchaseOrder extends Model
         'arrived_at', 'delivered_at', 'due_date',
         'approval_status', 'approved_by', 'approved_at', 'approval_note',
         'was_edited', 'edited_by', 'edited_at', 'due_at', 'pickup_at', 'warehouse_id', 'pick_order_id', 'created_by',
+        // ⚠️ **`image_path` غير `sheet_path`.** الشيت هو ملف الإكسيل
+        // بتاع الرفع الجماعي؛ ده صورة أمر الشراء الحقيقي بتاع
+        // السلسلة اللي المندوب بيفتحها عند العميل.
+        'image_path', 'prep_started_at',
     ];
+
+    /**
+     * رابط صورة أمر الشراء الأصلي — أو `null`.
+     *
+     * ⚠️ **`Storage::url` مش مسار خام.** الملف في `storage/app/public`
+     * والوصول ليه بيمرّ بالسيملينك (`php artisan storage:link`)؛
+     * كتابة المسار بالإيد بترجّع 404 على السيرفر اللايف.
+     */
+    public function imageUrl(): ?string
+    {
+        return $this->image_path === null
+            ? null
+            : asset('storage/'.$this->image_path);
+    }
+
+    /** مدة التجهيز بالدقايق — من «ابدأ التجهيز» للجاهز */
+    public function prepMinutes(): ?int
+    {
+        if ($this->prep_started_at === null) {
+            return null;
+        }
+
+        $end = $this->pickOrder?->ready_at ?? now();
+
+        // ⚠️ Carbon 3: `diffInMinutes` بترجّع float ممكن يكون سالب
+        return (int) round(abs($this->prep_started_at->diffInMinutes($end)));
+    }
 
     protected function casts(): array
     {
@@ -49,6 +80,8 @@ class PurchaseOrder extends Model
             'due_at' => 'datetime',
             // موعد وصول المندوب المخزن — غير موعد التسليم للفرع
             'pickup_at' => 'datetime',
+            // بداية التجهيز — المدة بتتحسب منها وبتتعرض
+            'prep_started_at' => 'datetime',
             'approved_at' => 'datetime',
             'was_edited' => 'boolean',
             'edited_at' => 'datetime',

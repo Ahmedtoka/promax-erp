@@ -105,12 +105,27 @@ class ReplenishmentRequest extends Model
      * عشان الفلو ما يتفرّعش لنسختين بيختلفوا مع الوقت.
      *
      * @param  string  $priceMode  channel | old | new
+     * @param  User|null  $actor  اللي بينزّل الطلب — لو اتبعت بيتفحص سكوبه
      */
-    public function assignTo(User $assignee, string $priceMode = 'channel'): PurchaseOrder
+    public function assignTo(User $assignee, string $priceMode = 'channel', ?User $actor = null): PurchaseOrder
     {
         // الرسايل دي بترجع للأبلكيشن كـ message في رد 422، فلازم تكون مترجمة
         if ($this->status !== 'pending') {
             throw new Rejected(__('api.request_already_assigned'));
+        }
+
+        // ⚠️ **`exists:users,id` في الكنترولرز مش كفاية** (تدقيق ٨/٨):
+        // كان ينفع PO يتنزّل على محاسب مالوش عهدة أصلاً، أو على حساب
+        // موقوف. الفحص هنا مش في الكنترولر عشان الويب والأبلكيشن
+        // الاتنين يعدّوا عليه — المسار ده هو المكان الوحيد للتحويل.
+        if (! $assignee->active || ! in_array($assignee->role, User::FIELD_ROLES, true)) {
+            throw new Rejected(__('field.not_a_field_role'));
+        }
+
+        // ⚠️ وسكوب الفاعل لو اتبعت — الراوت بتاع الويب كان بلا حارس
+        // قناة خالص، والتوأم في الـAPI بيفحص الطلب مش المستلم.
+        if ($actor !== null) {
+            \App\Support\Scope::assertRep($actor, $assignee, $this->client);
         }
         // ⚠️ `channel` اتغيّرت لـ`client`. القناة مابقاش لها سعر ولا
         // خصم — التسعير بيتحدد من قائمة العميل وخصمه (عقد/خاص/سلسلة).
@@ -150,6 +165,17 @@ class ReplenishmentRequest extends Model
                 $price = in_array($priceMode, ['client', 'channel'], true)
                     ? $client->priceFor($product)
                     : $product->priceFor($priceMode);
+
+                // ⚠️ **سعر صفر = أمر مرفوض** (تدقيق ٨/٨/٢٠٢٦). نفس
+                // الحارس اللي في `OpsController::fillPoItems` واتنسي
+                // هنا — والصنف اللي مش متسعّر في قايمة العميل كان
+                // بيعدّي بسطر 0.00 من غير أي رسالة. السواق بيوصّل
+                // بضاعة ببلاش والرقم مابيبانش غير في مراجعة آخر الشهر.
+                if ((float) $price <= 0) {
+                    throw new Rejected(__('api.product_not_priced', [
+                        'product' => $product->displayName(),
+                    ]));
+                }
 
                 $lineTotal = round($item->qty * $price, 2);
 
@@ -199,6 +225,7 @@ class ReplenishmentRequest extends Model
                 'client' => $this->client->displayName(),
                 'amount' => number_format((float) $po->total),
             ]),
+            link: \App\Models\AppNotification::poLink($po->id),
         );
 
         AppNotification::send(
@@ -211,6 +238,7 @@ class ReplenishmentRequest extends Model
                 'client' => $this->client->displayName(),
             ]),
             good: true,
+            link: \App\Models\AppNotification::replenishmentLink($this->id),
         );
 
         return $po;

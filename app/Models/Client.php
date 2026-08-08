@@ -59,6 +59,35 @@ class Client extends Model
     public const PAY_TERMS = [self::PAY_CASH, self::PAY_CREDIT, self::PAY_BOTH];
 
     /**
+     * ═══════════════════════════════════════════════════════════
+     * سياسة المرتجع (قرار المالك ٨ أغسطس ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * ⚠️ **بتتعرّف على العميل، مش على المندوب ولا على الحركة.**
+     * العميل ممكن يكون مسموح له بأكتر من طريقة، والمندوب بيشوف
+     * المسموح بيه **بس** ويختار قبل ما يعمل المرتجع. سيبها للمندوب
+     * كان معناه إن كل واحد يتصرف حسب علاقته بالعميل، والشركة
+     * تكتشف الفرق في المطابقة.
+     *
+     * ⚠️ **الافتراضي بيتبع شروط الدفع**: عميل الكاش بياخد «كاش
+     * فوري» (مالوش حساب أصلاً يتخصم منه)، وعميل الآجل بياخد «خصم
+     * من الحساب». الافتراض ده بيتطبق للعملاء اللي لسه مااتظبطش
+     * لهم سياسة — مش بيتكتب في الداتابيز، عشان لما الإدارة تحدد
+     * يبقى قرارها هو اللي شغّال.
+     */
+    public const RETURN_CASH = 'cash';
+    public const RETURN_ACCOUNT = 'account';
+    public const RETURN_EXCHANGE = 'exchange';
+    public const RETURN_CREDIT_NEXT = 'credit_next';
+
+    public const RETURN_POLICIES = [
+        self::RETURN_CASH,
+        self::RETURN_ACCOUNT,
+        self::RETURN_EXCHANGE,
+        self::RETURN_CREDIT_NEXT,
+    ];
+
+    /**
      * دورة الإقرار الضريبي للعميل.
      *
      * ⚠️ دي **مش** بتغيّر حساب الضريبة على الفاتورة — الضريبة بتتحسب
@@ -74,6 +103,9 @@ class Client extends Model
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng', 'address_ar',
         'location_confirmed_at', 'location_confirmed_by', 'location_source',
+        // ⚠️ **لازم يكون fillable** — من غيره `update()` بيتجاهله في
+        // صمت وشاشة العميل بتحفظ من غير ما تحفظ.
+        'return_policies',
         'discount', 'is_new', 'photo_path', 'docs_path', 'docs_type', 'has_docs',
         'purchases', 'collections', 'returns', 'rebates', 'settlements', 'balance', 'withheld',
         'first_activity_at', 'last_activity_at', 'last_payment_at',
@@ -100,6 +132,7 @@ class Client extends Model
             'settlements' => 'decimal:2',
             'balance' => 'decimal:2',
             'withheld' => 'decimal:2',
+            'return_policies' => 'array',
             'first_activity_at' => 'date',
             'last_activity_at' => 'date',
             'last_payment_at' => 'date',
@@ -697,7 +730,27 @@ public function zone(): BelongsTo
 
         // ⚠️ `null` لو لسه مفيش أول توريد — الافتراض إن أول توريد هو
         // النهارده كان بيدي ميعاد استحقاق بيتحرك كل يوم (نفس فخ العقد)
-        return $this->first_activity_at?->copy()->addDays($days);
+        //
+        // ⚠️ **دورة متكررة زي `Contract::dueDateFor`** (تدقيق ٨/٨) —
+        // الحسبة مكتوبة مرة هنا لأن العميل ممكن مايكونش عليه عقد
+        // خالص. لو غيّرت واحدة، غيّر التانية.
+        $first = $this->first_activity_at;
+
+        if ($first === null) {
+            return null;
+        }
+
+        $anchor = $first->copy()->startOfDay();
+        $ref = ($invoiceDate ? \Illuminate\Support\Carbon::parse($invoiceDate) : today())->copy()->startOfDay();
+
+        // ⚠️ صفر يوم = مستحق فوراً — نفس حارس `Contract::dueDateFor`
+        if ($days <= 0) {
+            return $ref;
+        }
+
+        $elapsed = (int) round($anchor->diffInDays($ref, false));
+
+        return $anchor->copy()->addDays($days * max(1, (int) ceil($elapsed / $days)));
     }
 
     /**
@@ -750,6 +803,41 @@ public function zone(): BelongsTo
         return (float) $this->purchases > 0
             ? (float) $this->collections / (float) $this->purchases
             : 0;
+    }
+
+    /**
+     * السياسات المسموح بيها للعميل ده — دايماً واحدة على الأقل.
+     *
+     * ⚠️ **مابترجعش مصفوفة فاضية أبداً.** لو رجّعت فاضية، المندوب
+     * بيوصل لشاشة المرتجع ومايلاقيش أي اختيار — يعني مرتجع مستحيل
+     * من غير رسالة تقول ليه. الافتراضي بيتبع شروط الدفع.
+     *
+     * @return array<int, string>
+     */
+    public function returnPolicies(): array
+    {
+        $raw = $this->return_policies;
+
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+
+        $set = collect(is_array($raw) ? $raw : [])
+            ->map(fn ($p) => (string) $p)
+            ->filter(fn ($p) => in_array($p, self::RETURN_POLICIES, true))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($set !== []) {
+            return $set;
+        }
+
+        // ⚠️ عميل الكاش مالوش حساب يتخصم منه — «خصم من الحساب»
+        // عليه بيسيب رصيد دائن وهمي بيفضل في الدفتر للأبد.
+        return $this->paymentTerms() === self::PAY_CASH
+            ? [self::RETURN_CASH, self::RETURN_EXCHANGE]
+            : [self::RETURN_ACCOUNT, self::RETURN_EXCHANGE, self::RETURN_CREDIT_NEXT];
     }
 
     /** أعمار المديونية تقديري FIFO من كشف الحساب */
@@ -826,6 +914,8 @@ public function zone(): BelongsTo
         // كاش (أو اتصنّف `danger`) بيفضل شايل `payment_days` قديمة.
         // من غير الحارس ده، نفس الكارت كان بيقول «كاش» في الشارة
         // و«متأخر من 40 يوم» في الـKPI جنبها.
+        // ⚠️ **`$days <= 0` كمان** — صفر يوم معناه «مستحق فوراً»،
+        // والقسمة عليه في `$dueOf` تحت كانت هترمي 500.
         if ($days === null || ! $this->allowsCredit()) {
             return $out;
         }
@@ -837,24 +927,55 @@ public function zone(): BelongsTo
             return $out;
         }
 
-        // ═══ الأساس «أول توريد» = ميعاد واحد للحساب كله ═══
-        if ($this->paymentBasis() !== Contract::DAYS_FROM_INVOICE) {
-            $due = $this->dueDateFor();
-            $out['due_on'] = $due;
+        // ═══════════════════════════════════════════════════════
+        // ميعاد الاستحقاق لكل حركة — حسب الأساس
+        // ═══════════════════════════════════════════════════════
+        //
+        // ⚠️ **الأساس `first_supply` كان بيدي ميعاد واحد للحساب كله
+        // مدى الحياة** (تدقيق ٨/٨/٢٠٢٦): `first_activity_at + days`.
+        // أول ما التاريخ ده يعدّي — وهو بيعدّي بعد شهر من أول توريد
+        // ويفضل عادي للأبد — **الرصيد كله بيبان متأخر**، بما فيه
+        // فاتورة اتكتبت النهارده. العميل الملتزم بيبقى أحمر في
+        // الشاشة والمتابعة بتلاحقه بدل المتأخر الحقيقي.
+        //
+        // ⚠️ الصح إن «من أول توريد» **دورة بتتكرر** مش تاريخ واحد:
+        // العميل بيسدّد كل `days` يوم، والعدّاد بيبدأ من أول توريد.
+        // فالحركة بتستحق في **حد الدورة اللي بعدها**:
+        //
+        //     due(T) = أول_توريد + days × ceil((T − أول_توريد) / days)
+        //
+        // كده فاتورة النهارده بتستحق في حد الدورة الجاية (مش متأخرة)،
+        // وفاتورة بقالها دورتين بتبان متأخرة بدورة كاملة. والفرق بين
+        // الأساسين بقى **في الميعاد بس** — التوزيع FIFO واحد للاتنين
+        // زي `aging()` بالظبط.
+        $byInvoice = $this->paymentBasis() === Contract::DAYS_FROM_INVOICE;
+        $anchor = $byInvoice ? null : $this->first_activity_at?->copy()->startOfDay();
 
-            // ⚠️ مفيش أول توريد لسه = مفيش ميعاد. الافتراض إن النهارده
-            // هو أول توريد كان بيدي ميعاد بيتحرك كل يوم.
-            if ($due === null || ! $due->isPast()) {
-                return $out;
-            }
-
-            $out['amount'] = round($balance, 2);
-            $out['days'] = max(0, (int) round($due->diffInDays(today())));
-
+        // ⚠️ مفيش أول توريد لسه = مفيش ميعاد. الافتراض إن النهارده هو
+        // أول توريد كان بيدي ميعاد بيتحرك كل يوم.
+        if (! $byInvoice && $anchor === null) {
             return $out;
         }
 
-        // ═══ الأساس «تاريخ كل فاتورة» = FIFO زي `aging()` ═══
+        $dueOf = function (Transaction $t) use ($byInvoice, $anchor, $days) {
+            // صفر يوم = مستحق يوم الحركة نفسها، في الأساسين
+            if ($days <= 0) {
+                return $t->date->copy();
+            }
+
+            if ($byInvoice) {
+                return $t->date->copy()->addDays($days);
+            }
+
+            // ⚠️ `max(1, ...)` — حركة في نفس يوم أول توريد (أو قبله في
+            // الداتا المستوردة) لازم تاخد دورة كاملة، مش تستحق فوراً.
+            $elapsed = (int) round($anchor->diffInDays($t->date->copy()->startOfDay(), false));
+            $cycles = max(1, (int) ceil($elapsed / $days));
+
+            return $anchor->copy()->addDays($days * $cycles);
+        };
+
+        // ═══ التوزيع FIFO — نفس ترتيب `aging()` بالظبط ═══
         $sales = $this->relationLoaded('transactions')
             ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortByDesc('date')
             : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->orderByDesc('date')->get();
@@ -869,7 +990,7 @@ public function zone(): BelongsTo
             $take = min($balance, (float) $t->debit);
             $balance -= $take;
 
-            $due = $t->date->copy()->addDays($days);
+            $due = $dueOf($t);
 
             if (! $due->isPast()) {
                 continue;
@@ -902,26 +1023,33 @@ public function zone(): BelongsTo
      */
     public function setOpeningBalance(float $amount, ?string $date = null, ?string $memo = null): ?Transaction
     {
-        $this->transactions()->where('kind', 'opening')->delete();
+        // ⚠️ **المسح والكتابة جوّه ترانزاكشن واحدة** (تدقيق ٨/٨/٢٠٢٦).
+        // القديم كان بيتمسح **قبل** ما الجديد يتكتب وبرّه أي حماية —
+        // لو الكتابة وقعت (خطأ فاليديشن على مستوى الداتابيز، انقطاع،
+        // ديد لوك) العميل بيفضل **بلا رصيد أول مدة خالص** والقديم راح.
+        // أسوأ حاجة في الباج ده إنه مابيرميش خطأ: الرصيد بيقل في صمت.
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($amount, $date, $memo) {
+            $this->transactions()->where('kind', 'opening')->delete();
 
-        if (abs($amount) < 0.01) {
+            if (abs($amount) < 0.01) {
+                $this->recalculate();
+
+                return null;
+            }
+
+            $txn = Transaction::create([
+                'client_id' => $this->id,
+                'date' => $date ?: today()->toDateString(),
+                'memo' => $memo ?: __('flash.memo_opening'),
+                'debit' => $amount > 0 ? round($amount, 2) : 0,
+                'credit' => $amount < 0 ? round(abs($amount), 2) : 0,
+                'kind' => 'opening',
+            ]);
+
             $this->recalculate();
 
-            return null;
-        }
-
-        $txn = Transaction::create([
-            'client_id' => $this->id,
-            'date' => $date ?: today()->toDateString(),
-            'memo' => $memo ?: __('flash.memo_opening'),
-            'debit' => $amount > 0 ? round($amount, 2) : 0,
-            'credit' => $amount < 0 ? round(abs($amount), 2) : 0,
-            'kind' => 'opening',
-        ]);
-
-        $this->recalculate();
-
-        return $txn;
+            return $txn;
+        });
     }
 
     /** مبيعاته موزّعة على عائلات المنتجات */

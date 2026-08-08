@@ -39,18 +39,38 @@ class ManagerApiController extends Controller
                 'role' => $user->role,
                 'role_label' => $user->roleLabel(),
                 // القنوات اللي بيتحكم فيها
+                // ⚠️ **`discount` اتشالت** (بقايا قرار ٣١ يوليو ٢٠٢٦):
+                // القناة مابقاش لها خصم، والأبلكيشن مش بيقراها أصلاً —
+                // فكانت بترجّع صفر لكل قناة وتوحي إن الحقل لسه حي.
                 'channels' => $channels->map(fn ($c) => [
                     'id' => $c->id, 'code' => $c->code, 'name' => $c->displayName(),
-                    'discount' => (float) $c->discount,
                 ])->values(),
                 'manages_all' => $user->isAdmin() || $channels->count() >= Channel::count(),
+                // ⚠️ **`locale` كانت ناقصة** (تدقيق ٨/٨/٢٠٢٦) —
+                // الأبلكيشن بيقرا اللغة من هنا، فالرول ده كان بياخد
+                // واجهة إنجليزي كل مرة مهما اختار عربي، لأن المفتاح
+                // مش موجود في رده أصلاً.
+                'locale' => $user->locale ?: config('app.locale'),
             ],
-            // الأرقام مفتوحة للكل (زي ما اتفقنا) — والتحكم بيتقيّد بقنواته
+            // ⚠️ **`attendance` كانت ناقصة كمان** — كارت الحضور في
+            // شاشة المدير بيقرا منها، ومن غيرها بيفضل على الحالة
+            // الافتراضية «مش حاضر» مهما سجّل.
+            'attendance' => \App\Services\Attendance::payload($user),
+            'notifications' => $user->appNotifications()->take(20)->get()->map(fn ($n) => [
+                'id' => $n->id, 'title' => $n->title, 'body' => $n->body,
+                'link' => $n->link,
+                'is_good' => $n->is_good, 'time' => $n->created_at->toIso8601String(),
+                'is_read' => $n->read_at !== null,
+            ]),
+            // الأرقام المجمّعة مفتوحة للكل (زي ما اتفقنا)، لكن **بيانات
+            // المندوب الفردية لأ** — GPS وعهدة وفواتير مندوب مدير تاني
+            // مش «رقم مجمّع»، دي متابعة فريق. (تدقيق ٨/٨/٢٠٢٦)
             'today' => $this->todayTotals(),
-            'reps' => $this->repsPayload(),
+            'reps' => $this->repsPayload($user),
             'requests' => $this->requestsPayload($user),
             'replenishments' => $this->replenishmentsPayload($user),
-            'drivers' => User::whereIn('role', ['driver', 'sales_agent'])
+            'drivers' => User::fieldVisibleTo(
+                User::whereIn('role', ['driver', 'sales_agent']), $user)
                 ->where('active', true)->orderBy('name')->get()
                 ->map(fn (User $u) => [
                     'id' => $u->id,
@@ -58,7 +78,7 @@ class ManagerApiController extends Controller
                     'code' => $u->code,
                     'role_label' => $u->roleLabel(),
                 ])->values()->all(),
-            'events' => $this->eventsPayload(),
+            'events' => $this->eventsPayload($user),
         ]);
     }
 
@@ -80,9 +100,10 @@ class ManagerApiController extends Controller
     }
 
     /** كل مندوب: عهدته، أداؤه، وهو فين دلوقتي */
-    private function repsPayload(): array
+    private function repsPayload(User $viewer): array
     {
-        return User::whereIn('role', User::FIELD_ROLES)
+        return User::fieldVisibleTo(
+            User::whereIn('role', User::FIELD_ROLES), $viewer)
             ->where('active', true)
             ->with('zone')
             ->get()
@@ -155,9 +176,12 @@ class ManagerApiController extends Controller
             ])->values()->all();
     }
 
-    private function eventsPayload(): array
+    private function eventsPayload(User $viewer): array
     {
+        // ⚠️ التايم لاين ده فيه `lat/lng` لكل حدث — من غير فلترة
+        // الفريق أي مدير بيرسم مسار مناديب الشركة كلها على خريطته.
         return TrackEvent::with('user')
+            ->whereIn('user_id', User::fieldVisibleTo(User::query(), $viewer)->select('id'))
             ->whereDate('happened_at', today())
             ->orderByDesc('happened_at')->take(60)->get()
             ->map(fn (TrackEvent $e) => [
@@ -174,6 +198,10 @@ class ManagerApiController extends Controller
     /** GET /api/manager/reps/{user} — تفاصيل مندوب */
     public function rep(Request $request, User $user): JsonResponse
     {
+        // ⚠️ **أي توكن مدير كان بيسحب عهدة وفواتير ومسار أي مندوب**
+        // بالـid. فلترة القايمة مابتحميش الإندبوينت الفردي.
+        \App\Support\Scope::assertRep($request->user(), $user);
+
         $custody = $user->todayCustody();
         $custody?->load('items.product');
         $mode = $user->isDriver() ? 'old' : 'new';
@@ -254,6 +282,10 @@ class ManagerApiController extends Controller
             ], 403);
         }
 
+        // ⚠️ وسكوب الفريق فوق سكوب القناة — مديرين كتير ممكن يشاركوا
+        // نفس القناة، والطلب بتاع مندوب واحد بس منهم.
+        \App\Support\Scope::assertRep($request->user(), $clientRequest->rep);
+
         DB::transaction(function () use ($data, $clientRequest, $request) {
             $clientRequest->status = $data['decision'];
             $clientRequest->decided_by = $request->user()->id;
@@ -266,8 +298,14 @@ class ManagerApiController extends Controller
                     'name' => $clientRequest->name,
                     'phone' => $clientRequest->phone,
                     'address' => $clientRequest->address,
-                    'zone_id' => $clientRequest->zone_id,
+                    // ⚠️ نفس تصليح `OpsController::decideRequest` —
+                    // العميل بيرث تسكين المندوب صاحب الطلب، وإلا
+                    // بيتولد يتيم ومابيظهرش في `visibleTo` لأي حد.
+                    'zone_id' => $clientRequest->zone_id ?? $clientRequest->rep?->zone_id,
+                    'rep_id' => $clientRequest->rep?->id,
                     'channel_id' => $clientRequest->rep?->channel_id,
+                    'manager_id' => $clientRequest->rep?->manager_id,
+                    'branch_id' => $clientRequest->rep?->branch_id,
                     'category' => 'grow',
                     'status' => 'active',
                     'discount' => ($data['discount'] ?? 0) / 100,
@@ -285,12 +323,14 @@ class ManagerApiController extends Controller
                     $clientRequest->rep,
                     fn () => __('field.notif_client_approved_title', ['name' => $clientRequest->name]),
                     fn () => __('field.notif_client_approved_body'),
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             } elseif ($data['decision'] === 'review') {
                 AppNotification::send(
                     $clientRequest->rep,
                     fn () => __('field.notif_client_review_title', ['name' => $clientRequest->name]),
                     fn () => $data['note'] ?? __('field.notif_client_review_body'),
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             } else {
                 AppNotification::send(
@@ -298,6 +338,7 @@ class ManagerApiController extends Controller
                     fn () => __('field.notif_client_rejected_title', ['name' => $clientRequest->name]),
                     fn () => $data['note'] ?? __('field.notif_client_rejected_body'),
                     false,
+                    link: AppNotification::requestLink($clientRequest->id),
                 );
             }
 
@@ -347,6 +388,7 @@ class ManagerApiController extends Controller
             $po = $replenishmentRequest->assignTo(
                 User::findOrFail($data['assigned_to']),
                 $data['price_mode'] ?? 'client',
+                $request->user(),
             );
         } catch (Rejected $e) {
             // رفض متوقّع بس — خطأ SQL بيكمّل لـ 500 عن قصد
@@ -379,6 +421,8 @@ class ManagerApiController extends Controller
                 'number' => $replenishmentRequest->number,
             ]),
             fn () => $data['note'] ?? __('field.notif_replenishment_rejected_body'),
+            // ⚠️ الوجهة — من غيرها البروموتر بيدوس ويقع على الرئيسية
+            link: AppNotification::replenishmentLink($replenishmentRequest->id),
             false,
         );
 

@@ -77,4 +77,11 @@ return [
     'act_org_manage' => 'Zones, branches, vehicles, chains & channels',
     'act_import_run' => 'Sheet imports',
 
+    // ═══ Scope guard (App\Support\Scope) — denial messages ═══
+    'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',
+    'scope_client_denied' => 'This client is outside your scope.',
+    'scope_team_denied' => 'The client and the rep are not under the same manager or branch.',
+    'scope_zone_denied' => "This client is not in the rep's zones.",
+    'scope_staff_denied' => 'This employee is not on your team.',
+
 ];

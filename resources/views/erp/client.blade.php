@@ -518,6 +518,38 @@
             <div><label class="f">{{ __('common.amount') }}</label><input type="number" step="0.01" name="amount" required style="width:100%"></div>
             <div><label class="f">{{ __('common.date') }}</label><input type="date" name="date" value="{{ today()->toDateString() }}" style="width:100%"></div>
         </div>
+        {{-- ═══ طريقة التحصيل (قرار المالك ٨/٨/٢٠٢٦) ═══
+             ⚠️ **التحصيل كان رقم بلا طريقة** — المحاسب بيقفل اليومية
+             ومعاه إجمالي واحد من غير ما يعرف كام كاش في الخزنة وكام
+             شيك في الدرج وكام تحويل لازم يتطابق مع كشف البنك.
+             ⚠️ **الشيك بيدخل الحساب فوراً زي الكاش** (قرار المالك). --}}
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.pay_method_label') }} <b class="req-star">*</b></label>
+                <select name="method" id="collMethod" required style="width:100%"
+                        onchange="collMethodChanged()">
+                    @foreach (\App\Models\Transaction::METHODS as $m)
+                        <option value="{{ $m }}">{{ __('client.pay_method_'.$m) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div id="collRefBox" style="display:none">
+                <label class="f">{{ __('client.pay_reference') }} <b class="req-star">*</b></label>
+                <input type="text" name="reference" maxlength="100" style="width:100%"
+                       placeholder="{{ __('client.pay_reference_ph') }}">
+            </div>
+        </div>
+        <div class="frow collChequeBox" style="display:none">
+            <div>
+                <label class="f">{{ __('client.cheque_bank') }} <b class="req-star">*</b></label>
+                <input type="text" name="cheque_bank" maxlength="120" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('client.cheque_due') }} <b class="req-star">*</b></label>
+                <input type="date" name="cheque_due" style="width:100%">
+            </div>
+        </div>
+
         <div><label class="f">{{ __('client.memo') }}</label><input type="text" name="memo" placeholder="{{ __('client.cash_collection') }}" style="width:100%"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
             <button class="btn" type="button" onclick="closeDlg('dlgCollect')">{{ __('common.cancel') }}</button>
@@ -663,6 +695,29 @@ new Chart(document.getElementById('chM'), {
       ] },
   options:{ plugins:{ legend:{ position:'bottom' } }, scales:AXES },
 });
+
+// ═══ طريقة التحصيل — إظهار الحقول حسب الاختيار (٨/٨/٢٠٢٦) ═══
+//
+// ⚠️ **العرض راحة، والإجبار على السيرفر.** الفاليديشن في
+// `OpsController::collect` هو اللي بيرفض تحصيل غير نقدي بلا ريفرنس —
+// الجافاسكربت هنا بيخبّي الخانات اللي مالهاش لازمة بس. حقل مخبّي
+// بيتبعت فاضي، والسيرفر بيرفضه، وده المطلوب.
+function collMethodChanged() {
+  var m = document.getElementById('collMethod');
+  if (!m) return;
+
+  var v = m.value;
+  var refBox = document.getElementById('collRefBox');
+  var chequeBoxes = document.querySelectorAll('.collChequeBox');
+
+  if (refBox) refBox.style.display = (v === 'cash') ? 'none' : '';
+
+  for (var i = 0; i < chequeBoxes.length; i++) {
+    chequeBoxes[i].style.display = (v === 'cheque') ? '' : 'none';
+  }
+}
+
+collMethodChanged();
 </script>
 
 @endsection
