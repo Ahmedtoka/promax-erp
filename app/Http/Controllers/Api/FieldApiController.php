@@ -747,12 +747,31 @@ class FieldApiController extends Controller
             'cheque_due' => ['nullable', 'required_if:method,cheque', 'date'],
             'proof' => ['nullable', 'required_unless:method,cash', 'file', 'image', 'max:8192'],
             'note' => ['nullable', 'string', 'max:190'],
+            'idem_key' => ['nullable', 'string', 'max:64'],
         ], [], [
             'amount' => __('field.attr_collect_amount'),
             'proof' => __('field.attr_collect_proof'),
         ]);
 
         $client = $visit->client;
+
+        // ⚠️ **نفس درس المرتجعات**: الأبلكيشن بيولّد المفتاح مرة
+        // واحدة للشاشة، وإعادة النداء بعد تايم أوت بترجّع نفس القيد
+        // بدل ما تصفّر مديونية ماتدفعتش. اليونيك في الداتابيز بيمسك
+        // السباق، والفحص هنا بيرجّع رد نضيف بدل خطأ SQL خام.
+        if (! empty($data['idem_key'])) {
+            $existing = Transaction::where('idem_key', $data['idem_key'])->first();
+
+            if ($existing !== null) {
+                return response()->json([
+                    'id' => $existing->id,
+                    'amount' => (float) $existing->credit,
+                    'method' => $existing->method,
+                    'balance' => (float) $client->fresh()->balance,
+                    'proof_url' => $existing->proofUrl(),
+                ]);
+            }
+        }
 
         $proofPath = $request->hasFile('proof')
             ? $request->file('proof')->store('collection-proofs', 'public')
@@ -773,6 +792,7 @@ class FieldApiController extends Controller
                 'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
                     ? ($data['cheque_due'] ?? null) : null,
                 'proof_path' => $proofPath,
+                'idem_key' => $data['idem_key'] ?? null,
                 'source_type' => Visit::class,
                 'source_id' => $visit->id,
             ]);
@@ -893,7 +913,12 @@ class FieldApiController extends Controller
                     'units_per_case' => (int) $p->units_per_case,
                     'box_units' => (int) $p->box_units,
                 ];
-            })->values()->all();
+            })
+            // ⚠️ **الصنف الغير متسعّر في قايمة العميل مابيظهرش أصلاً**
+            // (تدقيق ٩/٨). لو ظهر بـ0.00، المندوب هيضيفه والرفض
+            // هيطلع في وش المدير وقت الموافقة — بعد ما العميل اتوعد.
+            ->filter(fn ($row) => $row['price'] > 0)
+            ->values()->all();
 
         return response()->json(['items' => $items]);
     }
@@ -916,7 +941,7 @@ class FieldApiController extends Controller
             'visit_id' => ['required', 'exists:visits,id'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
-            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'items.*.qty' => ['required', 'integer', 'min:1', 'max:9999'],
             'items.*.unit' => ['nullable', 'string', 'max:20'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
@@ -932,8 +957,11 @@ class FieldApiController extends Controller
             return response()->json(['message' => __('field.visit_already_closed')], 422);
         }
 
-        // الوحدات بتتحول قطع في السيرفر — نفس حارس الفاتورة بالظبط
-        if ($err = $this->itemsToPieces($data['items'])) {
+        // الوحدات بتتحول قطع في السيرفر — نفس حارس الفاتورة بالظبط.
+        // ⚠️ **والسقف بعد الضرب** (تدقيق ٩/٨): «9999 كرتونة» بتعدّي
+        // `max:9999` وتبقى 719,928 قطعة في أمر هيتجهّز فعلاً —
+        // الطلب مالوش حارس عهدة زي الفاتورة، فالسقف هنا هو الوحيد.
+        if ($err = $this->itemsToPieces($data['items'], 9999)) {
             return $err;
         }
 

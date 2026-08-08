@@ -25,6 +25,8 @@ class RepSettlement extends Model
         return [
             // ⚠️ لقطة تاريخية — بتترسم زي ما هي وقت التوقيع
             'goods_json' => 'array',
+            'collections_json' => 'array',
+            'cash_collections' => 'decimal:2',
             'from_at' => 'datetime',
             'to_at' => 'datetime',
             'cash_sales' => 'decimal:2',

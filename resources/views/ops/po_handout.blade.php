@@ -350,11 +350,15 @@ document.addEventListener('click', e => {
 
 function unitSelect(p) {
     const units = p.units || { piece: 1 };
+    // ⚠️ الديفولت الموحّد (قرار المالك ٩/٨): **علبة** لو الصنف ليه
+    // علبة، وإلا **قطعة** — عمره ما يكون كرتونة. الديفولت القديم
+    // (أول أوبشن = قطعة) كان بيخلّي إدخال أوامر السلاسل كله ضرب يدوي.
+    const def = units.box ? 'box' : 'piece';
 
     return '<select name="unit[' + p.id + ']" data-row="' + p.id + '" data-kind="unit"' +
         ' style="width:100%" onchange="syncRow(' + p.id + ')">' +
         Object.keys(units).map(u =>
-            '<option value="' + u + '">' + esc(UNIT_LABELS[u]) +
+            '<option value="' + u + '"' + (u === def ? ' selected' : '') + '>' + esc(UNIT_LABELS[u]) +
             (units[u] > 1 ? ' (' + units[u] + ')' : '') + '</option>'
         ).join('') +
         '</select>';

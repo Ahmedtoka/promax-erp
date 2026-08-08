@@ -82,7 +82,7 @@ class Transaction extends Model
 
     protected $fillable = [
         'client_id', 'date', 'memo', 'debit', 'credit', 'tax', 'kind',
-        'method', 'reference', 'cheque_bank', 'cheque_due', 'proof_path',
+        'method', 'reference', 'cheque_bank', 'cheque_due', 'proof_path', 'idem_key',
         'source_type', 'source_id',
     ];
 

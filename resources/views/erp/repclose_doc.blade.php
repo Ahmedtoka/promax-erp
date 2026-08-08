@@ -59,6 +59,9 @@
             <table class="doc-table">
                 <tr><th>{{ __('common.total') }}</th><th class="num">{{ __('common.currency') }}</th></tr>
                 <tr><td>{{ __('settle.cash_sales') }}</td><td class="num"><b>{{ $fmt($s->cash_sales) }}</b></td></tr>
+                @if ((float) $s->cash_collections > 0)
+                    <tr><td>{{ __('settle.field_collections') }}</td><td class="num"><b>{{ $fmt($s->cash_collections) }}</b></td></tr>
+                @endif
                 <tr><td>{{ __('settle.cash_refunds') }}</td><td class="num">({{ $fmt($s->cash_refunds) }})</td></tr>
                 <tr><td><b>{{ __('settle.expected') }}</b></td><td class="num"><b>{{ $fmt($s->expected) }}</b></td></tr>
                 <tr><td>{{ __('settle.prev_balance') }}</td><td class="num">{{ $fmt($s->prev_balance) }}</td></tr>
@@ -73,6 +76,45 @@
                     <td class="num" style="color:var(--muted)">{{ $fmt($s->credit_sales) }}</td></tr>
             </table>
         </div>
+
+        {{-- ═══ التحصيلات غير النقدية — تسليم مستندات (٩ أغسطس) ═══
+             الشيك اللي بيتسلّم مع التصفية لازم يبقى على الورقة
+             الممضية بمرجعه وبنكه واستحقاقه — من اللقطة مش من القيود. --}}
+        @php $docCollections = collect($s->collections_json ?? [])->where('method', '!=', 'cash'); @endphp
+        @if ($docCollections->isNotEmpty())
+            <div style="font-size:12px;font-weight:900;margin:16px 0 6px">
+                🧾 {{ __('settle.collections_to_match') }}
+                <span style="font-weight:400;color:var(--muted);font-size:10.5px">
+                    — {{ __('settle.collections_hint') }}</span>
+            </div>
+            <div class="tablewrap">
+                <table class="doc-table">
+                    <tr>
+                        <th>{{ __('client.client') }}</th>
+                        <th>{{ __('ops.method') }}</th>
+                        <th>{{ __('ops.reference') }}</th>
+                        <th class="num">{{ __('common.total') }}</th>
+                    </tr>
+                    @foreach ($docCollections as $c)
+                        <tr>
+                            <td>{{ $c['client'] }}</td>
+                            <td>
+                                {{ $c['method_label'] }}
+                                @if (($c['method'] ?? '') === 'cheque' && ! empty($c['cheque_due']))
+                                    <div class="s">{{ $c['cheque_bank'] }} · {{ $c['cheque_due'] }}</div>
+                                @endif
+                            </td>
+                            <td class="num">{{ $c['reference'] ?: '—' }}</td>
+                            <td class="num"><b>{{ $fmt($c['amount']) }}</b></td>
+                        </tr>
+                    @endforeach
+                    <tr>
+                        <td colspan="3"><b>{{ __('common.total') }}</b></td>
+                        <td class="num"><b>{{ $fmt($docCollections->sum('amount')) }}</b></td>
+                    </tr>
+                </table>
+            </div>
+        @endif
 
         {{-- ═══════════════════════════════════════════════════════
              مطابقة العهدة على الورقة الممضية (٨ أغسطس ٢٠٢٦)

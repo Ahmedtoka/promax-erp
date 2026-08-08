@@ -25,6 +25,15 @@ return new class extends Migration
                 if (! Schema::hasColumn('transactions', 'proof_path')) {
                     $table->string('proof_path', 190)->nullable()->after('cheque_due');
                 }
+
+                // ⚠️ **نفس درس المرتجعات بالحرف** (مايجريشن 000700):
+                // الأبلكيشن على شبكة ضعيفة بيعيد النداء بعد التايم
+                // أوت — ومن غير المفتاح ده، N محاولات = N قيود دائنة
+                // بتصفّر مديونية ماتدفعتش. اليونيك في الداتابيز هو
+                // الحارس الحقيقي، مش فحص الكود.
+                if (! Schema::hasColumn('transactions', 'idem_key')) {
+                    $table->string('idem_key', 64)->nullable()->unique()->after('proof_path');
+                }
             });
         }
 
@@ -92,9 +101,23 @@ return new class extends Migration
 
         Schema::dropIfExists('visit_photos');
 
-        if (Schema::hasTable('transactions') && Schema::hasColumn('transactions', 'proof_path')) {
+        if (Schema::hasTable('rep_settlements')) {
+            Schema::table('rep_settlements', function (Blueprint $table) {
+                foreach (['cash_collections', 'collections_json'] as $c) {
+                    if (Schema::hasColumn('rep_settlements', $c)) {
+                        $table->dropColumn($c);
+                    }
+                }
+            });
+        }
+
+        if (Schema::hasTable('transactions')) {
             Schema::table('transactions', function (Blueprint $table) {
-                $table->dropColumn('proof_path');
+                foreach (['idem_key', 'proof_path'] as $c) {
+                    if (Schema::hasColumn('transactions', $c)) {
+                        $table->dropColumn($c);
+                    }
+                }
             });
         }
     }

@@ -248,7 +248,11 @@ class OpsController extends Controller
             : null;
 
         try {
-        DB::transaction(function () use ($data, $request, $needsApproval) {
+        // ⚠️ `$imagePath` لازم في الـ`use` — الرفع بيحصل قبل الترانزاكشن
+        // (عشان الـrollback مايسيبش ملف يتيم)، والكلوجر من غيره بترمي
+        // «Undefined variable $imagePath» **بس لما يكون فيه صورة فعلاً**
+        // — عشان كده الباج عدّى من كل التيستات اللي من غير صورة.
+        DB::transaction(function () use ($data, $request, $needsApproval, $imagePath) {
             // العميل محتاجينه عشان نحسب تسعيرته لو الوضع channel
             $client = Client::findOrFail($data['client_id']);
 

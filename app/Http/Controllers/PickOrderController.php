@@ -73,9 +73,29 @@ class PickOrderController extends Controller
         return view('wh.pick', ['o' => $pick]);
     }
 
+    /**
+     * حارس المخزن — الأمين بيجهّز أوامر **مخازنه** بس.
+     *
+     * ⚠️ **الويب كان من غير السكوب ده خالص** (تدقيق ٩/٨) — أمين
+     * مخزن المعادي كان يقدر يبدأ ويقفل أوامر مخزن تاني من المتصفح،
+     * بينما توأمه في الـAPI (`KeeperApiController::guard`) بيرفض.
+     * الأدمن والمدير بيعدّوا — دول بيديروا كل المخازن.
+     */
+    private function guardKeeperWarehouse(\App\Models\User $user, PickOrder $pick): bool
+    {
+        if (in_array($user->role, ['admin', 'manager'], true)) {
+            return true;
+        }
+
+        return (int) $pick->warehouse?->manager_id === (int) $user->id
+            || (int) $pick->warehouse_id === (int) $user->warehouse_id;
+    }
+
     /** أمين المخزن بدأ يجمع من الأرفف */
     public function startPicking(Request $request, PickOrder $pick)
     {
+        abort_unless($this->guardKeeperWarehouse($request->user(), $pick), 403);
+
         if ($error = $pick->startPicking($request->user())) {
             return back()->withErrors(['status' => $error]);
         }
@@ -86,6 +106,8 @@ class PickOrderController extends Controller
     /** "جاهز" — البضاعة بتخرج من الأرفف وتتحجز للمندوب */
     public function markReady(Request $request, PickOrder $pick)
     {
+        abort_unless($this->guardKeeperWarehouse($request->user(), $pick), 403);
+
         $data = $request->validate([
             'picked' => ['nullable', 'array'],
             'picked.*' => ['nullable', 'integer', 'min:0'],

@@ -93,12 +93,26 @@ class RepSettlementController extends Controller
                 'cash_sales' => $f['cash_sales'],
                 'credit_sales' => $f['credit_sales'],
                 'cash_refunds' => $f['cash_refunds'],
+                'cash_collections' => $f['cash_collections'],
                 'expected' => $f['expected'],
                 'prev_balance' => $f['prev_balance'],
                 'received' => $received,
                 'balance' => $balance,
                 'note' => $data['note'] ?? null,
                 'created_by' => $request->user()->id,
+
+                // ⚠️ لقطة التحصيلات — الشيك اللي المندوب مضى إنه
+                // سلّمه لازم يفضل على الورقة بنفس أرقام لحظتها
+                'collections_json' => $f['collection_rows']->map(fn ($t) => [
+                    'client' => $t->client?->fullName() ?? '—',
+                    'amount' => (float) $t->credit,
+                    'method' => $t->method,
+                    'method_label' => $t->methodLabel(),
+                    'reference' => $t->reference,
+                    'cheque_bank' => $t->cheque_bank,
+                    'cheque_due' => $t->cheque_due?->toDateString(),
+                    'at' => $t->created_at->format('m-d H:i'),
+                ])->values()->all(),
 
                 // ⚠️ **لقطة البضاعة بتتجمّد مع الأرقام** (2026-08-08).
                 // الورقة المطبوعة مستند بيتمضي — ولو قريناها من
@@ -242,7 +256,9 @@ class RepSettlementController extends Controller
             ->whereIn('source_id', Visit::where('user_id', $rep->id)->select('id'))
             ->when($from, fn ($q) => $q->where('created_at', '>', $from))
             ->where('created_at', '<=', $now)
-            ->with('client')
+            // ⚠️ `client.group` مش `client` — الشاشة بتعرض `fullName()`
+            // اللي بيلمس السلسلة، ومن غيرها كويري لكل صف
+            ->with(['client.group'])
             ->get();
 
         $cashCollections = round((float) $collectionRows

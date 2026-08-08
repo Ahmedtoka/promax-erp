@@ -257,6 +257,34 @@ class ReplenishmentRequest extends Model
                 'assigned_at' => now(),
             ]);
 
+            // ═══ التجهيز بينزل هنا (إصلاح تدقيق ٩/٨/٢٠٢٦) ═══
+            //
+            // ⚠️ **الفلو كان بيقف عند إنشاء الـPO.** الموافقة بتعمل
+            // أمر توريد، والمندوب بيوصله «سلّم»، وعربيته فاضية —
+            // ومفيش أي حاجة بتطلب البضاعة من المخزن. مسار
+            // `wh.picks.rpl` كان مبني ومن غير أي زرار بينده عليه
+            // (نفس فخ «شاشة من غير مدخل» الموثّق).
+            //
+            // `fulfil` بيفحص عربية المندوب الأول: لو البضاعة معاه،
+            // مفيش تجهيز والتسليم من عهدته. لو ناقصة، بيرفع أمر
+            // تجهيز من مخزنه (أو الرئيسي) — وأمين المخزن بيوصله
+            // إشعار من جوه `PickOrder::raise` نفسها.
+            //
+            // ⚠️ **جوه نفس الترانزاكشن** — لو مفيش رصيد لا في
+            // العربية ولا المخزن، `Rejected` بترجّع الموافقة كلها،
+            // والمدير بيشوف السبب بدل ما يتفاجئ المندوب عند الفرع.
+            $result = \App\Http\Controllers\PickOrderController::fulfil(
+                $assignee,
+                $this->items->pluck('qty', 'product_id')->all(),
+                PickOrder::PURPOSE_CUSTOMER_PO,
+                ['purchase_order_id' => $po->id],
+                $assignee,
+            );
+
+            if ($result['error']) {
+                throw new Rejected($result['error']);
+            }
+
             return $po;
         });
 
@@ -280,7 +308,13 @@ class ReplenishmentRequest extends Model
                 'client' => $this->client->displayName(),
             ]),
             good: true,
-            link: \App\Models\AppNotification::replenishmentLink($this->id),
+            // ⚠️ طلب المندوب لينكه **الأمر نفسه** (`po:`) — شاشة
+            // المندوب مافيهاش تاب ريفيل، فلينك `replenishment:` كان
+            // بيقع على «مفتاح مش معروف = الرئيسية» والإشعار يبان
+            // مكسور. البروموتر ليه تاب ريفيل فلينكه زي ما هو.
+            link: $this->origin() === 'rep'
+                ? \App\Models\AppNotification::poLink($po->id)
+                : \App\Models\AppNotification::replenishmentLink($this->id),
         );
 
         return $po;

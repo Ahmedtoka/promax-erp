@@ -161,6 +161,12 @@ class Access
             '!erp.purchasing.cancel', '!erp.purchasing.close',
             // جرس الإشعارات — طلبات البضاعة وأوامر التجهيز بتوصله هنا
             'notifications',
+            // ⚠️ **عرض بس** — إشعار «طلب بضاعة في السكة» لينكه بيفتح
+            // الشاشة دي، ومن غيرها الجرس بياكل الإشعار ويرمي 403
+            // (تدقيق ٩/٨). الموافقة والتنزيل والإلغاء قرارات تجارية
+            // فاضلة للمدير في الراوت نفسه.
+            'ops.replenishments',
+            '!ops.replenishments.assign', '!ops.replenishments.cancel',
         ],
     ];
 

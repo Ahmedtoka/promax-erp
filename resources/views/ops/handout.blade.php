@@ -337,11 +337,13 @@ function unitSelect(p, kind) {
     const units = p.units || { piece: 1 };
     // `unit` للبيع و`gift_unit` للهدية — نفس الودجت، خانتين مختلفتين
     const field = kind === 'gift' ? 'gift_unit' : 'unit';
+    // ⚠️ الديفولت الموحّد (قرار المالك ٩/٨): علبة لو موجودة، وإلا قطعة
+    const def = units.box ? 'box' : 'piece';
 
     return '<select name="' + field + '[' + p.id + ']" data-row="' + p.id + '" data-kind="' + field + '"' +
         ' style="width:100%" onchange="syncRow(' + p.id + ')">' +
         Object.keys(units).map(u =>
-            '<option value="' + u + '">' + esc(UNIT_LABELS[u]) +
+            '<option value="' + u + '"' + (u === def ? ' selected' : '') + '>' + esc(UNIT_LABELS[u]) +
             (units[u] > 1 ? ' (' + units[u] + ')' : '') + '</option>'
         ).join('') +
         '</select>';

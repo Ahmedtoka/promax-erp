@@ -75,9 +75,16 @@ Route::middleware(['api.token', 'locale'])->group(function () {
 
         // ═══ ٣ أوبشنات الزيارة الجديدة (2026-08-09) ═══
         // كلهم مرساتهم **زيارة مفتوحة** — نفس دوكترين الفاتورة والمرتجع.
-        Route::post('/visits/{visit}/collect', [FieldApiController::class, 'collect']);
-        Route::post('/visits/{visit}/shelf-photo', [FieldApiController::class, 'shelfPhoto']);
-        Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
+        //
+        // ⚠️ **من غير البروموتر** (تدقيق ٩/٨): تصفية المناديب بتلم
+        // السيلز والسواق بس — كاش يحصّله بروموتر كان هينزل في الدفتر
+        // ومايتحاسبش عليه حد. والبروموتر شغله رفوف الكي أكاونت من
+        // فلو `merch_visits` أصلاً، مش زيارات البيع.
+        Route::middleware('api.role:sales_agent,driver')->group(function () {
+            Route::post('/visits/{visit}/collect', [FieldApiController::class, 'collect']);
+            Route::post('/visits/{visit}/shelf-photo', [FieldApiController::class, 'shelfPhoto']);
+            Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
+        });
 
         // أوامر التوريد
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
