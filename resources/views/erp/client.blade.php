@@ -443,12 +443,38 @@
     <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
-            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
+            {{-- ⚠️ **عمود طريقة التحصيل** (٨/٨/٢٠٢٦). `method` و
+                 `reference` وبيانات الشيك بيتخزنوا مع القيد ومحدش
+                 بيعرضهم — فالمحاسب بيسجّل شيك برقم وبنك وتاريخ
+                 استحقاق، وبعد كده مايلاقيش الرقم ده في أي شاشة
+                 ويرجع يفتح الدرج يدوّر على الورقة. --}}
+            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
             @foreach ($txns as $t)
                 <tr>
                     <td class="num">{{ $t->date->format('Y-m-d') }}</td>
                     <td><span class="badge b-gray">{{ $t->kindLabel() }}</span></td>
                     <td style="white-space:normal;max-width:520px">{{ $t->memo }}</td>
+                    <td style="white-space:normal">
+                        @if ($t->method)
+                            <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
+                                {{ $t->methodLabel() }}</span>
+                            @if ($t->reference)
+                                <div style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $t->reference }}</div>
+                            @endif
+                            {{-- ⚠️ **تاريخ استحقاق الشيك لازم يبان** —
+                                 الشيك بيدخل الحساب فوراً (قرار المالك)،
+                                 فالتاريخ ده هو الحاجة الوحيدة اللي
+                                 بتفكّر المحاسب إنه لسه مااتحصّلش من البنك. --}}
+                            @if ($t->cheque_due)
+                                <div style="font-size:10.5px;color:var(--orange)">
+                                    {{ $t->cheque_bank }} · {{ __('client.cheque_due') }}
+                                    {{ $t->cheque_due->format('Y-m-d') }}
+                                </div>
+                            @endif
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
                     <td class="num">{{ $t->debit > 0 ? $fmt($t->debit) : '—' }}</td>
                     <td class="num pos">{{ $t->credit > 0 ? $fmt($t->credit) : '—' }}</td>
                 </tr>

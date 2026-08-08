@@ -31,6 +31,10 @@
                 <th>{{ __('settle.expected') }}</th>
                 <th>{{ __('settle.prev_balance') }}</th>
                 <th>{{ __('settle.due_total') }}</th>
+                {{-- ⚠️ **القايمة كانت فلوس بس.** المحاسب بيفتح كل
+                     مندوب واحد واحد عشان يعرف مين عنده عجز بضاعة —
+                     والرقم موجود أصلاً في `openFigures`. --}}
+                <th>{{ __('settle.goods_match') }}</th>
                 <th></th>
             </tr>
             @foreach ($rows as $r)
@@ -60,6 +64,27 @@
                         @endif
                     </td>
                     <td class="num"><b style="color:var(--royal-blue);font-size:14px">{{ $fmt($r['due_total']) }}</b></td>
+                    {{-- المحمَّل والعجز — والمرتجع اللي هيتسلّم معاه --}}
+                    <td class="num">
+                        @if ((int) $r['goods']['diff_qty'] !== 0)
+                            <span class="badge b-red">{{ __('settle.shortage') }}
+                                {{ number_format((int) $r['goods']['diff_qty']) }}</span>
+                        @elseif ((int) $r['goods']['assigned'] > 0)
+                            <span class="badge b-green">0 ✓</span>
+                        @else
+                            <span class="badge b-gray">—</span>
+                        @endif
+                        @if ((int) $r['goods']['returned_qty'] > 0 || (int) $r['goods']['damaged_qty'] > 0)
+                            <div style="font-size:10px;color:var(--muted);margin-top:3px">
+                                {{ __('settle.returned_in') }}:
+                                {{ number_format((int) $r['goods']['returned_qty']) }}
+                                @if ((int) $r['goods']['damaged_qty'] > 0)
+                                    · {{ __('field.return_damaged_units') }}
+                                    {{ number_format((int) $r['goods']['damaged_qty']) }}
+                                @endif
+                            </div>
+                        @endif
+                    </td>
                     <td>
                         <a class="btn sm gold" href="{{ route('erp.repclose.show', $rep) }}">🤝 {{ __('settle.settle_now') }}</a>
                     </td>

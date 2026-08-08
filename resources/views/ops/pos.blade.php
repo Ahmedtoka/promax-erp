@@ -169,6 +169,19 @@
                         ✍️ {{ $po->creator?->name ?? '—' }}
                         @if ($po->approvedBy)<br>🔏 {{ $po->approvedBy->name }} <span dir="ltr">{{ $po->approved_at?->format('m-d H:i') }}</span>@endif
                         @if ($po->editor)<br>✏️ {{ $po->editor->name }} <span dir="ltr">{{ $po->edited_at?->format('m-d H:i') }}</span>@endif
+                        {{-- ⚠️ **مدة التجهيز كانت بتتقاس ومحدش بيعرضها**
+                             (٨/٨/٢٠٢٦). `prep_started_at` بيتكتب وقت
+                             موافقة الحسابات و`prepMinutes()` موجودة —
+                             والرقم ده هو اللي بيقول ليه المندوب اتأخر
+                             قدام الفرع: المخزن أخد كام دقيقة يجهّز. --}}
+                        @if ($po->prepMinutes() !== null)
+                            <br>⏱️ {{ __('stock.prep_duration') }}:
+                            <b>{{ $po->prepMinutes() }}</b> {{ __('common.minutes') }}
+                        @endif
+                        {{-- وصورة الأمر الأصلي لو مرفوعة — لينك مباشر --}}
+                        @if ($po->imageUrl())
+                            <br><a href="{{ $po->imageUrl() }}" target="_blank">🖼️ {{ __('ops.po_image') }}</a>
+                        @endif
                     </td>
                     <td>
                         <div style="display:flex;gap:6px;flex-wrap:wrap">

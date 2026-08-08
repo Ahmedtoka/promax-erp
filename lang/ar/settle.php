@@ -52,6 +52,7 @@ return [
     'doc_title' => 'محضر تصفية مندوب',
     'sign_rep' => 'توقيع المندوب',
     'sign_accountant' => 'توقيع الحسابات',
+    'sign_warehouse' => 'توقيع أمين المخزن',
     'invoice_count' => ':count فاتورة',
     'window_from' => 'من',
     'window_to' => 'إلى',

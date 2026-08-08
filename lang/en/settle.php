@@ -52,6 +52,7 @@ return [
     'doc_title' => 'Rep Settlement Note',
     'sign_rep' => "Rep's signature",
     'sign_accountant' => "Accountant's signature",
+    'sign_warehouse' => "Warehouse keeper's signature",
     'invoice_count' => ':count invoices',
     'window_from' => 'From',
     'window_to' => 'To',
