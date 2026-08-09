@@ -305,6 +305,31 @@ input[type=search]{-webkit-appearance:none;appearance:none}
 input:focus,select:focus,textarea:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14)}
 .searchbar input[type=text],.searchbar input[type=search]{flex:1;min-width:200px}
 label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:var(--muted)}
+
+/* ═══ `.filters` و`.pill` — كانوا مستخدمين في ٤ صفحات (الحضور
+   والإصدار) **ومش معرّفين خالص** (إصلاح ٩/٨): الفلاتر كانت واقعة
+   تحت بعض كل واحدة بعرض الصفحة، والحالات نص عادي من غير شكل. ═══ */
+.filters{
+  display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:13px 16px;box-shadow:var(--shadow);
+}
+.filters>div{flex:1 1 165px;min-width:0}
+.filters>label.f{margin-bottom:0;align-self:center;flex:0 0 auto}
+.filters input,.filters select{width:100%}
+.filters button{flex:0 0 auto}
+
+.pill{
+  display:inline-block;padding:3px 10px;border-radius:99px;
+  font-size:11px;font-weight:700;line-height:1.7;
+  background:var(--card2);color:var(--muted);
+}
+.pill.good{background:#E7F7EE;color:#16A34A}
+.pill.warn{background:#FFF4E5;color:#B45309}
+.pill.red{background:#FDECEC;color:#B00020}
+
+/* الحالة الفاضية — كانت مستخدمة من غير تعريف برضه */
+.empty{padding:34px;text-align:center;color:var(--muted);font-size:13px}
 .frow{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
 /* ⚠️ **صف بأعمدة ثابتة — الخانة المخبّية بتسيب مكانها فاضي.**
 
@@ -428,6 +453,11 @@ dialog .formbar-sp{flex:1}
     if (in_array('picks', $shown, true)) {
         // تجهيز الطلبات — اللي لسه مستني أو تحت التجهيز
         $navCounts['picks'] = \App\Models\PickOrder::whereIn('status', ['requested', 'picking'])->count();
+    }
+
+    if (in_array('attendance_review', $shown, true)) {
+        // أيام الحضور اللي السيستم قفلها ومستنية اعتماد (2026-08-09)
+        $navCounts['attendance_review'] = \App\Models\AttendanceDay::needsReview()->count();
     }
 
     if (in_array('transfers', $shown, true)) {

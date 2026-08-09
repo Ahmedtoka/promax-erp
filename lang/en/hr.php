@@ -6,9 +6,9 @@ return [
 
     'attendance' => 'Attendance',
     'attendance_hint' => 'Who is working right now · hours per employee',
-    'today_board' => 'Today board',
-    'log' => 'Attendance log',
-    'review' => 'Needs review',
+    'today_board' => 'Today Board',
+    'log' => 'Attendance Log',
+    'review' => 'Needs Review',
 
     // -- Punches --
     'punch_in' => 'Check in',
@@ -82,4 +82,13 @@ return [
     'auto_closed_mark' => 'Auto closed',
     'punches_count' => ':n punches',
 
+
+    // ═══ بورد الأونلاين + المجموعة المستقلة (2026-08-09) ═══
+    'online' => 'Online',
+    'online_now' => 'Online Now',
+    'in_since' => 'In since',
+    'working_for' => 'Working for',
+    'nobody_online' => 'Nobody is clocked in right now.',
+    'auto_refresh' => 'Auto-refreshes every minute',
+    'all_team' => 'All Team',
 ];

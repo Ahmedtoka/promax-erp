@@ -226,6 +226,7 @@ class Access
         'nav.group_clients' => '👥',
         'nav.group_field' => '🗺️',
         'nav.group_money' => '💰',
+        'nav.group_hr' => '🕒',
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
     ];
@@ -340,6 +341,17 @@ class Access
         ],
 
         // ═══ ٧. الإعدادات ═══
+        // ═══ الحضور والانصراف — مجموعة مستقلة (قرار المالك ٩/٨) ═══
+        //
+        // ⚠️ **الخانة الخامسة مفتاح عدّاد مش رولز** (درس ٨/٨ الموثّق):
+        // `system.blade.php` بتعمل `pluck(4)` و`in_array` — مصفوفة
+        // رولز هنا بتوقع السايدبار كله. الرؤية من `SCREENS`.
+        'nav.group_hr' => [
+            ['erp.attendance', '📊', 'hr.today_board', 'erp.attendance', null],
+            ['erp.attendance.log', '📋', 'hr.log', 'erp.attendance.log', null],
+            ['erp.attendance.review', '⏰', 'hr.review', 'erp.attendance.review', 'attendance_review'],
+        ],
+
         'nav.group_settings' => [
             ['erp.team', '🧑‍💼', 'nav.team', 'erp.team', null],
             ['erp.zones', '📍', 'team.zones_and_govs', 'erp.zones*', null],
@@ -349,15 +361,8 @@ class Access
             ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
             // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
             ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
-            // الحضور والانصراف — أول موديول HR
-            //
-            // ⚠️ **الخانة الخامسة مفتاح عدّاد مش رولز** (إصلاح
-            // 2026-08-08). حطيت فيها `['manager','accountant']`
-            // فالسايدبار وقع بـ«Cannot access offset of type array on
-            // array» — `system.blade.php` بتعمل `pluck(4)` وبعدين
-            // `in_array` على القيم دي. مين بيشوف اللينك بيتحدد من
-            // `SCREENS` مش من هنا.
-            ['erp.attendance', '🕒', 'nav.attendance', 'erp.attendance*', null],
+            // ⚠️ الحضور والانصراف اتنقل لمجموعته المستقلة `group_hr`
+            // (قرار المالك ٩/٨) — متحطهوش هنا تاني.
             // إصدار الأبلكيشن: رفع APK وإجبار التحديث
             ['erp.app_version', '📲', 'nav.app_version', 'erp.app_version*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
