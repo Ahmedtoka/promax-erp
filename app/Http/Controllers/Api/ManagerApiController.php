@@ -85,7 +85,8 @@ class ManagerApiController extends Controller
     private function todayTotals(): array
     {
         return [
-            'sales' => (float) Invoice::whereDate('created_at', today())->sum('total'),
+            // ⚠️ `grand_total` — جنبها `pos_value` بالإجمالي الشامل أصلاً
+            'sales' => (float) Invoice::whereDate('created_at', today())->sum('grand_total'),
             'invoices' => Invoice::whereDate('created_at', today())->count(),
             'pos_value' => (float) PurchaseOrder::where('status', 'delivered')
                 ->whereDate('delivered_at', today())->sum('grand_total'),
@@ -122,7 +123,7 @@ class ManagerApiController extends Controller
                     'role_label' => $u->roleLabel(),
                     'zone' => $u->zone?->displayName() ?? ($u->isDriver() ? __('ops.delivery_run') : null),
                     'sales' => (float) Invoice::where('user_id', $u->id)
-                        ->whereDate('created_at', today())->sum('total'),
+                        ->whereDate('created_at', today())->sum('grand_total'),
                     'invoices' => Invoice::where('user_id', $u->id)
                         ->whereDate('created_at', today())->count(),
                     'visits' => $u->visits()->whereDate('created_at', today())->count(),
@@ -230,7 +231,8 @@ class ManagerApiController extends Controller
                 ->map(fn ($inv) => [
                     'number' => $inv->number,
                     'client' => $inv->client->displayName(),
-                    'total' => (float) $inv->total,
+                    // ⚠️ الإجمالي الشامل — نفس الرقم اللي السواق شايفه
+                    'total' => (float) $inv->grand_total,
                     'payment' => $inv->payment,
                     'time' => $inv->created_at->toIso8601String(),
                 ])->values(),
@@ -242,7 +244,7 @@ class ManagerApiController extends Controller
                     'number' => $po->number,
                     'client' => $po->client->displayName(),
                     'status_label' => $po->statusLabel(),
-                    'total' => (float) $po->total,
+                    'total' => (float) $po->payable(),
                 ])->values(),
             'events' => $user->trackEvents()
                 ->whereDate('happened_at', today())
@@ -415,15 +417,24 @@ class ManagerApiController extends Controller
 
         $replenishmentRequest->update(['status' => 'cancelled']);
 
+        // ⚠️⚠️ **`good: false` مش `false` موضعية** (تدقيق ٩/٨ مساءً):
+        // باراميتر موضعي بعد named argument = **خطأ PHP قاتل وقت
+        // تحميل الكلاس** — يعني كل `/api/manager/*` كانت بترجع 500
+        // ورول المدير على الموبايل واقع بالكامل، والأبلكيشن بيحاول
+        // ٣ مرات ويستسلم بصمت فتبان الشاشة أصفار.
+        //
+        // ⚠️ ولينك الطالب حسب مصدره — طلب المندوب لينكه الرئيسية
+        // (مالوش تاب ريفيل)، نفس منطق `assignTo` بالظبط.
         AppNotification::send(
             $replenishmentRequest->promoter,
             fn () => __('field.notif_replenishment_rejected_title', [
                 'number' => $replenishmentRequest->number,
             ]),
             fn () => $data['note'] ?? __('field.notif_replenishment_rejected_body'),
-            // ⚠️ الوجهة — من غيرها البروموتر بيدوس ويقع على الرئيسية
-            link: AppNotification::replenishmentLink($replenishmentRequest->id),
-            false,
+            good: false,
+            link: $replenishmentRequest->origin() === 'rep'
+                ? null
+                : AppNotification::replenishmentLink($replenishmentRequest->id),
         );
 
         return response()->json([

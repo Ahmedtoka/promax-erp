@@ -76,11 +76,14 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // ═══ ٣ أوبشنات الزيارة الجديدة (2026-08-09) ═══
         // كلهم مرساتهم **زيارة مفتوحة** — نفس دوكترين الفاتورة والمرتجع.
         //
-        // ⚠️ **من غير البروموتر** (تدقيق ٩/٨): تصفية المناديب بتلم
-        // السيلز والسواق بس — كاش يحصّله بروموتر كان هينزل في الدفتر
-        // ومايتحاسبش عليه حد. والبروموتر شغله رفوف الكي أكاونت من
-        // فلو `merch_visits` أصلاً، مش زيارات البيع.
-        Route::middleware('api.role:sales_agent,driver')->group(function () {
+        // ⚠️ **للسيلز إيجينت بس** (قرار ٩/٨ مساءً):
+        // - البروموتر: تصفيته مش بتتحسب، وكاش يحصّله بينزل الدفتر
+        //   ومايتحاسبش عليه حد. شغله رفوف الكي أكاونت من `merch_visits`.
+        // - السواق: مالوش فلو زيارة في الأبلكيشن أصلاً — صلاحية
+        //   مفتوحة لأكشن مالوش شاشة باب مفتوح وبس. لو المالك قرر
+        //   السواق يحصّل من الزيارات، ضيف `driver` هنا **وابني له
+        //   مدخل العميل في الأبلكيشن** في نفس اليوم.
+        Route::middleware('api.role:sales_agent')->group(function () {
             Route::post('/visits/{visit}/collect', [FieldApiController::class, 'collect']);
             Route::post('/visits/{visit}/shelf-photo', [FieldApiController::class, 'shelfPhoto']);
             Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
@@ -142,6 +145,9 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // الكتالوج الكامل بأسعار العميل — شاشة «طلب بضاعة» بتنده
         // عليها عند الفتح. قراءة، فبره حارس الحضور زي `prices`.
         Route::get('/clients/{client}/catalog', [FieldApiController::class, 'catalog']);
+
+        // طلبات البضاعة بتاعتي — شاشة «طلباتي» (2026-08-09). قراءة.
+        Route::get('/my-goods-requests', [FieldApiController::class, 'myGoodsRequests']);
 
         // بينج فتح الأبلكيشن — عدّاد في لوحة الأداء
         Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
@@ -206,6 +212,13 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::get('/picks/{pick}', [\App\Http\Controllers\Api\KeeperApiController::class, 'show']);
         Route::post('/picks/{pick}/start', [\App\Http\Controllers\Api\KeeperApiController::class, 'start']);
         Route::post('/picks/{pick}/ready', [\App\Http\Controllers\Api\KeeperApiController::class, 'ready']);
+    });
+
+    // ===== المحاسب — تحصيلات الميدان قراءة بس (2026-08-09) =====
+    // ⚠️ عشان إشعار «تحصيل غير نقدي» يفتح على حاجة — التسجيل
+    // والاعتماد فاضلين للويب عن قصد.
+    Route::prefix('accountant')->middleware('api.role:accountant,admin')->group(function () {
+        Route::get('/collections', [\App\Http\Controllers\Api\AccountantApiController::class, 'collections']);
     });
 
     // ===== الأدمن / الـ Channel Manager =====

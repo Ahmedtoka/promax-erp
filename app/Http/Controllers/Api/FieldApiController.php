@@ -401,6 +401,9 @@ class FieldApiController extends Controller
                 'number' => $po->number,
                 'client' => $po->client->fullName(),
                 'source' => $po->sourceLabel(),
+                // ⚠️ علم ثابت — الأبلكيشن كان بيقارن `source` (نص حر
+                // مترجم) بنص مترجم تاني عشان يلوّن الكارت (تدقيق ٩/٨)
+                'is_replenishment' => $po->fromReplenishment(),
                 'address' => $po->address,
                 'status' => $po->status,
                 'status_label' => $po->statusLabel(),
@@ -518,7 +521,10 @@ class FieldApiController extends Controller
     private function todayPayload($user): array
     {
         return [
-            'sales' => (float) Invoice::where('user_id', $user->id)->whereDate('created_at', today())->sum('total'),
+            // ⚠️ **`grand_total` مش `total`** (تدقيق ٩/٨ مساءً): الكارت ده
+            // بيفتح شاشة «مبيعات اليوم» اللي بتجمع بالإجمالي الشامل —
+            // فالرقمين كانوا بيختلفوا قدام المندوب بقيمة الضريبة.
+            'sales' => (float) Invoice::where('user_id', $user->id)->whereDate('created_at', today())->sum('grand_total'),
             'invoices' => Invoice::where('user_id', $user->id)->whereDate('created_at', today())->count(),
             'visits' => Visit::where('user_id', $user->id)->whereDate('created_at', today())->count(),
             'visits_done' => Visit::where('user_id', $user->id)->whereDate('created_at', today())
@@ -1034,6 +1040,42 @@ class FieldApiController extends Controller
                 'qty' => $qty,
             ],
         ], 201);
+    }
+
+    /**
+     * GET /api/my-goods-requests — طلبات البضاعة اللي الموظف ده طلبها.
+     *
+     * ⚠️ **كان بيطلب في الفراغ** (تدقيق ٩/٨): المندوب يبعت الطلب
+     * ومفيش أي شاشة تقوله اتوافق ولا اترفض ولا بقى أمر رقم كام —
+     * البروموتر ليه تاب ريفيل والسيلز ماكانش ليه حاجة.
+     */
+    public function myGoodsRequests(Request $request): JsonResponse
+    {
+        $rows = \App\Models\ReplenishmentRequest::with([
+            'client.group', 'items.product', 'assignee:id,name,name_en',
+            'purchaseOrder:id,number,status',
+        ])
+            ->where('requested_by', $request->user()->id)
+            ->latest()->take(30)->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'number' => $r->number,
+                'client' => $r->client?->fullName() ?? '—',
+                'status' => $r->status,
+                'status_label' => $r->statusLabel(),
+                'qty_total' => $r->qtyTotal(),
+                'note' => $r->note,
+                'po_number' => $r->purchaseOrder?->number,
+                'po_status' => $r->purchaseOrder?->status,
+                'assignee' => $r->assignee?->displayName(),
+                'time' => $r->created_at->toIso8601String(),
+                'items' => $r->items->map(fn ($i) => [
+                    'name' => $i->product?->displayName() ?? '—',
+                    'qty' => (int) $i->qty,
+                ])->values()->all(),
+            ])->values()->all();
+
+        return response()->json(['requests' => $rows]);
     }
 
     // ================= الفواتير =================
