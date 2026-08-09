@@ -35,11 +35,18 @@
     </div>
 </form>
 
+{{-- ⚠️ الكروت **كليكبل** (طلب المالك ٩/٨): الضغطة بتفلتر الجدول
+     على الحالة دي، والضغط على الكارت النشط تاني بيشيل الفلتر. --}}
+@php $kpiUrl = fn ($s) => route('erp.attendance', array_filter(['date' => $date, 'state' => $state === $s ? null : $s])); @endphp
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">🟢 {{ __('hr.working_now') }}</div><div class="val" style="color:#16A34A">{{ $working }}</div></div>
-    <div class="kpi"><div class="lbl">⏸️ {{ __('hr.on_break_now') }}</div><div class="val" style="color:#B86E00">{{ $onBreak }}</div></div>
-    <div class="kpi"><div class="lbl">✅ {{ __('hr.done_today') }}</div><div class="val">{{ $done }}</div></div>
-    <div class="kpi"><div class="lbl">⚪ {{ __('hr.not_in_yet') }}</div><div class="val" style="color:#B00020">{{ $notIn }}</div></div>
+    <a class="kpi {{ $state === 'working' ? 'on' : '' }}" href="{{ $kpiUrl('working') }}">
+        <div class="lbl">🟢 {{ __('hr.working_now') }}</div><div class="val" style="color:#16A34A">{{ $working }}</div></a>
+    <a class="kpi {{ $state === 'break' ? 'on' : '' }}" href="{{ $kpiUrl('break') }}">
+        <div class="lbl">⏸️ {{ __('hr.on_break_now') }}</div><div class="val" style="color:#B86E00">{{ $onBreak }}</div></a>
+    <a class="kpi {{ $state === 'done' ? 'on' : '' }}" href="{{ $kpiUrl('done') }}">
+        <div class="lbl">✅ {{ __('hr.done_today') }}</div><div class="val">{{ $done }}</div></a>
+    <a class="kpi {{ $state === 'off' ? 'on' : '' }}" href="{{ $kpiUrl('off') }}">
+        <div class="lbl">⚪ {{ __('hr.not_in_yet') }}</div><div class="val" style="color:#B00020">{{ $notIn }}</div></a>
 </div>
 
 {{-- ═══ الأونلاين دلوقتي — كروت (طلب المالك ٩/٨) ═══ --}}
@@ -92,9 +99,14 @@
 
 {{-- ═══ كل الفريق — الجدول ═══ --}}
 <div class="card">
-    <h3>🧑‍💼 {{ __('hr.all_team') }} <span class="side">{{ $rows->count() }}</span></h3>
+    <h3>🧑‍💼 {{ __('hr.all_team') }}
+        <span class="side">{{ $filtered->count() }}@if ($state) / {{ $rows->count() }}@endif</span>
+        @if ($state)
+            <a class="btn sm" href="{{ route('erp.attendance', ['date' => $date]) }}" style="margin-inline-start:8px">✕ {{ __('common.clear') }}</a>
+        @endif
+    </h3>
     <div class="tablewrap">
-    <table>
+    <table class="att-tbl">
         <thead>
             <tr>
                 <th style="text-align:start">{{ __('hr.employee') }}</th>
@@ -108,9 +120,9 @@
             </tr>
         </thead>
         <tbody>
-            @foreach ($rows as $r)
+            @foreach ($filtered as $r)
                 <tr>
-                    <td style="text-align:start">
+                    <td>
                         <strong>{{ $r['user']->displayName() }}</strong>
                         <div class="side" style="font-size:11px" dir="ltr">{{ $r['user']->code }}</div>
                     </td>

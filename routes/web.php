@@ -328,6 +328,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,accountant')->name('attendance');
         Route::get('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])
             ->middleware('role:admin,manager,accountant')->name('attendance.log');
+        // تصدير السجل إكسيل — موظف واحد أو الكل، بنفس فلاتر الشاشة
+        Route::get('/attendance/export', [\App\Http\Controllers\AttendanceController::class, 'export'])
+            ->middleware('role:admin,manager,accountant')->name('attendance.export');
         Route::get('/attendance/review', [\App\Http\Controllers\AttendanceController::class, 'review'])
             ->middleware('role:admin,manager,accountant')->name('attendance.review');
         // ⚠️ الاعتماد للأدمن والمدير بس — المحاسب بيقرا مايعتمدش

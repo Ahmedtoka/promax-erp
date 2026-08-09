@@ -330,6 +330,15 @@ label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:v
 
 /* الحالة الفاضية — كانت مستخدمة من غير تعريف برضه */
 .empty{padding:34px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ═══ كروت سامري كليكبل (٩/٨) — فلترة بالضغطة ═══ */
+a.kpi{display:block;text-decoration:none;color:inherit;cursor:pointer;transition:box-shadow .12s,transform .12s}
+a.kpi:hover{box-shadow:var(--shadow-lift);transform:translateY(-1px)}
+.kpi.on{border-color:var(--royal-blue);box-shadow:0 0 0 2px var(--blue-050),var(--shadow-lift)}
+
+/* جداول الحضور — محتوى في النص وأول عمود على البداية */
+.att-tbl th,.att-tbl td{text-align:center;vertical-align:middle}
+.att-tbl th:first-child,.att-tbl td:first-child{text-align:start}
 .frow{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
 /* ⚠️ **صف بأعمدة ثابتة — الخانة المخبّية بتسيب مكانها فاضي.**
 

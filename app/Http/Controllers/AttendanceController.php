@@ -52,9 +52,25 @@ class AttendanceController extends Controller
             ];
         });
 
+        // ═══ فلتر الحالة من كروت السامري الكليكبل (٩/٨) ═══
+        //
+        // ⚠️ العدّادات بتتحسب من **الكل** قبل الفلترة — كارت «شغال: 5»
+        // لازم يفضل 5 وانت واقف جوّاه، وإلا الأرقام بتنط مع كل ضغطة.
+        $state = (string) $request->query('state', '');
+
+        $filtered = match ($state) {
+            'working' => $rows->where('state', 'working'),
+            'break' => $rows->where('state', 'break'),
+            'done' => $rows->filter(fn ($r) => $r['state'] === 'off' && ($r['day']?->sessions ?? 0) > 0),
+            'off' => $rows->filter(fn ($r) => ($r['day']?->sessions ?? 0) === 0),
+            default => $rows,
+        };
+
         return view('erp.attendance_board', [
             'date' => $date,
+            'state' => in_array($state, ['working', 'break', 'done', 'off'], true) ? $state : '',
             'rows' => $rows,
+            'filtered' => $filtered->values(),
             'working' => $rows->where('state', 'working')->count(),
             'onBreak' => $rows->where('state', 'break')->count(),
             // ⚠️ «مسجّلش حضور» ≠ «خلّص شغله» — الاتنين حالتهم `off`
@@ -94,6 +110,59 @@ class AttendanceController extends Controller
             'avgMinutes' => $rows->isEmpty() ? 0 : (int) round($rows->avg(fn ($d) => $d->payableMinutes())),
             'needsReview' => AttendanceDay::needsReview()->count(),
         ]);
+    }
+
+    /**
+     * تصدير السجل إكسيل (٩ أغسطس ٢٠٢٦) — بنفس فلاتر شاشة السجل:
+     * موظف واحد أو الكل، من/إلى، والحالة. CSV بـBOM — نفس نمط تصدير
+     * المخازن، بيفتح في إكسيل عربي سليم من غير أي مكتبات.
+     */
+    public function export(Request $request)
+    {
+        $from = $request->date('from')?->toDateString() ?? today()->startOfMonth()->toDateString();
+        $to = $request->date('to')?->toDateString() ?? today()->toDateString();
+
+        $rows = AttendanceDay::with(['user:id,name,name_en,code,role', 'approver:id,name,name_en'])
+            ->whereBetween('date', [$from, $to])
+            ->when($request->filled('user'), fn ($q) => $q->where('user_id', $request->integer('user')))
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+            ->orderBy('date')->orderBy('user_id')
+            ->get();
+
+        $filename = 'attendance-'.$from.'-'.$to.'.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            // ⚠️ الـBOM هو اللي بيخلّي إكسيل يقرا العربي UTF-8 صح
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, [
+                __('hr.date'), __('hr.employee'), __('common.code'), __('hr.role'),
+                __('hr.first_in'), __('hr.last_out'), __('hr.breaks'),
+                __('hr.worked'), __('hr.sessions'), __('hr.state'), __('hr.approved'),
+            ]);
+
+            foreach ($rows as $d) {
+                fputcsv($out, [
+                    $d->date->format('Y-m-d'),
+                    $d->user?->displayName() ?? '—',
+                    $d->user?->code ?? '',
+                    $d->user?->roleLabel() ?? '',
+                    $d->first_in_at?->format('h:i A') ?? '',
+                    $d->last_out_at?->format('h:i A') ?? '',
+                    AttendanceDay::hhmm($d->break_minutes),
+                    // ⚠️ المعتمد لو موجود — نفس الرقم اللي بيروح المرتبات
+                    AttendanceDay::hhmm($d->payableMinutes()),
+                    $d->sessions,
+                    __('hr.status_'.$d->status),
+                    $d->approved_at
+                        ? ($d->approver?->displayName() ?? '—')
+                        : __('hr.not_approved'),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /** قايمة المراجعة — اللي السيستم قفلهم */

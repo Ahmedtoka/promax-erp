@@ -91,4 +91,5 @@ return [
     'nobody_online' => 'Nobody is clocked in right now.',
     'auto_refresh' => 'Auto-refreshes every minute',
     'all_team' => 'All Team',
+    'export_excel' => 'Export to Excel',
 ];

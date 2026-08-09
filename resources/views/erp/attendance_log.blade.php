@@ -41,6 +41,10 @@
         </select>
     </div>
     <button class="btn primary" type="submit">{{ __('common.search') }}</button>
+    {{-- ⚠️ التصدير بنفس فلاتر الفورم بالظبط: موظف واحد أو «الكل» —
+         الزرار بيبعت لراوت التصدير بنفس الحقول (formaction). --}}
+    <button class="btn" type="submit"
+            formaction="{{ route('erp.attendance.export') }}">📥 {{ __('hr.export_excel') }}</button>
 </form>
 
 <div class="kpis" style="margin-bottom:14px">
@@ -54,7 +58,7 @@
         <div class="empty">{{ __('hr.no_rows') }}</div>
     @else
         <div class="tablewrap">
-        <table>
+        <table class="att-tbl">
             <thead>
                 <tr>
                     <th>{{ __('hr.date') }}</th>
