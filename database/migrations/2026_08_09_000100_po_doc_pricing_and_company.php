@@ -30,9 +30,11 @@ return new class extends Migration
     private const SEED = [
         'company_tax_id' => '767-179-153',
         'company_cr' => '197434',
-        'company_phone' => '01008820066',
+        // ⚠️ اتصححوا في 000500 — القيم هنا بقت الجديدة عشان أي داتابيز
+        // جديدة تاخدها صح من أول مرة
+        'company_phone' => '+201044242200',
         'company_email' => 'info@promaxfoods.com',
-        'company_address' => '23 ب شارع المنصور - تقسيم اللاسلكي، المعادي، القاهرة، مصر',
+        'company_address' => '٢ مشروع ١٦ عمارة - تقسيم اللاسلكي - المعادي',
     ];
 
     public function up(): void

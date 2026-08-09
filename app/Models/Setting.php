@@ -34,7 +34,7 @@ class Setting extends Model
         'company_city' => '',
         'company_street' => '',
         'company_building' => '',
-        'company_phone' => '',
+        'company_phone' => '+201044242200',
         'eta_client_id' => '',
 
         // ═══ بيانات الترويسة والفوتر في المستندات المطبوعة (2026-08-09) ═══
@@ -50,7 +50,7 @@ class Setting extends Model
         // ملف الفاتورة الإلكترونية.
         'company_cr' => '197434',            // السجل التجاري
         'company_email' => 'info@promaxfoods.com',
-        'company_address' => '23 ب شارع المنصور - تقسيم اللاسلكي، المعادي، القاهرة، مصر',
+        'company_address' => '٢ مشروع ١٦ عمارة - تقسيم اللاسلكي - المعادي',
 
         // ═══ بيانات البنك — ديمو لحد ما المالك يدخّل الحقيقية ═══
         //

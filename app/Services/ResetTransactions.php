@@ -36,6 +36,15 @@ class ResetTransactions
         // الحركات اليومية
         'track_events', 'app_notifications', 'shelf_refills',
         'replenishment_items', 'replenishment_requests', 'merch_visits',
+        // ⚠️ **المرتجعات قبل الفواتير والقيود** — `return_items` بتشير
+        // لـ`invoice_items` و`returns` بتشير للقيود والزيارات والعهد.
+        // كانوا ناقصين من القايمة خالص (سايكل ٨/٨) — والمسح كان بيسيب
+        // مستندات مرتجعات يتيمة لينكاتها كلها null، تبان في الشاشة
+        // بعد التفضية وكأنها داتا حقيقية.
+        'return_items', 'returns',
+        // صور رفوف الزيارات (٩/٨) — بتتمسح بالتتابع مع `visits` أصلاً
+        // (cascade)، بس القاعدة هنا: كل جدول حركة يتسجّل صراحةً.
+        'visit_photos',
         'invoice_items', 'invoices',
         'gift_handouts',
         // ⚠️ الأوامر قبل التجهيز — `purchase_orders.pick_order_id`

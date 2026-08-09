@@ -55,6 +55,9 @@ class ResetSystem extends Command
         // الحركات اليومية
         'track_events', 'app_notifications', 'shelf_refills',
         'replenishment_items', 'replenishment_requests', 'merch_visits',
+        // المرتجعات قبل الفواتير والقيود + صور رفوف الزيارات (٩/٨) —
+        // نفس الإضافة اللي في `ResetTransactions` بالظبط
+        'return_items', 'returns', 'visit_photos',
         'invoice_items', 'invoices', 'purchase_order_items', 'purchase_orders',
         'gift_handouts',
         'rep_settlements',

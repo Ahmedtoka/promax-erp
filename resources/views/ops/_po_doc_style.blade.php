@@ -1,127 +1,117 @@
-{{-- ستايل مستند أمر التوريد — مشترك بين الفردي والمجمع.
+{{-- ستايل الفاتورة المؤقتة — مشترك بين الفردي والمجمع.
      ⚠️ لازم `partials._doc_style` يتضمّن قبله. --}}
 <style>
-/* ═══ أمر التوريد: شبه أحادي اللون + فوتر لاصق + صاعقة في النص ═══ */
+/* ═══ فاتورة مؤقتة: A4 مضبوطة + هيدر مضغوط + فوتر لاصق ═══ */
 
-/* الفوتر في آخر الورقة — المستند عمود والجسم بياخد الفراغ */
 .po-doc{display:flex;flex-direction:column}
-.po-doc .doc-body{flex:1}
+.po-doc .doc-body{flex:1;display:flex;flex-direction:column}
 
-/* الهيدر: أبيض بدل التدرج — لمسة البراند خط تحته بس */
+/* ═══ الهيدر المضغوط: اللوجو وجنبه البيانات — مش تحته ═══ */
 .po-doc .doc-head{
   background:#fff;color:var(--ink);
   border-bottom:3px solid var(--royal-blue);
-  padding:18px 26px 14px;
+  padding:12px 22px 10px;
+  align-items:center;
 }
-.po-doc .doc-corp{color:var(--muted);opacity:1}
-.po-doc .doc-no{color:var(--ink)}
-.po-doc .doc-date{color:var(--muted);opacity:1}
+.po-brandrow{display:flex;align-items:center;gap:14px}
+.po-doc .doc-logo{height:52px}
+.po-corp-name{font-size:12px;font-weight:900;letter-spacing:.4px;color:var(--ink)}
+.po-corp-line{font-size:10px;color:var(--muted);margin-top:2px}
+.po-corp-line b{color:var(--ink)}
+.po-doc .doc-no{color:var(--ink);font-size:20px}
+.po-doc .doc-date{color:var(--muted);opacity:1;font-size:10.5px;margin-bottom:2px}
+.po-doc .doc-date b{color:var(--ink)}
 
-/* البيانات القانونية تحت اللوجو */
-.po-doc .doc-legal{
-  display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:7px;
-  font-size:10.5px;color:var(--muted);letter-spacing:.2px;
-}
-.po-doc .doc-legal b{color:var(--ink);font-weight:700}
-
-/* العنوان الكبير في نص الورقة */
+/* العنوان الكبير */
 .po-title{
   position:relative;z-index:1;text-align:center;
-  font-size:25px;font-weight:900;letter-spacing:-.3px;
-  color:var(--royal-blue);margin:20px 0 2px;
+  font-size:22px;font-weight:900;letter-spacing:-.3px;
+  color:var(--royal-blue);margin:12px 0 2px;
 }
 
-/* بلوك الأطراف: أبيض ببرواز بدل الخلفية الزرقا */
-.po-doc .doc-parties{background:#fff;border:1px solid var(--border)}
-.po-doc .doc-parties .k{color:var(--muted)}
+/* ═══ الأطراف: سطر المندوب/المخزن + سطر العميل بالعرض ═══ */
+.po-parties{
+  display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:9px 4px 0;font-size:11px;color:var(--muted);
+}
+.po-party b{color:var(--ink);font-weight:800}
+.po-parties .sep,.po-client-line .sep{color:var(--border);margin-inline:5px}
+.po-client-line{
+  padding:7px 10px;margin-top:7px;font-size:11px;color:var(--muted);
+  border:1px solid var(--border);border-radius:var(--r-md);background:#fff;
+  line-height:1.8;
+}
+.po-client-line b{color:var(--ink);font-weight:800}
 
-/* الأرقام كلها بلون الحبر — مفيش أزرق في الجدول */
-.po-doc .doc-table td,
-.po-doc .doc-totals .row{color:var(--ink)}
-.po-doc .doc-totals .row.grand{border-top-color:var(--ink)}
-
-/* ═══ الجدول: 8 أعمدة على A4 ═══
-   ⚠️ الأعمدة الجديدة (خصم + سعر بعد الخصم) ضغطت العرض، فالخط أصغر
-   والباركود tabular عشان الأرقام تفضل متحاذية تحت بعض. */
-.po-table{font-size:11.5px}
-.po-table th{font-size:10px;padding:8px 6px;line-height:1.35}
-.po-table td{padding:8px 6px}
-.po-table .c-no{width:26px}
-.po-table .c-bar{width:96px}
-.po-table .c-qty{width:88px}
-.po-table .c-disc{width:56px}
-.po-table td.bar{font-variant-numeric:tabular-nums;font-size:10.5px;color:var(--muted)}
-.po-table .u{font-size:9.5px;color:var(--muted);margin-inline-start:3px;font-weight:600}
-.po-table .s{font-size:9.5px;color:var(--muted);margin-top:2px}
+/* ═══ الجدول: من غير سكرول نهائياً + صفوف الحشو ═══ */
+.po-table{font-size:11px;margin-top:10px;width:100%}
+.po-table th{font-size:9.5px;padding:7px 5px;line-height:1.3}
+.po-table td{padding:6px 5px}
+.po-table .c-no{width:24px}
+.po-table .c-bar{width:92px}
+.po-table .c-qty{width:86px}
+.po-table .c-disc{width:52px}
+.po-table td.bar{font-variant-numeric:tabular-nums;font-size:10px;color:var(--muted)}
+.po-table .u{font-size:9px;color:var(--muted);margin-inline-start:3px;font-weight:600}
+.po-table .s{font-size:9px;color:var(--muted);margin-top:1px}
 .po-table .disc{color:var(--purple-500)}
 .po-table .muted{color:var(--muted)}
+.po-table tr.pad td{height:24px;border-bottom:1px solid var(--border)}
 .po-table tr.sum td{border-top:2px solid var(--ink);background:var(--card2)}
 
-/* ═══ التجميعة جنب بيانات البنك ═══
-   ⚠️ البنك أول العنصر عشان يقعد ناحية بداية السطر في الاتجاهين —
-   `flex` مع `margin-inline-start:auto` على التجميعة بيضمن ده من غير
-   أي قاعدة RTL منفصلة. */
+/* ═══ التجميعة جنب بيانات البنك ═══ */
 .po-summary{
-  display:flex;gap:22px;align-items:flex-start;
-  margin-top:18px;flex-wrap:wrap;
+  display:flex;gap:18px;align-items:flex-start;
+  margin-top:12px;flex-wrap:wrap;
 }
-.po-summary .doc-totals{margin-top:0;margin-inline-start:auto;min-width:270px}
+.po-summary .doc-totals{margin-top:0;margin-inline-start:auto;min-width:260px}
+.po-doc .doc-totals .row{padding:5px 0;font-size:12px}
+.po-doc .doc-totals .row,.po-doc .doc-table td{color:var(--ink)}
 .po-doc .doc-totals .row.net{
-  border-top:1px solid var(--border);margin-top:4px;padding-top:9px;
-  font-weight:700;color:var(--ink);
+  border-top:1px solid var(--border);margin-top:3px;padding-top:8px;
+  font-weight:700;
 }
+.po-doc .doc-totals .row.grand{border-top-color:var(--ink);font-size:16px}
 
 .po-bank{
-  flex:1;min-width:250px;max-width:340px;
+  flex:1;min-width:240px;max-width:330px;
   border:1px solid var(--border);border-radius:var(--r-md);
-  padding:11px 13px;background:var(--card2);
+  padding:10px 12px;background:var(--card2);
 }
-.po-bank.demo{border-color:var(--orange);border-style:dashed}
-.po-bank .bk-h{
-  font-size:11.5px;font-weight:800;color:var(--royal-blue);
-  margin-bottom:6px;letter-spacing:.2px;
-}
+.po-bank .bk-h{font-size:11px;font-weight:800;color:var(--royal-blue);margin-bottom:5px}
 .po-bank .bk-warn{
-  font-size:10.5px;line-height:1.7;color:var(--ink);font-weight:700;
-  padding-bottom:7px;margin-bottom:7px;border-bottom:1px dashed var(--border);
+  font-size:10px;line-height:1.7;color:var(--ink);font-weight:700;
+  padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed var(--border);
 }
 .po-bank .bk-t{width:100%;border-collapse:collapse}
-.po-bank .bk-t td{
-  padding:2.5px 0;font-size:10.5px;color:var(--muted);
-  border:0;vertical-align:top;
-}
+.po-bank .bk-t td{padding:2px 0;font-size:10px;color:var(--muted);border:0;vertical-align:top}
 .po-bank .bk-t td:last-child{text-align:end;color:var(--ink)}
 .po-bank .bk-t td b{font-variant-numeric:tabular-nums;letter-spacing:.2px}
-.po-bank .bk-demo{
-  margin-top:8px;font-size:10px;font-weight:700;
-  color:var(--orange);line-height:1.6;
+
+/* ═══ الفوتر: العنوان والتليفون والإيميل بس — سطر واحد في النص ═══ */
+.po-foot{justify-content:center;letter-spacing:0}
+.po-foot .ft-inline{
+  display:flex;justify-content:center;flex-wrap:wrap;gap:4px 18px;
+  font-size:10px;font-weight:600;color:var(--muted);
 }
 
-/* ═══ الفوتر: ٣ بلوكات بدل سطرين ═══ */
-.po-foot{align-items:flex-start;gap:16px;letter-spacing:0;line-height:1.8}
-.po-foot .ft-corp{font-weight:800;color:var(--ink);font-size:10.5px;letter-spacing:.8px;white-space:nowrap}
-.po-foot .ft-lines{flex:1;text-align:center;font-size:9.5px;font-weight:500}
-.po-foot .ft-inline{display:flex;justify-content:center;flex-wrap:wrap;gap:3px 13px}
-.po-foot .ft-ref{font-size:9.5px;white-space:nowrap}
-
-/* الصاعقة: في نص الورقة، أخف، مش متاكلة من الجنب */
+/* الصاعقة: في نص الورقة، خفيفة */
 .po-doc .bolt-mark.po-bolt{
-  width:480px;top:32%;
-  inset-inline-start:50%;margin-inline-start:-240px;
+  width:460px;top:34%;
+  inset-inline-start:50%;margin-inline-start:-230px;
   opacity:.04;transform:rotate(8deg);
 }
 
 @media print{
-  /* ورقة A4 كاملة: 297mm − هوامش 12mm×2 — الفوتر بينزل آخرها */
+  /* A4: 297mm − هوامش 12mm×2 = 273mm — الفوتر آخر الورقة والجدول
+     بياخد الفراغ. الصف مايتقسمش على صفحتين. */
+  @page{size:A4;margin:12mm}
   .po-doc{min-height:273mm}
   .po-doc .doc-head{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .po-doc .bolt-mark.po-bolt{opacity:.035 !important}
-
-  /* ⚠️ من غير ده البوكس بيطلع أبيض على أبيض والنوت بتضيع */
   .po-bank,.po-table tr.sum td,.po-table th{
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
-  /* الصف مايتقسمش على صفحتين */
   .po-table tr{break-inside:avoid;page-break-inside:avoid}
   .po-summary{break-inside:avoid;page-break-inside:avoid}
 }

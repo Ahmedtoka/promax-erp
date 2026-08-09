@@ -31,7 +31,7 @@ return [
 
     // ═══════════ Bank details ═══════════
     'bank_details' => 'Bank Transfer Details',
-    'bank_note' => 'Please transfer all payments to the listed account number only.',
+    'bank_note' => 'Please deposit all due amounts to the listed account number only.',
     'bank_name' => 'Bank',
     'bank_branch' => 'Branch',
     'bank_account_name' => 'Account name',
@@ -39,4 +39,12 @@ return [
     'bank_iban' => 'IBAN',
     'bank_swift' => 'SWIFT',
     'bank_demo' => 'Demo bank details — change them in Tax & Company Settings before handing this document to any client.',
+
+    // ═══ الفاتورة المؤقتة (2026-08-09) ═══
+    'proforma' => 'Proforma Invoice',
+    'date' => 'Date',
+    'time' => 'Time',
+    'rep_name' => 'Rep Name',
+    'made_by' => 'Order created by',
+    'address' => 'Address',
 ];

@@ -157,9 +157,13 @@ img{display:block;max-width:100%}
   color:#fff;font-size:9.5px;font-weight:800;border-radius:99px;
   padding:2px 5.5px;line-height:1.2;border:2px solid var(--card);
 }
+/* ⚠️ **fixed مش absolute** (طلب المالك ٩/٨) — القايمة بتتعلّق على
+   الفيوبورت فمابتتقصّش من أي كونتينر وبتفضل ثابتة مع السكرول.
+   الإحداثيات بيحسبها سكريبت الجرس من مكان الزرار وقت الفتح. */
 .bell-panel{
-  position:absolute;top:calc(100% + 8px);inset-inline-end:0;z-index:60;
-  width:340px;max-height:430px;overflow:auto;background:var(--card);
+  position:fixed;top:70px;inset-inline-end:18px;z-index:600;
+  width:340px;max-width:calc(100vw - 16px);max-height:min(430px, calc(100vh - 90px));
+  overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);
 }
 .bell-head{
@@ -566,6 +570,46 @@ dialog .formbar-sp{flex:1}
             @endforelse
           </div>
         </details>
+        <script>
+        // ═══ تموضع قايمة الجرس — fixed على الفيوبورت (2026-08-09) ═══
+        //
+        // ⚠️ القايمة `position: fixed` فإحداثياتها بالنسبة للشاشة مش
+        // للزرار — بنحسبها من مكان الزرار وقت الفتح، وبنحاذي حافة
+        // البداية/النهاية حسب اتجاه الصفحة، مع تثبيتها جوه الشاشة
+        // على الموبايل. وبتتقفل بالضغط بره أو Esc.
+        (function () {
+            const bell = document.querySelector('.bell');
+            if (!bell) return;
+            const panel = bell.querySelector('.bell-panel');
+            const summary = bell.querySelector('summary');
+
+            function place() {
+                const r = summary.getBoundingClientRect();
+                const w = Math.min(340, window.innerWidth - 16);
+                const rtl = document.documentElement.dir === 'rtl';
+
+                // LTR: محاذاة الحافة اليمنى للقايمة مع يمين الزرار.
+                // RTL: محاذاة اليسرى مع شمال الزرار. والاتنين متزنوقين
+                // جوه الشاشة بهامش 8px.
+                let left = rtl ? r.left : r.right - w;
+                left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+
+                panel.style.left = left + 'px';
+                panel.style.insetInlineEnd = 'auto';
+                panel.style.top = (r.bottom + 8) + 'px';
+            }
+
+            bell.addEventListener('toggle', () => { if (bell.open) place(); });
+            window.addEventListener('resize', () => { if (bell.open) place(); });
+
+            document.addEventListener('click', (e) => {
+                if (bell.open && !bell.contains(e.target)) bell.open = false;
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') bell.open = false;
+            });
+        })();
+        </script>
       </div>
     </div>
 
