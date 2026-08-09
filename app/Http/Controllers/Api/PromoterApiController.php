@@ -57,6 +57,8 @@ class PromoterApiController extends Controller
                 // واجهة إنجليزي كل مرة مهما اختار عربي، لأن المفتاح
                 // مش موجود في رده أصلاً.
                 'locale' => $user->locale ?: config('app.locale'),
+                // ⚠️ زي درس locale بالظبط: bootstrap بيعيد بناء اليوزر
+                'avatar_url' => $user->avatarUrl(),
             ],
             // ⚠️ **`attendance` كانت ناقصة** — كارت الحضور في شاشة
             // البروموتر بيقرا منها، ومن غيرها بيفضل «مش حاضر» مهما
@@ -208,9 +210,12 @@ class PromoterApiController extends Controller
             'lng' => $data['lng'] ?? null,
         ]);
 
+        // ⚠️ فولباك ٩/٨: GPS فشل → لوكيشن الفرع المسجّل (للحدث بس)
         TrackEvent::log($user, 'check_in',
             __('field.event_merch_visit', ['client' => $client->displayName()]),
-            $client->address, $data['lat'] ?? null, $data['lng'] ?? null);
+            $client->address,
+            $data['lat'] ?? ($client->lat !== null ? (float) $client->lat : null),
+            $data['lng'] ?? ($client->lng !== null ? (float) $client->lng : null));
 
         return response()->json(['visit' => $this->visitPayload($visit)], 201);
     }
@@ -347,7 +352,8 @@ class PromoterApiController extends Controller
                 'client' => $merchVisit->client->displayName(),
             ]),
             __('field.event_qty_requested', ['qty' => $qty]),
-            $merchVisit->lat, $merchVisit->lng);
+            $merchVisit->lat ?? $merchVisit->client->lat,
+            $merchVisit->lng ?? $merchVisit->client->lng);
 
         // الطلب لازم يوصل للـ Channel Manager بتاع قناة العميل فوراً
         foreach ($req->managers() as $manager) {
@@ -404,12 +410,14 @@ class PromoterApiController extends Controller
                 'moved' => $merchVisit->movedTotal(),
                 'short' => $merchVisit->outOfStockCount(),
             ]),
-            $merchVisit->lat, $merchVisit->lng);
+            $merchVisit->lat ?? $merchVisit->client->lat,
+            $merchVisit->lng ?? $merchVisit->client->lng);
 
         TrackEvent::log($user, 'check_out',
             __('field.event_exit', ['client' => $merchVisit->client->displayName()]),
             __('field.event_visit_minutes', ['minutes' => $merchVisit->minutes()]),
-            $merchVisit->lat, $merchVisit->lng);
+            $merchVisit->lat ?? $merchVisit->client->lat,
+            $merchVisit->lng ?? $merchVisit->client->lng);
 
         return response()->json([
             'minutes' => $merchVisit->minutes(),

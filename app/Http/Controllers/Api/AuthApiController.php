@@ -95,6 +95,32 @@ class AuthApiController extends Controller
                 // (اتعمل باستيراد أو بـSQL) كان بيفتح الأبلكيشن عربي
                 // مهما كان الافتراضي في السيستم إنجليزي.
                 'locale' => $u->locale ?: config('app.locale'),
+            // صورة الموظف (٩/٨) — الأبلكيشن بيعرضها في «حسابي»
+            // والدايرة بحروف الاسم فولباك لما تكون null
+            'avatar_url' => $u->avatarUrl(),
         ];
+    }
+
+    /**
+     * POST /api/me/avatar — الموظف يرفع صورته من «حسابي».
+     *
+     * لكل الرولز: نفس العمود اللي الأدمن بيرفع عليه من شاشة الفريق،
+     * والتراكينج وكروت الحضور بيقروا منه. القديمة بتتمسح من الديسك.
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $request->validate(['avatar' => ['required', 'image', 'max:4096']]);
+
+        $user = $request->user();
+
+        if ($user->avatar_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        $user->update([
+            'avatar_path' => $request->file('avatar')->store('avatars', 'public'),
+        ]);
+
+        return response()->json(['user' => $this->userPayload($user->fresh())]);
     }
 }

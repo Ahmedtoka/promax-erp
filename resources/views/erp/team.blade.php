@@ -34,7 +34,12 @@
             <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canSetPassword)<th></th>@endif</tr>
             @foreach ($users as $u)
                 <tr>
-                    <td><b>{{ $u->displayName() }}</b></td>
+                    <td>
+                        <div style="display:flex;gap:9px;align-items:center">
+                            @include('partials._avatar', ['u' => $u, 'size' => 32])
+                            <b>{{ $u->displayName() }}</b>
+                        </div>
+                    </td>
                     <td class="num">{{ $u->code ?? '—' }}</td>
                     <td><span class="badge {{ match($u->role) { 'admin' => 'b-red', 'manager' => 'b-purple', 'branch_manager' => 'b-gold', 'driver' => 'b-blue', 'promoter' => 'b-orange', default => 'b-green' } }}">{{ $u->roleLabel() }}</span></td>
                     <td style="color:var(--muted)">{{ $u->email }}</td>
@@ -73,6 +78,7 @@
                                 'role' => $u->role, 'branch_id' => $u->branch_id,
                                 'zone_id' => $u->zone_id, 'warehouse_id' => $u->warehouse_id,
                                 'active' => (bool) $u->active,
+                                'avatar_url' => $u->avatarUrl(),
                                 'self' => $u->id === auth()->id(),
                             ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                         @endphp
@@ -145,7 +151,9 @@
 @if ($canSetPassword)
 {{-- ═══════════ يوزر جديد / تعديل يوزر ═══════════ --}}
 <dialog id="dlgUser">
+    {{-- ⚠️ enctype إجباري (٩/٨) — صورة الموظف بتترفع من نفس الفورم --}}
     <form class="dlg" method="POST" id="userForm" action="{{ route('erp.team.store') }}"
+          enctype="multipart/form-data"
           style="max-height:88vh;overflow-y:auto;min-width:min(560px,92vw)">
         @csrf
         <input type="hidden" name="_method" id="userMethod" value="POST">
@@ -235,6 +243,18 @@
                        autocomplete="new-password" style="width:100%">
                 <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('team.password_min_hint') }}</div>
             </div>
+        </div>
+
+        {{-- ═══ صورة الموظف (٩/٨) — بتظهر في التراكينج وكروت الحضور،
+             والموظف نفسه يقدر يرفعها من «حسابي» في الأبلكيشن ═══ --}}
+        <div style="margin-top:12px">
+            <label class="f">{{ __('team.avatar') }}</label>
+            <div style="display:flex;gap:10px;align-items:center">
+                <img id="uAvatarPrev" src="" alt="" hidden
+                     style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">
+                <input type="file" name="avatar" id="uAvatar" accept="image/*" style="flex:1">
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('team.avatar_hint') }}</div>
         </div>
 
         <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:800;margin-top:12px;cursor:pointer">
@@ -378,6 +398,12 @@ function openUser(u) {
     document.getElementById('uZone').value = editing && u.zone_id ? String(u.zone_id) : '';
     document.getElementById('uWarehouse').value = editing && u.warehouse_id ? String(u.warehouse_id) : '';
     document.getElementById('uActive').checked = editing ? !!u.active : true;
+
+    // صورة الموظف — معاينة الحالية في التعديل، والخانة بتتصفّر دايماً
+    const prev = document.getElementById('uAvatarPrev');
+    prev.hidden = !(editing && u.avatar_url);
+    prev.src = editing && u.avatar_url ? u.avatar_url : '';
+    document.getElementById('uAvatar').value = '';
 
     // الباسورد للجديد بس
     const passBox = document.getElementById('uPassBox');

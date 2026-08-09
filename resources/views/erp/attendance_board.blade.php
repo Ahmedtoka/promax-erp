@@ -61,9 +61,12 @@
             @foreach ($online as $r)
                 <div class="on-card {{ $r['state'] === 'break' ? 'is-break' : '' }}">
                     <div class="on-top">
-                        <div>
-                            <div class="on-name">{{ $r['user']->displayName() }}</div>
-                            <div class="on-role">{{ $r['user']->roleLabel() }} · <span dir="ltr">{{ $r['user']->code }}</span></div>
+                        <div style="display:flex;gap:10px;align-items:center">
+                            @include('partials._avatar', ['u' => $r['user'], 'size' => 38])
+                            <div>
+                                <div class="on-name">{{ $r['user']->displayName() }}</div>
+                                <div class="on-role">{{ $r['user']->roleLabel() }} · <span dir="ltr">{{ $r['user']->code }}</span></div>
+                            </div>
                         </div>
                         @if ($r['state'] === 'break')
                             <span class="pill warn">⏸️ {{ __('hr.state_break') }}</span>

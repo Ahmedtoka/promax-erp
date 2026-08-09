@@ -126,6 +126,10 @@ class FieldApiController extends Controller
                 // الأبلكيشن بيظبط لغته من هنا — نفس لغة الإشعارات
                 // ⚠️ نفس السبب: الافتراضي بييجي من إعدادات السيستم.
                 'locale' => $user->locale ?: config('app.locale'),
+                // ⚠️ لازم في **كل** ردود bootstrap مش اللوجين بس —
+                // الأبلكيشن بيعيد بناء اليوزر من هنا مع كل ريفريش،
+                // ولو المفتاح ناقص الصورة بتختفي بعد أول فتح.
+                'avatar_url' => $user->avatarUrl(),
             ],
             // السواق بيشوف عهدته بسعر القائمة القديم والسيلز بالجديد
             'custody' => $this->custodyPayload($custody, $user->isDriver() ? 'old' : 'new'),
@@ -639,9 +643,10 @@ class FieldApiController extends Controller
             'lng' => $this->egyptPoint($data)[1],
         ]);
 
+        [$evLat, $evLng] = $this->eventPoint($data, $client);
         TrackEvent::log($user, 'check_in',
             __('field.event_check_in', ['client' => $client->displayName()]), $client->address,
-            $data['lat'] ?? null, $data['lng'] ?? null);
+            $evLat, $evLng);
 
         return response()->json(['visit_id' => $visit->id, 'checked_in_at' => $visit->checked_in_at->toIso8601String()]);
     }
@@ -711,7 +716,7 @@ class FieldApiController extends Controller
         TrackEvent::log($request->user(), 'check_out',
             __('field.event_check_out', ['client' => $visit->client->displayName()]),
             __('field.event_visit_minutes', ['minutes' => $visit->minutes()]),
-            $visit->lat, $visit->lng);
+            $visit->lat ?? $visit->client->lat, $visit->lng ?? $visit->client->lng);
 
         return response()->json(['minutes' => $visit->minutes()]);
     }
@@ -814,7 +819,7 @@ class FieldApiController extends Controller
                 'client' => $client->displayName(),
             ]),
             $tx->methodLabel(),
-            $visit->lat, $visit->lng);
+            $visit->lat ?? $client->lat, $visit->lng ?? $client->lng);
 
         // ⚠️ **غير الكاش بيتبلّغ للمحاسبين فوراً** — الشيك محتاج
         // يتحط في الدرج والتحويل محتاج يتطابق مع البنك. الكاش
@@ -878,7 +883,7 @@ class FieldApiController extends Controller
                 __('field.event_shelf_'.$data['stage'], [
                     'client' => $visit->client->displayName(),
                 ]), null,
-                $visit->lat, $visit->lng);
+                $visit->lat ?? $visit->client->lat, $visit->lng ?? $visit->client->lng);
         }
 
         return response()->json([
@@ -1001,7 +1006,7 @@ class FieldApiController extends Controller
                 'client' => $client->displayName(),
             ]),
             __('field.event_qty_requested', ['qty' => $qty]),
-            $visit->lat, $visit->lng);
+            $visit->lat ?? $client->lat, $visit->lng ?? $client->lng);
 
         // ═══ النوتفيكيشن رايح جاي (طلب المالك ٩ أغسطس) ═══
         // مدير القناة بيوافق، وأمين المخزن بياخد بال إن فيه شغل جاي —
@@ -1308,10 +1313,11 @@ class FieldApiController extends Controller
 
                 $client->recalculate();
 
+                [$evLat, $evLng] = $this->eventPoint($data, $client);
                 TrackEvent::log($user, 'sale',
                     __('field.event_invoice', ['number' => $invoice->number, 'client' => $client->displayName()]),
                     __('common.money', ['amount' => number_format($grandTotal)]),
-                    $data['lat'] ?? null, $data['lng'] ?? null);
+                    $evLat, $evLng);
 
                 return $invoice;
             });
@@ -1466,10 +1472,11 @@ class FieldApiController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        [$evLat, $evLng] = $this->eventPoint($data, $client);
         TrackEvent::log($user, 'return',
             __('field.event_return', ['client' => $client->displayName()]),
             __('common.money', ['amount' => number_format($doc->payable())]),
-            $data['lat'] ?? null, $data['lng'] ?? null);
+            $evLat, $evLng);
 
         return response()->json(['return' => $this->returnPayload($doc)], 201);
     }
@@ -1593,9 +1600,10 @@ class FieldApiController extends Controller
 
         $purchaseOrder->update(['status' => 'arrived', 'arrived_at' => now()]);
 
+        [$evLat, $evLng] = $this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client);
         TrackEvent::log($request->user(), 'check_in',
             __('field.event_arrived', ['client' => $purchaseOrder->client->displayName()]),
-            $purchaseOrder->address, $request->input('lat'), $request->input('lng'));
+            $purchaseOrder->address, $evLat, $evLng);
 
         return response()->json(['status' => 'arrived']);
     }
@@ -1769,7 +1777,7 @@ class FieldApiController extends Controller
                         'qty' => $purchaseOrder->items->sum('delivered_qty'),
                         'amount' => number_format($grand),
                     ]),
-                    $request->input('lat'), $request->input('lng'));
+                    ...$this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client));
             });
         } catch (StockShortage $e) {
             // نقص في عهدة العربية — مفيش حاجة اتغيرت
@@ -1941,5 +1949,35 @@ class FieldApiController extends Controller
         }
 
         return [round($lat, 7), round($lng, 7)];
+    }
+
+    /**
+     * نقطة **حدث التراكينج** — GPS الجهاز، ولو فشل → لوكيشن العميل المسجّل.
+     *
+     * ⚠️ (إصلاح ٩ أغسطس): `Locator.get()` في الأبلكيشن بيرجع null بصمت
+     * لو الإذن اتأخر أو الـfix ماجاش في المهلة — فكان «دخل عند عميل»
+     * بيتسجل من غير مكان وصفحة التراكينج تقول «مفيش إحداثيات مسجلة»
+     * واليوم كله أحداث. العميل لوكيشنه متسجّل عندنا أصلاً — نقطة
+     * محله أصدق من لا شيء.
+     *
+     * ⚠️ الفولباك ده **للحدث بس** — `visits.lat` بتفضل null لو مفيش
+     * GPS، لأنها بتتاكل في شاشة «تأكيد لوكيشن العميل» كنقطة مقترحة،
+     * ولو حطينا فيها لوكيشن العميل نفسه بقت الاقتراحات بتأكد نفسها.
+     *
+     * @return array{0: ?float, 1: ?float}
+     */
+    private function eventPoint(?array $data, ?Client $client): array
+    {
+        [$lat, $lng] = $this->egyptPoint($data);
+
+        if ($lat !== null) {
+            return [$lat, $lng];
+        }
+
+        if ($client && $client->lat !== null && $client->lng !== null) {
+            return [(float) $client->lat, (float) $client->lng];
+        }
+
+        return [null, null];
     }
 }

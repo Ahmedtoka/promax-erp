@@ -1461,8 +1461,30 @@ class OpsController extends Controller
             $q->where('user_id', $userId);
         }
 
+        // ⚠️ سكوب الفريق: أحداث مناديب مدير تاني متابعة فردية مش
+        // «رقم مجمّع» — نفس دوكترين fieldVisibleTo في كل الشاشات.
+        $visibleIds = User::fieldVisibleTo(User::query())->pluck('id');
+        $events = $q->whereIn('user_id', $visibleIds)
+            ->orderByDesc('happened_at')->get()
+            ->filter(fn ($e) => $e->user !== null)->values();
+
+        // ═══ إعادة بناء ٩ أغسطس: كل المناديب مرة واحدة ═══
+        // لون ثابت لكل مندوب في العرض ده — الماركرز والمسار وحد
+        // التايم لاين كلهم بنفس اللون، عشان العين تفرز من غير قراءة.
+        $palette = [
+            '#12399B', '#B00020', '#0F766E', '#B45309', '#602D90',
+            '#DB2777', '#2563EB', '#059669', '#7C2D12', '#4338CA',
+        ];
+        $reps = $events->pluck('user')->unique('id')->values();
+        $colors = [];
+        foreach ($reps as $i => $u) {
+            $colors[$u->id] = $palette[$i % count($palette)];
+        }
+
         return view('ops.tracking', [
-            'events' => $q->orderByDesc('happened_at')->get(),
+            'events' => $events,
+            'reps' => $reps,
+            'colors' => $colors,
             'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))->get(),
             'userId' => $userId,
             'date' => $date->toDateString(),

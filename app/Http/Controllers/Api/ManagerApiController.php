@@ -51,6 +51,8 @@ class ManagerApiController extends Controller
                 // واجهة إنجليزي كل مرة مهما اختار عربي، لأن المفتاح
                 // مش موجود في رده أصلاً.
                 'locale' => $user->locale ?: config('app.locale'),
+                // ⚠️ زي درس locale بالظبط: bootstrap بيعيد بناء اليوزر
+                'avatar_url' => $user->avatarUrl(),
             ],
             // ⚠️ **`attendance` كانت ناقصة كمان** — كارت الحضور في
             // شاشة المدير بيقرا منها، ومن غيرها بيفضل على الحالة

@@ -38,6 +38,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     Route::get('/me', [AuthApiController::class, 'me']);
     Route::post('/logout', [AuthApiController::class, 'logout']);
     Route::post('/locale', [AuthApiController::class, 'setLocale']);
+    // صورة الموظف (٩/٨) — لكل الرولز، بتظهر في التراكينج والحضور
+    Route::post('/me/avatar', [AuthApiController::class, 'uploadAvatar']);
 
     // كل اللي الأبلكيشن محتاجه في ريكوست واحد
     Route::get('/bootstrap', [FieldApiController::class, 'bootstrap']);

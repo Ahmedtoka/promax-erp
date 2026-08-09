@@ -217,6 +217,7 @@ return [
     'life_left' => 'Life left',
     'relocate_needed' => 'Needs moving to a lower block',
     'relocate_hint' => 'Goods aged below their block band - move them to the suggested block so the FEFO layout stays honest',
+    'relocate_empty' => "Nothing needs relocating - all goods sit in blocks matching their remaining life. Items that age below their block's band show up here automatically with a one-click move.",
     'relocate_to' => 'Move to :code',
     'relocated_ok' => 'Moved.',
     'no_relocations' => 'Everything sits in its correct block ✓',

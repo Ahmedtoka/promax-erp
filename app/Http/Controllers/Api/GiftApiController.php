@@ -153,8 +153,8 @@ class GiftApiController extends Controller
                 'product' => $product?->displayName() ?? '',
             ]),
             $client?->displayName(),
-            $request->float('lat') ?: null,
-            $request->float('lng') ?: null,
+            ($request->float('lat') ?: null) ?? ($client?->lat !== null ? (float) $client->lat : null),
+            ($request->float('lng') ?: null) ?? ($client?->lng !== null ? (float) $client->lng : null),
         );
 
         return response()->json(['ok' => true]);

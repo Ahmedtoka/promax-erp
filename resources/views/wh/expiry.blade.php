@@ -76,13 +76,21 @@
     @endforeach
 </div>
 
-{{-- ═══ بلوكات FEFO: محتاجة تتنقل لبلوك أقل ═══ --}}
-@if ($relocations !== [])
-    <div class="card">
+{{-- ═══ بلوكات FEFO: محتاجة تتنقل لبلوك أقل ═══
+     ⚠️ الكارت **بيظهر دايماً** (طلب المالك ٩/٨): كان بيختفي تماماً
+     لما القايمة فاضية — والمالك فضل يدوّر على «صفحة اللي في رف
+     السنة وعاوز ينزل رف الشهور» ومش لاقيها. الحالة الفاضية ✅
+     بتقول صراحة إن مفيش حاجة محتاجة تتنقل. --}}
+    <div class="card" id="relocate">
         <h3>🔀 {{ __('stock.relocate_needed') }}
             <span class="side">{{ __('stock.relocate_hint') }}</span>
-            <span class="badge b-orange" style="margin-inline-start:auto">{{ count($relocations) }}</span>
+            @if ($relocations !== [])
+                <span class="badge b-orange" style="margin-inline-start:auto">{{ count($relocations) }}</span>
+            @endif
         </h3>
+        @if ($relocations === [])
+            <div class="alert good"><span>✅</span><span>{{ __('stock.relocate_empty') }}</span></div>
+        @else
         <div class="tablewrap exp-tbl">
             <table>
                 <tr>
@@ -129,8 +137,8 @@
                 @endforeach
             </table>
         </div>
+        @endif
     </div>
-@endif
 
 @foreach ($bucketMeta as $key => $meta)
     @continue($bucketFilter && $bucketFilter !== $key)

@@ -42,4 +42,6 @@ return [
     'of_27_governorates' => 'of 27 governorates have zones',
     'in_zones_hint' => 'active clients assigned to zones',
     'no_gov_hint' => 'need to be placed in their governorates',
+    'avatar' => 'Employee photo',
+    'avatar_hint' => "Shown on tracking and attendance cards - the employee can also upload it from My Account in the app.",
 ];

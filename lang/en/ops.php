@@ -283,4 +283,14 @@ return [
     'collected_by' => 'Collected By',
     'office_entry' => 'Office',
     'no_collections' => 'No collections in this window.',
+
+    // Tracking rebuild - Aug 9, 2026
+    'trk_reps' => 'On the move today',
+    'trk_events' => 'Events',
+    'trk_visits' => 'Client check-ins',
+    'trk_sales' => 'Invoices',
+    'trk_collects' => 'Collections',
+    'no_coords_note' => ':count events have no coordinates - they appear in the timeline only. (After this update, new events fall back to the client/warehouse location automatically when GPS fails)',
+    'no_coords_one' => 'No coordinates',
+    'toggle_rep_hint' => 'Tap a person to hide/show them:',
 ];

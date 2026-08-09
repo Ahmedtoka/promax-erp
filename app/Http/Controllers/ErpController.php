@@ -1844,7 +1844,9 @@ class ErpController extends Controller
         ]);
 
         // الكاست `hashed` على الموديل بيشفّر الباسورد بنفسه
-        User::create($data + ['active' => $request->boolean('active', true)]);
+        User::create($data
+            + $this->avatarData($request)
+            + ['active' => $request->boolean('active', true)]);
 
         return back()->with('ok', __('team.user_added', ['name' => $data['name']]));
     }
@@ -1854,9 +1856,33 @@ class ErpController extends Controller
         $data = $this->guardSelfEdit($request, $user,
             $request->validate($this->userRules($user)));
 
-        $user->update($data + ['active' => $request->boolean('active')]);
+        $user->update($data
+            + $this->avatarData($request, $user)
+            + ['active' => $request->boolean('active')]);
 
         return back()->with('ok', __('team.user_updated', ['name' => $user->displayName()]));
+    }
+
+    /**
+     * صورة الموظف من فورم الفريق (٩ أغسطس ٢٠٢٦) — نفس العمود اللي
+     * الأبلكيشن بيرفع عليه من «حسابي». القديمة بتتمسح من الديسك
+     * عشان مايتكوّمش ملفات يتيمة مع كل تغيير.
+     */
+    private function avatarData(Request $request, ?User $user = null): array
+    {
+        $file = $request->file('avatar');
+
+        if (! $file) {
+            return [];
+        }
+
+        $request->validate(['avatar' => ['image', 'max:4096']]);
+
+        if ($user?->avatar_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        return ['avatar_path' => $file->store('avatars', 'public')];
     }
 
     /**

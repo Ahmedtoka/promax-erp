@@ -82,13 +82,16 @@ final class WarehouseVisits
             ]);
 
             // ⚠️ التوقيع مواضع مش أراي: (يوزر، نوع، عنوان، تفصيلة، lat، lng)
+            // ⚠️ فولباك ٩/٨: GPS الجهاز فشل؟ لوكيشن **المخزن نفسه**
+            // متسجّل عندنا — «دخل مخزن المعادي» من غير نقطة على
+            // الخريطة كان شكله حدث بايظ في التراكينج.
             TrackEvent::log(
                 $user,
                 'wh_in',
                 __('warehouse.event_in', ['warehouse' => $warehouse->displayName()]),
                 null,
-                $lat,
-                $lng,
+                $lat ?? ($warehouse->lat !== null ? (float) $warehouse->lat : null),
+                $lng ?? ($warehouse->lng !== null ? (float) $warehouse->lng : null),
             );
 
             return $visit->load('warehouse');
@@ -131,8 +134,8 @@ final class WarehouseVisits
                     'mins' => $visit->minutes,
                 ]),
                 null,
-                $lat,
-                $lng,
+                $lat ?? ($visit->warehouse?->lat !== null ? (float) $visit->warehouse->lat : null),
+                $lng ?? ($visit->warehouse?->lng !== null ? (float) $visit->warehouse->lng : null),
             );
         }
 

@@ -121,6 +121,10 @@ return [
         'shift_break' => 'Break',
         'shift_back' => 'Back from break',
         'shift_out' => 'Shift end',
+        'wh_in' => 'Entered warehouse',
+        'wh_out' => 'Left warehouse',
+        'collect' => 'Collected money',
+        'shelf' => 'Shelf arrangement',
     ],
 
 ];

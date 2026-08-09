@@ -62,7 +62,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name', 'name_en', 'email', 'password', 'role', 'code', 'phone',
         'zone_id', 'channel_id', 'branch_id', 'warehouse_id', 'active', 'locale',
-        'manager_id',
+        'manager_id', 'avatar_path',
     ];
 
     /** اللغات المدعومة — أي قيمة تانية بترجع للافتراضي */
@@ -209,6 +209,30 @@ class User extends Authenticatable
     private ?array $permMapCache = null;
 
     // ---------- Helpers ----------
+
+    /**
+     * صورة الموظف (٩ أغسطس ٢٠٢٦) — null لو لسه مارفعش، والواجهات
+     * بتقع على دايرة بحروف اسمه (`initials()`). التراكينج وكروت
+     * الحضور والأبلكيشن كلهم بيقروا من هنا.
+     */
+    public function avatarUrl(): ?string
+    {
+        return $this->avatar_path
+            ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path)
+            : null;
+    }
+
+    /** حروف الاسم للدايرة البديلة — أول حرف من أول كلمتين */
+    public function initials(): string
+    {
+        $words = preg_split('/\s+/', trim($this->displayName())) ?: [];
+        $take = array_slice(array_filter($words), 0, 2);
+
+        return implode('', array_map(
+            fn ($w) => mb_substr($w, 0, 1),
+            $take,
+        )) ?: '؟';
+    }
 
     public function roleLabel(): string
     {
