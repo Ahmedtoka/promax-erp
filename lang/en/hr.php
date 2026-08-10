@@ -92,4 +92,11 @@ return [
     'auto_refresh' => 'Auto-refreshes every minute',
     'all_team' => 'All Team',
     'export_excel' => 'Export to Excel',
+
+    // Reverse attendance guard (Aug 9, 2026): open work blocks checkout
+    'block_out_intro' => 'You cannot check out while work is still open:',
+    'block_out_visit' => 'Open visit at ":client" - check out of it first',
+    'block_out_merch' => 'Open shelf visit at ":client" - close it with the after photo first',
+    'block_out_po' => 'Sales Order :number is mid-delivery - finish the delivery first',
+    'block_out_custody' => "Today's van stock is still open - return the van and have your manager close it on the dashboard",
 ];

@@ -101,6 +101,25 @@ final class Attendance
             return [__('hr.bad_state_'.$type), $day];
         }
 
+        // ═══ عكس حارس الحضور (قرار المالك ٩ أغسطس ٢٠٢٦) ═══
+        //
+        // زي ما «مش حاضر = مفيش شغل»، بقى «شغل مفتوح = مفيش انصراف».
+        // زيارة مفتوحة، أمر توريد جاري تسليمه، أو عهدة النهارده لسه
+        // مش مقفولة — كلهم بيمنعوا الانصراف اليدوي برسالة بتقول
+        // بالظبط إيه المفتوح.
+        //
+        // ⚠️ **اليدوي بس** — القفل الأوتوماتيكي بعد منتصف الليل
+        // (`autoClose`) بيعدّي من غير الحارس ده عن قصد: لو منعناه،
+        // يوم فيه زيارة اتنست مفتوحة كان هيفضل مفتوح للأبد ويبوّظ
+        // حساب الساعات، والزيارة المتعلّقة مشكلة تانية ليها علاجها.
+        if ($type === AttendancePunch::OUT && ! $auto) {
+            $open = self::openWork($user);
+
+            if ($open !== []) {
+                return [__('hr.block_out_intro').' '.implode(' · ', $open), $day];
+            }
+        }
+
         DB::transaction(function () use ($day, $user, $type, $lat, $lng, $auto) {
             // ⚠️ **الانصراف بيقفل زيارة المخزن المفتوحة** (2026-08-08).
             // الزيارة المفتوحة هي إذن الاستلام — والموظف اللي انصرف
@@ -124,6 +143,58 @@ final class Attendance
         });
 
         return [null, $day->fresh()];
+    }
+
+    /**
+     * الشغل المفتوح اللي بيمنع الانصراف (٩ أغسطس ٢٠٢٦).
+     *
+     * بترجع قايمة رسايل جاهزة للعرض — فاضية يعني اتفضل ينصرف.
+     * الترتيب بترتيب «اقفل إيه الأول» الطبيعي: الزيارة اللي هو
+     * واقف فيها، ثم زيارة الرف، ثم الأمر اللي في نص تسليم، ثم العهدة.
+     *
+     * ⚠️ **العهدة بتتقفل من الداش بورد** (`OpsController::closeCustody`
+     * على شاشة المندوب) — يعني بلوك العهدة بيتفك لما المدير يقفل
+     * العربية بعد ما المندوب يرجّع. لو ده عطّل التشغيل عملياً،
+     * القرار عند المالك يشيل الشرط ده بس من القايمة.
+     *
+     * @return list<string>
+     */
+    public static function openWork(User $user): array
+    {
+        $open = [];
+
+        // ١) زيارة بيع مفتوحة — نفس مرساة الفاتورة والتحصيل
+        if ($visit = $user->openVisit()) {
+            $open[] = __('hr.block_out_visit', [
+                'client' => $visit->client?->displayName() ?? '—',
+            ]);
+        }
+
+        // ٢) زيارة رف مفتوحة (البروموتر) — مقفولة = بالصورتين
+        $merch = \App\Models\MerchVisit::where('user_id', $user->id)
+            ->whereNull('checked_out_at')->latest()->first();
+        if ($merch !== null) {
+            $open[] = __('hr.block_out_merch', [
+                'client' => $merch->client?->displayName() ?? '—',
+            ]);
+        }
+
+        // ٣) أمر توريد في نص التسليم — عمل «وصول» وماسلّمش.
+        // ⚠️ `pending` مش بيمنع عن قصد: أمر متسكّن لبكرة مايحبسش
+        // السواق النهارده — اللي بيمنع هو اللي **ابتدى** فعلاً.
+        $arrived = \App\Models\PurchaseOrder::where('assigned_to', $user->id)
+            ->where('status', 'arrived')->pluck('number');
+        foreach ($arrived as $number) {
+            $open[] = __('hr.block_out_po', ['number' => $number]);
+        }
+
+        // ٤) عهدة النهارده لسه مفتوحة
+        $custody = $user->todayCustody();
+        if ($custody !== null && $custody->status !== 'closed') {
+            $open[] = __('hr.block_out_custody');
+        }
+
+        return $open;
     }
 
     /**
