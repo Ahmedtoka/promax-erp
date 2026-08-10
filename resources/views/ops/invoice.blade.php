@@ -67,6 +67,7 @@
         {{-- البنود --}}
         <div class="tablewrap">
             <table class="doc-table">
+                <thead>
                 <tr>
                     <th style="width:34px">#</th>
                     <th>{{ __('stock.item') }}</th>
@@ -79,6 +80,8 @@
                         <th>{{ __('tax.tax') }}</th>
                     @endif
                 </tr>
+                </thead>
+                <tbody>
                 @foreach ($inv->items as $i => $it)
                     <tr>
                         <td class="num">{{ $i + 1 }}</td>
@@ -106,6 +109,7 @@
                         @endif
                     </tr>
                 @endforeach
+                </tbody>
             </table>
         </div>
 

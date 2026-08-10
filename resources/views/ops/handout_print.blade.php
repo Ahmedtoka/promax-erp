@@ -65,6 +65,7 @@
 
         <div class="tablewrap">
             <table class="doc-table">
+                <thead>
                 <tr>
                     <th>#</th>
                     <th>{{ __('stock.item') }}</th>
@@ -74,6 +75,8 @@
                     <th class="num">{{ __('field.qty_gift') }}</th>
                     <th class="num">{{ __('common.total') }}</th>
                 </tr>
+                </thead>
+                <tbody>
 
                 @foreach ($o->items as $i => $it)
                     @php
@@ -95,12 +98,15 @@
                     </tr>
                 @endforeach
 
+                </tbody>
+                <tfoot>
                 <tr>
                     <td colspan="4"><b>{{ __('common.total') }}</b></td>
                     <td class="num"><b>{{ $fmt($sale) }}</b></td>
                     <td class="num"><b>{{ $gift > 0 ? $fmt($gift) : '—' }}</b></td>
                     <td class="num"><b>{{ $fmt($sale + $gift) }}</b></td>
                 </tr>
+                </tfoot>
             </table>
         </div>
 

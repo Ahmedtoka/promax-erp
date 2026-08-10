@@ -76,17 +76,48 @@
 
 /* ═══ الطباعة ═══ */
 @media print{
-  @page{size:A4;margin:12mm}
+  @page{size:A4;margin:11mm}
   .sidebar,.topbar,.flash{display:none !important}
   .main{padding:0 !important}
   .wrap{display:block !important}
   body{background:#fff}
-  .doc{max-width:none;border:none;border-radius:0;box-shadow:none}
+  .doc{max-width:none;width:100%;border:none;border-radius:0;box-shadow:none}
   .doc-head{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-parties{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-sign{display:flex}
   .bolt-mark{opacity:.035 !important}
+
+  /* ═══ الترقيم على A4 (١١ أغسطس ٢٠٢٦) ═══
+     المستندات دي كانت صفحة واحدة بس — فاتورة أو ورقة عهدة فيها
+     أصناف كتير كانت بتتقص عند حد الصفحة. القواعد دي بتخلّي المتصفح
+     يوزّعها على أكتر من A4 صح: هيدر الجدول بيتكرر فوق كل صفحة،
+     الصف مابينقسمش نصّين، والإجماليات والتوقيعات بتفضل مع بعض. */
+
+  /* الغلاف مايقصّش المحتوى في الطباعة */
+  .tablewrap{overflow:visible !important;max-height:none !important}
+
+  /* ⚠️ `table-header-group` بيكرّر `<thead>` فوق كل صفحة مطبوعة —
+     بس بيشتغل لو الهيدر فعلاً في `<thead>` والصفوف في `<tbody>`. */
+  .doc-table{width:100%}
+  .doc-table thead{display:table-header-group}
+  /* ⚠️ صف الإجماليات في `<tfoot>` — الافتراضي `table-footer-group`
+     بيكرّره تحت **كل** صفحة. بنخليه `table-row-group` فيظهر مرة
+     واحدة في آخر الجدول زي ما المفروض. */
+  .doc-table tfoot{display:table-row-group}
+  .doc-table tr{break-inside:avoid;page-break-inside:avoid}
+
+  /* الكتل دي وحدة واحدة — ماتنقسمش على صفحتين */
+  .doc-totals,.doc-sign,.doc-note,.doc-parties{break-inside:avoid;page-break-inside:avoid}
+
+  /* تصغير للطباعة عشان المستند العادي يقعد في A4 واحدة */
+  .doc-head{padding:14px 20px}
+  .doc-logo{height:52px}
+  .doc-body{padding:16px 20px 20px}
+  .doc-parties{padding:11px 13px;margin-bottom:13px}
+  .doc-table td{padding:6px 7px;font-size:11px}
+  .doc-table th{font-size:10px}
+  .doc-no{font-size:20px}
 }
 
 /* ═══ زيادات ورق المخزن ═══ */
