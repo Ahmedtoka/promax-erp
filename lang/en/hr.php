@@ -98,5 +98,5 @@ return [
     'block_out_visit' => 'Open visit at ":client" - check out of it first',
     'block_out_merch' => 'Open shelf visit at ":client" - close it with the after photo first',
     'block_out_po' => 'Sales Order :number is mid-delivery - finish the delivery first',
-    'block_out_custody' => "Today's van stock is still open - return the van and have your manager close it on the dashboard",
+    'block_out_custody' => 'Your van stock is still open - return the van and have your manager close it on the dashboard',
 ];

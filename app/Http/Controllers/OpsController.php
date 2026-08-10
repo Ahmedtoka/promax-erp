@@ -51,7 +51,7 @@ class OpsController extends Controller
 
     private function userStats(User $u): array
     {
-        $custody = $u->todayCustody();
+        $custody = $u->currentCustody();
         $custody?->load('items.product');
 
         return [
@@ -81,7 +81,7 @@ class OpsController extends Controller
         abort_unless($request->user()->role !== 'manager'
             || (int) $user->manager_id === (int) $request->user()->id, 403);
 
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         $custody?->load('items.product');
 
         return view('ops.rep', [
@@ -109,7 +109,7 @@ class OpsController extends Controller
         // والمندوب بيلاقي عهدته اتقفلت وهو لسه في الشارع.
         Scope::assertRep($request->user(), $user);
 
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         $custody?->update(['status' => 'closed', 'closed_at' => now()]);
 
         return back()->with('ok', __('flash.van_closed'));

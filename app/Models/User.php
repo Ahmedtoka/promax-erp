@@ -432,6 +432,33 @@ class User extends Authenticatable
         return $this->custodies()->whereDate('date', today())->first();
     }
 
+    /**
+     * ⚠️⚠️ **العهدة الحالية — مش عهدة النهارده** (إصلاح ١٠ أغسطس ٢٠٢٦).
+     *
+     * العهدة اللي اتحمّلت امبارح ولسه **مفتوحة** كانت بتختفي من كل
+     * الشاشات الساعة ١٢ بالليل — المندوب يفتح الصبح يلاقي «مفيش عهدة»
+     * وأوامر التوريد تقول «ناقص» والبضاعة **في عربيته فعلياً**.
+     * التاريخ مش هو اللي بينهي العهدة — **القفل** هو اللي بينهيها
+     * (`closeCustody` من شاشة المندوب).
+     *
+     * الترتيب: عهدة النهارده لو موجودة (حتى لو مقفولة — يومه اتقفل)،
+     * وإلا آخر عهدة لسه مفتوحة من الأيام اللي فاتت.
+     *
+     * ⚠️ `status != 'closed'` في MySQL بتستبعد الـNULL — الصفوف
+     * القديمة اللي من غير status لازم `whereNull` صريحة.
+     *
+     * **كل قراية إنتاجية تستخدم دي** — `todayCustody()` فضلت
+     * للسيدرز ولأي حساب مقيد بيوم بعينه.
+     */
+    public function currentCustody(): ?Custody
+    {
+        return $this->todayCustody()
+            ?? $this->custodies()
+                ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+                ->orderByDesc('date')
+                ->first();
+    }
+
     /** الزيارة المفتوحة حالياً */
     public function openVisit(): ?Visit
     {

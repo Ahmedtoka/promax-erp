@@ -55,8 +55,12 @@ class FieldApiController extends Controller
 
         // ⚠️ العبرة بالبنود مش برأس العهدة: صنف نزل أو اتباع بيغيّر
         // `custody_items` بس، و`custodies.updated_at` بتفضل مكانها.
+        // ⚠️ النهارده **أو المفتوحة** (١٠/٨) — نفس عقيدة `currentCustody`:
+        // البصمة لازم تحس بعهدة امبارح المفتوحة اللي الأبلكيشن بيعرضها.
         $custody = DB::table('custodies')->where('custodies.user_id', $id)
-            ->whereDate('custodies.date', today())
+            ->where(fn ($q) => $q->whereDate('custodies.date', today())
+                ->orWhereNull('custodies.status')
+                ->orWhere('custodies.status', '<>', 'closed'))
             ->leftJoin('custody_items', 'custody_items.custody_id', '=', 'custodies.id')
             ->selectRaw('COUNT(custody_items.id) n, MAX(custody_items.updated_at) t')
             ->first();
@@ -111,7 +115,7 @@ class FieldApiController extends Controller
     public function bootstrap(Request $request): JsonResponse
     {
         $user = $request->user();
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         $custody?->load('items.product');
 
         // ⚠️ **مرة واحدة** — بتتستخدم في حتتين تحت (حالة الزيارة
@@ -670,7 +674,7 @@ class FieldApiController extends Controller
             return $err;
         }
 
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         $custody?->load('items.product', 'items.batch');
 
         $rows = [];
@@ -1108,7 +1112,7 @@ class FieldApiController extends Controller
 
         $user = $request->user();
         $client = Client::findOrFail($data['client_id']);
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
 
         if (! $custody) {
             return response()->json(['message' => __('field.no_custody_today')], 422);
@@ -1620,7 +1624,7 @@ class FieldApiController extends Controller
             return response()->json(['message' => __('field.must_arrive_first')], 422);
         }
 
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         if (! $custody) {
             return response()->json(['message' => __('field.no_custody_today')], 422);
         }

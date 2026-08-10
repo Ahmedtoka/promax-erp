@@ -189,7 +189,7 @@ class Returns
             throw new Rejected(__('api.return_no_items'));
         }
 
-        $custody = $rep?->todayCustody();
+        $custody = $rep?->currentCustody();
 
         // ⚠️ من غير عهدة مفيش مكان البضاعة تتحط فيه — مرتجع المندوب
         // بيتسجل على عربية. مرتجع الـERP بيدخل بلا عهدة (بضاعة

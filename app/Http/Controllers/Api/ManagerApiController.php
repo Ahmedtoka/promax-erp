@@ -111,7 +111,7 @@ class ManagerApiController extends Controller
             ->with('zone')
             ->get()
             ->map(function (User $u) {
-                $custody = $u->todayCustody();
+                $custody = $u->currentCustody();
                 $custody?->load('items.product');
                 $mode = $u->isDriver() ? 'old' : 'new';
                 $openVisit = $u->openVisit();
@@ -205,7 +205,7 @@ class ManagerApiController extends Controller
         // بالـid. فلترة القايمة مابتحميش الإندبوينت الفردي.
         \App\Support\Scope::assertRep($request->user(), $user);
 
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         $custody?->load('items.product');
         $mode = $user->isDriver() ? 'old' : 'new';
 

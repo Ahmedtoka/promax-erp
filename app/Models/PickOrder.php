@@ -599,6 +599,8 @@ class PickOrder extends Model
         // العهدة الموجودة بتتقرا هنا للفحص بس. لو مش موجودة بتتعمل **جوه**
         // الترانزاكشن تحت — لأن firstOrCreate بره الترانزاكشن كان بيسيب عهدة
         // مفتوحة يتيمة لو الترانزاكشن رجعت.
+        // ⚠️ عهدة **النهارده** المقفولة هي اللي بتمنع — عهدة مفتوحة من
+        // امبارح مش مانع، دي بالظبط اللي هنكمّل عليها (شوف تحت).
         $existing = Custody::where('user_id', $rep->id)->whereDate('date', today())->first();
         if ($existing && $existing->status === 'closed') {
             return __('field.custody_closed');
@@ -609,7 +611,20 @@ class PickOrder extends Model
 
         try {
             DB::transaction(function () use ($receivedByItem, $rep, &$custody, &$variance, $note) {
-                $custody = Custody::firstOrCreate(
+                // ⚠️⚠️ **الاستلام بيكمّل على العهدة المفتوحة — مش بيفتح
+                // صف جديد بتاريخ النهارده** (إصلاح ١٠ أغسطس ٢٠٢٦).
+                // `firstOrCreate(date: today)` كانت بتعمل عهدة تانية
+                // جنب عهدة امبارح المفتوحة — فبضاعة امبارح تختفي من
+                // الشاشات (اللي بتقرا الأحدث) من غير ما اتقفلت ولا
+                // اتحاسب عليها حد. عهدة واحدة مفتوحة في كل لحظة،
+                // والقفل هو اللي بينهيها مش منتصف الليل.
+                $custody = Custody::where('user_id', $rep->id)
+                    ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+                    ->orderByDesc('date')
+                    ->lockForUpdate()
+                    ->first();
+
+                $custody ??= Custody::firstOrCreate(
                     ['user_id' => $rep->id, 'date' => today()],
                     ['warehouse_id' => $this->warehouse_id, 'status' => 'open'],
                 );

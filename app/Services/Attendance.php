@@ -189,7 +189,7 @@ final class Attendance
         }
 
         // ٤) عهدة النهارده لسه مفتوحة
-        $custody = $user->todayCustody();
+        $custody = $user->currentCustody();
         if ($custody !== null && $custody->status !== 'closed') {
             $open[] = __('hr.block_out_custody');
         }

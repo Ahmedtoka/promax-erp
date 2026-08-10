@@ -361,8 +361,11 @@ class JourneyController extends Controller
     /** صفوف التيرمينال — مشتركة بين العرض الأول والـJSON (2026-08-06) */
     private function liveRows(Request $request)
     {
-        // ⚠️ العهدة بتتحمّل مفلترة على النهارده. `todayCustody()` بتعمل
-        // كويري جديدة في كل نداء، والشاشة دي بتترفرش لوحدها كل دقيقة.
+        // ⚠️ العهدة بتتحمّل eager مش `currentCustody()` — الميثود دي
+        // بتعمل كويري جديدة لكل مندوب، والشاشة دي بتترفرش كل دقيقة.
+        // ⚠️ **النهارده أو المفتوحة** (إصلاح ١٠/٨): الفلتر كان على
+        // النهارده بس — فعهدة امبارح اللي لسه مفتوحة (البضاعة في
+        // العربية) كانت بتختفي من اللايف الساعة ١٢ بالليل.
         // ⚠️ **`fieldVisibleTo` مش اختيارية هنا** (تدقيق ٨/٨/٢٠٢٦):
         // الشاشة اللايف كانت أخطر تسريب في السيستم — أي تشانل مانجر
         // بيشوف GPS وسرعة وقيمة عهدة ومبيعات **كل** مناديب الشركة.
@@ -370,7 +373,12 @@ class JourneyController extends Controller
         // اللي فاتت.
         $reps = User::fieldVisibleTo(Branch::scope(User::with([
             'zone',
-            'custodies' => fn ($q) => $q->whereDate('date', today())->with('items.product'),
+            'custodies' => fn ($q) => $q
+                ->where(fn ($w) => $w->whereDate('date', today())
+                    ->orWhereNull('status')
+                    ->orWhere('status', '<>', 'closed'))
+                ->orderByDesc('date')
+                ->with('items.product'),
         ])), $request->user())
             ->whereIn('role', User::FIELD_ROLES)
             ->where('active', true)

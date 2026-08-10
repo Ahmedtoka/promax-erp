@@ -140,7 +140,7 @@ class PickOrderController extends Controller
      */
     public static function checkVanStock(User $rep, array $qtyByProduct): array
     {
-        $custody = $rep->todayCustody();
+        $custody = $rep->currentCustody();
 
         if ($custody === null) {
             return [
@@ -187,7 +187,7 @@ class PickOrderController extends Controller
             return ['mode' => 'van', 'pick' => null, 'error' => null];
         }
 
-        $warehouse ??= $rep->todayCustody()?->warehouse ?? Warehouse::defaultBranch();
+        $warehouse ??= $rep->currentCustody()?->warehouse ?? Warehouse::defaultBranch();
 
         if ($warehouse === null) {
             return ['mode' => 'none', 'pick' => null, 'error' => __('stock.no_warehouse')];

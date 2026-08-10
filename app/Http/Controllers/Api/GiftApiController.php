@@ -162,9 +162,13 @@ class GiftApiController extends Controller
 
     private function custody(Request $request): ?Custody
     {
+        // ⚠️ **العهدة المفتوحة مش عهدة النهارده** (إصلاح ١٠/٨) —
+        // فلتر النهارده كان بيخلّي توزيع الهدايا يقف الساعة ١٢
+        // بالليل رغم إن البضاعة لسه في العربية. نفس عقيدة
+        // `User::currentCustody()`.
         return Custody::where('user_id', $request->user()->id)
-            ->whereDate('date', today())
-            ->where('status', 'open')
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+            ->orderByDesc('date')
             ->first();
     }
 }
