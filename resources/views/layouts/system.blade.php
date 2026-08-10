@@ -874,6 +874,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (wrap.closest('dialog')) return;
     const table = wrap.querySelector('table');
     if (!table || table.hasAttribute('data-plain')) return;
+    // ⚠️ **المستندات الرسمية بره أدوات الجداول** (١١ أغسطس ٢٠٢٦):
+    // الفاتورة وورقة العهدة والمرتجع مستندات للطباعة مش قوايم
+    // تفاعلية — بحث/ترتيب/فريز/صف إجماليات عليها بيحطّ خانة بحث
+    // فوق الفاتورة ويحبسها في سكرول. `.doc` بيغطّيهم كلهم.
+    if (table.closest('.doc') || table.classList.contains('doc-table')) return;
 
     const headRow = table.tHead ? table.tHead.rows[0] : table.querySelector('tr');
     if (!headRow || !headRow.querySelector('th')) return;
