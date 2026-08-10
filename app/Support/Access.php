@@ -267,6 +267,8 @@ class Access
         // (قرار المالك 2026-08-03): طلب التسليم ← تجهيز الطلبات ←
         // تأكيد ← إشعار المندوب ← استلام من الأبلكيشن
         'nav.group_custody' => [
+            // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
+            ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
         ],

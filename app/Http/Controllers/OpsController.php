@@ -103,6 +103,65 @@ class OpsController extends Controller
     // الأبلكيشن — التحميل الرسمي بقى من فلو تسليم العهدة:
     // CustodyHandoutController::store ← تجهيز الطلبات ← تأكيد ← استلام.
 
+    /**
+     * ═══ عهد المناديب — بورد المراجعة بنظرة واحدة (١٠ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «كل المناديب وكل واحد معاه عهدة كام وحالتها دلوقتي
+     * وباقي قد إيه — وأراجع ورا كل مندوب بنظرة واحدة».
+     *
+     * ⚠️ العهدة من `currentCustody()` — نفس عقيدة ١٠/٨: المفتوحة من
+     * امبارح لسه شغالة، مش «عهدة النهارده» بس.
+     * ⚠️ قيمة البضاعة بسعر البيع: السواق بقايمة `old` والسيلز بـ`new`
+     * — نفس قاعدة كل الشاشات.
+     */
+    public function vans(Request $request)
+    {
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))
+            ->where('active', true)
+            ->with('zone')
+            ->orderBy('name')
+            ->get();
+
+        $rows = $reps->map(function (User $u) {
+            $c = $u->currentCustody();
+            $c?->load(['items.product', 'items.batch', 'vehicle']);
+            $mode = $u->isDriver() ? 'old' : 'new';
+
+            $assigned = (int) ($c?->items->sum('assigned') ?? 0);
+            $remaining = (int) ($c?->remainingUnits() ?? 0);
+            $openVisit = $u->openVisit();
+
+            return [
+                'user' => $u,
+                'custody' => $c,
+                'state' => $c === null ? 'none' : ($c->status === 'closed' ? 'closed' : 'open'),
+                'assigned' => $assigned,
+                'assigned_value' => round($c?->assignedValue($mode) ?? 0, 2),
+                'sold' => (int) ($c?->items->sum('sold') ?? 0),
+                'returned' => (int) ($c?->items->sum('returned') ?? 0),
+                // هدايا لسه معاه — الموزّع بيتخصم من المخصص
+                'gifts_left' => (int) ($c?->items->sum(fn ($i) => max((int) $i->gift_assigned - (int) $i->gift_given, 0)) ?? 0),
+                'remaining' => $remaining,
+                'remaining_value' => round($c?->remainingValue($mode) ?? 0, 2),
+                // نسبة التصريف — المخلَّص من المحمّل (بيع + مرتجع للمخزن)
+                'pct' => $assigned > 0 ? (int) round(($assigned - $remaining) / $assigned * 100) : 0,
+                'expiring' => $c?->expiringItems(30)->count() ?? 0,
+                'active_client' => $openVisit?->client?->displayName(),
+                'att' => \App\Services\Attendance::state($u),
+                'sales_today' => (float) Invoice::where('user_id', $u->id)
+                    ->whereDate('created_at', today())->sum('grand_total'),
+            ];
+        });
+
+        return view('ops.vans', [
+            'rows' => $rows,
+            'openCount' => $rows->where('state', 'open')->count(),
+            'noneCount' => $rows->where('state', 'none')->count(),
+            'streetValue' => $rows->where('state', 'open')->sum('remaining_value'),
+            'unitsLeft' => $rows->where('state', 'open')->sum('remaining'),
+        ]);
+    }
+
     public function closeCustody(Request $request, User $user)
     {
         // ⚠️ **كان بلا حارس** — أي مدير بيقفل يوم أي مندوب في الشركة،

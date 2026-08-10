@@ -80,4 +80,5 @@ return [
 
     // ═══ بورد الأونلاين + المجموعة المستقلة (2026-08-09) ═══
     'group_hr' => 'Attendance',
+    'vans_board' => 'Van Stock Board',
 ];

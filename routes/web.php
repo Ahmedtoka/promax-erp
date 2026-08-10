@@ -577,6 +577,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/reps/{user}/close', [OpsController::class, 'closeCustody'])
             ->middleware('role:admin,manager')->name('rep.close');
 
+        // ═══ عهد المناديب — بورد المراجعة بنظرة واحدة (١٠ أغسطس ٢٠٢٦) ═══
+        // ⚠️ بيانات إدارة: قيمة عهدة كل مندوب — أدمن ومدير بس، والمدير
+        // بيشوف فريقه من fieldVisibleTo جوه الكنترولر.
+        Route::get('/vans', [OpsController::class, 'vans'])
+            ->middleware('role:admin,manager')->name('vans');
+
         Route::get('/pos', [OpsController::class, 'purchaseOrders'])->name('pos');
         Route::post('/pos', [OpsController::class, 'storePurchaseOrder'])
             ->middleware('role:admin,manager')->name('pos.store');
