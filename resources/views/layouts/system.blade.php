@@ -954,9 +954,14 @@ document.addEventListener('DOMContentLoaded', function () {
     for (let c = 0; c < cols; c++) {
       if (!numericCol[c]) continue;
 
-      /* أ) أعمدة أرقامها نضيفة بس مجموعها مالوش معنى (كود، سنة، نسبة) */
+      /* أ) أعمدة أرقامها نضيفة بس مجموعها مالوش معنى (كود، سنة، نسبة)
+         ⚠️ التليفونات واللوكيشن اتضافوا (طلب المالك ١٠/٨): صفحة
+         العملاء كانت بتجمع أرقام التليفونات في صف الإجماليات —
+         «مش بنجمع تليفونات أكيد». وأي بليد يقدر يستثني عمود بإيده
+         بـ`data-nosum` على الـth. */
+      if (headRow.cells[c].hasAttribute('data-nosum')) continue;
       const head = (headRow.cells[c].textContent || '').trim().toLowerCase();
-      if (/كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|موعد|معاد|ساعة|time/.test(head)) continue;
+      if (/كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|موعد|معاد|ساعة|time|تليفون|موبايل|هاتف|phone|mobile|whats|واتس|لوكيشن|الموقع|location|إحداثيات/.test(head)) continue;
 
       /* ب) ⚠️ **الفحص الحقيقي: كل خلية لازم تكون رقم نضيف.** الفاضي
          و«—» محايدين (خانة مش متملية مش خطأ)، لكن أي خلية فيها حرف

@@ -86,6 +86,11 @@ class TaxController extends Controller
         // الشيك بوكس مابيتبعتش أصلاً وهو مقفول
         $pairs['tax_enabled'] = $request->boolean('tax_enabled') ? '1' : '0';
 
+        // ═══ سويتش المرتجعات (قرار المالك ١٠ أغسطس ٢٠٢٦) ═══
+        // «فتح المرتجعات يدوي لحين الإقفال» — الحارس نفسه في
+        // Returns::create فبيمسك الأبلكيشن والـERP من نقطة واحدة.
+        $pairs['returns_open'] = $request->boolean('returns_open') ? '1' : '0';
+
         Setting::writeMany($pairs);
 
         return back()->with('ok', __('tax.saved'));

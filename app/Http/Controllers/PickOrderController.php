@@ -70,7 +70,12 @@ class PickOrderController extends Controller
             'purchaseOrder.client', 'replenishmentRequest.client',
         ]);
 
-        return view('wh.pick', ['o' => $pick]);
+        return view('wh.pick', [
+            'o' => $pick,
+            // كتالوج الأصناف لمنتقي «إضافة صنف» في تعديل إذن الصرف (١٠/٨)
+            'products' => Product::where('active', true)->orderBy('code')
+                ->get(['id', 'code', 'name', 'name_en']),
+        ]);
     }
 
     /**
@@ -127,6 +132,53 @@ class PickOrderController extends Controller
         }
 
         return back()->with('ok', __('stock.pick_cancelled'));
+    }
+
+    /**
+     * تعديل أمر التجهيز قبل «جاهز» (١٠ أغسطس ٢٠٢٦) — الأمين يصلّح
+     * كمية أو يشيل/يضيف صنف. حارس المخزن نفسه، والموديل بيرفض لو
+     * الأمر اتجهّز أو اتسلّم.
+     */
+    public function update(Request $request, PickOrder $pick)
+    {
+        abort_unless($this->guardKeeperWarehouse($request->user(), $pick), 403);
+
+        $data = $request->validate([
+            'qty' => ['required', 'array'],
+            'qty.*' => ['nullable', 'integer', 'min:0'],
+            'unit' => ['nullable', 'array'],
+            'unit.*' => ['nullable', 'in:piece,box,case'],
+        ]);
+
+        // وحدة الإدخال → قطع في السيرفر (نفس قاعدة الإنشاء والفاتورة)
+        $qty = [];
+        foreach ($data['qty'] as $productId => $q) {
+            $q = (int) $q;
+            if ($q <= 0) {
+                continue;
+            }
+
+            $unit = $request->input("unit.$productId", 'piece');
+            if ($unit !== 'piece') {
+                $factor = Product::find($productId)?->unitFactor($unit);
+                if ($factor === null) {
+                    return back()->withErrors([
+                        'qty' => __('stock.unit_not_for_product', [
+                            'name' => Product::find($productId)?->displayName() ?? $productId,
+                        ]),
+                    ])->withInput();
+                }
+                $q *= $factor;
+            }
+
+            $qty[(int) $productId] = $q;
+        }
+
+        if ($error = $pick->editItems($qty)) {
+            return back()->withErrors(['qty' => $error])->withInput();
+        }
+
+        return back()->with('ok', __('stock.pick_edited', ['number' => $pick->number]));
     }
 
     // ==================== سيناريو 2 و 3 ====================

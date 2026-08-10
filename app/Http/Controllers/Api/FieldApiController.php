@@ -357,6 +357,10 @@ class FieldApiController extends Controller
                     'branch' => $c->displayName(),
                     'address' => $c->address,
                     'phone' => $c->phone,
+                    // لوكيشن العميل — زرار «الاتجاهات» في الأبلكيشن
+                    'lat' => $c->lat === null ? null : (float) $c->lat,
+                    'lng' => $c->lng === null ? null : (float) $c->lng,
+                    'location_url' => $c->location_url,
                     'category' => $c->category,
                     'category_label' => $c->categoryLabel(),
                     'balance' => (float) $c->balance,
@@ -500,6 +504,7 @@ class FieldApiController extends Controller
                 'phone' => $r['client']->phone,
                 'lat' => $r['client']->lat !== null ? (float) $r['client']->lat : null,
                 'lng' => $r['client']->lng !== null ? (float) $r['client']->lng : null,
+                'location_url' => $r['client']->location_url,
                 'balance' => (float) $r['client']->balance,
                 'cash_only' => $r['client']->cashOnly(),
                 'payment_terms' => $r['client']->paymentTerms(),

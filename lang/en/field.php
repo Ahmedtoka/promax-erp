@@ -221,4 +221,6 @@ return [
     'vans_expiring' => ':count items expiring soon',
     'vans_close' => 'Close van',
     'vans_close_confirm' => "Close :name's van stock? They cannot sell from it after closing - the next handout opens a fresh one.",
+    'notif_po_reapproval_title' => 'Order :number was edited and returned for approval',
+    'notif_po_reapproval_body' => ':client - edited by :by, needs approval again',
 ];

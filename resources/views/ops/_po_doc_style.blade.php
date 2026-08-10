@@ -95,6 +95,12 @@
   font-size:10px;font-weight:600;color:var(--muted);
 }
 
+/* ═══ متعدد الورقات (١٠/٨): الأمر الكبير بيتقسم — كل جزء ورقة
+   A4 لوحده. `po-cont` = ورقة تكملة (مش الأخيرة) بتقفل صفحتها.
+   على الشاشة مسافة بين الورقات — نفس إحساس الطباعة المجمعة. */
+.po-doc + .po-doc{margin-top:24px}
+.po-pageno{font-weight:700}
+
 /* الصاعقة: في نص الورقة، خفيفة */
 .po-doc .bolt-mark.po-bolt{
   width:460px;top:34%;
@@ -114,5 +120,10 @@
   }
   .po-table tr{break-inside:avoid;page-break-inside:avoid}
   .po-summary{break-inside:avoid;page-break-inside:avoid}
+
+  /* ورقة التكملة بتقفل صفحتها — والأخيرة من غير فاصل عشان الطباعة
+     المجمعة (po_print_batch) هي اللي بتحكم الفاصل بين أمر وأمر */
+  .po-doc.po-cont{break-after:page;page-break-after:always}
+  .po-doc + .po-doc{margin-top:0}
 }
 </style>

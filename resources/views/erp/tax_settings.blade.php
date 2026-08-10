@@ -36,6 +36,23 @@
 <form method="POST" action="{{ route('erp.tax.settings.save') }}">
     @csrf
 
+    {{-- ═══════════ المرتجعات — سويتش يدوي (١٠/٨) ═══════════ --}}
+    @php $returnsOpen = ($s['returns_open'] ?? '1') !== '0'; @endphp
+    <div class="card">
+        <h3>↩️ {{ __('tax.returns_section') }}
+            @if ($returnsOpen)
+                <span class="badge b-green">{{ __('tax.returns_state_open') }}</span>
+            @else
+                <span class="badge b-red">{{ __('tax.returns_state_closed') }}</span>
+            @endif
+        </h3>
+        <label style="display:flex;align-items:center;gap:7px;padding-top:2px">
+            <input type="hidden" name="returns_open" value="0">
+            <input type="checkbox" name="returns_open" value="1" @checked($returnsOpen)>
+            <span style="font-size:12px;color:var(--muted)">{{ __('tax.returns_open_hint') }}</span>
+        </label>
+    </div>
+
     {{-- ═══════════ الضريبة ═══════════ --}}
     <div class="card">
         <h3>🧾 {{ __('tax.tax_section') }}</h3>

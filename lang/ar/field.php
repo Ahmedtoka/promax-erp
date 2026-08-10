@@ -220,4 +220,6 @@ return [
     'vans_expiring' => ':count صنف قرب ينتهي',
     'vans_close' => 'قفل العربية',
     'vans_close_confirm' => 'قفل عهدة :name؟ بعد القفل مايقدرش يبيع منها، وأول استلام جديد يفتح عهدة جديدة.',
+    'notif_po_reapproval_title' => 'أمر :number اتعدّل ورجع للموافقة',
+    'notif_po_reapproval_body' => ':client — عدّله :by، محتاج اعتماد من جديد',
 ];

@@ -190,8 +190,14 @@
                                 {{-- شيت السلسلة الأصلي — المرجع المحفوظ وقت الرفع --}}
                                 <a class="btn sm" href="{{ route('ops.po.sheet', $po) }}" title="{{ __('ops.po_sheet') }}">📎</a>
                             @endif
-                            @if ($po->approval_status === 'pending' && \App\Support\Access::action(auth()->user(), 'act.ka.edit'))
-                                <a class="btn sm" href="{{ route('ops.po.edit', $po) }}" title="{{ __('ops.po_edit') }}">✏️</a>
+                            {{-- ⚠️ المعتمد بقى يتعدّل كمان (١٠/٨) طالما التسليم
+                                 مابدأش والبضاعة ماخرجتش — والتعديل بيرجّعه
+                                 لطابور الحسابات. نفس شرط poEditable في الكنترولر. --}}
+                            @if (($po->approval_status === 'pending'
+                                    || ($po->approval_status === 'approved' && $po->status === 'pending' && $po->pickOrder?->status !== 'handed'))
+                                && \App\Support\Access::action(auth()->user(), 'act.ka.edit'))
+                                <a class="btn sm" href="{{ route('ops.po.edit', $po) }}" title="{{ __('ops.po_edit') }}"
+                                   @if ($po->approval_status === 'approved') onclick="return confirm(@js(__('ops.po_edit_back_confirm')))" @endif>✏️</a>
                             @endif
                             @if ($manager && $po->status === 'pending' && ! $po->needsApproval())
                                 <button class="btn sm" onclick="assignPo({{ $po->id }}, '{{ $po->number }}')">{{ __('ops.assign') }}</button>

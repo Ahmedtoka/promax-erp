@@ -47,4 +47,7 @@ return [
     'rep_name' => 'Rep Name',
     'made_by' => 'Order created by',
     'address' => 'Address',
+
+    // ═══ Proforma multi-page split (2026-08-10) ═══
+    'page_of' => 'Page :p of :t',
 ];

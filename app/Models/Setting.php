@@ -25,6 +25,9 @@ class Setting extends Model
     public const DEFAULTS = [
         'tax_enabled' => '0',
         'tax_rate' => '14',            // نسبة مئوية زي ما اليوزر بيكتبها
+        // سويتش المرتجعات (١٠/٨) — '1' مفتوحة · '0' مقفولة يدوياً.
+        // الحارس في Returns::create — بيمسك الأبلكيشن والـERP معاً.
+        'returns_open' => '1',
         'company_name' => 'PROMAX Food Industries',
         'company_name_en' => 'PROMAX Food Industries',
         'company_tax_id' => '767-179-153',

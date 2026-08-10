@@ -151,6 +151,17 @@ class Returns
             }
         }
 
+        // ═══ سويتش المرتجعات (قرار المالك ١٠ أغسطس ٢٠٢٦) ═══
+        //
+        // المالك بيفتح ويقفل استقبال المرتجعات يدوياً من إعدادات
+        // السيستم. الحارس هنا في الخدمة نفسها — فالأبلكيشن والـERP
+        // بيترفضوا من نفس النقطة برسالة واضحة، ومفيش مسار يتفرّع.
+        // ⚠️ بييجي **بعد** فحص الـidem_key فوق عن قصد: إعادة إرسال
+        // لمستند اتعمل قبل القفل بترجّع المستند نفسه مش رسالة رفض.
+        if (\App\Models\Setting::read('returns_open', '1') === '0') {
+            throw new Rejected(__('api.returns_closed'));
+        }
+
         if (! in_array($policy, ClientReturn::POLICIES, true)) {
             throw new Rejected(__('api.return_policy_unknown'));
         }

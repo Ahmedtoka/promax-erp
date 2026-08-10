@@ -55,14 +55,17 @@ class JourneyController extends Controller
         // في الخطة والاتنين يروحوا نفس المحل.
         $planned = collect($week)->flatten()->pluck('client_id')->unique();
 
-        $available = Client::with(['zone', 'group'])->where('status', 'active')
-            ->where(function ($q) use ($rep) {
-                $q->where('rep_id', $rep->id);
-                if ($rep->zone_id) {
-                    $q->orWhere('zone_id', $rep->zone_id);
-                }
-            })
-            ->whereNotIn('id', $planned)
+        $available = Client::visibleTo(
+            Client::with(['zone', 'group'])->where('status', 'active')
+                ->where(function ($q) use ($rep) {
+                    $q->where('rep_id', $rep->id);
+                    if ($rep->zone_id) {
+                        $q->orWhere('zone_id', $rep->zone_id);
+                    }
+                })
+                ->whereNotIn('id', $planned),
+            $request->user()
+        )
             ->orderBy('name')
             ->get();
 
@@ -242,19 +245,26 @@ class JourneyController extends Controller
             ->orderBy('code')
             ->get();
 
-        // ⚠️ `group` محمّلة عشان الاسم بيتعرض «السلسلة — الفرع» —
-        // من غيرها fullName() بيضرب استعلام لكل صف من الـ300.
-        $mine = $rep
-            ? Client::with(['zone', 'group'])->where('rep_id', $rep->id)->where('status', 'active')->orderBy('name')->get()
-            : collect();
+        // ═══ قايمة موحّدة: كل عميل الفاعل شايفه ═══
+        // (طلب المالك ١٠/٨): «تخصيص العملاء صعب — عاوز أدوس على العميل
+        // يتحوّل للمندوب على طول». بدل كارتين (عملاء المندوب + اليتامى)
+        // بقى جدول واحد فيه **كل** العملاء ومعاهم مندوبهم الحالي وزرار
+        // تخصيص/شيل لكل صف، وبلوك تحديد جماعي بينقل المحدد لمرة واحدة.
+        //
+        // ⚠️ `visibleTo` (سكوب المدير) **مع** `Branch::scope` (سكوب الفرع)
+        // — الاتنين مطلوبين مع بعض، بالظبط زي حارس `Scope::canClient`:
+        // `visibleTo` لوحدها بتعدّي مدير فرع على عميل فرع تاني.
+        // ⚠️ `rep` محمّلة عشان عمود «المندوب الحالي» — من غيرها كويري
+        // لكل صف. و`group` عشان `fullName()` بيبدأ باسم السلسلة.
+        $only = (string) $request->input('only', '');
 
-        // العملاء اللي مالهمش مندوب — دول اللي بيضيعوا في السيستم
-        $orphans = Branch::scope(Client::with(['zone', 'group']))
-            ->whereNull('rep_id')
+        $clients = Branch::scope(Client::visibleTo(Client::with(['zone', 'group', 'rep']), $request->user()))
             ->where('status', 'active')
             ->when($request->filled('zone'), fn ($q) => $q->where('zone_id', $request->input('zone')))
-            // ⚠️ البحث في السيرفر مش المتصفح — القايمة مقصوصة على 300،
-            // والعميل رقم 301 مش هيظهر بأي فلترة في المتصفح.
+            ->when($only === 'orphans', fn ($q) => $q->whereNull('rep_id'))
+            ->when($only === 'mine' && $rep, fn ($q) => $q->where('rep_id', $rep->id))
+            // ⚠️ البحث في السيرفر مش المتصفح — القايمة مقصوصة على 500،
+            // والعميل بعد الحد مش هيظهر بأي فلترة في المتصفح.
             ->when($request->filled('q'), function ($q) use ($request) {
                 $s = $request->string('q')->trim()->value();
                 // البحث باسم السلسلة كمان — الاسم المعروض بيبدأ بيها
@@ -264,19 +274,21 @@ class JourneyController extends Controller
                     ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
                         ->orWhere('name_en', 'like', "%$s%")));
             })
+            // ⚠️ اليتامى الأول — دول اللي بيضيعوا، والمالك عايزهم فوق.
+            // `rep_id IS NULL` بترجع 1 لليتيم فالـDESC بيطلّعهم لفوق.
+            ->orderByRaw('rep_id IS NULL DESC')
             ->orderBy('name')
-            ->limit(300)
+            ->limit(500)
             ->get();
 
         return view('ops.assignments', [
             'reps' => $reps,
             'rep' => $rep,
             'zones' => $zones,
-            'mine' => $mine,
-            'orphans' => $orphans,
-            'orphanTotal' => Branch::scope(Client::query())
+            'clients' => $clients,
+            'orphanTotal' => Branch::scope(Client::visibleTo(Client::query(), $request->user()))
                 ->whereNull('rep_id')->where('status', 'active')->count(),
-            'filters' => $request->only(['zone', 'q']),
+            'filters' => $request->only(['zone', 'q', 'only']),
         ]);
     }
 
@@ -624,11 +636,11 @@ class JourneyController extends Controller
         // تفعيل أو ليدز بس لسه مفيش أكتيف — دي الزونات اللي ناويين
         // نغطيها. زون مالوش لا دول ولا دول مش بيترسم — 362 دايرة
         // فاضية هتغرق الخريطة.
-        $activeByZone = \App\Models\Client::where('status', 'active')
-            ->whereNotNull('zone_id')
+        $activeByZone = Client::visibleTo(
+            \App\Models\Client::where('status', 'active')->whereNotNull('zone_id'), auth()->user())
             ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
-        $pendingByZone = \App\Models\Client::where('status', 'pending')
-            ->whereNotNull('zone_id')
+        $pendingByZone = Client::visibleTo(
+            \App\Models\Client::where('status', 'pending')->whereNotNull('zone_id'), auth()->user())
             ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
         $leadsByZone = \App\Models\Lead::whereNotNull('zone_id')
             ->selectRaw('zone_id, COUNT(*) as n')->groupBy('zone_id')->pluck('n', 'zone_id');
@@ -651,8 +663,8 @@ class JourneyController extends Controller
             ])->values();
 
         // طبقة المحافظات — اسم + مركز + كام عميل شغال فيها
-        $activeByGov = \App\Models\Client::where('status', 'active')
-            ->whereNotNull('governorate')
+        $activeByGov = Client::visibleTo(
+            \App\Models\Client::where('status', 'active')->whereNotNull('governorate'), auth()->user())
             ->selectRaw('governorate, COUNT(*) as n')->groupBy('governorate')->pluck('n', 'governorate');
 
         $governorates = \App\Models\Governorate::whereNotNull('lat')->whereNotNull('lng')

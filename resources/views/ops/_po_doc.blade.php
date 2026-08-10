@@ -11,6 +11,13 @@
     ممكن تكون من قبل تفعيل الضريبة أو قبل تخزين الخصم، فالورقة
     كانت بتطبع تجميعة مش بتساوي مجموع جدولها. الجمع من السطور
     بيضمن إن اللي بيراجع بالآلة الحاسبة قدام الفرع يطلع بنفس الرقم.
+
+    ⚠️ **التقسيم على ورقات (طلب المالك ١٠/٨ — «الأصناف الكتير على
+    صفحتين تلاتة»):** الأمر الكبير بيتقسم على أكتر من ورقة A4 — كل
+    ورقة بتكرر الهيدر ورأس الجدول ومعاها «صفحة X من Y»، والتجميعة
+    وبيانات البنك والتوقيعات والفوتر على **آخر ورقة بس**. التجميعة
+    بتتحسب مرة واحدة من كل السطور — مش لكل ورقة. لو ١٥ صف أو أقل
+    → ورقة واحدة مطابقة تماماً للشكل القديم.
 --}}
 
 @php
@@ -51,16 +58,38 @@
     // مكانه شاشة الإعدادات مش الورقة.
     $bankDoc = array_filter($co['bank']);
 
-    // ⚠️ ١٥ صف على الأقل — فاتورة نص صفحتها فاضي شكلها ناقص،
-    // والصفوف الفاضية بتثبّت ارتفاع الجدول على الـA4.
-    $padRows = max(0, 15 - $po->items->count());
+    // ═══ تقسيم السطور على ورقات A4 (١٠/٨) ═══
+    // آخر ورقة شايلة التجميعة والبنك والتوقيعات → ١٥ صف زي زمان.
+    // ورقة التكملة جدول بس — المساحة اللي فضيت من التجميعة بتشيل
+    // ٢٠ صف بأمان. واللوب بيسيب صف على الأقل لآخر ورقة عشان
+    // التجميعة ماتطلعش على ورقة جدولها كله فاضي.
+    $rowsLastDoc = 15;
+    $rowsFullDoc = 20;
+    $pagesDoc = [];
+    $restDoc = $po->items->values();
+    while ($restDoc->count() > $rowsLastDoc) {
+        $takeDoc = min($rowsFullDoc, $restDoc->count() - 1);
+        $pagesDoc[] = $restDoc->slice(0, $takeDoc)->values();
+        $restDoc = $restDoc->slice($takeDoc)->values();
+    }
+    $pagesDoc[] = $restDoc;
+    $pageCountDoc = count($pagesDoc);
+
+    // ⚠️ ١٥ صف على الأقل في آخر ورقة — فاتورة نص صفحتها فاضي شكلها
+    // ناقص، والصفوف الفاضية بتثبّت ارتفاع الجدول على الـA4.
+    $padRows = max(0, 15 - $restDoc->count());
+
+    // ترقيم السطور متواصل عبر الورقات — مش بيبدأ من ١ كل ورقة
+    $rowStartDoc = 0;
 @endphp
 
-<div class="doc po-doc has-bolt">
+@foreach ($pagesDoc as $pageItemsDoc)
+@php $isLastDoc = $loop->last; @endphp
+<div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}">
     <img class="bolt-mark po-bolt" src="{{ asset('brand/bolt.svg') }}" alt="">
 
     {{-- ═══ الهيدر المضغوط: اللوجو وجنبه البيانات · والناحية
-         التانية الرقم والتاريخ والوقت بليبل ═══ --}}
+         التانية الرقم والتاريخ والوقت بليبل — بيتكرر على كل ورقة ═══ --}}
     <header class="doc-head">
         <div class="po-brandrow">
             <img src="{{ asset('img/promax-logo.png') }}" alt="PROMAX" class="doc-logo">
@@ -84,6 +113,9 @@
                 <b>{{ $po->created_at?->format('Y-m-d') ?? '—' }}</b></div>
             <div class="doc-date">{{ __('doc.time') }}:
                 <b>{{ $po->created_at?->format('H:i') ?? '—' }}</b></div>
+            @if ($pageCountDoc > 1)
+                <div class="doc-date po-pageno">{{ __('doc.page_of', ['p' => $loop->iteration, 't' => $pageCountDoc]) }}</div>
+            @endif
         </div>
     </header>
 
@@ -117,7 +149,7 @@
             @endif
         </div>
 
-        {{-- ═══ الجدول — من غير سكرول، ١٥ صف على الأقل ═══ --}}
+        {{-- ═══ الجدول — من غير سكرول، ورأسه بيتكرر على كل ورقة ═══ --}}
         <table class="doc-table po-table">
             <tr>
                 <th class="c-no">{{ __('doc.line_no') }}</th>
@@ -130,9 +162,9 @@
                 <th class="num">{{ __('common.total') }}</th>
             </tr>
 
-            @foreach ($po->items as $i => $it)
+            @foreach ($pageItemsDoc as $iDoc => $it)
                 <tr>
-                    <td class="num">{{ $i + 1 }}</td>
+                    <td class="num">{{ $rowStartDoc + $iDoc + 1 }}</td>
                     <td class="num bar">{{ $it->product?->barcode ?? '—' }}</td>
                     <td><b>{{ $it->product?->displayName() ?? '—' }}</b></td>
                     <td class="num">
@@ -155,82 +187,90 @@
                 </tr>
             @endforeach
 
-            {{-- صفوف فاضية لحد ١٥ — بتثبّت الشكل وبتمنع الإضافة بالإيد --}}
-            @for ($r = 0; $r < $padRows; $r++)
-                <tr class="pad"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-            @endfor
+            @if ($isLastDoc)
+                {{-- صفوف فاضية لحد ١٥ — بتثبّت الشكل وبتمنع الإضافة بالإيد --}}
+                @for ($r = 0; $r < $padRows; $r++)
+                    <tr class="pad"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+                @endfor
 
-            <tr class="sum">
-                <td colspan="3"><b>{{ __('common.total') }}</b></td>
-                <td class="num"><b>{{ number_format($qtyTotalDoc) }}</b></td>
-                <td colspan="2"></td>
-                <td></td>
-                <td class="num"><b>{{ $fmtDoc($netDoc) }}</b></td>
-            </tr>
+                <tr class="sum">
+                    <td colspan="3"><b>{{ __('common.total') }}</b></td>
+                    <td class="num"><b>{{ number_format($qtyTotalDoc) }}</b></td>
+                    <td colspan="2"></td>
+                    <td></td>
+                    <td class="num"><b>{{ $fmtDoc($netDoc) }}</b></td>
+                </tr>
+            @endif
         </table>
 
-        {{-- ═══ التجميعة جنب بيانات البنك — من غير أي أيقونات ═══ --}}
-        <div class="po-summary">
-            @if ($bankDoc !== [])
-                <div class="po-bank">
-                    <div class="bk-h">{{ __('doc.bank_details') }}</div>
-                    <div class="bk-warn">{{ __('doc.bank_note') }}</div>
-                    <table class="bk-t">
-                        @foreach ([
-                            'doc.bank_name' => $co['bank']['name'],
-                            'doc.bank_branch' => $co['bank']['branch'],
-                            'doc.bank_account_name' => $co['bank']['account_name'],
-                            'doc.bank_account_no' => $co['bank']['account_no'],
-                            'doc.bank_iban' => $co['bank']['iban'],
-                            'doc.bank_swift' => $co['bank']['swift'],
-                        ] as $bkKey => $bkVal)
-                            @if ($bkVal)
-                                <tr><td>{{ __($bkKey) }}</td><td><b>{{ $bkVal }}</b></td></tr>
-                            @endif
-                        @endforeach
-                    </table>
-                </div>
-            @endif
-
-            <div class="doc-totals">
-                <div class="row"><span>{{ __('doc.gross_before_discount') }}</span><span>{{ $fmtDoc($grossDoc) }}</span></div>
-                <div class="row disc"><span>{{ __('doc.discount_value') }}</span><span>− {{ $fmtDoc($discDoc) }}</span></div>
-
-                <div class="row net"><span>{{ __('doc.net_before_tax') }}</span><span>{{ $fmtDoc($netDoc) }}</span></div>
-
-                {{-- السطر بيبان حتى لو صفر طول ما الضريبة مفعّلة —
-                     الفرع يعرف إن الأمر معفى بقصد مش بالنسيان --}}
-                @if ($taxDoc > 0 || \App\Services\Tax::enabled())
-                    @if ($exemptBaseDoc > 0 && $taxDoc > 0)
-                        <div class="row"><span>{{ __('doc.exempt_base') }}</span><span>{{ $fmtDoc($exemptBaseDoc) }}</span></div>
-                    @endif
-                    <div class="row tax">
-                        <span>{{ __('doc.vat_on', ['rate' => $rateLabelDoc, 'base' => $fmtDoc($taxableBaseDoc)]) }}</span>
-                        <span>{{ $fmtDoc($taxDoc) }}</span>
+        @if ($isLastDoc)
+            {{-- ═══ التجميعة جنب بيانات البنك — آخر ورقة بس ═══ --}}
+            <div class="po-summary">
+                @if ($bankDoc !== [])
+                    <div class="po-bank">
+                        <div class="bk-h">{{ __('doc.bank_details') }}</div>
+                        <div class="bk-warn">{{ __('doc.bank_note') }}</div>
+                        <table class="bk-t">
+                            @foreach ([
+                                'doc.bank_name' => $co['bank']['name'],
+                                'doc.bank_branch' => $co['bank']['branch'],
+                                'doc.bank_account_name' => $co['bank']['account_name'],
+                                'doc.bank_account_no' => $co['bank']['account_no'],
+                                'doc.bank_iban' => $co['bank']['iban'],
+                                'doc.bank_swift' => $co['bank']['swift'],
+                            ] as $bkKey => $bkVal)
+                                @if ($bkVal)
+                                    <tr><td>{{ __($bkKey) }}</td><td><b>{{ $bkVal }}</b></td></tr>
+                                @endif
+                            @endforeach
+                        </table>
                     </div>
                 @endif
 
-                <div class="row grand">
-                    <span>{{ __('doc.total_with_tax') }}</span>
-                    <span>{{ $fmtDoc($grandDoc) }}</span>
+                <div class="doc-totals">
+                    <div class="row"><span>{{ __('doc.gross_before_discount') }}</span><span>{{ $fmtDoc($grossDoc) }}</span></div>
+                    <div class="row disc"><span>{{ __('doc.discount_value') }}</span><span>− {{ $fmtDoc($discDoc) }}</span></div>
+
+                    <div class="row net"><span>{{ __('doc.net_before_tax') }}</span><span>{{ $fmtDoc($netDoc) }}</span></div>
+
+                    {{-- السطر بيبان حتى لو صفر طول ما الضريبة مفعّلة —
+                         الفرع يعرف إن الأمر معفى بقصد مش بالنسيان --}}
+                    @if ($taxDoc > 0 || \App\Services\Tax::enabled())
+                        @if ($exemptBaseDoc > 0 && $taxDoc > 0)
+                            <div class="row"><span>{{ __('doc.exempt_base') }}</span><span>{{ $fmtDoc($exemptBaseDoc) }}</span></div>
+                        @endif
+                        <div class="row tax">
+                            <span>{{ __('doc.vat_on', ['rate' => $rateLabelDoc, 'base' => $fmtDoc($taxableBaseDoc)]) }}</span>
+                            <span>{{ $fmtDoc($taxDoc) }}</span>
+                        </div>
+                    @endif
+
+                    <div class="row grand">
+                        <span>{{ __('doc.total_with_tax') }}</span>
+                        <span>{{ $fmtDoc($grandDoc) }}</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {{-- خانات الختم — بتظهر في الطباعة بس --}}
-        <div class="doc-sign three">
-            <div><span></span>{{ __('ops.stamp_accounting') }}</div>
-            <div><span></span>{{ __('ops.stamp_warehouse') }}</div>
-            <div><span></span>{{ __('ops.stamp_branch') }}</div>
-        </div>
+            {{-- خانات الختم — بتظهر في الطباعة بس --}}
+            <div class="doc-sign three">
+                <div><span></span>{{ __('ops.stamp_accounting') }}</div>
+                <div><span></span>{{ __('ops.stamp_warehouse') }}</div>
+                <div><span></span>{{ __('ops.stamp_branch') }}</div>
+            </div>
+        @endif
     </div>
 
-    {{-- ═══ الفوتر: العنوان والتليفون والإيميل بس (قرار المالك ٩/٨) ═══ --}}
-    <footer class="doc-foot po-foot">
-        <div class="ft-inline">
-            @if ($co['address'])<span>{{ $co['address'] }}</span>@endif
-            @if ($co['phone'])<span dir="ltr">{{ $co['phone'] }}</span>@endif
-            @if ($co['email'])<span dir="ltr">{{ $co['email'] }}</span>@endif
-        </div>
-    </footer>
+    @if ($isLastDoc)
+        {{-- ═══ الفوتر: العنوان والتليفون والإيميل بس (قرار المالك ٩/٨) ═══ --}}
+        <footer class="doc-foot po-foot">
+            <div class="ft-inline">
+                @if ($co['address'])<span>{{ $co['address'] }}</span>@endif
+                @if ($co['phone'])<span dir="ltr">{{ $co['phone'] }}</span>@endif
+                @if ($co['email'])<span dir="ltr">{{ $co['email'] }}</span>@endif
+            </div>
+        </footer>
+    @endif
 </div>
+@php $rowStartDoc += $pageItemsDoc->count(); @endphp
+@endforeach

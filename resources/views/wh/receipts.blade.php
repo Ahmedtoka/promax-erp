@@ -9,16 +9,17 @@
     // عنه: مخزن للقراية بس.
     $manager = auth()->user()->canWorkWarehouse();
 
-    // قايمة الأصناف بتتبني مرة واحدة هنا وبتتعاد في قالب البند — ممنوع لوب على المنتجات جوه الجافاسكريبت
-    $productOptions = '<option value="">'.e(__('stock.choose_item')).'</option>';
-    foreach ($products as $p) {
-        $productOptions .= '<option value="'.(int) $p->id.'">'
-            .e($p->code.' — '.$p->displayName())
-            .'</option>';
-    }
-
-    // وحدات الإدخال لكل صنف — العرض بس؛ الضرب الحقيقي في السيرفر (storeReceipt)
-    $unitMap = $products->mapWithKeys(fn ($p) => [$p->id => $p->unitFactors()]);
+    // كتالوج البحث — بحث ليست بالاسمين والكود والصورة (بدل السيلكت الجاف).
+    // وحدات الإدخال جوّاه للعرض بس؛ الضرب الحقيقي في السيرفر (storeReceipt).
+    $catalog = $products->map(fn ($p) => [
+        'id' => $p->id,
+        'code' => (string) $p->code,
+        'name' => $p->displayName(),
+        'name_ar' => (string) $p->name,
+        'name_en' => (string) $p->name_en,
+        'image' => $p->imageSrc(),
+        'units' => $p->unitFactors(),
+    ])->values();
 @endphp
 
 @section('actions')
@@ -176,7 +177,17 @@
         </div>
 
         <h4 style="font-size:13.5px;margin-bottom:8px">{{ __('stock.receipt_lines') }}</h4>
-        <div class="tablewrap" style="max-height:44vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
+
+        {{-- ═══ منتقي الأصناف: بحث ليست بدل السيلكت الجاف (ليست مش دروب داون) ═══
+             نفس نمط تسليم العهدة/التحويلات. اختيار صنف بينزّل بند باتش
+             ليه — ونفس الصنف ممكن يتضاف أكتر من مرة (باتشات مختلفة). --}}
+        @include('partials._item_picker', [
+            'id' => 'grn',
+            'catalog' => $catalog,
+            'onPick' => 'grnPickProduct',
+        ])
+
+        <div class="tablewrap" style="margin-top:10px;max-height:44vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
             <table id="grnTbl">
                 <thead>
                     <tr>
@@ -191,12 +202,14 @@
                         <th></th>
                     </tr>
                 </thead>
-                <tbody id="grnRows"></tbody>
+                <tbody id="grnRows">
+                    <tr id="grnEmpty">
+                        <td colspan="9" style="text-align:center;color:var(--muted);padding:24px">
+                            {{ __('field.no_selected_hint') }}
+                        </td>
+                    </tr>
+                </tbody>
             </table>
-        </div>
-
-        <div style="margin-top:10px">
-            <button class="btn" type="button" onclick="grnAddLine()">+ {{ __('stock.add_line') }}</button>
         </div>
 
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
@@ -206,29 +219,6 @@
     </form>
 </dialog>
 
-{{-- قالب البند — الأوبشنز مبنية مرة واحدة في PHP فوق --}}
-<template id="grnTpl">
-    <tr>
-        <td class="num grn-no"></td>
-        <td>
-            <select data-n="product_id" required style="min-width:210px;width:100%">{!! $productOptions !!}</select>
-        </td>
-        <td><input type="text" data-n="batch_no" required style="width:120px"></td>
-        <td><input type="date" data-n="produced_on" style="width:150px"></td>
-        <td><input type="date" data-n="expires_on" style="width:150px"></td>
-        <td>
-            <select data-n="unit" style="width:100px" onchange="grnUnitHint(this)">
-                <option value="piece">{{ __('stock.unit_piece') }}</option>
-            </select>
-        </td>
-        <td>
-            <input type="number" data-n="qty" min="1" step="1" value="1" required style="width:90px" oninput="grnUnitHint(this)">
-            <div class="grn-eq" style="font-size:10.5px;color:var(--muted);margin-top:3px"></div>
-        </td>
-        <td><input type="number" data-n="cost" min="0" step="0.01" style="width:100px"></td>
-        <td><button class="btn sm red" type="button" onclick="grnRemoveLine(this)">{{ __('stock.remove_line') }}</button></td>
-    </tr>
-</template>
 @endif
 
 @endsection
@@ -236,56 +226,36 @@
 @section('scripts')
 @if ($manager)
 <script>
-// وحدات الإدخال لكل صنف — {id: {piece:1, box:12, case:72}}
-// ⚠️ العرض بس: السيرفر بيعيد الضرب بنفسه في storeReceipt
-const GRN_UNITS = {!! json_encode($unitMap, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+// الكتالوج (id, code, name, units...) بيتعرّض من بارشيال المنتقي
+const GRN_CAT = window.PICKER_GRN || [];
 const GRN_UNIT_LABELS = {
     piece: @json(__('stock.unit_piece')),
     box: @json(__('stock.unit_box')),
     'case': @json(__('stock.unit_case'))
 };
 
-/** الصنف اتغيّر؟ نبني قايمة الوحدات المتاحة ليه (قطعة دايماً + علبة/كرتونة لو معرّفين) */
-function grnUnitOptions(row) {
-    var pid = row.querySelector('[data-n="product_id"]').value;
-    var sel = row.querySelector('[data-n="unit"]');
-    var factors = GRN_UNITS[pid] || { piece: 1 };
-    var current = sel.value;
+const grnEsc = s => String(s ?? '').replace(/[&<>"']/g,
+    ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-    sel.innerHTML = '';
-    Object.keys(factors).forEach(function (u) {
-        var opt = document.createElement('option');
-        opt.value = u;
-        opt.textContent = GRN_UNIT_LABELS[u] + (factors[u] > 1 ? ' (' + factors[u] + ')' : '');
-        sel.appendChild(opt);
-    });
-
-    sel.value = factors[current] ? current : 'piece';
-    grnUnitHint(sel);
-}
+function grnProduct(id) { return GRN_CAT.find(function (p) { return p.id === id; }); }
 
 /** «= N قطعة» تحت الكمية — بيبان بس لما الوحدة مش قطعة */
 function grnUnitHint(el) {
     var row = el.closest('tr');
-    var pid = row.querySelector('[data-n="product_id"]').value;
+    var pid = Number(row.dataset.pid);
     var unit = row.querySelector('[data-n="unit"]').value;
     var qty = Number(row.querySelector('[data-n="qty"]').value || 0);
     var eq = row.querySelector('.grn-eq');
-    var factor = (GRN_UNITS[pid] || {})[unit] || 1;
+    var factor = ((grnProduct(pid) || {}).units || {})[unit] || 1;
 
     eq.textContent = (factor > 1 && qty > 0)
         ? '= ' + (qty * factor).toLocaleString() + ' ' + GRN_UNIT_LABELS.piece
         : '';
 }
 
-document.addEventListener('change', function (e) {
-    if (e.target.matches('#grnRows [data-n="product_id"]')) {
-        grnUnitOptions(e.target.closest('tr'));
-    }
-});
-
+/** بترقّم البنود وتحدّث أسماء الحقول lines[i][...] — بتشيل أي فراغ في الترتيب */
 function grnReindex() {
-    document.querySelectorAll('#grnRows > tr').forEach(function (tr, i) {
+    document.querySelectorAll('#grnRows > tr[data-pid]').forEach(function (tr, i) {
         tr.querySelectorAll('[data-n]').forEach(function (el) {
             el.name = 'lines[' + i + '][' + el.dataset.n + ']';
         });
@@ -294,30 +264,67 @@ function grnReindex() {
     });
 }
 
-function grnAddLine() {
-    var tpl = document.getElementById('grnTpl');
-    var row = tpl.content.firstElementChild.cloneNode(true);
-    document.getElementById('grnRows').appendChild(row);
+/**
+ * اختيار صنف من الليست → بند باتش جديد ليه.
+ * ⚠️ **مفيش منع تكرار** — نفس الصنف ممكن يوصل في أكتر من باتش
+ * (رقم/تاريخ مختلف)، والسيرفر بيجمّعهم بـ product+batch_no.
+ */
+function grnPickProduct(id) {
+    var p = grnProduct(id);
+    if (!p) { return; }
+
+    grnPickerReset();                       // من البارشيال — يفضّي البحث ويقفل القايمة
+    document.getElementById('grnEmpty')?.remove();
+
+    var units = p.units || { piece: 1 };
+    // الديفولت الموحّد: علبة لو موجودة، وإلا قطعة
+    var def = units.box ? 'box' : 'piece';
+
+    var tr = document.createElement('tr');
+    tr.dataset.pid = id;
+    tr.innerHTML =
+        '<td class="num grn-no"></td>' +
+        '<td><div style="display:flex;gap:9px;align-items:center">' +
+            (p.image
+                ? '<img src="' + grnEsc(p.image) + '" style="width:48px;height:48px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#fff;flex-shrink:0">'
+                : '<div style="width:48px;height:48px;border-radius:8px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>') +
+            '<div><b>' + grnEsc(p.name) + '</b><div style="font-size:10.5px;color:var(--muted)">' + grnEsc(p.code) + '</div></div>' +
+        '</div>' +
+        '<input type="hidden" data-n="product_id" value="' + id + '"></td>' +
+        '<td><input type="text" data-n="batch_no" required style="width:120px"></td>' +
+        '<td><input type="date" data-n="produced_on" style="width:150px"></td>' +
+        '<td><input type="date" data-n="expires_on" style="width:150px"></td>' +
+        '<td><select data-n="unit" style="width:110px" onchange="grnUnitHint(this)">' +
+            Object.keys(units).map(function (u) {
+                return '<option value="' + u + '"' + (u === def ? ' selected' : '') + '>' +
+                    grnEsc(GRN_UNIT_LABELS[u]) + (units[u] > 1 ? ' (' + units[u] + ')' : '') + '</option>';
+            }).join('') +
+        '</select></td>' +
+        '<td><input type="number" data-n="qty" min="1" step="1" value="1" required style="width:90px" oninput="grnUnitHint(this)">' +
+            '<div class="grn-eq" style="font-size:10.5px;color:var(--muted);margin-top:3px"></div></td>' +
+        '<td><input type="number" data-n="cost" min="0" step="0.01" style="width:100px"></td>' +
+        '<td><button class="btn sm red" type="button" onclick="grnRemoveLine(this)">' + grnEsc(@json(__('stock.remove_line'))) + '</button></td>';
+
+    document.getElementById('grnRows').appendChild(tr);
     grnReindex();
-    var sel = row.querySelector('[data-n="product_id"]');
-    if (sel) { sel.focus(); }
+    tr.querySelector('[data-n="batch_no"]').focus();
 }
 
 function grnRemoveLine(btn) {
-    var rows = document.getElementById('grnRows');
-    if (rows.children.length <= 1) { return; }
     btn.closest('tr').remove();
     grnReindex();
+    // رجّع صف «فاضي» لو مبقاش فيه بنود
+    if (!document.querySelector('#grnRows > tr[data-pid]')) {
+        document.getElementById('grnRows').innerHTML =
+            '<tr id="grnEmpty"><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">' +
+            grnEsc(@json(__('field.no_selected_hint'))) + '</td></tr>';
+    }
 }
 
 function grnBeforeSubmit() {
     grnReindex();
-    return document.querySelectorAll('#grnRows > tr').length > 0;
+    return document.querySelectorAll('#grnRows > tr[data-pid]').length > 0;
 }
-
-document.addEventListener('DOMContentLoaded', function () {
-    if (document.getElementById('grnRows')) { grnAddLine(); }
-});
 </script>
 @endif
 @endsection

@@ -100,4 +100,5 @@ return [
     'notifications' => 'Notifications',
     'mark_all_read' => 'Mark all read',
     'no_notifications' => 'No notifications yet',
+    'unit' => 'Unit',
 ];

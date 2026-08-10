@@ -986,7 +986,7 @@ class OpsController extends Controller
         // ⚠️ سكوب التشانل مانجر — مايعدّلش أمر عميل مش بتاعه
         abort_unless($purchaseOrder->client?->visibleBy(auth()->user()) ?? true, 403);
 
-        if ($purchaseOrder->approval_status !== 'pending') {
+        if (! $this->poEditable($purchaseOrder)) {
             return redirect()->route('ops.po.approvals')
                 ->withErrors(['decision' => __('ops.po_already_decided')]);
         }
@@ -1004,11 +1004,34 @@ class OpsController extends Controller
      * بيرقّع، بيعيد التسعير كأنه أمر جديد بنفس الرقم. والقرار لسه
      * عند الحسابات: التعديل مابيوافقش، بيرجّع الأمر للطابور.
      */
+    /**
+     * الأمر يتعدّل امتى؟ (توسيع ١٠ أغسطس ٢٠٢٦ بقرار المالك)
+     *
+     * - **مستني الحسابات** → يتعدّل عادي (السلوك القديم).
+     * - **معتمد** → يتعدّل طالما التسليم مابدأش (`status = pending`)
+     *   والمندوب ماستلمش بضاعته من المخزن (`pick != handed`) —
+     *   والتعديل **بيرجّعه لطابور الحسابات** (شوف updatePo).
+     * - وصل/اتسلم/اتلغى أو البضاعة خرجت → مفيش تعديل.
+     */
+    private function poEditable(PurchaseOrder $purchaseOrder): bool
+    {
+        if ($purchaseOrder->approval_status === 'pending') {
+            return true;
+        }
+
+        return $purchaseOrder->approval_status === 'approved'
+            && $purchaseOrder->status === 'pending'
+            && $purchaseOrder->pickOrder?->status !== 'handed';
+    }
+
     public function updatePo(Request $request, PurchaseOrder $purchaseOrder)
     {
-        if ($purchaseOrder->approval_status !== 'pending') {
+        if (! $this->poEditable($purchaseOrder)) {
             return back()->withErrors(['decision' => __('ops.po_already_decided')]);
         }
+
+        // بنمسكها قبل أي كتابة — دي اللي بتحدد فلو «الرجوع للحسابات»
+        $wasApproved = $purchaseOrder->approval_status === 'approved';
 
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
@@ -1086,6 +1109,49 @@ class OpsController extends Controller
                 $purchaseOrder->items()->delete();
                 $this->fillPoItems($purchaseOrder, $client, $data['qty'], 'channel');
             });
+
+            // ═══ تعديل أمر معتمد → يرجع لطابور الحسابات (١٠ أغسطس ٢٠٢٦) ═══
+            //
+            // قرار المالك: التعديل مايكملش من غير موافقة الحسابات من
+            // جديد. أمر التجهيز اللي اتفتح بالموافقة القديمة بيتلغي
+            // (cancel بترجّع أي كميات اتلمّت للرف)، والموافقة الجاية
+            // هتفتح تجهيز جديد بالكميات الجديدة — مفيش تجهيزين لنفس
+            // الأمر ولا تجهيز بكميات قديمة.
+            if ($wasApproved) {
+                DB::transaction(function () use ($purchaseOrder) {
+                    $pick = $purchaseOrder->pickOrder;
+
+                    if ($pick !== null && ! in_array($pick->status, ['cancelled', 'handed'], true)) {
+                        if ($err = $pick->cancel()) {
+                            throw new \App\Exceptions\Rejected($err);
+                        }
+                    }
+
+                    $purchaseOrder->update([
+                        'approval_status' => 'pending',
+                        'approved_by' => null,
+                        'approved_at' => null,
+                        'pick_order_id' => null,
+                    ]);
+                });
+
+                // المحاسبين ياخدوا بالهم إن فيه أمر رجع الطابور —
+                // ⚠️ من غير لينك: شاشة الطابور مش من وجهات الأبلكيشن،
+                // ولينك مقفول أسوأ من مفيش (درس أمين المخزن الموثّق).
+                foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
+                    AppNotification::send(
+                        $acc,
+                        fn () => __('field.notif_po_reapproval_title', ['number' => $purchaseOrder->number]),
+                        fn () => __('field.notif_po_reapproval_body', [
+                            'client' => $purchaseOrder->client->displayName(),
+                            'by' => auth()->user()->displayName(),
+                        ]),
+                    );
+                }
+
+                return redirect()->route('ops.po.approvals')
+                    ->with('ok', __('flash.po_back_to_accounting'));
+            }
         } catch (\App\Exceptions\Rejected $e) {
             return back()->withErrors(['qty' => $e->getMessage()])->withInput();
         }

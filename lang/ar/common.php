@@ -100,4 +100,5 @@ return [
     'notifications' => 'الإشعارات',
     'mark_all_read' => 'علّم الكل مقروء',
     'no_notifications' => 'مفيش إشعارات',
+    'unit' => 'الوحدة',
 ];

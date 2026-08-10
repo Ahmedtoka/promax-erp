@@ -41,7 +41,7 @@ class BranchController extends Controller
             // ⚠️ اللي مش متخصص لفرع — دول اللي بيبانوا لكل الفروع.
             // لازم يبان عددهم عشان اليوزر يعرف إن فيه حاجة مركزية.
             'unassigned' => [
-                'clients' => Client::whereNull('branch_id')->where('status', 'active')->count(),
+                'clients' => Client::visibleTo(Client::whereNull('branch_id')->where('status', 'active'), $request->user())->count(),
                 'users' => User::whereNull('branch_id')->where('active', true)->count(),
                 'zones' => Zone::whereNull('branch_id')->count(),
                 'warehouses' => Warehouse::whereNull('branch_id')->count(),

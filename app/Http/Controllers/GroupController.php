@@ -31,7 +31,7 @@ class GroupController extends Controller
         $groups = $q->orderByDesc('clients_count')->orderBy('name')->get();
 
         // أرقام كل سلسلة في استعلام واحد
-        $stats = Client::query()
+        $stats = Client::visibleTo(Client::query(), $request->user())
             ->whereNotNull('group_id')
             ->selectRaw('group_id,
                 SUM(purchases) as purchases,
@@ -45,15 +45,17 @@ class GroupController extends Controller
             'stats' => $stats,
             'channels' => Channel::orderBy('id')->get(),
             'filters' => $request->only(['q', 'channel']),
-            'ungrouped' => Client::whereNull('group_id')
+            'ungrouped' => Client::visibleTo(Client::whereNull('group_id'), $request->user())
                 ->where('category', '!=', 'internal')->count(),
         ]);
     }
 
     public function show(ClientGroup $group, Request $request)
     {
-        $branches = $group->clients()
-            ->with(['zone', 'contract', 'group.contract'])
+        $branches = Client::visibleTo(
+            $group->clients()->with(['zone', 'contract', 'group.contract']),
+            $request->user()
+        )
             ->orderByDesc('purchases')
             ->get();
 
@@ -144,7 +146,7 @@ class GroupController extends Controller
                 $fields['payment_days_from'] = null;
             }
 
-            $n = $group->clients()->update($fields);
+            $n = Client::visibleTo($group->clients(), $request->user())->update($fields);
 
             return back()->with('ok', __('client.chain_payment_applied', [
                 'terms' => $fields['payment_terms'] === null
@@ -166,7 +168,7 @@ class GroupController extends Controller
             // بيعيش على الفرع عشان الفرع اللي هيتفاوض لوحده بعدين
             // يتعدّل لوحده. والفرع اللي ليه عقد سارٍ بخصم فاتورة،
             // خصم العقد هو اللي بيتحاسب بيه (أولوية `effectiveDiscount`).
-            $n = $group->clients()->update(['discount' => $pct / 100]);
+            $n = Client::visibleTo($group->clients(), $request->user())->update(['discount' => $pct / 100]);
 
             return back()->with('ok', __('client.chain_discount_applied', [
                 'pct' => $pct,

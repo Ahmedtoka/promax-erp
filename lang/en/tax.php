@@ -83,4 +83,10 @@ return [
     'print_address' => 'Print address',
     'print_address_hint' => 'The line printed in the footer of sales orders and invoices — separate from the address fields below, which go to the tax authority.',
     'bank_hint' => 'Printed beside the totals on the sales order',
+
+    // Returns switch (Aug 10, 2026)
+    'returns_section' => 'Returns',
+    'returns_state_open' => 'Open',
+    'returns_state_closed' => 'Closed',
+    'returns_open_hint' => 'Open: reps and accounting can record returns. Close it during stock counts or period closing - any attempt is rejected with a clear message.',
 ];

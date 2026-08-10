@@ -1142,6 +1142,13 @@ class ErpController extends Controller
     {
         $contract->load(['client.zone', 'group', 'contractClauses']);
 
+        // ⚠️ سكوب التشانل مانجر (تدقيق ١٠/٨): عقد عميل مفرد مش بتاعه
+        // مايتفتحش بالـid. عقد السلسلة مفتوح — نفس سياسة صفحة العقود.
+        abort_unless(
+            $contract->client === null || $contract->client->visibleBy(auth()->user()),
+            403,
+        );
+
         // البنود متقسّمة لمجموعات عرض: المهم فوق والتفاصيل تحت
         $clauses = $contract->contractClauses;
 
@@ -1152,7 +1159,7 @@ class ErpController extends Controller
 
         // الفروع اللي العقد بيغطيها — عقد السلسلة بيغطي كل فروعها
         $branches = $contract->group_id
-            ? Client::where('group_id', $contract->group_id)->orderBy('name')->get()
+            ? Client::visibleTo(Client::where('group_id', $contract->group_id))->orderBy('name')->get()
             : collect(array_filter([$contract->client]));
 
         return view('erp.contract', [
@@ -1170,7 +1177,7 @@ class ErpController extends Controller
                 ? \App\Models\ClientGroup::where('active', true)->orderBy('name')->get()
                 : collect(),
             'linkClients' => $contract->client_id === null && $contract->group_id === null
-                ? Client::orderBy('code')->get(['id', 'code', 'name', 'name_en'])
+                ? Client::visibleTo(Client::orderBy('code'))->get(['id', 'code', 'name', 'name_en'])
                 : collect(),
         ]);
     }

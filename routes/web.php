@@ -544,6 +544,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
             Route::post('/picks/{pick}/start', [PickOrderController::class, 'startPicking'])->name('picks.start');
             Route::post('/picks/{pick}/ready', [PickOrderController::class, 'markReady'])->name('picks.ready');
+            // تعديل إذن الصرف قبل «جاهز» (١٠/٨) — نفس حارس المخزن جوه الأكشن
+            Route::post('/picks/{pick}/update', [PickOrderController::class, 'update'])->name('picks.update');
         });
 
         // ═════ القرارات — للمدير بس ═════

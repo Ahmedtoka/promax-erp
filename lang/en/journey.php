@@ -44,6 +44,19 @@ return [
     'no_orphans' => 'Every client has a rep — all good',
     'clients_count' => 'Clients',
 
+    // ═══ Quick assignment (2026-08-10) — pick the rep once, then click ═══
+    'all_clients' => 'All clients',
+    'flow_hint' => 'Pick the rep at the top, then click Assign next to any client to move them instantly. Or tick several and move them at once.',
+    'filter' => 'Filter',
+    'show_all' => 'All',
+    'only_orphans' => 'No rep only',
+    'only_mine' => "This rep's clients",
+    'current_rep' => 'Current rep',
+    'no_rep' => 'No rep',
+    'assign_to' => 'Assign to :rep',
+    'remove_this' => 'Unassign',
+    'move_selected' => 'Move selected to :rep',
+
     // ═══ Live board ═══
     'live' => 'Live board',
     'live_sub' => 'Reps out in the field right now',

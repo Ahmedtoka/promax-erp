@@ -293,4 +293,5 @@ return [
     'no_coords_note' => ':count events have no coordinates - they appear in the timeline only. (After this update, new events fall back to the client/warehouse location automatically when GPS fails)',
     'no_coords_one' => 'No coordinates',
     'toggle_rep_hint' => 'Tap a person to hide/show them:',
+    'po_edit_back_confirm' => 'This order is approved - editing sends it back to accounting approval and cancels the current pick order. Continue?',
 ];

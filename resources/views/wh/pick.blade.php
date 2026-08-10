@@ -24,6 +24,10 @@
     // والسيرفر بيرفض «جاهز» قبل البداية (`PickOrder::markReady`).
     $canStart = $o->status === 'requested';
     $canReady = $o->status === 'picking';
+    // تعديل إذن الصرف قبل «جاهز» (١٠/٨) — الأمين يصلّح كمية أو صنف
+    $canEdit = in_array($o->status, ['requested', 'picking'], true);
+    // الكميات الحالية مجمّعة بالصنف (الأمر ممكن يبقى فيه أكتر من باتش لنفس الصنف)
+    $editQty = $o->items->groupBy('product_id')->map(fn ($g) => (int) $g->sum('qty_requested'));
     // ⚠️ الإلغاء قرار مدير (`role:admin,manager` في الراوت) — من غير
     // فحص الرول أمين المخزن كان بيشوف الزرار وياخد 403.
     $canCancel = $o->status !== 'handed' && auth()->user()->canDecideOps();
@@ -59,6 +63,9 @@
                 @csrf
                 <button class="btn" type="submit">▶️ {{ __('stock.start_picking') }}</button>
             </form>
+        @endif
+        @if ($canEdit)
+            <button class="btn" type="button" onclick="openDlg('dlgEdit')">✏️ {{ __('stock.pick_edit') }}</button>
         @endif
         @if ($canReady)
             <button class="btn gold" type="button" onclick="openDlg('dlgReady')">✅ {{ __('stock.mark_ready') }}</button>
@@ -305,6 +312,112 @@
             </div>
         </form>
     </dialog>
+@endif
+
+{{-- ═══ تعديل إذن الصرف (١٠/٨) — كميات الأصناف الحالية + إضافة صنف ═══
+     ⚠️ التعديل بيعيد تخطيط FEFO بالكميات الجديدة (PickOrder::editItems)
+     — بيشتغل قبل «جاهز» بس، والبضاعة لسه ماخرجتش من الأرفف. --}}
+@if ($manager && $canEdit)
+    <dialog id="dlgEdit" class="wide">
+        <form class="dlg" method="POST" action="{{ route('wh.picks.update', $o) }}"
+              style="width:min(720px,96vw);max-height:88vh;overflow-y:auto">
+            @csrf
+            <h4>✏️ {{ __('stock.pick_edit') }} — {{ $o->number }}</h4>
+
+            <div class="alert info" style="margin-bottom:12px">
+                <span>ℹ️</span><span>{{ __('stock.pick_edit_hint') }}</span>
+            </div>
+
+            {{-- منتقي إضافة صنف جديد — نفس ليست البحث المشتركة --}}
+            @php
+                $pickCatalog = $products->map(fn ($p) => [
+                    'id' => $p->id, 'code' => $p->code,
+                    'name' => $p->displayName(), 'name_ar' => $p->name,
+                    'name_en' => $p->name_en, 'image' => $p->imageSrc(),
+                ])->values()->all();
+            @endphp
+            <label class="f">{{ __('stock.pick_add_item') }}</label>
+            @include('partials._item_picker', [
+                'id' => 'pkedit',
+                'catalog' => $pickCatalog,
+                'onPick' => 'pickEditAdd',
+            ])
+
+            <div class="tablewrap" style="margin-top:12px;max-height:44vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align:start">{{ __('stock.item') }}</th>
+                            <th>{{ __('common.unit') }}</th>
+                            <th>{{ __('common.qty') }}</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pkeditRows">
+                        @foreach ($editQty as $productId => $qty)
+                            @php $prod = $products->firstWhere('id', $productId); @endphp
+                            <tr data-pid="{{ $productId }}">
+                                <td style="text-align:start">
+                                    <b>{{ $prod?->displayName() ?? __('stock.product_hash', ['id' => $productId]) }}</b>
+                                    @if ($prod)<div style="font-size:10.5px;color:var(--muted)">{{ $prod->code }}</div>@endif
+                                </td>
+                                <td>
+                                    <select name="unit[{{ $productId }}]" style="width:110px">
+                                        <option value="piece">{{ __('stock.unit_piece') }}</option>
+                                        <option value="box">{{ __('stock.unit_box') }}</option>
+                                        <option value="case">{{ __('stock.unit_case') }}</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="number" name="qty[{{ $productId }}]" min="0" step="1"
+                                           value="{{ $qty }}" style="width:96px">
+                                </td>
+                                <td>
+                                    <button type="button" class="btn sm red" onclick="this.closest('tr').remove()">✕</button>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                <button class="btn" type="button" onclick="closeDlg('dlgEdit')">{{ __('common.cancel') }}</button>
+                <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script>
+    (function () {
+        'use strict';
+        // إضافة صنف من ليست البحث — لو موجود بيركّز على خانته بدل التكرار
+        window.pickEditAdd = function (id) {
+            const prod = (window.PICKER_PKEDIT || []).find(p => p.id === id);
+            if (!prod) return;
+
+            const existing = document.querySelector('#pkeditRows tr[data-pid="' + id + '"]');
+            if (existing) {
+                const q = existing.querySelector('input[type=number]');
+                if (q) { q.value = (parseInt(q.value || '0', 10) || 0) + 1; q.focus(); }
+            } else {
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-pid', id);
+                tr.innerHTML =
+                    '<td style="text-align:start"><b>' + (prod.name || '') + '</b>' +
+                    '<div style="font-size:10.5px;color:var(--muted)">' + (prod.code || '') + '</div></td>' +
+                    '<td><select name="unit[' + id + ']" style="width:110px">' +
+                    '<option value="piece">{{ __('stock.unit_piece') }}</option>' +
+                    '<option value="box">{{ __('stock.unit_box') }}</option>' +
+                    '<option value="case">{{ __('stock.unit_case') }}</option></select></td>' +
+                    '<td><input type="number" name="qty[' + id + ']" min="0" step="1" value="1" style="width:96px"></td>' +
+                    '<td><button type="button" class="btn sm red" onclick="this.closest(\'tr\').remove()">✕</button></td>';
+                document.getElementById('pkeditRows').appendChild(tr);
+            }
+            window.pkeditPickerReset();
+        };
+    })();
+    </script>
 @endif
 
 {{-- بعد «تم التجهيز»: رسالة النجاح بتبان وبنرجع لقايمة تجهيز

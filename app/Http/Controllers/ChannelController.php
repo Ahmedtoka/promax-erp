@@ -33,13 +33,14 @@ class ChannelController extends Controller
             'channels' => Channel::orderBy('id')->get(),
             'stats' => $this->channelStats(),
             'spread' => $this->discountSpread(),
-            'subCounts' => Client::selectRaw('sub_channel, COUNT(*) as n')
+            'subCounts' => Client::visibleTo(Client::query(), $request->user())
+                ->selectRaw('sub_channel, COUNT(*) as n')
                 ->whereNotNull('sub_channel')->groupBy('sub_channel')
                 ->pluck('n', 'sub_channel')->all(),
             // ⚠️ عملاء من غير قناة = عملاء مش داخلين في أي رقم في
             // الشاشة دي. لازم يبانوا، وإلا الإجماليات تحت بتقل عن
             // إجمالي السيستم ومحدش يعرف ليه.
-            'orphans' => Client::whereNull('channel_id')->where('status', 'active')->count(),
+            'orphans' => Client::visibleTo(Client::whereNull('channel_id'), $request->user())->where('status', 'active')->count(),
             'managers' => User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
                 ->where('active', true)->with('channels')->get(),
         ]);
@@ -58,7 +59,7 @@ class ChannelController extends Controller
     {
         // ═══ العملاء والفلوس ═══
         // ملاحظة: `returns` كلمة محجوزة في MySQL — لازم backticks
-        $money = Client::query()
+        $money = Client::visibleTo(Client::query(), auth()->user())
             ->whereNotNull('channel_id')
             ->selectRaw("channel_id,
                 COUNT(*) as n_clients,
@@ -79,6 +80,7 @@ class ChannelController extends Controller
             ->join('clients', 'clients.id', '=', 'transactions.client_id')
             ->where('transactions.kind', 'consignment')
             ->whereNotNull('clients.channel_id')
+            ->whereIn('transactions.client_id', Client::visibleTo(Client::query(), auth()->user())->select('id'))
             ->selectRaw('clients.channel_id, SUM(transactions.debit - transactions.credit) as amt')
             ->groupBy('clients.channel_id')
             ->pluck('amt', 'channel_id');
@@ -88,6 +90,7 @@ class ChannelController extends Controller
             ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
             ->join('clients', 'clients.id', '=', 'invoices.client_id')
             ->whereNotNull('clients.channel_id')
+            ->whereIn('invoices.client_id', Client::visibleTo(Client::query(), auth()->user())->select('id'))
             ->selectRaw('clients.channel_id, SUM(invoice_items.qty) as units')
             ->groupBy('clients.channel_id')
             ->pluck('units', 'channel_id');
@@ -153,6 +156,7 @@ class ChannelController extends Controller
             ->join('clients', 'clients.id', '=', 'invoices.client_id')
             ->whereNotNull('clients.channel_id')
             ->whereDate('invoices.created_at', today())
+            ->whereIn('invoices.client_id', Client::visibleTo(Client::query(), auth()->user())->select('id'))
             ->selectRaw('clients.channel_id, SUM(invoices.total) as amt')
             ->groupBy('clients.channel_id')
             ->pluck('amt', 'channel_id');
@@ -206,7 +210,7 @@ class ChannelController extends Controller
     {
         $acc = [];
 
-        Client::with(['contract', 'group.contract', 'group'])
+        Client::visibleTo(Client::with(['contract', 'group.contract', 'group']), auth()->user())
             ->whereNotNull('channel_id')
             ->where('status', 'active')
             ->chunkById(200, function ($chunk) use (&$acc) {

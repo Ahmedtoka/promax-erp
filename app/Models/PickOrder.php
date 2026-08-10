@@ -710,6 +710,88 @@ class PickOrder extends Model
     }
 
     /** إلغاء — البضاعة اللي طلعت من الأرفف ترجع */
+    /**
+     * تعديل كميات/أصناف أمر التجهيز قبل ما يتسلّم (١٠ أغسطس ٢٠٢٦).
+     *
+     * قرار المالك: «إذن الصرف مش بيتعدّل». الأمين لقى الطلب فيه صنف
+     * غلط أو كمية غلط ومكانش يقدر يصلّح غير بإلغاء وإعادة إنشاء.
+     *
+     * ⚠️ **بيشتغل قبل «جاهز» بس** (`requested`/`picking`): البضاعة
+     * لسه ماخرجتش من الأرفف — `pull()` بيحصل في `markReady`، و
+     * `qty_picked` لسه صفر. فالتعديل هنا مجرد إعادة تخطيط FEFO
+     * بالكميات الجديدة، من غير أي حركة مخزون نرجّعها. بعد «جاهز»
+     * أو «اتسلّم» ممنوع — الطريق الوحيد وقتها الإلغاء.
+     *
+     * ⚠️ بيرجّع الحالة لـ`requested` لأن الخطة اتغيّرت — الأمين
+     * يبدأ من جديد على الكميات الجديدة.
+     *
+     * @param  array<int, int>  $qtyByProduct  [product_id => qty]
+     */
+    public function editItems(array $qtyByProduct): ?string
+    {
+        if (! in_array($this->status, ['requested', 'picking'], true)) {
+            return __('stock.pick_edit_too_late');
+        }
+
+        $qtyByProduct = array_filter($qtyByProduct, fn ($q) => (int) $q > 0);
+
+        if (! $qtyByProduct) {
+            return __('stock.pick_no_items');
+        }
+
+        $warehouse = $this->warehouse;
+
+        // نخطّط الكل الأول — صنف واحد ناقص يرفض التعديل كله (نفس raise)
+        $plan = [];
+        foreach ($qtyByProduct as $productId => $qty) {
+            $lines = self::planFefo($warehouse, (int) $productId, (int) $qty);
+
+            if ($lines === null) {
+                return __('stock.pick_not_enough', [
+                    'product' => Product::find($productId)?->displayName() ?? "#$productId",
+                    'available' => $warehouse->availableFor((int) $productId),
+                ]);
+            }
+
+            $plan = array_merge($plan, $lines);
+        }
+
+        // ⚠️ **الهدايا بتتحفظ** — أمر تحميل العهدة (van_load) ممكن
+        // يكون فيه هدايا على البنود، والتعديل بيعيد بناء البنود.
+        // من غير الحفظ ده كان تعديل كمية البيع بيمسح كل الهدايا في
+        // صمت. بنجمّع gift_qty بالصنف ونرجّعها لأول بند للصنف بعد البناء.
+        $giftByProduct = $this->items->groupBy('product_id')
+            ->map(fn ($g) => (int) $g->sum('gift_qty'))->filter();
+
+        DB::transaction(function () use ($plan, $giftByProduct) {
+            $this->items()->delete();
+
+            $giftDone = [];
+            foreach ($plan as $line) {
+                $pid = $line['product_id'];
+                $gift = ! isset($giftDone[$pid]) ? (int) ($giftByProduct[$pid] ?? 0) : 0;
+                $giftDone[$pid] = true;
+
+                PickOrderItem::create([
+                    'pick_order_id' => $this->id,
+                    'product_id' => $pid,
+                    'batch_id' => $line['batch_id'],
+                    'location_id' => $line['location_id'],
+                    'qty_requested' => $line['qty'],
+                    'gift_qty' => $gift,
+                ]);
+            }
+
+            $this->update([
+                'status' => 'requested',
+                'picked_by' => null,
+                'started_at' => null,
+            ]);
+        });
+
+        return null;
+    }
+
     public function cancel(): ?string
     {
         if ($this->status === 'handed') {

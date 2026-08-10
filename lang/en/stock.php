@@ -519,4 +519,10 @@ return [
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'pick_ready_ok' => 'Order ready - the rep was notified to pick it up.',
     'pick_not_your_warehouse' => 'This order is not on your warehouse.',
+    // Pick order edit (Aug 10, 2026)
+    'pick_edit' => 'Edit pick order',
+    'pick_edit_hint' => 'Fix quantities or add/remove an item before Ready. The edit re-plans the reservation with the new quantities and returns the order to Requested so the keeper starts fresh.',
+    'pick_add_item' => 'Add item',
+    'pick_edited' => 'Pick order :number updated',
+    'pick_edit_too_late' => 'Cannot edit after the order is picked or handed over - use cancel instead.',
 ];
