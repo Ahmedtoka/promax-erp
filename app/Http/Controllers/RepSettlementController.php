@@ -51,7 +51,8 @@ class RepSettlementController extends Controller
     /** شاشة تصفية مندوب واحد — الفواتير بالتفصيل للمطابقة قدام المحاسب */
     public function show(User $user)
     {
-        abort_unless(in_array($user->role, ['sales_agent', 'driver'], true), 404);
+        // ⚠️ المدير بيتصفّى كمان (١١/٨) — نفس قايمة الأدوار الميدانية
+        abort_unless(in_array($user->role, User::FIELD_WORK_ROLES, true), 404);
 
         $figures = $this->openFigures($user);
 
@@ -69,11 +70,15 @@ class RepSettlementController extends Controller
     /** قفل التصفية — الأرقام بتتجمد والرصيد بيترحّل */
     public function store(Request $request, User $user)
     {
-        abort_unless(in_array($user->role, ['sales_agent', 'driver'], true), 404);
+        abort_unless(in_array($user->role, User::FIELD_WORK_ROLES, true), 404);
 
         $data = $request->validate([
             'received' => ['required', 'numeric', 'min:0', 'max:99999999'],
             'note' => ['nullable', 'string', 'max:500'],
+            // ⚠️ قفل العهدة مع التصفية (طلب المالك ١١/٨) — التصفية كانت
+            // بتقفل الفلوس وتسيب العهدة مفتوحة، فالمندوب يتحبس عند
+            // الانصراف («عهدتك لسه مفتوحة») والمالك مش لاقي إيه الناقص.
+            'close_custody' => ['nullable', 'boolean'],
         ]);
 
         $settlement = DB::transaction(function () use ($user, $data, $request) {
@@ -83,6 +88,17 @@ class RepSettlementController extends Controller
 
             $received = round((float) $data['received'], 2);
             $balance = round($f['prev_balance'] + $f['expected'] - $received, 2);
+
+            // ⚠️ **قفل العهدة مع التصفية** (١١/٨): التصفية بتقفل الفلوس،
+            // والعهدة قفلتها كانت زرار منفصل في «عهد المناديب» — المحاسب
+            // بينسى، والمندوب يتحبس عند الانصراف بـ«عهدتك لسه مفتوحة».
+            // التشيك بوكس متعلّم افتراضياً، ويتشال لو العربية هتكمل بكرة.
+            if ($request->boolean('close_custody')) {
+                $user->currentCustody()?->update([
+                    'status' => 'closed',
+                    'closed_at' => now(),
+                ]);
+            }
 
             return RepSettlement::create([
                 'number' => RepSettlement::nextNumber(),

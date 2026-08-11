@@ -313,6 +313,27 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('targets.save');
         Route::post('/targets/copy', [\App\Http\Controllers\IncentiveController::class, 'copyTargets'])
             ->middleware('role:admin,manager')->name('targets.copy');
+
+        // ═════ التارجيت السنوي الهرمي (١١ أغسطس ٢٠٢٦) ═════
+        // شركة ← مديرين ← مناديب ← عملاء — غير تارجتات الحوافز اللي فوق.
+        // ⚠️ العرض للأدمن والمدير (المدير بيشوف شجرته بس جوّه
+        // الكنترولر)، وقرارات الشركة والمديرين واليدوي أدمن بس.
+        Route::get('/targets/annual', [\App\Http\Controllers\TargetPlanController::class, 'annual'])
+            ->middleware('role:admin,manager')->name('targets.annual');
+        Route::get('/targets/rep/{user}', [\App\Http\Controllers\TargetPlanController::class, 'repClients'])
+            ->middleware('role:admin,manager')->name('targets.annual.rep');
+        Route::post('/targets/annual/company', [\App\Http\Controllers\TargetPlanController::class, 'createCompany'])
+            ->middleware('role:admin')->name('targets.annual.company');
+        Route::post('/targets/annual/managers', [\App\Http\Controllers\TargetPlanController::class, 'saveManagers'])
+            ->middleware('role:admin')->name('targets.annual.managers');
+        Route::post('/targets/annual/{target}/rebalance', [\App\Http\Controllers\TargetPlanController::class, 'rebalance'])
+            ->middleware('role:admin,manager')->name('targets.annual.rebalance');
+        Route::post('/targets/annual/{target}/manual', [\App\Http\Controllers\TargetPlanController::class, 'saveManual'])
+            ->middleware('role:admin')->name('targets.annual.manual');
+        Route::post('/targets/annual/{target}/reps', [\App\Http\Controllers\TargetPlanController::class, 'saveReps'])
+            ->middleware('role:admin,manager')->name('targets.annual.reps');
+        Route::post('/targets/annual/{target}/clients', [\App\Http\Controllers\TargetPlanController::class, 'saveClients'])
+            ->middleware('role:admin,manager')->name('targets.annual.clients');
         Route::get('/performance', [\App\Http\Controllers\IncentiveController::class, 'performance'])
             ->middleware('role:admin,manager,accountant')->name('performance');
         Route::post('/performance/points', [\App\Http\Controllers\IncentiveController::class, 'storePoints'])

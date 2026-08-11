@@ -73,4 +73,6 @@ return [
     'po_delivered' => 'Delivered sales orders',
     'po_delivered_hint' => 'The credit total above includes invoices + these orders - here is their detail',
     'po_split' => 'Of which cash: :cash · credit: :credit',
+    'close_custody_too' => 'Close the custody too',
+    'close_custody_hint' => 'Untick if the van keeps its load for tomorrow',
 ];

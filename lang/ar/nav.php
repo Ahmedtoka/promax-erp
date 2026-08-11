@@ -57,6 +57,7 @@ return [
     'repclose' => 'تصفية المناديب',
     'dayclose' => 'قفل اليوم',
     'targets' => 'التارجتات',
+    'targets_annual' => 'التارجيت السنوي',
     'performance' => 'لوحة الأداء',
     'incentives' => 'إعدادات الحوافز',
     'import' => 'استيراد الداتا',

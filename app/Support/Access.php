@@ -315,7 +315,13 @@ class Access
             ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
             ['ops.live', '📡', 'nav.live', 'ops.live', null],
             // الحوافز (2026-08-06): التارجتات الشهرية + لوحة الأداء
-            ['erp.targets', '🎯', 'nav.targets', 'erp.targets*', null],
+            // ⚠️ النمط بقى بالظبط مش `erp.targets*` — عشان صفحات
+            // التارجيت السنوي (`erp.targets.annual.*`) ماتنوّرش
+            // اللينكين مع بعض. راوتات POST بتاعة الشاشة دي
+            // (`targets.save`/`targets.copy`) مش صفحات أصلاً.
+            ['erp.targets', '🎯', 'nav.targets', 'erp.targets', null],
+            // التارجيت السنوي الهرمي (١١/٨): شركة ← مديرين ← مناديب ← عملاء
+            ['erp.targets.annual', '📈', 'nav.targets_annual', 'erp.targets.annual*', null],
             ['erp.performance', '🏆', 'nav.performance', 'erp.performance*', null],
         ],
 

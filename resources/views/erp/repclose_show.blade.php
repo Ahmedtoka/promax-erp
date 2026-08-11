@@ -94,7 +94,14 @@
                 <input type="text" name="note" maxlength="500" style="width:100%" value="{{ old('note') }}">
             </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            {{-- قفل العهدة مع التصفية — متعلّم افتراضياً؛ شيله لو العربية
+                 هتكمل بنفس الحمولة بكرة (١١/٨) --}}
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;cursor:pointer">
+                <input type="checkbox" name="close_custody" value="1" checked style="width:16px;height:16px">
+                🔒 {{ __('settle.close_custody_too') }}
+                <span style="font-weight:400;color:var(--muted);font-size:11px">{{ __('settle.close_custody_hint') }}</span>
+            </label>
             <button class="btn gold" type="submit">🤝 {{ __('settle.close_btn') }}</button>
         </div>
     </form>

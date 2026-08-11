@@ -57,6 +57,7 @@ return [
     'repclose' => 'Rep Settlements',
     'dayclose' => 'Day Close',
     'targets' => 'Targets',
+    'targets_annual' => 'Annual Target',
     'performance' => 'Performance Board',
     'incentives' => 'Incentive Settings',
     'import' => 'Import Data',
