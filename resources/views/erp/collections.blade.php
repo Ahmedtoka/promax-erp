@@ -62,7 +62,8 @@
                 <th>{{ __('common.date') }}</th>
                 <th>{{ __('ops.collected_by') }}</th>
                 <th>{{ __('ops.method') }}</th>
-                <th>{{ __('ops.reference') }}</th>
+                {{-- ⚠️ data-nosum — رقم التحويل مرجع مش مبلغ، مجموعه غلط (١١/٨) --}}
+                <th data-nosum>{{ __('ops.reference') }}</th>
                 <th>{{ __('settle.proof') }}</th>
                 <th>{{ __('common.total') }}</th>
             </tr>
