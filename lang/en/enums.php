@@ -125,6 +125,7 @@ return [
         'wh_out' => 'Left warehouse',
         'collect' => 'Collected money',
         'shelf' => 'Shelf arrangement',
+        'po_abort' => 'Returned an order undelivered',
     ],
 
 ];

@@ -294,4 +294,5 @@ return [
     'no_coords_one' => 'No coordinates',
     'toggle_rep_hint' => 'Tap a person to hide/show them:',
     'po_edit_back_confirm' => 'This order is approved - editing sends it back to accounting approval and cancels the current pick order. Continue?',
+    'po_aborted_note' => 'Came back undelivered',
 ];

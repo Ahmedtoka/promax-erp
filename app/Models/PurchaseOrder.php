@@ -33,7 +33,7 @@ class PurchaseOrder extends Model
         'number', 'client_id', 'source', 'sheet_path', 'sheet_name', 'address', 'assigned_to', 'status',
         'price_mode', 'total', 'tax_total', 'grand_total',
         'arrived_at', 'delivered_at', 'due_date',
-        'approval_status', 'approved_by', 'approved_at', 'approval_note',
+        'approval_status', 'approved_by', 'approved_at', 'approval_note', 'abort_reason',
         'was_edited', 'edited_by', 'edited_at', 'due_at', 'pickup_at', 'warehouse_id', 'pick_order_id', 'created_by',
         // ⚠️ **`image_path` غير `sheet_path`.** الشيت هو ملف الإكسيل
         // بتاع الرفع الجماعي؛ ده صورة أمر الشراء الحقيقي بتاع

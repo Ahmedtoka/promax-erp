@@ -163,6 +163,10 @@
                     </td>
                     <td><span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span>
                         @if ($po->delivered_at)<br><span style="font-size:10.5px;color:var(--muted)">{{ $po->delivered_at->format('H:i') }}</span>@endif
+                        {{-- إلغاء تسليم بسبب (١١/٨) — بيتمسح مع أول تسليم ناجح --}}
+                        @if ($po->abort_reason)
+                            <br><span style="font-size:10px;color:var(--red)" title="{{ $po->abort_reason }}">⛔ {{ __('ops.po_aborted_note') }}: {{ \Illuminate\Support\Str::limit($po->abort_reason, 40) }}</span>
+                        @endif
                     </td>
                     {{-- التراك: مين أنشأ / وافق / عدّل — كله موثق --}}
                     <td style="font-size:10.5px;color:var(--muted);line-height:1.9">

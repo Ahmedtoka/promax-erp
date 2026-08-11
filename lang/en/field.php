@@ -225,4 +225,8 @@ return [
     'vans_close_confirm' => "Close :name's van stock? They cannot sell from it after closing - the next handout opens a fresh one.",
     'notif_po_reapproval_title' => 'Order :number was edited and returned for approval',
     'notif_po_reapproval_body' => ':client - edited by :by, needs approval again',
+    // Delivery cancellation (Aug 11, 2026 evening)
+    'event_po_aborted' => 'Returned order :number - :client undelivered',
+    'notif_po_aborted_title' => 'Order :number came back undelivered ⛔',
+    'notif_po_aborted_body' => ':client - :rep cancelled the delivery: :reason',
 ];

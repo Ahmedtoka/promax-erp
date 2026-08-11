@@ -1610,6 +1610,72 @@ class FieldApiController extends Controller
         return response()->json(['status' => 'arrived']);
     }
 
+    /**
+     * POST /api/pos/{purchaseOrder}/cancel-arrival — إلغاء التسليم
+     * (طلب المالك ١١ أغسطس ٢٠٢٦ مساءً).
+     *
+     * المندوب عمل «وصول» وماعرفش يسلّم (المحل قافل، مسؤول الاستلام
+     * مش موجود، رفضوا الاستلام...) — كان محبوس: «لازم تسلّم» ومفيش
+     * رجوع، ولا يعرف يعمل انصراف (الأمر الـarrived بيمنعه — عكس
+     * حارس الحضور) ولا يروح محل تاني.
+     *
+     * الإلغاء **بسبب إجباري**: الأمر بيرجع «مستني» بنفس تسكينه
+     * (يقدر يرجعله بعدين أو المدير يعيد تسكينه)، السبب بيتسجل على
+     * الأمر نفسه (`abort_reason` بيبان في الداش بورد) وفي التراكينج،
+     * والمدير/منشئ الأمر بياخد إشعار فوري بالسبب.
+     */
+    public function cancelArrival(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($purchaseOrder->assigned_to !== $user->id) {
+            return response()->json(['message' => __('api.order_not_yours')], 403);
+        }
+        if ($purchaseOrder->status !== 'arrived') {
+            return response()->json(['message' => __('field.must_arrive_first')], 422);
+        }
+
+        $data = $request->validate([
+            // ⚠️ السبب إجباري — «إلغاء صامت» بيضيّع المعلومة اللي
+            // الإدارة محتاجاها عشان تحل المشكلة مع الفرع.
+            'reason' => ['required', 'string', 'min:3', 'max:190'],
+        ]);
+
+        $purchaseOrder->update([
+            'status' => 'pending',
+            'arrived_at' => null,
+            'abort_reason' => $data['reason'],
+        ]);
+
+        [$evLat, $evLng] = $this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client);
+        TrackEvent::log($user, 'po_abort',
+            __('field.event_po_aborted', [
+                'number' => $purchaseOrder->number,
+                'client' => $purchaseOrder->client->displayName(),
+            ]),
+            $data['reason'], $evLat, $evLng);
+
+        // إشعار فوري لمنشئ الأمر (المدير غالباً) — بالسبب نصاً.
+        // ⚠️ مايتبعتش للمندوب نفسه لو هو اللي أنشأه (المدير الميداني
+        // بيسلّم أوامر بيعملها لنفسه).
+        $creator = $purchaseOrder->creator;
+        if ($creator !== null && $creator->id !== $user->id) {
+            AppNotification::send(
+                $creator,
+                fn () => __('field.notif_po_aborted_title', ['number' => $purchaseOrder->number]),
+                fn () => __('field.notif_po_aborted_body', [
+                    'client' => $purchaseOrder->client->displayName(),
+                    'rep' => $user->displayName(),
+                    'reason' => $data['reason'],
+                ]),
+                good: false,
+                link: AppNotification::poLink($purchaseOrder->id),
+            );
+        }
+
+        return response()->json(['status' => 'pending']);
+    }
+
     /** POST /api/pos/{purchaseOrder}/deliver */
     public function deliver(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
     {
@@ -1685,7 +1751,9 @@ class FieldApiController extends Controller
                     throw new StockShortage($err);
                 }
 
-                $purchaseOrder->update(['status' => 'delivered', 'delivered_at' => now()]);
+                // ⚠️ `abort_reason` بتتمسح مع أول تسليم ناجح — السبب
+                // القديم مالوش معنى بعد ما البضاعة وصلت فعلاً.
+                $purchaseOrder->update(['status' => 'delivered', 'delivered_at' => now(), 'abort_reason' => null]);
 
                 // ═══ قيمة القيد = المسلَّم فعلاً بسعر بنوده وضريبتها ═══
                 $net = 0.0;

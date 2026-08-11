@@ -224,4 +224,8 @@ return [
     'vans_close_confirm' => 'قفل عهدة :name؟ بعد القفل مايقدرش يبيع منها، وأول استلام جديد يفتح عهدة جديدة.',
     'notif_po_reapproval_title' => 'أمر :number اتعدّل ورجع للموافقة',
     'notif_po_reapproval_body' => ':client — عدّله :by، محتاج اعتماد من جديد',
+    // ═══ إلغاء التسليم (١١ أغسطس ٢٠٢٦ مساءً) ═══
+    'event_po_aborted' => 'رجّع أمر :number — :client من غير تسليم',
+    'notif_po_aborted_title' => 'أمر :number اترجع من غير تسليم ⛔',
+    'notif_po_aborted_body' => ':client — :rep لغى التسليم: :reason',
 ];

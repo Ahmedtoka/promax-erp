@@ -110,6 +110,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);
+        // إلغاء التسليم بسبب إجباري — الأمر بيرجع «مستني» (١١/٨ مساءً)
+        Route::post('/pos/{purchaseOrder}/cancel-arrival', [FieldApiController::class, 'cancelArrival']);
 
         // ═══ دخول وخروج المخزن (2026-08-08) ═══
         // ⚠️ **بره حارس `in.warehouse` طبعاً** — دي الحاجة اللي
