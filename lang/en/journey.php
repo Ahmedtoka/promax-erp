@@ -99,6 +99,12 @@ return [
     'no_activity' => 'No activity today',
     'refresh_note' => 'This board refreshes itself every minute',
 
+    // ═══ Full wipe (2026-08-11) — rebuild the plans from scratch ═══
+    'wipe_all' => 'Wipe all journey plans',
+    'wipe_team' => "Wipe your team's plans",
+    'wipe_confirm' => 'Warning: this permanently deletes :count journey plans so you can rebuild from scratch. Past visits are not affected. Are you sure?',
+    'wiped' => ':count journey plans wiped - start planning fresh',
+
     // ═══ Messages ═══
     'added' => ':count clients added to the plan',
     'removed' => 'Client removed from the plan',

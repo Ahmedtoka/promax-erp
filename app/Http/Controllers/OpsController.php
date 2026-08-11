@@ -40,10 +40,15 @@ class OpsController extends Controller
         // وللأدمن كل الميدان. رقم فوق وكروت تحت من نطاقين = شاشة بتكدب.
         $teamIds = $field->pluck('id');
 
+        // ⚠️ `grand_total` مش `total` (توحيد ١١/٨ مساءً): الكروت دي
+        // «باع/سلّم بكام» — نفس عقيدة اللايف وعهد المناديب (اللي
+        // العميل بيدفعه). قبل كده كانت صافي قبل الضريبة، فمجموع
+        // صفوف المناديب تحت ماكانش بيطابق الكارت فوق.
         return view('ops.dashboard', [
             'field' => $field->map(fn ($u) => $this->userStats($u)),
-            'todaySales' => Invoice::whereIn('user_id', $teamIds)->whereDate('created_at', today())->sum('total'),
-            'todayPos' => PurchaseOrder::whereIn('assigned_to', $teamIds)->whereDate('delivered_at', today())->sum('total'),
+            'todaySales' => Invoice::whereIn('user_id', $teamIds)->whereDate('created_at', today())->sum('grand_total'),
+            'todayPos' => PurchaseOrder::whereIn('assigned_to', $teamIds)->where('status', 'delivered')
+                ->whereDate('delivered_at', today())->sum('grand_total'),
             'openRequests' => ClientRequest::whereIn('created_by', $teamIds)->whereIn('status', ['pending', 'review'])->count(),
             'visitsDone' => DB::table('visits')->whereIn('user_id', $teamIds)->whereDate('created_at', today())
                 ->whereNotNull('checked_out_at')->count(),
@@ -57,12 +62,23 @@ class OpsController extends Controller
         $custody = $u->currentCustody();
         $custody?->load('items.product');
 
+        // ⚠️ العقيدة: **مبيعات المندوب = فواتيره (user_id) + أوامر
+        // التوريد المسلَّمة (assigned_to)؛ مبيعات العميل = قيوده؛
+        // التارجيت بالعميل.** (إصلاح ١١/٨ مساءً) — `sales` كانت
+        // فواتير بس وبالصافي، فالسيلز اللي طلب بضاعته اتحوّلت PO
+        // واتسلّمت كان «أداء النهارده» بتاعه ناقص الآجل ده، والكارت
+        // كان بيتفرّع سواق/غيره فمبيعات جنب فاتورة بتختفي. الرقم
+        // الموحّد بالـ`grand_total` زي اللايف وعهد المناديب.
+        $posValue = (float) PurchaseOrder::where('assigned_to', $u->id)->where('status', 'delivered')
+            ->whereDate('delivered_at', today())->sum('grand_total');
+
         return [
             'user' => $u,
             'custody' => $custody,
             'remaining' => $custody?->remainingUnits() ?? 0,
             'remainingValue' => $custody?->remainingValue($u->isDriver() ? 'old' : 'new') ?? 0,
-            'sales' => Invoice::where('user_id', $u->id)->whereDate('created_at', today())->sum('total'),
+            'sales' => round((float) Invoice::where('user_id', $u->id)
+                ->whereDate('created_at', today())->sum('grand_total') + $posValue, 2),
             'visits' => $u->visits()->whereDate('created_at', today())->count(),
             'visitsDone' => $u->visits()->whereDate('created_at', today())->whereNotNull('checked_out_at')->count(),
             'pos' => PurchaseOrder::where('assigned_to', $u->id)->whereDate('created_at', today())->count(),
@@ -70,8 +86,7 @@ class OpsController extends Controller
                 ->whereDate('delivered_at', today())->count(),
             // ⚠️ «قيمة التسليمات» = اللي السواق حصّله فعلاً، فبالإجمالي
             // شامل الضريبة. الصافي مكانه تقارير المبيعات.
-            'posValue' => PurchaseOrder::where('assigned_to', $u->id)->where('status', 'delivered')
-                ->whereDate('delivered_at', today())->sum('grand_total'),
+            'posValue' => $posValue,
             'openVisit' => $u->openVisit(),
         ];
     }
@@ -125,7 +140,26 @@ class OpsController extends Controller
             ->orderBy('name')
             ->get();
 
-        $rows = $reps->map(function (User $u) {
+        // ═══ «باع بكام النهارده» (إصلاح ١١/٨ مساءً) ═══
+        // ⚠️ العقيدة: **مبيعات المندوب = فواتيره (user_id) + أوامر
+        // التوريد المسلَّمة (assigned_to)؛ مبيعات العميل = قيوده؛
+        // التارجيت بالعميل.** العمود هنا كان بيقرا الفواتير بس —
+        // فالآجل اللي اتسلّم بأمر توريد (طلب بضاعة اتحوّل PO) كان
+        // بيختفي من البورد ده وهو ظاهر في التصفية واللايف. نفس
+        // إصلاح `liveRows` بالحرف، وبالـ`grand_total` (اللي العميل
+        // بيدفعه — عقيدة الأرقام).
+        $invToday = Invoice::whereIn('user_id', $reps->pluck('id'))
+            ->whereDate('created_at', today())
+            ->selectRaw('user_id, COALESCE(SUM(grand_total),0) as s')
+            ->groupBy('user_id')->pluck('s', 'user_id');
+
+        $poToday = PurchaseOrder::whereIn('assigned_to', $reps->pluck('id'))
+            ->where('status', 'delivered')
+            ->whereDate('delivered_at', today())
+            ->selectRaw('assigned_to, COALESCE(SUM(grand_total),0) as s')
+            ->groupBy('assigned_to')->pluck('s', 'assigned_to');
+
+        $rows = $reps->map(function (User $u) use ($invToday, $poToday) {
             $c = $u->currentCustody();
             $c?->load(['items.product', 'items.batch', 'vehicle']);
             $mode = $u->isDriver() ? 'old' : 'new';
@@ -151,8 +185,9 @@ class OpsController extends Controller
                 'expiring' => $c?->expiringItems(30)->count() ?? 0,
                 'active_client' => $openVisit?->client?->displayName(),
                 'att' => \App\Services\Attendance::state($u),
-                'sales_today' => (float) Invoice::where('user_id', $u->id)
-                    ->whereDate('created_at', today())->sum('grand_total'),
+                // فواتيره + أوامره المسلَّمة — من الكويريز المجمّعة فوق
+                'sales_today' => round((float) ($invToday[$u->id] ?? 0)
+                    + (float) ($poToday[$u->id] ?? 0), 2),
             ];
         });
 

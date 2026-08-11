@@ -24,8 +24,14 @@
 
 <div class="kpis">
     <div class="kpi"><div class="lbl">{{ __('team.role') }}</div><div class="val" style="font-size:17px">{{ $u->roleLabel() }}</div><div class="sub2">{{ $u->code }} • {{ $u->zone?->displayName() ?? __('ops.delivery_run') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ $u->isDriver() ? __('ops.delivered_value') : __('ops.sales_today') }}</div>
-        <div class="val pos">{{ $fmt($u->isDriver() ? $stats['posValue'] : $stats['sales']) }} {{ __('common.currency') }}</div></div>
+    {{-- مبيعات المندوب = فواتيره + أوامره المسلَّمة (عقيدة ١١/٨) —
+         التفرّع القديم كان بيخفي آجل السيلز المسلَّم بأمر توريد --}}
+    <div class="kpi"><div class="lbl">{{ __('ops.sales_today') }}</div>
+        <div class="val pos">{{ $fmt($stats['sales']) }} {{ __('common.currency') }}</div>
+        @if ($stats['posValue'] > 0)
+            <div class="sub2">{{ __('ops.delivered_value') }}: {{ $fmt($stats['posValue']) }} {{ __('common.currency') }}</div>
+        @endif
+    </div>
     <div class="kpi"><div class="lbl">{{ $u->isDriver() ? __('ops.deliveries') : __('ops.visits') }}</div>
         <div class="val">{{ $u->isDriver() ? $stats['posDone'].'/'.$stats['pos'] : $stats['visitsDone'].'/'.$stats['visits'] }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('ops.van_stock_left') }}</div><div class="val">{{ $stats['remaining'] }}</div><div class="sub2">{{ $fmt($stats['remainingValue']) }} {{ __('common.currency') }}</div></div>

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ClientRequest;
 use App\Models\CommissionTier;
 use App\Models\Invoice;
+use App\Models\PurchaseOrder;
 use App\Models\RepPoint;
 use App\Models\RepTarget;
 use App\Models\Setting;
@@ -50,6 +51,28 @@ class RepKpis
                          COUNT(DISTINCT client_id) as clients')
             ->first();
 
+        // ═══ أوامر التوريد المسلَّمة — من القيود (إصلاح ١١/٨ مساءً) ═══
+        //
+        // ⚠️ العقيدة: **مبيعات المندوب = فواتيره (user_id) + أوامر
+        // التوريد المسلَّمة (assigned_to)؛ مبيعات العميل = قيوده؛
+        // التارجيت بالعميل.** الخدمة دي كانت بتقرا الفواتير بس —
+        // فالآجل المسلَّم بأمر توريد (طلب بضاعة اتحوّل PO واتسلّم)
+        // كان صفر هنا وهو ظاهر في التصفية، والعمولة بتضيع على
+        // المندوب. نفس منطق `RepSettlementController::openFigures`:
+        // **من `transactions` مش من `purchase_orders`** — القيد هو
+        // مصدر الحقيقة، وقيد الـ`collection` هو اللي بيفرّق الكاش
+        // من الآجل (الصافي = `debit − tax` زي قيود المرتجع تحت).
+        $po = Transaction::where('source_type', PurchaseOrder::class)
+            ->whereIn('source_id', PurchaseOrder::where('assigned_to', $rep->id)->select('id'))
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw("COALESCE(SUM(CASE WHEN kind = 'sale' THEN debit - tax ELSE 0 END),0) as net,
+                         COALESCE(SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END),0) as gross,
+                         COALESCE(SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END),0) as cash")
+            ->first();
+
+        $poCash = round((float) $po->cash, 2);
+        $poCredit = round(max(0, (float) $po->gross - $poCash), 2);
+
         // مرتجعات المندوب — قيود return على زياراته، صافي بعد طرح الضريبة
         $returns = Transaction::where('kind', 'return')
             ->where('source_type', Visit::class)
@@ -58,9 +81,15 @@ class RepKpis
             ->selectRaw('COALESCE(SUM(credit - tax),0) as net')
             ->value('net');
 
-        $netSales = round((float) $inv->net - (float) $returns, 2);
+        // الصافي = فواتير + أوامر مسلَّمة − مرتجعات — والعمولة عليه،
+        // فالسواق والسيلز اللي بيسلّم POs بقى بيتحاسب على شغله كله
+        $netSales = round((float) $inv->net + (float) $po->net - (float) $returns, 2);
 
         // ═══ القطع — بنود فواتيره ═══
+        // ⚠️ عن قصد من الفواتير بس (قرار ١١/٨): قطع أوامر التوريد
+        // بتتحاسب في مطابقة العهدة، وضمها هنا كان هيحرّك نقاط
+        // وتارجيت القطع بأثر رجعي من غير قرار من المالك. الفلوس
+        // فوق اتوحّدت — العدّ لأ.
         $pieces = (int) DB::table('invoice_items')
             ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
             ->where('invoices.user_id', $rep->id)
@@ -109,8 +138,10 @@ class RepKpis
         return [
             'target' => $target,
             'net_sales' => $netSales,
-            'cash_sales' => round((float) $inv->cash, 2),
-            'credit_sales' => round((float) $inv->credit, 2),
+            // الكاش/الآجل بالإجمالي المدفوع (`grand_total`) — فواتيره
+            // + أوامره: كاش الأمر من قيد التحصيل، وآجله الباقي
+            'cash_sales' => round((float) $inv->cash + $poCash, 2),
+            'credit_sales' => round((float) $inv->credit + $poCredit, 2),
             'returns_net' => round((float) $returns, 2),
             'invoices' => (int) $inv->n,
             'clients_sold' => (int) $inv->clients,

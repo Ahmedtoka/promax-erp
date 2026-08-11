@@ -722,6 +722,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
             Route::post('/journeys', [\App\Http\Controllers\JourneyController::class, 'store'])
                 ->name('journeys.store');
+            // مسح شامل لخطوط السير — «أعملها من أول وجديد» (١١/٨)
+            Route::post('/journeys/wipe', [\App\Http\Controllers\JourneyController::class, 'wipe'])
+                ->name('journeys.wipe');
             Route::delete('/journeys/{journeyPlan}', [\App\Http\Controllers\JourneyController::class, 'destroy'])
                 ->name('journeys.destroy');
             Route::post('/journeys/reorder', [\App\Http\Controllers\JourneyController::class, 'reorder'])

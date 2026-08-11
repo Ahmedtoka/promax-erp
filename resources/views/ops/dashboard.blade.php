@@ -30,11 +30,16 @@
                     <td><b>{{ $u->displayName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $u->code }}</span></td>
                     <td><span class="badge {{ $u->isDriver() ? 'b-blue' : 'b-green' }}">{{ $u->roleLabel() }}</span></td>
                     <td style="color:var(--muted)">{{ $u->zone?->displayName() ?? ($u->isDriver() ? __('ops.delivery_run') : '—') }}</td>
+                    {{-- الرقم موحّد للكل: فواتيره + أوامره المسلَّمة
+                         (عقيدة ١١/٨) — التفرّع سواق/غيره كان بيخفي
+                         آجل السيلز اللي اتسلّم بأمر توريد. السطر
+                         التاني بس هو اللي لسه بيتفرّع بالدور. --}}
                     <td class="num">
+                        {{ $fmt($s['sales']) }} {{ __('common.currency') }}<br>
                         @if ($u->isDriver())
-                            {{ $fmt($s['posValue']) }} {{ __('common.currency') }}<br><span style="color:var(--muted)">{{ $s['posDone'] }}/{{ $s['pos'] }} {{ trans_choice('ops.delivery', $s['pos']) }}</span>
+                            <span style="color:var(--muted)">{{ $s['posDone'] }}/{{ $s['pos'] }} {{ trans_choice('ops.delivery', $s['pos']) }}</span>
                         @else
-                            {{ $fmt($s['sales']) }} {{ __('common.currency') }}<br><span style="color:var(--muted)">{{ $s['visitsDone'] }}/{{ $s['visits'] }} {{ trans_choice('ops.visit_count', $s['visits']) }}</span>
+                            <span style="color:var(--muted)">{{ $s['visitsDone'] }}/{{ $s['visits'] }} {{ trans_choice('ops.visit_count', $s['visits']) }}</span>
                         @endif
                     </td>
                     <td class="num">{{ $s['remaining'] }} {{ trans_choice('ops.unit', $s['remaining']) }}<br><span style="color:var(--muted)">{{ $fmt($s['remainingValue']) }} {{ __('common.currency') }}</span></td>

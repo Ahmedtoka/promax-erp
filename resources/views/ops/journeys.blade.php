@@ -9,6 +9,25 @@
 @section('actions')
     <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
     <a class="btn" href="{{ route('ops.live') }}">📡 {{ __('journey.live') }}</a>
+    {{-- زرار الخطر: مسح كل الخطط والبدء من أول وجديد. الأدمن بيمسح
+         الكل والمدير فريقه بس — واللابل بتقول اللي هيحصل فعلاً.
+         آمن على الزيارات: الـFK بتاع visits.journey_plan_id بيصفّر
+         مش بيمسح. الرسالة بتقول العدد قبل التنفيذ. --}}
+    @if (($wipeCount ?? 0) > 0)
+        @php
+            $wipeMsg = json_encode(
+                __('journey.wipe_confirm', ['count' => number_format($wipeCount)]),
+                JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP,
+            );
+        @endphp
+        <form method="POST" action="{{ route('ops.journeys.wipe') }}" style="display:inline"
+              onsubmit="return confirm({!! $wipeMsg !!})">
+            @csrf
+            <button class="btn red" type="submit">
+                🗑 {{ auth()->user()?->role === 'manager' ? __('journey.wipe_team') : __('journey.wipe_all') }}
+            </button>
+        </form>
+    @endif
 @endsection
 
 @section('content')

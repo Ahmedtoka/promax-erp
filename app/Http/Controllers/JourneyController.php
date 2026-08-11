@@ -52,11 +52,16 @@ class JourneyController extends Controller
             ? $reps->firstWhere('id', (int) $request->input('rep'))
             : $reps->first();
 
+        // عدّ زرار المسح الشامل — «هتمسح X خطة» في رسالة التأكيد.
+        // نفس سكوب `wipe()` بالظبط: الأدمن الكل، والمدير فريقه.
+        $wipeCount = $this->wipeQuery($viewer)->count();
+
         if ($rep === null) {
             return view('ops.journeys', [
                 'reps' => $reps, 'rep' => null, 'week' => [],
                 'available' => collect(), 'weekdays' => JourneyPlan::WEEKDAYS,
                 'frequencies' => JourneyPlan::FREQUENCIES, 'today' => today()->dayOfWeek,
+                'wipeCount' => $wipeCount,
             ]);
         }
 
@@ -150,7 +155,54 @@ class JourneyController extends Controller
             'today' => today()->dayOfWeek,
             'monthStart' => $monthStart,
             'calendar' => $calendar,
+            'wipeCount' => $wipeCount,
         ]);
+    }
+
+    /**
+     * كويري خطط السير اللي الفاعل مسموح له يمسحها — مصدر واحد
+     * للعدّ في الشاشة وللمسح نفسه، عشان الرقم في رسالة التأكيد
+     * يبقى هو نفسه اللي بيتمسح فعلاً.
+     */
+    private function wipeQuery(?User $viewer)
+    {
+        $q = JourneyPlan::query();
+
+        // الأدمن بيمسح الكل — وغيره فريقه بس (`fieldVisibleTo`:
+        // مناديب المدير + نفسه، بعد قرار ١١/٨ إن المدير بيشتغل ميداني)
+        if ($viewer === null || ! $viewer->isAdmin()) {
+            $q->whereIn('user_id', User::fieldVisibleTo(User::query(), $viewer)->select('id'));
+        }
+
+        return $q;
+    }
+
+    /**
+     * ═══ مسح كل خطوط السير (طلب المالك ١١/٨) — «أعملها من أول وجديد» ═══
+     *
+     * ⚠️ **آمن على تاريخ الزيارات**: `visits.journey_plan_id` معرّف
+     * بـ`nullOnDelete` في مايجريشن `000018_leads_and_journeys` —
+     * مسح الخطة بيصفّر اللينك بس، والزيارة نفسها (وفلوسها وقيودها)
+     * بتفضل زي ما هي. لو الـFK كان cascade كان الزرار ده هياكل سجل
+     * الزيارات كله — اتفحص قبل ما يتبني.
+     *
+     * السكوب: الأدمن بيمسح كل الخطط، والمدير خطط فريقه بس. أي رول
+     * تاني وصله الراوت باستثناء Access مايعملش مسح جماعي — 403.
+     */
+    public function wipe(Request $request)
+    {
+        $viewer = $request->user();
+
+        abort_unless($viewer !== null
+            && ($viewer->isAdmin() || $viewer->role === 'manager'), 403);
+
+        $deleted = 0;
+
+        DB::transaction(function () use ($viewer, &$deleted) {
+            $deleted = (int) $this->wipeQuery($viewer)->delete();
+        });
+
+        return back()->with('ok', __('journey.wiped', ['count' => $deleted]));
     }
 
     public function store(Request $request)
