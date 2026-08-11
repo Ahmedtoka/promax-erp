@@ -35,4 +35,14 @@ return [
     'unknown' => 'Unknown',
     'no_devices' => 'No registered devices yet',
 
+
+    // Chunked upload (Aug 11, 2026)
+    'upload_now' => 'Upload file',
+    'pick_file_first' => 'Pick the APK file first',
+    'chunk_of' => 'Uploading… part :x of :y',
+    'upload_done' => 'Fully uploaded - refreshing…',
+    'upload_failed' => 'Upload failed',
+    'retrying' => 'Connection hiccup - retrying',
+    'chunk_out_of_order' => 'Upload got scrambled - start over.',
+    'not_an_apk' => 'This file is not an APK - make sure you picked the right one.',
 ];

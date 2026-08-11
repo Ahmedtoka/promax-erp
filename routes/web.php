@@ -343,6 +343,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('app_version');
         Route::post('/app-version', [\App\Http\Controllers\AppVersionController::class, 'save'])
             ->middleware('role:admin')->name('app_version.save');
+        // رفع الـAPK بالقطع (١١/٨) — كل قطعة ٤ ميجا ريكوست مستقل،
+        // عشان الرفع الكبير مايموتش على مهلة البروكسي
+        Route::post('/app-version/chunk', [\App\Http\Controllers\AppVersionController::class, 'uploadChunk'])
+            ->middleware('role:admin')->name('app_version.chunk');
 
         // ═════ سجل حركة اليوزرات (2026-08-07) — أدمن بس، قراءة فقط ═════
         Route::get('/audit', [\App\Http\Controllers\AuditController::class, 'index'])

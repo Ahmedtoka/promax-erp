@@ -96,6 +96,93 @@ class AppVersionController extends Controller
     }
 
     /**
+     * ═══ رفع الـAPK بالقطع (١١ أغسطس ٢٠٢٦) ═══
+     *
+     * الرفع بريكوست واحد كان بيموت في النص (`ERR_HTTP2_PING_FAILED`):
+     * ملف ٥٠+ ميجا على اتصال مصري ورا بروكسي Cloudways بيتعدى مهلة
+     * الـHTTP2 ping ولا حد عارف وصل ولا لأ. دلوقتي الجافاسكربت بيقطّع
+     * الملف قطع ٤ ميجا — كل قطعة ريكوست سريع مستحيل يتعدى المهلة،
+     * والشاشة بتعرض بار تقدم حقيقي (قطعة X من Y).
+     *
+     * البروتوكول: `POST /erp/app-version/chunk` بحقول:
+     *   upload_id (معرّف الجلسة من المتصفح) · index · total · chunk (الملف)
+     * القطع بتتجمع في `storage/app/apk-upload/{upload_id}.part` بالترتيب،
+     * وآخر قطعة بتنقل الملف لـ`public/app/promax.apk` وبتحدّث الرابط.
+     *
+     * ⚠️ **القطع لازم تيجي بالترتيب** (المتصفح بيبعتها واحدة واحدة) —
+     * قطعة برقم غير المتوقع = الجلسة بايظة وبنرفض عشان مانجمّعش APK
+     * مشوّه ويتوزع على المناديب.
+     */
+    public function uploadChunk(Request $request)
+    {
+        $data = $request->validate([
+            'upload_id' => ['required', 'regex:/^[a-zA-Z0-9_-]{8,64}$/'],
+            'index' => ['required', 'integer', 'min:0'],
+            'total' => ['required', 'integer', 'min:1', 'max:200'],
+            // ٤ ميجا للقطعة + هامش — أي PHP config بيقبلها
+            'chunk' => ['required', 'file', 'max:6144'],
+        ]);
+
+        $dir = storage_path('app/apk-upload');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $part = $dir.'/'.$data['upload_id'].'.part';
+        $meta = $dir.'/'.$data['upload_id'].'.next';
+
+        // أول قطعة بتبدأ ملف جديد — وأي بقايا قديمة بتتداس
+        $expected = (int) $data['index'] === 0
+            ? 0
+            : (is_file($meta) ? (int) file_get_contents($meta) : -1);
+
+        if ((int) $data['index'] !== $expected) {
+            @unlink($part);
+            @unlink($meta);
+
+            return response()->json(['message' => __('appver.chunk_out_of_order')], 422);
+        }
+
+        $bytes = file_get_contents($request->file('chunk')->getRealPath());
+        file_put_contents($part, $bytes, $data['index'] === 0 ? 0 : FILE_APPEND);
+        file_put_contents($meta, (string) ($data['index'] + 1));
+
+        // مش آخر قطعة؟ خلصنا هنا
+        if ((int) $data['index'] + 1 < (int) $data['total']) {
+            return response()->json(['ok' => true, 'received' => $data['index'] + 1]);
+        }
+
+        // ═══ آخر قطعة — التجميع خلص، ننقل للمكان النهائي ═══
+        $pubDir = public_path('app');
+        if (! is_dir($pubDir)) {
+            mkdir($pubDir, 0755, true);
+        }
+
+        // فحص بدائي إن ده APK فعلاً (ZIP بيبدأ بـ PK) — مش أمان،
+        // حماية من ملف اترفع غلط ويتوزع على كل التليفونات
+        $head = file_get_contents($part, false, null, 0, 2);
+        if ($head !== 'PK') {
+            @unlink($part);
+            @unlink($meta);
+
+            return response()->json(['message' => __('appver.not_an_apk')], 422);
+        }
+
+        rename($part, public_path(self::APK_PATH));
+        @unlink($meta);
+
+        // الرابط بنفس نسخة الإعدادات الحالية — «حفظ» بيحدّثها بعدين
+        Setting::write('app_apk_url',
+            url(self::APK_PATH).'?v='.Setting::read('app_version', '1.0.0'));
+
+        return response()->json([
+            'ok' => true,
+            'done' => true,
+            'size' => filesize(public_path(self::APK_PATH)),
+        ]);
+    }
+
+    /**
      * GET /api/app-version — **من غير تسجيل دخول عن قصد.**
      *
      * ⚠️ شاشة «لازم تحدّث» بتظهر قبل اللوجين كمان: المندوب اللي
