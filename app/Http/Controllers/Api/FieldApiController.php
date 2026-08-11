@@ -141,7 +141,9 @@ class FieldApiController extends Controller
             // ⚠️ السيلز بقى بيشوف أوامر التوريد برضو — فلو الكي أكاونت
             // (2026-08-04): أمر معتمد من الحسابات واتجهز بينزله يسلمه.
             // ⚠️ والمدير كمان (١١/٨) — بيسلّم أوردرات بنفسه.
-            'purchase_orders' => ($user->isDriver() || $user->isSalesAgent() || $user->role === 'manager')
+            // ⚠️ والبروموتر (١١/٨ مساءً) — طلب الريفيل بقى ممكن يتنزّل
+            // عليه هو نفسه («نفس المندوب اللي طلبه»)، فلازم يشوف أمره.
+            'purchase_orders' => in_array($user->role, User::FIELD_WORK_ROLES, true)
                 ? self::posPayload($user) : [],
             'today' => $this->todayPayload($user),
             // ⚠️ **مع البوت ستراب مش ريكوست منفصل** — الأبلكيشن

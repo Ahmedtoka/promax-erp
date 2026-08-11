@@ -104,8 +104,15 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::middleware('api.role:sales_agent,manager')->group(function () {
             Route::post('/visits/{visit}/collect', [FieldApiController::class, 'collect']);
             Route::post('/visits/{visit}/shelf-photo', [FieldApiController::class, 'shelfPhoto']);
-            Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
         });
+
+        // ═══ طلب البضاعة لكل رولز الشغل الميداني (قرار المالك ١١/٨ مساءً) ═══
+        // «غيري الكلام بتاع البروموتر ده خليه مناديب عادي» — طلب البضاعة
+        // من عند العميل بقى لكل اللي بينزل الشارع (سيلز/سواق/بروموتر/مدير)،
+        // مش للسيلز والمدير بس. التحصيل والرف فاضلين فوق زي ما هم:
+        // التحصيل مربوط بالتصفية والبروموتر مالوش تصفية.
+        // المرساة جوّه `storeGoodsRequest` زي ما هي: زيارة **مفتوحة بتاعته**.
+        Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
 
         // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);

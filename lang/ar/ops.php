@@ -237,11 +237,14 @@ return [
     'contract_pending_note' => 'العقد هيتظبّط من شاشة تعديل العميل.',
 
     // ---------- الريفيل ----------
-    'replenishments' => 'طلبات الريفيل',
-    'replenishments_from_merch' => 'طلبات الريفيل من البروموترز',
+    'replenishments' => 'طلبات البضاعة والريفيل',
+    // ⚠️ اتحيّد (١١/٨ مساءً): الطلب بقى لكل رولز الشغل الميداني مش للبروموتر بس
+    'replenishments_from_merch' => 'طلبات البضاعة من المحلات (الريفيل)',
     'assign_replenishment' => 'تنزيل الطلب على مندوب',
     'replenishment_note' => 'الطلب هيتحول لأمر توريد وينزل على المندوب في أبلكيشنه.',
     'rep_or_driver' => 'المندوب / السواق',
+    'requester' => 'الطالب',
+    'who_delivers' => 'مين يوصّله؟',
     'by_client_channel' => 'حسب قناة العميل (الافتراضي)',
     'confirm_cancel_request' => 'تلغي الطلب؟',
     'no_replenishments' => 'مفيش طلبات ريفيل.',

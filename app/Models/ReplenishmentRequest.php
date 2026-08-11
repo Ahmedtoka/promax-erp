@@ -140,7 +140,11 @@ class ReplenishmentRequest extends Model
         // كان ينفع PO يتنزّل على محاسب مالوش عهدة أصلاً، أو على حساب
         // موقوف. الفحص هنا مش في الكنترولر عشان الويب والأبلكيشن
         // الاتنين يعدّوا عليه — المسار ده هو المكان الوحيد للتحويل.
-        if (! $assignee->active || ! in_array($assignee->role, User::FIELD_ROLES, true)) {
+        //
+        // ⚠️ `FIELD_WORK_ROLES` مش `FIELD_ROLES` (طلب المالك ١١/٨ مساءً):
+        // المدير بقى بيسلّم أوردرات بنفسه — و`Scope::assertRep` تحت
+        // لسه بتحكم إن المدير-كمستلم يعدّي لنفسه أو من الأدمن بس.
+        if (! $assignee->active || ! in_array($assignee->role, User::FIELD_WORK_ROLES, true)) {
             throw new Rejected(__('field.not_a_field_role'));
         }
 
@@ -318,6 +322,32 @@ class ReplenishmentRequest extends Model
         );
 
         return $po;
+    }
+
+    /**
+     * إلغاء/رفض الطلب + إشعار الطالب — المكان الوحيد للإلغاء.
+     *
+     * ⚠️ الويب كان بيلغي **من غير أي إشعار** والـAPI بيلغي وبيبلّغ —
+     * فالطالب اللي طلبه اتلغى من الداش بورد كان بيفضل مستني للأبد.
+     * الاتنين بقوا بينده هنا عشان الفلو مايتفرّعش لنسختين.
+     */
+    public function cancelAndNotify(?string $note = null): void
+    {
+        $this->update(['status' => 'cancelled']);
+
+        // ⚠️ لينك الطالب حسب مصدره — طلب المندوب لينكه الرئيسية
+        // (مالوش تاب ريفيل)، والبروموتر ليه تاب ريفيل فلينكه ليه.
+        AppNotification::send(
+            $this->promoter,
+            fn () => __('field.notif_replenishment_rejected_title', [
+                'number' => $this->number,
+            ]),
+            fn () => $note ?: __('field.notif_replenishment_rejected_body'),
+            good: false,
+            link: $this->origin() === 'rep'
+                ? null
+                : AppNotification::replenishmentLink($this->id),
+        );
     }
 
     /** مديرو القناة اللي المفروض يشوفوا الطلب ده */

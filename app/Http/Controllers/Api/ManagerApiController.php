@@ -78,8 +78,11 @@ class ManagerApiController extends Controller
             'reps' => $this->repsPayload($user),
             'requests' => $this->requestsPayload($user),
             'replenishments' => $this->replenishmentsPayload($user),
+            // ⚠️ **كل رولز الشغل الميداني** (١١/٨ مساءً) — «نفس المندوب
+            // اللي طلبه ولا مندوب تاني»: البروموتر بقى يستلم زي غيره،
+            // و`assignTo` جواه `Scope::assertRep` بيمنع أي تجاوز.
             'drivers' => User::fieldVisibleTo(
-                User::whereIn('role', ['driver', 'sales_agent', 'manager']), $user)
+                User::whereIn('role', User::FIELD_WORK_ROLES), $user)
                 ->where('active', true)->orderBy('name')->get()
                 ->map(fn (User $u) => [
                     'id' => $u->id,
@@ -399,7 +402,11 @@ class ManagerApiController extends Controller
     {
         return response()->json([
             'replenishments' => $this->replenishmentsPayload($request->user()),
-            'drivers' => User::whereIn('role', ['driver', 'sales_agent'])
+            // ⚠️ نفس قايمة bootstrap بالحرف: كل رولز الشغل الميداني
+            // **بسكوب الفريق** — القايمة هنا كانت من غير `fieldVisibleTo`
+            // خالص، فمدير قناة بيشوف مناديب الشركة كلها في الاختيار.
+            'drivers' => User::fieldVisibleTo(
+                User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
                 ->where('active', true)->orderBy('name')->get()
                 ->map(fn (User $u) => [
                     'id' => $u->id,
@@ -454,27 +461,11 @@ class ManagerApiController extends Controller
             return $err;
         }
 
-        $replenishmentRequest->update(['status' => 'cancelled']);
-
-        // ⚠️⚠️ **`good: false` مش `false` موضعية** (تدقيق ٩/٨ مساءً):
-        // باراميتر موضعي بعد named argument = **خطأ PHP قاتل وقت
-        // تحميل الكلاس** — يعني كل `/api/manager/*` كانت بترجع 500
-        // ورول المدير على الموبايل واقع بالكامل، والأبلكيشن بيحاول
-        // ٣ مرات ويستسلم بصمت فتبان الشاشة أصفار.
-        //
-        // ⚠️ ولينك الطالب حسب مصدره — طلب المندوب لينكه الرئيسية
-        // (مالوش تاب ريفيل)، نفس منطق `assignTo` بالظبط.
-        AppNotification::send(
-            $replenishmentRequest->promoter,
-            fn () => __('field.notif_replenishment_rejected_title', [
-                'number' => $replenishmentRequest->number,
-            ]),
-            fn () => $data['note'] ?? __('field.notif_replenishment_rejected_body'),
-            good: false,
-            link: $replenishmentRequest->origin() === 'rep'
-                ? null
-                : AppNotification::replenishmentLink($replenishmentRequest->id),
-        );
+        // ⚠️ الإلغاء + إشعار الطالب اتوحّدوا في
+        // `ReplenishmentRequest::cancelAndNotify` (١١/٨ مساءً) — الويب
+        // كان بيلغي في صمت والمسار ده بيبلّغ، فالمنطق بقى في الموديل
+        // زي `assignTo` بالظبط عشان النسختين مايفترقوش تاني.
+        $replenishmentRequest->cancelAndNotify($data['note'] ?? null);
 
         return response()->json([
             'status' => 'cancelled',

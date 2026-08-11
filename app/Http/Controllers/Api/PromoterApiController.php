@@ -27,6 +27,14 @@ class PromoterApiController extends Controller
     {
         $user = $request->user();
 
+        // ═══ البروموتر بقى يستلم ويسلّم أوامر توريد (١١/٨ مساءً) ═══
+        // «نفس المندوب اللي طلبه ولا مندوب تاني» — لو الطلب اتنزّل
+        // عليه هو، الأمر لازم يبان في أبلكيشنه: عهدة + أوامر + مخازن،
+        // من **نفس البيلدرز المشتركة** بالحرف (زي بوت ستراب المدير).
+        $custody = $user->currentCustody();
+        $custody?->load('items.product');
+        $openWh = \App\Services\WarehouseVisits::open($user);
+
         // فروع الكي أكاونت اللي في زون البروموتر
         $branches = Client::query()
             ->where('status', 'active')
@@ -65,6 +73,12 @@ class PromoterApiController extends Controller
             // سجّل، والضغط على «ابدأ الشيفت» بياخد ٤٢٢ من سيرفر
             // مسجّله حاضر خلاص.
             'attendance' => \App\Services\Attendance::payload($user),
+
+            // ═══ حزمة التسليم (١١/٨ مساءً) — نفس مفاتيح bootstrap الميدان ═══
+            // البروموتر بيشوف عهدته بالسعر الجديد زي السيلز.
+            'custody' => FieldApiController::custodyPayload($custody, 'new'),
+            'purchase_orders' => FieldApiController::posPayload($user),
+            ...FieldApiController::warehouseBundle($user, $openWh),
             // ⚠️ **جرس الإشعارات كان مابيتملاش أبداً** (تدقيق ٨/٨):
             // الشاشة فيها جرس وشارة، والبوت ستراب مابيبعتش إشعارات
             // خالص — فالبروموتر بيدوس على جرس فاضي دايماً حتى لما
@@ -365,6 +379,21 @@ class PromoterApiController extends Controller
                     'client' => $merchVisit->client->displayName(),
                     'qty' => $qty,
                     'user' => $user->displayName(),
+                ]),
+                link: \App\Models\AppNotification::replenishmentLink($req->id),
+            );
+        }
+
+        // ⚠️ وأمناء المخازن كمان (١١/٨ مساءً) — نفس مسار طلب بضاعة
+        // المندوب بالحرف: الفلوهين بقوا واحد، وأمين المخزن بياخد بال
+        // إن فيه شغل جاي قبل ما أمر التجهيز نفسه ينزل له.
+        foreach (\App\Models\User::where('role', 'warehouse_keeper')->where('active', true)->get() as $keeper) {
+            \App\Models\AppNotification::send(
+                $keeper,
+                fn () => __('field.notif_goods_request_wh_title', ['number' => $req->number]),
+                fn () => __('field.notif_goods_request_wh_body', [
+                    'client' => $merchVisit->client->displayName(),
+                    'qty' => $qty,
                 ]),
                 link: \App\Models\AppNotification::replenishmentLink($req->id),
             );

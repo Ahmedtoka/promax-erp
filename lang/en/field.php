@@ -145,7 +145,7 @@ return [
     'preparing_title' => 'Under Preparation',
     'preparing_hint' => 'Requests sent to the warehouse, not yet confirmed - confirm from Order Preparation',
     'go_prepare' => 'Prepare',
-    'not_a_field_role' => 'That account is not a rep, driver or promoter — van stock is only carried by field staff.',
+    'not_a_field_role' => 'That account is not field staff (rep, driver, promoter or manager) — van stock is only carried by field staff.',
     'gift_notice' => ':qty units in this van stock are gifts. Not for sale — the rep must record who received them.',
     'handout_pledge' => 'I, the undersigned rep, confirm receipt of the goods listed above in the quantities and batches shown, and accept responsibility for them until sales proceeds and returns are handed in and the van stock is closed.',
     'sign_issuer' => 'Issued by',

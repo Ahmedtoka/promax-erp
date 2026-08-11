@@ -46,7 +46,7 @@ return [
     'po_approvals' => 'موافقات التوريد',
     'invoices' => 'الفواتير',
     'client_requests' => 'طلبات العملاء الجدد',
-    'replenishments' => 'طلبات الريفيل',
+    'replenishments' => 'طلبات البضاعة والريفيل',
     'merch_visits' => 'زيارات الرفوف',
     'tracking' => 'التراكينج',
 

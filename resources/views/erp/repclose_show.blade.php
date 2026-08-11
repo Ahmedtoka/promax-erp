@@ -95,10 +95,11 @@
             </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-            {{-- قفل العهدة مع التصفية — متعلّم افتراضياً؛ شيله لو العربية
-                 هتكمل بنفس الحمولة بكرة (١١/٨) --}}
+            {{-- قفل العهدة مع التصفية — **مش متعلّم افتراضياً** (قرار
+                 المالك ١١/٨): الفلو الطبيعي إن العربية تبات بباقي
+                 البضاعة وتكمل بكرة؛ القفل النهائي كل فين وفين بس --}}
             <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;cursor:pointer">
-                <input type="checkbox" name="close_custody" value="1" checked style="width:16px;height:16px">
+                <input type="checkbox" name="close_custody" value="1" style="width:16px;height:16px">
                 🔒 {{ __('settle.close_custody_too') }}
                 <span style="font-weight:400;color:var(--muted);font-size:11px">{{ __('settle.close_custody_hint') }}</span>
             </label>

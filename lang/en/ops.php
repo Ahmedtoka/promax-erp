@@ -235,11 +235,14 @@ return [
     'contract_pending_note' => 'Contract to be finalized from the client edit page.',
 
     // ---------- Replenishment ----------
-    'replenishments' => 'Replenishment Requests',
-    'replenishments_from_merch' => 'Replenishment Requests from Merchandisers',
+    'replenishments' => 'Goods & Replenishment Requests',
+    // ⚠️ اتحيّد (١١/٨ مساءً): الطلب بقى لكل رولز الشغل الميداني مش للبروموتر بس
+    'replenishments_from_merch' => 'Goods & Replenishment Requests from Stores',
     'assign_replenishment' => 'Assign the request to a rep',
     'replenishment_note' => 'The request becomes a sales order and lands in the rep’s app.',
     'rep_or_driver' => 'Rep / Driver',
+    'requester' => 'Requested By',
+    'who_delivers' => 'Who delivers it?',
     'by_client_channel' => "By the client's channel price (default)",
     'confirm_cancel_request' => 'Cancel this request?',
     'no_replenishments' => 'No replenishment requests.',

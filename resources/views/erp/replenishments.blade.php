@@ -27,13 +27,14 @@
     <div class="tablewrap">
         <table>
             <tr>
-                <th>{{ __('ops.request') }}</th><th>{{ __('client.branch') }}</th><th>{{ __('ops.merchandiser') }}</th><th>{{ __('ops.items') }}</th>
+                <th>{{ __('ops.request') }}</th><th>{{ __('client.branch') }}</th><th>{{ __('ops.requester') }}</th><th>{{ __('ops.items') }}</th>
                 <th>{{ __('common.qty') }}</th><th>{{ __('common.status') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('common.notes') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
             @forelse ($requests as $r)
                 {{-- ملحوظة: ممنوع دايركتيف json بمصفوفة جوه الـ Blade — بيكسّر الـ parser --}}
-                @php $rJson = json_encode(['id' => $r->id, 'number' => $r->number], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); @endphp
+                {{-- requested_by بيتبعت للمودال عشان «مين يوصّله؟» يفتح على الطالب نفسه --}}
+                @php $rJson = json_encode(['id' => $r->id, 'number' => $r->number, 'requested_by' => (int) $r->requested_by], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); @endphp
                 <tr>
                     <td class="num"><b>{{ $r->number }}</b><br>
                         <span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d h:i A') }}</span></td>
@@ -87,10 +88,13 @@
             {{ __('ops.replenishment_note') }}
         </p>
         <div class="frow">
-            <div><label class="f">{{ __('ops.rep_or_driver') }}</label>
-                <select name="assigned_to" required style="width:100%">
+            <div><label class="f">{{ __('ops.who_delivers') }}</label>
+                {{-- بحث + سيلكت: القايمة كل رولز الشغل الميداني وممكن تطول --}}
+                <input type="text" id="rplWho" placeholder="{{ __('common.search') }}"
+                       autocomplete="off" style="width:100%;margin-bottom:6px">
+                <select name="assigned_to" id="rplAssignee" required size="5" style="width:100%">
                     @foreach ($drivers as $d)
-                        <option value="{{ $d->id }}">{{ $d->name }} ({{ $d->roleLabel() }})</option>
+                        <option value="{{ $d->id }}">{{ $d->displayName() }} ({{ $d->roleLabel() }})</option>
                     @endforeach
                 </select>
             </div>
@@ -117,7 +121,42 @@
 function assignRpl(r) {
     document.getElementById('rplTitle').textContent = {!! json_encode(__('ops.assign'), JSON_UNESCAPED_UNICODE) !!} + ' ' + r.number;
     document.getElementById('formRpl').action = '{{ url('ops/replenishments') }}/' + r.id + '/assign';
+
+    // «مين يوصّله؟» بيفتح على الطالب نفسه — «يرجع تاني للمندوب» زي
+    // ما المالك طلب. لو الطالب مش في القايمة (اتوقف/بره الفريق)
+    // بيفضل أول واحد والمدير يختار بإيده.
+    var sel = document.getElementById('rplAssignee');
+    var box = document.getElementById('rplWho');
+    box.value = '';
+    filterAssignees('');
+    sel.selectedIndex = -1;
+    if (r.requested_by) {
+        for (var i = 0; i < sel.options.length; i++) {
+            if (parseInt(sel.options[i].value, 10) === r.requested_by) {
+                sel.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    // الطالب مش في القايمة؟ أول واحد — عشان `required` مايعلّقش الفورم
+    if (sel.selectedIndex < 0 && sel.options.length > 0) {
+        sel.selectedIndex = 0;
+    }
     openDlg('dlgRpl');
 }
+
+// فلترة قايمة المستلمين بالاسم — إخفاء بس، الاختيار المظلل بيفضل
+function filterAssignees(q) {
+    q = (q || '').trim().toLowerCase();
+    var sel = document.getElementById('rplAssignee');
+    for (var i = 0; i < sel.options.length; i++) {
+        var opt = sel.options[i];
+        opt.hidden = q !== '' && opt.textContent.toLowerCase().indexOf(q) === -1;
+    }
+}
+document.getElementById('rplWho') &&
+    document.getElementById('rplWho').addEventListener('input', function () {
+        filterAssignees(this.value);
+    });
 </script>
 @endsection

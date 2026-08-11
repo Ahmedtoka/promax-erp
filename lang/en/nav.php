@@ -46,7 +46,7 @@ return [
     'po_approvals' => 'Sales Order Approvals',
     'invoices' => 'Invoices',
     'client_requests' => 'New Client Requests',
-    'replenishments' => 'Replenishment Requests',
+    'replenishments' => 'Goods & Replenishment Requests',
     'merch_visits' => 'Merchandising Visits',
     'tracking' => 'Tracking',
 

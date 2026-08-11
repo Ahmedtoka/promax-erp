@@ -323,8 +323,13 @@ class ChannelController extends Controller
 
         return view('erp.replenishments', [
             'requests' => $q->latest()->paginate(25)->withQueryString(),
+            // ⚠️ **كل رولز الشغل الميداني** (طلب المالك ١١/٨ مساءً):
+            // «نفس المندوب اللي طلبه ولا مندوب تاني» — سيلز وسواق
+            // وبروموتر ومدير. `fieldVisibleTo` بتسكّب فريق المدير بس،
+            // و`assignTo` جواه `Scope::assertRep` بيمنع أي تجاوز.
             'drivers' => User::fieldVisibleTo(
-                User::whereIn('role', ['driver', 'sales_agent']), $request->user())->get(),
+                User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
+                ->where('active', true)->orderBy('name')->get(),
             'filters' => $request->only('status'),
         ]);
     }
@@ -364,7 +369,9 @@ class ChannelController extends Controller
         // الرف فاضي وطلبه ملغي من حد مالوش علاقة.
         Scope::assertClient($request->user(), $replenishmentRequest->client);
 
-        $replenishmentRequest->update(['status' => 'cancelled']);
+        // ⚠️ الإلغاء + إشعار الطالب في الموديل — الويب كان بيلغي
+        // في صمت والـAPI بيبلّغ، فاتوحّد المسار (١١/٨ مساءً).
+        $replenishmentRequest->cancelAndNotify();
 
         return back()->with('ok', __('flash.replenishment_cancelled'));
     }
