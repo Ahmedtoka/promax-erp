@@ -228,4 +228,6 @@ return [
     'event_po_aborted' => 'رجّع أمر :number — :client من غير تسليم',
     'notif_po_aborted_title' => 'أمر :number اترجع من غير تسليم ⛔',
     'notif_po_aborted_body' => ':client — :rep لغى التسليم: :reason',
+    'notif_forced_out_title' => 'الإدارة قفلت زيارتك ⚠️',
+    'notif_forced_out_body' => 'زيارتك عند «:client» اتقفلت بواسطة :by — لو لسه شغال هناك اعمل تشيك إن من جديد.',
 ];

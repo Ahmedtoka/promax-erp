@@ -229,4 +229,6 @@ return [
     'event_po_aborted' => 'Returned order :number - :client undelivered',
     'notif_po_aborted_title' => 'Order :number came back undelivered ⛔',
     'notif_po_aborted_body' => ':client - :rep cancelled the delivery: :reason',
+    'notif_forced_out_title' => 'Management closed your visit ⚠️',
+    'notif_forced_out_body' => 'Your visit at ":client" was closed by :by - if you are still working there, check in again.',
 ];

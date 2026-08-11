@@ -295,4 +295,20 @@ return [
     'toggle_rep_hint' => 'Tap a person to hide/show them:',
     'po_edit_back_confirm' => 'This order is approved - editing sends it back to accounting approval and cancels the current pick order. Continue?',
     'po_aborted_note' => 'Came back undelivered',
+
+    // Open visits (Aug 11, 2026)
+    'ov_clients' => 'Open client visits',
+    'ov_warehouses' => 'Inside warehouses now',
+    'ov_stale' => 'Forgotten old visits',
+    'ov_stale_hint' => 'From a past day, still open - blocking check-ins',
+    'ov_hint' => 'Forcing out is logged on tracking as administrative and the employee gets a notification',
+    'ov_wh_hint' => 'These close automatically on checkout - force out here for stuck cases',
+    'ov_since' => 'In since',
+    'ov_duration' => 'For',
+    'ov_old_visit' => 'Old visit',
+    'ov_force_out' => 'Check out',
+    'ov_confirm' => 'Check :rep out of :client? It is logged as administrative and they get a notification.',
+    'ov_none' => 'Nobody is checked in right now',
+    'ov_closed_ok' => 'Closed - :rep was notified.',
+    'forced_out_by' => 'Administrative checkout by :by',
 ];
