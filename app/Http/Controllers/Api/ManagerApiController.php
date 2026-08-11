@@ -116,6 +116,8 @@ class ManagerApiController extends Controller
                 $user,
                 \App\Services\WarehouseVisits::open($user),
             ),
+            // الزيارة المفتوحة أياً كان يومها — المدير الميداني برضه (١١/٨)
+            'open_visit' => FieldApiController::openVisitPayload($user),
         ]);
     }
 

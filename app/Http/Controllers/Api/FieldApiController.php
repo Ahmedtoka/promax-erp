@@ -158,6 +158,12 @@ class FieldApiController extends Controller
             // بالرفض وهو شايف نفسه مسجّل.
             // ═══ حزمة المخزن — مشتركة مع بوت ستراب المدير (١١/٨) ═══
             ...self::warehouseBundle($user, $openWh),
+
+            // ═══ الزيارة المفتوحة — أياً كان يومها (إصلاح ١١/٨) ═══
+            // البانر في الأبلكيشن كان بيدور في قوايم النهارده بس،
+            // فزيارة اتنست من يوم قديم كانت بتمنع التشيك إن من غير
+            // ما حد يعرف هي فين. المفتاح ده هو مصدر الحقيقة الوحيد.
+            'open_visit' => self::openVisitPayload($user),
             // ⚠️ **`is_read` لازم تتبعت** (إصلاح 2026-08-07). الأبلكيشن
             // كان بيعد الإشعارات كلها في الشارة عشان مكانش عارف
             // المقروء من غيره — فالمندوب يفتحها ويقفلها والرقم زي ما
@@ -2121,6 +2127,28 @@ class FieldApiController extends Controller
                     'lat' => $w->lat === null ? null : (float) $w->lat,
                     'lng' => $w->lng === null ? null : (float) $w->lng,
                 ])->values(),
+        ];
+    }
+
+    /**
+     * الزيارة المفتوحة حالياً — أياً كان يومها (١١ أغسطس ٢٠٢٦).
+     *
+     * الأبلكيشن بيعرض بانر «اقفل زيارة فلان الأول» بزرار تشيك أوت
+     * مباشر — حتى لو العميل مش في قوايم النهارده (زيارة قديمة اتنست).
+     */
+    public static function openVisitPayload(User $user): ?array
+    {
+        $ov = $user->openVisit();
+
+        if ($ov === null) {
+            return null;
+        }
+
+        return [
+            'visit_id' => $ov->id,
+            'client_id' => $ov->client_id,
+            'client' => $ov->client?->displayName() ?? '—',
+            'since' => $ov->checked_in_at?->toIso8601String(),
         ];
     }
 

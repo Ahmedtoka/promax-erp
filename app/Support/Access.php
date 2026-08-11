@@ -305,6 +305,8 @@ class Access
 
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══
         'nav.group_field' => [
+            // مين عامل «إن» فين دلوقتي + الإخراج الإداري (١١/٨)
+            ['ops.open_visits', '🚪', 'nav.open_visits', 'ops.open_visits', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],

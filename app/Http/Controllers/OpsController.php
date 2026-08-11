@@ -162,6 +162,79 @@ class OpsController extends Controller
         ]);
     }
 
+    /**
+     * ═══ الزيارات المفتوحة — مين عامل «إن» فين دلوقتي (١١ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «أشوف المندوب عامل إن فين وواقف فين، وأقدر أعمله
+     * Out من الداش بورد». كل زيارة عميل مفتوحة (أياً كان يومها) +
+     * زيارات المخزن المفتوحة — بزرار إخراج إداري لكل واحدة.
+     */
+    public function openVisits(Request $request)
+    {
+        $teamIds = User::fieldVisibleTo(User::query(), $request->user())->select('id');
+
+        return view('ops.open_visits', [
+            'visits' => \App\Models\Visit::whereNull('checked_out_at')
+                ->whereIn('user_id', $teamIds)
+                ->with(['user', 'client'])
+                ->orderBy('checked_in_at')
+                ->get(),
+            'whVisits' => \App\Models\WarehouseVisit::whereNull('checked_out_at')
+                ->whereIn('user_id', $teamIds)
+                ->with(['user', 'warehouse'])
+                ->orderBy('checked_in_at')
+                ->get(),
+        ]);
+    }
+
+    /**
+     * إخراج إداري من زيارة عميل — بيقفلها دلوقتي، بيسجل في التراكينج
+     * إن القفل إداري ومين اللي قفل، وبيبلّغ المندوب بإشعار.
+     */
+    public function forceCheckOut(Request $request, \App\Models\Visit $visit)
+    {
+        abort_unless($visit->checked_out_at === null, 404);
+        // ⚠️ مدير القناة بيخرّج **فريقه** بس — نفس حارس كل الشاشات
+        Scope::assertStaff($request->user(), $visit->user);
+
+        $visit->update(['checked_out_at' => now()]);
+
+        \App\Models\TrackEvent::log($visit->user, 'check_out',
+            __('field.event_check_out', ['client' => $visit->client?->displayName() ?? '—']),
+            __('ops.forced_out_by', ['by' => $request->user()->displayName()]),
+            $visit->lat ?? $visit->client?->lat,
+            $visit->lng ?? $visit->client?->lng);
+
+        // المندوب لازم يعرف — شاشته هتتغير فجأة ومن غير الإشعار
+        // هيفتكر الأبلكيشن باظ
+        AppNotification::send(
+            $visit->user,
+            fn () => __('field.notif_forced_out_title'),
+            fn () => __('field.notif_forced_out_body', [
+                'client' => $visit->client?->displayName() ?? '—',
+                'by' => $request->user()->displayName(),
+            ]),
+            good: false,
+        );
+
+        return back()->with('ok', __('ops.ov_closed_ok', [
+            'rep' => $visit->user?->displayName() ?? '—',
+        ]));
+    }
+
+    /** إخراج إداري من زيارة مخزن — نفس الفكرة */
+    public function forceWarehouseOut(Request $request, \App\Models\WarehouseVisit $whVisit)
+    {
+        abort_unless($whVisit->checked_out_at === null, 404);
+        Scope::assertStaff($request->user(), $whVisit->user);
+
+        \App\Services\WarehouseVisits::close($whVisit);
+
+        return back()->with('ok', __('ops.ov_closed_ok', [
+            'rep' => $whVisit->user?->displayName() ?? '—',
+        ]));
+    }
+
     public function closeCustody(Request $request, User $user)
     {
         // ⚠️ **كان بلا حارس** — أي مدير بيقفل يوم أي مندوب في الشركة،

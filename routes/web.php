@@ -583,6 +583,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/reps/{user}/close', [OpsController::class, 'closeCustody'])
             ->middleware('role:admin,manager')->name('rep.close');
 
+        // ═══ الزيارات المفتوحة + الإخراج الإداري (١١ أغسطس ٢٠٢٦) ═══
+        Route::get('/open-visits', [OpsController::class, 'openVisits'])
+            ->middleware('role:admin,manager')->name('open_visits');
+        Route::post('/open-visits/{visit}/out', [OpsController::class, 'forceCheckOut'])
+            ->middleware('role:admin,manager')->name('open_visits.out');
+        Route::post('/open-wh-visits/{whVisit}/out', [OpsController::class, 'forceWarehouseOut'])
+            ->middleware('role:admin,manager')->name('open_visits.wh_out');
+
         // ═══ عهد المناديب — بورد المراجعة بنظرة واحدة (١٠ أغسطس ٢٠٢٦) ═══
         // ⚠️ بيانات إدارة: قيمة عهدة كل مندوب — أدمن ومدير بس، والمدير
         // بيشوف فريقه من fieldVisibleTo جوه الكنترولر.

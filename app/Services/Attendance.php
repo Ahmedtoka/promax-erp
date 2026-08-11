@@ -302,6 +302,15 @@ final class Attendance
                 WarehouseVisits::closeOpenFor($day->user);
             }
 
+            // ⚠️ **وزيارات العملاء المفتوحة كمان** (إصلاح ١١/٨ — حالة
+            // «هيد باديل»): زيارة اتنست مفتوحة كانت بتمنع أي تشيك إن
+            // تاني يوم — والبانر مش لاقيها لأنها مش في قوايم النهارده.
+            // القفل التلقائي بيقفلها على آخر يوم الشيفت — نفس منطق
+            // بانش الانصراف الوهمي بالظبط.
+            \App\Models\Visit::where('user_id', $day->user_id)
+                ->whereNull('checked_out_at')
+                ->update(['checked_out_at' => $day->date->copy()->endOfDay()]);
+
             AttendancePunch::create([
                 'attendance_day_id' => $day->id,
                 'user_id' => $day->user_id,
