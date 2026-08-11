@@ -84,8 +84,8 @@
                     </td>
                     <td class="s">{{ $row['client']->zone?->displayName() ?: '—' }}</td>
                     <td class="s">{{ $row['plan']->frequencyLabel() }}</td>
-                    <td class="num s">{{ $row['visit']?->checked_in_at?->format('H:i') ?: '—' }}</td>
-                    <td class="num s">{{ $row['visit']?->checked_out_at?->format('H:i') ?: '—' }}</td>
+                    <td class="num s">{{ $row['visit']?->checked_in_at?->format('h:i A') ?: '—' }}</td>
+                    <td class="num s">{{ $row['visit']?->checked_out_at?->format('h:i A') ?: '—' }}</td>
                     <td>
                         <span class="badge {{ $statusClass[$row['status']] ?? 'b-gray' }}">
                             {{ __('journey.'.$row['status']) }}
@@ -121,8 +121,8 @@
                             {{ $v->client?->displayName() }}
                         </a>
                     </td>
-                    <td class="num s">{{ $v->checked_in_at?->format('H:i') ?: '—' }}</td>
-                    <td class="num s">{{ $v->checked_out_at?->format('H:i') ?: '—' }}</td>
+                    <td class="num s">{{ $v->checked_in_at?->format('h:i A') ?: '—' }}</td>
+                    <td class="num s">{{ $v->checked_out_at?->format('h:i A') ?: '—' }}</td>
                 </tr>
             @endforeach
         </table>

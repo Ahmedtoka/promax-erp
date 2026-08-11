@@ -75,18 +75,12 @@
             </div>
         @endif
 
-        {{-- ═══ الرفع بالقطع (١١/٨) — بار تقدم حقيقي + ريفريش تلقائي ═══
-             الرفع القديم بريكوست واحد كان بيموت في النص على الملفات
-             الكبيرة (ERR_HTTP2_PING_FAILED) ومحدش عارف وصل ولا لأ.
-             دلوقتي: الملف بيتقطّع ٤ ميجا، كل قطعة ريكوست سريع،
-             والبار بيقول «قطعة X من Y» — ولما يخلص الصفحة بتترفرش
-             لوحدها وتلاقي «الملف على السيرفر ✅». --}}
+        {{-- ═══ زرار واحد (طلب المالك ١١/٨): «حفظ» بيرفع الملف بالقطع
+             ببار تقدم بالبايت، ولما يخلص بيحفظ الإصدارات ويرفرش
+             بالداتا الصح. مفيش زرار رفع منفصل يلخبط. --}}
         <label class="f">{{ __('appver.apk_upload') }}</label>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <input type="file" id="apkFile" accept=".apk,application/vnd.android.package-archive" style="flex:1;min-width:220px">
-            <button class="btn gold" type="button" id="apkBtn" onclick="apkUpload()">⬆️ {{ __('appver.upload_now') }}</button>
-        </div>
-        <div class="side" style="font-size:11px">{{ __('appver.apk_hint') }}</div>
+        <input type="file" id="apkFile" accept=".apk,application/vnd.android.package-archive" style="width:100%">
+        <div class="side" style="font-size:11px">{{ __('appver.apk_hint') }} — {{ __('appver.one_button_hint') }}</div>
 
         <div id="apkProg" style="display:none;margin-top:12px">
             <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-bottom:5px">
@@ -100,7 +94,7 @@
         </div>
     </div>
 
-    <button class="btn primary" type="submit">{{ __('common.save') }}</button>
+    <button class="btn primary" type="submit" id="saveBtn">{{ __('common.save') }}</button>
 </form>
 
 <div class="card" style="margin-top:14px">
@@ -149,26 +143,59 @@
 
 const APK_URL = @json(route('erp.app_version.chunk'));
 const APK_CSRF = @json(csrf_token());
-const T_PICK = @json(__('appver.pick_file_first'));
 const T_CHUNK = @json(__('appver.chunk_of'));
 const T_DONE = @json(__('appver.upload_done'));
 const T_FAIL = @json(__('appver.upload_failed'));
 const T_RETRY = @json(__('appver.retrying'));
 
-/* ═══ الرفع بالقطع — ٤ ميجا للقطعة ═══
-   كل قطعة ريكوست مستقل بمهلة قصيرة، وبيتعاد ٣ مرات لو النت شقلب —
-   فالرفع بينجو من مهلة البروكسي اللي كانت بتموّت الريكوست الواحد
-   الكبير. البار بيتحرك مع كل قطعة، وآخر قطعة بترجّع done=true
-   والصفحة بتترفرش لوحدها. */
-const APK_CHUNK = 4 * 1024 * 1024;
+/* ═══ زرار واحد (١١/٨): «حفظ» = رفع بالقطع + حفظ الإصدارات + ريفريش ═══
 
-async function apkUpload() {
+   فيه ملف متختار؟ بنمنع الإرسال العادي، نرفع الملف قطع ٢ ميجا
+   بـXHR عشان ناخد **تقدم بالبايت جوه القطعة نفسها** (fetch مافيهوش
+   upload progress — وده اللي كان مخلّي البار واقف على 0% والقطعة
+   بترفع) — ولما الرفع يخلص بنبعت الفورم عادي فبيحفظ الإصدارات
+   ويرجع بالصفحة متحدثة بالداتا الصح. مفيش ملف؟ الفورم بيتبعت عادي. */
+const APK_CHUNK = 2 * 1024 * 1024;
+
+function sendChunk(uploadId, i, total, blob, onProgress) {
+    return new Promise(function (resolve, reject) {
+        const fd = new FormData();
+        fd.append('upload_id', uploadId);
+        fd.append('index', i);
+        fd.append('total', total);
+        fd.append('chunk', blob, 'part');
+
+        const x = new XMLHttpRequest();
+        x.open('POST', APK_URL);
+        x.setRequestHeader('X-CSRF-TOKEN', APK_CSRF);
+        x.setRequestHeader('Accept', 'application/json');
+        x.timeout = 120000;
+
+        x.upload.onprogress = function (e) {
+            if (e.lengthComputable) onProgress(e.loaded);
+        };
+        x.onload = function () {
+            let j = {};
+            try { j = JSON.parse(x.responseText || '{}'); } catch (e) { /* HTML خطأ */ }
+            if (x.status >= 200 && x.status < 300) resolve(j);
+            else reject(new Error(j.message || ('HTTP ' + x.status)));
+        };
+        x.onerror = function () { reject(new Error('network')); };
+        x.ontimeout = function () { reject(new Error('timeout')); };
+        x.send(fd);
+    });
+}
+
+document.querySelector('form[action*="app-version"]').addEventListener('submit', async function (ev) {
+    const form = this;
     const inp = document.getElementById('apkFile');
     const file = inp.files && inp.files[0];
 
-    if (!file) { alert(T_PICK); return; }
+    if (!file || form.dataset.uploaded === '1') return; // مفيش ملف أو اترفع خلاص → حفظ عادي
 
-    const btn = document.getElementById('apkBtn');
+    ev.preventDefault();
+
+    const btn = document.getElementById('saveBtn');
     const prog = document.getElementById('apkProg');
     const bar = document.getElementById('apkProgBar');
     const pct = document.getElementById('apkProgPct');
@@ -181,48 +208,30 @@ async function apkUpload() {
     btn.disabled = true;
     inp.disabled = true;
     prog.style.display = 'block';
+    bar.style.background = '';
     msg.textContent = '';
 
+    const paint = function (uploadedBytes) {
+        const done = Math.min(99, Math.round((uploadedBytes / file.size) * 100));
+        bar.style.width = done + '%';
+        pct.textContent = done + '%';
+    };
+
     try {
+        let sent = 0;
+
         for (let i = 0; i < total; i++) {
             const blob = file.slice(i * APK_CHUNK, Math.min((i + 1) * APK_CHUNK, file.size));
-
             txt.textContent = T_CHUNK.replace(':x', i + 1).replace(':y', total);
 
-            /* ٣ محاولات للقطعة — النت المصري بيشقلب والقطعة الضايعة
-               تتعاد لوحدها بدل ما الرفع كله يقع */
+            /* ٣ محاولات للقطعة — النت بيشقلب والقطعة بتتعاد لوحدها */
+            let j = null;
             let lastErr = null;
-            let ok = false;
 
-            for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+            for (let attempt = 1; attempt <= 3 && j === null; attempt++) {
                 try {
-                    const fd = new FormData();
-                    fd.append('upload_id', uploadId);
-                    fd.append('index', i);
-                    fd.append('total', total);
-                    fd.append('chunk', blob, 'part');
-
-                    const r = await fetch(APK_URL, {
-                        method: 'POST',
-                        headers: { 'X-CSRF-TOKEN': APK_CSRF, 'Accept': 'application/json' },
-                        body: fd,
-                    });
-
-                    const j = await r.json().catch(() => ({}));
-
-                    if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status));
-
-                    ok = true;
-
-                    if (j.done) {
-                        bar.style.width = '100%';
-                        pct.textContent = '100%';
-                        txt.textContent = T_DONE;
-                        msg.textContent = '✅ ' + T_DONE;
-                        /* ريفريش تلقائي — الصفحة بترجع بـ«الملف على السيرفر» */
-                        setTimeout(() => location.reload(), 1200);
-                        return;
-                    }
+                    j = await sendChunk(uploadId, i, total, blob,
+                        (loaded) => paint(sent + loaded));
                 } catch (e) {
                     lastErr = e;
                     if (attempt < 3) {
@@ -232,19 +241,31 @@ async function apkUpload() {
                 }
             }
 
-            if (!ok) throw lastErr || new Error('upload failed');
+            if (j === null) throw lastErr || new Error('upload failed');
 
-            const done = Math.round(((i + 1) / total) * 100);
-            bar.style.width = done + '%';
-            pct.textContent = done + '%';
+            sent += blob.size;
+            paint(sent);
+            msg.textContent = '';
         }
+
+        bar.style.width = '100%';
+        pct.textContent = '100%';
+        txt.textContent = T_DONE;
+        msg.textContent = '✅ ' + T_DONE;
+
+        /* الملف وصل — دلوقتي بنبعت الفورم نفسه عشان يحفظ الإصدارات
+           ويرجع بالصفحة متحدثة. الخانة بتتفضّى عشان الملف الكبير
+           مايتبعتش تاني مع البوست، والعلم بيمنع اللفة اللانهائية. */
+        inp.value = '';
+        inp.disabled = false;
+        form.dataset.uploaded = '1';
+        form.submit();
     } catch (e) {
         msg.textContent = '⛔ ' + T_FAIL + ' — ' + (e && e.message ? e.message : '');
         bar.style.background = '#B00020';
-    } finally {
         btn.disabled = false;
         inp.disabled = false;
     }
-}
+});
 </script>
 @endsection

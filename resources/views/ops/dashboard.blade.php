@@ -68,7 +68,7 @@
                 };
             @endphp
             <div class="alert {{ $cls }}">
-                <div><b>{{ $e->happened_at->format('H:i') }} — {{ $e->user->displayName() }}:</b> {{ $e->title }}
+                <div><b>{{ $e->happened_at->format('h:i A') }} — {{ $e->user->displayName() }}:</b> {{ $e->title }}
                     @if ($e->subtitle)<span style="color:var(--muted)"> • {{ $e->subtitle }}</span>@endif
                 </div>
             </div>

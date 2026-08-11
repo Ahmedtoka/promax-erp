@@ -35,7 +35,7 @@
                     JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
                 ); @endphp
                 <tr>
-                    <td class="num">{{ $r->number }}<br><span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d H:i') }}</span></td>
+                    <td class="num">{{ $r->number }}<br><span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d h:i A') }}</span></td>
                     <td><b>{{ $r->name }}</b>
                         @if ($r->client)<br><a style="font-size:11px;color:var(--blue)" href="{{ route('erp.clients.show', $r->client) }}">{{ __('client.client_card') }} ←</a>@endif
                     </td>
@@ -63,7 +63,7 @@
                             @if ($r->isOpen())
                                 <button class="btn sm gold" onclick='decide({!! $rJson !!})'>{{ __('ops.decision') }}</button>
                             @else
-                                <span style="color:var(--muted);font-size:11px">{{ $r->decided_at?->format('m-d H:i') }}</span>
+                                <span style="color:var(--muted);font-size:11px">{{ $r->decided_at?->format('m-d h:i A') }}</span>
                             @endif
                         </td>
                     @endif

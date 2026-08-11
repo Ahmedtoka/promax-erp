@@ -549,7 +549,7 @@ class JourneyController extends Controller
                 ->map(fn ($e) => [
                     'lat' => (float) $e->lat,
                     'lng' => (float) $e->lng,
-                    't' => ($e->happened_at ?? $e->created_at)->format('H:i'),
+                    't' => ($e->happened_at ?? $e->created_at)->format('h:i A'),
                 ])->all();
 
             return [
@@ -620,7 +620,7 @@ class JourneyController extends Controller
             ->take(60)
             ->get()
             ->map(fn ($e) => [
-                't' => $e->happened_at->format('H:i'),
+                't' => $e->happened_at->format('h:i A'),
                 'kind' => $e->type,
                 'icon' => $e->icon(),
                 'color' => $e->color(),

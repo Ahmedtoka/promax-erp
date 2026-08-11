@@ -72,7 +72,7 @@
             <div class="doc-date">{{ __('doc.date') }}:
                 <b>{{ $inv->created_at?->format('Y-m-d') ?? '—' }}</b></div>
             <div class="doc-date">{{ __('doc.time') }}:
-                <b>{{ $inv->created_at?->format('H:i') ?? '—' }}</b></div>
+                <b>{{ $inv->created_at?->format('h:i A') ?? '—' }}</b></div>
             @if ($pageCountDoc > 1)
                 <div class="doc-date po-pageno">{{ __('doc.page_of', ['p' => $loop->iteration, 't' => $pageCountDoc]) }}</div>
             @endif
@@ -94,7 +94,7 @@
                 <span>{{ __('common.code') }}: <b>{{ $inv->user?->code ?? '—' }}</b></span>
             </div>
             <div class="po-party">
-                <span>{{ __('ops.visit') }}: <b>{{ $inv->visit?->checked_in_at?->format('Y-m-d H:i') ?? '—' }}</b></span>
+                <span>{{ __('ops.visit') }}: <b>{{ $inv->visit?->checked_in_at?->format('Y-m-d h:i A') ?? '—' }}</b></span>
                 <span class="sep">·</span>
                 <span>{{ $inv->visit?->minutes() ? __('ops.minutes', ['count' => $inv->visit->minutes()]) : __('ops.in_progress') }}</span>
             </div>

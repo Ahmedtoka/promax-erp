@@ -111,7 +111,7 @@ class RepSettlementController extends Controller
                     'reference' => $t->reference,
                     'cheque_bank' => $t->cheque_bank,
                     'cheque_due' => $t->cheque_due?->toDateString(),
-                    'at' => $t->created_at->format('m-d H:i'),
+                    'at' => $t->created_at->format('m-d h:i A'),
                 ])->values()->all(),
 
                 // ⚠️ **لقطة البضاعة بتتجمّد مع الأرقام** (2026-08-08).

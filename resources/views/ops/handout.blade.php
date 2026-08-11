@@ -178,7 +178,7 @@
                     <td class="num"><b>{{ $o->number }}</b></td>
                     <td>{{ $o->rep?->displayName() ?? '—' }}</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11.5px">{{ $o->created_at?->format('Y-m-d H:i') }}</td>
+                    <td class="num" style="font-size:11.5px">{{ $o->created_at?->format('Y-m-d h:i A') }}</td>
                     <td class="num">{{ $fmt($o->items->sum('qty_requested')) }}</td>
                     <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
                     <td class="num" style="white-space:nowrap">
@@ -213,7 +213,7 @@
                     <td class="num"><b>{{ $o->number }}</b></td>
                     <td>{{ $o->rep?->displayName() ?? '—' }}</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11.5px">{{ ($o->issued_at ?? $o->ready_at)?->format('Y-m-d H:i') ?? '—' }}</td>
+                    <td class="num" style="font-size:11.5px">{{ ($o->issued_at ?? $o->ready_at)?->format('Y-m-d h:i A') ?? '—' }}</td>
                     <td class="num">{{ $fmt($o->items->sum('qty_picked')) }}</td>
                     <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
                     <td class="num">
@@ -254,7 +254,7 @@
                     <td class="num"><b>{{ $o->number }}</b></td>
                     <td>{{ $o->rep?->displayName() ?? '—' }}</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11.5px">{{ $o->handed_at?->format('Y-m-d H:i') ?? '—' }}</td>
+                    <td class="num" style="font-size:11.5px">{{ $o->handed_at?->format('Y-m-d h:i A') ?? '—' }}</td>
                     <td class="num">{{ $fmt($o->items->sum(fn ($i) => (int) ($i->qty_received ?? $i->qty_picked))) }}</td>
                     <td class="num">{{ $fmt($o->items->sum('gift_qty')) ?: '—' }}</td>
                     <td class="num"><b>{{ number_format($value, 2) }}</b></td>

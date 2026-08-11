@@ -69,7 +69,7 @@
                     <td class="num">{{ number_format($r->good_units) }}</td>
                     <td class="num {{ $r->damaged_units > 0 ? 'neg' : '' }}">{{ number_format($r->damaged_units) }}</td>
                     <td class="num neg"><b>{{ $fmt($r->grand_total) }}</b></td>
-                    <td class="num">{{ $r->created_at->format('Y-m-d H:i') }}</td>
+                    <td class="num">{{ $r->created_at->format('Y-m-d h:i A') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">

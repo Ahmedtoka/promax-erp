@@ -76,7 +76,7 @@
                 <tr>
                     <td style="white-space:nowrap;font-size:11.5px">
                         {{ $r->created_at?->format('Y-m-d') }}
-                        <br><span style="color:var(--muted)">{{ $r->created_at?->format('H:i:s') }}</span>
+                        <br><span style="color:var(--muted)">{{ $r->created_at?->format('h:i:s A') }}</span>
                     </td>
                     <td>
                         <b>{{ $r->user?->displayName() ?? $r->user_name ?? '—' }}</b>

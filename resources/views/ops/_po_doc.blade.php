@@ -112,7 +112,7 @@
             <div class="doc-date">{{ __('doc.date') }}:
                 <b>{{ $po->created_at?->format('Y-m-d') ?? '—' }}</b></div>
             <div class="doc-date">{{ __('doc.time') }}:
-                <b>{{ $po->created_at?->format('H:i') ?? '—' }}</b></div>
+                <b>{{ $po->created_at?->format('h:i A') ?? '—' }}</b></div>
             @if ($pageCountDoc > 1)
                 <div class="doc-date po-pageno">{{ __('doc.page_of', ['p' => $loop->iteration, 't' => $pageCountDoc]) }}</div>
             @endif
@@ -134,7 +134,7 @@
                 <span>{{ __('stock.warehouse') }}: <b>{{ $po->warehouse?->displayName() ?? '—' }}</b></span>
                 <span class="sep">·</span>
                 <span>{{ __('ops.due_at') }}:
-                    <b>{{ $po->due_at?->format('Y-m-d H:i') ?? ($po->due_date?->format('Y-m-d') ?? '—') }}</b></span>
+                    <b>{{ $po->due_at?->format('Y-m-d h:i A') ?? ($po->due_date?->format('Y-m-d') ?? '—') }}</b></span>
             </div>
         </div>
 

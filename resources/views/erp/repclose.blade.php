@@ -47,7 +47,7 @@
                     <td class="s">
                         {{ __('settle.invoice_count', ['count' => $r['invoices']->count()]) }}
                         <div style="font-size:10px;color:var(--muted)">
-                            {{ $r['from_at'] ? __('settle.since_last').' '.$r['from_at']->format('m-d H:i') : __('settle.since_start') }}
+                            {{ $r['from_at'] ? __('settle.since_last').' '.$r['from_at']->format('m-d h:i A') : __('settle.since_start') }}
                         </div>
                     </td>
                     <td class="num"><b>{{ $fmt($r['cash_sales']) }}</b></td>
@@ -113,7 +113,7 @@
                 <tr>
                     <td class="num"><b>{{ $s->number }}</b></td>
                     <td>{{ $s->user?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11px">{{ $s->to_at->format('Y-m-d H:i') }}</td>
+                    <td class="num" style="font-size:11px">{{ $s->to_at->format('Y-m-d h:i A') }}</td>
                     <td class="num">{{ $fmt($s->expected) }}</td>
                     <td class="num pos"><b>{{ $fmt($s->received) }}</b></td>
                     <td>

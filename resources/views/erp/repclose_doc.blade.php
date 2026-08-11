@@ -31,7 +31,7 @@
         <div class="doc-id">
             <div class="doc-no">{{ $s->number }}</div>
             <div class="doc-date">{{ __('settle.doc_title') }}</div>
-            <div class="doc-date">{{ $s->to_at->format('Y-m-d — H:i') }}</div>
+            <div class="doc-date">{{ $s->to_at->format('Y-m-d — h:i A') }}</div>
         </div>
     </header>
 
@@ -45,7 +45,7 @@
             <div>
                 <div class="k">{{ __('settle.open_window') }}</div>
                 <div class="v" dir="ltr" style="font-size:13px">
-                    {{ $s->from_at?->format('Y-m-d H:i') ?? '—' }} → {{ $s->to_at->format('Y-m-d H:i') }}
+                    {{ $s->from_at?->format('Y-m-d h:i A') ?? '—' }} → {{ $s->to_at->format('Y-m-d h:i A') }}
                 </div>
                 <div class="s">{{ __('settle.invoice_count', ['count' => $s->invoices_count]) }}</div>
             </div>

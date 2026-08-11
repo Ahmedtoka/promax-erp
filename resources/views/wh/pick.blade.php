@@ -86,7 +86,7 @@
     <div class="kpi">
         <div class="lbl">{{ __('stock.pick_order') }}</div>
         <div class="val">{{ $o->number }}</div>
-        <div class="sub2">{{ $o->created_at?->format('Y-m-d H:i') ?? '—' }}</div>
+        <div class="sub2">{{ $o->created_at?->format('Y-m-d h:i A') ?? '—' }}</div>
     </div>
     <div class="kpi">
         <div class="lbl">{{ __('common.status') }}</div>
@@ -107,8 +107,8 @@
             <div class="val">{{ $o->prepMinutes() }}</div>
             <div class="sub2">
                 {{ __('common.minutes') }}
-                @if ($o->started_at) · {{ $o->started_at->format('H:i') }} @endif
-                @if ($o->ready_at) → {{ $o->ready_at->format('H:i') }} @endif
+                @if ($o->started_at) · {{ $o->started_at->format('h:i A') }} @endif
+                @if ($o->ready_at) → {{ $o->ready_at->format('h:i A') }} @endif
             </div>
         </div>
     @endif
@@ -152,7 +152,7 @@
         <span>✅</span>
         <span>
             {{ __('stock.pick_status_handed') }} —
-            {{ __('stock.pick_handed_at') }}: {{ $o->handed_at?->format('Y-m-d H:i') ?? '—' }}
+            {{ __('stock.pick_handed_at') }}: {{ $o->handed_at?->format('Y-m-d h:i A') ?? '—' }}
             @if ($o->rep)
                 • <a href="{{ route('ops.rep', $o->rep) }}" style="font-weight:800;color:var(--primary)">
                     {{ __('ops.rep_card') }}
@@ -186,13 +186,13 @@
         @if ($o->ready_at)
             <div>
                 <label class="f">{{ __('stock.pick_ready_at') }}</label>
-                <div class="num">{{ $o->ready_at->format('Y-m-d H:i') }}</div>
+                <div class="num">{{ $o->ready_at->format('Y-m-d h:i A') }}</div>
             </div>
         @endif
         @if ($o->handed_at)
             <div>
                 <label class="f">{{ __('stock.pick_handed_at') }}</label>
-                <div class="num">{{ $o->handed_at->format('Y-m-d H:i') }}</div>
+                <div class="num">{{ $o->handed_at->format('Y-m-d h:i A') }}</div>
             </div>
         @endif
         @if ($sourceLabel)

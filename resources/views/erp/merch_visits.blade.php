@@ -32,7 +32,7 @@
                         @endif
                     </td>
                     <td>{{ $v->user->displayName() }}</td>
-                    <td class="num">{{ $v->checked_in_at?->format('m-d H:i') ?? '—' }}</td>
+                    <td class="num">{{ $v->checked_in_at?->format('m-d h:i A') ?? '—' }}</td>
                     <td class="num">{{ $v->minutes() !== null ? __('ops.minutes', ['count' => $v->minutes()]) : __('ops.in_progress') }}</td>
                     <td class="num pos"><b>{{ $v->movedTotal() }}</b></td>
                     <td class="num {{ $v->outOfStockCount() > 0 ? 'neg' : '' }}">{{ $v->outOfStockCount() }}</td>

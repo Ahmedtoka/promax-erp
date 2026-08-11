@@ -67,7 +67,7 @@
     @if ($close)
         <div style="font-size:11.5px;color:var(--muted);margin-top:8px">
             🔒 {{ __('incent.closed_by') }}: <b style="color:var(--ink)">{{ $close->closer?->name ?? '—' }}</b>
-            · {{ $close->created_at->format('Y-m-d H:i') }}
+            · {{ $close->created_at->format('Y-m-d h:i A') }}
             @if ($close->notes) · {{ $close->notes }}@endif
         </div>
     @endif

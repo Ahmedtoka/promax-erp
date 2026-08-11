@@ -45,4 +45,5 @@ return [
     'retrying' => 'Connection hiccup - retrying',
     'chunk_out_of_order' => 'Upload got scrambled - start over.',
     'not_an_apk' => 'This file is not an APK - make sure you picked the right one.',
+    'one_button_hint' => 'Press Save - it uploads the file with the progress bar, then saves the versions and refreshes automatically.',
 ];

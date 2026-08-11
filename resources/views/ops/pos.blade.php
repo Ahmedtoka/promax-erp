@@ -143,7 +143,7 @@
                     <td>{{ $po->courier?->displayName() ?? '—' }}</td>
                     {{-- معاد التوريد بالساعة + شارة التأخير --}}
                     <td style="font-size:11.5px">
-                        {{ $po->due_at?->format('m-d H:i') ?? $po->due_date?->format('m-d') ?? '—' }}
+                        {{ $po->due_at?->format('m-d h:i A') ?? $po->due_date?->format('m-d') ?? '—' }}
                         @if ($po->isLate())<br><span class="badge b-red" style="font-size:9.5px">⏰ {{ __('ops.po_late') }}</span>@endif
                     </td>
                     <td class="num">{{ $po->qtyTotal() }}
@@ -162,7 +162,7 @@
                         @endif
                     </td>
                     <td><span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span>
-                        @if ($po->delivered_at)<br><span style="font-size:10.5px;color:var(--muted)">{{ $po->delivered_at->format('H:i') }}</span>@endif
+                        @if ($po->delivered_at)<br><span style="font-size:10.5px;color:var(--muted)">{{ $po->delivered_at->format('h:i A') }}</span>@endif
                         {{-- إلغاء تسليم بسبب (١١/٨) — بيتمسح مع أول تسليم ناجح --}}
                         @if ($po->abort_reason)
                             <br><span style="font-size:10px;color:var(--red)" title="{{ $po->abort_reason }}">⛔ {{ __('ops.po_aborted_note') }}: {{ \Illuminate\Support\Str::limit($po->abort_reason, 40) }}</span>
@@ -171,8 +171,8 @@
                     {{-- التراك: مين أنشأ / وافق / عدّل — كله موثق --}}
                     <td style="font-size:10.5px;color:var(--muted);line-height:1.9">
                         ✍️ {{ $po->creator?->name ?? '—' }}
-                        @if ($po->approvedBy)<br>🔏 {{ $po->approvedBy->name }} <span dir="ltr">{{ $po->approved_at?->format('m-d H:i') }}</span>@endif
-                        @if ($po->editor)<br>✏️ {{ $po->editor->name }} <span dir="ltr">{{ $po->edited_at?->format('m-d H:i') }}</span>@endif
+                        @if ($po->approvedBy)<br>🔏 {{ $po->approvedBy->name }} <span dir="ltr">{{ $po->approved_at?->format('m-d h:i A') }}</span>@endif
+                        @if ($po->editor)<br>✏️ {{ $po->editor->name }} <span dir="ltr">{{ $po->edited_at?->format('m-d h:i A') }}</span>@endif
                         {{-- ⚠️ **مدة التجهيز كانت بتتقاس ومحدش بيعرضها**
                              (٨/٨/٢٠٢٦). `prep_started_at` بيتكتب وقت
                              موافقة الحسابات و`prepMinutes()` موجودة —

@@ -119,7 +119,7 @@
                         <td class="s">{{ $po->courier?->name ?? '—' }}</td>
                         <td class="s">{{ $po->warehouse?->displayName() ?? '—' }}</td>
                         <td class="s">
-                            {{ $po->due_at?->format('Y-m-d H:i') ?? '—' }}
+                            {{ $po->due_at?->format('Y-m-d h:i A') ?? '—' }}
                             @if ($po->isLate())<span class="badge b-red" style="font-size:9.5px">⏰ {{ __('ops.po_late') }}</span>@endif
                         </td>
                         <td class="num">

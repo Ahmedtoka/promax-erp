@@ -36,7 +36,7 @@
                 @php $rJson = json_encode(['id' => $r->id, 'number' => $r->number], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); @endphp
                 <tr>
                     <td class="num"><b>{{ $r->number }}</b><br>
-                        <span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d H:i') }}</span></td>
+                        <span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d h:i A') }}</span></td>
                     <td><b>{{ $r->client->displayName() }}</b></td>
                     <td>
                         {{ $r->promoter?->displayName() ?? '—' }}

@@ -79,7 +79,7 @@
                         <td>{{ $inv->client->displayName() }}</td>
                         <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                         <td class="num pos">{{ $fmt($inv->total) }}</td>
-                        <td class="num">{{ $inv->created_at->format('m-d H:i') }}</td>
+                        <td class="num">{{ $inv->created_at->format('m-d h:i A') }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_invoices') }}</td></tr>
@@ -93,7 +93,7 @@
         <div class="alerts" style="max-height:400px;overflow-y:auto">
             @forelse ($events as $e)
                 @php $cls = match ($e->type) { 'sale','deliver' => 'good', 'check_in','start' => 'info', 'request' => 'warn', default => '' }; @endphp
-                <div class="alert {{ $cls }}"><div><b>{{ $e->happened_at->format('H:i') }}</b> — {{ $e->title }}
+                <div class="alert {{ $cls }}"><div><b>{{ $e->happened_at->format('h:i A') }}</b> — {{ $e->title }}
                     @if ($e->subtitle)<span style="color:var(--muted)"> • {{ $e->subtitle }}</span>@endif</div></div>
             @empty
                 <div style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_activity') }}</div>

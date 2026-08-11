@@ -30,7 +30,7 @@
         <div class="lbl">{{ __('settle.rep') }}</div>
         <div class="val" style="font-size:17px">{{ $rep->displayName() }}</div>
         <div class="sub2">
-            {{ $from_at ? __('settle.since_last').' '.$from_at->format('Y-m-d H:i') : __('settle.since_start') }}
+            {{ $from_at ? __('settle.since_last').' '.$from_at->format('Y-m-d h:i A') : __('settle.since_start') }}
         </div>
     </div>
     <div class="kpi">
@@ -274,7 +274,7 @@
                     <tr>
                         <td class="num"><b>{{ $inv->number }}</b></td>
                         <td style="text-align:start">{{ $inv->client?->fullName() ?? '—' }}</td>
-                        <td class="num" style="font-size:11px">{{ $inv->created_at->format('m-d H:i') }}</td>
+                        <td class="num" style="font-size:11px">{{ $inv->created_at->format('m-d h:i A') }}</td>
                         <td>
                             @if ($inv->payment === 'cash')
                                 <span class="badge b-green">{{ __('settle.payment_cash') }}</span>
@@ -345,7 +345,7 @@
                 @foreach ($refundRows as $t)
                     <tr>
                         <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
-                        <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d H:i') }}</td>
+                        <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d h:i A') }}</td>
                         <td class="num neg"><b>{{ $fmt($t->debit) }}</b></td>
                     </tr>
                 @endforeach
@@ -374,7 +374,7 @@
                 @foreach ($collection_rows as $t)
                     <tr>
                         <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
-                        <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d H:i') }}</td>
+                        <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d h:i A') }}</td>
                         <td>
                             <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
                                 {{ $t->methodLabel() ?? '—' }}</span>

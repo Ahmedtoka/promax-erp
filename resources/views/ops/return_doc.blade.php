@@ -8,7 +8,7 @@
 
 <div class="card">
     <h3>📥 {{ $r->number }}
-        <span class="side">{{ $r->created_at->format('Y-m-d H:i') }}</span></h3>
+        <span class="side">{{ $r->created_at->format('Y-m-d h:i A') }}</span></h3>
 
     <div class="frow">
         <div class="f"><span>{{ __('client.client') }}</span>

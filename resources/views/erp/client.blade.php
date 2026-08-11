@@ -431,7 +431,7 @@
                          اللي بيقيّد الإجمالي، ورقمين مختلفين لنفس الفاتورة
                          على نفس الصفحة بيخلّي اليوزر يشك في السيستم كله. --}}
                     <td class="num pos">{{ $fmt($inv->payable()) }}</td>
-                    <td class="num">{{ $inv->created_at->format('Y-m-d H:i') }}</td>
+                    <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
                 </tr>
             @endforeach
         </tbody></table>

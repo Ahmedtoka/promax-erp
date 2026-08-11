@@ -37,7 +37,7 @@
                     <td class="num">{{ $fmt($inv->subtotal) }}</td>
                     <td class="num mid">{{ $fmt($inv->discount) }}</td>
                     <td class="num pos"><b>{{ $fmt($inv->total) }}</b></td>
-                    <td class="num">{{ $inv->created_at->format('Y-m-d H:i') }}</td>
+                    <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_invoices_found') }}</td></tr>

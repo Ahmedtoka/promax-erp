@@ -100,7 +100,7 @@
                         @if ($v)
                             <span dir="ltr">{{ number_format((float) $v->lat, 5) }}, {{ number_format((float) $v->lng, 5) }}</span>
                             <br><span style="font-size:10px;color:var(--muted)">
-                                {{ $v->user?->displayName() }} · {{ $v->checked_in_at?->format('m-d H:i') }}
+                                {{ $v->user?->displayName() }} · {{ $v->checked_in_at?->format('m-d h:i A') }}
                             </span>
                         @else
                             {{-- ⚠️ **مفيش زيارة ≠ مفيش حل.** اللي بيراجع لسه

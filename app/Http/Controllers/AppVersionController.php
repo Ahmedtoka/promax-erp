@@ -45,7 +45,13 @@ class AppVersionController extends Controller
             'note' => Setting::read('app_update_note', ''),
             'apkExists' => is_file($apk),
             'apkSize' => is_file($apk) ? filesize($apk) : 0,
-            'apkAt' => is_file($apk) ? date('Y-m-d H:i', filemtime($apk)) : null,
+            // ⚠️ **بتوقيت مصر مش UTC** (إصلاح ١١/٨): `date()` بتطلع
+            // بتوقيت السيرفر، فالمالك رفع الملف حالاً ولقى الساعة
+            // «غلط» بتلات ساعات وافتكر إن الرفع فشل والملف قديم.
+            'apkAt' => is_file($apk)
+                ? \Illuminate\Support\Carbon::createFromTimestamp(filemtime($apk))
+                    ->timezone('Africa/Cairo')->format('Y-m-d h:i A')
+                : null,
             // كام جهاز على كل إصدار — بيوريك التحديث وصل لمين فعلاً
             'devices' => DeviceToken::selectRaw('COALESCE(NULLIF(app_version, ""), "—") v, COUNT(*) n')
                 ->groupBy('v')->orderByDesc('n')->pluck('n', 'v')->all(),

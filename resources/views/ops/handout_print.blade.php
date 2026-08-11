@@ -37,7 +37,7 @@
         <div class="doc-id">
             <div class="doc-kind">{{ __('field.handout_note') }}</div>
             <div class="doc-no">{{ $o->number }}</div>
-            <div class="doc-date">{{ ($o->issued_at ?? $o->created_at)->format('Y-m-d — H:i') }}</div>
+            <div class="doc-date">{{ ($o->issued_at ?? $o->created_at)->format('Y-m-d — h:i A') }}</div>
             <span class="badge {{ $o->status === 'handed' ? 'b-green' : 'b-orange' }}">
                 {{ $o->status === 'handed' ? __('field.received') : __('field.awaiting_receipt') }}
             </span>
@@ -59,7 +59,7 @@
             <div>
                 <div class="k">{{ __('field.carrier_note') }}</div>
                 <div class="v">{{ $o->carrier_note ?: '—' }}</div>
-                <div class="s">{{ __('field.issued_at') }}: {{ $o->issued_at?->format('Y-m-d H:i') ?? '—' }}</div>
+                <div class="s">{{ __('field.issued_at') }}: {{ $o->issued_at?->format('Y-m-d h:i A') ?? '—' }}</div>
             </div>
         </div>
 

@@ -115,7 +115,7 @@
                     <td>{{ $h->kindLabel() }}</td>
                     <td style="max-width:220px;white-space:normal">{{ $h->file_name }}
                         <br><span style="font-size:10px;color:var(--muted)">
-                            {{ $h->created_at?->format('Y-m-d H:i') }}
+                            {{ $h->created_at?->format('Y-m-d h:i A') }}
                             @if ($h->user) · {{ $h->user->displayName() }} @endif
                         </span>
                     </td>

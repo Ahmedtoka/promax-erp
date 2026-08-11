@@ -75,7 +75,7 @@
                             <div style="font-size:10.5px;color:var(--muted)">{{ $t->memo }}</div>
                         @endif
                     </td>
-                    <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d H:i') }}</td>
+                    <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d h:i A') }}</td>
                     <td>
                         @if ($visit?->user)
                             {{ $visit->user->name }}
