@@ -77,11 +77,29 @@
     <h3>🤝 {{ __('journey.pools_title') }}</h3>
     <div class="alert info">{{ __('journey.pools_hint') }}</div>
 
-    @if (empty($pools))
+    @if (empty($pools['cards']))
         <div class="alert warn">{{ __('journey.pools_none') }}</div>
     @else
+        {{-- سطر الجمع: مجاميع الفرق + بدون فريق = الإجمالي (١١/٨ مساءً) --}}
+        <div class="pool-sum">
+            @foreach ($pools['cards'] as $p)
+                <span class="badge b-blue">{{ $p['manager']->displayName() }} · {{ $fmt($p['client_count']) }}</span>
+                <span style="color:var(--muted)">+</span>
+            @endforeach
+            <span class="badge {{ $pools['orphans'] > 0 ? 'b-orange' : 'b-gray' }}">
+                {{ __('journey.pool_orphans') }} · {{ $fmt($pools['orphans']) }}
+            </span>
+            <span style="color:var(--muted)">=</span>
+            <span class="badge b-green"><b>{{ $fmt($pools['total']) }}</b> {{ __('journey.pool_clients') }}</span>
+        </div>
+        @if ($pools['orphans'] > 0)
+            <div class="alert warn" style="margin-top:8px">
+                {{ __('journey.pool_orphans_hint', ['count' => $fmt($pools['orphans'])]) }}
+            </div>
+        @endif
+
         <div class="poolgrid">
-            @foreach ($pools as $p)
+            @foreach ($pools['cards'] as $p)
                 <div class="poolcard">
                     <div class="pool-head">
                         @include('partials._avatar', ['u' => $p['manager'], 'size' => 38, 'ring' => '#602D90'])
@@ -172,7 +190,10 @@
                     <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a></td>
                     <td class="s">{{ $c->zone?->displayName() ?: '—' }}</td>
                     <td class="s">
-                        @if ($c->rep_id === null)
+                        @if ($c->rep_id === null && $c->manager_id !== null)
+                            {{-- في بول فريق — كل مناديب المدير شايفينه، مفيش «مسؤول أساسي» بس --}}
+                            <span class="badge b-purple">🤝 {{ __('journey.in_pool_of', ['name' => $c->manager?->displayName() ?? '—']) }}</span>
+                        @elseif ($c->rep_id === null)
                             <span class="badge b-orange">{{ __('journey.no_rep') }}</span>
                         @elseif ($c->rep_id === $rep->id)
                             <span class="badge b-green">{{ $c->rep?->displayName() }}</span>
@@ -281,6 +302,7 @@
     tr.orphan-row td { background: rgba(234, 140, 28, .08); }
 
     /* ═══ كروت بول الفريق ═══ */
+    .pool-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
     .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
     .poolcard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}
     .pool-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}

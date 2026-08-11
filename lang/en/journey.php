@@ -168,4 +168,7 @@ return [
     'no_alerts_rep' => 'No events for this rep today',
     'track_hint' => 'Click a rep to draw their route for today on the map',
     'work_state' => 'Attendance',
+    'pool_orphans' => 'No team',
+    'pool_orphans_hint' => ':count clients have no team - assign them to any rep below and they join his manager\'s pool automatically',
+    'in_pool_of' => ':name team pool',
 ];

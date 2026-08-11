@@ -340,7 +340,7 @@ class JourneyController extends Controller
         // لكل صف. و`group` عشان `fullName()` بيبدأ باسم السلسلة.
         $only = (string) $request->input('only', '');
 
-        $clients = Branch::scope(Client::visibleTo(Client::with(['zone', 'group', 'rep']), $request->user()))
+        $clients = Branch::scope(Client::visibleTo(Client::with(['zone', 'group', 'rep', 'manager']), $request->user()))
             ->where('status', 'active')
             ->when($request->filled('zone'), fn ($q) => $q->where('zone_id', $request->input('zone')))
             ->when($only === 'orphans', fn ($q) => $q->whereNull('rep_id'))
@@ -398,7 +398,7 @@ class JourneyController extends Controller
             ->get();
 
         if ($managers->isEmpty()) {
-            return [];
+            return ['cards' => [], 'orphans' => 0, 'total' => 0];
         }
 
         // كويريز مجمّعة — مش كويري لكل مدير
@@ -426,7 +426,7 @@ class JourneyController extends Controller
             ->get()
             ->keyBy('id');
 
-        return $managers->map(fn (User $m) => [
+        $cards = $managers->map(fn (User $m) => [
             'manager' => $m,
             'reps' => $reps->get($m->id, collect()),
             'client_count' => (int) ($clientCounts[$m->id] ?? 0),
@@ -437,6 +437,20 @@ class JourneyController extends Controller
                     'count' => (int) $r->n,
                 ])->values()->all(),
         ])->values()->all();
+
+        // ═══ سطر الجمع (طلب المالك ١١/٨ مساءً): عمرو + محمد + بدون
+        // فريق = الإجمالي. من غيره الكروت كانت بتبان «مش مجمّعة» —
+        // والفرق هو العملاء اللي `manager_id` بتاعهم فاضي.
+        $orphans = (int) Branch::scope(Client::query())
+            ->where('status', 'active')
+            ->whereNull('manager_id')
+            ->count();
+
+        return [
+            'cards' => $cards,
+            'orphans' => $orphans,
+            'total' => array_sum(array_column($cards, 'client_count')) + $orphans,
+        ];
     }
 
     public function assign(Request $request)
@@ -486,8 +500,20 @@ class JourneyController extends Controller
 
         DB::transaction(function () use ($data, $rep, $syncZones, &$clients) {
             if (! empty($data['client_ids'])) {
+                // ═══ التسكين بيضم للفريق (إصلاح ١١/٨ مساءً) ═══
+                //
+                // ⚠️ كان بيظبط `rep_id` بس و`manager_id` بيفضل فاضي —
+                // فالعميل المتسكّن مابيدخلش بول فريق المدير، وكروت
+                // «فرق القنوات» مجاميعها مش بتطابق الإجمالي، والزملا
+                // مش شايفينه. القاعدة: تسكين على مندوب = انضمام لفريقه.
+                // (مندوب بلا مدير: مانمسحش مدير موجود — بنسيبه زي ما هو.)
+                $teamManager = $rep->role === 'manager' ? $rep->id : $rep->manager_id;
+
                 $clients = Client::whereIn('id', $data['client_ids'])
-                    ->update(['rep_id' => $rep->id]);
+                    ->update(array_filter([
+                        'rep_id' => $rep->id,
+                        'manager_id' => $teamManager,
+                    ], fn ($v) => $v !== null));
             }
 
             // ⚠️ `sync` مش `attach` — الشاشة بتبعت القايمة الكاملة،
