@@ -389,6 +389,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ⚠️ doc قبل {user} — «doc» ماينفعش يتفسر كـid مندوب
         Route::get('/rep-close/doc/{settlement}', [\App\Http\Controllers\RepSettlementController::class, 'doc'])
             ->middleware('role:admin,accountant')->name('repclose.doc');
+        // ⚠️ details قبل {user} كمان — نفس فخ doc بالظبط (١١/٨ مساءً)
+        Route::get('/rep-close/details/{settlement}', [\App\Http\Controllers\RepSettlementController::class, 'details'])
+            ->middleware('role:admin,accountant')->name('repclose.details');
         Route::get('/rep-close/{user}', [\App\Http\Controllers\RepSettlementController::class, 'show'])
             ->middleware('role:admin,accountant')->name('repclose.show');
         Route::post('/rep-close/{user}', [\App\Http\Controllers\RepSettlementController::class, 'store'])

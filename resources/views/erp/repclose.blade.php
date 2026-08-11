@@ -147,6 +147,9 @@
                     </td>
                     <td class="s">{{ $s->creator?->name ?? '—' }}</td>
                     <td style="white-space:nowrap">
+                        {{-- تفاصيل التصفية — كل رقم في المحضر جاي منين (١١/٨ مساءً) --}}
+                        <a class="btn sm" href="{{ route('erp.repclose.details', $s) }}"
+                           title="{{ __('settle.details_title') }}">🔎</a>
                         <a class="btn sm" href="{{ route('erp.repclose.doc', $s) }}">🖨️</a>
                         {{-- مسح — أدمن، وآخر تصفية للمندوب بس (سلامة سلسلة الأرصدة) --}}
                         @if (auth()->user()->isAdmin() && ($latestIds[$s->user_id] ?? null) === $s->id)

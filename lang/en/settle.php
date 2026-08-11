@@ -81,4 +81,27 @@ return [
     'delete_latest_only' => 'Only the rep\'s latest settlement can be deleted - unwind from the end one by one to keep the balance chain',
     'delete_confirm' => 'This will permanently delete settlement :number and return its activity to the open window - sure?',
     'deleted_ok' => 'Settlement :number deleted - its activity returned to the open window',
+
+    // ═══ صفحة تفاصيل التصفية — «الرقم ده جاي منين» (١١/٨ مساءً) ═══
+    'details_title' => 'Settlement details',
+    'recon_title' => 'Component reconciliation',
+    'recon_hint' => 'Client and sales screens show invoices only - the settlement note adds delivered sales orders on top, which explains any gap between the two figures',
+    'recon_cash' => 'Cash on the note = cash invoices :a + cash collected on sales orders :b = :total',
+    'recon_credit' => 'Credit sales on the note = credit invoices :a + credit portion of sales orders :b = :total',
+    'snapshot_mismatch' => 'The figures stored at close differ from the live rebuild - an invoice was edited or deleted after closing. The snapshot is the official figure on the note.',
+    'stored_at_close' => 'Snapshot (at close)',
+    'live_rebuild' => 'Live rebuild',
+    'cash_invoices' => 'Cash invoices',
+    'credit_invoices' => 'Credit invoices',
+    'po_in_window' => 'Delivered sales orders - already inside the cash/credit above',
+    'collections_snapshot_hint' => 'From the snapshot frozen at close',
+    'collections_live_hint' => 'This settlement has no stored snapshot - table built from live ledger entries',
+    'returns_window' => 'Returns in the window',
+
+    // ═══ محضر التصفية المطوّر (١١/٨ مساءً) ═══
+    'money_summary' => 'Money summary',
+    'credit_components' => 'Credit = credit invoices + credit portion of delivered sales orders - informational, not part of expected cash',
+    'cash_components' => 'Cash = cash invoices + cash collected on delivered sales orders',
+    'final_balance' => 'Final balance',
+    'sign_management' => "Management's signature",
 ];
