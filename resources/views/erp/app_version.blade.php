@@ -208,7 +208,9 @@ document.querySelector('form[action*="app-version"]').addEventListener('submit',
     btn.disabled = true;
     inp.disabled = true;
     prog.style.display = 'block';
-    bar.style.background = '';
+    /* ⚠️ مش '' — الخلفية الأصلية inline، وتصفيرها كان بيمسحها خالص
+       فالشريط يبقى شفاف: النسبة بتتحرك والبار «واقف» (اتشاف ١١/٨) */
+    bar.style.background = 'var(--brand-gradient, #12399B)';
     msg.textContent = '';
 
     const paint = function (uploadedBytes) {
