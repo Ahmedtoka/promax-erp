@@ -166,9 +166,8 @@ class ErpController extends Controller
         }
 
         if ($s = $request->string('q')->trim()->value()) {
-            $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
-                ->orWhere('phone', 'like', "%$s%")
-                ->orWhere('code', 'like', "%$s%"));
+            // البحث الموحّد: فرع + سلسلة، عربي + إنجليزي (١١/٨)
+            Client::search($q, $s);
         }
         if ($cat = $request->string('cat')->value()) {
             $q->where('category', $cat);

@@ -72,7 +72,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_replenishments') }}</td></tr>
+                <tr><td colspan="{{ $manager ? 9 : 8 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_replenishments') }}</td></tr>
             @endforelse
         </table>
     </div>

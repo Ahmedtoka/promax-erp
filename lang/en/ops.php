@@ -322,4 +322,17 @@ return [
     'ov_none' => 'Nobody is checked in right now',
     'ov_closed_ok' => 'Closed - :rep was notified.',
     'forced_out_by' => 'Administrative checkout by :by',
+
+    // "Still clocked in" card + administrative shift checkout (Aug 11, 2026 evening)
+    'att_kpi' => 'Still clocked in',
+    'att_title' => 'Still clocked in',
+    'att_hint' => 'Administrative checkout counts the day at the hours you set - the employee gets a notification',
+    'att_open_work' => 'Open work',
+    'att_force_out' => 'Check out',
+    'att_none' => 'Nobody is clocked in right now',
+    'att_dlg_title' => 'Check out :name',
+    'att_hours' => 'Worked hours',
+    'att_hours_hint' => 'The day is counted at these hours - quarter-hour steps',
+    'att_note' => 'Note (optional)',
+    'att_forced_ok' => ':rep was checked out at :t hours and notified.',
 ];

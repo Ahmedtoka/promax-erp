@@ -8,8 +8,23 @@
 @php
     $fmt = fn ($n) => number_format((float) $n, 2);
     $pctOf = fn ($a, $t) => $t > 0 ? round($a / $t * 100, 1) : 0.0;
+    $achClass = fn ($p) => $p >= 100 ? 'pos' : ($p >= 70 ? 'mid' : 'neg');
     $annual = $repNode !== null ? (float) $repNode->amount : 0.0;
     $repPct = $pctOf($repAchieved, $annual);
+    $repRemaining = round($annual - $repAchieved, 2);
+    $cliSumAmt = 0.0;
+    $cliSumAch = 0.0;
+    $cliSumRem = 0.0;
+    foreach ($rows as $cliRow) {
+        $cliSumAch += $cliRow['achieved'];
+        if ($cliRow['amount'] !== null) {
+            $cliSumAmt += $cliRow['amount'];
+            $cliSumRem += $cliRow['amount'] - $cliRow['achieved'];
+        }
+    }
+    $cliSumAmt = round($cliSumAmt, 2);
+    $cliSumAch = round($cliSumAch, 2);
+    $cliSumRem = round($cliSumRem, 2);
 @endphp
 
 @section('actions')
@@ -43,10 +58,14 @@
                 <div class="val num pos">{{ $fmt($repAchieved) }}</div>
             </div>
             <div class="kpi">
+                <div class="lbl">{{ __('targets.kpi_remaining') }}</div>
+                <div class="val num {{ $repRemaining > 0 ? 'mid' : 'pos' }}">{{ $fmt(max($repRemaining, 0)) }}</div>
+            </div>
+            <div class="kpi">
                 <div class="lbl">{{ __('targets.kpi_pct') }}</div>
                 <div class="val num">{{ $repPct }}%</div>
                 <div style="background:var(--card2);border:1px solid var(--border);border-radius:6px;height:9px;overflow:hidden;margin-top:6px">
-                    <div style="height:100%;width:{{ min($repPct, 100) }}%;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
+                    <div style="height:100%;width:{{ $repPct > 0 ? max(min($repPct, 100), 2) : 0 }}%;min-width:{{ $repPct > 0 ? 2 : 0 }}px;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
                 </div>
             </div>
         </div>
@@ -78,12 +97,14 @@
                         <th style="text-align:start">{{ __('targets.client') }}</th>
                         <th data-nosum style="width:160px">{{ __('targets.amount') }}</th>
                         <th>{{ __('targets.achieved') }}</th>
+                        <th>{{ __('targets.month_remaining') }}</th>
                         <th data-nosum style="width:90px">%</th>
                     </tr>
                     @forelse ($rows as $row)
                         @php
                             $c = $row['client'];
                             $cliPct = $pctOf($row['achieved'], (float) ($row['amount'] ?? 0));
+                            $cliRem = $row['amount'] !== null ? round($row['amount'] - $row['achieved'], 2) : null;
                             $needle = mb_strtolower(trim(
                                 $c->name.' '.($c->name_en ?? '').' '.$c->code.' '.($c->group?->displayName() ?? '')
                             ));
@@ -101,11 +122,26 @@
                                        value="{{ $row['amount'] !== null ? $row['amount'] + 0 : '' }}"
                                        style="width:100%;text-align:center;font-weight:800"></td>
                             <td class="num">{{ $fmt($row['achieved']) }}</td>
-                            <td class="num {{ $cliPct >= 100 ? 'pos' : ($cliPct >= 60 ? 'mid' : '') }}">{{ $cliPct }}%</td>
+                            <td class="num {{ $cliRem === null ? '' : ($cliRem <= 0 ? 'pos' : 'neg') }}">
+                                {{ $cliRem === null ? '—' : $fmt($cliRem) }}
+                            </td>
+                            <td class="num {{ $achClass($cliPct) }}">{{ $cliPct }}%</td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:18px">{{ __('targets.no_clients') }}</td></tr>
+                        <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">{{ __('targets.no_clients') }}</td></tr>
                     @endforelse
+
+                    @if (count($rows) > 0)
+                        <tfoot>
+                            <tr>
+                                <td style="text-align:start"><b>Σ {{ __('targets.total_row') }}</b></td>
+                                <td class="num"><b>{{ $fmt($cliSumAmt) }}</b></td>
+                                <td class="num"><b>{{ $fmt($cliSumAch) }}</b></td>
+                                <td class="num {{ $cliSumRem <= 0 ? 'pos' : 'neg' }}"><b>{{ $fmt($cliSumRem) }}</b></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    @endif
                 </table>
             </div>
             <div style="display:flex;align-items:center;gap:10px;margin-top:10px">

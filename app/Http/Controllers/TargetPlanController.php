@@ -127,36 +127,30 @@ class TargetPlanController extends Controller
             : collect();
 
         // ═══ الجريد الشهري: الأدمن بيشوف الشركة، والمدير عقدته ═══
+        // `computed` = لايف + تصعيدات يدوي الولاد (من غير يدوي العقدة
+        // نفسها — ده placeholder خانات اليدوي)، و`achieved` = النهائي.
         $gridNode = $actor->isAdmin() ? $company : $managerNodes->get($actor->id);
         $grid = null;
 
         if ($gridNode !== null) {
-            $computed = $gridNode->kind === Target::KIND_COMPANY
-                ? TargetProgress::companyByMonth($year)
-                : TargetProgress::managerByMonth($year, (int) $gridNode->user_id);
-
-            $manuals = $gridNode->manualByMonth();
-            $effective = $computed;
-
-            foreach ($manuals as $m => $v) {
-                if ($v !== null) {
-                    $effective[$m] = $v;
-                }
-            }
+            $effective = TargetProgress::achievedByMonth($gridNode);
 
             $grid = [
                 'node_id' => $gridNode->id,
                 'kind' => $gridNode->kind,
                 'annual' => (float) $gridNode->amount,
                 'targets' => $gridNode->monthsArray(),
-                'computed' => $computed,
+                'computed' => TargetProgress::baseByMonth($gridNode),
                 'achieved' => $effective,
-                'manuals' => $manuals,
+                'manuals' => $gridNode->manualByMonth(),
                 'achieved_total' => round(array_sum($effective), 2),
             ];
         }
 
         // ═══ كارت توزيع المديرين — أدمن بس ═══
+        // كل صف معاه شهوره كاملة عشان أكورديون الجريد الشهري بتاع
+        // المدير (تارجيت + يدوي الماضي + محقق) — من نفس تمريرة
+        // TargetProgress الواحدة، مفيش N+1.
         $managersCard = null;
 
         if ($actor->isAdmin() && $company !== null) {
@@ -166,11 +160,19 @@ class TargetPlanController extends Controller
                 ->get()
                 ->map(function (User $mgr) use ($year, $managerNodes) {
                     $node = $managerNodes->get($mgr->id);
+                    $achievedMonths = $node !== null
+                        ? TargetProgress::achievedByMonth($node)
+                        : TargetProgress::managerByMonth($year, $mgr->id);
 
                     return [
                         'user' => $mgr,
+                        'node_id' => $node?->id,
                         'amount' => $node === null ? null : (float) $node->amount,
-                        'achieved' => round(array_sum(TargetProgress::managerByMonth($year, $mgr->id)), 2),
+                        'achieved' => round(array_sum($achievedMonths), 2),
+                        'targets' => $node?->monthsArray(),
+                        'manuals' => $node?->manualByMonth(),
+                        'computed' => $node !== null ? TargetProgress::baseByMonth($node) : null,
+                        'achieved_months' => $achievedMonths,
                     ];
                 })
                 ->all();
@@ -202,10 +204,14 @@ class TargetPlanController extends Controller
             foreach ($this->teamOf($mgr) as $u) {
                 $rn = $repNodes->get($u->id);
 
+                // المحقق من العقدة لو موجودة (يدويها وتصعيدات ولادها
+                // محسوبين) — ومن اللايف لو لسه ماتوزّعلوش
                 $rows[] = [
                     'user' => $u,
                     'amount' => $rn === null ? null : (float) $rn->amount,
-                    'achieved' => round(array_sum(TargetProgress::repByMonth($year, $u->id)), 2),
+                    'achieved' => round(array_sum($rn !== null
+                        ? TargetProgress::achievedByMonth($rn)
+                        : TargetProgress::repByMonth($year, $u->id)), 2),
                 ];
             }
 
@@ -213,7 +219,7 @@ class TargetPlanController extends Controller
                 'manager' => $mgr,
                 'node_id' => $node->id,
                 'annual' => (float) $node->amount,
-                'achieved' => round(array_sum(TargetProgress::managerByMonth($year, $mgr->id)), 2),
+                'achieved' => round(array_sum(TargetProgress::achievedByMonth($node)), 2),
                 'rows' => $rows,
             ];
         }
@@ -267,7 +273,9 @@ class TargetPlanController extends Controller
             return [
                 'client' => $c,
                 'amount' => $node === null ? null : (float) $node->amount,
-                'achieved' => round(array_sum(TargetProgress::clientByMonth($year, $c->id)), 2),
+                'achieved' => round(array_sum($node !== null
+                    ? TargetProgress::achievedByMonth($node)
+                    : TargetProgress::clientByMonth($year, $c->id)), 2),
             ];
         })->all();
 
@@ -464,14 +472,19 @@ class TargetPlanController extends Controller
     }
 
     /**
-     * المحقق اليدوي للشهور اللي فاتت — أدمن بس وعلى عقدة الشركة بس
-     * (قرار المالك: «أوفر أول» رقم واحد للشهر على مستوى الشركة).
-     * الخانة الفاضية بتمسح اليدوي ويرجع حساب السيستم.
+     * المحقق اليدوي للشهور اللي فاتت — أدمن بس، على عقدة الشركة
+     * **أو عقدة مدير** (١١/٨ — فيدباك المالك: شهور عمرو حسن القديمة
+     * تتكتب على عقدته وتصعّد لبار المدير والشركة عبر TargetProgress).
+     * الخانة الفاضية بتمسح اليدوي ويرجع حساب السيستم + تصعيدات الولاد.
      */
     public function saveManual(Request $request, Target $target)
     {
         abort_unless($request->user()->isAdmin(), 403);
-        abort_unless($target->kind === Target::KIND_COMPANY, 422, __('targets.manual_company_only'));
+        abort_unless(
+            in_array($target->kind, [Target::KIND_COMPANY, Target::KIND_MANAGER], true),
+            422,
+            __('targets.manual_scope'),
+        );
 
         $data = $request->validate([
             'manual' => ['required', 'array'],

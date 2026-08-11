@@ -330,6 +330,82 @@ final class Attendance
         return true;
     }
 
+    /**
+     * ═══ الانصراف الإداري من الداش بورد (١١ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «أعمل للناس من عندي تشيك أوت للشغل زي الزيارات
+     * المفتوحة — وأنا بخرّجه بحدد عدد ساعات العمل».
+     *
+     * ⚠️ **بيعدّي من غير حارس `openWork` عن قصد** — زي `autoClose`
+     * بالظبط: ده قرار إداري، والشغل المفتوح (زيارة/رف/أمر توريد)
+     * ليه كروته الخاصة في نفس الشاشة وبيتعرض هنا كتنبيه بس.
+     *
+     * **إزاي الساعات المطلوبة بتتحقق:**
+     *   • لو الموظف `working`: بانش الانصراف بيتحط على «أول حضور +
+     *     الساعات المطلوبة + البريكات المقفولة» — فالمحسوب من السجل
+     *     نفسه بيطلع بالظبط الرقم المطلوب. لو الوقت ده في المستقبل
+     *     أو قبل آخر بانش (ساعات أقل من المشتغل فعلاً)، البانش
+     *     بيتحط **دلوقتي** — السجل الخام مايتزوّرش أبداً.
+     *   • وفي كل الحالات `approved_minutes` بتتظبط على المطلوب —
+     *     ودي اللي بتتحاسب (`payableMinutes` بيغلّب المعتمد على
+     *     المحسوب)، فرقم الأدمن هو اللي بيروح المرتبات مهما قال
+     *     السجل الخام.
+     *
+     * حالة اليوم بتفضل زي الانصراف اليدوي (بتتقفل مع أمر منتصف
+     * الليل) — فلو الموظف رجع سجّل حضور تاني نفس اليوم مفيش حاجة
+     * بتتكسر.
+     *
+     * بترجع `null` لو تمام، أو رسالة الخطأ.
+     */
+    public static function forceOut(User $user, User $by, int $minutes, ?string $note = null): ?string
+    {
+        $day = self::today($user);
+        $state = $day->state();
+
+        if (! in_array($state, ['working', 'break'], true)) {
+            return __('hr.force_out_not_in');
+        }
+
+        DB::transaction(function () use ($day, $user, $by, $minutes, $note, $state) {
+            // نفس قاعدة أي انصراف — إذن استلام المخزن بيتقفل معاه
+            WarehouseVisits::closeOpenFor($user);
+
+            // البانش على الوقت اللي يخلّي المحسوب = المطلوب، لو ده
+            // ممكن من غير بانش في المستقبل ولا قبل آخر بانش
+            $outAt = now();
+
+            if ($state === 'working' && $day->first_in_at !== null) {
+                $target = $day->first_in_at->copy()
+                    ->addMinutes($minutes + (int) $day->break_minutes);
+                $last = $day->lastPunch()?->at;
+
+                if ($last !== null && $target->gte($last) && $target->lte(now())) {
+                    $outAt = $target;
+                }
+            }
+
+            AttendancePunch::create([
+                'attendance_day_id' => $day->id,
+                'user_id' => $user->id,
+                'type' => AttendancePunch::OUT,
+                'at' => $outAt,
+                'auto' => false,
+                'forced_by' => $by->id,
+            ]);
+
+            $fresh = self::recalculate($day->fresh());
+
+            // رقم الأدمن هو المعتمد — بيغلب المحسوب في المرتبات،
+            // والملاحظة بتوثّق إن القفلة إدارية ومين اللي عملها
+            $stamp = __('hr.forced_out_note', ['by' => $by->displayName()]);
+
+            self::approve($fresh, $by, $minutes,
+                $note !== null && trim($note) !== '' ? $stamp.' — '.trim($note) : $stamp);
+        });
+
+        return null;
+    }
+
     /** المدير بيعتمد أو بيعدّل الساعات */
     public static function approve(AttendanceDay $day, User $by, ?int $minutes, ?string $note): void
     {
@@ -372,6 +448,9 @@ final class Attendance
                 'icon' => $p->icon(),
                 'at' => $p->at->toIso8601String(),
                 'auto' => $p->auto,
+                // انصراف إداري (١١/٨) — الأبلكيشن بيتجاهل المفاتيح
+                // الزيادة فالإضافة آمنة، وأي شاشة جاية تلاقيها جاهزة
+                'forced' => $p->forced_by !== null,
                 'lat' => $p->lat === null ? null : (float) $p->lat,
                 'lng' => $p->lng === null ? null : (float) $p->lng,
             ])->values(),

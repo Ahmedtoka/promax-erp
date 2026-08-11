@@ -65,6 +65,10 @@ class JourneyController extends Controller
         // ⚠️ العملاء المتاحين للإضافة = عملاء المندوب اللي **لسه**
         // مش في خطته. عرض العملاء كلهم بيخلّي حد يحط عميل مندوب تاني
         // في الخطة والاتنين يروحوا نفس المحل.
+        //
+        // ═══ بول الفريق (١١/٨ مساءً) ═══ «عملاء المندوب» بقت بول
+        // فريقه: أي عميل تحت نفس مديره ينفع يتخطط له — تغطية الغايب
+        // من غير نقل عملاء. عميل فريق تاني برضه مش بيظهر.
         $planned = collect($week)->flatten()->pluck('client_id')->unique();
 
         $available = Client::visibleTo(
@@ -79,6 +83,12 @@ class JourneyController extends Controller
                     }
 
                     $q->where('rep_id', $rep->id);
+
+                    // البول المشترك — كل عملاء مديره
+                    if ($rep->manager_id !== null) {
+                        $q->orWhere('manager_id', $rep->manager_id);
+                    }
+
                     if ($rep->zone_id) {
                         $q->orWhere('zone_id', $rep->zone_id);
                     }
@@ -309,7 +319,72 @@ class JourneyController extends Controller
             'orphanTotal' => Branch::scope(Client::visibleTo(Client::query(), $request->user()))
                 ->whereNull('rep_id')->where('status', 'active')->count(),
             'filters' => $request->only(['zone', 'q', 'only']),
+            'pools' => $this->managerPools($request->user()),
         ]);
+    }
+
+    /**
+     * ═══ كروت بول الفريق (قرار المالك ١١ أغسطس ٢٠٢٦ مساءً) ═══
+     *
+     * «سكّن كل عملاء مدير التشانل بكل مناديبه وكل مناطقه» — الفصل
+     * الأساسي بقى على مستوى المدير: كارت لكل مدير بيوري مناديبه
+     * (صور)، عدد عملائه، ومناطق عملائه بعدد العميل في كل واحدة —
+     * وكله «معلّم» لأن البول مشترك بالقاعدة مش بالتسكين. التسكين
+     * الفردي تحت فضل شغّال بس بقى «المسؤول الأساسي» (التارجت).
+     *
+     * ⚠️ سكوب: المدير بيشوف كارته هو بس — نفس `Client::visibleTo`.
+     *
+     * @return list<array{manager: User, reps: \Illuminate\Support\Collection,
+     *   client_count: int, zones: list<array{name: string, count: int}>}>
+     */
+    private function managerPools(?User $viewer): array
+    {
+        $managers = Branch::scope(User::where('role', 'manager')->where('active', true))
+            ->when($viewer !== null && $viewer->role === 'manager',
+                fn ($q) => $q->whereKey($viewer->id))
+            ->orderBy('name')
+            ->get();
+
+        if ($managers->isEmpty()) {
+            return [];
+        }
+
+        // كويريز مجمّعة — مش كويري لكل مدير
+        $reps = User::whereIn('manager_id', $managers->pluck('id'))
+            ->whereIn('role', User::FIELD_ROLES)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get()
+            ->groupBy('manager_id');
+
+        $clientCounts = Client::whereIn('manager_id', $managers->pluck('id'))
+            ->where('status', 'active')
+            ->selectRaw('manager_id, COUNT(*) as n')
+            ->groupBy('manager_id')
+            ->pluck('n', 'manager_id');
+
+        $zoneRows = Client::whereIn('manager_id', $managers->pluck('id'))
+            ->where('status', 'active')
+            ->whereNotNull('zone_id')
+            ->selectRaw('manager_id, zone_id, COUNT(*) as n')
+            ->groupBy('manager_id', 'zone_id')
+            ->get();
+
+        $zoneNames = Zone::whereIn('id', $zoneRows->pluck('zone_id')->unique())
+            ->get()
+            ->keyBy('id');
+
+        return $managers->map(fn (User $m) => [
+            'manager' => $m,
+            'reps' => $reps->get($m->id, collect()),
+            'client_count' => (int) ($clientCounts[$m->id] ?? 0),
+            'zones' => $zoneRows->where('manager_id', $m->id)
+                ->sortByDesc('n')
+                ->map(fn ($r) => [
+                    'name' => $zoneNames->get($r->zone_id)?->displayName() ?? '—',
+                    'count' => (int) $r->n,
+                ])->values()->all(),
+        ])->values()->all();
     }
 
     public function assign(Request $request)

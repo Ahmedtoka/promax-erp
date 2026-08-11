@@ -44,6 +44,17 @@ return [
     'no_orphans' => 'Every client has a rep — all good',
     'clients_count' => 'Clients',
 
+    // ═══ Team pool (2026-08-11 evening) — a manager's clients are shared with all his reps ═══
+    'pools_title' => 'Channel teams — shared pool',
+    'pools_hint' => "Every channel manager's clients are shared work for all his reps and zones — a rep can cover an absent teammate without moving clients around. The rule runs by itself: any new client under the manager shows up for the whole team instantly.",
+    'pools_none' => 'No active channel managers',
+    'pool_shared' => 'Shared pool',
+    'pool_reps' => 'reps',
+    'pool_clients' => 'clients',
+    'pool_zones' => 'zones',
+    'pool_no_reps' => 'No reps assigned to this manager yet',
+    'primary_hint' => 'Assigning here only sets the "primary responsible" rep — for targets and new-client inheritance. Day-to-day work is shared: every rep of the manager sees all his clients in the app.',
+
     // ═══ Quick assignment (2026-08-10) — pick the rep once, then click ═══
     'all_clients' => 'All clients',
     'flow_hint' => 'Pick the rep at the top, then click Assign next to any client to move them instantly. Or tick several and move them at once.',

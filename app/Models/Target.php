@@ -139,12 +139,23 @@ class Target extends Model
         $this->unsetRelation('months');
     }
 
-    /** قسمة متساوية على ١٢ شهر — فرق التقريب كله على ديسمبر */
+    /**
+     * قسمة متساوية على ١٢ شهر — **بحساب القروش الصحيحة** (١١/٨):
+     * نصيب الشهر = intdiv(القروش, 12) والباقي كله على ديسمبر.
+     *
+     * ⚠️ الصيغة القديمة `round(amount / 12, 2)` كانت بتقرّب لفوق
+     * (half-up)، فأي إجمالي مش من مضاعفات ١٢ قرش بيرمي قرش زيادة
+     * على كل شهر من الـ١١ وديسمبر يتحمّل الفرق — ٣٠ مليون طلعت
+     * 2,500,000.01 ×١١ و2,499,999.89. بالـfloor على القروش:
+     * ٣٠ مليون = 2,500,000.00 في الاتناشر شهر بالظبط.
+     */
     public function distributeEvenly(): void
     {
-        $per = round(((float) $this->amount) / 12, 2);
-        $byMonth = array_fill(1, 12, $per);
-        $byMonth[12] = round((float) $this->amount - $per * 11, 2);
+        $cents = (int) round(((float) $this->amount) * 100);
+        $perCents = intdiv($cents, 12);
+
+        $byMonth = array_fill(1, 12, $perCents / 100);
+        $byMonth[12] = ($cents - $perCents * 11) / 100;
 
         $this->setMonthAmounts($byMonth);
     }
@@ -160,6 +171,14 @@ class Target extends Model
         $oldSum = round(array_sum($old), 2);
 
         if ($oldSum <= 0.004) {
+            $this->distributeEvenly();
+
+            return;
+        }
+
+        // المنحنى القديم متساوي عملياً (فرق قروش التوزيع بس)؟ —
+        // قسمة نضيفة أحسن من ضرب/قسمة تناسبية بتسيّب قروش على الشهور
+        if (max($old) - min($old) <= 0.12) {
             $this->distributeEvenly();
 
             return;
@@ -209,10 +228,11 @@ class Target extends Model
                     $months[$m] = round($months[$m] - $delta * ($months[$m] / $sumF), 2);
                 }
             } else {
-                $share = round($delta / count($following), 2);
+                // قسمة متساوية بالقروش الصحيحة — الباقي بيلمّه دريفت ديسمبر
+                $shareCents = intdiv((int) round($delta * 100), count($following));
 
                 foreach ($following as $m) {
-                    $months[$m] = round($months[$m] - $share, 2);
+                    $months[$m] = round($months[$m] - $shareCents / 100, 2);
                 }
             }
         }

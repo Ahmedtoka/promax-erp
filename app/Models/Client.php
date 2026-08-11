@@ -322,6 +322,24 @@ public function zone(): BelongsTo
      *
      * ⚠️ نفس نمط `Branch::scope` — بيرجع الكويري زي ما هو لغير المدير.
      */
+    /**
+     * البحث الموحّد عن عميل (طلب المالك ١١/٨): «رابت» ماكانش بيطلّع
+     * «رابت — فرع مدينة نصر» لأن «رابت» اسم **السلسلة** في جدول تاني
+     * والبحث كان في اسم الفرع بس. السكوب ده بيغطي: اسم الفرع
+     * عربي/إنجليزي + اسم السلسلة عربي/إنجليزي + التليفون + الكود —
+     * فتكتب بأي لغة وبأول كام حرف من أي جزء وتلاقيه.
+     * أي خانة بحث عملاء جديدة لازم تستخدمه بدل ما تكتب like بإيدها.
+     */
+    public static function search($query, string $s)
+    {
+        return $query->where(fn ($w) => $w->where('name', 'like', "%$s%")
+            ->orWhere('name_en', 'like', "%$s%")
+            ->orWhere('phone', 'like', "%$s%")
+            ->orWhere('code', 'like', "%$s%")
+            ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
+                ->orWhere('name_en', 'like', "%$s%")));
+    }
+
     public static function visibleTo($query, ?User $user = null)
     {
         $user = $user ?? auth()->user();
@@ -339,6 +357,49 @@ public function zone(): BelongsTo
         return $user === null
             || $user->role !== 'manager'
             || (int) $this->manager_id === (int) $user->id;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * بول الفريق (قرار المالك ١١ أغسطس ٢٠٢٦ مساءً) — «سكّن كل عملاء
+     * مدير التشانل بكل مناديبه»
+     * ═══════════════════════════════════════════════════════════
+     *
+     * الفصل الأساسي بقى على مستوى **مدير القناة**: عملاؤه بول مشترك
+     * لكل فريقه. مندوب «ب» بيغطي منطقة مندوب «أ» الغايب من غير ما حد
+     * ينقل عملاء بإيده — الاتنين تحت نفس المدير فالاتنين شايفين نفس
+     * البول. `rep_id` فضل زي ما هو = **المسؤول الأساسي** (التارجت،
+     * الوراثة، عزو العميل الجديد).
+     *
+     * قاعدة مش داتا: مفيش جدول pivot ولا سكريبت تسكين — أي عميل جديد
+     * تحت المدير بيبان لكل مناديبه فوراً وللأبد.
+     *
+     * ⚠️ **الحدود زي ما هي**: مندوب مدير «س» عمره ما يشوف عملاء مدير
+     * «ص» (الفحص على `manager_id` بتاع المندوب نفسه). والعميل اللي
+     * `manager_id` بتاعه فاضي (يتيم/إدارة) بيفضل لمندوبه المسجّل بس —
+     * زي الأول بالظبط.
+     */
+    public static function poolWhere($query, User $rep)
+    {
+        return $query->where(function ($w) use ($rep) {
+            $w->where('rep_id', $rep->id);
+
+            // مندوب من غير مدير = السلوك القديم بالحرف (rep_id بس)
+            if ($rep->manager_id !== null) {
+                $w->orWhere('manager_id', $rep->manager_id);
+            }
+        });
+    }
+
+    /** العميل ده جوه بول فريق المندوب ده؟ — نسخة الصف الواحد من `poolWhere` */
+    public function inPoolOf(User $rep): bool
+    {
+        if ((int) $this->rep_id === (int) $rep->id) {
+            return true;
+        }
+
+        return $rep->manager_id !== null
+            && (int) $this->manager_id === (int) $rep->manager_id;
     }
 
     public function transactions(): HasMany

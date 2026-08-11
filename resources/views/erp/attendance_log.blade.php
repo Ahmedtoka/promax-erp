@@ -101,6 +101,10 @@
                                 <div class="side" style="font-size:10.5px">
                                     {{ __('hr.approved_by', ['name' => $d->approver?->displayName() ?? '—']) }}
                                 </div>
+                                {{-- الملاحظة بتوثّق الانصراف الإداري — «انصراف إداري بواسطة فلان» --}}
+                                @if ($d->note)
+                                    <div class="side" style="font-size:10px">{{ $d->note }}</div>
+                                @endif
                             @else
                                 <span class="side">{{ __('hr.not_approved') }}</span>
                             @endif

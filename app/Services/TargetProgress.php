@@ -26,8 +26,20 @@ use App\Models\Transaction;
  * (`clients.rep_id`) ولمديره (`clients.manager_id`) وللشركة —
  * مش لمين قبض الفاتورة. والشركة = **كل** العملاء.
  *
- * **اليدوي بيغلب:** `target_months.manual_actual` لو متسجّل لشهر،
- * بيستبدل المحسوب للعقدة دي في الشهر ده (الشهور التاريخية 1–7).
+ * ═══ عقيدة اليدوي والتصعيد (١١ أغسطس ٢٠٢٦ — فيدباك المالك) ═══
+ *
+ *     achieved(node, m) = manual(node, m)                    لو متسجّل
+ *                       = live(node, m)
+ *                         + Σ children (achieved(child, m) − live(child, m))   غير كده
+ *
+ * يعني اليدوي المكتوب على أي عقدة بيصعّد **فرقه عن اللايف** لأبوها:
+ * تكتب شهور مندوب قديمة يدوي، فبار مديره وإجمالي الشركة يتحركوا
+ * معاه — إلا لو الأب نفسه له يدوي للشهر ده (اليدوي بيغلب في عقدته
+ * دايماً). ومسح اليدوي بيرجّع اللايف + تصعيدات ولاده.
+ *
+ * التنفيذ: تحميل شجرة السنة كلها بشهورها **مرة واحدة**، واللايف من
+ * كويري الليدجر المجمّعة الواحدة، وبعدين تمريرة واحدة من تحت لفوق
+ * (عميل ← مندوب ← مدير ← شركة). مفيش N+1.
  *
  * ⚠️ كاش ستاتيك للريكوست الواحد — كويري مجمّعة واحدة لكل سنة
  * مهما الشاشة سألت عن عملاء ومناديب ومديرين.
@@ -39,6 +51,16 @@ class TargetProgress
 
     /** @var array<int, array{rep: ?int, mgr: ?int}>|null عميل => تسكيناته */
     private static ?array $assign = null;
+
+    /**
+     * شجرة السنة المحسوبة — لكل عقدة: `live` (من القيود بس)،
+     * `base` (لايف + تصعيدات الولاد، من غير يدوي العقدة نفسها —
+     * ده اللي بيتعرض placeholder في خانات اليدوي)، و`eff`
+     * (النهائي — اليدوي بيغلب).
+     *
+     * @var array<int, array{live: array<int, array<int, float>>, base: array<int, array<int, float>>, eff: array<int, array<int, float>>}>
+     */
+    private static array $tree = [];
 
     /**
      * صافي مبيعات كل عميل شهر بشهر للسنة دي — كويري واحدة، كاش للريكوست.
@@ -153,27 +175,123 @@ class TargetProgress
     }
 
     /**
-     * المحقق الفعلي لعقدة تارجيت شهر بشهر — المحسوب من القيود،
-     * و`manual_actual` بيغلب للشهر اللي متسجّل فيه.
+     * اللايف من القيود لعقدة حسب نوعها — من غير أي يدوي ولا تصعيد.
      *
      * @return array<int, float>
      */
-    public static function achievedByMonth(Target $t): array
+    public static function liveByMonth(Target $t): array
     {
-        $out = match ($t->kind) {
+        return match ($t->kind) {
             Target::KIND_COMPANY => self::companyByMonth((int) $t->year),
             Target::KIND_MANAGER => self::managerByMonth((int) $t->year, (int) $t->user_id),
             Target::KIND_REP => self::repByMonth((int) $t->year, (int) $t->user_id),
             Target::KIND_CLIENT => self::clientByMonth((int) $t->year, (int) $t->client_id),
             default => self::zeros(),
         };
+    }
 
-        foreach ($t->manualByMonth() as $m => $manual) {
-            if ($manual !== null) {
-                $out[$m] = $manual;
+    /**
+     * حل شجرة السنة كلها مرة واحدة: تحميل كل عقد السنة بشهورها
+     * (كويري واحدة)، اللايف من الليدجر المجمّع، وتمريرة من تحت لفوق
+     * بتصعّد فرق اليدوي عن اللايف لكل أب.
+     *
+     * @return array{live: array<int, array<int, float>>, base: array<int, array<int, float>>, eff: array<int, array<int, float>>}
+     */
+    private static function solveYear(int $year): array
+    {
+        if (isset(self::$tree[$year])) {
+            return self::$tree[$year];
+        }
+
+        $nodes = Target::with('months')->where('year', $year)->get();
+
+        $byParent = [];
+
+        foreach ($nodes as $n) {
+            if ($n->parent_id !== null) {
+                $byParent[(int) $n->parent_id][] = $n;
             }
         }
 
-        return $out;
+        $live = [];
+        $base = [];
+        $eff = [];
+
+        foreach ($nodes as $n) {
+            $live[(int) $n->id] = self::liveByMonth($n);
+        }
+
+        // حارس الدواير: عمق الشجرة ٤ بحكم البناء، بس لو parent_id
+        // اتلخبط يوم من الأيام مانلفّش للأبد — العقدة اللي لسه بتتحل
+        // بترجع لايفها وخلاص.
+        $busy = [];
+
+        $solve = function (Target $n) use (&$solve, &$live, &$base, &$eff, &$busy, $byParent): array {
+            $id = (int) $n->id;
+
+            if (isset($eff[$id])) {
+                return $eff[$id];
+            }
+
+            if (isset($busy[$id])) {
+                return $live[$id];
+            }
+
+            $busy[$id] = true;
+            $out = $live[$id];
+
+            foreach ($byParent[$id] ?? [] as $child) {
+                $cid = (int) $child->id;
+                $childEff = $solve($child);
+
+                for ($m = 1; $m <= 12; $m++) {
+                    $out[$m] = round($out[$m] + $childEff[$m] - $live[$cid][$m], 2);
+                }
+            }
+
+            $base[$id] = $out;
+
+            foreach ($n->manualByMonth() as $m => $manual) {
+                if ($manual !== null) {
+                    $out[$m] = $manual;
+                }
+            }
+
+            unset($busy[$id]);
+
+            return $eff[$id] = $out;
+        };
+
+        foreach ($nodes as $n) {
+            $solve($n);
+        }
+
+        return self::$tree[$year] = ['live' => $live, 'base' => $base, 'eff' => $eff];
+    }
+
+    /**
+     * المحقق الفعلي لعقدة شهر بشهر — يدوي العقدة بيغلب، وتصعيدات
+     * يدوي الولاد محسوبة (الدوكترين فوق).
+     *
+     * @return array<int, float>
+     */
+    public static function achievedByMonth(Target $t): array
+    {
+        $tree = self::solveYear((int) $t->year);
+
+        return $tree['eff'][(int) $t->id] ?? self::liveByMonth($t);
+    }
+
+    /**
+     * المحسوب للعقدة **من غير يدويها هي** (لايف + تصعيدات الولاد) —
+     * ده الـplaceholder بتاع خانة اليدوي: لو مسحتها ده اللي هيتحسب.
+     *
+     * @return array<int, float>
+     */
+    public static function baseByMonth(Target $t): array
+    {
+        $tree = self::solveYear((int) $t->year);
+
+        return $tree['base'][(int) $t->id] ?? self::liveByMonth($t);
     }
 }

@@ -32,6 +32,8 @@ class AttendancePunch extends Model
 
     protected $fillable = [
         'attendance_day_id', 'user_id', 'type', 'at', 'lat', 'lng', 'auto',
+        // انصراف إداري من الداش بورد (١١/٨) — مين اللي سجّله
+        'forced_by',
     ];
 
     protected function casts(): array
@@ -47,6 +49,12 @@ class AttendancePunch extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** الأدمن/المدير اللي سجّل الانصراف الإداري — null للبانش العادي */
+    public function forcedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'forced_by');
     }
 
     public function typeLabel(): string

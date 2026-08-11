@@ -75,6 +75,7 @@
                             {{ $p->icon() }} {{ $p->typeLabel() }}
                             <span dir="ltr">{{ $p->at->format('h:i A') }}</span>
                             @if ($p->auto)<em style="font-size:10px">({{ __('hr.auto_closed_mark') }})</em>@endif
+                            @if ($p->forced_by)<em style="font-size:10px">({{ __('hr.forced_out_note', ['by' => $p->forcedBy?->displayName() ?? '—']) }})</em>@endif
                         </span>
                     @endforeach
                 </div>

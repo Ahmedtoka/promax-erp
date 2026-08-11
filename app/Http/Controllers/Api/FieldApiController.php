@@ -281,7 +281,13 @@ class FieldApiController extends Controller
         // العملاء (rep_id) من غير ما يعلّم على تشيك بوكس المناطق —
         // فالمندوب كان بيفتح «المناطق» يلاقيها فاضية وعملاؤه موجودين
         // فعلاً. أي منطقة فيها عميل بتاعه هي منطقته بحكم الواقع.
-        $clientZoneIds = Client::where($isManager ? 'manager_id' : 'rep_id', $user->id)
+        //
+        // ═══ بول الفريق (١١/٨ مساءً) ═══ «عملاؤه» للمندوب بقت
+        // `Client::poolWhere`: عملاءه هو + كل عملاء مديره — مندوب «ب»
+        // بيشوف مناطق وعملاء زميله الغايب من غير أي نقل يدوي.
+        $clientZoneIds = ($isManager
+            ? Client::where('manager_id', $user->id)
+            : Client::poolWhere(Client::query(), $user))
             ->where('status', 'active')
             ->whereNotNull('zone_id')
             ->distinct()->pluck('zone_id');
@@ -305,15 +311,27 @@ class FieldApiController extends Controller
                     return;
                 }
 
-                // ⚠️ **عملاءه هو دايماً** (مهما كانت قناتهم)، واللي لسه
+                // ⚠️ **بول الفريق** (١١/٨ مساءً): عملاءه هو + كل عملاء
+                // مديره (مهما كانت قناتهم) — البول المشترك، واللي لسه
                 // من غير مندوب — دول بس بيتفلتروا بقناته لو ليه قناة.
+                // مندوب من غير مدير = السلوك القديم بالحرف.
                 $q->where(function ($w) use ($user) {
                     $w->where('rep_id', $user->id);
+
+                    if ($user->manager_id !== null) {
+                        $w->orWhere('manager_id', $user->manager_id);
+                    }
+
                     $w->orWhere(function ($w2) use ($user) {
                         $w2->whereNull('rep_id');
                         if ($user->channel_id) {
                             $w2->where('channel_id', $user->channel_id);
                         }
+                        // ⚠️ عميل بلا مندوب بس متسكّن لمدير **تاني** =
+                        // بول فريق تاني — الفصل بين الفرق هو القاعدة.
+                        $w2->where(fn ($w3) => $w3->whereNull('manager_id')
+                            ->when($user->manager_id !== null,
+                                fn ($q3) => $q3->orWhere('manager_id', $user->manager_id)));
                     });
                 });
             },
@@ -333,6 +351,9 @@ class FieldApiController extends Controller
             'name' => $z->displayName(),
             'day' => $z->day_label,
             'is_today' => $user->zone_id === $z->id,
+            // ⚠️ additive (١١/٨ مساءً) — بادج «كام عميل» على كارت
+            // المنطقة في الأبلكيشن. النسخ القديمة بتتجاهله عادي.
+            'client_count' => $z->clients->count(),
             'clients' => $z->clients->map(function ($c) use ($todayVisits) {
                 $v = $todayVisits->get($c->id);
 
@@ -348,6 +369,14 @@ class FieldApiController extends Controller
                     'name' => $c->fullName(),
                     'chain' => $chain,
                     'branch' => $c->displayName(),
+                    // ⚠️ كتلة البحث عابرة اللغات (١١/٨): الاسم المعروض
+                    // بلغة الأبلكيشن بس — والمندوب بيكتب بأي لغة.
+                    // بنبعت كل الأسماء (فرع+سلسلة عربي وإنجليزي) في
+                    // خانة واحدة صغيرة الأبلكيشن بيبحث فيها.
+                    'q' => mb_strtolower(trim(implode(' ', array_filter([
+                        $c->name, $c->name_en,
+                        $c->group?->name, $c->group?->name_en,
+                    ])))),
                     'address' => $c->address,
                     'phone' => $c->phone,
                     // لوكيشن العميل — زرار «الاتجاهات» في الأبلكيشن
@@ -568,15 +597,23 @@ class FieldApiController extends Controller
      * عميل في الداتابيز. مندوب ماتسكّنش على العميل كان يقدر يخصم من
      * عهدته ويمدّن حساب عميل مندوب تاني.
      *
-     * القبول: العميل مسكّن عليه (`rep_id`)، **أو** في زون من زوناته،
-     * **أو** عنده عليه أمر توريد (السواق بيوصّل لعملاء مش بتوعه).
+     * القبول: العميل مسكّن عليه (`rep_id`)، **أو جوه بول فريقه**
+     * (نفس `manager_id` بتاع مديره — قرار المالك ١١/٨ مساءً)، **أو**
+     * في زون من زوناته، **أو** عنده عليه أمر توريد (السواق بيوصّل
+     * لعملاء مش بتوعه).
      *
      * ⚠️ **مش بنشدّد أكتر من كده.** المندوب الجديد اللي لسه مااتسكّنش
      * له عملاء بيشتغل بالزون، وقفل الزون كان هيمنعه يفتح أي زيارة.
+     *
+     * ⚠️ المرساة دي بتغطي كل أكشنات الزيارة مرة واحدة: التشيك إن هنا،
+     * والفاتورة/المرتجع/التحصيل/الرف/طلب البضاعة مرساتهم الزيارة
+     * المفتوحة نفسها — فقبول البول هنا بيفتح السايكل كله لزميل الفريق.
      */
     private function ownsClient(User $user, Client $client): bool
     {
-        if ((int) $client->rep_id === (int) $user->id) {
+        // بيغطي rep_id **وبول الفريق** مع بعض — مندوب بلا مدير بيرجع
+        // لفحص rep_id القديم بالحرف جوه `inPoolOf`.
+        if ($client->inPoolOf($user)) {
             return true;
         }
 

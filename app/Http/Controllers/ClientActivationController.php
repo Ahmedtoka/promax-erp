@@ -43,9 +43,8 @@ class ClientActivationController extends Controller
         };
 
         if ($s = $request->string('q')->trim()->value()) {
-            $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
-                ->orWhere('name_en', 'like', "%$s%")
-                ->orWhere('code', 'like', "%$s%")
+            // البحث الموحّد (فرع+سلسلة، عربي+إنجليزي) + العنوان الخاص بالشاشة دي
+            $q->where(fn ($w) => \App\Models\Client::search($w, $s)
                 ->orWhere('address', 'like', "%$s%"));
         }
 

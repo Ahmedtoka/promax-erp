@@ -176,6 +176,29 @@ class OpsController extends Controller
     {
         $teamIds = User::fieldVisibleTo(User::query(), $request->user())->select('id');
 
+        // ⏱ اللي لسه مسجّلين حضور (١١/٨ مساءً) — يوم النهارده المفتوح
+        // بحالة working/break. ⚠️ الحضور مش للميدان بس (المكتب بيبصم
+        // كمان)، فالسكوب على **كل** الموظفين النشطين — والمدير بيشوف
+        // فريقه من fieldVisibleTo زي باقي الشاشة.
+        $attRows = \App\Models\AttendanceDay::whereDate('date', today())
+            ->where('status', \App\Models\AttendanceDay::STATUS_OPEN)
+            ->whereIn('user_id', User::fieldVisibleTo(
+                User::where('active', true), $request->user(),
+            )->select('id'))
+            ->with('user')
+            ->get()
+            ->filter(fn ($d) => $d->user !== null
+                && in_array($d->state(), ['working', 'break'], true))
+            ->map(fn ($d) => [
+                'day' => $d,
+                'user' => $d->user,
+                'state' => $d->state(),
+                // الشغل المفتوح بيتعرض كتنبيه بس — الانصراف الإداري
+                // بيعدّي من غير الحارس، وقفل الشغل نفسه من الكروت فوق
+                'open' => \App\Services\Attendance::openWork($d->user),
+            ])
+            ->values();
+
         return view('ops.open_visits', [
             'visits' => \App\Models\Visit::whereNull('checked_out_at')
                 ->whereIn('user_id', $teamIds)
@@ -187,6 +210,7 @@ class OpsController extends Controller
                 ->with(['user', 'warehouse'])
                 ->orderBy('checked_in_at')
                 ->get(),
+            'attRows' => $attRows,
         ]);
     }
 
@@ -241,6 +265,60 @@ class OpsController extends Controller
 
         return back()->with('ok', __('ops.ov_closed_ok', [
             'rep' => $whVisit->user?->displayName() ?? '—',
+        ]));
+    }
+
+    /**
+     * ═══ الانصراف الإداري — تشيك أوت للشغل نفسه (١١ أغسطس ٢٠٢٦ مساءً) ═══
+     *
+     * طلب المالك: «أعمل للناس من عندي تشيك أوت للشغل زي ما عملنا في
+     * الزيارات المفتوحة — وأنا بخرّجه بحدد عدد ساعات العمل».
+     *
+     * الساعات بتتعتمد على اليوم (`approved_minutes`) فهي اللي بتروح
+     * المرتبات — والبانش نفسه بيتعلّم `forced_by` فالسجل بيفضل شاهد.
+     * البانش المباشر بيعدّي من غير حارس `openWork` عن قصد (قرار
+     * إداري زي `autoClose`) — والشغل المفتوح باين في نفس الصف كتنبيه.
+     */
+    public function forceAttendanceOut(Request $request, User $user)
+    {
+        $data = $request->validate([
+            'hours' => ['required', 'numeric', 'min:0.25', 'max:24'],
+            'note' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        // ⚠️ نفس حارس شاشة الحضور — الساعات بتتحول فلوس، والمدير
+        // بيخرّج **فريقه** بس (والحضور بيشمل موظفين مكتب: assertStaff)
+        Scope::assertStaff($request->user(), $user);
+
+        $minutes = (int) round((float) $data['hours'] * 60);
+
+        $err = \App\Services\Attendance::forceOut(
+            $user, $request->user(), $minutes, $data['note'] ?? null,
+        );
+
+        if ($err !== null) {
+            return back()->withErrors($err);
+        }
+
+        // نفس فيد التتبع بتاع أي انصراف — بس معلّم إنه إداري
+        TrackEvent::log($user, 'shift_out', __('hr.punch_out'),
+            __('ops.forced_out_by', ['by' => $request->user()->displayName()]));
+
+        // الموظف لازم يعرف — عدّاده هيقف فجأة ومن غير الإشعار
+        // هيفتكر الأبلكيشن باظ
+        AppNotification::send(
+            $user,
+            fn () => __('hr.notif_forced_att_title'),
+            fn () => __('hr.notif_forced_att_body', [
+                't' => \App\Models\AttendanceDay::hhmm($minutes),
+                'by' => $request->user()->displayName(),
+            ]),
+            good: false,
+        );
+
+        return back()->with('ok', __('ops.att_forced_ok', [
+            'rep' => $user->displayName(),
+            't' => \App\Models\AttendanceDay::hhmm($minutes),
         ]));
     }
 

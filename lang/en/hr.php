@@ -99,4 +99,10 @@ return [
     'block_out_merch' => 'Open shelf visit at ":client" - close it with the after photo first',
     'block_out_po' => 'Sales Order :number is mid-delivery - finish the delivery first',
     'block_out_custody' => 'Your van stock is still open - return the van and have your manager close it on the dashboard',
+
+    // Administrative checkout from the dashboard (Aug 11, 2026 evening)
+    'forced_out_note' => 'Administrative checkout by :by',
+    'force_out_not_in' => 'This employee is not clocked in right now.',
+    'notif_forced_att_title' => 'Management checked you out',
+    'notif_forced_att_body' => 'Management checked you out (:by) - your hours today were set to :t. If you are still working, contact your manager.',
 ];

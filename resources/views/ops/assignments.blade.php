@@ -70,11 +70,72 @@
     @endif
 </div>
 
+{{-- ═══════════ بول الفريق — كارت لكل مدير (١١ أغسطس مساءً) ═══════════
+     الفصل الأساسي بقى على مستوى مدير القناة: عملاؤه بول مشترك لكل
+     مناديبه. كله معلّم بالقاعدة — مفيش حاجة تتحفظ من هنا. --}}
+<div class="card">
+    <h3>🤝 {{ __('journey.pools_title') }}</h3>
+    <div class="alert info">{{ __('journey.pools_hint') }}</div>
+
+    @if (empty($pools))
+        <div class="alert warn">{{ __('journey.pools_none') }}</div>
+    @else
+        <div class="poolgrid">
+            @foreach ($pools as $p)
+                <div class="poolcard">
+                    <div class="pool-head">
+                        @include('partials._avatar', ['u' => $p['manager'], 'size' => 38, 'ring' => '#602D90'])
+                        <div>
+                            <b>{{ $p['manager']->displayName() }}</b>
+                            <div class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }}</div>
+                        </div>
+                        <span class="badge b-purple" style="margin-inline-start:auto">
+                            {{ __('journey.pool_shared') }}
+                        </span>
+                    </div>
+
+                    <div class="pool-kpis">
+                        <span class="badge b-blue">👥 {{ $p['reps']->count() }} {{ __('journey.pool_reps') }}</span>
+                        <span class="badge b-green">🏪 {{ $fmt($p['client_count']) }} {{ __('journey.pool_clients') }}</span>
+                        <span class="badge b-gold">📍 {{ count($p['zones']) }} {{ __('journey.pool_zones') }}</span>
+                    </div>
+
+                    {{-- مناديب الفريق — كلهم شايفين كل البول --}}
+                    @if ($p['reps']->isEmpty())
+                        <div class="s" style="color:var(--muted);padding:6px 0">{{ __('journey.pool_no_reps') }}</div>
+                    @else
+                        <div class="pool-reps">
+                            @foreach ($p['reps'] as $tr)
+                                <span class="pool-rep" title="{{ $tr->roleLabel() }}">
+                                    @include('partials._avatar', ['u' => $tr, 'size' => 24])
+                                    <span>{{ $tr->displayName() }}</span>
+                                </span>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    {{-- مناطق فيها عملاء البول — بعدد العملاء، وكلها «✓» --}}
+                    @if ($p['zones'] !== [])
+                        <div class="pool-zones">
+                            @foreach ($p['zones'] as $pz)
+                                <span class="badge b-green">✓ {{ $pz['name'] }} · {{ $fmt($pz['count']) }}</span>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    @endif
+</div>
+
 @if ($rep !== null)
 
-{{-- ═══════════ كل العملاء — تخصيص بضغطة ═══════════ --}}
+{{-- ═══════════ كل العملاء — المسؤول الأساسي بضغطة ═══════════ --}}
 <div class="card">
     <h3>👥 {{ __('journey.all_clients') }} <span class="side">{{ $clients->count() }}</span></h3>
+
+    {{-- التسكين الفردي اتنزّل درجة: بيحدد المسؤول الأساسي بس --}}
+    <div class="alert info">{{ __('journey.primary_hint') }}</div>
 
     <div class="alert">{{ __('journey.flow_hint') }}</div>
 
@@ -218,6 +279,16 @@
 @section('scripts')
 <style>
     tr.orphan-row td { background: rgba(234, 140, 28, .08); }
+
+    /* ═══ كروت بول الفريق ═══ */
+    .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+    .poolcard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}
+    .pool-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+    .pool-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+    .pool-reps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+    .pool-rep{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:20px;padding:2px 9px 2px 3px;font-size:12px;background:var(--card2)}
+    [dir=rtl] .pool-rep{padding:2px 3px 2px 9px}
+    .pool-zones{display:flex;gap:5px;flex-wrap:wrap;max-height:96px;overflow-y:auto}
 
     /* ═══ محافظات مطوية — <details> بعلامة ＋/− ═══
        نفس أسلوب أكورديون السايدبار: list-style:none + إخفاء الماركر

@@ -611,6 +611,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('open_visits.out');
         Route::post('/open-wh-visits/{whVisit}/out', [OpsController::class, 'forceWarehouseOut'])
             ->middleware('role:admin,manager')->name('open_visits.wh_out');
+        // الانصراف الإداري بساعات محددة (١١/٨ مساءً) — نفس الشاشة
+        Route::post('/attendance/{user}/force-out', [OpsController::class, 'forceAttendanceOut'])
+            ->middleware('role:admin,manager')->name('att.force_out');
 
         // ═══ عهد المناديب — بورد المراجعة بنظرة واحدة (١٠ أغسطس ٢٠٢٦) ═══
         // ⚠️ بيانات إدارة: قيمة عهدة كل مندوب — أدمن ومدير بس، والمدير

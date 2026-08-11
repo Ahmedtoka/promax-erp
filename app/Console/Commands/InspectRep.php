@@ -53,10 +53,16 @@ class InspectRep extends Command
             $this->line("   - {$z->displayName()}".($z->active ? '' : ' ⛔ المنطقة موقوفة'));
         }
 
-        // عملاؤه ومناطقهم
-        $clients = Client::where('rep_id', $user->id)->where('status', 'active')->with('zone')->get();
+        // عملاؤه ومناطقهم — **بول الفريق** (١١/٨ مساءً): عملاءه هو
+        // + كل عملاء مديره. نفس قاعدة zonesPayload بالظبط.
+        $clients = Client::poolWhere(Client::query(), $user)
+            ->where('status', 'active')->with('zone')->get();
         $this->newLine();
-        $this->info("🏪 عملاؤه النشطين (rep_id): {$clients->count()}");
+        $mine = $clients->where('rep_id', $user->id)->count();
+        $this->info("🏪 بول الفريق النشط: {$clients->count()} (منهم {$mine} هو المسؤول الأساسي عنهم)");
+        if ($user->manager_id === null) {
+            $this->line('   ⚠️ مالوش مدير — البول = عملاؤه المسجّلين (rep_id) بس، زي القاعدة القديمة.');
+        }
         foreach ($clients->groupBy(fn ($c) => $c->zone?->displayName() ?? 'بدون منطقة') as $zoneName => $group) {
             $this->line("   - $zoneName: {$group->count()} عميل");
         }
@@ -81,8 +87,12 @@ class InspectRep extends Command
             $free = Client::whereNull('rep_id')->where('status', 'active')
                 ->where('zone_id', $z->id)
                 ->when($user->channel_id, fn ($q) => $q->where('channel_id', $user->channel_id))
+                // نفس قاعدة الـAPI: يتيم مدير تاني = بول فريق تاني
+                ->where(fn ($w) => $w->whereNull('manager_id')
+                    ->when($user->manager_id !== null,
+                        fn ($q) => $q->orWhere('manager_id', $user->manager_id)))
                 ->count();
-            $this->line("   - {$z->displayName()}: $mine بتوعه + $free من غير مندوب");
+            $this->line("   - {$z->displayName()}: $mine من البول + $free من غير مندوب");
         }
 
         if ($apiZones->isEmpty()) {
