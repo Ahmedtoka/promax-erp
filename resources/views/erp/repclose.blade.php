@@ -115,18 +115,29 @@
             <tr>
                 <th>#</th>
                 <th>{{ __('settle.rep') }}</th>
-                <th>{{ __('settle.window_to') }}</th>
+                {{-- النافذة كاملة من→إلى بدل «إلى» بس (طلب المالك ١١/٨) --}}
+                <th>{{ __('settle.window') }}</th>
+                <th>{{ __('settle.cash_sales') }}</th>
+                <th>{{ __('settle.credit_sales') }}</th>
+                <th>{{ __('settle.collections') }}</th>
                 <th>{{ __('settle.expected') }}</th>
                 <th>{{ __('settle.received') }}</th>
                 <th>{{ __('settle.balance') }}</th>
                 <th>{{ __('settle.by') }}</th>
-                <th></th>
+                <th data-nosum></th>
             </tr>
             @forelse ($recent as $s)
                 <tr>
                     <td class="num"><b>{{ $s->number }}</b></td>
                     <td>{{ $s->user?->displayName() ?? '—' }}</td>
-                    <td class="num" style="font-size:11px">{{ $s->to_at->format('Y-m-d h:i A') }}</td>
+                    <td class="num" style="font-size:10.5px" dir="ltr">
+                        {{ $s->from_at?->format('m-d h:i A') ?? __('settle.since_start') }}
+                        ← {{ $s->to_at->format('m-d h:i A') }}
+                    </td>
+                    <td class="num">{{ $fmt($s->cash_sales) }}</td>
+                    {{-- ⚠️ آجل مريم كان مخزون هنا وماكانش بيبان في أي حتة --}}
+                    <td class="num mid"><b>{{ $fmt($s->credit_sales) }}</b></td>
+                    <td class="num">{{ $fmt($s->cash_collections) }}</td>
                     <td class="num">{{ $fmt($s->expected) }}</td>
                     <td class="num pos"><b>{{ $fmt($s->received) }}</b></td>
                     <td>
@@ -135,10 +146,20 @@
                         </span>
                     </td>
                     <td class="s">{{ $s->creator?->name ?? '—' }}</td>
-                    <td><a class="btn sm" href="{{ route('erp.repclose.doc', $s) }}">🖨️</a></td>
+                    <td style="white-space:nowrap">
+                        <a class="btn sm" href="{{ route('erp.repclose.doc', $s) }}">🖨️</a>
+                        {{-- مسح — أدمن، وآخر تصفية للمندوب بس (سلامة سلسلة الأرصدة) --}}
+                        @if (auth()->user()->isAdmin() && ($latestIds[$s->user_id] ?? null) === $s->id)
+                            <form method="POST" action="{{ route('erp.repclose.destroy', $s) }}" style="display:inline"
+                                  onsubmit="return confirm(@js(__('settle.delete_confirm', ['number' => $s->number])))">
+                                @csrf @method('DELETE')
+                                <button class="btn sm red" type="submit">🗑</button>
+                            </form>
+                        @endif
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">{{ __('settle.no_settlements') }}</td></tr>
+                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">{{ __('settle.no_settlements') }}</td></tr>
             @endforelse
         </table>
     </div>

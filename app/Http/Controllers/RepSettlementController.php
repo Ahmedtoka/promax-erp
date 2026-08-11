@@ -45,6 +45,9 @@ class RepSettlementController extends Controller
             'rows' => $rows,
             'recent' => RepSettlement::with(['user', 'creator'])
                 ->latest('to_at')->limit(15)->get(),
+            // آخر تصفية لكل مندوب — زرار المسح بيظهر عليها بس (سلامة السلسلة)
+            'latestIds' => RepSettlement::selectRaw('user_id, MAX(id) as mid')
+                ->groupBy('user_id')->pluck('mid', 'user_id'),
         ]);
     }
 
@@ -85,6 +88,29 @@ class RepSettlementController extends Controller
             // ⚠️ الأرقام بتتحسب جوه الترانزاكشن — فاتورة بتتسجل في نفس
             // اللحظة يا إما جوه النافذة يا إما في التصفية الجاية.
             $f = $this->openFigures($user);
+
+            // ═══ ممنوع القفل الفاضي (قرار المالك ١١/٨ مساءً) ═══
+            //
+            // ⚠️ ضغطة «قفل» على نافذة مافيهاش أي حركة كانت بتعمل
+            // تصفية صفرية — والتصفيات الصفرية دي بتبلع النافذة وتخفي
+            // المبيعات من الجدول (حالة مريم: RS-1002..1004 فاضيين
+            // خنقوا آجل RS-1001). القفل بقى مشروط بوجود أي حركة:
+            // فواتير، تحصيلات، مرتجعات، أوامر مسلَّمة، متوقع، رصيد
+            // مترحّل، أو مبلغ مستلم فعلي.
+            $hasActivity = $f['invoices']->isNotEmpty()
+                || $f['collection_rows']->isNotEmpty()
+                || $f['returns']->isNotEmpty()
+                || ($f['po_rows'] ?? collect())->isNotEmpty()
+                || round((float) $f['expected'], 2) != 0.0
+                || round((float) $f['prev_balance'], 2) != 0.0
+                || round((float) $data['received'], 2) != 0.0;
+
+            if (! $hasActivity) {
+                // بيرجع لنفس الصفحة برسالة واضحة — والترانزاكشن بتترول باك
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'received' => __('settle.empty_close_blocked'),
+                ]);
+            }
 
             $received = round((float) $data['received'], 2);
             $balance = round($f['prev_balance'] + $f['expected'] - $received, 2);
@@ -158,6 +184,31 @@ class RepSettlementController extends Controller
                 'number' => $settlement->number,
                 'balance' => number_format(abs((float) $settlement->balance), 2),
             ]));
+    }
+
+    /**
+     * مسح تصفية (طلب المالك ١١/٨ مساءً) — لإلغاء التصفيات الفاضية
+     * اللي اتقفلت بالغلط وبلعت النافذة (حالة مريم RS-1002..1004).
+     *
+     * ⚠️ **آخر تصفية للمندوب بس.** الرصيد بيترحّل من تصفية للي
+     * بعدها زي السلسلة — مسح واحدة من النص بيكسر السلسلة ويبوّظ
+     * أرصدة اللي بعدها. عاوز تمسح أقدم؟ امسح من الآخر واحدة واحدة.
+     * المسح بيرجّع كل حركات النافذة للفترة المفتوحة تلقائياً
+     * (openFigures بتقرا من آخر تصفية متبقية).
+     */
+    public function destroy(Request $request, RepSettlement $settlement)
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+
+        $latestId = RepSettlement::where('user_id', $settlement->user_id)->max('id');
+
+        if ($settlement->id !== $latestId) {
+            return back()->withErrors(['settlement' => __('settle.delete_latest_only')]);
+        }
+
+        DB::transaction(fn () => $settlement->delete());
+
+        return back()->with('ok', __('settle.deleted_ok', ['number' => $settlement->number]));
     }
 
     /** ورقة التصفية — بتتطبع وتتمضي من المندوب والمحاسب */

@@ -75,4 +75,10 @@ return [
     'po_split' => 'Of which cash: :cash · credit: :credit',
     'close_custody_too' => 'Close the custody too',
     'close_custody_hint' => 'Tick only when the van is fully returned to the warehouse - normally it keeps its load for tomorrow',
+    'window' => 'Window',
+    'collections' => 'Collections',
+    'empty_close_blocked' => 'No activity in this window - an empty close swallows the window and hides figures, so it is blocked',
+    'delete_latest_only' => 'Only the rep\'s latest settlement can be deleted - unwind from the end one by one to keep the balance chain',
+    'delete_confirm' => 'This will permanently delete settlement :number and return its activity to the open window - sure?',
+    'deleted_ok' => 'Settlement :number deleted - its activity returned to the open window',
 ];

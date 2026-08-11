@@ -393,6 +393,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,accountant')->name('repclose.show');
         Route::post('/rep-close/{user}', [\App\Http\Controllers\RepSettlementController::class, 'store'])
             ->middleware('role:admin,accountant')->name('repclose.store');
+        // مسح تصفية — أدمن بس، وآخر واحدة للمندوب بس (سلامة سلسلة الأرصدة)
+        Route::delete('/rep-close/doc/{settlement}', [\App\Http\Controllers\RepSettlementController::class, 'destroy'])
+            ->middleware('role:admin')->name('repclose.destroy');
 
         Route::get('/dues', [\App\Http\Controllers\DuesController::class, 'index'])->name('dues');
         Route::post('/dues/generate', [\App\Http\Controllers\DuesController::class, 'generate'])
