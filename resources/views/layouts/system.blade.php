@@ -715,7 +715,7 @@ select.ssel-native{display:none!important}
                 </div>
             </details>
 
-            {{-- بيانات الاختصارات للجافاسكربت — @php + json_encode (مش @json) --}}
+            {{-- بيانات الاختصارات للجافاسكربت — عبر json_encode مش الدايركتيف --}}
             @php
                 $qcData = collect($shortcuts)->map(fn ($s) => [
                     'key' => $s['key'], 'url' => $s['url'], 'icon' => $s['icon'], 'label' => $s['label'],
