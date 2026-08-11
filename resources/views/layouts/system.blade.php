@@ -207,6 +207,37 @@ img{display:block;max-width:100%}
 .bell-empty{padding:26px;text-align:center;color:var(--muted);font-size:12px}
 @media print{.bell{display:none !important}}
 
+/* ═══ شريط الاختصارات (١١ أغسطس ٢٠٢٦) ═══ */
+.qbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.qchip{
+  display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+  padding:5px 11px;border-radius:999px;border:1px solid var(--border);
+  background:var(--card);color:var(--ink);font-size:12px;font-weight:700;
+  white-space:nowrap;transition:.12s;
+}
+.qchip:hover{border-color:var(--royal-blue);box-shadow:var(--shadow)}
+.qchip-t{font-size:11.5px}
+/* على الموبايل الشيبس بتاخد مساحة — نخبّي نصها ونسيب الأيقونة */
+@media (max-width:760px){.qchip-t{display:none}}
+.qsc>summary{cursor:pointer}
+.qmenu .qrow{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border-bottom:1px solid var(--border);
+}
+.qmenu .qrow.on{background:var(--blue-050)}
+.qmenu .qgo{
+  flex:1;display:flex;align-items:center;gap:9px;text-decoration:none;
+  color:var(--ink);font-size:12.5px;font-weight:700;min-width:0;
+}
+.qmenu .qgo:hover{color:var(--royal-blue)}
+.qmenu .qic{font-size:15px;width:20px;text-align:center;flex:none}
+.qmenu .qpin{
+  border:0;background:none;cursor:pointer;font-size:16px;color:var(--muted);
+  line-height:1;padding:2px;flex:none;
+}
+.qmenu .qpin.on{color:#E6A700}
+@media print{.qbar,.qsc{display:none !important}}
+
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .kpi::before{content:"";position:absolute;inset-block-start:0;inset-inline-start:0;width:100%;height:3px;background:var(--brand-gradient);opacity:.85}
@@ -619,6 +650,128 @@ select.ssel-native{display:none!important}
       <h1>@yield('title')</h1>
       <div class="meta">
         @yield('actions')
+
+        {{-- ═══ شريط الاختصارات (طلب المالك ١١ أغسطس ٢٠٢٦) ═══
+             أهم الصفحات في الهيدر على كل شاشة — من غير ما تفتح المنيو.
+             ⚠️ **كل اختصار مفلتر بصلاحية الرول** (`Access::allows`) —
+             محاسب مايشوفش اختصار للتصفية بتاعت غيره، وأمين المخزن
+             مايشوفش شاشات الميدان. المفضّلة بتتحفظ في `localStorage`
+             (لكل متصفح) فمفيش مايجريشن ولا عمود جديد. --}}
+        @php
+            $u2 = auth()->user();
+            // [screen-key للصلاحية, route, أيقونة, ليبل]
+            $shortcutDefs = [
+                ['erp.overview', 'erp.overview', '🏠', __('nav.overview')],
+                ['ops.open_visits', 'ops.open_visits', '🚪', __('nav.open_visits')],
+                ['ops.live', 'ops.live', '🛰️', __('nav.live')],
+                ['ops.vans', 'ops.vans', '🚐', __('nav.vans_board')],
+                ['ops.pos', 'ops.pos', '🚚', __('nav.purchase_orders')],
+                ['ops.requests', 'ops.requests', '✅', __('nav.client_requests')],
+                ['ops.replenishments', 'ops.replenishments', '📦', __('nav.replenishments')],
+                ['ops.handout', 'ops.handout', '📤', __('field.handout')],
+                ['erp.collections', 'erp.collections', '💵', __('nav.field_collections')],
+                ['erp.repclose', 'erp.repclose', '🤝', __('settle.title')],
+                ['erp.clients', 'erp.clients', '👥', __('nav.clients')],
+                ['erp.client_locations', 'erp.client_locations', '📍', __('geo.confirm_locations')],
+                ['wh.picks', 'wh.picks', '📋', __('nav.prep_orders')],
+                ['erp.dues', 'erp.dues', '💰', __('nav.dues')],
+            ];
+
+            $shortcuts = [];
+            foreach ($shortcutDefs as [$screen, $routeName, $icon, $label]) {
+                if (\Illuminate\Support\Facades\Route::has($routeName)
+                    && \App\Support\Access::allows($u2, $screen)) {
+                    $shortcuts[] = [
+                        'key' => $routeName,
+                        'url' => route($routeName),
+                        'icon' => $icon,
+                        'label' => $label,
+                        'active' => request()->routeIs($routeName),
+                    ];
+                }
+            }
+        @endphp
+
+        @if ($shortcuts !== [])
+            {{-- الشيبس المثبّتة بتترندر بالجافاسكربت من localStorage --}}
+            <div class="qbar" id="qbar"></div>
+
+            <details class="bell qsc">
+                <summary title="{{ __('nav.shortcuts') }}">⚡</summary>
+                <div class="bell-panel qmenu">
+                    <div class="bell-head"><b>⚡ {{ __('nav.shortcuts') }}</b>
+                        <span style="font-size:10.5px;color:var(--muted)">{{ __('nav.shortcuts_hint') }}</span>
+                    </div>
+                    @foreach ($shortcuts as $sc)
+                        <div class="qrow {{ $sc['active'] ? 'on' : '' }}" data-key="{{ $sc['key'] }}">
+                            <button type="button" class="qpin" title="{{ __('nav.pin') }}"
+                                    onclick="qcTogglePin('{{ $sc['key'] }}', this)">☆</button>
+                            <a class="qgo" href="{{ $sc['url'] }}">
+                                <span class="qic">{{ $sc['icon'] }}</span>
+                                <span>{{ $sc['label'] }}</span>
+                            </a>
+                        </div>
+                    @endforeach
+                </div>
+            </details>
+
+            {{-- بيانات الاختصارات للجافاسكربت — @php + json_encode (مش @json) --}}
+            @php
+                $qcData = collect($shortcuts)->map(fn ($s) => [
+                    'key' => $s['key'], 'url' => $s['url'], 'icon' => $s['icon'], 'label' => $s['label'],
+                ])->values();
+            @endphp
+            <script>
+            (function () {
+                'use strict';
+                var ALL = {!! json_encode($qcData, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+                var KEY = 'promax_shortcuts';
+
+                function pins() {
+                    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+                    catch (e) { return []; }
+                }
+                function savePins(p) { localStorage.setItem(KEY, JSON.stringify(p)); }
+
+                // رسم الشيبس المثبّتة في الهيدر
+                function renderBar() {
+                    var bar = document.getElementById('qbar');
+                    if (!bar) return;
+                    var p = pins();
+                    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g,
+                        function (ch) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]; }); };
+                    bar.innerHTML = p.map(function (k) {
+                        var it = ALL.find(function (x) { return x.key === k; });
+                        if (!it) return '';
+                        return '<a class="qchip" href="' + esc(it.url) + '" title="' + esc(it.label) + '">' +
+                            '<span>' + it.icon + '</span><span class="qchip-t">' + esc(it.label) + '</span></a>';
+                    }).join('');
+                }
+
+                // نجوم القايمة تعكس الحالة الحالية
+                function syncStars() {
+                    var p = pins();
+                    document.querySelectorAll('.qrow').forEach(function (row) {
+                        var on = p.indexOf(row.dataset.key) !== -1;
+                        var b = row.querySelector('.qpin');
+                        if (b) { b.textContent = on ? '★' : '☆'; b.classList.toggle('on', on); }
+                    });
+                }
+
+                window.qcTogglePin = function (key, btn) {
+                    var p = pins();
+                    var i = p.indexOf(key);
+                    if (i === -1) p.push(key); else p.splice(i, 1);
+                    savePins(p);
+                    renderBar();
+                    syncStars();
+                };
+
+                renderBar();
+                syncStars();
+            })();
+            </script>
+        @endif
 
         {{-- ═══ جرس الإشعارات (2026-08-09) — نفس صفوف الموبايل ═══
              ⚠️ استعلامين خفاف لكل صفحة (عدّاد + آخر 12) — مقبول.

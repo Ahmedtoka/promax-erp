@@ -82,4 +82,8 @@ return [
     'group_hr' => 'Attendance',
     'vans_board' => 'Van Stock Board',
     'open_visits' => 'Open Visits',
+'field_collections' => 'Field collections',
+    'shortcuts' => 'Shortcuts',
+    'shortcuts_hint' => 'Tap ☆ to pin it to the header',
+    'pin' => 'Pin to header',
 ];
