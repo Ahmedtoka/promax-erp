@@ -51,8 +51,14 @@ class ClientLocationController extends Controller
         // مالوش نقطة، ويدوّر بالعين على الصفوف اللي فيها شغل.
         //
         // ⚠️ **`from_visit` هو الافتراضي دلوقتي** — ده الشغل الجاهز.
-        $visitClientIds = Visit::whereNotNull('lat')->whereNotNull('lng')
-            ->select('client_id')->distinct();
+        //
+        // ⚠️ **أي تشيك إن مش بس اللي معاه GPS** (طلب المالك ١١/٨):
+        // «الجاهز للتأكيد يكون العملاء اللي المندوب راح عندها وعمل
+        // تشيك إن». الزيارة اللي الـGPS كان مقفول فيها برضه بتثبت إن
+        // المندوب راح — والمراجع يقدر يكتب النقطة من لينك الخرايط أو
+        // إحداثيات العميل القديمة (المودال بيسمح). النقطة المسحوبة
+        // لو موجودة بتتعرض، ولو مش موجودة العمود بيقول «مفيش نقطة».
+        $visitClientIds = Visit::select('client_id')->distinct();
 
         $q = Client::query()
             ->with(['zone', 'channel', 'group'])

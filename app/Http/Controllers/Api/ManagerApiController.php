@@ -31,6 +31,13 @@ class ManagerApiController extends Controller
 
         $channels = $user->channels()->get();
 
+        // ═══ المدير الميداني (قرار المالك ١١ أغسطس ٢٠٢٦) ═══
+        // عهدته الحالية + خط سيره — بنفس بيلدرز bootstrap الميدان
+        // بالظبط (شوف المفاتيح الإضافية آخر الرد).
+        $custody = $user->currentCustody();
+        $custody?->load('items.product');
+        $journey = FieldApiController::journeyPayload($user);
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -72,7 +79,7 @@ class ManagerApiController extends Controller
             'requests' => $this->requestsPayload($user),
             'replenishments' => $this->replenishmentsPayload($user),
             'drivers' => User::fieldVisibleTo(
-                User::whereIn('role', ['driver', 'sales_agent']), $user)
+                User::whereIn('role', ['driver', 'sales_agent', 'manager']), $user)
                 ->where('active', true)->orderBy('name')->get()
                 ->map(fn (User $u) => [
                     'id' => $u->id,
@@ -81,6 +88,34 @@ class ManagerApiController extends Controller
                     'role_label' => $u->roleLabel(),
                 ])->values()->all(),
             'events' => $this->eventsPayload($user),
+
+            // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦) — مفاتيح **إضافية** ═══
+            //
+            // ⚠️ **نفس أشكال bootstrap الميدان بالحرف، من نفس البيلدرز**
+            // (`FieldApiController` بقت public static عشان كده) — ممنوع
+            // نسخ منطق الحمولة، وإلا الشكلين بيفترقوا مع أول تعديل
+            // والأبلكيشن بيبني شاشتين لنفس الداتا.
+            // ⚠️ والمفاتيح القديمة فوق زي ما هي — نسخة أبلكيشن قديمة
+            // على تليفون مدير ماتقعش.
+            //
+            // عملاؤه بالزونز — سكوب المدير جوه `zonesPayload` نفسها
+            // (`clients.manager_id`)
+            'zones' => FieldApiController::zonesPayload($user),
+            // خط سيره هو — نفس بيلدر المندوب
+            'journey' => $journey,
+            'journey_summary' => $journey['summary'],
+            // عهدته الحالية — قايمة «جديد» (المدير بيبيع زي السيلز مش
+            // زي السواق)
+            'custody' => FieldApiController::custodyPayload($custody, 'new'),
+            // أوامر التوريد المتسكّنة عليه — نفس شكل كارت السواق
+            'purchase_orders' => FieldApiController::posPayload($user),
+            // ═══ حزمة المخزن (١١/٨) — من غيرها المدير كان بيشوف
+            // قايمة مخازن فاضية ومايعرفش يدخل يستلم عهدته: استلام
+            // التجهيز وراه حارس التواجد في المخزن (in.warehouse).
+            ...FieldApiController::warehouseBundle(
+                $user,
+                \App\Services\WarehouseVisits::open($user),
+            ),
         ]);
     }
 

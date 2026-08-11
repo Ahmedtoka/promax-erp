@@ -161,11 +161,16 @@ img{display:block;max-width:100%}
    الفيوبورت فمابتتقصّش من أي كونتينر وبتفضل ثابتة مع السكرول.
    الإحداثيات بيحسبها سكريبت الجرس من مكان الزرار وقت الفتح. */
 .bell-panel{
-  position:fixed;top:70px;inset-inline-end:18px;z-index:600;
+  position:fixed;top:70px;z-index:600;
   width:340px;max-width:calc(100vw - 16px);max-height:min(430px, calc(100vh - 90px));
   overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);
 }
+/* ⚠️ فولباك من غير جافاسكربت — بالاتجاه الفيزيائي الصريح (١١/٨):
+   `inset-inline-end` في RTL كانت بتتحسب غلط في متصفحات وبتطلّع
+   القايمة بره الشاشة. الجرس في العربي على الشمال → القايمة من الشمال. */
+[dir=ltr] .bell-panel{right:18px;left:auto}
+[dir=rtl] .bell-panel{left:18px;right:auto}
 .bell-head{
   display:flex;justify-content:space-between;align-items:center;
   padding:10px 13px;border-bottom:1px solid var(--border);font-size:12.5px;
@@ -180,7 +185,17 @@ img{display:block;max-width:100%}
   text-decoration:none;color:var(--ink);align-items:flex-start;
 }
 .bell-item:hover{background:var(--card2)}
-.bell-item.unread{background:var(--blue-050)}
+/* ⚠️ غير المقروء لازم يبان من غير تدقيق (١١/٨): الخلفية الزرقا
+   الفاتحة لوحدها كانت شبه غير مرئية — فبان إن «الريد مش شغال».
+   دلوقتي: خلفية + شريط جانبي + عنوان تقيل، والمقروء باهت وعادي. */
+.bell-item.unread{
+  background:var(--blue-050);
+  border-inline-start:3px solid var(--royal-blue);
+}
+.bell-item.unread .bell-txt b{font-weight:900}
+.bell-item:not(.unread){opacity:.65}
+.bell-item:not(.unread) .bell-txt b{font-weight:600}
+.bell-item:not(.unread) .bell-dot{opacity:.25}
 .bell-dot{width:8px;height:8px;border-radius:99px;margin-top:5px;flex:none}
 .bell-dot.good{background:var(--green)}
 .bell-dot.bad{background:var(--red)}
@@ -407,6 +422,40 @@ dialog .frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 dialog .frow>*{flex:1 1 220px;min-width:0}
 dialog .formbar{display:flex;align-items:center;gap:8px;margin-top:16px}
 dialog .formbar-sp{flex:1}
+/* ═══════════════════════════════════════════════════════════
+   السيلكت القابل للبحث (١١ أغسطس ٢٠٢٦) — طبقة عامة
+   ═══════════════════════════════════════════════════════════
+   أي <select> فيه أكتر من 7 اختيارات بياخد زرار عرض + لوحة فيها
+   خانة بحث (السكريبت آخر الصفحة). السيلكت الأصلي بيتخبى بس بيفضل
+   في الفورم — هو اللي بيتبعت، واللوحة مجرد واجهة بتكتب فيه.
+
+   ⚠️ اللوحة `position:fixed` مش absolute — نفس قرار قايمة الجرس:
+   جوه المودالات `dialog>form` عنده overflow-y:auto وكان هيقص لوحة
+   absolute لأي سيلكت قريب من آخر الفورم. الـfixed بيهرب من القص،
+   ومفيش مشكلة top layer لأن اللوحة لسه ابن للـdialog في الـDOM.
+   ⚠️ `.ssel-panel[hidden]` لازم قاعدة صريحة — الكلاس بـdisplay:flex
+   بييجي بعد قاعدة [hidden] بتاعة المتصفح فكان بيغلبها واللوحة
+   تفضل مفتوحة على طول. */
+select.ssel-native{display:none!important}
+.ssel{position:relative;display:inline-block;max-width:100%;vertical-align:middle}
+.filters .ssel{width:100%}
+.ssel-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;color:var(--text);cursor:pointer;text-align:start;transition:.15s}
+.ssel-btn:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14);outline:none}
+.ssel-btn:disabled{opacity:.55;cursor:default}
+.ssel-btn.bad{border-color:var(--red)!important;background:#FDECEC!important}
+.ssel-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ssel-arw{font-size:10px;color:var(--muted);flex-shrink:0}
+.ssel-panel{position:fixed;z-index:650;background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);padding:8px;display:flex;flex-direction:column;gap:6px}
+.ssel-panel[hidden]{display:none}
+.ssel-q{width:100%}
+.ssel-list{max-height:260px;overflow-y:auto;overscroll-behavior:contain}
+.ssel-grp{font-size:10.5px;font-weight:800;color:var(--muted);padding:7px 9px 3px;position:sticky;top:0;background:var(--card);z-index:1}
+.ssel-opt{padding:7px 11px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssel-opt:hover{background:var(--card2)}
+.ssel-opt.on{background:var(--blue-050);color:var(--royal-blue);font-weight:800}
+.ssel-opt.dis{color:var(--muted);opacity:.5;cursor:default}
+.ssel-none{padding:10px;text-align:center;color:var(--muted);font-size:12px}
+@media print{.ssel-panel{display:none!important}}
 .pag{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;font-size:12.5px}
 .pag a,.pag span{padding:6px 11px;border-radius:9px;border:1px solid var(--border);background:#fff}
 .pag .on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff;font-weight:800}
@@ -625,17 +674,22 @@ dialog .formbar-sp{flex:1}
             function place() {
                 const r = summary.getBoundingClientRect();
                 const w = Math.min(340, window.innerWidth - 16);
-                const rtl = document.documentElement.dir === 'rtl';
 
-                // LTR: محاذاة الحافة اليمنى للقايمة مع يمين الزرار.
-                // RTL: محاذاة اليسرى مع شمال الزرار. والاتنين متزنوقين
-                // جوه الشاشة بهامش 8px.
-                let left = rtl ? r.left : r.right - w;
+                // ⚠️ **حساب فيزيائي مش لغوي** (إصلاح ١١/٨): الحساب
+                // القديم كان بيقرا `dir` وبيطلّع القايمة بره الشاشة
+                // في العربي. القاعدة الجديدة بمكان الزرار نفسه:
+                // زرار في النص الشمال → القايمة تمتد يمينه، والعكس —
+                // شغالة في الاتجاهين ومزنوقة جوه الشاشة دايماً.
+                let left = (r.left + r.width / 2) < window.innerWidth / 2
+                    ? r.left
+                    : r.right - w;
                 left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
 
                 panel.style.left = left + 'px';
+                panel.style.right = 'auto';
                 panel.style.insetInlineEnd = 'auto';
-                panel.style.top = (r.bottom + 8) + 'px';
+                panel.style.insetInlineStart = 'auto';
+                panel.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - 120)) + 'px';
             }
 
             bell.addEventListener('toggle', () => { if (bell.open) place(); });
@@ -1181,6 +1235,269 @@ document.addEventListener('DOMContentLoaded', function () {
       localStorage.setItem(KEY, i);
 
       accs.forEach(function (o) { if (o !== d) o.open = false; });
+    });
+  });
+})();
+
+/* ═══════════════════════════════════════════════════════════════
+   السيلكت القابل للبحث — طبقة عامة على كل السيستم (١١ أغسطس ٢٠٢٦)
+   ═══════════════════════════════════════════════════════════════
+   طلب المالك: «كل الدروب داون منيو تبقى دروب منيو وكمان فيه بحث».
+   تحسين تدريجي فانيلا من غير أي مكتبة ومن غير لمس أي بليد:
+
+   - بيتفعّل بس على سيلكت فيه **أكتر من 7 اختيارات** — تحسين سيلكت
+     بـ3 اختيارات دوشة من غير فايدة. والمستبعدين: `multiple` ·
+     `data-nosearch` · جوه `.doc` (المستندات المطبوعة).
+   - **الاختيار بيبعت حدث change حقيقي bubbles** — فكل الفلاتر اللي
+     عليها onchange="this.form.submit()" وuserRoleSync() وأشباههم
+     شغالين زي ما هما من غير أي تعديل.
+   - **خانة البحث من غير name** — عمرها ما بتتبعت مع الفورم، وEnter
+     جواها بيختار أول نتيجة ظاهرة (preventDefault بيمنع الإرسال
+     الضمني للفورم وقت الكتابة).
+   - **مزامنة القيم المكتوبة برمجياً** (openUser/openGeo بيحطوا
+     .value مباشرة من غير حدث) — تلات طبقات:
+       1) تحديث العرض على أي حدث change حقيقي؛
+       2) إعادة قراءة القيمة والاختيارات من السيلكت مع **كل فتح
+          للوحة** (بيمسك كمان الاختيارات اللي اتغيرت ديناميكياً)؛
+       3) لفّة حوالين openDlg() العامة: أي ديالوج بيتفتح بنحدّث
+          عرض كل السيلكتات اللي جواه — وده اللي بيمسك تعيين
+          .value المباشر في المودالات (وكمان disabled بتاع
+          «الأدمن مايعدّلش رول نفسه»).
+   - كيبورد: كتابة بتفلتر · Enter أول نتيجة · Escape بيقفل اللوحة
+     بس (preventDefault عشان مايقفلش الـdialog اللي حواليها).
+     والضغط بره بيقفل. */
+(function () {
+  'use strict';
+
+  var Q_PH = {!! json_encode(__('common.search'), JSON_UNESCAPED_UNICODE) !!};
+  var NONE_TXT = {!! json_encode(__('common.no_results'), JSON_UNESCAPED_UNICODE) !!};
+
+  var current = null; // اللوحة المفتوحة — واحدة بس في أي لحظة
+
+  function enhance(sel) {
+    if (sel.dataset.sselDone === '1') return;
+    if (sel.multiple || sel.size > 1) return;
+    if ('nosearch' in sel.dataset) return;
+    if (sel.closest('.doc')) return;
+    if (sel.options.length <= 7) return;
+    sel.dataset.sselDone = '1';
+
+    var wrap = document.createElement('div');
+    wrap.className = 'ssel';
+    // العرض الصريح بينتقل للغلاف — المودالات كلها style="width:100%"
+    // وفلاتر القوايم (العملاء وغيرها) بتستخدم min-width بالبكسل
+    if (sel.style.width) wrap.style.width = sel.style.width;
+    if (sel.style.minWidth) wrap.style.minWidth = sel.style.minWidth;
+
+    var btn = document.createElement('button');
+    btn.type = 'button'; // ⚠️ جوه فورم — من غيرها الزرار كان هيبعت الفورم
+    btn.className = 'ssel-btn';
+    btn.setAttribute('aria-haspopup', 'listbox');
+
+    var lbl = document.createElement('span');
+    lbl.className = 'ssel-lbl';
+    var arw = document.createElement('span');
+    arw.className = 'ssel-arw';
+    arw.textContent = '▾';
+    btn.appendChild(lbl);
+    btn.appendChild(arw);
+
+    var panel = document.createElement('div');
+    panel.className = 'ssel-panel';
+    panel.hidden = true;
+
+    var q = document.createElement('input');
+    q.type = 'search'; // بياخد ستايل خانات البحث الموحد — ومن غير name
+    q.className = 'ssel-q';
+    q.placeholder = '🔍 ' + Q_PH;
+    q.autocomplete = 'off';
+
+    var list = document.createElement('div');
+    list.className = 'ssel-list';
+    list.setAttribute('role', 'listbox');
+
+    panel.appendChild(q);
+    panel.appendChild(list);
+
+    sel.after(wrap);
+    wrap.appendChild(btn);
+    wrap.appendChild(panel);
+    sel.classList.add('ssel-native');
+
+    var rows = [];
+    var noneRow = null;
+
+    // عرض الزرار = حالة السيلكت الحقيقية (القيمة + disabled + .bad)
+    function refresh() {
+      var o = sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+      lbl.textContent = o ? o.text : ' ';
+      btn.disabled = sel.disabled;
+      btn.classList.toggle('bad', sel.classList.contains('bad'));
+    }
+
+    function closePanel() {
+      panel.hidden = true;
+      if (current && current.wrap === wrap) current = null;
+    }
+
+    function pick(idx) {
+      closePanel();
+      sel.selectedIndex = idx;
+      refresh();
+      // ⚠️ حدث حقيقي bubbles — بيشغّل onchange المكتوب في البليدات
+      //    (فلاتر this.form.submit() وغيرها) — ممكن يعمل submit فعلاً
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function addOpt(o) {
+      var d = document.createElement('div');
+      d.className = 'ssel-opt' + (o.disabled ? ' dis' : '')
+        + (o.index === sel.selectedIndex ? ' on' : '');
+      d.setAttribute('role', 'option');
+      d.textContent = o.text;
+      d.dataset.txt = (o.text + ' ' + o.value).toLowerCase();
+      if (!o.disabled) {
+        (function (idx) {
+          d.addEventListener('click', function () { pick(idx); });
+        })(o.index);
+      }
+      list.appendChild(d);
+      rows.push(d);
+    }
+
+    // القايمة بتتبني من جديد مع كل فتح — بتلقط أي تغيير برمجي
+    // في القيمة أو الاختيارات حصل بعد التحسين. الـoptgroup بيتحول
+    // لرأس مجموعة (سيلكت المناطق مجمّع بالمحافظة).
+    function build() {
+      list.innerHTML = '';
+      rows = [];
+      Array.prototype.forEach.call(sel.children, function (ch) {
+        if (ch.tagName === 'OPTGROUP') {
+          var g = document.createElement('div');
+          g.className = 'ssel-grp';
+          g.dataset.grp = '1';
+          g.textContent = ch.label;
+          list.appendChild(g);
+          Array.prototype.forEach.call(ch.children, addOpt);
+        } else if (ch.tagName === 'OPTION') {
+          addOpt(ch);
+        }
+      });
+      noneRow = document.createElement('div');
+      noneRow.className = 'ssel-none';
+      noneRow.textContent = NONE_TXT;
+      noneRow.hidden = true;
+      list.appendChild(noneRow);
+    }
+
+    // فلترة substring على النص (عربي/إنجليزي) + القيمة.
+    // رأس المجموعة بيتخبى لو كل اللي تحته اتخبى.
+    function filter(raw) {
+      var s = raw.trim().toLowerCase();
+      var any = false;
+      rows.forEach(function (d) {
+        var hit = s === '' || d.dataset.txt.indexOf(s) !== -1;
+        d.style.display = hit ? '' : 'none';
+        if (hit) any = true;
+      });
+      var kids = Array.prototype.slice.call(list.children);
+      kids.forEach(function (k, i) {
+        if (k.dataset.grp !== '1') return;
+        var vis = false;
+        for (var j = i + 1; j < kids.length; j++) {
+          if (kids[j].dataset.grp === '1') break;
+          if (kids[j].classList.contains('ssel-opt')
+              && kids[j].style.display !== 'none') { vis = true; break; }
+        }
+        k.style.display = vis ? '' : 'none';
+      });
+      noneRow.hidden = any;
+    }
+
+    // التموضع فيزيائي من مكان الزرار وقت الفتح (نفس أسلوب الجرس) —
+    // مزنوق جوه الشاشة، وبيتقلب لفوق لو المساحة تحت مش كفاية.
+    function place() {
+      var r = btn.getBoundingClientRect();
+      var w = Math.min(Math.max(r.width, 230), window.innerWidth - 16);
+      panel.style.width = w + 'px';
+      var left = IS_RTL ? r.right - w : r.left;
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      var h = panel.offsetHeight;
+      var top = r.bottom + 4;
+      if (top + h > window.innerHeight - 8 && r.top - h - 4 >= 8) top = r.top - h - 4;
+      top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+
+    function openPanel() {
+      if (sel.disabled) return;
+      if (current) current.close();
+      refresh();
+      build();
+      q.value = '';
+      panel.hidden = false;
+      filter('');
+      place();
+      current = { wrap: wrap, close: closePanel, place: place };
+      q.focus();
+    }
+
+    btn.addEventListener('click', function () {
+      if (panel.hidden) openPanel(); else closePanel();
+    });
+
+    q.addEventListener('input', function () { filter(q.value); });
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault(); // ⚠️ يمنع الإرسال الضمني للفورم وقت الكتابة
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].style.display !== 'none'
+              && !rows[i].classList.contains('dis')) { rows[i].click(); return; }
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault(); // ⚠️ ومن غيرها Escape بيقفل الـdialog كمان
+        e.stopPropagation();
+        closePanel();
+        btn.focus();
+      }
+    });
+
+    sel.addEventListener('change', refresh);
+    wrap.__sselRefresh = refresh;
+    refresh();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // ⚠️ اللسنر ده متسجل **بعد** أدوات الجداول — فحص «الكارت فيه
+    //    خانة بحث؟» بتاعهم بيحصل قبل ما خانات البحث بتاعتنا تتولد.
+    document.querySelectorAll('select').forEach(function (s) { enhance(s); });
+
+    // طبقة المزامنة رقم 3: لفّة حوالين openDlg() العامة — أي ديالوج
+    // بيتفتح بنحدّث عرض كل سيلكت متحسّن جواه (openUser/openGeo
+    // بيحطوا .value مباشرة قبل openDlg ومفيش حدث change بيتبعت).
+    if (typeof window.openDlg === 'function') {
+      var origOpenDlg = window.openDlg;
+      window.openDlg = function (id) {
+        origOpenDlg(id);
+        var dlg = document.getElementById(id);
+        if (dlg) {
+          dlg.querySelectorAll('.ssel').forEach(function (w) {
+            if (w.__sselRefresh) w.__sselRefresh();
+          });
+        }
+      };
+    }
+
+    document.addEventListener('click', function (e) {
+      if (current && !current.wrap.contains(e.target)) current.close();
+    });
+    // اللوحة fixed — أي سكرول (حتى جوه كونتينر) بيغيّر مكان الزرار
+    document.addEventListener('scroll', function () {
+      if (current) current.place();
+    }, true);
+    window.addEventListener('resize', function () {
+      if (current) current.place();
     });
   });
 })();

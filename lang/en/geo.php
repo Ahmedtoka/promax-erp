@@ -99,7 +99,7 @@ return [
     'f_done' => 'Confirmed',
     'address' => 'Address',
     'f_from_visit' => 'Ready to confirm',
-    'f_from_visit_hint' => 'A rep captured the point',
+    'f_from_visit_hint' => 'A rep checked in there',
     'f_unconfirmed' => 'Awaiting review',
     'f_unconfirmed_hint' => 'Has coordinates nobody confirmed',
     'f_no_location' => 'No location',

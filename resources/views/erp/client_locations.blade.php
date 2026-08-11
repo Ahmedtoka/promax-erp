@@ -125,7 +125,9 @@
                              والعناوين فيها أقواس وكوتيشن عربي، وحقنها في
                              `onclick='confirm({...})'` كان بيكسّر الـHTML على
                              أول اسم فيه أبوستروف. --}}
-                        <button type="button" class="btn sm gold"
+                        {{-- ⚠️ المتأكد خلاص مايتأكدش تاني (طلب المالك ١١/٨) —
+                             زراره «تعديل» رمادي، للتصحيح بس. --}}
+                        <button type="button" class="btn sm {{ $c->locationTrusted() ? '' : 'gold' }}"
                                 data-id="{{ $c->id }}"
                                 data-name="{{ $c->fullName() }}"
                                 data-lat="{{ $v?->lat ?? $c->lat }}"
@@ -136,7 +138,7 @@
                                 data-gov="{{ $c->governorate }}"
                                 data-zone="{{ $c->zone_id }}"
                                 onclick="openGeo(this)">
-                            ✔ {{ __('geo.confirm') }}
+                            {{ $c->locationTrusted() ? '✏️ '.__('common.edit') : '✔ '.__('geo.confirm') }}
                         </button>
                     </td>
                 </tr>

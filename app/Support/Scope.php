@@ -38,11 +38,19 @@ class Scope
      *
      * الشروط بالترتيب:
      * 1. الموظف موجود، **أكتيف**، ورول ميداني (`User::FIELD_ROLES`)
+     *    — **أو تشانل مانجر شغّال على نفسه** (شوف تحت)
      * 2. الفاعل شايف فرعه (`canSeeBranch`)
      * 3. لو الفاعل تشانل مانجر → الموظف متسكّن له (`manager_id`)
      *
      * ⚠️ الأدمن بيعدّي من ٣، بس **مش** من ١ — تحميل عهدة على محاسب
      * غلط حتى لو الأدمن هو اللي عمله.
+     *
+     * ═══ المدير بقى ميداني كمان (قرار المالك ١١ أغسطس ٢٠٢٦) ═══
+     * التشانل مانجر بينزل الشارع: زيارات وعهدة وأوامر توريد وخط سير.
+     * **الهدف المدير مقبول لما الفاعل هو نفسه** (`actor->id === rep->id`)
+     * **أو لما الفاعل أدمن** — يعني المدير بينظّم شغله هو، والأدمن
+     * يقدر يسكّن عليه. **مدير تاني لأ**: مدير ماينفعش يتسكّن له شغل
+     * من زميله — دي نفس قاعدة الفريق بالظبط.
      */
     public static function canRep(?User $actor, ?User $rep): bool
     {
@@ -50,15 +58,29 @@ class Scope
             return false;
         }
 
-        if (! $rep->active || ! in_array($rep->role, User::FIELD_ROLES, true)) {
+        if (! $rep->active) {
             return false;
+        }
+
+        if (! in_array($rep->role, User::FIELD_ROLES, true)) {
+            // المدير الميداني (١١/٨): على نفسه، أو الأدمن عليه — وبس.
+            if ($rep->role !== 'manager') {
+                return false;
+            }
+
+            if ($actor->id !== $rep->id && ! $actor->isAdmin()) {
+                return false;
+            }
         }
 
         if (! $actor->canSeeBranch($rep->branch_id)) {
             return false;
         }
 
-        if ($actor->role === 'manager' && (int) $rep->manager_id !== (int) $actor->id) {
+        // ⚠️ `$actor->id !== $rep->id` — المدير على نفسه بيعدّي:
+        // `manager_id` بتاعه هو null غالباً، والفحص ده عن فريقه مش عنه.
+        if ($actor->role === 'manager' && $actor->id !== $rep->id
+            && (int) $rep->manager_id !== (int) $actor->id) {
             return false;
         }
 

@@ -3,12 +3,15 @@
 @section('title', __('journey.control_room'))
 
 {{-- ═══════════════════════════════════════════════════════════════
-     غرفة تحكم المناديب (2026-08-06) — إعادة بناء بنمط غرفة العمليات:
-     ثيم داكن خاص بالشاشة دي بس، خريطة داكنة بدواير الزونات، سايدبار
-     مناديب ببحث وفلاتر، بانل تفاصيل المندوب المختار بعهدته وبارات
-     الأصناف، وفيد تنبيهات حقيقي من الفواتير والزيارات.
-     التحديث لايف بـSSE كل ٣ ثواني (2026-08-07)، وبيرجع للبولينج
-     كل ١٥ ثانية لوحده لو التدفق مش شغال — مع إيقاف مؤقت وتتبع مندوب.
+     غرفة تحكم المناديب — إعادة ترتيب كاملة (١١ أغسطس ٢٠٢٦) بطلب المالك:
+     «فلتر بالكل أول ما أفتح»: شريط KPI بمجاميع الفريق فوق (عهدة على
+     الطريق، مبيعات، زيارات، أوامر اتسلمت) ← عمود كروت المناديب بصورهم
+     وكل واحد معاه بكام وباع بكام وزار كام وسلّم كام وآخر حالة ←
+     الخريطة الكبيرة بطبقاتها الأربعة ← التايم لاين بتاع الكل.
+     الضغط على مندوب: مساره النهارده بيترسم على الخريطة والتايم لاين
+     بيتفلتر عليه — ضغطة تانية (أو زرار «الكل») بترجّع كل الفريق.
+     التحديث لايف بـSSE كل ٣ ثواني وبيرجع للبولينج كل ١٥ ثانية لوحده
+     لو التدفق مش شغال — الآلية دي زي ما هي بالحرف.
      ⚠️ الداتا كلها من `livePayload` — أول رسمة والتحديث نفس المصدر. --}}
 
 @section('actions')
@@ -20,7 +23,7 @@
 
 <div id="lvRoom" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 
-    {{-- ═════ الهيدر: عنوان + ساعة + KPIs ═════ --}}
+    {{-- ═════ الهيدر: عنوان + ساعة + مؤشر التحديث ═════ --}}
     <div class="lv-top">
         <div class="lv-title">
             <span class="lv-live-dot"></span>
@@ -29,15 +32,21 @@
             {{-- مؤشر وضع التحديث — اليوزر يعرف الشاشة لايف ولا بولينج --}}
             <span class="lv-mode" id="lvMode">{{ __('journey.realtime_off') }}</span>
         </div>
-        <div class="lv-kpis" id="lvKpis"></div>
+        <div>
+            <button class="lv-btn" id="lvFollowBtn">🎯 {{ __('journey.follow_rep') }}</button>
+            <button class="lv-btn" id="lvPauseBtn">⏸ {{ __('journey.pause_updates') }}</button>
+        </div>
     </div>
+
+    {{-- ═════ شريط الـKPI — مجاميع الفريق كله (العرض الافتراضي «الكل») ═════ --}}
+    <div class="lv-kpis" id="lvKpis"></div>
 
     {{-- ═════ شريط الحركة — تيكر البورصة ═════ --}}
     <div class="lv-tape"><div class="lv-tape-track" id="lvTape"></div></div>
 
     <div class="lv-grid">
 
-        {{-- ═════ سايدبار المناديب ═════ --}}
+        {{-- ═════ عمود كروت المناديب ═════ --}}
         <aside class="lv-side">
             <div class="lv-side-head">
                 <b>{{ __('journey.rep') }}</b>
@@ -51,14 +60,15 @@
                 <button class="lv-chip" data-f="idle">{{ __('journey.idle') }}</button>
                 <button class="lv-chip" data-f="off">{{ __('journey.offline') }}</button>
             </div>
+            <div class="lv-dim" style="margin-bottom:6px">{{ __('journey.track_hint') }}</div>
             <div class="lv-replist" id="lvRepList"></div>
         </aside>
 
         {{-- ═════ الخريطة ═════ --}}
         <div class="lv-maparea">
             <div class="lv-mapbar">
-                {{-- طبقات الخريطة (2026-08-06): شيك بوكسات مرنة —
-                     الديفولت المناديب بس، والاختيارات بتتحفظ في المتصفح --}}
+                {{-- طبقات الخريطة: شيك بوكسات مرنة — الديفولت المناديب،
+                     والاختيارات بتتحفظ في المتصفح --}}
                 <div class="lv-layers">
                     <span class="lv-layers-t">🗺️ {{ __('journey.map_layers') }}:</span>
                     <label class="lv-layer"><input type="checkbox" data-layer="reps" checked>
@@ -70,8 +80,6 @@
                     <label class="lv-layer"><input type="checkbox" data-layer="govs">
                         <i style="background:var(--sky)"></i>{{ __('journey.layer_govs') }}</label>
                 </div>
-                <button class="lv-btn" id="lvFollowBtn">🎯 {{ __('journey.follow_rep') }}</button>
-                <button class="lv-btn" id="lvPauseBtn">⏸ {{ __('journey.pause_updates') }}</button>
             </div>
             <div id="lvMap"></div>
             <div class="lv-legend">
@@ -85,13 +93,14 @@
             </div>
         </div>
 
-        {{-- ═════ بانل المندوب المختار + التنبيهات ═════ --}}
+        {{-- ═════ بانل المندوب المختار + التايم لاين ═════ --}}
         <aside class="lv-detail">
             <div class="lv-card" id="lvRepCard">
                 <div class="lv-dim" style="text-align:center;padding:26px 8px">{{ __('journey.pick_rep') }}</div>
             </div>
             <div class="lv-card">
-                <div class="lv-card-h">🔔 {{ __('journey.alerts_feed') }} <span class="lv-dim" id="lvAlertCount"></span></div>
+                <div class="lv-card-h">🔔 {{ __('journey.alerts_feed') }}
+                    <span id="lvAlertScope"></span></div>
                 <div class="lv-alerts" id="lvAlerts"></div>
             </div>
         </aside>
@@ -129,12 +138,12 @@
 .lv-mode{font-size:10px;border-radius:999px;padding:2px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .lv-mode.on{color:#4ADE80;border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.12)}
 
-/* KPIs — أيقونة بهالة لونية + رقم بلونه الدال + خط علوي */
-.lv-kpis{display:flex;gap:8px;flex-wrap:wrap}
+/* KPIs — شريط مجاميع الفريق فوق الصفحة: أيقونة بهالة + رقم بلونه */
+.lv-kpis{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .lv-kpi{
     position:relative;background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel);
     border:1px solid var(--line);border-radius:12px;
-    padding:9px 14px 8px;min-width:104px;overflow:hidden;
+    padding:9px 14px 8px;min-width:104px;overflow:hidden;flex:1 1 104px;
     display:flex;align-items:center;gap:10px;
     transition:transform .18s, border-color .18s, box-shadow .18s;
 }
@@ -172,10 +181,10 @@
 .lv-tk .up{color:var(--green)} .lv-tk .dn{color:var(--dim)}
 @keyframes lvTape{0%{transform:translateX(0)}100%{transform:translateX({{ app()->getLocale() === 'ar' ? '' : '-' }}50%)}}
 
-.lv-grid{display:grid;grid-template-columns:250px 1fr 300px;gap:12px;align-items:start}
+.lv-grid{display:grid;grid-template-columns:290px 1fr 300px;gap:12px;align-items:start}
 @media(max-width:1200px){.lv-grid{grid-template-columns:1fr}.lv-side,.lv-detail{max-height:none}}
 
-/* السايدبار */
+/* عمود كروت المناديب */
 .lv-side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:78vh;display:flex;flex-direction:column}
 .lv-side-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px}
 .lv-search{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12px;margin-bottom:8px}
@@ -184,26 +193,40 @@
 .lv-chip{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:3px 10px;font-size:10.5px;cursor:pointer}
 .lv-chip.on{background:var(--royal);border-color:var(--royal);color:#fff}
 .lv-replist{overflow-y:auto;display:flex;flex-direction:column;gap:6px;flex:1}
-.lv-rep{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;gap:9px;align-items:center;transition:border-color .15s, transform .15s;position:relative;overflow:hidden}
+.lv-rep{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;transition:border-color .15s, transform .15s;position:relative;overflow:hidden}
 .lv-rep::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:transparent}
 .lv-rep:hover{border-color:var(--royal);transform:translateX({{ app()->getLocale() === 'ar' ? '-2px' : '2px' }})}
 .lv-rep.sel{border-color:var(--royal);box-shadow:0 0 0 1px var(--royal), 0 0 18px rgba(91,123,232,.25)}
 .lv-rep.sel::before{background:var(--grad-lite)}
-.lv-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;color:#fff}
+.lv-rep-top{display:flex;gap:9px;align-items:center}
+.lv-avatar{display:inline-block;width:34px;height:34px;border-radius:50%;flex-shrink:0;border:2px solid;overflow:hidden;background:#fff}
+.lv-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.lv-avatar span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;border-radius:50%}
 .lv-rep .nm{font-size:12.5px;font-weight:600}
 .lv-rep .mt{font-size:10px;color:var(--dim);margin-top:2px}
-.lv-status{font-size:9.5px;border-radius:999px;padding:1px 7px;margin-inline-start:auto;white-space:nowrap}
+.lv-rep-badges{margin-inline-start:auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.lv-status{font-size:9.5px;border-radius:999px;padding:1px 7px;white-space:nowrap}
 .s-visit{background:rgba(157,111,224,.18);color:var(--purple)}
 .s-moving{background:rgba(46,222,139,.15);color:var(--green)}
 .s-idle{background:rgba(255,176,32,.15);color:var(--orange)}
 .s-off{background:rgba(90,95,133,.25);color:var(--dim)}
+.lv-work{font-size:9px;border-radius:999px;padding:1px 7px;white-space:nowrap}
+.w-working{background:rgba(34,197,94,.14);color:#4ADE80}
+.w-break{background:rgba(245,158,11,.15);color:#FBBF24}
+.w-off{background:rgba(90,95,133,.25);color:var(--dim)}
 .z-in{color:var(--green)} .z-out{color:var(--red)}
+/* صف أرقام المندوب: معاه بكام · باع بكام · زار كام · سلّم كام */
+.lv-rep-stats{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px;color:var(--dim);margin-top:6px}
+.lv-rep-stats b{color:var(--txt);font-weight:700}
+.lv-rep-stats .up b{color:var(--green)}
+.lv-rep-last{font-size:10px;color:var(--dim);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* الخريطة */
 .lv-maparea{position:relative}
 .lv-mapbar{display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap}
 .lv-btn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 12px;font-size:11.5px;cursor:pointer}
 .lv-btn.on{background:var(--royal);border-color:var(--royal)}
+.lv-btn.sm{padding:2px 9px;font-size:10px;border-radius:999px}
 #lvMap{height:64vh;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
 .lv-legend{display:flex;gap:14px;justify-content:flex-end;margin-top:7px;font-size:10.5px;color:var(--dim)}
 .lv-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-inline-end:4px}
@@ -215,7 +238,7 @@
 .lv-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--grad)}
 .lv-card-h{font-size:13px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
 .lv-dim{color:var(--dim);font-size:10.5px;font-weight:400}
-.lv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+.lv-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
 .lv-stat{background:var(--panel2);border-radius:8px;padding:6px 4px;text-align:center}
 .lv-stat .v{font-size:13.5px;font-weight:700}
 .lv-stat .l{font-size:9px;color:var(--dim)}
@@ -229,13 +252,15 @@
 .lv-alert .ic{font-size:12px;line-height:1.3}
 .lv-alert .rp{color:var(--dim);white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis}
 
-/* الماركرز */
-.lv-marker{position:relative}
-.lv-marker .core{width:15px;height:15px;border-radius:50%;border:2px solid #fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2}
-.lv-marker .ring{width:34px;height:34px;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);opacity:.55}
+/* الماركرز — صورة الموظف بإطار بلون حالته (نمط التراكينج) */
+.lv-marker{position:relative;width:38px;height:38px}
+.lv-marker .pic{width:34px;height:34px;border-radius:50%;border:2.5px solid;overflow:hidden;background:#fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;box-shadow:0 1px 6px rgba(0,0,0,.5)}
+.lv-marker .pic img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.lv-marker .pic span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;border-radius:50%}
+.lv-marker .ring{width:46px;height:46px;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);opacity:.5}
 .lv-marker.mv .ring{animation:lvPing 1.6s ease-out infinite}
 .lv-marker.vs .ring{animation:lvPing 1.1s ease-out infinite}
-.lv-marker .tag{position:absolute;top:-19px;left:50%;transform:translateX(-50%);background:rgba(13,16,34,.85);color:#E8EAF6;font-size:9.5px;padding:1px 7px;border-radius:99px;white-space:nowrap;border:1px solid #262C55}
+.lv-marker .tag{position:absolute;top:-17px;left:50%;transform:translateX(-50%);background:rgba(13,16,34,.85);color:#E8EAF6;font-size:9.5px;padding:1px 7px;border-radius:99px;white-space:nowrap;border:1px solid #262C55;z-index:3}
 @keyframes lvPing{0%{transform:translate(-50%,-50%) scale(.5);opacity:.7}100%{transform:translate(-50%,-50%) scale(1.7);opacity:0}}
 @keyframes lvBlink{0%,100%{opacity:1}50%{opacity:.35}}
 .lv-zone-label{background:transparent;border:0;box-shadow:none;color:#8B90B5;font-size:11px;font-weight:700;white-space:nowrap}
@@ -252,6 +277,7 @@
 let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE) !!};
 let selectedId = null, followId = null, paused = false, filter = '', search = '';
 const markers = {}, zoneShapes = [], govShapes = [];
+let trackLine = null, trackStart = null;
 
 // طبقات الخريطة — الديفولت المناديب بس، والاختيار محفوظ في المتصفح
 let layers = { reps: true, covered: false, target: false, govs: false };
@@ -267,14 +293,21 @@ const T = {
         idle: {!! json_encode(__('journey.idle'), JSON_UNESCAPED_UNICODE) !!},
         off: {!! json_encode(__('journey.offline'), JSON_UNESCAPED_UNICODE) !!},
     },
+    /* حالة الحضور — نفس مفاتيح hr.state_* بتاعة سجل الحضور */
+    work: {
+        working: {!! json_encode(__('hr.state_working'), JSON_UNESCAPED_UNICODE) !!},
+        break: {!! json_encode(__('hr.state_break'), JSON_UNESCAPED_UNICODE) !!},
+        off: {!! json_encode(__('hr.state_off'), JSON_UNESCAPED_UNICODE) !!},
+    },
     kpis: [
         ['reps', {!! json_encode(__('journey.rep'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal'],
+        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}, 'k-sky'],
+        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple'],
+        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
+        ['visits', {!! json_encode(__('journey.visits_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-orange'],
+        ['pos', {!! json_encode(__('journey.pos_delivered_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal'],
         ['in_zone', {!! json_encode(__('journey.in_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
         ['out_zone', {!! json_encode(__('journey.out_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-red'],
-        ['idle', {!! json_encode(__('journey.stopped'), JSON_UNESCAPED_UNICODE) !!}, 'k-orange'],
-        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple'],
-        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}, 'k-sky'],
-        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
     ],
     covered: {!! json_encode(__('journey.covered_zone'), JSON_UNESCAPED_UNICODE) !!},
     target: {!! json_encode(__('journey.target_zone'), JSON_UNESCAPED_UNICODE) !!},
@@ -285,7 +318,10 @@ const T = {
     speedU: {!! json_encode(__('journey.speed_unit'), JSON_UNESCAPED_UNICODE) !!},
     kmU: {!! json_encode(__('journey.km_unit'), JSON_UNESCAPED_UNICODE) !!},
     sales: {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!},
-    orders: {!! json_encode(__('journey.orders_today'), JSON_UNESCAPED_UNICODE) !!},
+    visitsT: {!! json_encode(__('journey.visits_today'), JSON_UNESCAPED_UNICODE) !!},
+    posT: {!! json_encode(__('journey.pos_delivered_today'), JSON_UNESCAPED_UNICODE) !!},
+    workState: {!! json_encode(__('journey.work_state'), JSON_UNESCAPED_UNICODE) !!},
+    atClient: {!! json_encode(__('journey.at_client'), JSON_UNESCAPED_UNICODE) !!},
     done: {!! json_encode(__('journey.done'), JSON_UNESCAPED_UNICODE) !!},
     custody: {!! json_encode(__('journey.custody_panel'), JSON_UNESCAPED_UNICODE) !!},
     sold: {!! json_encode(__('journey.sold_label'), JSON_UNESCAPED_UNICODE) !!},
@@ -294,11 +330,15 @@ const T = {
     worth: {!! json_encode(__('journey.worth'), JSON_UNESCAPED_UNICODE) !!},
     latest: {!! json_encode(__('journey.alerts_latest'), JSON_UNESCAPED_UNICODE) !!},
     noAlerts: {!! json_encode(__('journey.no_alerts'), JSON_UNESCAPED_UNICODE) !!},
+    noAlertsRep: {!! json_encode(__('journey.no_alerts_rep'), JSON_UNESCAPED_UNICODE) !!},
+    tlFor: {!! json_encode(__('journey.timeline_for'), JSON_UNESCAPED_UNICODE) !!},
+    tlAll: {!! json_encode(__('journey.timeline_all_hint'), JSON_UNESCAPED_UNICODE) !!},
+    all: {!! json_encode(__('common.all'), JSON_UNESCAPED_UNICODE) !!},
+    pickRep: {!! json_encode(__('journey.pick_rep'), JSON_UNESCAPED_UNICODE) !!},
     lastSignal: {!! json_encode(__('journey.last_signal'), JSON_UNESCAPED_UNICODE) !!},
+    minAgo: {!! json_encode(__('journey.minutes_ago'), JSON_UNESCAPED_UNICODE) !!},
     follow: '🎯 ' + {!! json_encode(__('journey.follow_rep'), JSON_UNESCAPED_UNICODE) !!},
     unfollow: '🎯 ' + {!! json_encode(__('journey.unfollow'), JSON_UNESCAPED_UNICODE) !!},
-    zShown: {!! json_encode(__('journey.zones_shown'), JSON_UNESCAPED_UNICODE) !!},
-    zHidden: {!! json_encode(__('journey.zones_hidden'), JSON_UNESCAPED_UNICODE) !!},
     pause: '⏸ ' + {!! json_encode(__('journey.pause_updates'), JSON_UNESCAPED_UNICODE) !!},
     resume: '▶ ' + {!! json_encode(__('journey.resume_updates'), JSON_UNESCAPED_UNICODE) !!},
     rtOn: {!! json_encode(__('journey.realtime_on'), JSON_UNESCAPED_UNICODE) !!},
@@ -307,6 +347,8 @@ const T = {
 
 const SC = { visit: '#9D6FE0', moving: '#2EDE8B', idle: '#FFB020', off: '#5A5F85' };
 const AV = ['#4D6FE3','#9D6FE0','#2EDE8B','#FFB020','#FF5D73','#38BDF8','#F472B6','#A3E635'];
+/* لون ثابت لكل مندوب — بالـid مش بترتيب القايمة عشان مايتغيرش مع الفلترة */
+const repColor = id => AV[Math.abs(id) % AV.length];
 const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
 /* ⚠️ **إجباري قبل أي نص داتا في innerHTML.** أسماء العملاء والمناديب
@@ -344,7 +386,7 @@ function drawZones() {
         const lbl = L.marker([z.lat, z.lng], {
             icon: L.divIcon({
                 className: 'lv-zone-label',
-                html: `<div style="text-align:center">${z.name}<br>
+                html: `<div style="text-align:center">${esc(z.name)}<br>
                         <span style="font-size:9px;color:${covered ? '#4ADE80' : '#FBBF24'}">${covered ? '● ' + T.covered : '◌ ' + T.target} · ${sub}</span></div>`,
                 iconSize: null,
             }),
@@ -364,7 +406,7 @@ function drawGovs() {
         const m = L.marker([g.lat, g.lng], {
             icon: L.divIcon({
                 className: 'lv-gov-label',
-                html: `<div style="text-align:center">${g.name}${g.clients > 0
+                html: `<div style="text-align:center">${esc(g.name)}${g.clients > 0
                     ? `<br><span style="font-size:9.5px;font-weight:600;color:#BAE6FD">${fmt(g.clients)} ●</span>` : ''}</div>`,
                 iconSize: null,
             }),
@@ -374,11 +416,44 @@ function drawGovs() {
     });
 }
 
+/* ═════ مسار المندوب المختار — نمط التراكينج (polyline بلونه) ═════
+   بيترسم من `r.track` اللي جاي في الحمولة (أحداث اليوم بإحداثياتها
+   بترتيب زمني) — وبيتحدث مع كل حمولة جديدة من غير ما نعيد الزوم. */
+function drawTrack() {
+    if (trackLine !== null) { map.removeLayer(trackLine); trackLine = null; }
+    if (trackStart !== null) { map.removeLayer(trackStart); trackStart = null; }
+    if (selectedId === null) return;
+
+    const r = (data.reps || []).find(x => x.id === selectedId);
+    if (!r || !Array.isArray(r.track) || r.track.length === 0) return;
+
+    const pts = r.track.map(p => [p.lat, p.lng]);
+    const color = repColor(r.id);
+
+    if (pts.length > 1) {
+        trackLine = L.polyline(pts, { color: color, weight: 4, opacity: .85 }).addTo(map);
+    }
+    // نقطة البداية — أول إشارة النهارده بوقتها
+    trackStart = L.circleMarker(pts[0], {
+        radius: 6, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
+    }).addTo(map);
+    if (r.track[0].t) trackStart.bindTooltip(r.track[0].t, { direction: 'top' });
+}
+
+/* زوم على المسار — عند الاختيار بس، مش مع كل تحديث */
+function fitTrack() {
+    const r = (data.reps || []).find(x => x.id === selectedId);
+    if (!r || !Array.isArray(r.track) || r.track.length === 0) return;
+    const pts = r.track.map(p => [p.lat, p.lng]);
+    if (pts.length === 1) map.setView(pts[0], 14);
+    else map.fitBounds(L.latLngBounds(pts).pad(0.2));
+}
+
 /* شريط الحركة — كل مندوب سهم بورصة: أخضر بيبيع، رمادي ساكن */
 function renderTape() {
     const items = (data.reps || []).map(r => {
         const up = r.sales > 0;
-        return `<span class="lv-tk"><span class="sym">${r.name}</span>
+        return `<span class="lv-tk"><span class="sym">${esc(r.name)}</span>
             <span class="${up ? 'up' : 'dn'}">${up ? '▲' : '—'} ${fmt(r.sales)}</span>
             <span class="lv-dim">${r.done}/${r.planned}</span></span>`;
     }).join('');
@@ -386,24 +461,29 @@ function renderTape() {
     document.getElementById('lvTape').innerHTML = items + items;
 }
 
+/* ماركر بصورة الموظف — نمط التراكينج: دايرة صورة (أو حروف اسمه
+   بلونه الثابت) بإطار بلون الحالة، ونبضة للمتحرك/اللي في زيارة */
 function repIcon(r) {
     const cls = r.status === 'moving' ? 'mv' : (r.status === 'visit' ? 'vs' : '');
+    const inner = r.avatar_url
+        ? `<img src="${esc(r.avatar_url)}" alt="">`
+        : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
     return L.divIcon({
         className: '',
         html: `<div class="lv-marker ${cls}">
                  <div class="ring" style="background:${SC[r.status]}"></div>
-                 <div class="core" style="background:${SC[r.status]}"></div>
-                 <div class="tag">${r.name}</div>
+                 <div class="pic" style="border-color:${SC[r.status]}">${inner}</div>
+                 <div class="tag">${esc(r.name)}</div>
                </div>`,
-        iconSize: [34, 34], iconAnchor: [17, 17],
+        iconSize: [38, 38], iconAnchor: [19, 19],
     });
 }
 
 /* ═════ الرسم ═════ */
-const KICONS = { reps: '🧑‍💼', in_zone: '🎯', out_zone: '⚠️', idle: '🛑', units: '📦', value: '🚚', sales: '💰' };
+const KICONS = { reps: '🧑‍💼', value: '🚚', units: '📦', sales: '💰', visits: '📍', pos: '🧾', in_zone: '🎯', out_zone: '⚠️' };
 
 function render() {
-    // KPIs — أيقونة بهالة + رقم بلونه الدال
+    // شريط الـKPI — مجاميع الفريق كله (وضع «الكل» الافتراضي)
     document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l, cls]) =>
         `<div class="lv-kpi ${cls}">
             <div class="ic">${KICONS[k] || '•'}</div>
@@ -412,25 +492,47 @@ function render() {
 
     renderTape();
 
-    // قايمة المناديب
+    // كروت المناديب — كل واحد: معاه بكام، باع بكام، زار كام، سلّم كام، وآخر حالة
     const q = search.trim().toLowerCase();
     const reps = (data.reps || []).filter(r =>
         (!filter || r.status === filter)
         && (!q || (r.name + ' ' + (r.zone || '')).toLowerCase().includes(q)));
 
     document.getElementById('lvSideCount').textContent = reps.length + ' / ' + (data.reps || []).length;
-    document.getElementById('lvRepList').innerHTML = reps.map((r, i) => `
+    document.getElementById('lvRepList').innerHTML = reps.map(r => {
+        const work = r.work || 'off';
+        const avatar = r.avatar_url
+            ? `<img src="${esc(r.avatar_url)}" alt="">`
+            : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
+        const zoneDot = r.in_zone === true ? ' · <b class="z-in">●</b>'
+            : (r.in_zone === false ? ' · <b class="z-out">●</b>' : '');
+        const last = r.open_client
+            ? '🛒 ' + T.atClient.replace(':client', esc(r.open_client))
+            : (r.last_event
+                ? (r.last_event_icon || '') + ' ' + esc(r.last_event)
+                : '📵 ' + T.statuses.off);
+        return `
         <div class="lv-rep ${r.id === selectedId ? 'sel' : ''}" data-id="${r.id}">
-            <div class="lv-avatar" style="background:${AV[i % AV.length]}">${r.name.slice(0, 2)}</div>
-            <div>
-                <div class="nm">${r.name}</div>
-                <div class="mt">
-                    ${r.speed !== null ? r.speed + ' ' + T.speedU + ' · ' : ''}${r.zone || '—'}
-                    ${r.in_zone === true ? ' · <b class="z-in">●</b>' : (r.in_zone === false ? ' · <b class="z-out">●</b>' : '')}
+            <div class="lv-rep-top">
+                <div class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</div>
+                <div>
+                    <div class="nm">${esc(r.name)}</div>
+                    <div class="mt">${esc(r.zone || '—')}${r.speed !== null ? ' · ' + r.speed + ' ' + T.speedU : ''}${zoneDot}</div>
+                </div>
+                <div class="lv-rep-badges">
+                    <span class="lv-status s-${r.status}">${T.statuses[r.status]}</span>
+                    <span class="lv-work w-${work}">${T.work[work]}</span>
                 </div>
             </div>
-            <span class="lv-status s-${r.status}">${T.statuses[r.status]}</span>
-        </div>`).join('');
+            <div class="lv-rep-stats">
+                <span title="${esc(T.custody)}">🚚 <b>${fmt(r.value)}</b> · ${fmt(r.units)} 📦</span>
+                <span class="up" title="${esc(T.sales)}">💰 <b>${fmt(r.sales)}</b></span>
+                <span title="${esc(T.visitsT)}">📍 <b>${r.visits || 0}</b></span>
+                <span title="${esc(T.posT)}">🧾 <b>${r.pos || 0}</b></span>
+            </div>
+            <div class="lv-rep-last">${last}</div>
+        </div>`;
+    }).join('');
 
     document.querySelectorAll('#lvRepList .lv-rep').forEach(el =>
         el.addEventListener('click', () => selectRep(parseInt(el.dataset.id, 10))));
@@ -452,6 +554,9 @@ function render() {
         if (!seen.has(parseInt(id, 10))) { map.removeLayer(markers[id]); delete markers[id]; }
     });
 
+    // مسار المختار — بيتحدث مع كل حمولة من غير ما نلمس الزوم
+    drawTrack();
+
     // التتبع
     if (followId !== null) {
         const fr = (data.reps || []).find(r => r.id === followId);
@@ -462,19 +567,38 @@ function render() {
     renderAlerts();
 }
 
+/* الضغط على مندوب = وضع المندوب (مسار + تايم لاين + بانل).
+   ضغطة تانية على نفسه = رجوع لوضع «الكل». */
 function selectRep(id) {
+    if (selectedId === id) { clearSelection(); return; }
     selectedId = id;
     if (followId !== null) followId = id;
+    render();
+    fitTrack();
     const r = (data.reps || []).find(x => x.id === id);
-    if (r && r.lat !== null) map.panTo([r.lat, r.lng]);
+    if (r && trackLine === null && trackStart === null && r.lat !== null) map.panTo([r.lat, r.lng]);
+}
+
+function clearSelection() {
+    selectedId = null;
+    if (followId !== null) {
+        followId = null;
+        const b = document.getElementById('lvFollowBtn');
+        b.classList.remove('on');
+        b.textContent = T.follow;
+    }
     render();
 }
 
 function renderDetail() {
     const el = document.getElementById('lvRepCard');
     const r = (data.reps || []).find(x => x.id === selectedId);
-    if (!r) return;
+    if (!r) {
+        el.innerHTML = `<div class="lv-dim" style="text-align:center;padding:26px 8px">${T.pickRep}</div>`;
+        return;
+    }
 
+    const work = r.work || 'off';
     const zoneChip = r.in_zone === null ? ''
         : `<span class="lv-status ${r.in_zone ? 's-moving' : 's-idle'}" style="${r.in_zone ? '' : 'color:var(--red);background:rgba(255,93,115,.15)'}">
              ${r.in_zone ? T.inZone : T.outZone}</span>`;
@@ -482,45 +606,72 @@ function renderDetail() {
     const items = (r.items || []).map(i => {
         const pct = i.assigned > 0 ? Math.round(i.sold / i.assigned * 100) : 0;
         return `<div class="lv-item">
-            <div class="r1"><span>${i.name}</span>
+            <div class="r1"><span>${esc(i.name)}</span>
                 <span class="lv-dim">${T.sold} ${i.sold} · ${T.left} <b style="color:var(--txt)">${i.remaining}</b> / ${i.assigned}</span></div>
             <div class="bar"><i style="width:${pct}%;background:linear-gradient(90deg,#4D6FE3,#9D6FE0)"></i></div>
         </div>`;
     }).join('');
 
+    const avatar = r.avatar_url
+        ? `<img src="${esc(r.avatar_url)}" alt="">`
+        : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
+
+    const lastLine = r.open_client
+        ? '🛒 ' + T.atClient.replace(':client', esc(r.open_client))
+        : (r.last_event ? (r.last_event_icon || '') + ' ' + esc(r.last_event) : '');
+
     el.innerHTML = `
         <div class="lv-card-h">
-            <span><a href="${r.url}" style="color:var(--txt);text-decoration:none">${r.name} ↗</a>
-                <div class="lv-dim">${r.zone || '—'} · ${r.role}</div></span>
-            <span>${zoneChip}<br><span class="lv-status s-${r.status}" style="margin-top:4px;display:inline-block">${T.statuses[r.status]}</span></span>
+            <span style="display:flex;gap:8px;align-items:center">
+                <span class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</span>
+                <span><a href="${r.url}" style="color:var(--txt);text-decoration:none">${esc(r.name)} ↗</a>
+                    <div class="lv-dim">${esc(r.zone || '—')} · ${esc(r.role)}</div></span>
+            </span>
+            <span style="text-align:end">${zoneChip}<br>
+                <span class="lv-status s-${r.status}" style="margin-top:4px;display:inline-block">${T.statuses[r.status]}</span><br>
+                <span class="lv-work w-${work}" style="margin-top:4px;display:inline-block">${T.workState}: ${T.work[work]}</span></span>
         </div>
         <div class="lv-stats">
-            <div class="lv-stat"><div class="v">${r.speed !== null ? r.speed : '—'}</div><div class="l">${T.speedU}</div></div>
-            <div class="lv-stat"><div class="v">${r.km}</div><div class="l">${T.kmU}</div></div>
-            <div class="lv-stat"><div class="v">${r.done}/${r.planned}</div><div class="l">${T.done}</div></div>
             <div class="lv-stat"><div class="v" style="color:var(--green)">${fmt(r.sales)}</div><div class="l">${T.sales}</div></div>
+            <div class="lv-stat"><div class="v">${r.visits || 0}</div><div class="l">${T.visitsT}</div></div>
+            <div class="lv-stat"><div class="v">${r.pos || 0}</div><div class="l">${T.posT}</div></div>
+            <div class="lv-stat"><div class="v">${r.done}/${r.planned}</div><div class="l">${T.done}</div></div>
+            <div class="lv-stat"><div class="v">${r.km}</div><div class="l">${T.kmU}</div></div>
+            <div class="lv-stat"><div class="v">${r.speed !== null ? r.speed : '—'}</div><div class="l">${T.speedU}</div></div>
         </div>
+        ${lastLine ? `<div class="lv-dim" style="margin-bottom:6px">${lastLine}</div>` : ''}
         <div class="lv-card-h" style="margin-top:4px">📦 ${T.custody}
             <span class="lv-dim">${T.remTotal.replace(':count', fmt(r.units))} · ${T.worth.replace(':value', fmt(r.value))}</span></div>
         ${items || '<div class="lv-dim">—</div>'}
-        <div class="lv-dim" style="margin-top:6px">${T.lastSignal}: ${r.minutes !== null ? r.minutes + ' د' : '—'}</div>`;
+        <div class="lv-dim" style="margin-top:6px">${T.lastSignal}: ${r.minutes !== null ? T.minAgo.replace(':count', r.minutes) : '—'}</div>`;
 }
 
+/* التايم لاين — بتاع الكل افتراضياً، وبيتفلتر على المندوب المختار.
+   زرار «الكل» بيرجّع فيد الفريق كله. */
 function renderAlerts() {
-    const list = data.alerts || [];
-    document.getElementById('lvAlertCount').textContent = list.length ? T.latest.replace(':count', list.length) : '';
+    const all = data.alerts || [];
+    const list = selectedId === null
+        ? all
+        : all.filter(a => a.user_id === undefined || a.user_id === selectedId);
+
+    const sel = (data.reps || []).find(x => x.id === selectedId);
+    const scope = document.getElementById('lvAlertScope');
+    scope.innerHTML = selectedId === null
+        ? `<span class="lv-dim">${T.tlAll}${list.length ? ' · ' + T.latest.replace(':count', list.length) : ''}</span>`
+        : `<span class="lv-dim">${T.tlFor.replace(':name', esc(sel ? sel.name : ''))}</span>
+           <button class="lv-btn sm" id="lvTlAll" type="button">${T.all}</button>`;
+    const allBtn = document.getElementById('lvTlAll');
+    if (allBtn) allBtn.addEventListener('click', clearSelection);
+
     document.getElementById('lvAlerts').innerHTML = list.length
-        /* ⚠️ اللون والأيقونة جايين **من السيرفر** مش من كلاس CSS
-           (2026-08-07). كانت `.a-sale/.a-checkin/.a-checkout` تلات
-           كلاسات مكتوبة بالإيد، فأي نوع حدث جديد (مرتجع، هدية،
-           استلام عهدة) بيطلع بلا لون ومحدش واخد باله إنه ناقص.
-           دلوقتي `TrackEvent::TYPES` هو المصدر الوحيد للاتنين. */
+        /* ⚠️ اللون والأيقونة جايين **من السيرفر** مش من كلاس CSS —
+           `TrackEvent::TYPES` هو المصدر الوحيد للاتنين. */
         ? list.map(a => `<div class="lv-alert" style="border-color:${a.color}">
              <span class="tm">${a.t}</span>
              <span class="ic">${a.icon || ''}</span>
              <span class="rp">${esc(a.rep)}</span>
              <span>${esc(a.text)}</span></div>`).join('')
-        : `<div class="lv-dim">${T.noAlerts}</div>`;
+        : `<div class="lv-dim">${selectedId === null ? T.noAlerts : T.noAlertsRep}</div>`;
 }
 
 /* ═════ التحكم ═════ */
@@ -660,7 +811,8 @@ document.addEventListener('visibilitychange', function () {
     startLive();
 });
 
-/* أول رسمة من الحمولة المدمجة */
+/* أول رسمة من الحمولة المدمجة — وضع «الكل»: مفيش مندوب مختار،
+   التايم لاين للفريق كله والـKPIs مجاميع (طلب المالك ١١/٨) */
 drawZones();
 drawGovs();
 render();
@@ -669,10 +821,7 @@ render();
 startLive();
 
 const first = (data.reps || []).find(r => r.lat !== null);
-if (first) {
-    map.setView([first.lat, first.lng], 12);
-    selectRep(first.id);
-}
+if (first) map.setView([first.lat, first.lng], 12);
 })();
 </script>
 @endsection

@@ -136,12 +136,13 @@ class FieldApiController extends Controller
                 'avatar_url' => $user->avatarUrl(),
             ],
             // السواق بيشوف عهدته بسعر القائمة القديم والسيلز بالجديد
-            'custody' => $this->custodyPayload($custody, $user->isDriver() ? 'old' : 'new'),
-            'zones' => $user->isSalesAgent() ? $this->zonesPayload($user) : [],
+            'custody' => self::custodyPayload($custody, $user->isDriver() ? 'old' : 'new'),
+            'zones' => $user->isSalesAgent() ? self::zonesPayload($user) : [],
             // ⚠️ السيلز بقى بيشوف أوامر التوريد برضو — فلو الكي أكاونت
             // (2026-08-04): أمر معتمد من الحسابات واتجهز بينزله يسلمه.
-            'purchase_orders' => ($user->isDriver() || $user->isSalesAgent())
-                ? $this->posPayload($user) : [],
+            // ⚠️ والمدير كمان (١١/٨) — بيسلّم أوردرات بنفسه.
+            'purchase_orders' => ($user->isDriver() || $user->isSalesAgent() || $user->role === 'manager')
+                ? self::posPayload($user) : [],
             'today' => $this->todayPayload($user),
             // ⚠️ **مع البوت ستراب مش ريكوست منفصل** — الأبلكيشن
             // بيقرر من أول رسمة يعرض بوب أب الحضور ولا لأ، ولو
@@ -155,45 +156,8 @@ class FieldApiController extends Controller
             // يرسم بانر «انت جوه مخزن المعادي من 9:12» من أول رسمة —
             // ولو استنى ريكوست تاني، المندوب بيدوس استلام ويتفاجئ
             // بالرفض وهو شايف نفسه مسجّل.
-            'warehouse_visit' => $openWh?->payload(),
-            // ═══ سامري المخزن النهارده (طلب المالك ٨/٨/٢٠٢٦) ═══
-            // ⚠️ زي شاشة الحضور بالظبط: المندوب لازم يشوف عمل إيه
-            // النهارده مش بس إنه جوّه دلوقتي. من غير السامري ده
-            // الشاشة بتقول «انت في مخزن المعادي» وخلاص.
-            'warehouse_today' => [
-                'picks' => \App\Models\PickOrder::where('assigned_to', $user->id)
-                    ->whereDate('handed_at', today())->count(),
-                'pos' => PurchaseOrder::where('assigned_to', $user->id)
-                    ->whereDate('delivered_at', today())->count(),
-                // إجمالي دقايق كل زيارات المخزن النهارده.
-                //
-                // ⚠️ **عمود `minutes` بيتكتب عند الخروج بس** —
-                // `WarehouseVisit::liveMinutes()` هي اللي بتحسب
-                // المفتوحة. من غير جمعها، المندوب اللي قاعد جوّه
-                // ٤٠ دقيقة وماخرجش لسه بيشوف «0:00».
-                'minutes' => (int) \App\Models\WarehouseVisit::where('user_id', $user->id)
-                    ->whereDate('checked_in_at', today())->sum('minutes')
-                    // ⚠️ **وبس لو الزيارة المفتوحة بتاعة النهارده** —
-                    // زيارة امبارح مااتقفلتش أوتوماتيك كانت هتضيف
-                    // ساعاتها لرقم النهارده.
-                    + ($openWh?->checked_in_at?->isToday() ? $openWh->liveMinutes() : 0),
-                'visits' => \App\Models\WarehouseVisit::where('user_id', $user->id)
-                    ->whereDate('checked_in_at', today())->count(),
-            ],
-
-            // ⚠️ **القايمة كلها مش المسكّن له.** المندوب بيستلم من
-            // أي مخزن حسب اللي جهّزوا له فيه — وتقييدها على مخزن
-            // فرعه كان بيمنع الاستلام من المخزن المركزي.
-            'warehouses' => \App\Models\Warehouse::where('active', true)
-                ->orderBy('name')
-                ->get(['id', 'name', 'name_en', 'address', 'lat', 'lng'])
-                ->map(fn ($w) => [
-                    'id' => $w->id,
-                    'name' => $w->displayName(),
-                    'address' => $w->address,
-                    'lat' => $w->lat === null ? null : (float) $w->lat,
-                    'lng' => $w->lng === null ? null : (float) $w->lng,
-                ])->values(),
+            // ═══ حزمة المخزن — مشتركة مع بوت ستراب المدير (١١/٨) ═══
+            ...self::warehouseBundle($user, $openWh),
             // ⚠️ **`is_read` لازم تتبعت** (إصلاح 2026-08-07). الأبلكيشن
             // كان بيعد الإشعارات كلها في الشارة عشان مكانش عارف
             // المقروء من غيره — فالمندوب يفتحها ويقفلها والرقم زي ما
@@ -210,7 +174,7 @@ class FieldApiController extends Controller
             // ⚠️ خطة اليوم بتيجي مع البوت ستراب مش في ريكوست منفصل —
             // المندوب بيفتح الأبلكيشن على شبكة موبايل ضعيفة، وكل
             // ريكوست زيادة معناه ثواني استنى في أول الشغل.
-            'journey' => $this->journeyPayload($user),
+            'journey' => self::journeyPayload($user),
             'events' => $this->eventsPayload($user),
             'client_requests' => ClientRequest::where('created_by', $user->id)
                 ->latest()->take(20)->get()->map(fn ($r) => [
@@ -221,7 +185,14 @@ class FieldApiController extends Controller
         ]);
     }
 
-    private function custodyPayload($custody, string $mode): array
+    /**
+     * ⚠️ **`public static` عن قصد (١١ أغسطس ٢٠٢٦)** — دي وأخواتها
+     * (`zonesPayload` / `posPayload` / `journeyPayload`) بقوا العقد
+     * المشترك مع الأبلكيشن: `ManagerApiController::bootstrap` بينده
+     * عليهم بنفس الأشكال بالظبط بدل ما ينسخ منطق الحمولة. أي تغيير
+     * في شكل الحمولة هنا بيوصل للرولين مع بعض — وده المطلوب.
+     */
+    public static function custodyPayload($custody, string $mode): array
     {
         if (! $custody) {
             return ['exists' => false, 'items' => []];
@@ -281,8 +252,13 @@ class FieldApiController extends Controller
         ];
     }
 
-    private function zonesPayload($user): array
+    public static function zonesPayload($user): array
     {
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): عملاؤه = المتسكّنين له ═══
+        // نفس مرساة `ownsClient` و`Client::visibleTo` — `manager_id`
+        // مش `rep_id`. المندوب فاضل زي ما هو بالحرف.
+        $isManager = $user->role === 'manager';
+
         // ⚠️ **مناطقه هو وبس.** كانت بترجّع كل مناطق الشركة بكل
         // عملائها — مندوب المعادي كان بيشوف عملاء الإسكندرية بأرصدتهم
         // وخصومهم. المناطق من شاشة التوزيع (`zone_user`)، ولو لسه
@@ -297,7 +273,7 @@ class FieldApiController extends Controller
         // العملاء (rep_id) من غير ما يعلّم على تشيك بوكس المناطق —
         // فالمندوب كان بيفتح «المناطق» يلاقيها فاضية وعملاؤه موجودين
         // فعلاً. أي منطقة فيها عميل بتاعه هي منطقته بحكم الواقع.
-        $clientZoneIds = Client::where('rep_id', $user->id)
+        $clientZoneIds = Client::where($isManager ? 'manager_id' : 'rep_id', $user->id)
             ->where('status', 'active')
             ->whereNotNull('zone_id')
             ->distinct()->pluck('zone_id');
@@ -305,13 +281,22 @@ class FieldApiController extends Controller
         $zoneIds = $zoneIds->merge($clientZoneIds)->unique()->values();
 
         $zones = Zone::with([
-            'clients' => function ($q) use ($user) {
+            'clients' => function ($q) use ($user, $isManager) {
                 // ⚠️ contract و group.contract ضروريين: effectiveDiscount()
                 // بتنادي liveContract() لكل عميل. من غيرهم ~300 كويري زيادة
                 // على /api/home وهو أكتر إندبوينت بيتنادى في الأبلكيشن.
                 $q->where('status', 'active')
                     ->with(['channel', 'contract', 'group.contract'])
                     ->orderBy('name');
+
+                // المدير: عملاؤه المتسكّنين له وبس — مفيش فولباك يتامى
+                // هنا، اليتيم أصلاً مالوش `manager_id` فمش بتاعه.
+                if ($isManager) {
+                    $q->where('manager_id', $user->id);
+
+                    return;
+                }
+
                 // ⚠️ **عملاءه هو دايماً** (مهما كانت قناتهم)، واللي لسه
                 // من غير مندوب — دول بس بيتفلتروا بقناته لو ليه قناة.
                 $q->where(function ($w) use ($user) {
@@ -396,7 +381,7 @@ class FieldApiController extends Controller
         ])->values()->all();
     }
 
-    private function posPayload($user): array
+    public static function posPayload($user): array
     {
         return PurchaseOrder::with(['client', 'items.product'])
             ->where('assigned_to', $user->id)
@@ -464,7 +449,7 @@ class FieldApiController extends Controller
      * ⚠️ الترتيب من `sort` — الشاشة بتوري العملاء بالترتيب ده والمندوب
      * بيمشي عليه، فأي إعادة ترتيب في الـ ERP لازم توصله زي ما هي.
      */
-    private function journeyPayload($user): array
+    public static function journeyPayload($user): array
     {
         // ⚠️ مرة واحدة — `summary()` كانت بتعيد حساب نفس الخطة،
         // فكل `/api/bootstrap` كان بيعمل الشغل مرتين على شبكة موبايل.
@@ -528,7 +513,7 @@ class FieldApiController extends Controller
     /** GET /api/journey — خطة السير لوحدها (للريفريش) */
     public function journey(Request $request): JsonResponse
     {
-        return response()->json($this->journeyPayload($request->user()));
+        return response()->json(self::journeyPayload($request->user()));
     }
 
     private function todayPayload($user): array
@@ -584,6 +569,14 @@ class FieldApiController extends Controller
     private function ownsClient(User $user, Client $client): bool
     {
         if ((int) $client->rep_id === (int) $user->id) {
+            return true;
+        }
+
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): عملاؤه = المتسكّنين له ═══
+        // نفس مرساة `Client::visibleTo` بالظبط (`clients.manager_id`) —
+        // المدير بيتشيك إن على عملاء فريقه اللي هو مسؤول عنهم،
+        // مش أي عميل في الشركة.
+        if ($user->role === 'manager' && (int) $client->manager_id === (int) $user->id) {
             return true;
         }
 
@@ -1842,42 +1835,100 @@ class FieldApiController extends Controller
 
         $hasDocs = filter_var($request->input('has_docs', false), FILTER_VALIDATE_BOOLEAN);
 
-        $req = ClientRequest::create([
-            'number' => ClientRequest::nextNumber(),
-            'name' => $data['name'],
-            'phone' => $data['phone'] ?? null,
-            'address' => $data['address'] ?? null,
-            'zone_id' => $user->zone_id,
-            'has_docs' => $hasDocs || $docsPath !== null,
-            'photo_path' => $photoPath,
-            'docs_path' => $docsPath,
-            'docs_type' => $docsType,
-            'status' => 'pending',
-            'created_by' => $user->id,
-        ]);
+        // ═══ المدير بيفتح الأكاونت من غير موافقة (قرار المالك ١١ أغسطس ٢٠٢٦) ═══
+        //
+        // «هو كده كده المدير» — الطلب **بيتسجّل برضه** (أثر مراجعة:
+        // مين فتح إيه وإمتى وبأنهي أوراق) بس بيتعمد في نفس اللحظة
+        // **بنفس منطق `OpsController::decideRequest` بالحرف**: العميل
+        // بيرث الزون/القناة/الفرع من الطلب/المدير، و`manager_id` =
+        // المدير نفسه — **مش بيتولد يتيم**. `rep_id` بتفضل null لحد
+        // ما يسكّنه لمندوب من شاشة التخصيص.
+        //
+        // ⚠️ الإنشاء والاعتماد في **ترانزاكشن واحدة** — طلب «معتمد»
+        // من غير عميل اتولد فعلاً أسوأ من طلب معلّق.
+        $isManager = $user->role === 'manager';
+
+        [$req, $client] = DB::transaction(function () use ($data, $user, $hasDocs, $photoPath, $docsPath, $docsType, $isManager) {
+            $req = ClientRequest::create([
+                'number' => ClientRequest::nextNumber(),
+                'name' => $data['name'],
+                'phone' => $data['phone'] ?? null,
+                'address' => $data['address'] ?? null,
+                'zone_id' => $user->zone_id,
+                'has_docs' => $hasDocs || $docsPath !== null,
+                'photo_path' => $photoPath,
+                'docs_path' => $docsPath,
+                'docs_type' => $docsType,
+                'status' => 'pending',
+                'created_by' => $user->id,
+            ]);
+
+            if (! $isManager) {
+                return [$req, null];
+            }
+
+            // نفس أعمدة `decideRequest` بالظبط — بفارق واحد مقصود:
+            // صاحب الطلب هنا مدير مش مندوب، فالوراثة منه شخصياً.
+            $client = Client::create([
+                'code' => Client::nextCode(),
+                'name' => $req->name,
+                'phone' => $req->phone,
+                'address' => $req->address,
+                'zone_id' => $req->zone_id ?? $user->zone_id,
+                'rep_id' => null,
+                'channel_id' => $user->channel_id,
+                'manager_id' => $user->id,
+                'branch_id' => $user->branch_id,
+                'category' => 'grow',
+                'status' => 'active',
+                'discount' => 0,
+                'uses_channel_discount' => true,
+                'is_new' => true,
+                'has_docs' => $req->has_docs,
+                'photo_path' => $req->photo_path,
+                'docs_path' => $req->docs_path,
+                'docs_type' => $req->docs_type,
+                'created_by' => $req->created_by,
+            ]);
+
+            $req->status = 'approved';
+            $req->decided_by = $user->id;
+            $req->decided_at = now();
+            $req->client_id = $client->id;
+            $req->save();
+
+            return [$req, $client];
+        });
 
         TrackEvent::log($user, 'request',
             __('field.event_client_request', ['name' => $req->name]),
-            __('field.event_awaiting_manager'));
+            $isManager
+                ? __('field.event_client_auto_approved')
+                : __('field.event_awaiting_manager'));
 
         // ═══ نوتفيكيشن للمدير — موبايل وداش بورد (2026-08-09) ═══
         //
         // ⚠️ **كانت ناقصة.** الطلب كان بينزل في الشاشة وخلاص، والمدير
         // مايعرفش غير لو فتحها بنفسه — والسيلز واقف مستني الموافقة
         // عشان يبيع. مدير المندوب المباشر + الأدمنز.
-        $recipients = User::where('active', true)
-            ->where(fn ($q) => $q
-                ->where('role', 'admin')
-                ->when($user->manager_id, fn ($w) => $w->orWhere('id', $user->manager_id)))
-            ->get();
+        //
+        // ⚠️ **والمدير مش بيبلّغ نفسه** (١١/٨) — طلبه اتوافق في نفس
+        // النداء، فالإشعار كان هيبقى «في طلب مستنيك» على حاجة خلصت.
+        if (! $isManager) {
+            $recipients = User::where('active', true)
+                ->where(fn ($q) => $q
+                    ->where('role', 'admin')
+                    ->when($user->manager_id, fn ($w) => $w->orWhere('id', $user->manager_id)))
+                ->get();
 
-        foreach ($recipients as $recipient) {
-            AppNotification::send(
-                $recipient,
-                fn () => __('field.notif_client_request_title', ['name' => $req->name]),
-                fn () => __('field.notif_client_request_body', ['user' => $user->displayName()]),
-                link: AppNotification::requestLink($req->id),
-            );
+            foreach ($recipients as $recipient) {
+                AppNotification::send(
+                    $recipient,
+                    fn () => __('field.notif_client_request_title', ['name' => $req->name]),
+                    fn () => __('field.notif_client_request_body', ['user' => $user->displayName()]),
+                    link: AppNotification::requestLink($req->id),
+                );
+            }
         }
 
         return response()->json([
@@ -1885,6 +1936,11 @@ class FieldApiController extends Controller
                 'id' => $req->id, 'number' => $req->number, 'name' => $req->name,
                 'status' => $req->status, 'status_label' => $req->statusLabel(),
             ],
+            // ═══ مفاتيح إضافية (١١/٨) — الأبلكيشن بيفرّق بيها رد
+            // المدير (اتوافق فوراً + id العميل الجديد) عن رد المندوب.
+            // النسخ القديمة بتتجاهلها عادي.
+            'approved' => $isManager,
+            'client_id' => $client?->id,
         ], 201);
     }
 
@@ -1958,6 +2014,46 @@ class FieldApiController extends Controller
         }
 
         return [round($lat, 7), round($lng, 7)];
+    }
+
+    /**
+     * حزمة المخزن في البوت ستراب — زيارة مفتوحة + سامري النهارده +
+     * قايمة المخازن. اتفصلت (١١ أغسطس ٢٠٢٦) عشان بوت ستراب **المدير
+     * الميداني** ياخد نفسها بالظبط: من غيرها كان بيشوف قايمة مخازن
+     * فاضية ومايعرفش يدخل يستلم عهدته.
+     *
+     * ⚠️ زي شاشة الحضور بالظبط: السامري بيقول عمل إيه النهارده مش
+     * بس إنه جوّه دلوقتي. و`minutes` بيجمع الزيارة المفتوحة
+     * بـ`liveMinutes()` (العمود بيتكتب عند الخروج بس) — وبس لو
+     * المفتوحة بتاعة النهارده. والقايمة **كل** المخازن النشطة مش
+     * المسكّن له — الاستلام بيحصل من أي مخزن جهّزوا له فيه.
+     */
+    public static function warehouseBundle(User $user, ?\App\Models\WarehouseVisit $openWh): array
+    {
+        return [
+            'warehouse_visit' => $openWh?->payload(),
+            'warehouse_today' => [
+                'picks' => \App\Models\PickOrder::where('assigned_to', $user->id)
+                    ->whereDate('handed_at', today())->count(),
+                'pos' => PurchaseOrder::where('assigned_to', $user->id)
+                    ->whereDate('delivered_at', today())->count(),
+                'minutes' => (int) \App\Models\WarehouseVisit::where('user_id', $user->id)
+                    ->whereDate('checked_in_at', today())->sum('minutes')
+                    + ($openWh?->checked_in_at?->isToday() ? $openWh->liveMinutes() : 0),
+                'visits' => \App\Models\WarehouseVisit::where('user_id', $user->id)
+                    ->whereDate('checked_in_at', today())->count(),
+            ],
+            'warehouses' => \App\Models\Warehouse::where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'name_en', 'address', 'lat', 'lng'])
+                ->map(fn ($w) => [
+                    'id' => $w->id,
+                    'name' => $w->displayName(),
+                    'address' => $w->address,
+                    'lat' => $w->lat === null ? null : (float) $w->lat,
+                    'lng' => $w->lng === null ? null : (float) $w->lng,
+                ])->values(),
+        ];
     }
 
     /**

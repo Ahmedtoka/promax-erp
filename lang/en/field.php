@@ -84,6 +84,8 @@ return [
     'event_delivered_sub' => ':qty units • EGP :amount',
     'event_client_request' => 'New client request — :name',
     'event_awaiting_manager' => 'Awaiting the manager’s approval',
+    // Managers open accounts themselves — approved on the spot (11 Aug 2026)
+    'event_client_auto_approved' => 'Opened and approved on the spot — created by the manager himself',
     'event_merch_visit' => 'Merchandising visit — :client',
     'event_replenishment' => 'Replenishment :number — :client',
     'event_qty_requested' => ':qty units requested',

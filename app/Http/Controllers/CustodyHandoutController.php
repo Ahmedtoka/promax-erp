@@ -29,11 +29,21 @@ class CustodyHandoutController extends Controller
     {
         $warehouse = $this->warehouse($request);
 
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): بياخد عهدة يسلّم بيها ═══
+        // بيضيف **نفسه هو بس** — في شاشة الأمين/الأدمن المديرين مش
+        // بيظهروا، و`Scope::assertRep` في `store` بترفض تحميل عهدة
+        // على مدير من غير نفسه أو الأدمن.
+        $reps = User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver', 'promoter', 'manager']))
+            ->where('active', true)->orderBy('name')->get();
+
+        if ($request->user()?->role === 'manager' && ! $reps->contains('id', $request->user()->id)) {
+            $reps->push($request->user());
+        }
+
         return view('ops.handout', [
             'warehouse' => $warehouse,
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->orderBy('code')->get(),
-            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver', 'promoter']))
-                ->where('active', true)->orderBy('name')->get(),
+            'reps' => $reps,
             // ⚠️ **المتاح من الأرفف مش من `stocks`.** أمر التجهيز
             // بيخصم من الأرفف، فالرقم اللي بيتعرض لازم يكون هو نفسه
             // اللي هيتفحص وقت التسليم — وإلا الشاشة بتقول «متاح 40»
@@ -126,7 +136,12 @@ class CustodyHandoutController extends Controller
         // بتقول «اليوزر ده موجود» مش «ده مندوب» — ومن غير الفحص ده
         // ينفع تتحمّل عهدة على محاسب أو أدمن، وتقفل عهدة محدش
         // هيقفلها.
-        if (! in_array($rep->role, ['sales_agent', 'driver', 'promoter'], true)) {
+        //
+        // ⚠️ `manager` اتضاف (١١ أغسطس ٢٠٢٦) — المدير الميداني بياخد
+        // عهدة يسلّم بيها أوردرات. `Scope::assertRep` تحت هي اللي
+        // بتقفلها على «نفسه أو من الأدمن» — مدير تاني وأمين المخزن
+        // مايحمّلوش عليه.
+        if (! in_array($rep->role, ['sales_agent', 'driver', 'promoter', 'manager'], true)) {
             return back()->withErrors(['rep_id' => __('field.not_a_field_role')])->withInput();
         }
 

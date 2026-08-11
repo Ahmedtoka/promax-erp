@@ -31,10 +31,22 @@ class JourneyController extends Controller
     {
         // ⚠️ سكوب الفرع — مدير المعادي بيشوف فريق المعادي بس
         $reps = User::fieldVisibleTo(Branch::scope(User::with('zone')))
-            ->whereIn('role', User::FIELD_ROLES)
+            ->whereIn('role', User::FIELD_WORK_ROLES)
             ->where('active', true)
             ->orderBy('name')
             ->get();
+
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): بيعمل خط سير **لنفسه** ═══
+        // القايمة فوق «فريق الشارع» — والمدير مش في `FIELD_ROLES` عن
+        // قصد (عشان تقارير الفريق). هنا بس بيضيف نفسه عشان ينظّم
+        // شغله، و`Scope::assertRep` في store/destroy/reorder بتسمح
+        // له **على نفسه بس**. شاشات الأدمن زي ما هي.
+        $viewer = $request->user();
+
+        if ($viewer !== null && $viewer->role === 'manager'
+            && ! $reps->contains('id', $viewer->id)) {
+            $reps->push($viewer->load('zone'));
+        }
 
         $rep = $request->filled('rep')
             ? $reps->firstWhere('id', (int) $request->input('rep'))
@@ -58,6 +70,14 @@ class JourneyController extends Controller
         $available = Client::visibleTo(
             Client::with(['zone', 'group'])->where('status', 'active')
                 ->where(function ($q) use ($rep) {
+                    // المدير الميداني (١١/٨): محطات خطته من عملاءه
+                    // المتسكّنين له (`manager_id`) — نفس مرساة الزيارة.
+                    if ($rep->role === 'manager') {
+                        $q->where('manager_id', $rep->id);
+
+                        return;
+                    }
+
                     $q->where('rep_id', $rep->id);
                     if ($rep->zone_id) {
                         $q->orWhere('zone_id', $rep->zone_id);
@@ -229,7 +249,7 @@ class JourneyController extends Controller
     public function assignments(Request $request)
     {
         $reps = User::fieldVisibleTo(Branch::scope(User::with(['zone', 'zones'])))
-            ->whereIn('role', User::FIELD_ROLES)
+            ->whereIn('role', User::FIELD_WORK_ROLES)
             ->where('active', true)
             ->orderBy('name')
             ->get();
@@ -392,7 +412,7 @@ class JourneyController extends Controller
                 ->orderByDesc('date')
                 ->with('items.product'),
         ])), $request->user())
-            ->whereIn('role', User::FIELD_ROLES)
+            ->whereIn('role', User::FIELD_WORK_ROLES)
             ->where('active', true)
             ->orderBy('name')
             ->get();
@@ -416,13 +436,49 @@ class JourneyController extends Controller
             ->selectRaw('user_id, COALESCE(SUM(grand_total),0) as s')
             ->groupBy('user_id')->pluck('s', 'user_id');
 
-        // اللي جوه زيارة مفتوحة دلوقتي — بينوّر بنفسجي على الخريطة
-        $inVisit = \App\Models\Visit::whereIn('user_id', $reps->pluck('id'))
+        // ⚠️ «باع بكام» (إعادة البناء ١١/٨) = فواتير اليوم **+ أوامر
+        // التوريد اللي اتسلمت النهارده** — السواق مبيعاته POs مش
+        // فواتير، ومن غير الجمعة ده كان بيبان صفر طول اليوم.
+        // الاتنين بالـgrand_total (اللي العميل بيدفعه — عقيدة الأرقام).
+        $poToday = \App\Models\PurchaseOrder::whereDate('delivered_at', today())
+            ->whereIn('assigned_to', $reps->pluck('id'))
+            ->where('status', 'delivered')
+            ->selectRaw('assigned_to, COUNT(*) as c, COALESCE(SUM(grand_total),0) as s')
+            ->groupBy('assigned_to')->get()->keyBy('assigned_to');
+
+        // زيارات اليوم لكل مندوب — «زار محلات ولا لأ»
+        $visitsToday = \App\Models\Visit::whereIn('user_id', $reps->pluck('id'))
+            ->whereDate('checked_in_at', today())
+            ->selectRaw('user_id, COUNT(*) as c')
+            ->groupBy('user_id')->pluck('c', 'user_id');
+
+        // الزيارة المفتوحة دلوقتي — بينوّر بنفسجي على الخريطة، ومعاها
+        // العميل عشان «آخر حالة»: المدير يشوف المندوب واقف عند مين
+        $openVisits = \App\Models\Visit::with('client')
+            ->whereIn('user_id', $reps->pluck('id'))
             ->whereDate('checked_in_at', today())
             ->whereNull('checked_out_at')
-            ->pluck('user_id')->flip();
+            ->get()->keyBy('user_id');
 
-        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $inVisit) {
+        // حالة الحضور (شغال/بريك/منصرف) — بانشات اليوم محمّلة مرة
+        // واحدة وآخر بانش بيتحسب من الكولكشن، مش `Attendance::state`
+        // اللي بتعمل firstOrCreate + كويري بانش لكل مندوب كل ٣ ثواني
+        $workStates = \App\Models\AttendanceDay::with('punches')
+            ->whereDate('date', today())
+            ->whereIn('user_id', $reps->pluck('id'))
+            ->get()
+            ->mapWithKeys(function ($d) {
+                $lastPunch = $d->punches->sortBy([['at', 'desc'], ['id', 'desc']])->first();
+
+                return [$d->user_id => match ($lastPunch?->type) {
+                    \App\Models\AttendancePunch::IN,
+                    \App\Models\AttendancePunch::BACK => 'working',
+                    \App\Models\AttendancePunch::BREAK => 'break',
+                    default => 'off',
+                }];
+            });
+
+        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $poToday, $visitsToday, $openVisits, $workStates) {
             // من العلاقة المحمّلة فوق — مش كويري جديدة
             $custody = $rep->custodies->first();
             $summary = Journeys::summary($rep);
@@ -431,7 +487,7 @@ class JourneyController extends Controller
 
             // الحالة: زيارة ← متحرك (إشارة < 10 دقايق) ← واقف ← مفيش إشارة
             $status = match (true) {
-                $inVisit->has($rep->id) => 'visit',
+                $openVisits->has($rep->id) => 'visit',
                 $minutes !== null && $minutes < 10 => 'moving',
                 $minutes !== null => 'idle',
                 default => 'off',
@@ -478,22 +534,52 @@ class JourneyController extends Controller
                 ])->values()->all()
                 : [];
 
+            // ⚠️ قيمة العهدة بعقيدة التسعير (١١/٨): السواق بضاعته
+            // متسعّرة «قديم» والسيلز بيبيع بـ«جديد» — قبل كده الكل
+            // كان بيتقيّم «جديد» فعهدة السواق كانت شكلها أغلى من حقيقتها.
+            $priceMode = $rep->role === 'driver' ? 'old' : 'new';
+
+            // مسار اليوم — من نفس `$eventsByUser` المحمّلة فوق (مفيش
+            // كويري زيادة): ترتيب زمني تصاعدي عشان الخط يترسم صح،
+            // وسقف 300 نقطة عشان حمولة الـSSE كل ٣ ثواني متتخنش.
+            $track = ($eventsByUser->get($rep->id) ?? collect())
+                ->sortBy(fn ($e) => ($e->happened_at ?? $e->created_at)->getTimestamp())
+                ->slice(-300)
+                ->values()
+                ->map(fn ($e) => [
+                    'lat' => (float) $e->lat,
+                    'lng' => (float) $e->lng,
+                    't' => ($e->happened_at ?? $e->created_at)->format('H:i'),
+                ])->all();
+
             return [
                 'rep' => $rep,
                 'custody' => $custody,
                 'remaining_units' => $custody?->remainingUnits() ?? 0,
-                'remaining_value' => round($custody?->remainingValue('new') ?? 0, 2),
+                'remaining_value' => round($custody?->remainingValue($priceMode) ?? 0, 2),
                 'summary' => $summary,
                 'last' => $last,
                 'lat' => $last?->lat,
                 'lng' => $last?->lng,
                 'minutes_ago' => $minutes,
                 'status' => $status,
-                'sales_today' => round((float) ($salesToday[$rep->id] ?? 0), 2),
+                'sales_today' => round((float) ($salesToday[$rep->id] ?? 0)
+                    + (float) ($poToday->get($rep->id)?->s ?? 0), 2),
                 'km_today' => \App\Services\RepKpis::kmForDay($rep, now()),
                 'speed' => $speed,
                 'in_zone' => $inZone,
                 'items' => $items,
+                // ═══ إعادة البناء (١١/٨) — «كل واحد معاه بكام وباع بكام
+                // وزار ولا لأ وعمل أوامر ولا لأ وآخر حالة إيه» ═══
+                'visits_today' => (int) ($visitsToday[$rep->id] ?? 0),
+                'pos_today' => (int) ($poToday->get($rep->id)?->c ?? 0),
+                'work' => $workStates[$rep->id] ?? 'off',
+                'open_client' => $openVisits->get($rep->id)?->client?->displayName(),
+                'last_event' => $last !== null
+                    ? trim($last->title.($last->subtitle ? ' · '.$last->subtitle : ''))
+                    : null,
+                'last_event_icon' => $last?->icon(),
+                'track' => $track,
             ];
         });
 
@@ -528,7 +614,10 @@ class JourneyController extends Controller
             // دخل الفيد هيغرقه (المندوب بيفتح الأبلكيشن 50 مرة في اليوم)
             ->where('type', '!=', 'open')
             ->orderByDesc('happened_at')
-            ->take(25)
+            // ⚠️ 60 مش 25 (١١/٨) — التايم لاين بقى بيتفلتر بالمندوب
+            // في المتصفح، و25 حدث لكل الفريق كانوا بيسيبوا للمندوب
+            // الواحد حدثين تلاتة والباقي «فاضي» كذباً.
+            ->take(60)
             ->get()
             ->map(fn ($e) => [
                 't' => $e->happened_at->format('H:i'),
@@ -537,6 +626,8 @@ class JourneyController extends Controller
                 'color' => $e->color(),
                 'rep' => $names[$e->user_id] ?? '—',
                 'text' => trim($e->title.($e->subtitle ? ' · '.$e->subtitle : '')),
+                // فلترة التايم لاين بالضغط على المندوب — client-side
+                'user_id' => (int) $e->user_id,
             ])
             ->values()->all();
     }
@@ -702,6 +793,17 @@ class JourneyController extends Controller
                 'in_zone' => $r['in_zone'],
                 'items' => $r['items'],
                 'url' => route('ops.rep_day', $r['rep']),
+                // ═══ إضافات إعادة البناء (١١/٨) — كلها additive عشان
+                // صفحة قديمة متكاشة في متصفح مفتوح متقعش ═══
+                'avatar_url' => $r['rep']->avatarUrl(),
+                'initials' => $r['rep']->initials(),
+                'work' => $r['work'],
+                'open_client' => $r['open_client'],
+                'last_event' => $r['last_event'],
+                'last_event_icon' => $r['last_event_icon'],
+                'visits' => $r['visits_today'],
+                'pos' => $r['pos_today'],
+                'track' => $r['track'],
             ])->values(),
         ];
     }
@@ -720,6 +822,9 @@ class JourneyController extends Controller
             'in_zone' => $rows->filter(fn ($r) => $r['in_zone'] === true)->count(),
             'out_zone' => $rows->filter(fn ($r) => $r['in_zone'] === false)->count(),
             'idle' => $rows->filter(fn ($r) => $r['status'] === 'idle')->count(),
+            // إعادة البناء (١١/٨) — «الكل زار كام محل وسلّم كام أمر»
+            'visits' => (int) $rows->sum(fn ($r) => $r['visits_today']),
+            'pos' => (int) $rows->sum(fn ($r) => $r['pos_today']),
         ];
     }
 

@@ -32,7 +32,7 @@ class RepSettlementController extends Controller
     /** المناديب بأرصدتهم وأرقام الفترة المفتوحة — نظرة واحدة */
     public function index()
     {
-        $reps = User::whereIn('role', ['sales_agent', 'driver'])
+        $reps = User::whereIn('role', ['sales_agent', 'driver', 'manager']) // المدير بيتصفّى كمان (١١/٨ مساءً)
             ->where('active', true)->orderBy('name')->get();
 
         $rows = $reps->map(function (User $rep) {

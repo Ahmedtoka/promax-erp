@@ -141,4 +141,14 @@ return [
     // Update-mode indicator (2026-08-07)
     'realtime_on' => 'Realtime',
     'realtime_off' => 'Polling every 15s',
+
+    // ═══ Control-room rebuild (2026-08-11) ═══
+    'visits_today' => 'Visits today',
+    'pos_delivered_today' => 'POs delivered',
+    'at_client' => 'In a visit at :client',
+    'timeline_for' => ':name events only',
+    'timeline_all_hint' => 'Whole team',
+    'no_alerts_rep' => 'No events for this rep today',
+    'track_hint' => 'Click a rep to draw their route for today on the map',
+    'work_state' => 'Attendance',
 ];

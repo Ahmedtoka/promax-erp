@@ -83,6 +83,8 @@ return [
     'event_delivered_sub' => ':qty وحدة • :amount ج',
     'event_client_request' => 'طلب عميل جديد — :name',
     'event_awaiting_manager' => 'مستني موافقة المدير',
+    // المدير بيفتح الأكاونت بنفسه — بيتوافق في نفس اللحظة (١١ أغسطس ٢٠٢٦)
+    'event_client_auto_approved' => 'اتفتح واتوافق فوراً — المدير فتحه بنفسه',
     'event_merch_visit' => 'زيارة رف — :client',
     'event_replenishment' => 'طلب ريفيل :number — :client',
     'event_qty_requested' => ':qty قطعة مطلوبة',

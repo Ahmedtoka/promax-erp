@@ -30,7 +30,7 @@ class OpsController extends Controller
     {
         // ⚠️ سكوب الفرع على لوحة العمليات
         $field = \App\Models\Branch::scope(
-            User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES)->with('zone')),
+            User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES)->with('zone')),
         )->get();
 
         // ⚠️ أرقام اللوحة من نفس الفريق المعروض — للمدير ده فريقه بس،
@@ -116,7 +116,7 @@ class OpsController extends Controller
      */
     public function vans(Request $request)
     {
-        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))
             ->where('active', true)
             ->with('zone')
             ->orderBy('name')
@@ -499,7 +499,7 @@ class OpsController extends Controller
                 ->orderBy('name')->get(['id', 'name', 'name_en']),
             'groupChannels' => $groupChannels,
             'warehouses' => Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
-            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver'])
+            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver', 'manager'])
                 ->where('active', true))->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -1199,6 +1199,17 @@ class OpsController extends Controller
             ->whereNotNull('group_id')->whereNotNull('channel_id')
             ->distinct()->get(['group_id', 'channel_id']);
 
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): بيسلّم أوردرات بنفسه ═══
+        // بيضيف **نفسه هو بس** لقايمة المستلمين — `Scope::assertRep`
+        // في الحفظ والتسكين بتسمح بالمدير على نفسه (أو من الأدمن)
+        // ومدير تاني لأ. قايمة فريق الشارع نفسها زي ما هي.
+        $reps = User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver', 'manager']))
+            ->where('active', true)->orderBy('name')->get(['id', 'name']);
+
+        if (auth()->user()?->role === 'manager' && ! $reps->contains('id', auth()->id())) {
+            $reps->push(auth()->user());
+        }
+
         return view('ops.po_handout', [
             'shelfAvail' => $this->shelfAvailability(),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
@@ -1212,8 +1223,7 @@ class OpsController extends Controller
             'clients' => Client::visibleTo(Client::with(['group.contract.priceListRow', 'contract.priceListRow', 'priceListRow'])
                 ->where('status', 'active'))->orderBy('name')
                 ->get(['id', 'name', 'name_en', 'group_id', 'channel_id', 'balance', 'price_list', 'price_list_id']),
-            'reps' => User::fieldVisibleTo(User::whereIn('role', ['sales_agent', 'driver']))
-                ->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'reps' => $reps,
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
             'products' => Product::where('active', true)->orderBy('code')->get(),
         ]);
@@ -1610,7 +1620,7 @@ class OpsController extends Controller
             'events' => $events,
             'reps' => $reps,
             'colors' => $colors,
-            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))->get(),
+            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
             'userId' => $userId,
             'date' => $date->toDateString(),
         ]);
@@ -1638,7 +1648,7 @@ class OpsController extends Controller
 
         return view('ops.invoices', [
             'invoices' => $q->latest()->paginate(40)->withQueryString(),
-            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))->get(),
+            'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
             'filters' => $request->only(['user', 'from', 'to']),
             'sum' => (clone $q)->sum('total'),
         ]);

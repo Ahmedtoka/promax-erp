@@ -63,35 +63,51 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ⚠️ **`admin,manager` اتشالوا من المجموعة دي** (تدقيق ٨/٨/٢٠٢٦):
     // توكن مدير كان يقدر يعمل `POST /invoices` و`/returns` — يعني
     // نافذة كتابة مفتوحة على دفتر أي عميل من غير عهدة ولا زيارة.
-    // المدير مالوش عربية ولا عهدة، فمالوش لازمة في شغل الشارع أصلاً؛
-    // ولو احتاج يكتب فاتورة، مكانها الـERP بمسار وسجل واضحين.
-    Route::middleware(['api.role:sales_agent,driver,promoter', 'attendance'])->group(function () {
-        // الزيارات
+    //
+    // ═══ ورجع `manager` **بحساب** (قرار المالك ١١ أغسطس ٢٠٢٦) ═══
+    // «عاوز التشانل مانجر زي المندوب بالظبط: ينزل يروح محلات، يفتح
+    // أكاونتات من غير موافقة، يعمل خط سير لنفسه، ويسلّم أوردرات.»
+    // فالمدير في المجموعة دي للزيارات وأوامر التوريد والمخزن وطلبات
+    // العملاء — لكن **الفاتورة والمرتجع فاضلين لفريق الشارع بس**
+    // (المجموعة المتداخلة تحت): دول مربوطين بتصفية المندوب، والمدير
+    // مالوش تصفية. وحارس `attendance` شغال عليه زي أي مندوب.
+    Route::middleware(['api.role:sales_agent,driver,promoter,manager', 'attendance'])->group(function () {
+        // الزيارات — `ownsClient` هي اللي بتحدد عملاء مين: للمدير
+        // عملاؤه هم المتسكّنين له (`clients.manager_id`)
         Route::post('/visits/check-in', [FieldApiController::class, 'checkIn']);
         Route::post('/visits/{visit}/check-out', [FieldApiController::class, 'checkOut']);
 
-        Route::post('/invoices', [FieldApiController::class, 'storeInvoice']);
+        // ═══ الفاتورة والمرتجع — والمدير كمان (قرار المالك ١١/٨ مساءً) ═══
+        // «الشركة لسه صغيرة — المدير هيبيع ويتصفّى زي المندوب بالظبط،
+        // وإحنا فاصلين كل واحد بمبيعاته ومرتجعاته وفريقه». المدير بقى
+        // بياخد عهدة ويبيع منها وبيدخل قايمة التصفية زي أي مندوب.
+        Route::middleware('api.role:sales_agent,driver,promoter,manager')->group(function () {
+            Route::post('/invoices', [FieldApiController::class, 'storeInvoice']);
 
-        // مرتجع من العميل — قيد دائن + بضاعة مفصولة في العهدة
-        Route::post('/returns', [FieldApiController::class, 'storeReturn']);
+            // مرتجع من العميل — قيد دائن + بضاعة مفصولة في العهدة
+            Route::post('/returns', [FieldApiController::class, 'storeReturn']);
+        });
 
         // ═══ ٣ أوبشنات الزيارة الجديدة (2026-08-09) ═══
         // كلهم مرساتهم **زيارة مفتوحة** — نفس دوكترين الفاتورة والمرتجع.
         //
-        // ⚠️ **للسيلز إيجينت بس** (قرار ٩/٨ مساءً):
+        // ⚠️ **للسيلز إيجينت والمدير بس** (قرار ٩/٨ مساءً + ١١/٨):
         // - البروموتر: تصفيته مش بتتحسب، وكاش يحصّله بينزل الدفتر
         //   ومايتحاسبش عليه حد. شغله رفوف الكي أكاونت من `merch_visits`.
         // - السواق: مالوش فلو زيارة في الأبلكيشن أصلاً — صلاحية
         //   مفتوحة لأكشن مالوش شاشة باب مفتوح وبس. لو المالك قرر
         //   السواق يحصّل من الزيارات، ضيف `driver` هنا **وابني له
         //   مدخل العميل في الأبلكيشن** في نفس اليوم.
-        Route::middleware('api.role:sales_agent')->group(function () {
+        // - المدير (١١/٨ مساءً): «زي المندوب بالظبط» — بقى له تصفية
+        //   زي أي مندوب (قايمة تصفية المناديب بتشمله)، وتحصيله
+        //   النقدي بيدخل «المتوقع» فيها بنفس مرساة الزيارة.
+        Route::middleware('api.role:sales_agent,manager')->group(function () {
             Route::post('/visits/{visit}/collect', [FieldApiController::class, 'collect']);
             Route::post('/visits/{visit}/shelf-photo', [FieldApiController::class, 'shelfPhoto']);
             Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
         });
 
-        // أوامر التوريد
+        // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);
 
@@ -116,7 +132,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         });
 
         // ═══ الليدز: القرار أكشن (القراءة بره الحارس تحت) ═══
-        Route::post('/leads/{lead}/action', [\App\Http\Controllers\Api\IncentiveApiController::class, 'leadAction']);
+        // ⚠️ فريق الشارع بس — الليدز والحوافز نظام المناديب، والمدير
+        // دخوله المجموعة (١١/٨) ماكانش المقصود بيه ده.
+        Route::middleware('api.role:sales_agent,driver,promoter')->group(function () {
+            Route::post('/leads/{lead}/action', [\App\Http\Controllers\Api\IncentiveApiController::class, 'leadAction']);
+        });
     });
 
     // ═══════════════════════════════════════════════════════════

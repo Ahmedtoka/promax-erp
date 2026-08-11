@@ -59,6 +59,20 @@ class User extends Authenticatable
     /** الرولز اللي بتنزل الشارع */
     public const FIELD_ROLES = ['sales_agent', 'driver', 'promoter'];
 
+    /**
+     * الرولز اللي بتشتغل شغل ميداني **فعلاً** — الشارع + المدير.
+     *
+     * (قرار المالك ١١ أغسطس ٢٠٢٦ مساءً): «الشركة لسه صغيرة — المدير
+     * هيبيع ويتصفّى ويتابع مناديبه، وإحنا فاصلين كل واحد بمبيعاته
+     * ومرتجعاته وفريقه». دي بتتستخدم في شاشات **المتابعة والتصفية
+     * والتوزيع** (اللايف، عهد المناديب، التراكينج، التصفية، تسليم
+     * العهدة) عشان المدير يظهر فيها زي أي مندوب.
+     *
+     * ⚠️ `FIELD_ROLES` فضلت زي ما هي — أي منطق بيميّز «مين مرؤوس
+     * لمدير» أو تقارير فريق الشارع الخام بيفضل عليها.
+     */
+    public const FIELD_WORK_ROLES = ['sales_agent', 'driver', 'promoter', 'manager'];
+
     protected $fillable = [
         'name', 'name_en', 'email', 'password', 'role', 'code', 'phone',
         'zone_id', 'channel_id', 'branch_id', 'warehouse_id', 'active', 'locale',
@@ -186,7 +200,13 @@ class User extends Authenticatable
         $viewer = $viewer ?? auth()->user();
 
         if ($viewer !== null && $viewer->role === 'manager') {
-            $query->where('manager_id', $viewer->id);
+            // ⚠️ **+ نفسه** (١١/٨ مساءً): المدير بقى بيشتغل ميداني —
+            // من غير `orWhere` كان بيختفي من قوايم فريقه هو شخصياً
+            // (اللايف، التصفية، عهد المناديب...) لأن `manager_id`
+            // بتاعه null.
+            $query->where(fn ($q) => $q
+                ->where('manager_id', $viewer->id)
+                ->orWhere('id', $viewer->id));
         }
 
         return $query;
@@ -395,6 +415,24 @@ class User extends Authenticatable
     public function isFieldUser(): bool
     {
         return in_array($this->role, self::FIELD_ROLES, true);
+    }
+
+    /**
+     * ميداني «فعلياً» — الرولز الميدانية أو التشانل مانجر.
+     *
+     * ⚠️ **المدير بقى ميداني كمان (قرار المالك ١١ أغسطس ٢٠٢٦)**:
+     * بينزل يزور محلاته، يفتح أكاونتات (من غير موافقة — هو كده كده
+     * المدير)، يعمل خط سير لنفسه، وياخد عهدة ويسلّم أوردرات.
+     *
+     * ⚠️⚠️ **مقصود إن المدير مش في `FIELD_ROLES` نفسها.** القايمة دي
+     * معناها «فريق الشارع» في تقارير الفريق والتصفية والشاشة اللايف
+     * وشاشات العهد — إضافة المدير ليها كانت هتغرق الشاشات دي
+     * بالمديرين وتخرب معنى التقارير. اللي محتاج يسأل «الراجل ده
+     * ينفع ينزل الشارع؟» يستخدم الدالة دي، مش القايمة.
+     */
+    public function isFieldCapable(): bool
+    {
+        return in_array($this->role, self::FIELD_ROLES, true) || $this->role === 'manager';
     }
 
     /** أكواد القنوات اللي المستخدم مسموحله يتحكم فيها */

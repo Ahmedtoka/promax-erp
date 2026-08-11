@@ -99,7 +99,7 @@ return [
     'f_done' => 'المتأكدة',
     'address' => 'العنوان',
     'f_from_visit' => 'جاهز للتأكيد',
-    'f_from_visit_hint' => 'مندوب سحب النقطة',
+    'f_from_visit_hint' => 'المندوب عمل تشيك إن عنده',
     'f_unconfirmed' => 'مستني مراجعة',
     'f_unconfirmed_hint' => 'فيه إحداثيات محدش أكّدها',
     'f_no_location' => 'مالوش لوكيشن',
