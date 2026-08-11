@@ -18,7 +18,7 @@ class ClientRequest extends Model
     ];
 
     protected $fillable = [
-        'number', 'name', 'phone', 'address', 'zone_id', 'has_docs',
+        'number', 'name', 'phone', 'address', 'address_ar', 'zone_id', 'lat', 'lng', 'has_docs',
         'photo_path', 'docs_path', 'docs_type',
         'status', 'created_by', 'decided_by', 'decided_at', 'client_id', 'decision_note',
     ];
@@ -86,6 +86,18 @@ class ClientRequest extends Model
     public function docsUrl(): ?string
     {
         return $this->docs_path ? asset('storage/'.$this->docs_path) : null;
+    }
+
+    public function hasPoint(): bool
+    {
+        return $this->lat !== null && $this->lng !== null;
+    }
+
+    public function mapUrl(): ?string
+    {
+        return $this->hasPoint()
+            ? 'https://www.google.com/maps?q='.$this->lat.','.$this->lng
+            : null;
     }
 
     public static function nextNumber(): string

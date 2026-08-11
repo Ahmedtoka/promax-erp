@@ -225,6 +225,14 @@ return [
     'reject' => 'Reject',
     'note_to_rep' => 'Note to the rep',
     'no_requests' => 'No requests.',
+    // ═══ Rich approval form (2026-08-11) ═══
+    'captured_location' => "Rep's captured location",
+    'detect_from_location' => 'Detect address from location',
+    'open_in_maps' => 'Open in Google Maps',
+    'no_location_captured' => 'No location was captured with this request - detection is unavailable.',
+    'chain_inherits_note' => "A chain branch inherits the chain's contract and discount.",
+    'contract_finish_hint' => 'Mark as a contract client, then finish the full contract from the client edit page.',
+    'contract_pending_note' => 'Contract to be finalized from the client edit page.',
 
     // ---------- Replenishment ----------
     'replenishments' => 'Replenishment Requests',

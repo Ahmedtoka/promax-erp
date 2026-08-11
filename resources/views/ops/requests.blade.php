@@ -31,7 +31,17 @@
             @forelse ($requests as $r)
                 {{-- ملحوظة: ممنوع دايركتيف json بمصفوفة جوه الـ Blade — بيكسّر الـ parser --}}
                 @php $rJson = json_encode(
-                    ['id' => $r->id, 'name' => $r->name, 'zone' => $r->zone_id],
+                    [
+                        'id' => $r->id,
+                        'name' => $r->name,
+                        'zone' => $r->zone_id,
+                        'address' => $r->address,
+                        'address_ar' => $r->address_ar,
+                        'lat' => $r->lat,
+                        'lng' => $r->lng,
+                        // القناة المبدئية من قناة المندوب صاحب الطلب
+                        'channel' => $r->rep?->channel_id,
+                    ],
                     JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
                 ); @endphp
                 <tr>
@@ -78,7 +88,8 @@
 
 @if ($manager)
 <dialog id="dlgDecide">
-    <form class="dlg" method="POST" id="formDecide">
+    {{-- ⚠️ فورم طويل — بيتعمله سكرول جوه المودال (max-height + overflow). --}}
+    <form class="dlg" method="POST" id="formDecide" style="max-width:660px;max-height:86vh;overflow:auto">
         @csrf
         <h4 id="dTitle">{{ __('ops.decide_on', ['name' => __('ops.request')]) }}</h4>
 
@@ -90,16 +101,114 @@
                     <option value="rejected">{{ __('ops.reject') }}</option>
                 </select>
             </div>
-            <div id="wrapZone"><label class="f">{{ __('team.zone') }}</label>
-                @include('partials._zone_select', [
-                    'zones' => $zones,
-                    'name' => 'zone_id',
-                    'placeholder' => '— '.__('common.none').' —',
-                    'style' => 'width:100%',
-                    'attrs' => 'id="dZone"',
-                ])
+        </div>
+
+        {{-- ═══ حقول الاعتماد — بتبان لـ«اعتماد» بس ═══ --}}
+        <div id="approveFields">
+            {{-- النقطة اللي المندوب لقّطها + زرار كشف العنوان منها --}}
+            <div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:12px 0;background:var(--card2)">
+                <div style="font-size:12px;font-weight:800;color:var(--royal-blue);margin-bottom:8px">{{ __('ops.captured_location') }}</div>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button type="button" class="btn sm" id="dGeoFill" onclick="detectFromLocation()">
+                        🌐 {{ __('ops.detect_from_location') }}
+                    </button>
+                    <a id="dMapLink" href="#" target="_blank" rel="noopener" class="btn sm" style="display:none">📍 {{ __('ops.open_in_maps') }}</a>
+                    <span id="dGeoMsg" style="font-size:11.5px;color:var(--muted)"></span>
+                </div>
+                <div id="dNoPoint" style="font-size:11.5px;color:var(--muted);margin-top:6px;display:none">{{ __('ops.no_location_captured') }}</div>
             </div>
-            <div id="wrapDisc"><label class="f">{{ __('client.discount_pct') }}</label><input type="number" step="0.5" name="discount" value="0" style="width:100%"></div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('geo.address_en') }}</label>
+                    <input type="text" name="address" id="dAddr" dir="ltr" maxlength="190" style="width:100%">
+                </div>
+                <div>
+                    <label class="f">{{ __('geo.address_ar') }}</label>
+                    <input type="text" name="address_ar" id="dAddrAr" maxlength="190" style="width:100%">
+                </div>
+            </div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('geo.governorate') }}</label>
+                    <select name="governorate" id="dGov" style="width:100%" onchange="filterZones()">
+                        <option value="">{{ __('geo.pick_governorate') }}</option>
+                        @foreach ($governorates as $key => $label)
+                            <option value="{{ $key }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="f">{{ __('geo.zone') }}</label>
+                    {{-- ⚠️ سيلكت مسطّح بـ`data-gov` عشان الفلترة في المتصفح
+                         (نفس نمط client_form) مش البارشال المجمّع. --}}
+                    <select name="zone_id" id="dZone" style="width:100%">
+                        <option value="">{{ __('geo.pick_zone') }}</option>
+                        @foreach ($zones as $z)
+                            <option value="{{ $z->id }}" data-gov="{{ $z->governorate }}">{{ $z->displayName() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('client.channel') }}</label>
+                    <select name="channel_id" id="dChannel" style="width:100%" onchange="syncSubChannel()">
+                        <option value="">— {{ __('client.pick_channel') }} —</option>
+                        @foreach ($channels as $ch)
+                            <option value="{{ $ch->id }}" data-code="{{ $ch->code }}">{{ $ch->displayName() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div id="dSubChannelBox" style="display:none">
+                    <label class="f">{{ __('client.key_account_segment') }}</label>
+                    <select name="sub_channel" style="width:100%">
+                        <option value="">— {{ __('client.pick_segment') }} —</option>
+                        @foreach (array_keys(\App\Models\Channel::SUB_CHANNELS) as $k)
+                            <option value="{{ $k }}">{{ __('enums.sub_channel.'.$k) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('client.price_list') }}</label>
+                    <select name="price_list_id" style="width:100%">
+                        <option value="">— {{ __('client.pick_price_list') }} —</option>
+                        @foreach ($priceLists as $pl)
+                            <option value="{{ $pl->id }}">{{ $pl->displayName() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="f">{{ __('client.custom_discount') }} %</label>
+                    <input type="number" step="0.5" min="0" max="100" name="discount" value="0" style="width:100%">
+                </div>
+            </div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('client.chain') }}</label>
+                    <select name="group_id" style="width:100%">
+                        <option value="">— {{ __('client.independent') }} —</option>
+                        @foreach ($groups as $grp)
+                            <option value="{{ $grp->id }}">{{ $grp->displayName() }}</option>
+                        @endforeach
+                    </select>
+                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('ops.chain_inherits_note') }}</div>
+                </div>
+                <div style="display:flex;align-items:flex-end;padding-bottom:6px">
+                    {{-- المخفي يسبق: لو مش متعلّم بيوصل 0 بدل ما مايوصلش خالص --}}
+                    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:800;cursor:pointer">
+                        <input type="hidden" name="has_contract" value="0">
+                        <input type="checkbox" name="has_contract" value="1"> {{ __('client.has_contract') }}
+                    </label>
+                </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin:-4px 0 4px">{{ __('ops.contract_finish_hint') }}</div>
         </div>
 
         <div><label class="f">{{ __('ops.note_to_rep') }}</label><input type="text" name="note" placeholder="{{ __('common.optional') }}" style="width:100%"></div>
@@ -115,19 +224,133 @@
 @endsection
 
 @section('scripts')
+@php
+    // ⚠️ ممنوع دايركتيف @json بمصفوفة — بيكسّر بارسر بليد. json_encode في @php.
+    $decideData = json_encode([
+        'suggest' => route('erp.client_locations.suggest'),
+        'decideBase' => url('ops/requests'),
+        'titleTpl' => __('ops.decide_on', ['name' => '#N#']),
+        'wait' => __('geo.fetching'),
+        'fail' => __('geo.reverse_failed'),
+        'fAddr' => __('geo.address'),
+        'fGov' => __('geo.governorate'),
+        'fZone' => __('geo.zone'),
+    ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+@endphp
 <script>
+const DEC = {!! $decideData !!};
+// النقطة الملتقطة للطلب المفتوح حالياً
+let CUR = { lat: null, lng: null };
+
 function decide(r) {
-    const tpl = {!! json_encode(__('ops.decide_on', ['name' => '#N#']), JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
-    document.getElementById('dTitle').textContent = tpl.replace('#N#', r.name);
-    document.getElementById('formDecide').action = '{{ url('ops/requests') }}/' + r.id + '/decide';
-    if (r.zone) document.getElementById('dZone').value = r.zone;
+    document.getElementById('dTitle').textContent = DEC.titleTpl.replace('#N#', r.name);
+    document.getElementById('formDecide').action = DEC.decideBase + '/' + r.id + '/decide';
+    document.getElementById('dDecision').value = 'approved';
+
+    document.getElementById('dAddr').value = r.address || '';
+    document.getElementById('dAddrAr').value = r.address_ar || '';
+    document.getElementById('dGov').value = '';
+    document.getElementById('dZone').value = r.zone || '';
+    document.getElementById('dChannel').value = r.channel || '';
+    document.querySelector('#formDecide select[name="price_list_id"]').value = '';
+    document.querySelector('#formDecide select[name="group_id"]').value = '';
+    document.querySelector('#formDecide input[name="discount"]').value = '0';
+    document.getElementById('dGeoMsg').textContent = '';
+
+    CUR = { lat: r.lat != null ? r.lat : null, lng: r.lng != null ? r.lng : null };
+    updateCaptured();
+    syncSubChannel();
+    filterZones();
     toggleFields();
     openDlg('dlgDecide');
 }
+
 function toggleFields() {
     const approved = document.getElementById('dDecision').value === 'approved';
-    document.getElementById('wrapZone').style.display = approved ? '' : 'none';
-    document.getElementById('wrapDisc').style.display = approved ? '' : 'none';
+    document.getElementById('approveFields').style.display = approved ? '' : 'none';
+}
+
+// النقطة موجودة؟ نوري لينك الخريطة ونفعّل زرار الكشف — وإلا نعطّله
+function updateCaptured() {
+    const has = CUR.lat != null && CUR.lng != null;
+    const link = document.getElementById('dMapLink');
+    const btn = document.getElementById('dGeoFill');
+    const noPt = document.getElementById('dNoPoint');
+    if (has) {
+        link.style.display = '';
+        link.href = 'https://www.google.com/maps?q=' + CUR.lat + ',' + CUR.lng;
+        btn.disabled = false;
+        noPt.style.display = 'none';
+    } else {
+        link.style.display = 'none';
+        btn.disabled = true;
+        noPt.style.display = '';
+    }
+}
+
+// فلترة المناطق بالمحافظة — نفس نمط client_form
+function filterZones() {
+    const gov = document.getElementById('dGov').value;
+    const sel = document.getElementById('dZone');
+    Array.from(sel.options).forEach(function (opt) {
+        if (!opt.value) return;
+        const ok = !gov || !opt.dataset.gov || opt.dataset.gov === gov || opt.selected;
+        opt.hidden = !ok;
+    });
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '';
+}
+
+// قسم الكي أكاونت بيبان للكي أكاونت بس — نفس نمط client_form
+function syncSubChannel() {
+    const sel = document.getElementById('dChannel');
+    const box = document.getElementById('dSubChannelBox');
+    const sub = box.querySelector('select');
+    const code = sel.selectedOptions[0] ? sel.selectedOptions[0].dataset.code : '';
+    const allowed = (code === 'key_account');
+    box.style.display = allowed ? '' : 'none';
+    if (!allowed && sub) sub.value = '';
+}
+
+// كشف العنوان AR/EN + المحافظة + المنطقة من النقطة — نفس fillFromMap
+async function detectFromLocation() {
+    if (CUR.lat == null || CUR.lng == null) return;
+    const msg = document.getElementById('dGeoMsg');
+    const btn = document.getElementById('dGeoFill');
+    btn.disabled = true;
+    msg.textContent = DEC.wait;
+    try {
+        const r = await fetch(DEC.suggest, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+            },
+            body: JSON.stringify({ lat: CUR.lat, lng: CUR.lng }),
+        });
+        const j = await r.json();
+        if (!r.ok) { msg.textContent = j.message || DEC.fail; return; }
+
+        if (j.ar) document.getElementById('dAddrAr').value = j.ar;
+        if (j.en) document.getElementById('dAddr').value = j.en;
+
+        const gov = document.getElementById('dGov');
+        if (j.governorate && !gov.value) gov.value = j.governorate;
+        // نعيد الفلترة بعد المحافظة عشان منطقة الاقتراح تبقى ظاهرة
+        filterZones();
+        const zone = document.getElementById('dZone');
+        if (j.zone_id && !zone.value) zone.value = j.zone_id;
+
+        const filled = [];
+        if (j.en || j.ar) filled.push(DEC.fAddr);
+        if (j.governorate) filled.push(DEC.fGov);
+        if (j.zone_id) filled.push(DEC.fZone);
+        msg.textContent = filled.length ? '✔ ' + filled.join(' · ') : DEC.fail;
+    } catch (e) {
+        msg.textContent = DEC.fail;
+    } finally {
+        btn.disabled = false;
+    }
 }
 </script>
 @endsection

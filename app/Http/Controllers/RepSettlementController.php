@@ -203,6 +203,20 @@ class RepSettlementController extends Controller
         $cashSales = round($cashSales + $poCash, 2);
         $creditSales = round($creditSales + max(0, $poCredit - $poCash), 2);
 
+        // ═══ تفاصيل أوامر التوريد المسلَّمة — للعرض (طلب المالك ١١/٨) ═══
+        //
+        // ⚠️ **الرقم كان بيبان والتفصيلة لأ:** «مبيعات آجل 20,727»
+        // في الكارت بس الجدول «مفيش» لأنه بيقرا `invoices` بس —
+        // والآجل ده جاي من أوامر التوريد المسلَّمة. المحاسب بيسأل
+        // «الفلوس دي لمين» فلازم يشوف الأوامر بأسماء عملائها.
+        $poRows = \App\Models\PurchaseOrder::where('assigned_to', $rep->id)
+            ->where('status', 'delivered')
+            ->when($from, fn ($q) => $q->where('delivered_at', '>', $from))
+            ->where('delivered_at', '<=', $now)
+            ->with('client')
+            ->orderByDesc('delivered_at')
+            ->get();
+
         // ═══ مستندات المرتجع في النافذة (٨ أغسطس ٢٠٢٦) ═══
         //
         // ⚠️ **المرتجع بقى مستند ليه بنود وحالة.** المحاسب لازم يشوف
@@ -280,6 +294,9 @@ class RepSettlementController extends Controller
             'refund_rows' => $refundRows,
             'cash_sales' => $cashSales,
             'credit_sales' => $creditSales,
+            'po_rows' => $poRows,
+            'po_cash' => $poCash,
+            'po_credit' => round(max(0, $poCredit - $poCash), 2),
             'cash_refunds' => $cashRefunds,
             'collection_rows' => $collectionRows,
             'cash_collections' => $cashCollections,

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
+use App\Models\Channel;
 use App\Models\Client;
+use App\Models\ClientGroup;
 use App\Models\ClientRequest;
 use App\Models\Invoice;
+use App\Models\PriceList;
 use App\Models\PickOrder;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
@@ -197,7 +200,13 @@ class OpsController extends Controller
         // ⚠️ مدير القناة بيخرّج **فريقه** بس — نفس حارس كل الشاشات
         Scope::assertStaff($request->user(), $visit->user);
 
-        $visit->update(['checked_out_at' => now()]);
+        // ⚠️ **بنقفل كل الزيارات المفتوحة للمندوب مش الصف ده بس**
+        // (إصلاح ١١/٨): لو حصل ازدواج (زيارتين لنفس اليوم من ريتراي
+        // على شبكة ضعيفة)، إخراج واحدة كان بيسيب التانية والزيارة
+        // «تطلع تاني» بعد الريفريش. القفلة الجماعية بتخلص الحالة كلها.
+        \App\Models\Visit::where('user_id', $visit->user_id)
+            ->whereNull('checked_out_at')
+            ->update(['checked_out_at' => now()]);
 
         \App\Models\TrackEvent::log($visit->user, 'check_out',
             __('field.event_check_out', ['client' => $visit->client?->displayName() ?? '—']),
@@ -1567,16 +1576,34 @@ class OpsController extends Controller
 
         return view('ops.requests', [
             'requests' => $q->latest()->paginate(30)->withQueryString(),
-            'zones' => Zone::orderBy('code')->get(),
+            'zones' => Zone::orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
             'filters' => $request->only('status'),
+            // ═══ داتا فورم الاعتماد الغني (١١ أغسطس ٢٠٢٦) ═══
+            // نفس مصادر `ErpController::clientFormData` عشان العميل
+            // المعتمد يطلع متسق مع اللي بيتعمل من شاشة العميل.
+            'channels' => Channel::orderBy('id')->get(),
+            'priceLists' => PriceList::where('active', true)->orderBy('id')->get(),
+            'groups' => ClientGroup::where('active', true)->orderBy('name')->get(),
+            'governorates' => \App\Support\Governorates::options(),
         ]);
     }
 
     public function decideRequest(Request $request, ClientRequest $clientRequest)
     {
+        // ⚠️ كل الحقول اختيارية إلا القرار — «مراجعة» و«رفض» بيبعتوا
+        // ملاحظة بس، والاعتماد بيملا الباقي (كلها مبدئية والمدير يعدّل
+        // من كارت العميل بعدين).
         $data = $request->validate([
             'decision' => ['required', 'in:approved,review,rejected'],
             'zone_id' => ['nullable', 'exists:zones,id'],
+            'governorate' => ['nullable', 'string', 'max:60'],
+            'address' => ['nullable', 'string', 'max:190'],
+            'address_ar' => ['nullable', 'string', 'max:190'],
+            'channel_id' => ['nullable', 'exists:channels,id'],
+            'sub_channel' => ['nullable', 'in:'.implode(',', array_keys(Channel::SUB_CHANNELS))],
+            'price_list_id' => ['nullable', 'exists:price_lists,id'],
+            'group_id' => ['nullable', 'exists:client_groups,id'],
+            'has_contract' => ['nullable', 'boolean'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
@@ -1599,26 +1626,50 @@ class OpsController extends Controller
                 // مابيلاقيهوش في الزون. الوراثة من المندوب صاحب الطلب.
                 $rep = $clientRequest->rep;
 
+                $discount = (float) ($data['discount'] ?? 0);
+
+                // ⚠️ **العقد الكامل مش هنا.** الاعتماد بيسجّل خصم +
+                // قائمة سعر مباشرة على العميل (خصم العميل يغلب حسب
+                // الترتيب المقدّس). الـ٢٢ بند بيتظبّطوا من شاشة تعديل
+                // العميل. لو المدير علّم «عليه عقد»، بنسيبله ملاحظة
+                // يفكّره يكمّله من هناك — من غير ما نعمل عقد فاضي.
+                // ⚠️ ولو فرع سلسلة (`group_id`)، عقد السلسلة هو اللي
+                // بيحكم — فمابنقترحش عقد فردي (دوكترين promax-clients).
+                $wantsContract = ! empty($data['has_contract']) && empty($data['group_id']);
+
                 $client = Client::create([
                     'code' => Client::nextCode(),
                     'name' => $clientRequest->name,
                     'phone' => $clientRequest->phone,
-                    'address' => $clientRequest->address,
+                    // العنوان الإنجليزي والعربي والنقطة من الفورم
+                    // (المدير راجعها/كشفها) وإلا من الطلب نفسه.
+                    'address' => $data['address'] ?? $clientRequest->address,
+                    'address_ar' => $data['address_ar'] ?? $clientRequest->address_ar,
+                    'lat' => $clientRequest->lat,
+                    'lng' => $clientRequest->lng,
+                    'governorate' => $data['governorate'] ?? null,
                     'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id ?? $rep?->zone_id,
                     'rep_id' => $rep?->id,
-                    'channel_id' => $rep?->channel_id,
+                    // القناة من الفورم وإلا قناة المندوب. `sub_channel`
+                    // للكي أكاونت بس — `Client::booted()` بيصفّيها لو
+                    // القناة مش كده.
+                    'channel_id' => $data['channel_id'] ?? $rep?->channel_id,
+                    'sub_channel' => $data['sub_channel'] ?? null,
+                    'price_list_id' => $data['price_list_id'] ?? null,
+                    'group_id' => $data['group_id'] ?? null,
                     // ⚠️ المدير بييجي من تسكين المندوب مش من الفاعل —
                     // الأدمن بيعتمد لمناديب مديرين مختلفين.
                     'manager_id' => $rep?->manager_id,
                     'branch_id' => $rep?->branch_id,
                     'category' => 'grow',
                     'status' => 'active',
-                    'discount' => ($data['discount'] ?? 0) / 100,
+                    'discount' => $discount / 100,
                     // ⚠️ **توحيد مع التوأم في الـAPI** — الويب ماكانش
                     // بيكتب العمود ده، فنفس الطلب كان بيطلّع عميل
                     // بإعداد خصم مختلف حسب اتعتمد من الويب ولا من
                     // الأبلكيشن.
-                    'uses_channel_discount' => ($data['discount'] ?? 0) <= 0,
+                    'uses_channel_discount' => $discount <= 0,
+                    'notes' => $wantsContract ? __('ops.contract_pending_note') : null,
                     'is_new' => true,
                     'has_docs' => $clientRequest->has_docs,
                     'photo_path' => $clientRequest->photo_path,

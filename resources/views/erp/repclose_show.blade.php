@@ -147,6 +147,55 @@
     @endforeach
 </div>
 
+{{-- ═══ أوامر التوريد المسلَّمة — تفصيلة الآجل الناقصة (١١/٨) ═══
+     الآجل في الكارت فوق بيجمع الفواتير + أوامر التوريد المسلَّمة،
+     بس الجدولين فوق بيقروا الفواتير بس — فأمر توريد لعميل آجل كان
+     رقمه بيبان والتفصيلة «مفيش». الجدول ده بيكمّل الصورة. --}}
+@if (($po_rows ?? collect())->isNotEmpty())
+    <div class="card">
+        <h3>🚚 {{ __('settle.po_delivered') }}
+            <span class="side">{{ __('settle.po_delivered_hint') }}</span></h3>
+        <div class="tablewrap">
+            <table>
+                <thead>
+                <tr>
+                    <th style="text-align:start">{{ __('ops.order') }}</th>
+                    <th>{{ __('client.client') }}</th>
+                    <th>{{ __('settle.window_to') }}</th>
+                    <th>{{ __('common.qty') }}</th>
+                    <th>{{ __('ops.payment') }}</th>
+                    <th>{{ __('common.total') }}</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach ($po_rows as $po)
+                    <tr>
+                        <td style="text-align:start"><b>{{ $po->number }}</b></td>
+                        <td>{{ $po->client?->fullName() ?? '—' }}</td>
+                        <td class="num" style="font-size:11px" dir="ltr">{{ $po->delivered_at?->format('m-d h:i A') ?? '—' }}</td>
+                        <td class="num">{{ number_format((int) $po->items->sum('delivered_qty')) }}</td>
+                        @php $poCashClient = $po->client?->paymentTerms() === 'cash'; @endphp
+                        <td>
+                            <span class="badge {{ $poCashClient ? 'b-green' : 'b-orange' }}">
+                                {{ $poCashClient ? __('enums.payment.cash') : __('enums.payment.credit') }}
+                            </span>
+                        </td>
+                        <td class="num mid">{{ number_format((float) $po->deliveredValue(), 2) }}</td>
+                    </tr>
+                @endforeach
+                <tr class="sum">
+                    <td colspan="5" style="text-align:start"><b>{{ __('common.total') }}</b></td>
+                    <td class="num"><b>{{ number_format((float) $po_rows->sum(fn ($p) => $p->deliveredValue()), 2) }}</b></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="side" style="font-size:11px;margin-top:8px">
+            {{ __('settle.po_split', ['cash' => number_format($po_cash ?? 0, 2), 'credit' => number_format($po_credit ?? 0, 2)]) }}
+        </div>
+    </div>
+@endif
+
 {{-- ═══════════════════════════════════════════════════════════
      مطابقة العهدة — بالقطع مش بالفلوس
      ═══════════════════════════════════════════════════════════

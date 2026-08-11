@@ -68,4 +68,9 @@ return [
     'collections_to_match' => 'Collections in this window',
     'collections_hint' => 'Cash is inside "expected" — cheques and transfers are document handover',
     'proof' => 'Proof',
+    'other_collections' => 'Collections (transfer/cheque)',
+    'other_collections_hint' => 'Not in expected cash - money never reached his hand',
+    'po_delivered' => 'Delivered sales orders',
+    'po_delivered_hint' => 'The credit total above includes invoices + these orders - here is their detail',
+    'po_split' => 'Of which cash: :cash · credit: :credit',
 ];

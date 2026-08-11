@@ -27,6 +27,11 @@
                 <th>{{ __('settle.open_window') }}</th>
                 <th>{{ __('settle.cash_sales') }}</th>
                 <th>{{ __('settle.credit_sales') }}</th>
+                {{-- ⚠️ **تحصيلات غير نقدية** (طلب المالك ١١/٨): التحويل
+                     والشيك والفيزا فلوس ماوصلتش إيد المندوب فمش داخلة
+                     «المتوقع» النقدي — بس المحاسب لازم يشوفها عشان
+                     يعرف المندوب حصّل كام بره الكاش وقت التصفية. --}}
+                <th>{{ __('settle.other_collections') }}</th>
                 <th>{{ __('settle.cash_refunds') }}</th>
                 <th>{{ __('settle.expected') }}</th>
                 <th>{{ __('settle.prev_balance') }}</th>
@@ -52,6 +57,14 @@
                     </td>
                     <td class="num"><b>{{ $fmt($r['cash_sales']) }}</b></td>
                     <td class="num" style="color:var(--muted)">{{ $fmt($r['credit_sales']) }}</td>
+                    <td class="num">
+                        @if ((float) ($r['other_collections_value'] ?? 0) > 0)
+                            <b style="color:#0F766E">{{ $fmt($r['other_collections_value']) }}</b>
+                            <div style="font-size:9.5px;color:var(--muted)">{{ __('settle.other_collections_hint') }}</div>
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
                     <td class="num mid">{{ $fmt($r['cash_refunds']) }}</td>
                     <td class="num pos"><b>{{ $fmt($r['expected']) }}</b></td>
                     <td class="num">

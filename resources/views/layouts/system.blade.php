@@ -157,20 +157,21 @@ img{display:block;max-width:100%}
   color:#fff;font-size:9.5px;font-weight:800;border-radius:99px;
   padding:2px 5.5px;line-height:1.2;border:2px solid var(--card);
 }
-/* ⚠️ **fixed مش absolute** (طلب المالك ٩/٨) — القايمة بتتعلّق على
-   الفيوبورت فمابتتقصّش من أي كونتينر وبتفضل ثابتة مع السكرول.
-   الإحداثيات بيحسبها سكريبت الجرس من مكان الزرار وقت الفتح. */
+/* ⚠️ **absolute جوه الجرس نفسه** (إصلاح نهائي ١١/٨ مساءً) — الحل
+   الـfixed + جافاسكربت كان بيطلّع القايمة بره الشاشة لو السكربت
+   ماشتغلش أو اتأخر. دلوقتي القايمة معلّقة على الزرار مباشرة بـCSS
+   بحت: بتنزل تحته وتمتد للداخل (بعيد عن حافة الشاشة). الجرس نفسه
+   `position:relative` تحت. مفيش اعتماد على أي جافاسكربت للتموضع. */
 .bell-panel{
-  position:fixed;top:70px;z-index:600;
-  width:340px;max-width:calc(100vw - 16px);max-height:min(430px, calc(100vh - 90px));
+  position:absolute;top:calc(100% + 8px);z-index:600;
+  width:340px;max-width:calc(100vw - 24px);max-height:min(430px, calc(100vh - 120px));
   overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);
 }
-/* ⚠️ فولباك من غير جافاسكربت — بالاتجاه الفيزيائي الصريح (١١/٨):
-   `inset-inline-end` في RTL كانت بتتحسب غلط في متصفحات وبتطلّع
-   القايمة بره الشاشة. الجرس في العربي على الشمال → القايمة من الشمال. */
-[dir=ltr] .bell-panel{right:18px;left:auto}
-[dir=rtl] .bell-panel{left:18px;right:auto}
+/* الجرس في LTR على اليمين → القايمة حافتها اليمنى معاه وتمتد شمال.
+   في RTL على الشمال → حافتها الشمال معاه وتمتد يمين. الاتنين للداخل. */
+[dir=ltr] .bell-panel{right:0;left:auto}
+[dir=rtl] .bell-panel{left:0;right:auto}
 .bell-head{
   display:flex;justify-content:space-between;align-items:center;
   padding:10px 13px;border-bottom:1px solid var(--border);font-size:12.5px;
@@ -647,9 +648,13 @@ select.ssel-native{display:none!important}
                 <a class="bell-item {{ $note->read_at ? '' : 'unread' }}"
                    href="{{ route('notifications.go', $note) }}">
                     <span class="bell-dot {{ $note->is_good ? 'good' : 'bad' }}"></span>
+                    {{-- ⚠️ **`dir="auto"`** (طلب المالك ١١/٨): الإشعار
+                         العربي يترتب يمين-لشمال والإنجليزي شمال-ليمين
+                         تلقائياً حسب أول حرف — بدل ما الاتنين يتفرضوا
+                         باتجاه الصفحة ويطلع أحدهم متبعثر. --}}
                     <span class="bell-txt">
-                        <b>{{ $note->title }}</b>
-                        @if ($note->body)<span>{{ $note->body }}</span>@endif
+                        <b dir="auto">{{ $note->title }}</b>
+                        @if ($note->body)<span dir="auto">{{ $note->body }}</span>@endif
                         <small>{{ $note->created_at->diffForHumans() }}</small>
                     </span>
                 </a>
@@ -668,33 +673,10 @@ select.ssel-native{display:none!important}
         (function () {
             const bell = document.querySelector('.bell');
             if (!bell) return;
-            const panel = bell.querySelector('.bell-panel');
-            const summary = bell.querySelector('summary');
 
-            function place() {
-                const r = summary.getBoundingClientRect();
-                const w = Math.min(340, window.innerWidth - 16);
-
-                // ⚠️ **حساب فيزيائي مش لغوي** (إصلاح ١١/٨): الحساب
-                // القديم كان بيقرا `dir` وبيطلّع القايمة بره الشاشة
-                // في العربي. القاعدة الجديدة بمكان الزرار نفسه:
-                // زرار في النص الشمال → القايمة تمتد يمينه، والعكس —
-                // شغالة في الاتجاهين ومزنوقة جوه الشاشة دايماً.
-                let left = (r.left + r.width / 2) < window.innerWidth / 2
-                    ? r.left
-                    : r.right - w;
-                left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-
-                panel.style.left = left + 'px';
-                panel.style.right = 'auto';
-                panel.style.insetInlineEnd = 'auto';
-                panel.style.insetInlineStart = 'auto';
-                panel.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - 120)) + 'px';
-            }
-
-            bell.addEventListener('toggle', () => { if (bell.open) place(); });
-            window.addEventListener('resize', () => { if (bell.open) place(); });
-
+            // ⚠️ **التموضع بقى CSS بحت** (١١/٨ مساءً) — القايمة absolute
+            // على الجرس نفسه، فمفيش حساب جافاسكربت يطلّعها بره الشاشة.
+            // الباقي هنا: قفل بالضغط بره أو Esc بس.
             document.addEventListener('click', (e) => {
                 if (bell.open && !bell.contains(e.target)) bell.open = false;
             });

@@ -1884,6 +1884,11 @@ class FieldApiController extends Controller
             'name' => ['required', 'string', 'max:190'],
             'phone' => ['nullable', 'string', 'max:30'],
             'address' => ['nullable', 'string', 'max:190'],
+            // ⚠️ النقطة اللي المندوب لقّطها وهو واقف عند المحل — المدير
+            // بيكشف منها العنوان في فورم الاعتماد. اختيارية: الطلب
+            // بيتسجّل حتى لو الـGPS مقفول.
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
             'has_docs' => ['nullable'],
             'photo' => ['nullable', 'file', 'image', 'max:8192'],
             'docs' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:12288'],
@@ -1929,6 +1934,8 @@ class FieldApiController extends Controller
                 'phone' => $data['phone'] ?? null,
                 'address' => $data['address'] ?? null,
                 'zone_id' => $user->zone_id,
+                'lat' => $data['lat'] ?? null,
+                'lng' => $data['lng'] ?? null,
                 'has_docs' => $hasDocs || $docsPath !== null,
                 'photo_path' => $photoPath,
                 'docs_path' => $docsPath,
@@ -1948,6 +1955,12 @@ class FieldApiController extends Controller
                 'name' => $req->name,
                 'phone' => $req->phone,
                 'address' => $req->address,
+                // النقطة والعنوان العربي بيرثوا من الطلب لو موجودين —
+                // المدير من الموبايل مالوش فورم اعتماد غني زي الويب،
+                // فبناخد اللي المندوب لقّطه من غير ما نضيّعه.
+                'address_ar' => $req->address_ar,
+                'lat' => $req->lat,
+                'lng' => $req->lng,
                 'zone_id' => $req->zone_id ?? $user->zone_id,
                 'rep_id' => null,
                 'channel_id' => $user->channel_id,
