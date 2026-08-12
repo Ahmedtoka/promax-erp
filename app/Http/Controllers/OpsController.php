@@ -106,6 +106,10 @@ class OpsController extends Controller
             'u' => $user,
             'stats' => $this->userStats($user),
             'custody' => $custody,
+            // عرض فقط (١٢/٨): قيمة الباقي بكل قايمة مفعّلة + قايمة
+            // المندوب المعتمدة (السواق قديمة والسيلز جديدة) لديالوج التعديل
+            'custodyValues' => \App\Support\CustodyValue::remainingTotals($custody),
+            'repList' => \App\Support\CustodyValue::listForRep($user),
             'invoices' => Invoice::with('client')->where('user_id', $user->id)
                 ->latest()->take(30)->get(),
             'visits' => $user->visits()->with('client')->take(30)->get(),
@@ -180,6 +184,10 @@ class OpsController extends Controller
                 'gifts_left' => (int) ($c?->items->sum(fn ($i) => max((int) $i->gift_assigned - (int) $i->gift_given, 0)) ?? 0),
                 'remaining' => $remaining,
                 'remaining_value' => round($c?->remainingValue($mode) ?? 0, 2),
+                // ⚠️ عرض فقط (طلب المالك ١٢/٨): قيمة الباقي بكل قايمة
+                // مفعّلة — «لو بالقديمة بكده ولو بالجديدة بكده».
+                // القوايم ميمو للريكوست كله (CustodyValue) — مش كويري لكل صف.
+                'values' => \App\Support\CustodyValue::remainingTotals($c),
                 // نسبة التصريف — المخلَّص من المحمّل (بيع + مرتجع للمخزن)
                 'pct' => $assigned > 0 ? (int) round(($assigned - $remaining) / $assigned * 100) : 0,
                 'expiring' => $c?->expiringItems(30)->count() ?? 0,
@@ -196,6 +204,8 @@ class OpsController extends Controller
             'openCount' => $rows->where('state', 'open')->count(),
             'noneCount' => $rows->where('state', 'none')->count(),
             'streetValue' => $rows->where('state', 'open')->sum('remaining_value'),
+            // تفصيلة الكارت: نفس القيمة بكل قايمة مفعّلة — عرض فقط
+            'streetValues' => \App\Support\CustodyValue::merge($rows->where('state', 'open')->pluck('values')),
             'unitsLeft' => $rows->where('state', 'open')->sum('remaining'),
         ]);
     }
@@ -383,6 +393,8 @@ class OpsController extends Controller
                 'state' => $c === null ? 'none' : ($c->status === 'closed' ? 'closed' : 'open'),
                 'remaining' => $remaining,
                 'remaining_value' => round($c?->remainingValue($mode) ?? 0, 2),
+                // عرض فقط: قيمة الباقي بكل قايمة مفعّلة (طلب المالك ١٢/٨)
+                'values' => \App\Support\CustodyValue::remainingTotals($c),
                 // نسبة التصريف — المخلَّص من المحمّل، نفس معادلة «عهد المناديب»
                 'pct' => $assigned > 0 ? (int) round(($assigned - $remaining) / $assigned * 100) : 0,
                 'cash' => $cash,

@@ -24,7 +24,10 @@
 {{-- ═══ السامري ═══ --}}
 <div class="kpis" style="margin-bottom:14px">
     <div class="kpi"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val" style="color:#16A34A">{{ $openCount }}</div></div>
-    <div class="kpi"><div class="lbl">💰 {{ __('field.vans_street_value') }}</div><div class="val">{{ $fmt($streetValue) }}</div></div>
+    <div class="kpi"><div class="lbl">💰 {{ __('field.vans_street_value') }}</div><div class="val">{{ $fmt($streetValue) }}</div>
+        {{-- عرض فقط (١٢/٨): نفس البضاعة متقيّمة بكل قايمة مفعّلة --}}
+        <div class="sub2">@include('partials._list_values', ['totals' => $streetValues])</div>
+    </div>
     <div class="kpi"><div class="lbl">📦 {{ __('field.vans_units_left') }}</div><div class="val">{{ $fmt($unitsLeft) }}</div></div>
     <div class="kpi"><div class="lbl">⚪ {{ __('field.vans_no_custody') }}</div><div class="val" style="color:var(--muted)">{{ $noneCount }}</div></div>
 </div>
@@ -94,7 +97,9 @@
                     <td dir="ltr">
                         @if ($c)
                             <b style="font-size:13.5px">{{ $fmt($r['remaining']) }}</b>
-                            <div style="font-size:10.5px;font-weight:800;color:var(--royal-blue, #12399B)">{{ $fmt($r['remaining_value']) }}</div>
+                            {{-- القيمة بكل قايمة مفعّلة — «لو بالقديمة بكده
+                                 ولو بالجديدة بكده» (طلب المالك ١٢/٨) --}}
+                            @include('partials._list_values', ['totals' => $r['values']])
                         @else — @endif
                     </td>
                     <td>

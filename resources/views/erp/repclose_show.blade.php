@@ -32,6 +32,21 @@
     $soldQty = $goods['cash_qty'] + $goods['credit_qty'];
     $spentQty = $soldQty + $goods['po_qty'] + $goods['gift_qty'];
     $vanLeftQty = $goods['remaining_qty'] + $goods['gift_left_qty'];
+
+    // ═══ قيمة الباقي في العربية بكل قايمة مفعّلة (طلب المالك ١٢/٨) ═══
+    // ⚠️ **عرض فقط** — معادلة التصفية ومطابقة العهدة بالقطع زي ما هي.
+    // القيمة من `CustodyValue` (نفس مصدر Pricing — price_list_items)،
+    // والباقي من غير الهدايا (الهدايا مش بضاعة بيع). القوايم بتتحمّل
+    // مرة واحدة — مش كويري لكل صنف.
+    $vanValues = \App\Support\CustodyValue::totals(
+        collect($goods['lines'])->map(fn ($l) => [
+            'product' => $l['product'],
+            'qty' => (int) $l['remaining'],
+        ]),
+    );
+    // عمود «قيمة الباقي» في الجدول بقايمة المندوب المعتمدة —
+    // السواق بالقديمة والسيلز بالجديدة (نفس قاعدة كل الشاشات)
+    $repPriceList = \App\Support\CustodyValue::listForRep($rep);
 @endphp
 
 @section('title', __('settle.title').' — '.$rep->displayName())
@@ -77,6 +92,8 @@
             @endif
         </div>
         <div class="sub2">{{ __('settle.still_on_van') }}: {{ number_format($goods['remaining_qty']) }} {{ __('common.piece') }}</div>
+        {{-- قيمة الباقي بكل قايمة — استرشادي، التصفية بالقطع (١٢/٨) --}}
+        <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div>
     </div>
 </div>
 
@@ -142,6 +159,8 @@
         <div class="lbl">{{ __('settle.still_on_van') }}</div>
         <div class="val" style="color:var(--primary)">{{ number_format($vanLeftQty) }}</div>
         <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div>
+        {{-- القيمة بكل قايمة — عرض فقط (١٢/٨) --}}
+        <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div>
     </div>
     {{-- بره المعادلة بقصد — بضاعة العملاء اللي بتتسلّم مع التصفية --}}
     <div class="kpi {{ ($goods['returned_qty'] + $goods['damaged_qty']) == 0 ? 'st-zero' : '' }}">
@@ -566,7 +585,9 @@
                 <div class="kpi"><div class="lbl">{{ __('settle.returned_wh') }}</div>
                     <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div></div>
                 <div class="kpi"><div class="lbl">{{ __('settle.still_on_van') }}</div>
-                    <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div></div>
+                    <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div>
+                    {{-- القيمة بكل قايمة — عرض فقط، المعادلة بالقطع (١٢/٨) --}}
+                    <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div></div>
                 {{-- بره المعادلة بقصد: بضاعة العملاء اللي في العربية
                      ومالهاش أصل في المحمَّل — لازم تتسلّم مع التصفية --}}
                 <div class="kpi"><div class="lbl">{{ __('settle.returned_in') }}</div>
@@ -600,6 +621,11 @@
                         <th>{{ __('settle.gifts') }}</th>
                         <th>{{ __('settle.returned_wh') }}</th>
                         <th>{{ __('settle.still_on_van') }}</th>
+                        {{-- قيمة الباقي بقايمة المندوب — عرض فقط (١٢/٨).
+                             خلية رقم نضيف فالفوتر الأوتوماتيك بيجمعها --}}
+                        <th>{{ __('ops.remaining_value') }}
+                            <div style="font-size:9.5px;font-weight:600;color:var(--muted)">{{ $repPriceList?->displayName() ?? '—' }}</div>
+                        </th>
                         <th>{{ __('settle.returned_in') }}</th>
                         <th>{{ __('field.return_damaged_units') }}</th>
                         <th>{{ __('settle.shortage') }}</th>
@@ -627,6 +653,8 @@
                             </td>
                             <td class="num">{{ number_format($l['returned']) }}</td>
                             <td class="num" style="color:var(--primary);font-weight:900">{{ number_format($l['remaining']) }}</td>
+                            @php $lRemVal = (int) $l['remaining'] * \App\Support\CustodyValue::priceIn($repPriceList, $l['product']); @endphp
+                            <td class="num">{{ $l['remaining'] > 0 ? number_format($lRemVal, 2) : '—' }}</td>
                             <td class="num" style="color:var(--purple-heart)">{{ number_format($l['returned_in']) }}</td>
                             <td class="num {{ $l['damaged_in'] > 0 ? 'neg' : '' }}">{{ number_format($l['damaged_in']) }}</td>
                             <td class="num {{ $l['diff'] == 0 ? '' : 'neg' }}">
@@ -634,7 +662,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:26px">
+                        <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('settle.no_custody') }}</td></tr>
                     @endforelse
                     </tbody>

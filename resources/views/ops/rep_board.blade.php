@@ -92,8 +92,9 @@
                             <div style="font-size:10.5px;margin-top:2px">
                                 {{ __('field.vans_left') }}:
                                 <b dir="ltr">{{ $fmt0($r['remaining']) }}</b>
-                                · <span dir="ltr" style="font-weight:800;color:var(--royal-blue, #12399B)">{{ $fmt($r['remaining_value']) }}</span>
                             </div>
+                            {{-- القيمة بكل قايمة مفعّلة — عرض فقط (طلب المالك ١٢/٨) --}}
+                            @include('partials._list_values', ['totals' => $r['values']])
                         @elseif ($r['state'] === 'closed')
                             <span class="pill">🔒 {{ __('field.van_closed') }}</span>
                         @else

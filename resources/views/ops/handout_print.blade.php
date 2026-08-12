@@ -15,6 +15,13 @@
     // الورقة بتتطبع بالمطلوب عشان المخزن يجهّز عليها
     $totalQty = (int) $o->items->sum(fn ($it) => (int) ($it->qty_picked ?: $it->qty_requested));
     $sale = $totalQty - $gift;
+
+    // ═══ القيمة بقايمة المندوب (طلب المالك ١٢/٨) — عرض فقط ═══
+    // السواق بالقديمة والسيلز بالجديدة (قاعدة السيستم في CustodyValue).
+    // اللي بيمضي على الورقة يعرف إنه مسؤول عن بضاعة قيمتها كام.
+    $hoList = \App\Support\CustodyValue::listForRep($o->rep);
+    $hoPrice = fn ($it) => \App\Support\CustodyValue::priceIn($hoList, $it->product);
+    $hoValue = round($o->items->sum(fn ($it) => (int) (($it->qty_picked ?? 0) ?: $it->qty_requested) * $hoPrice($it)), 2);
 @endphp
 
 @section('title', __('field.handout_note').' '.$o->number)
@@ -74,6 +81,9 @@
                     <th class="num">{{ __('field.qty_sale') }}</th>
                     <th class="num">{{ __('field.qty_gift') }}</th>
                     <th class="num">{{ __('common.total') }}</th>
+                    {{-- السعر والقيمة بقايمة المندوب — عرض فقط (١٢/٨) --}}
+                    <th class="num">{{ __('doc.unit_price') }}</th>
+                    <th class="num">{{ __('field.handout_value') }}</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -95,6 +105,9 @@
                         <td class="num">{{ $fmt(max($picked - $g, 0)) }}</td>
                         <td class="num">{{ $g > 0 ? $fmt($g) : '—' }}</td>
                         <td class="num"><b>{{ $fmt($picked) }}</b></td>
+                        @php $hoP = $hoPrice($it); @endphp
+                        <td class="num">{{ number_format($hoP, 2) }}</td>
+                        <td class="num"><b>{{ number_format($picked * $hoP, 2) }}</b></td>
                     </tr>
                 @endforeach
 
@@ -105,6 +118,8 @@
                     <td class="num"><b>{{ $fmt($sale) }}</b></td>
                     <td class="num"><b>{{ $gift > 0 ? $fmt($gift) : '—' }}</b></td>
                     <td class="num"><b>{{ $fmt($sale + $gift) }}</b></td>
+                    <td class="num"></td>
+                    <td class="num"><b>{{ number_format($hoValue, 2) }}</b></td>
                 </tr>
                 </tfoot>
             </table>
@@ -118,6 +133,9 @@
                 <b>🎁 {{ __('field.gift_notice', ['qty' => $fmt($gift)]) }}</b>
             </div>
         @endif
+
+        {{-- القيمة استرشادية — العهدة بتتحاسب بالقطعة في التصفية --}}
+        <div class="doc-note">{{ __('field.handout_value_note', ['list' => $hoList?->displayName() ?? '—']) }}</div>
 
         <div class="doc-note">{{ __('field.handout_pledge') }}</div>
 
