@@ -187,8 +187,9 @@
 .lv-tk .up{color:var(--green)} .lv-tk .dn{color:var(--dim)}
 @keyframes lvTape{0%{transform:translateX(0)}100%{transform:translateX({{ $isRtl ? '' : '-' }}50%)}}
 
-.lv-grid{display:grid;grid-template-columns:430px 1fr 300px;gap:12px;align-items:start}
-@media(max-width:1500px){.lv-grid{grid-template-columns:380px 1fr 270px}}
+/* عمود التنبيهات اتوسّع على حساب الخريطة شوية (طلب المالك ١٢/٨) */
+.lv-grid{display:grid;grid-template-columns:430px 1fr 360px;gap:12px;align-items:start}
+@media(max-width:1500px){.lv-grid{grid-template-columns:380px 1fr 320px}}
 @media(max-width:1200px){.lv-grid{grid-template-columns:1fr}.lv-side,.lv-detail{max-height:none}}
 
 /* بانل الأشخاص — جريد كروت بدل القايمة الطويلة */
@@ -246,11 +247,20 @@
 .lv-card-h{font-size:14px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;gap:6px}
 .lv-dim{color:var(--dim);font-size:11px;font-weight:400}
 .lv-tl{display:flex;flex-direction:column;min-height:0;flex:1}
-.lv-alerts{display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:0}
-.lv-alert{display:flex;gap:8px;font-size:12px;line-height:1.5;border-inline-start:2px solid var(--line);padding-inline-start:8px}
-.lv-alert .tm{color:var(--dim);font-size:11px;direction:ltr;white-space:nowrap}
-.lv-alert .ic{font-size:13px;line-height:1.3}
-.lv-alert .rp{color:var(--dim);white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis}
+/* التنبيهات زي الرسايل (طلب المالك ١٢/٨): الاسم فوق، الوقت تحته،
+   ونص التنبيه سطر لوحده — أسهل في القراية من السطر الواحد المزنوق */
+.lv-alerts{display:flex;flex-direction:column;gap:9px;overflow-y:auto;flex:1;min-height:0}
+.lv-alert{
+  display:flex;flex-direction:column;gap:3px;font-size:12.5px;line-height:1.55;
+  border-inline-start:3px solid var(--line);padding:7px 10px;
+  background:rgba(255,255,255,.03);border-radius:0 10px 10px 0;
+}
+[dir=rtl] .lv-alert{border-radius:10px 0 0 10px}
+.lv-alert .hd{display:flex;align-items:center;gap:6px}
+.lv-alert .ic{font-size:13px;line-height:1}
+.lv-alert .rp{color:#E8EAF6;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-alert .tm{color:var(--dim);font-size:10.5px;direction:ltr;white-space:nowrap;margin-inline-start:auto}
+.lv-alert .tx{color:#B9BEDC}
 
 /* الماركرز — صورة الموظف بإطار بلون حالته */
 .lv-marker{position:relative;width:40px;height:40px}
@@ -267,7 +277,9 @@
 .leaflet-container{background:#0D1022}
 
 /* البوب أب */
-.lv-ovl{position:fixed;inset:0;z-index:80;background:rgba(4,7,20,.66);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
+/* ⚠️ z-index أعلى من طبقات Leaflet (اللي بتوصل ~700) — البوب أب كان
+   بيطلع ورا الخريطة (١٢/٨) */
+.lv-ovl{position:fixed;inset:0;z-index:1200;background:rgba(4,7,20,.66);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
 /* ⚠️ display:flex بتاعتنا بتغلب [hidden] بتاعة المتصفح — من غير
    السطر ده الأوفرلاي بيفضل ظاهر على طول (نفس فخ ssel-panel الموثّق) */
 .lv-ovl[hidden]{display:none}
@@ -821,10 +833,8 @@ function renderAlerts() {
     const st = box.scrollTop;
     box.innerHTML = list.length
         ? list.map(a => `<div class="lv-alert" style="border-color:${a.color}">
-             <span class="tm">${a.t}</span>
-             <span class="ic">${a.icon || ''}</span>
-             <span class="rp">${esc(a.rep)}</span>
-             <span>${esc(a.text)}</span></div>`).join('')
+             <div class="hd"><span class="ic">${a.icon || ''}</span><b class="rp">${esc(a.rep)}</b><span class="tm">${a.t}</span></div>
+             <div class="tx">${esc(a.text)}</div></div>`).join('')
         : `<div class="lv-dim">${selectedId === null ? T.noAlerts : T.noAlertsRep}</div>`;
     box.scrollTop = st;
 }
