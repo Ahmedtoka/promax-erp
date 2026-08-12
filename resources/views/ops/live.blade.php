@@ -3,16 +3,25 @@
 @section('title', __('journey.control_room'))
 
 {{-- ═══════════════════════════════════════════════════════════════
-     غرفة تحكم المناديب — إعادة ترتيب كاملة (١١ أغسطس ٢٠٢٦) بطلب المالك:
-     «فلتر بالكل أول ما أفتح»: شريط KPI بمجاميع الفريق فوق (عهدة على
-     الطريق، مبيعات، زيارات، أوامر اتسلمت) ← عمود كروت المناديب بصورهم
-     وكل واحد معاه بكام وباع بكام وزار كام وسلّم كام وآخر حالة ←
-     الخريطة الكبيرة بطبقاتها الأربعة ← التايم لاين بتاع الكل.
-     الضغط على مندوب: مساره النهارده بيترسم على الخريطة والتايم لاين
-     بيتفلتر عليه — ضغطة تانية (أو زرار «الكل») بترجّع كل الفريق.
-     التحديث لايف بـSSE كل ٣ ثواني وبيرجع للبولينج كل ١٥ ثانية لوحده
-     لو التدفق مش شغال — الآلية دي زي ما هي بالحرف.
-     ⚠️ الداتا كلها من `livePayload` — أول رسمة والتحديث نفس المصدر. --}}
+     غرفة تحكم المناديب — نسخة شاشة التلفزيون (١٢ أغسطس ٢٠٢٦) بطلب المالك:
+     «أوضح» — خط أكبر وتباين أعلى على 1080p والخريطة في النص.
+     «الحضور جوه الشاشة» — KPI مندوبين/مديرين في الشارع + أوفلاين،
+     وكل كارت فيه شغال من / انصرف / مش مسجل.
+     «جريد مش قايمة» — بانل الأشخاص قسمين: المديرين ثم المناديب، كروت
+     مدمجة فيها الحالة بمدتها وقيمة العهدة والمبيعات وآخر إشارة.
+     «مفيش إشارة مش مفهومة» — آخر إشارة h:i A ومن قد إيه، أو مفيش
+     إشارة النهارده، أو مش مسجل حضور — والمنصرف أوفلاين مش «مفيش إشارة».
+     «واقف بقاله قد إيه» — كل حالة بمدتها من live_state/live_min.
+     «الزيارة واضحة جداً» — كارت وماركر اللي في زيارة بينبضوا بنفسجي.
+     «البار المتحرك تحت خالص» — التيكر fixed أسفل الشاشة.
+     «دوس على الشخص» — بوب أب بكل بياناته + آخر ٥ أحداث + زرار
+     التراكينج بيفتح في تاب جديد.
+     «أسرع» — نفس الـSSE كل ٣ ثواني، الماركرز بتنزلق (lerp ~2ث) بدل
+     القفز، وفولباك البولينج اتشد لـ10 ثواني.
+     كل الأوقات h:i A بتوقيت القاهرة جاهزة من السيرفر — مفيش JS Date
+     parsing لنصوص UTC نهائياً.
+     ⚠️ الداتا كلها من `livePayload` — أول رسمة والتحديث نفس المصدر،
+     وكل المفاتيح الجديدة additive فالصفحة القديمة المتكاشة ماتقعش. --}}
 
 @section('actions')
     <a class="btn" href="{{ route('ops.journeys') }}">🗓️ {{ __('journey.page') }}</a>
@@ -21,15 +30,16 @@
 
 @section('content')
 
-<div id="lvRoom" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+@php $isRtl = app()->getLocale() === 'ar'; @endphp
 
-    {{-- ═════ الهيدر: عنوان + ساعة + مؤشر التحديث ═════ --}}
+<div id="lvRoom" dir="{{ $isRtl ? 'rtl' : 'ltr' }}">
+
+    {{-- ═════ الهيدر: عنوان + ساعة القاهرة + مؤشر التحديث ═════ --}}
     <div class="lv-top">
         <div class="lv-title">
             <span class="lv-live-dot"></span>
             <b>{{ __('journey.control_room') }}</b>
             <span class="lv-clock" id="lvClock">--:--:--</span>
-            {{-- مؤشر وضع التحديث — اليوزر يعرف الشاشة لايف ولا بولينج --}}
             <span class="lv-mode" id="lvMode">{{ __('journey.realtime_off') }}</span>
         </div>
         <div>
@@ -38,37 +48,31 @@
         </div>
     </div>
 
-    {{-- ═════ شريط الـKPI — مجاميع الفريق كله (العرض الافتراضي «الكل») ═════ --}}
+    {{-- ═════ شريط الـKPI — الحضور والفلوس مجاميع الفريق ═════ --}}
     <div class="lv-kpis" id="lvKpis"></div>
-
-    {{-- ═════ شريط الحركة — تيكر البورصة ═════ --}}
-    <div class="lv-tape"><div class="lv-tape-track" id="lvTape"></div></div>
 
     <div class="lv-grid">
 
-        {{-- ═════ عمود كروت المناديب ═════ --}}
+        {{-- ═════ بانل الأشخاص — جريد: المديرين ثم المناديب ═════ --}}
         <aside class="lv-side">
             <div class="lv-side-head">
-                <b>{{ __('journey.rep') }}</b>
+                <input type="text" id="lvSearch" class="lv-search" placeholder="{{ __('journey.search_rep') }}">
                 <span id="lvSideCount" class="lv-dim"></span>
             </div>
-            <input type="text" id="lvSearch" class="lv-search" placeholder="{{ __('journey.search_rep') }}">
             <div class="lv-chips" id="lvChips">
                 <button class="lv-chip on" data-f="">{{ __('common.all') }}</button>
-                <button class="lv-chip" data-f="moving">{{ __('journey.moving') }}</button>
                 <button class="lv-chip" data-f="visit">{{ __('journey.in_visit_now') }}</button>
-                <button class="lv-chip" data-f="idle">{{ __('journey.idle') }}</button>
-                <button class="lv-chip" data-f="off">{{ __('journey.offline') }}</button>
+                <button class="lv-chip" data-f="moving">{{ __('journey.moving_now') }}</button>
+                <button class="lv-chip" data-f="standing">{{ __('journey.idle') }}</button>
+                <button class="lv-chip" data-f="nosignal">{{ __('journey.no_signal_today') }}</button>
+                <button class="lv-chip" data-f="off">{{ __('journey.offline_chip') }}</button>
             </div>
-            <div class="lv-dim" style="margin-bottom:6px">{{ __('journey.track_hint') }}</div>
-            <div class="lv-replist" id="lvRepList"></div>
+            <div class="lv-peoplewrap" id="lvPeople"></div>
         </aside>
 
-        {{-- ═════ الخريطة ═════ --}}
+        {{-- ═════ الخريطة — نجمة الشاشة ═════ --}}
         <div class="lv-maparea">
             <div class="lv-mapbar">
-                {{-- طبقات الخريطة: شيك بوكسات مرنة — الديفولت المناديب،
-                     والاختيارات بتتحفظ في المتصفح --}}
                 <div class="lv-layers">
                     <span class="lv-layers-t">🗺️ {{ __('journey.map_layers') }}:</span>
                     <label class="lv-layer"><input type="checkbox" data-layer="reps" checked>
@@ -84,37 +88,41 @@
             <div id="lvMap"></div>
             <div class="lv-legend">
                 <span><i class="dot d-visit"></i>{{ __('journey.in_visit_now') }}</span>
-                <span><i class="dot d-moving"></i>{{ __('journey.moving') }}</span>
+                <span><i class="dot d-moving"></i>{{ __('journey.moving_now') }}</span>
                 <span><i class="dot d-idle"></i>{{ __('journey.idle') }}</span>
-                <span><i class="dot d-off"></i>{{ __('journey.offline') }}</span>
+                <span><i class="dot d-off"></i>{{ __('journey.offline_chip') }}</span>
                 <span style="border-inline-start:1px solid var(--line);padding-inline-start:12px">
                     <i class="dot" style="background:var(--green)"></i>{{ __('journey.covered_zone') }}</span>
                 <span><i class="dot" style="background:var(--orange)"></i>{{ __('journey.target_zone') }}</span>
             </div>
         </div>
 
-        {{-- ═════ بانل المندوب المختار + التايم لاين ═════ --}}
+        {{-- ═════ التايم لاين — أوقات h:i A من السيرفر ═════ --}}
         <aside class="lv-detail">
-            <div class="lv-card" id="lvRepCard">
-                <div class="lv-dim" style="text-align:center;padding:26px 8px">{{ __('journey.pick_rep') }}</div>
-            </div>
-            <div class="lv-card">
+            <div class="lv-card lv-tl">
                 <div class="lv-card-h">🔔 {{ __('journey.alerts_feed') }}
                     <span id="lvAlertScope"></span></div>
                 <div class="lv-alerts" id="lvAlerts"></div>
             </div>
         </aside>
     </div>
+
+    {{-- ═════ التيكر — تحت خالص، fixed (طلب المالك ١٢/٨) ═════ --}}
+    <div class="lv-tape"><div class="lv-tape-track" id="lvTape"></div></div>
+
+    {{-- ═════ بوب أب الشخص — بكل بياناته، بيفضل بيتحدث مع كل حمولة ═════ --}}
+    <div class="lv-ovl" id="lvOvl" hidden>
+        <div class="lv-pop" id="lvPop"></div>
+    </div>
 </div>
 
 <style>
-/* ═════ ثيم غرفة التحكم — مشتق من هوية PROMAX ═════
-   الأساس نيلي معتم من Royal Blue #12399B (مش رمادي عام)، والأكسنتات
-   نسخ مفتحة من ألوان البراند علشان الكونتراست على الخلفية الداكنة:
-   royal ← #5B7BE8، purple heart ← #9B6BDB. أخضر/أحمر بدلالة البورصة. */
+/* ═════ ثيم غرفة التحكم — TV grade: خط أكبر وتباين أعلى ═════
+   الأساس نيلي معتم من Royal Blue #12399B، والأكسنتات نسخ مفتحة من
+   ألوان البراند: royal ← #5B7BE8، purple heart ← #9B6BDB. */
 #lvRoom{
-    --bg:#080C1E; --panel:#101635; --panel2:#171E45; --line:#232B5C;
-    --txt:#EDF0FB; --dim:#8A92C0;
+    --bg:#080C1E; --panel:#101635; --panel2:#171E45; --line:#2A3468;
+    --txt:#F2F4FD; --dim:#9AA3D0;
     --royal:#5B7BE8; --purple:#9B6BDB; --green:#22C55E; --orange:#F59E0B; --red:#F43F5E;
     --gray:#5A6190; --sky:#38BDF8;
     --grad:linear-gradient(90deg,#12399B,#602D90);
@@ -124,39 +132,37 @@
         radial-gradient(900px 450px at 10% 110%, rgba(96,45,144,.22), transparent 60%),
         var(--bg);
     color:var(--txt);
-    margin:-18px -24px -40px; padding:14px 18px 22px; min-height:calc(100vh - 60px);
-    font-variant-numeric:tabular-nums;
+    margin:-18px -24px -40px; padding:12px 18px 64px; min-height:calc(100vh - 60px);
+    font-variant-numeric:tabular-nums; font-size:13.5px;
 }
 #lvRoom *{box-sizing:border-box}
 #lvRoom ::-webkit-scrollbar{width:8px;height:8px}
 #lvRoom ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
 .lv-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-.lv-title{display:flex;align-items:center;gap:10px;font-size:17px}
-.lv-clock{font-size:13px;color:var(--dim);direction:ltr;letter-spacing:.5px}
-.lv-live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lvBlink 1.4s infinite}
-/* مؤشر وضع التحديث — رمادي = بولينج، أخضر = تدفق لايف */
-.lv-mode{font-size:10px;border-radius:999px;padding:2px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.lv-title{display:flex;align-items:center;gap:12px;font-size:19px}
+.lv-clock{font-size:16px;color:var(--txt);direction:ltr;letter-spacing:1px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px 10px}
+.lv-live-dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:lvBlink 1.4s infinite}
+.lv-mode{font-size:11px;border-radius:999px;padding:2px 10px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .lv-mode.on{color:#4ADE80;border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.12)}
 
-/* KPIs — شريط مجاميع الفريق فوق الصفحة: أيقونة بهالة + رقم بلونه */
+/* KPIs — كبيرة تتقري من آخر الأوضة */
 .lv-kpis{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .lv-kpi{
     position:relative;background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel);
     border:1px solid var(--line);border-radius:12px;
-    padding:9px 14px 8px;min-width:104px;overflow:hidden;flex:1 1 104px;
+    padding:10px 14px 9px;min-width:120px;overflow:hidden;flex:1 1 120px;
     display:flex;align-items:center;gap:10px;
-    transition:transform .18s, border-color .18s, box-shadow .18s;
+    transition:transform .18s, border-color .18s;
 }
 .lv-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--kc,var(--grad-lite))}
-.lv-kpi:hover{transform:translateY(-2px);border-color:var(--kc,var(--royal));box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .lv-kpi .ic{
-    width:30px;height:30px;border-radius:9px;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;font-size:14px;
+    width:34px;height:34px;border-radius:9px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:16px;
     background:color-mix(in srgb, var(--kc) 16%, transparent);
     box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--kc) 35%, transparent);
 }
-.lv-kpi .v{font-size:17.5px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px;line-height:1.1}
-.lv-kpi .l{font-size:9.5px;color:var(--dim);white-space:nowrap;margin-top:1px}
+.lv-kpi .v{font-size:21px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px;line-height:1.1}
+.lv-kpi .l{font-size:10.5px;color:var(--dim);white-space:nowrap;margin-top:1px}
 .k-royal{--kc:#5B7BE8;--kc-b:#8FA5F0} .k-green{--kc:#22C55E;--kc-b:#4ADE80}
 .k-red{--kc:#F43F5E;--kc-b:#FB7185}  .k-orange{--kc:#F59E0B;--kc-b:#FBBF24}
 .k-purple{--kc:#9B6BDB;--kc-b:#B794E8} .k-sky{--kc:#38BDF8;--kc-b:#7DD3FC}
@@ -164,107 +170,131 @@
 /* طبقات الخريطة */
 .lv-layers{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 12px;flex-wrap:wrap}
 .lv-layers-t{font-size:11px;color:var(--dim)}
-.lv-layer{display:flex;align-items:center;gap:5px;font-size:11.5px;cursor:pointer;user-select:none}
+.lv-layer{display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none}
 .lv-layer input{accent-color:var(--royal);width:14px;height:14px;cursor:pointer}
 .lv-layer i{width:8px;height:8px;border-radius:50%;display:inline-block}
 .lv-gov-label{background:transparent;border:0;box-shadow:none;color:#7DD3FC;font-size:13px;font-weight:800;letter-spacing:1px;white-space:nowrap;text-shadow:0 0 12px rgba(56,189,248,.5)}
 
-/* شريط الحركة — تيكر البورصة */
-.lv-tape{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px;position:relative}
+/* التيكر — تحت خالص (fixed) بطلب المالك */
+.lv-tape{position:fixed;bottom:0;inset-inline:0;z-index:70;background:#0B102A;border-top:1px solid var(--line);overflow:hidden}
 .lv-tape::before,.lv-tape::after{content:'';position:absolute;top:0;bottom:0;width:46px;z-index:2;pointer-events:none}
-.lv-tape::before{inset-inline-start:0;background:linear-gradient(to left,transparent,var(--panel))}
-.lv-tape::after{inset-inline-end:0;background:linear-gradient(to right,transparent,var(--panel))}
-.lv-tape-track{display:inline-flex;gap:34px;white-space:nowrap;padding:7px 0;animation:lvTape 40s linear infinite;will-change:transform}
+.lv-tape::before{inset-inline-start:0;background:linear-gradient(to left,transparent,#0B102A)}
+.lv-tape::after{inset-inline-end:0;background:linear-gradient(to right,transparent,#0B102A)}
+.lv-tape-track{display:inline-flex;gap:38px;white-space:nowrap;padding:9px 0;animation:lvTape 40s linear infinite;will-change:transform}
 .lv-tape:hover .lv-tape-track{animation-play-state:paused}
-.lv-tk{font-size:11.5px;display:inline-flex;gap:7px;align-items:center}
+.lv-tk{font-size:13px;display:inline-flex;gap:8px;align-items:center}
 .lv-tk .sym{font-weight:700}
 .lv-tk .up{color:var(--green)} .lv-tk .dn{color:var(--dim)}
-@keyframes lvTape{0%{transform:translateX(0)}100%{transform:translateX({{ app()->getLocale() === 'ar' ? '' : '-' }}50%)}}
+@keyframes lvTape{0%{transform:translateX(0)}100%{transform:translateX({{ $isRtl ? '' : '-' }}50%)}}
 
-.lv-grid{display:grid;grid-template-columns:290px 1fr 300px;gap:12px;align-items:start}
+.lv-grid{display:grid;grid-template-columns:430px 1fr 300px;gap:12px;align-items:start}
+@media(max-width:1500px){.lv-grid{grid-template-columns:380px 1fr 270px}}
 @media(max-width:1200px){.lv-grid{grid-template-columns:1fr}.lv-side,.lv-detail{max-height:none}}
 
-/* عمود كروت المناديب */
-.lv-side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:78vh;display:flex;flex-direction:column}
-.lv-side-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px}
-.lv-search{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12px;margin-bottom:8px}
+/* بانل الأشخاص — جريد كروت بدل القايمة الطويلة */
+.lv-side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:calc(100vh - 235px);display:flex;flex-direction:column}
+.lv-side-head{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.lv-search{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12.5px}
 .lv-search::placeholder{color:var(--dim)}
 .lv-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
-.lv-chip{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:3px 10px;font-size:10.5px;cursor:pointer}
+.lv-chip{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer}
 .lv-chip.on{background:var(--royal);border-color:var(--royal);color:#fff}
-.lv-replist{overflow-y:auto;display:flex;flex-direction:column;gap:6px;flex:1}
-.lv-rep{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;transition:border-color .15s, transform .15s;position:relative;overflow:hidden}
-.lv-rep::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:transparent}
-.lv-rep:hover{border-color:var(--royal);transform:translateX({{ app()->getLocale() === 'ar' ? '-2px' : '2px' }})}
-.lv-rep.sel{border-color:var(--royal);box-shadow:0 0 0 1px var(--royal), 0 0 18px rgba(91,123,232,.25)}
-.lv-rep.sel::before{background:var(--grad-lite)}
-.lv-rep-top{display:flex;gap:9px;align-items:center}
-.lv-avatar{display:inline-block;width:34px;height:34px;border-radius:50%;flex-shrink:0;border:2px solid;overflow:hidden;background:#fff}
+.lv-peoplewrap{overflow-y:auto;flex:1}
+.lv-sec-h{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;color:var(--dim);letter-spacing:.5px;margin:8px 2px 6px;text-transform:uppercase}
+.lv-sec-h:first-child{margin-top:0}
+.lv-people{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+@media(max-width:1500px){.lv-people{grid-template-columns:1fr}}
+.lv-p{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 9px;cursor:pointer;transition:border-color .15s, transform .15s;position:relative;overflow:hidden}
+.lv-p:hover{border-color:var(--royal);transform:translateY(-1px)}
+.lv-p.sel{border-color:var(--royal);box-shadow:0 0 0 1px var(--royal)}
+/* الزيارة واضحة جداً — نبضة بنفسجية على الكارت كله */
+.lv-p.visiting{border-color:var(--purple);animation:lvVisitCard 1.6s ease-in-out infinite}
+@keyframes lvVisitCard{0%,100%{box-shadow:0 0 0 1px var(--purple)}50%{box-shadow:0 0 0 3px rgba(155,107,219,.55), 0 0 22px rgba(155,107,219,.35)}}
+.lv-p .r1{display:flex;gap:8px;align-items:center}
+.lv-avatar{display:inline-block;width:36px;height:36px;border-radius:50%;flex-shrink:0;border:2px solid;overflow:hidden;background:#fff}
 .lv-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
-.lv-avatar span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;border-radius:50%}
-.lv-rep .nm{font-size:12.5px;font-weight:600}
-.lv-rep .mt{font-size:10px;color:var(--dim);margin-top:2px}
-.lv-rep-badges{margin-inline-start:auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
-.lv-status{font-size:9.5px;border-radius:999px;padding:1px 7px;white-space:nowrap}
-.s-visit{background:rgba(157,111,224,.18);color:var(--purple)}
-.s-moving{background:rgba(46,222,139,.15);color:var(--green)}
-.s-idle{background:rgba(255,176,32,.15);color:var(--orange)}
-.s-off{background:rgba(90,95,133,.25);color:var(--dim)}
-.lv-work{font-size:9px;border-radius:999px;padding:1px 7px;white-space:nowrap}
-.w-working{background:rgba(34,197,94,.14);color:#4ADE80}
-.w-break{background:rgba(245,158,11,.15);color:#FBBF24}
-.w-off{background:rgba(90,95,133,.25);color:var(--dim)}
-.z-in{color:var(--green)} .z-out{color:var(--red)}
-/* صف أرقام المندوب: معاه بكام · باع بكام · زار كام · سلّم كام */
-.lv-rep-stats{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px;color:var(--dim);margin-top:6px}
-.lv-rep-stats b{color:var(--txt);font-weight:700}
-.lv-rep-stats .up b{color:var(--green)}
-.lv-rep-last{font-size:10px;color:var(--dim);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-avatar span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;border-radius:50%}
+.lv-p .nm{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.lv-p .zn{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.lv-status{font-size:10.5px;border-radius:999px;padding:2px 8px;white-space:nowrap;margin-inline-start:auto;flex-shrink:0}
+.s-visit{background:rgba(157,111,224,.2);color:#C6A9F2}
+.s-moving{background:rgba(46,222,139,.16);color:#4ADE80}
+.s-standing{background:rgba(255,176,32,.16);color:#FBBF24}
+.s-nosignal{background:rgba(56,189,248,.14);color:#7DD3FC}
+.s-off{background:rgba(90,95,133,.3);color:var(--dim)}
+.lv-p .ln{font-size:11px;color:var(--dim);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-p .ln b{color:var(--txt);font-weight:700}
+.lv-p .ln.vis{color:#C6A9F2;font-weight:700;white-space:normal}
+.lv-p .nums{display:flex;gap:10px;font-size:11.5px;color:var(--dim);margin-top:5px}
+.lv-p .nums b{color:var(--txt)} .lv-p .nums .up b{color:var(--green)}
 
 /* الخريطة */
 .lv-maparea{position:relative}
 .lv-mapbar{display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap}
-.lv-btn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 12px;font-size:11.5px;cursor:pointer}
+.lv-btn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
 .lv-btn.on{background:var(--royal);border-color:var(--royal)}
-.lv-btn.sm{padding:2px 9px;font-size:10px;border-radius:999px}
-#lvMap{height:64vh;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
-.lv-legend{display:flex;gap:14px;justify-content:flex-end;margin-top:7px;font-size:10.5px;color:var(--dim)}
+.lv-btn.sm{padding:2px 9px;font-size:10.5px;border-radius:999px}
+#lvMap{height:calc(100vh - 320px);min-height:430px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+.lv-legend{display:flex;gap:14px;justify-content:flex-end;margin-top:7px;font-size:11px;color:var(--dim)}
 .lv-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-inline-end:4px}
 .d-visit{background:var(--purple)} .d-moving{background:var(--green)} .d-idle{background:var(--orange)} .d-off{background:var(--gray)}
 
-/* بانل التفاصيل */
-.lv-detail{display:flex;flex-direction:column;gap:12px;max-height:78vh;overflow-y:auto}
+/* التايم لاين */
+.lv-detail{display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 235px)}
 .lv-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;position:relative;overflow:hidden}
 .lv-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--grad)}
-.lv-card-h{font-size:13px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
-.lv-dim{color:var(--dim);font-size:10.5px;font-weight:400}
-.lv-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
-.lv-stat{background:var(--panel2);border-radius:8px;padding:6px 4px;text-align:center}
-.lv-stat .v{font-size:13.5px;font-weight:700}
-.lv-stat .l{font-size:9px;color:var(--dim)}
-.lv-item{margin-bottom:9px}
-.lv-item .r1{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
-.lv-item .bar{height:5px;background:var(--panel2);border-radius:99px;overflow:hidden}
-.lv-item .bar i{display:block;height:100%;border-radius:99px}
-.lv-alerts{display:flex;flex-direction:column;gap:7px;max-height:34vh;overflow-y:auto}
-.lv-alert{display:flex;gap:8px;font-size:11px;line-height:1.5;border-inline-start:2px solid var(--line);padding-inline-start:8px}
-.lv-alert .tm{color:var(--dim);font-size:10px;direction:ltr;white-space:nowrap}
-.lv-alert .ic{font-size:12px;line-height:1.3}
+.lv-card-h{font-size:14px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.lv-dim{color:var(--dim);font-size:11px;font-weight:400}
+.lv-tl{display:flex;flex-direction:column;min-height:0;flex:1}
+.lv-alerts{display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:0}
+.lv-alert{display:flex;gap:8px;font-size:12px;line-height:1.5;border-inline-start:2px solid var(--line);padding-inline-start:8px}
+.lv-alert .tm{color:var(--dim);font-size:11px;direction:ltr;white-space:nowrap}
+.lv-alert .ic{font-size:13px;line-height:1.3}
 .lv-alert .rp{color:var(--dim);white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis}
 
-/* الماركرز — صورة الموظف بإطار بلون حالته (نمط التراكينج) */
-.lv-marker{position:relative;width:38px;height:38px}
-.lv-marker .pic{width:34px;height:34px;border-radius:50%;border:2.5px solid;overflow:hidden;background:#fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;box-shadow:0 1px 6px rgba(0,0,0,.5)}
+/* الماركرز — صورة الموظف بإطار بلون حالته */
+.lv-marker{position:relative;width:40px;height:40px}
+.lv-marker .pic{width:36px;height:36px;border-radius:50%;border:2.5px solid;overflow:hidden;background:#fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;box-shadow:0 1px 6px rgba(0,0,0,.5)}
 .lv-marker .pic img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
-.lv-marker .pic span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;border-radius:50%}
-.lv-marker .ring{width:46px;height:46px;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);opacity:.5}
+.lv-marker .pic span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;border-radius:50%}
+.lv-marker .ring{width:48px;height:48px;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);opacity:.5}
 .lv-marker.mv .ring{animation:lvPing 1.6s ease-out infinite}
-.lv-marker.vs .ring{animation:lvPing 1.1s ease-out infinite}
-.lv-marker .tag{position:absolute;top:-17px;left:50%;transform:translateX(-50%);background:rgba(13,16,34,.85);color:#E8EAF6;font-size:9.5px;padding:1px 7px;border-radius:99px;white-space:nowrap;border:1px solid #262C55;z-index:3}
-@keyframes lvPing{0%{transform:translate(-50%,-50%) scale(.5);opacity:.7}100%{transform:translate(-50%,-50%) scale(1.7);opacity:0}}
+.lv-marker.vs .ring{animation:lvPing 1s ease-out infinite}
+.lv-marker .tag{position:absolute;top:-18px;left:50%;transform:translateX(-50%);background:rgba(13,16,34,.88);color:#E8EAF6;font-size:10.5px;padding:1px 8px;border-radius:99px;white-space:nowrap;border:1px solid #262C55;z-index:3}
+@keyframes lvPing{0%{transform:translate(-50%,-50%) scale(.5);opacity:.7}100%{transform:translate(-50%,-50%) scale(1.8);opacity:0}}
 @keyframes lvBlink{0%,100%{opacity:1}50%{opacity:.35}}
 .lv-zone-label{background:transparent;border:0;box-shadow:none;color:#8B90B5;font-size:11px;font-weight:700;white-space:nowrap}
 .leaflet-container{background:#0D1022}
+
+/* البوب أب */
+.lv-ovl{position:fixed;inset:0;z-index:80;background:rgba(4,7,20,.66);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px}
+/* ⚠️ display:flex بتاعتنا بتغلب [hidden] بتاعة المتصفح — من غير
+   السطر ده الأوفرلاي بيفضل ظاهر على طول (نفس فخ ssel-panel الموثّق) */
+.lv-ovl[hidden]{display:none}
+.lv-pop{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;width:min(520px, 94vw);max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:lvPopIn .18s ease-out}
+@keyframes lvPopIn{0%{transform:scale(.95);opacity:0}100%{transform:scale(1);opacity:1}}
+.lv-pop::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad)}
+.lv-pop .x{position:absolute;top:10px;inset-inline-end:12px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;width:30px;height:30px;font-size:15px;cursor:pointer}
+.lv-pop .head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.lv-pop .head .nm{font-size:17px;font-weight:800}
+.lv-pop .stateline{font-size:14px;font-weight:700;margin:4px 0 8px}
+.lv-pop .stateline.vis{color:#C6A9F2}
+.lv-pop .metaline{font-size:12.5px;color:var(--dim);margin-bottom:4px}
+.lv-pop .metaline b{color:var(--txt)}
+.lv-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.lv-stat{background:var(--panel2);border-radius:8px;padding:7px 4px;text-align:center}
+.lv-stat .v{font-size:15px;font-weight:700}
+.lv-stat .l{font-size:9.5px;color:var(--dim)}
+.lv-item{margin-bottom:9px}
+.lv-item .r1{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px}
+.lv-item .bar{height:5px;background:var(--panel2);border-radius:99px;overflow:hidden}
+.lv-item .bar i{display:block;height:100%;border-radius:99px}
+.lv-pop .evts{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.lv-pop .evt{display:flex;gap:8px;font-size:12px;border-inline-start:2px solid var(--line);padding-inline-start:8px}
+.lv-pop .evt .tm{color:var(--dim);font-size:11px;direction:ltr;white-space:nowrap}
+.lv-pop .foot{display:flex;gap:8px;margin-top:12px}
+.lv-pop .foot a{flex:1;text-align:center;text-decoration:none;background:var(--grad);color:#fff;border-radius:9px;padding:9px 10px;font-size:13px;font-weight:700}
+.lv-pop .foot a.alt{background:var(--panel2);border:1px solid var(--line);color:var(--txt)}
 </style>
 @endsection
 
@@ -273,9 +303,12 @@
 (function () {
 'use strict';
 
-/* ═════ الحالة ═════ */
-let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE) !!};
+/* ═════ الحالة ═════
+   ⚠️ فلاجات الـHEX إجبارية: أسماء المناديب والعملاء وعناوين الأحداث
+   بتتكتب بإيد المستخدم — `</script>` جوه اسم كان بيقفل البلوك كله */
+let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) !!};
 let selectedId = null, followId = null, paused = false, filter = '', search = '';
+let popupId = null;
 const markers = {}, zoneShapes = [], govShapes = [];
 let trackLine = null, trackStart = null;
 
@@ -289,25 +322,25 @@ try {
 const T = {
     statuses: {
         visit: {!! json_encode(__('journey.in_visit_now'), JSON_UNESCAPED_UNICODE) !!},
-        moving: {!! json_encode(__('journey.moving'), JSON_UNESCAPED_UNICODE) !!},
-        idle: {!! json_encode(__('journey.idle'), JSON_UNESCAPED_UNICODE) !!},
-        off: {!! json_encode(__('journey.offline'), JSON_UNESCAPED_UNICODE) !!},
+        moving: {!! json_encode(__('journey.moving_now'), JSON_UNESCAPED_UNICODE) !!},
+        standing: {!! json_encode(__('journey.idle'), JSON_UNESCAPED_UNICODE) !!},
+        nosignal: {!! json_encode(__('journey.no_signal_today'), JSON_UNESCAPED_UNICODE) !!},
+        off: {!! json_encode(__('journey.offline_chip'), JSON_UNESCAPED_UNICODE) !!},
     },
-    /* حالة الحضور — نفس مفاتيح hr.state_* بتاعة سجل الحضور */
     work: {
         working: {!! json_encode(__('hr.state_working'), JSON_UNESCAPED_UNICODE) !!},
         break: {!! json_encode(__('hr.state_break'), JSON_UNESCAPED_UNICODE) !!},
         off: {!! json_encode(__('hr.state_off'), JSON_UNESCAPED_UNICODE) !!},
     },
     kpis: [
-        ['reps', {!! json_encode(__('journey.rep'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal'],
-        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}, 'k-sky'],
-        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple'],
-        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
-        ['visits', {!! json_encode(__('journey.visits_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-orange'],
-        ['pos', {!! json_encode(__('journey.pos_delivered_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal'],
-        ['in_zone', {!! json_encode(__('journey.in_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-green'],
-        ['out_zone', {!! json_encode(__('journey.out_zone'), JSON_UNESCAPED_UNICODE) !!}, 'k-red'],
+        ['reps_on', {!! json_encode(__('journey.kpi_reps_street'), JSON_UNESCAPED_UNICODE) !!}, 'k-green', '🧑‍💼'],
+        ['managers_on', {!! json_encode(__('journey.kpi_managers_street'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple', '👔'],
+        ['offline_n', {!! json_encode(__('journey.kpi_offline'), JSON_UNESCAPED_UNICODE) !!}, 'k-red', '📴'],
+        ['sales', {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-green', '💰'],
+        ['value', {!! json_encode(__('journey.stock_value'), JSON_UNESCAPED_UNICODE) !!}, 'k-sky', '🚚'],
+        ['units', {!! json_encode(__('journey.units_in_custody'), JSON_UNESCAPED_UNICODE) !!}, 'k-purple', '📦'],
+        ['visits', {!! json_encode(__('journey.visits_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-orange', '📍'],
+        ['pos', {!! json_encode(__('journey.pos_delivered_today'), JSON_UNESCAPED_UNICODE) !!}, 'k-royal', '🧾'],
     ],
     covered: {!! json_encode(__('journey.covered_zone'), JSON_UNESCAPED_UNICODE) !!},
     target: {!! json_encode(__('journey.target_zone'), JSON_UNESCAPED_UNICODE) !!},
@@ -320,8 +353,6 @@ const T = {
     sales: {!! json_encode(__('journey.sales_today'), JSON_UNESCAPED_UNICODE) !!},
     visitsT: {!! json_encode(__('journey.visits_today'), JSON_UNESCAPED_UNICODE) !!},
     posT: {!! json_encode(__('journey.pos_delivered_today'), JSON_UNESCAPED_UNICODE) !!},
-    workState: {!! json_encode(__('journey.work_state'), JSON_UNESCAPED_UNICODE) !!},
-    atClient: {!! json_encode(__('journey.at_client'), JSON_UNESCAPED_UNICODE) !!},
     done: {!! json_encode(__('journey.done'), JSON_UNESCAPED_UNICODE) !!},
     custody: {!! json_encode(__('journey.custody_panel'), JSON_UNESCAPED_UNICODE) !!},
     sold: {!! json_encode(__('journey.sold_label'), JSON_UNESCAPED_UNICODE) !!},
@@ -332,11 +363,27 @@ const T = {
     noAlerts: {!! json_encode(__('journey.no_alerts'), JSON_UNESCAPED_UNICODE) !!},
     noAlertsRep: {!! json_encode(__('journey.no_alerts_rep'), JSON_UNESCAPED_UNICODE) !!},
     tlFor: {!! json_encode(__('journey.timeline_for'), JSON_UNESCAPED_UNICODE) !!},
+    lastSignal: {!! json_encode(__('journey.last_signal'), JSON_UNESCAPED_UNICODE) !!},
     tlAll: {!! json_encode(__('journey.timeline_all_hint'), JSON_UNESCAPED_UNICODE) !!},
     all: {!! json_encode(__('common.all'), JSON_UNESCAPED_UNICODE) !!},
-    pickRep: {!! json_encode(__('journey.pick_rep'), JSON_UNESCAPED_UNICODE) !!},
-    lastSignal: {!! json_encode(__('journey.last_signal'), JSON_UNESCAPED_UNICODE) !!},
-    minAgo: {!! json_encode(__('journey.minutes_ago'), JSON_UNESCAPED_UNICODE) !!},
+    secManagers: {!! json_encode(__('journey.sec_managers'), JSON_UNESCAPED_UNICODE) !!},
+    secReps: {!! json_encode(__('journey.sec_reps'), JSON_UNESCAPED_UNICODE) !!},
+    standingFor: {!! json_encode(__('journey.standing_for'), JSON_UNESCAPED_UNICODE) !!},
+    visitingFor: {!! json_encode(__('journey.visiting_for'), JSON_UNESCAPED_UNICODE) !!},
+    signalAgo: {!! json_encode(__('journey.signal_ago'), JSON_UNESCAPED_UNICODE) !!},
+    noSignalToday: {!! json_encode(__('journey.no_signal_today'), JSON_UNESCAPED_UNICODE) !!},
+    notChecked: {!! json_encode(__('journey.not_checked_in'), JSON_UNESCAPED_UNICODE) !!},
+    workingSince: {!! json_encode(__('journey.working_since'), JSON_UNESCAPED_UNICODE) !!},
+    leftAt: {!! json_encode(__('journey.left_at'), JSON_UNESCAPED_UNICODE) !!},
+    offSince: {!! json_encode(__('journey.off_since'), JSON_UNESCAPED_UNICODE) !!},
+    durMin: {!! json_encode(__('journey.dur_min'), JSON_UNESCAPED_UNICODE) !!},
+    durHr: {!! json_encode(__('journey.dur_hr'), JSON_UNESCAPED_UNICODE) !!},
+    openTracking: {!! json_encode(__('journey.open_tracking'), JSON_UNESCAPED_UNICODE) !!},
+    repDay: {!! json_encode(__('journey.rep_day'), JSON_UNESCAPED_UNICODE) !!},
+    lastEvents: {!! json_encode(__('journey.last_events'), JSON_UNESCAPED_UNICODE) !!},
+    noEvents: {!! json_encode(__('journey.no_events_today'), JSON_UNESCAPED_UNICODE) !!},
+    statusL: {!! json_encode(__('journey.status_label'), JSON_UNESCAPED_UNICODE) !!},
+    workState: {!! json_encode(__('journey.work_state'), JSON_UNESCAPED_UNICODE) !!},
     follow: '🎯 ' + {!! json_encode(__('journey.follow_rep'), JSON_UNESCAPED_UNICODE) !!},
     unfollow: '🎯 ' + {!! json_encode(__('journey.unfollow'), JSON_UNESCAPED_UNICODE) !!},
     pause: '⏸ ' + {!! json_encode(__('journey.pause_updates'), JSON_UNESCAPED_UNICODE) !!},
@@ -345,9 +392,9 @@ const T = {
     rtOff: {!! json_encode(__('journey.realtime_off'), JSON_UNESCAPED_UNICODE) !!},
 };
 
-const SC = { visit: '#9D6FE0', moving: '#2EDE8B', idle: '#FFB020', off: '#5A5F85' };
+/* ألوان الحالات الخمسة — nosignal سماوي عشان يبان إنه عطل مش انصراف */
+const SC = { visit: '#9D6FE0', moving: '#2EDE8B', standing: '#FFB020', nosignal: '#38BDF8', off: '#5A5F85' };
 const AV = ['#4D6FE3','#9D6FE0','#2EDE8B','#FFB020','#FF5D73','#38BDF8','#F472B6','#A3E635'];
-/* لون ثابت لكل مندوب — بالـid مش بترتيب القايمة عشان مايتغيرش مع الفلترة */
 const repColor = id => AV[Math.abs(id) % AV.length];
 const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -355,6 +402,61 @@ const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits:
    بتتكتب بإيد المستخدم، واسم فيه `<` كان بيكسّر الفيد أو أسوأ. */
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ⚠️ استبدال بداتا مستخدم لازم يعدي من هنا — الوسيط التاني بتاع
+   String.replace بيفسّر `$&` و`$'` لو اتبعت كنص، والفنكشن بتعطّل ده */
+const sub = (tpl, key, val) => tpl.replace(key, () => val);
+
+/* ═════ أدوات الحالة الجديدة (١٢/٨) — كل الأوقات جاهزة من السيرفر ═════ */
+
+/* الحالة الفعلية — live_state من السيرفر، وفولباك للقديمة لو حمولة
+   قديمة متكاشة وصلت (مايحصلش عملياً بس الشاشة ماتقعش) */
+function effState(r) {
+    if (r.live && r.live.state) return r.live.state;
+    return r.status === 'idle' ? 'standing' : (r.status || 'off');
+}
+
+/* مدة بالعربي/الإنجليزي من مفاتيح اللغة — أرقام بس، مفيش Date */
+function dur(m) {
+    if (m === null || m === undefined) return '';
+    m = Math.max(0, Math.round(m));
+    if (m < 60) return T.durMin.replace(':count', m);
+    return T.durHr.replace(':h', Math.floor(m / 60)).replace(':m', m % 60);
+}
+
+/* نص شيب الحالة — كل حالة بمدتها (طلب المالك: «واقف بقاله قد إيه»).
+   nosignal بإشارة قديمة النهارده بيوري وقتها الفعلي، مش «مفيش إشارة». */
+function stateTxt(r) {
+    const s = effState(r);
+    const m = r.live ? r.live.min : null;
+    if (s === 'visit') return T.statuses.visit + (m !== null && m !== undefined ? ' · ' + dur(m) : '');
+    if (s === 'moving') return T.statuses.moving;
+    if (s === 'standing') return (m !== null && m !== undefined) ? T.standingFor.replace(':dur', dur(m)) : T.statuses.standing;
+    if (s === 'nosignal') return r.signal_at ? T.lastSignal + ' ' + r.signal_at : T.statuses.nosignal;
+    return (m !== null && m !== undefined) ? T.offSince.replace(':dur', dur(m)) : T.statuses.off;
+}
+
+/* سطر الحضور — شغال من / انصرف / مش مسجل حضور */
+function attLine(r) {
+    const a = r.att || { state: 'none', in: null, out: null };
+    if (a.state === 'working' || a.state === 'break') {
+        let t = '🕐 ' + T.workingSince.replace(':time', a.in || '—');
+        if (a.state === 'break') t += ' · ' + T.work.break;
+        return t;
+    }
+    if (a.state === 'out') return '🏁 ' + T.leftAt.replace(':time', a.out || '—');
+    return '⛔ ' + T.notChecked;
+}
+
+/* سطر آخر إشارة — الوقت الفعلي h:i A + من قد إيه */
+function signalLine(r) {
+    if (r.signal_at) {
+        return '📡 ' + T.signalAgo.replace(':time', r.signal_at).replace(':dur', dur(r.minutes === null ? 0 : r.minutes));
+    }
+    const a = r.att || {};
+    if (a.state === 'working' || a.state === 'break') return '📡 ' + T.noSignalToday;
+    return '';
+}
 
 /* ═════ الخريطة الداكنة ═════ */
 const map = L.map('lvMap', { zoomControl: true }).setView([30.05, 31.25], 11);
@@ -366,7 +468,6 @@ function drawZones() {
     zoneShapes.forEach(s => map.removeLayer(s));
     zoneShapes.length = 0;
 
-    // مغطي = أخضر ثابت · مستهدف = برتقالي متقطع — كل نوع بطبقته
     (data.zones || []).forEach(z => {
         const covered = z.kind === 'covered';
         if (covered && !layers.covered) return;
@@ -396,7 +497,6 @@ function drawZones() {
     });
 }
 
-/* طبقة المحافظات — اسم كبير متوهج + عدد العملاء الشغالين */
 function drawGovs() {
     govShapes.forEach(s => map.removeLayer(s));
     govShapes.length = 0;
@@ -416,9 +516,7 @@ function drawGovs() {
     });
 }
 
-/* ═════ مسار المندوب المختار — نمط التراكينج (polyline بلونه) ═════
-   بيترسم من `r.track` اللي جاي في الحمولة (أحداث اليوم بإحداثياتها
-   بترتيب زمني) — وبيتحدث مع كل حمولة جديدة من غير ما نعيد الزوم. */
+/* مسار المندوب المختار — polyline بلونه، بيتحدث مع كل حمولة */
 function drawTrack() {
     if (trackLine !== null) { map.removeLayer(trackLine); trackLine = null; }
     if (trackStart !== null) { map.removeLayer(trackStart); trackStart = null; }
@@ -433,14 +531,12 @@ function drawTrack() {
     if (pts.length > 1) {
         trackLine = L.polyline(pts, { color: color, weight: 4, opacity: .85 }).addTo(map);
     }
-    // نقطة البداية — أول إشارة النهارده بوقتها
     trackStart = L.circleMarker(pts[0], {
         radius: 6, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
     }).addTo(map);
     if (r.track[0].t) trackStart.bindTooltip(r.track[0].t, { direction: 'top' });
 }
 
-/* زوم على المسار — عند الاختيار بس، مش مع كل تحديث */
 function fitTrack() {
     const r = (data.reps || []).find(x => x.id === selectedId);
     if (!r || !Array.isArray(r.track) || r.track.length === 0) return;
@@ -449,7 +545,7 @@ function fitTrack() {
     else map.fitBounds(L.latLngBounds(pts).pad(0.2));
 }
 
-/* شريط الحركة — كل مندوب سهم بورصة: أخضر بيبيع، رمادي ساكن */
+/* التيكر — تحت خالص: كل واحد سهم بورصة، أخضر بيبيع رمادي ساكن */
 function renderTape() {
     const items = (data.reps || []).map(r => {
         const up = r.sales > 0;
@@ -457,93 +553,62 @@ function renderTape() {
             <span class="${up ? 'up' : 'dn'}">${up ? '▲' : '—'} ${fmt(r.sales)}</span>
             <span class="lv-dim">${r.done}/${r.planned}</span></span>`;
     }).join('');
-    // المحتوى مكرر — التيكر بيلف نصه فبيبان متواصل
     document.getElementById('lvTape').innerHTML = items + items;
 }
 
-/* ماركر بصورة الموظف — نمط التراكينج: دايرة صورة (أو حروف اسمه
-   بلونه الثابت) بإطار بلون الحالة، ونبضة للمتحرك/اللي في زيارة */
+/* ماركر بصورة الموظف — إطار بلون الحالة ونبضة للمتحرك/اللي في زيارة */
 function repIcon(r) {
-    const cls = r.status === 'moving' ? 'mv' : (r.status === 'visit' ? 'vs' : '');
+    const s = effState(r);
+    const cls = s === 'moving' ? 'mv' : (s === 'visit' ? 'vs' : '');
+    const col = SC[s] || SC.off;
     const inner = r.avatar_url
         ? `<img src="${esc(r.avatar_url)}" alt="">`
         : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
     return L.divIcon({
         className: '',
         html: `<div class="lv-marker ${cls}">
-                 <div class="ring" style="background:${SC[r.status]}"></div>
-                 <div class="pic" style="border-color:${SC[r.status]}">${inner}</div>
+                 <div class="ring" style="background:${col}"></div>
+                 <div class="pic" style="border-color:${col}">${inner}</div>
                  <div class="tag">${esc(r.name)}</div>
                </div>`,
-        iconSize: [38, 38], iconAnchor: [19, 19],
+        iconSize: [40, 40], iconAnchor: [20, 20],
     });
 }
 
-/* ═════ الرسم ═════ */
-const KICONS = { reps: '🧑‍💼', value: '🚚', units: '📦', sales: '💰', visits: '📍', pos: '🧾', in_zone: '🎯', out_zone: '⚠️' };
+/* ═════ انزلاق الماركر — lerp ~2 ثانية بدل النطة (طلب المالك:
+   «عاوز أشوفه بيتحرك») ═════ */
+function slideMarker(m, lat, lng) {
+    const from = m.getLatLng();
+    if (Math.abs(from.lat - lat) < 1e-7 && Math.abs(from.lng - lng) < 1e-7) return;
+    if (m._lvAnim) cancelAnimationFrame(m._lvAnim);
+    const t0 = performance.now(), D = 2000;
+    const step = now => {
+        const k = Math.min(1, (now - t0) / D);
+        const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        m.setLatLng([from.lat + (lat - from.lat) * e, from.lng + (lng - from.lng) * e]);
+        if (k < 1) { m._lvAnim = requestAnimationFrame(step); } else { m._lvAnim = null; }
+    };
+    m._lvAnim = requestAnimationFrame(step);
+}
 
+/* ═════ الرسم ═════ */
 function render() {
-    // شريط الـKPI — مجاميع الفريق كله (وضع «الكل» الافتراضي)
-    document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l, cls]) =>
+    document.getElementById('lvKpis').innerHTML = T.kpis.map(([k, l, cls, ic]) =>
         `<div class="lv-kpi ${cls}">
-            <div class="ic">${KICONS[k] || '•'}</div>
-            <div><div class="v">${fmt(data.totals[k])}</div><div class="l">${l}</div></div>
+            <div class="ic">${ic}</div>
+            <div><div class="v">${fmt((data.totals || {})[k])}</div><div class="l">${l}</div></div>
         </div>`).join('');
 
     renderTape();
+    renderPeople();
 
-    // كروت المناديب — كل واحد: معاه بكام، باع بكام، زار كام، سلّم كام، وآخر حالة
-    const q = search.trim().toLowerCase();
-    const reps = (data.reps || []).filter(r =>
-        (!filter || r.status === filter)
-        && (!q || (r.name + ' ' + (r.zone || '')).toLowerCase().includes(q)));
-
-    document.getElementById('lvSideCount').textContent = reps.length + ' / ' + (data.reps || []).length;
-    document.getElementById('lvRepList').innerHTML = reps.map(r => {
-        const work = r.work || 'off';
-        const avatar = r.avatar_url
-            ? `<img src="${esc(r.avatar_url)}" alt="">`
-            : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
-        const zoneDot = r.in_zone === true ? ' · <b class="z-in">●</b>'
-            : (r.in_zone === false ? ' · <b class="z-out">●</b>' : '');
-        const last = r.open_client
-            ? '🛒 ' + T.atClient.replace(':client', esc(r.open_client))
-            : (r.last_event
-                ? (r.last_event_icon || '') + ' ' + esc(r.last_event)
-                : '📵 ' + T.statuses.off);
-        return `
-        <div class="lv-rep ${r.id === selectedId ? 'sel' : ''}" data-id="${r.id}">
-            <div class="lv-rep-top">
-                <div class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</div>
-                <div>
-                    <div class="nm">${esc(r.name)}</div>
-                    <div class="mt">${esc(r.zone || '—')}${r.speed !== null ? ' · ' + r.speed + ' ' + T.speedU : ''}${zoneDot}</div>
-                </div>
-                <div class="lv-rep-badges">
-                    <span class="lv-status s-${r.status}">${T.statuses[r.status]}</span>
-                    <span class="lv-work w-${work}">${T.work[work]}</span>
-                </div>
-            </div>
-            <div class="lv-rep-stats">
-                <span title="${esc(T.custody)}">🚚 <b>${fmt(r.value)}</b> · ${fmt(r.units)} 📦</span>
-                <span class="up" title="${esc(T.sales)}">💰 <b>${fmt(r.sales)}</b></span>
-                <span title="${esc(T.visitsT)}">📍 <b>${r.visits || 0}</b></span>
-                <span title="${esc(T.posT)}">🧾 <b>${r.pos || 0}</b></span>
-            </div>
-            <div class="lv-rep-last">${last}</div>
-        </div>`;
-    }).join('');
-
-    document.querySelectorAll('#lvRepList .lv-rep').forEach(el =>
-        el.addEventListener('click', () => selectRep(parseInt(el.dataset.id, 10))));
-
-    // الماركرز — بتتحرك مش بتتمسح، وطبقة المناديب ممكن تتقفل
+    // الماركرز — بتنزلق مش بتنط، وطبقة المناديب ممكن تتقفل
     const seen = new Set();
     (data.reps || []).forEach(r => {
         if (r.lat === null || !layers.reps) return;
         seen.add(r.id);
         if (markers[r.id]) {
-            markers[r.id].setLatLng([r.lat, r.lng]);
+            slideMarker(markers[r.id], r.lat, r.lng);
             markers[r.id].setIcon(repIcon(r));
         } else {
             markers[r.id] = L.marker([r.lat, r.lng], { icon: repIcon(r) })
@@ -554,25 +619,87 @@ function render() {
         if (!seen.has(parseInt(id, 10))) { map.removeLayer(markers[id]); delete markers[id]; }
     });
 
-    // مسار المختار — بيتحدث مع كل حمولة من غير ما نلمس الزوم
     drawTrack();
 
-    // التتبع
     if (followId !== null) {
         const fr = (data.reps || []).find(r => r.id === followId);
         if (fr && fr.lat !== null) map.panTo([fr.lat, fr.lng]);
     }
 
-    renderDetail();
     renderAlerts();
+    if (popupId !== null) renderPopup();
 }
 
-/* الضغط على مندوب = وضع المندوب (مسار + تايم لاين + بانل).
-   ضغطة تانية على نفسه = رجوع لوضع «الكل». */
+/* كارت شخص واحد في الجريد */
+function personCard(r) {
+    const s = effState(r);
+    const avatar = r.avatar_url
+        ? `<img src="${esc(r.avatar_url)}" alt="">`
+        : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
+    const visitLine = s === 'visit' && r.open_client
+        ? `<div class="ln vis">🛒 ${sub(sub(T.visitingFor, ':client', esc(r.open_client)), ':dur', dur(r.live ? r.live.min : null))}</div>`
+        : '';
+    const sig = signalLine(r);
+    return `
+    <div class="lv-p ${s === 'visit' ? 'visiting' : ''} ${r.id === selectedId ? 'sel' : ''}" data-id="${r.id}">
+        <div class="r1">
+            <div class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</div>
+            <div style="min-width:0">
+                <div class="nm">${esc(r.name)}</div>
+                <div class="zn">${esc(r.zone || '—')}</div>
+            </div>
+            <span class="lv-status s-${s}">${stateTxt(r)}</span>
+        </div>
+        ${visitLine}
+        <div class="ln">${attLine(r)}</div>
+        <div class="nums">
+            <span title="${esc(T.custody)}">🚚 <b>${fmt(r.value)}</b></span>
+            <span class="up" title="${esc(T.sales)}">💰 <b>${fmt(r.sales)}</b></span>
+            <span title="${esc(T.visitsT)}">📍 <b>${r.visits || 0}</b></span>
+        </div>
+        ${sig ? `<div class="ln">${sig}</div>` : ''}
+    </div>`;
+}
+
+/* بانل الأشخاص — قسمين: المديرين فوق والمناديب تحت (طلب المالك ١٢/٨) */
+function renderPeople() {
+    const q = search.trim().toLowerCase();
+    const match = r => (!filter || effState(r) === filter)
+        && (!q || (r.name + ' ' + (r.zone || '')).toLowerCase().includes(q));
+
+    const all = data.reps || [];
+    const managers = all.filter(r => r.role_key === 'manager' && match(r));
+    const reps = all.filter(r => r.role_key !== 'manager' && match(r));
+
+    document.getElementById('lvSideCount').textContent = (managers.length + reps.length) + ' / ' + all.length;
+
+    let html = '';
+    if (managers.length) {
+        html += `<div class="lv-sec-h">👔 ${T.secManagers} <span>${managers.length}</span></div>
+                 <div class="lv-people">${managers.map(personCard).join('')}</div>`;
+    }
+    html += `<div class="lv-sec-h">🧑‍💼 ${T.secReps} <span>${reps.length}</span></div>
+             <div class="lv-people">${reps.map(personCard).join('')}</div>`;
+
+    // ⚠️ الحاوية بتتكتب كل ٣ ثواني — من غير حفظ scrollTop مفيش حد
+    // يعرف ينزّل في القايمة أكتر من ٣ ثواني
+    const wrap = document.getElementById('lvPeople');
+    const st = wrap.scrollTop;
+    wrap.innerHTML = html;
+    wrap.scrollTop = st;
+    document.querySelectorAll('#lvPeople .lv-p').forEach(el =>
+        el.addEventListener('click', () => selectRep(parseInt(el.dataset.id, 10))));
+}
+
+/* الضغط على شخص = اختياره (مسار + فلترة تايم لاين) + بوب أب بياناته */
 function selectRep(id) {
-    if (selectedId === id) { clearSelection(); return; }
+    if (selectedId === id) {
+        openPopup(id);
+        return;
+    }
     selectedId = id;
     if (followId !== null) followId = id;
+    openPopup(id);
     render();
     fitTrack();
     const r = (data.reps || []).find(x => x.id === id);
@@ -590,18 +717,33 @@ function clearSelection() {
     render();
 }
 
-function renderDetail() {
-    const el = document.getElementById('lvRepCard');
-    const r = (data.reps || []).find(x => x.id === selectedId);
-    if (!r) {
-        el.innerHTML = `<div class="lv-dim" style="text-align:center;padding:26px 8px">${T.pickRep}</div>`;
-        return;
-    }
+/* ═════ البوب أب — كل بيانات الشخص، وبيتحدث مع كل حمولة جديدة ═════ */
+function openPopup(id) {
+    popupId = id;
+    document.getElementById('lvOvl').hidden = false;
+    renderPopup();
+}
 
-    const work = r.work || 'off';
-    const zoneChip = r.in_zone === null ? ''
-        : `<span class="lv-status ${r.in_zone ? 's-moving' : 's-idle'}" style="${r.in_zone ? '' : 'color:var(--red);background:rgba(255,93,115,.15)'}">
-             ${r.in_zone ? T.inZone : T.outZone}</span>`;
+function closePopup() {
+    popupId = null;
+    document.getElementById('lvOvl').hidden = true;
+}
+
+function renderPopup() {
+    const r = (data.reps || []).find(x => x.id === popupId);
+    if (!r) { closePopup(); return; }
+
+    const s = effState(r);
+    const avatar = r.avatar_url
+        ? `<img src="${esc(r.avatar_url)}" alt="">`
+        : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
+
+    const stateLine = s === 'visit' && r.open_client
+        ? `<div class="stateline vis">🛒 ${sub(sub(T.visitingFor, ':client', esc(r.open_client)), ':dur', dur(r.live ? r.live.min : null))}</div>`
+        : `<div class="stateline"><span class="lv-status s-${s}">${stateTxt(r)}</span></div>`;
+
+    const zoneChip = r.in_zone === null || r.in_zone === undefined ? ''
+        : ` · <span style="color:${r.in_zone ? 'var(--green)' : 'var(--red)'}">● ${r.in_zone ? T.inZone : T.outZone}</span>`;
 
     const items = (r.items || []).map(i => {
         const pct = i.assigned > 0 ? Math.round(i.sold / i.assigned * 100) : 0;
@@ -612,42 +754,52 @@ function renderDetail() {
         </div>`;
     }).join('');
 
-    const avatar = r.avatar_url
-        ? `<img src="${esc(r.avatar_url)}" alt="">`
-        : `<span style="background:${repColor(r.id)}">${esc(r.initials || '')}</span>`;
+    const evts = (r.events || []).map(ev => `
+        <div class="evt" style="border-color:${ev.color || 'var(--line)'}">
+            <span class="tm">${ev.t}</span>
+            <span>${ev.icon || ''}</span>
+            <span>${esc(ev.text)}</span>
+        </div>`).join('');
 
-    const lastLine = r.open_client
-        ? '🛒 ' + T.atClient.replace(':client', esc(r.open_client))
-        : (r.last_event ? (r.last_event_icon || '') + ' ' + esc(r.last_event) : '');
+    const sig = signalLine(r);
 
-    el.innerHTML = `
-        <div class="lv-card-h">
-            <span style="display:flex;gap:8px;align-items:center">
-                <span class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</span>
-                <span><a href="${r.url}" style="color:var(--txt);text-decoration:none">${esc(r.name)} ↗</a>
-                    <div class="lv-dim">${esc(r.zone || '—')} · ${esc(r.role)}</div></span>
-            </span>
-            <span style="text-align:end">${zoneChip}<br>
-                <span class="lv-status s-${r.status}" style="margin-top:4px;display:inline-block">${T.statuses[r.status]}</span><br>
-                <span class="lv-work w-${work}" style="margin-top:4px;display:inline-block">${T.workState}: ${T.work[work]}</span></span>
+    document.getElementById('lvPop').innerHTML = `
+        <button class="x" type="button" id="lvPopX" aria-label="×">✕</button>
+        <div class="head">
+            <span class="lv-avatar" style="border-color:${repColor(r.id)};width:46px;height:46px">${avatar}</span>
+            <div>
+                <div class="nm">${esc(r.name)}</div>
+                <div class="lv-dim">${esc(r.role)} · ${esc(r.zone || '—')}${zoneChip}</div>
+            </div>
         </div>
+        ${stateLine}
+        <div class="metaline">${attLine(r)}</div>
+        ${sig ? `<div class="metaline">${sig}</div>` : ''}
         <div class="lv-stats">
             <div class="lv-stat"><div class="v" style="color:var(--green)">${fmt(r.sales)}</div><div class="l">${T.sales}</div></div>
+            <div class="lv-stat"><div class="v">${r.done}/${r.planned}</div><div class="l">${T.done}</div></div>
             <div class="lv-stat"><div class="v">${r.visits || 0}</div><div class="l">${T.visitsT}</div></div>
             <div class="lv-stat"><div class="v">${r.pos || 0}</div><div class="l">${T.posT}</div></div>
-            <div class="lv-stat"><div class="v">${r.done}/${r.planned}</div><div class="l">${T.done}</div></div>
             <div class="lv-stat"><div class="v">${r.km}</div><div class="l">${T.kmU}</div></div>
-            <div class="lv-stat"><div class="v">${r.speed !== null ? r.speed : '—'}</div><div class="l">${T.speedU}</div></div>
+            <div class="lv-stat"><div class="v">${fmt(r.value)}</div><div class="l">${T.custody}</div></div>
         </div>
-        ${lastLine ? `<div class="lv-dim" style="margin-bottom:6px">${lastLine}</div>` : ''}
-        <div class="lv-card-h" style="margin-top:4px">📦 ${T.custody}
-            <span class="lv-dim">${T.remTotal.replace(':count', fmt(r.units))} · ${T.worth.replace(':value', fmt(r.value))}</span></div>
-        ${items || '<div class="lv-dim">—</div>'}
-        <div class="lv-dim" style="margin-top:6px">${T.lastSignal}: ${r.minutes !== null ? T.minAgo.replace(':count', r.minutes) : '—'}</div>`;
+        ${items ? `<div class="lv-card-h" style="margin-top:4px">📦 ${T.custody}
+            <span class="lv-dim">${T.remTotal.replace(':count', fmt(r.units))} · ${T.worth.replace(':value', fmt(r.value))}</span></div>${items}` : ''}
+        <div class="lv-card-h" style="margin-top:6px">🕐 ${T.lastEvents}</div>
+        <div class="evts">${evts || `<div class="lv-dim">${T.noEvents}</div>`}</div>
+        <div class="foot">
+            <a href="${r.tracking_url || '#'}" target="_blank" rel="noopener">📍 ${T.openTracking} ↗</a>
+            <a class="alt" href="${r.url}" target="_blank" rel="noopener">📅 ${T.repDay} ↗</a>
+        </div>`;
+
+    document.getElementById('lvPopX').addEventListener('click', closePopup);
 }
 
-/* التايم لاين — بتاع الكل افتراضياً، وبيتفلتر على المندوب المختار.
-   زرار «الكل» بيرجّع فيد الفريق كله. */
+document.getElementById('lvOvl').addEventListener('click', function (e) {
+    if (e.target === this) closePopup();
+});
+
+/* التايم لاين — بتاع الكل افتراضياً، وبيتفلتر على المختار */
 function renderAlerts() {
     const all = data.alerts || [];
     const list = selectedId === null
@@ -658,20 +810,21 @@ function renderAlerts() {
     const scope = document.getElementById('lvAlertScope');
     scope.innerHTML = selectedId === null
         ? `<span class="lv-dim">${T.tlAll}${list.length ? ' · ' + T.latest.replace(':count', list.length) : ''}</span>`
-        : `<span class="lv-dim">${T.tlFor.replace(':name', esc(sel ? sel.name : ''))}</span>
+        : `<span class="lv-dim">${sub(T.tlFor, ':name', esc(sel ? sel.name : ''))}</span>
            <button class="lv-btn sm" id="lvTlAll" type="button">${T.all}</button>`;
     const allBtn = document.getElementById('lvTlAll');
     if (allBtn) allBtn.addEventListener('click', clearSelection);
 
-    document.getElementById('lvAlerts').innerHTML = list.length
-        /* ⚠️ اللون والأيقونة جايين **من السيرفر** مش من كلاس CSS —
-           `TrackEvent::TYPES` هو المصدر الوحيد للاتنين. */
+    const box = document.getElementById('lvAlerts');
+    const st = box.scrollTop;
+    box.innerHTML = list.length
         ? list.map(a => `<div class="lv-alert" style="border-color:${a.color}">
              <span class="tm">${a.t}</span>
              <span class="ic">${a.icon || ''}</span>
              <span class="rp">${esc(a.rep)}</span>
              <span>${esc(a.text)}</span></div>`).join('')
         : `<div class="lv-dim">${selectedId === null ? T.noAlerts : T.noAlertsRep}</div>`;
+    box.scrollTop = st;
 }
 
 /* ═════ التحكم ═════ */
@@ -683,7 +836,6 @@ document.querySelectorAll('#lvChips .lv-chip').forEach(ch => ch.addEventListener
     render();
 }));
 
-// شيك بوكسات الطبقات — بترسم فوراً وبتتحفظ في المتصفح
 document.querySelectorAll('.lv-layer input').forEach(cb => {
     cb.checked = !!layers[cb.dataset.layer];
     cb.addEventListener('change', () => {
@@ -705,19 +857,20 @@ document.getElementById('lvPauseBtn').addEventListener('click', function () {
     paused = !paused;
     this.classList.toggle('on', paused);
     this.textContent = paused ? T.resume : T.pause;
-    // ⚠️ «إيقاف مؤقت» لازم يقطع التدفق نفسه مش يوقف البولينج بس —
-    // وإلا العملية على السيرفر فاضلة شغالة والشاشة بتتحدث برضه.
     if (paused) { stopStream(); stopPolling(); setMode(false); } else { startLive(); }
 });
 
-/* ═════ الساعة ═════ */
+/* ═════ الساعة — القاهرة صراحةً: التلفزيون ممكن توقيته UTC ═════ */
+const clockFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+});
 setInterval(() => {
-    document.getElementById('lvClock').textContent = new Date().toLocaleTimeString('en-GB');
+    document.getElementById('lvClock').textContent = clockFmt.format(new Date()).toUpperCase();
 }, 1000);
 
 /* ═══════════════ التحديث: تدفق لايف + فولباك بولينج ═══════════════
-   التدفق (SSE) هو الأصل، والبولينج شبكة أمان. الاتنين عمرهم ما
-   يشتغلوا مع بعض: أول حمولة توصل من التدفق البولينج بيقف. */
+   التدفق (SSE كل ٣ ثواني) هو الأصل، والبولينج شبكة أمان — اتشد
+   لـ10 ثواني (طلب المالك «أسرع»). عمرهم ما يشتغلوا مع بعض. */
 const LV_STREAM = {!! json_encode(route('ops.live.stream')) !!};
 const LV_DATA = {!! json_encode(route('ops.live.data')) !!};
 
@@ -742,12 +895,12 @@ async function refresh() {
         const res = await fetch(LV_DATA, { headers: { Accept: 'application/json' } });
         if (!res.ok) return;
         apply(await res.json());
-    } catch (e) { /* الشبكة وقعت — المحاولة الجاية بعد 15 ثانية */ }
+    } catch (e) { /* الشبكة وقعت — المحاولة الجاية */ }
 }
 
 function startPolling() {
     if (pollTimer !== null || paused) return;
-    pollTimer = setInterval(refresh, 15000);
+    pollTimer = setInterval(refresh, 10000);
     setMode(false);
 }
 
@@ -766,7 +919,6 @@ function retryStream(ms) {
 }
 
 function startStream() {
-    // ⚠️ اتصال واحد بس — اتنين معناهم عمليتين PHP لنفس الشاشة
     if (es !== null || paused || document.hidden) return;
     if (typeof window.EventSource !== 'function') { startPolling(); return; }
 
@@ -779,16 +931,13 @@ function startStream() {
         try { payload = JSON.parse(e.data); } catch (err) { return; }
         got = true;
         retryMs = 5000;
-        stopPolling();          // التدفق شغال — البولينج مالوش لزمة
+        stopPolling();
         setMode(true);
         if (!paused && !document.hidden) apply(payload);
     };
 
     src.onerror = function () {
         stopStream();
-        // اتصال جاب داتا وقفل = سقف المدة في السيرفر، بنفتح واحد جديد
-        // على طول. اتصال مجابش حاجة أصلاً = التدفق مش شغال على
-        // الاستضافة دي، فبنرجع للبولينج ونجرب تاني بعد فترة بتطول.
         if (got) { retryStream(800); return; }
         setMode(false);
         startPolling();
@@ -799,25 +948,20 @@ function startStream() {
 
 function startLive() {
     if (paused || document.hidden) return;
-    startPolling();   // شبكة أمان لحد ما أول حمولة توصل من التدفق
+    startPolling();
     startStream();
 }
 
-// ⚠️ تاب متسيّب في الخلفية كان هيفضل ماسك عملية على السيرفر —
-// بنقفل الاتصال لما الشاشة تختفي وبنفتحه لما ترجع.
 document.addEventListener('visibilitychange', function () {
     if (document.hidden) { stopStream(); stopPolling(); setMode(false); return; }
-    refresh();      // رسمة فورية بدل ما نستنى أول حمولة
+    refresh();
     startLive();
 });
 
-/* أول رسمة من الحمولة المدمجة — وضع «الكل»: مفيش مندوب مختار،
-   التايم لاين للفريق كله والـKPIs مجاميع (طلب المالك ١١/٨) */
+/* أول رسمة من الحمولة المدمجة، وبعدها التدفق يمسك الشاشة */
 drawZones();
 drawGovs();
 render();
-
-/* وبعدها التدفق يمسك الشاشة */
 startLive();
 
 const first = (data.reps || []).find(r => r.lat !== null);

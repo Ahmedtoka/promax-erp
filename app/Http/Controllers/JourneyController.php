@@ -594,9 +594,13 @@ class JourneyController extends Controller
         // ⚠️ آخر موقعين لكل مندوب في كويري واحدة — الأول للمكان
         // والتاني لحساب السرعة اللحظية. لوب بيسأل لكل مندوب = كويري
         // لكل صف، والصفحة دي بتترفرش لوحدها.
+        // ⚠️ `lat` **و`lng`** الاتنين (١٢/٨) — صف بـlat من غير lng كان
+        // بيتحول `(float) null = 0.0` ويرمي ماركر ومسافة وهمية لخط
+        // الطول صفر (وسط المحيط) في كل الحسابات.
         $eventsByUser = TrackEvent::whereIn('user_id', $reps->pluck('id'))
             ->whereDate('created_at', today())
             ->whereNotNull('lat')
+            ->whereNotNull('lng')
             ->orderByDesc('created_at')
             ->get()
             ->groupBy('user_id');
@@ -634,25 +638,25 @@ class JourneyController extends Controller
             ->whereNull('checked_out_at')
             ->get()->keyBy('user_id');
 
-        // حالة الحضور (شغال/بريك/منصرف) — بانشات اليوم محمّلة مرة
-        // واحدة وآخر بانش بيتحسب من الكولكشن، مش `Attendance::state`
-        // اللي بتعمل firstOrCreate + كويري بانش لكل مندوب كل ٣ ثواني
-        $workStates = \App\Models\AttendanceDay::with('punches')
+        // حالة الحضور (شغال/بريك/منصرف) — أيام اليوم ببانشاتها محمّلة
+        // مرة واحدة **قراءة فقط** (مفيش firstOrCreate — الشاشة بتترفرش
+        // كل ٣ ثواني)، وآخر بانش بيتحسب من الكولكشن مش من كويري لكل مندوب
+        $attDays = \App\Models\AttendanceDay::with('punches')
             ->whereDate('date', today())
             ->whereIn('user_id', $reps->pluck('id'))
             ->get()
-            ->mapWithKeys(function ($d) {
-                $lastPunch = $d->punches->sortBy([['at', 'desc'], ['id', 'desc']])->first();
+            ->keyBy('user_id');
 
-                return [$d->user_id => match ($lastPunch?->type) {
-                    \App\Models\AttendancePunch::IN,
-                    \App\Models\AttendancePunch::BACK => 'working',
-                    \App\Models\AttendancePunch::BREAK => 'break',
-                    default => 'off',
-                }];
-            });
+        // ═══ فيد اليوم (بلا `open`) مرة واحدة — منه «آخر ٥ أحداث»
+        // في بوب أب الشخص على شاشة التلفزيون (١٢/٨) ═══
+        $feedByUser = TrackEvent::whereIn('user_id', $reps->pluck('id'))
+            ->whereDate('happened_at', today())
+            ->where('type', '!=', 'open')
+            ->orderByDesc('happened_at')
+            ->get(['id', 'user_id', 'type', 'title', 'subtitle', 'happened_at'])
+            ->groupBy('user_id');
 
-        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $poToday, $visitsToday, $openVisits, $workStates) {
+        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $poToday, $visitsToday, $openVisits, $attDays, $feedByUser) {
             // من العلاقة المحمّلة فوق — مش كويري جديدة
             $custody = $rep->custodies->first();
             $summary = Journeys::summary($rep);
@@ -660,12 +664,96 @@ class JourneyController extends Controller
             $minutes = $last ? (int) round(abs(now()->diffInMinutes($last->created_at))) : null;
 
             // الحالة: زيارة ← متحرك (إشارة < 10 دقايق) ← واقف ← مفيش إشارة
+            // ⚠️ **بتفضل بنفس الحساب القديم بالحرف** — صفحة قديمة متكاشة
+            // في متصفح مفتوح بتقرا `status` من نفس الـSSE. الحالة الجديدة
+            // بتاعة شاشة التلفزيون تحت في `live_state` (إضافة مش تغيير).
             $status = match (true) {
                 $openVisits->has($rep->id) => 'visit',
                 $minutes !== null && $minutes < 10 => 'moving',
                 $minutes !== null => 'idle',
                 default => 'off',
             };
+
+            // ═══ شاشة التلفزيون (١٢/٨) — كل الأوقات h:i A بتوقيت القاهرة
+            // **صراحةً**: اللايف سيرفر ممكن يكون ناسي APP_TIMEZONE (مشكلة
+            // معروفة) — التحويل الصريح صح في الحالتين: لو التوقيت مظبوط
+            // فهو no-op، ولو UTC فبيتحوّل للقاهرة. ═══
+            $hia = fn ($dt) => $dt?->copy()->timezone('Africa/Cairo')->format('h:i A');
+
+            // ═══ الحضور — من اليوم المحمّل فوق (قراءة فقط) ═══
+            $att = $attDays->get($rep->id);
+            $lastPunch = $att?->punches->sortBy([['at', 'desc'], ['id', 'desc']])->first();
+
+            $attState = $att === null ? 'none' : match ($lastPunch?->type) {
+                \App\Models\AttendancePunch::IN,
+                \App\Models\AttendancePunch::BACK => 'working',
+                \App\Models\AttendancePunch::BREAK => 'break',
+                \App\Models\AttendancePunch::OUT => 'out',
+                default => 'none',
+            };
+            $onShift = in_array($attState, ['working', 'break'], true);
+
+            // ═══ واقف ولا متحرك — من نقط التراك مش من عمر الإشارة ═══
+            // «واقف» = مفيش حركة تُذكر: بنمشي من أحدث نقطة لورا طول ما
+            // كل نقطة جوه 100 متر منها — أول نقطة برة الدايرة هي آخر
+            // حركة حقيقية. لو آخر حركة من ≥ 10 دقايق يبقى واقف بمدة،
+            // وأقل من كده يبقى متحرك. (رعشة GPS جوه الـ100 متر مش حركة.)
+            $moveState = null;
+            $moveMin = null;
+            $pts = $eventsByUser->get($rep->id);
+
+            if ($pts !== null && $pts->isNotEmpty()) {
+                $p0 = $pts->first();
+                $standSince = $p0->happened_at ?? $p0->created_at;
+
+                foreach ($pts->slice(1) as $p) {
+                    $d = \App\Services\RepKpis::haversine(
+                        (float) $p->lat, (float) $p->lng, (float) $p0->lat, (float) $p0->lng,
+                    );
+
+                    if ($d > 0.1) {
+                        break;
+                    }
+
+                    $standSince = $p->happened_at ?? $p->created_at;
+                }
+
+                $standMin = (int) round(abs(now()->diffInMinutes($standSince)));
+
+                if ($standMin >= 10) {
+                    $moveState = 'standing';
+                    $moveMin = $standMin;
+                } else {
+                    $moveState = 'moving';
+                }
+            }
+
+            // ═══ آلة حالة التلفزيون — كل حالة ومعاها مدتها ═══
+            // زيارة مفتوحة ← أوفلاين (مش على الحضور: «مفيش إشارة» كانت
+            // بتتقال لحد منصرف أصلاً) ← مفيش GPS النهارده وهو شغال ←
+            // متحرك/واقف من نقط التراك.
+            $openV = $openVisits->get($rep->id);
+
+            if ($openV !== null) {
+                $liveState = 'visit';
+                $liveMin = $openV->checked_in_at !== null
+                    ? (int) round(abs(now()->diffInMinutes($openV->checked_in_at)))
+                    : null;
+            } elseif (! $onShift) {
+                $liveState = 'off';
+                $liveMin = $attState === 'out' && $lastPunch !== null
+                    ? (int) round(abs(now()->diffInMinutes($lastPunch->at)))
+                    : null;
+            } elseif ($moveState === null || ($minutes !== null && $minutes > 15)) {
+                // مفيش GPS النهارده خالص، **أو** الإشارة قديمة (> 15
+                // دقيقة): منقولش «واقف من 6 ساعات» وإحنا أصلاً مش
+                // شايفينه — الشيب بيوري «آخر إشارة h:i A» والمدة.
+                $liveState = 'nosignal';
+                $liveMin = $minutes;
+            } else {
+                $liveState = $moveState;
+                $liveMin = $moveMin;
+            }
 
             // ═══ غرفة التحكم (2026-08-06) ═══
             // السرعة اللحظية من آخر نقطتين — بس لو الفرق أقل من 15 دقيقة،
@@ -709,28 +797,60 @@ class JourneyController extends Controller
                 : [];
 
             // ⚠️ قيمة العهدة بعقيدة التسعير (١١/٨): السواق بضاعته
-            // متسعّرة «قديم» والسيلز بيبيع بـ«جديد» — قبل كده الكل
-            // كان بيتقيّم «جديد» فعهدة السواق كانت شكلها أغلى من حقيقتها.
-            $priceMode = $rep->role === 'driver' ? 'old' : 'new';
+            // متسعّرة «قديم» والسيلز بيبيع بـ«جديد». التقييم من
+            // `CustodyValue` (١٢/٨) — نفس القاعدة (`listForRep`) بس
+            // القوايم وبنودها ميمو للريكوست كله: مفيش كويري سعر لكل
+            // صنف لكل مندوب كل ٣ ثواني.
+            $repList = \App\Support\CustodyValue::listForRep($rep);
+            $remTotals = \App\Support\CustodyValue::remainingTotals($custody);
 
             // مسار اليوم — من نفس `$eventsByUser` المحمّلة فوق (مفيش
             // كويري زيادة): ترتيب زمني تصاعدي عشان الخط يترسم صح،
             // وسقف 300 نقطة عشان حمولة الـSSE كل ٣ ثواني متتخنش.
-            $track = ($eventsByUser->get($rep->id) ?? collect())
+            $chrono = ($eventsByUser->get($rep->id) ?? collect())
                 ->sortBy(fn ($e) => ($e->happened_at ?? $e->created_at)->getTimestamp())
+                ->values();
+
+            $track = $chrono
                 ->slice(-300)
                 ->values()
                 ->map(fn ($e) => [
                     'lat' => (float) $e->lat,
                     'lng' => (float) $e->lng,
-                    't' => ($e->happened_at ?? $e->created_at)->format('h:i A'),
+                    't' => $hia($e->happened_at ?? $e->created_at),
                 ])->all();
+
+            // ═══ الكيلومترات — من النقط المحمّلة أصلاً (كويري أقل من
+            // `kmForDay`) وبفلتر الشوشرة الموثّق في `RepKpis::cleanKm`،
+            // ومقصوصة على نافذة الشغل: من أول تشيك إن لآخر انصراف.
+            // مش مسجل حضور النهارده = صفر كيلومتر شغل. ═══
+            $kmToday = $att?->first_in_at !== null
+                ? \App\Services\RepKpis::cleanKm(
+                    $chrono->map(fn ($e) => [
+                        'lat' => (float) $e->lat,
+                        'lng' => (float) $e->lng,
+                        'at' => $e->happened_at ?? $e->created_at,
+                    ])->all(),
+                    $att->first_in_at,
+                    $att->last_out_at,
+                )
+                : 0.0;
+
+            // آخر ٥ أحداث للبوب أب — أوقات h:i A جاهزة من السيرفر
+            $recent = ($feedByUser->get($rep->id) ?? collect())
+                ->take(5)
+                ->map(fn ($e) => [
+                    't' => $hia($e->happened_at),
+                    'icon' => $e->icon(),
+                    'color' => $e->color(),
+                    'text' => trim($e->title.($e->subtitle ? ' · '.$e->subtitle : '')),
+                ])->values()->all();
 
             return [
                 'rep' => $rep,
                 'custody' => $custody,
                 'remaining_units' => $custody?->remainingUnits() ?? 0,
-                'remaining_value' => round($custody?->remainingValue($priceMode) ?? 0, 2),
+                'remaining_value' => round((float) ($remTotals[$repList?->id]['total'] ?? 0), 2),
                 'summary' => $summary,
                 'last' => $last,
                 'lat' => $last?->lat,
@@ -739,7 +859,7 @@ class JourneyController extends Controller
                 'status' => $status,
                 'sales_today' => round((float) ($salesToday[$rep->id] ?? 0)
                     + (float) ($poToday->get($rep->id)?->s ?? 0), 2),
-                'km_today' => \App\Services\RepKpis::kmForDay($rep, now()),
+                'km_today' => $kmToday,
                 'speed' => $speed,
                 'in_zone' => $inZone,
                 'items' => $items,
@@ -747,13 +867,21 @@ class JourneyController extends Controller
                 // وزار ولا لأ وعمل أوامر ولا لأ وآخر حالة إيه» ═══
                 'visits_today' => (int) ($visitsToday[$rep->id] ?? 0),
                 'pos_today' => (int) ($poToday->get($rep->id)?->c ?? 0),
-                'work' => $workStates[$rep->id] ?? 'off',
-                'open_client' => $openVisits->get($rep->id)?->client?->displayName(),
+                'work' => $onShift ? $attState : 'off',
+                'open_client' => $openV?->client?->displayName(),
                 'last_event' => $last !== null
                     ? trim($last->title.($last->subtitle ? ' · '.$last->subtitle : ''))
                     : null,
                 'last_event_icon' => $last?->icon(),
                 'track' => $track,
+                // ═══ شاشة التلفزيون (١٢/٨) — كله additive ═══
+                'att_state' => $attState,
+                'att_in' => $hia($att?->first_in_at),
+                'att_out' => $hia($att?->last_out_at),
+                'live_state' => $liveState,
+                'live_min' => $liveMin,
+                'signal_at' => $hia($last?->happened_at ?? $last?->created_at),
+                'events' => $recent,
             ];
         });
 
@@ -793,8 +921,11 @@ class JourneyController extends Controller
             // الواحد حدثين تلاتة والباقي «فاضي» كذباً.
             ->take(60)
             ->get()
+            // ⚠️ توقيت القاهرة صراحةً (١٢/٨) — «التايم لاين توقيته غلط»:
+            // اللايف سيرفر ممكن يكون ناسي APP_TIMEZONE فبيفرمت UTC.
+            // التحويل الصريح no-op لو التوقيت مظبوط وصح لو ناسيه.
             ->map(fn ($e) => [
-                't' => $e->happened_at->format('h:i A'),
+                't' => $e->happened_at->copy()->timezone('Africa/Cairo')->format('h:i A'),
                 'kind' => $e->type,
                 'icon' => $e->icon(),
                 'color' => $e->color(),
@@ -978,6 +1109,21 @@ class JourneyController extends Controller
                 'visits' => $r['visits_today'],
                 'pos' => $r['pos_today'],
                 'track' => $r['track'],
+                // ═══ إضافات شاشة التلفزيون (١٢/٨) — additive برضه:
+                // الصفحة القديمة بتتجاهلها والجديدة بتبني عليها ═══
+                'role_key' => $r['rep']->role,
+                'att' => [
+                    'state' => $r['att_state'],
+                    'in' => $r['att_in'],
+                    'out' => $r['att_out'],
+                ],
+                'live' => [
+                    'state' => $r['live_state'],
+                    'min' => $r['live_min'],
+                ],
+                'signal_at' => $r['signal_at'],
+                'events' => $r['events'],
+                'tracking_url' => route('ops.tracking', ['user' => $r['rep']->id]),
             ])->values(),
         ];
     }
@@ -999,6 +1145,13 @@ class JourneyController extends Controller
             // إعادة البناء (١١/٨) — «الكل زار كام محل وسلّم كام أمر»
             'visits' => (int) $rows->sum(fn ($r) => $r['visits_today']),
             'pos' => (int) $rows->sum(fn ($r) => $r['pos_today']),
+            // شاشة التلفزيون (١٢/٨) — «الحضور جوه الشاشة»: كام مندوب
+            // وكام مدير في الشارع فعلاً (حضور مفتوح) وكام أوفلاين
+            'reps_on' => $rows->filter(fn ($r) => $r['rep']->role !== 'manager'
+                && in_array($r['att_state'], ['working', 'break'], true))->count(),
+            'managers_on' => $rows->filter(fn ($r) => $r['rep']->role === 'manager'
+                && in_array($r['att_state'], ['working', 'break'], true))->count(),
+            'offline_n' => $rows->filter(fn ($r) => ! in_array($r['att_state'], ['working', 'break'], true))->count(),
         ];
     }
 

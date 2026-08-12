@@ -166,8 +166,8 @@ class RepKpis
     }
 
     /**
-     * كيلومترات يوم واحد — مجموع المسافات بين نقاط التراك المتتالية.
-     * القفزات الأكبر من 5 كم بين نقطتين بتتداس (GPS شارد).
+     * كيلومترات يوم واحد — مجموع المسافات بين نقاط التراك المتتالية
+     * بعد فلتر الشوشرة (`cleanKm`).
      */
     public static function kmForDay(User $rep, Carbon $day): float
     {
@@ -175,20 +175,80 @@ class RepKpis
             ->whereDate('happened_at', $day->toDateString())
             ->whereNotNull('lat')->whereNotNull('lng')
             ->orderBy('happened_at')
-            ->get(['lat', 'lng']);
+            ->get(['lat', 'lng', 'happened_at']);
 
+        return self::cleanKm($points->map(fn ($p) => [
+            'lat' => (float) $p->lat,
+            'lng' => (float) $p->lng,
+            'at' => $p->happened_at,
+        ])->all());
+    }
+
+    /**
+     * ═══ فلتر شوشرة الـGPS (بلاغ المالك ١٢/٨: «حسابات الكيلو غلط») ═══
+     *
+     * الجمع الخام كان بيحسب رعشة الجهاز وهو واقف مشاوير، وقفزات
+     * الإحداثيات سرعات خرافية. القطعة بين كل نقطتين متتاليتين بتتداس لو:
+     *
+     *   • أقصر من 15 متر — رعشة GPS مش حركة عربية
+     *   • سرعتها المحسوبة أكبر من 120 كم/س — قفزة إحداثيات مش مشوار
+     *   • أطول من 5 كم — تيليبورت (الحارس القديم، فاضل زي ما هو)
+     *   • فرق الوقت صفر — نقطتين بنفس الطابع الزمني
+     *   • خارج نافذة الشغل لو اتبعتت (`$from`/`$to`) — الشاشة اللايف
+     *     بتبعت أول حضور وآخر انصراف، فمشوار ما قبل التشيك إن وما
+     *     بعد الانصراف مش بيتحسب شغل
+     *
+     * ⚠️ **عرض فقط** — الرقم مؤشر أداء ومابيدخلش في أي قيد أو تصفية.
+     *
+     * @param  list<array{lat: float, lng: float, at: \Carbon\CarbonInterface}>  $points  ترتيب زمني تصاعدي
+     */
+    public static function cleanKm(array $points, ?\Carbon\CarbonInterface $from = null, ?\Carbon\CarbonInterface $to = null): float
+    {
         $km = 0.0;
         $prev = null;
 
         foreach ($points as $p) {
-            if ($prev !== null) {
-                $d = self::haversine((float) $prev->lat, (float) $prev->lng, (float) $p->lat, (float) $p->lng);
-
-                if ($d <= 5) {
-                    $km += $d;
-                }
+            if ($from !== null && $p['at']->lt($from)) {
+                continue;
             }
 
+            if ($to !== null && $p['at']->gt($to)) {
+                break;
+            }
+
+            if ($prev === null) {
+                $prev = $p;
+
+                continue;
+            }
+
+            $d = self::haversine($prev['lat'], $prev['lng'], $p['lat'], $p['lng']);
+            // ⚠️ Carbon 3: الفرق ممكن يرجع سالب — القيمة المطلقة دايماً
+            $secs = abs($prev['at']->diffInSeconds($p['at']));
+
+            if ($secs <= 0) {
+                // نفس الطابع الزمني — نقطة مكررة، بنتخطاها من غير
+                // ما نحرك المرساة
+                continue;
+            }
+
+            if ($d > 5 || ($d / ($secs / 3600)) > 120) {
+                // قفزة إحداثيات — بندوسها **وبنعيد المرساة** عند
+                // النقطة الجديدة، وإلا كل القطع الجاية هتتقاس من
+                // مكان غلط وتترفض للأبد
+                $prev = $p;
+
+                continue;
+            }
+
+            if ($d < 0.015) {
+                // ⚠️ رعشة — بنتخطى **من غير ما نحرك المرساة**: حركة
+                // بطيئة حقيقية (زحمة، مشي) خطواتها الصغيرة بتتراكم
+                // لحد ما تعدي الـ15 متر فتتحسب — مش بتتداس واحدة واحدة
+                continue;
+            }
+
+            $km += $d;
             $prev = $p;
         }
 
