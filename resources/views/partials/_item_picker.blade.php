@@ -16,6 +16,11 @@
                     بتتندَه مرة لكل صنف متعلّم عليه عند «إضافة»
       placeholder — اختياري: نص التلميح (الافتراضي field.search_product_ph)
       emptyText   — اختياري: نص «مفيش نتايج» (الافتراضي common.no_results)
+      filter      — اختياري: اسم دالة جافاسكربت عامّة (p) => bool —
+                    بتتقيّم مع كل بحث، فتنفع للمتاح المتغيّر بتغيير
+                    المخزن من غير ريلود (١٢/٨)
+      sub         — اختياري: اسم دالة جافاسكربت عامّة (p) => string —
+                    ليبل صغير في آخر الصف (زي «المتاح: 120»)
 
     بيعرّض الكتالوج على window.PICKER_<ID> عشان addRow في الشاشة يقرا منه.
     ملاحظة: أسماء الحقول اللي بتتبعت للسيرفر مسؤولية الشاشة نفسها —
@@ -26,6 +31,10 @@
     $pkVar   = 'PICKER_'.\Illuminate\Support\Str::upper(preg_replace('/[^A-Za-z0-9_]/', '', (string) $id));
     $pkPh    = $placeholder ?? __('field.search_product_ph');
     $pkEmpty = $emptyText ?? __('common.no_results');
+    // أسماء دوال اختيارية — بتتحل وقت التشغيل عشان سكربت الشاشة
+    // بييجي بعد البارشيال في الترتيب (content قبل scripts)
+    $pkFilter = (string) ($filter ?? '');
+    $pkSub    = (string) ($sub ?? '');
     $pkJson  = json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 @endphp
 
@@ -59,6 +68,11 @@
     const ADD_LBL = {!! json_encode(__('common.add'), JSON_UNESCAPED_UNICODE) !!};
     const SEL_ALL = {!! json_encode(__('field.select_all'), JSON_UNESCAPED_UNICODE) !!};
     const UNSEL_ALL = {!! json_encode(__('field.unselect_all'), JSON_UNESCAPED_UNICODE) !!};
+    // هوكات اختيارية بالاسم — بتتنده لو الشاشة عرّفتها (المتاح المتغيّر)
+    const FILTER_FN = {!! json_encode($pkFilter) !!};
+    const SUB_FN = {!! json_encode($pkSub) !!};
+    const passes = p => !FILTER_FN || typeof window[FILTER_FN] !== 'function' || !!window[FILTER_FN](p);
+    const subOf = p => (SUB_FN && typeof window[SUB_FN] === 'function') ? String(window[SUB_FN](p) ?? '') : '';
     const esc = s => String(s ?? '').replace(/[&<>"']/g,
         ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
     const box = () => document.getElementById('{{ $pkId }}Results');
@@ -89,8 +103,9 @@
         b.style.display = 'block';
         list().innerHTML = hits.length === 0
             ? '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">' + esc(EMPTY) + '</div>'
-            : hits.map(p =>
-                '<div data-pid="' + p.id + '" onclick="{{ $pkId }}PickerToggle(' + p.id + ')" ' +
+            : hits.map(function (p) {
+                const sub = subOf(p);
+                return '<div data-pid="' + p.id + '" onclick="{{ $pkId }}PickerToggle(' + p.id + ')" ' +
                 'style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:pointer;' +
                 'border-bottom:1px solid var(--border);background:' + (sel.has(p.id) ? '#E8F1FF' : '#fff') + '">' +
                 '<input type="checkbox" ' + (sel.has(p.id) ? 'checked ' : '') +
@@ -100,7 +115,9 @@
                     : '<span style="width:52px;height:52px;border:1px dashed var(--border);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)">📦</span>') +
                 '<span style="flex:1;min-width:0"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
                 '<span style="display:block;font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</span></span>' +
-                '</div>').join('');
+                (sub ? '<span style="font-size:11px;font-weight:800;color:var(--muted);flex-shrink:0">' + esc(sub) + '</span>' : '') +
+                '</div>';
+            }).join('');
         bar();
     }
 
@@ -108,11 +125,13 @@
     window.{{ $pkId }}PickerSearch = function () {
         const q = (inp().value || '').trim().toLowerCase();
         hits = CAT.filter(p =>
-            q === '' ||
-            (p.name || '').toLowerCase().includes(q) ||
-            (p.name_ar || '').includes(q) ||
-            (p.name_en || '').toLowerCase().includes(q) ||
-            (p.code || '').toLowerCase().includes(q)
+            passes(p) && (
+                q === '' ||
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.name_ar || '').includes(q) ||
+                (p.name_en || '').toLowerCase().includes(q) ||
+                (p.code || '').toLowerCase().includes(q)
+            )
         );
         render();
     };

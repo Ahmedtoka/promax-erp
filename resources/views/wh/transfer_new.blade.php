@@ -11,9 +11,10 @@
 @php
     $fmt = fn ($n) => number_format((float) $n);
 
-    // الكتالوج للبحث بالصور — والباتشات الحقيقية بتغذّي قايمة الباتش
+    // الكتالوج للبحث بالصور — بيتبعت للمنتقي المشترك زي ما هو،
+    // والباتشات الحقيقية بتغذّي قايمة الباتش
     $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
-    $catalog = json_encode($products->map(fn ($p) => [
+    $catalog = $products->map(fn ($p) => [
         'id' => $p->id,
         'code' => (string) $p->code,
         'name' => $p->displayName(),
@@ -21,7 +22,7 @@
         'name_en' => (string) $p->name_en,
         'image' => $p->imageSrc(),
         'units' => $p->unitFactors(),
-    ])->values(), $jsonFlags);
+    ])->values();
 
     $batchData = json_encode($batches->map(fn ($b) => [
         'id' => $b->id,
@@ -99,12 +100,17 @@
             </div>
         </div>
 
-        {{-- ═══ البحث بالصور — نفس نمط تسليم العهدة ═══ --}}
-        <div style="position:relative;margin-top:12px">
-            <input type="search" id="trSearch" autocomplete="off" style="width:100%"
-                   placeholder="🔍 {{ __('field.search_product_ph') }}"
-                   oninput="trSearchNow()" onfocus="trSearchNow()">
-            <div id="trResults" style="display:none;position:absolute;top:100%;inset-inline:0;z-index:30;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.12);max-height:300px;overflow-y:auto"></div>
+        {{-- ═══ البحث بالصور — المنتقي المشترك بالتشيك بوكس (١٢/٨) ═══
+             الفلتر بيتقيّم مع كل فتحة: اللي ليه رصيد في المخزن
+             المرسل بس — تغيير «من مخزن» بيغيّر النتايج من غير ريلود. --}}
+        <div style="margin-top:12px">
+            @include('partials._item_picker', [
+                'id' => 'trpick',
+                'catalog' => $catalog,
+                'onPick' => 'trAddRow',
+                'filter' => 'trPickable',
+                'sub' => 'trPickSub',
+            ])
         </div>
 
         <div class="tablewrap" style="margin-top:12px;max-height:52vh;overflow-y:auto">
@@ -146,7 +152,8 @@
 
 @section('scripts')
 <script>
-const TR_CATALOG = {!! $catalog !!};
+{{-- الكتالوج جاي من المنتقي المشترك — مفيش نسخة تانية من الـ JSON --}}
+const TR_CATALOG = window.PICKER_TRPICK;
 const TR_BATCHES = {!! $batchData !!};
 const TR_UNIT_LABELS = {
     piece: @json(__('stock.unit_piece')),
@@ -167,38 +174,18 @@ function trAvail(pid) {
         .reduce((s, b) => s + b.left, 0);
 }
 
-function trSearchNow() {
-    const q = document.getElementById('trSearch').value.trim().toLowerCase();
-    const box = document.getElementById('trResults');
-    // اللي ليه رصيد في المخزن المرسل بس — مفيش تحويل من العدم
-    const hits = TR_CATALOG.filter(p => trAvail(p.id) > 0).filter(p =>
-        !q || p.name.toLowerCase().includes(q) || p.name_ar.includes(q)
-        || p.name_en.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
+// هوكات المنتقي المشترك: اللي ليه رصيد في المخزن المرسل بس —
+// مفيش تحويل من العدم — وليبل «المتاح: X» جنب كل صف
+function trPickable(p) { return trAvail(p.id) > 0; }
+function trPickSub(p) { return @json(__('stock.available')) + ': ' + trAvail(p.id).toLocaleString(); }
 
-    box.style.display = 'block';
-    box.innerHTML = hits.length === 0
-        ? '<div style="padding:14px;text-align:center;color:var(--muted)">' + @json(__('common.no_results')) + '</div>'
-        : hits.map(p =>
-            '<div onclick="trAddRow(' + p.id + ')" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)">' +
-            (p.image ? '<img src="' + esc(p.image) + '" style="width:48px;height:48px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">' : '') +
-            '<div style="flex:1"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
-            '<div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + @json(__('stock.available')) + ' ' + trAvail(p.id).toLocaleString() + '</div></div>' +
-            '</div>').join('');
-}
-
-document.addEventListener('click', e => {
-    if (!e.target.closest('#trSearch') && !e.target.closest('#trResults')) {
-        document.getElementById('trResults').style.display = 'none';
-    }
-});
-
-/** صف بند جديد — الباتشات FEFO (الأقرب انتهاءً الأول) من المخزن المرسل */
+/** صف بند جديد — الباتشات FEFO (الأقرب انتهاءً الأول) من المخزن المرسل.
+ *  بينده من «إضافة (X)» في المنتقي المشترك مرة لكل صنف متعلّم عليه.
+ *  ⚠️ التكرار مسموح عن قصد — نفس الصنف بيتنقل من أكتر من باتش. */
 function trAddRow(pid) {
     const p = TR_CATALOG.find(x => x.id === pid);
     if (!p) return;
 
-    document.getElementById('trResults').style.display = 'none';
-    document.getElementById('trSearch').value = '';
     document.getElementById('trEmpty')?.remove();
 
     const i = trIdx++;

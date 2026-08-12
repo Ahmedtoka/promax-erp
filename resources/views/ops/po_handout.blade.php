@@ -175,12 +175,17 @@
             </div>
         </div>
 
-        {{-- ═══ الأصناف: بحث ← صف بكمية ووحدة ═══ --}}
-        <div style="position:relative;margin-top:14px">
-            <input type="text" id="prodSearch" autocomplete="off" style="width:100%"
-                   placeholder="🔍 {{ __('field.search_product_ph') }}"
-                   oninput="poSearch()" onfocus="poSearch()">
-            <div id="prodResults" style="display:none;position:absolute;top:100%;inset-inline:0;z-index:30;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.12);max-height:300px;overflow-y:auto"></div>
+        {{-- ═══ الأصناف: المنتقي المشترك بالتشيك بوكس (١٢/٨) ═══
+             الفلتر بيتقيّم مع كل فتحة — المتاح بيتبع المخزن المختار
+             والتسعير بيتبع قايمة الفرع، من غير ريلود. --}}
+        <div style="margin-top:14px">
+            @include('partials._item_picker', [
+                'id' => 'po',
+                'catalog' => $catalog,
+                'onPick' => 'addRow',
+                'filter' => 'poPickable',
+                'sub' => 'poPickSub',
+            ])
         </div>
 
         {{-- الهيدر ثابت + الصورة جوه خانة الصنف — نفس نمط تسليم العهدة --}}
@@ -219,8 +224,9 @@
 
 @section('scripts')
 <script>
-const CATALOG = {!! json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
-const BRANCHES = {!! json_encode($branches, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+{{-- الكتالوج جاي من المنتقي المشترك — مفيش نسخة تانية من الـ JSON --}}
+const CATALOG = window.PICKER_PO;
+const BRANCHES ={!! json_encode($branches, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
 const OLD_ROWS = {!! json_encode($oldRows, JSON_UNESCAPED_UNICODE) !!};
 const OLD_QTY = {!! json_encode(old('qty', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 const OLD_UNIT = {!! json_encode(old('unit', new stdClass), JSON_UNESCAPED_UNICODE) !!};
@@ -322,31 +328,10 @@ function poPriced(p) {
                 : Object.values(prices).some(v => v > 0);
 }
 
-function poSearch() {
-    const q = document.getElementById('prodSearch').value.trim().toLowerCase();
-    const box = document.getElementById('prodResults');
-    // ⚠️ بحث الأصناف بيطلّع اللي ليه كمية **على أرفف المخزن المختار**
-    // وسعر بس — صنف من غير سعر أو رصيد الحسابات هترفضه أصلاً
-    const hits = CATALOG.filter(p => pAvail(p) > 0 && poPriced(p)).filter(p =>
-        !q || p.name.toLowerCase().includes(q) || p.name_ar.includes(q)
-        || p.name_en.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
-
-    box.style.display = 'block';
-    box.innerHTML = hits.length === 0
-        ? '<div style="padding:14px;text-align:center;color:var(--muted)">' + @json(__('common.no_results')) + '</div>'
-        : hits.map(p =>
-            '<div onclick="addRow(' + p.id + ')" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)">' +
-            (p.image ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">' : '') +
-            '<div style="flex:1"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
-            '<div style="font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + @json(__('stock.available')) + ' ' + pAvail(p).toLocaleString() + '</div></div>' +
-            '</div>').join('');
-}
-
-document.addEventListener('click', e => {
-    if (!e.target.closest('#prodSearch') && !e.target.closest('#prodResults')) {
-        document.getElementById('prodResults').style.display = 'none';
-    }
-});
+// ⚠️ هوكات المنتقي المشترك: الأصناف اللي ليها كمية **على أرفف المخزن
+// المختار** وسعر بس — صنف من غير سعر أو رصيد الحسابات هترفضه أصلاً
+function poPickable(p) { return pAvail(p) > 0 && poPriced(p); }
+function poPickSub(p) { return @json(__('stock.available')) + ': ' + pAvail(p).toLocaleString(); }
 
 function unitSelect(p) {
     const units = p.units || { piece: 1 };
@@ -371,12 +356,11 @@ function rowFactor(id) {
     return (p && p.units && sel && p.units[sel.value]) || 1;
 }
 
+/** بينده من «إضافة (X)» في المنتقي المشترك مرة لكل صنف متعلّم عليه —
+ *  الصنف الموجود أصلاً بياخد فوكس بس (مفيش تكرار صفوف). */
 function addRow(id) {
     const p = CATALOG.find(x => x.id === id);
     if (!p) return;
-
-    document.getElementById('prodResults').style.display = 'none';
-    document.getElementById('prodSearch').value = '';
 
     const existing = document.querySelector('[data-row="' + id + '"][data-kind="qty"]');
     if (existing) { existing.focus(); return; }

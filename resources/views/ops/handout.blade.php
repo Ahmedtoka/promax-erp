@@ -101,15 +101,17 @@
             </div>
         </div>
 
-        {{-- ═══════════ البحث — اكتب أو دوس مسافة يفتح الكل ═══════════ --}}
-        <div style="position:relative;margin-top:14px">
-            <input type="text" id="prodSearch" autocomplete="off" style="width:100%"
-                   placeholder="🔍 {{ __('field.search_product_ph') }}"
-                   oninput="searchProducts()" onfocus="searchProducts()">
-            <div id="prodResults"
-                 style="display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;z-index:60;
-                        background:#fff;border:1px solid var(--border);border-radius:12px;
-                        box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:320px;overflow-y:auto"></div>
+        {{-- ═══════════ البحث — المنتقي المشترك بالتشيك بوكس (١٢/٨) ═══════════
+             نفس ليست تعديل إذن الصرف: علّم على كذا صنف ودوس «إضافة (X)».
+             الفلتر بيخفي اللي رصيده صفر، والليبل بيوري المتاح لكل صف. --}}
+        <div style="margin-top:14px">
+            @include('partials._item_picker', [
+                'id' => 'ho',
+                'catalog' => $catalog,
+                'onPick' => 'addRow',
+                'filter' => 'hoPickAvail',
+                'sub' => 'hoPickSub',
+            ])
         </div>
 
         {{-- ═══════════ الأصناف المختارة — بتنزل هنا صف صف ═══════════ --}}
@@ -273,8 +275,8 @@
 
 @section('scripts')
 <script>
-{{-- الكتالوج كله للبحث — 31 صنف، مش وجع للمتصفح --}}
-const CATALOG = {!! json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+{{-- الكتالوج جاي من المنتقي المشترك — مفيش نسخة تانية من الـ JSON --}}
+const CATALOG = window.PICKER_HO;
 const OLD_ROWS = {!! json_encode($oldRows, JSON_UNESCAPED_UNICODE) !!};
 const OLD_QTY = {!! json_encode(old('qty', new stdClass), JSON_UNESCAPED_UNICODE) !!};
 const OLD_GIFT = {!! json_encode(old('gift', new stdClass), JSON_UNESCAPED_UNICODE) !!};
@@ -283,45 +285,11 @@ const OLD_UNIT = {!! json_encode(old('unit', new stdClass), JSON_UNESCAPED_UNICO
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-/**
- * البحث: اكتب اسم (عربي أو إنجليزي) أو كود — أو مسافة/فوكس يفتح الكل.
- */
-function searchProducts() {
-    const box = document.getElementById('prodResults');
-    const q = document.getElementById('prodSearch').value.trim().toLowerCase();
+const AVAIL_LBL = @json(__('stock.available'));
 
-    const hits = CATALOG.filter(p =>
-        q === '' ||
-        p.name.toLowerCase().includes(q) ||
-        (p.name_ar || '').includes(q) ||
-        (p.name_en || '').toLowerCase().includes(q) ||
-        p.code.toLowerCase().includes(q)
-    );
-
-    box.innerHTML = hits.length === 0
-        ? '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">{{ __('stock.no_items') }}</div>'
-        : hits.map(p => {
-            const out = p.available <= 0;
-            return '<div onclick="' + (out ? '' : 'addRow(' + p.id + ')') + '"' +
-                ' style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:' + (out ? 'not-allowed' : 'pointer') + ';' +
-                'border-bottom:1px solid var(--border);opacity:' + (out ? '.45' : '1') + '">' +
-                (p.image ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">' : '<span style="width:52px"></span>') +
-                '<span style="flex:1;min-width:0"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
-                '<span style="display:block;font-size:10.5px;color:var(--muted)">' + esc(p.code) + ' · ' + esc(p.unit) + '</span></span>' +
-                '<span style="font-size:11px;font-weight:800;color:' + (out ? 'var(--red, #B00020)' : 'var(--muted)') + '">' +
-                (out ? '{{ __('stock.out_of') }}' : '{{ __('stock.available') }}: ' + p.available.toLocaleString()) + '</span></div>';
-        }).join('');
-
-    box.style.display = 'block';
-}
-
-// قفل القايمة عند الضغط بره
-document.addEventListener('click', e => {
-    if (!e.target.closest('#prodSearch') && !e.target.closest('#prodResults')) {
-        const box = document.getElementById('prodResults');
-        if (box) box.style.display = 'none';
-    }
-});
+// هوكات المنتقي المشترك: فلتر «اللي ليه رصيد بس» + ليبل «المتاح: X»
+function hoPickAvail(p) { return Number(p.available || 0) > 0; }
+function hoPickSub(p) { return AVAIL_LBL + ': ' + Number(p.available || 0).toLocaleString(); }
 
 const UNIT_LABELS = {
     piece: @json(__('stock.unit_piece')),
@@ -378,13 +346,12 @@ function rowFactor(id, kind) {
     return (p && p.units && sel && p.units[sel.value]) || 1;
 }
 
-/** اختيار صنف — ينزل صف في الجدول بكمية وهدية */
+/** اختيار صنف — ينزل صف في الجدول بكمية وهدية.
+ *  بينده من «إضافة (X)» في المنتقي المشترك مرة لكل صنف متعلّم عليه —
+ *  الصنف الموجود أصلاً بياخد فوكس بس (مفيش تكرار صفوف). */
 function addRow(id) {
     const p = CATALOG.find(x => x.id === id);
     if (!p) return;
-
-    document.getElementById('prodResults').style.display = 'none';
-    document.getElementById('prodSearch').value = '';
 
     const existing = document.querySelector('[data-row="' + id + '"][data-kind="qty"]');
     if (existing) { existing.focus(); return; }
