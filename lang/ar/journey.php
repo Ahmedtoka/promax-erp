@@ -196,4 +196,23 @@ return [
     'last_events' => 'آخر الأحداث',
     'status_label' => 'الحالة',
     'no_events_today' => 'مفيش أحداث النهارده',
+
+    // ═══ يوم المندوب — إعادة بناء (١٢ أغسطس ٢٠٢٦) ═══
+    'rd_btn_tracking' => 'التراكينج',
+    'rd_btn_settle' => 'التصفية',
+    'rd_attendance' => 'الحضور',
+    'rd_att_in' => 'شغال من',
+    'rd_att_break' => 'بريك',
+    'rd_att_out' => 'انصرف',
+    'rd_att_worked' => 'ساعات الشغل',
+    'rd_sales_sub' => ':count فاتورة بإجمالي :inv',
+    'rd_collections' => 'تحصيلات',
+    'rd_coll_sub' => 'نقدي :cash · غير نقدي :other',
+    'rd_custody_left' => 'قيمة العهدة الباقية',
+    'rd_custody_now' => 'العهدة الحالية دلوقتي — مش بتاريخ اليوم المختار',
+    'rd_km_today' => 'كيلومترات اليوم',
+    'rd_km_hint' => 'من نقط التتبع بعد فلتر الشوشرة',
+    'rd_timeline' => 'تايم لاين اليوم',
+    'rd_timeline_hint' => 'كل حركات اليوم من سجل التتبع — من غير فتحات الأبلكيشن',
+    'rd_duration' => 'المدة',
 ];

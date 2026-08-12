@@ -195,4 +195,23 @@ return [
     'last_events' => 'Last events',
     'status_label' => 'Status',
     'no_events_today' => 'No events today',
+
+    // ═══ Rep day — rebuild (2026-08-12) ═══
+    'rd_btn_tracking' => 'Tracking',
+    'rd_btn_settle' => 'Settlement',
+    'rd_attendance' => 'Attendance',
+    'rd_att_in' => 'On shift from',
+    'rd_att_break' => 'Break',
+    'rd_att_out' => 'Checked out',
+    'rd_att_worked' => 'Worked',
+    'rd_sales_sub' => ':count invoices totalling :inv',
+    'rd_collections' => 'Collections',
+    'rd_coll_sub' => 'Cash :cash · non-cash :other',
+    'rd_custody_left' => 'Remaining custody value',
+    'rd_custody_now' => 'Current custody right now — not bound to the picked date',
+    'rd_km_today' => 'Kilometres today',
+    'rd_km_hint' => 'From track points after the GPS-noise filter',
+    'rd_timeline' => 'Day timeline',
+    'rd_timeline_hint' => 'Every move of the day from the tracking log — app opens excluded',
+    'rd_duration' => 'Duration',
 ];

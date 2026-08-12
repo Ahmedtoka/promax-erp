@@ -1155,12 +1155,25 @@ class JourneyController extends Controller
         ];
     }
 
-    /** يوم مندوب واحد — بيتفتح من الشاشة اللايف */
+    /**
+     * يوم مندوب واحد — بيتفتح من الشاشة اللايف.
+     *
+     * ═══ إعادة بناء ١٢ أغسطس ٢٠٢٦ — «يوم المندوب» بمعايير الأسبوع ده ═══
+     *
+     * ⚠️ **كل المراسي هنا بالـid مش بالرول** — عشان المدير الميداني
+     * (قرار ١١/٨) يتحسب زي المندوب بالظبط: خطته `journey_plans.user_id`،
+     * زياراته `visits.user_id`، فواتيره `invoices.user_id`، أوامره
+     * `purchase_orders.assigned_to`، وتحصيلاته قيود بمرساة زياراته.
+     * الصفحة كانت بتقرا الخطة والزيارات بس — فمدير اشتغل ميداني من
+     * غير خطة لليوم ده كان بيطلع «كله أصفار» وفلوسه وحركته موجودة
+     * فعلاً تحت الـid بتاعه ومحدش شايفها هنا.
+     */
     public function repDay(Request $request, User $user)
     {
         // ⚠️ **فلترة الشاشة اللايف بتخبّي الصف عن العين مش عن الراوت**
         // — `/ops/live/{user}` كان بيفتح يوم أي مندوب بالـid: مساره
         // وزياراته وفواتيره. الحارس هنا هو اللي بيقفلها فعلاً.
+        // (المدير بيعدّي منه: على نفسه، أو الأدمن عليه — عقيدة ١١/٨.)
         Scope::assertRep($request->user(), $user);
 
         // ⚠️ `Carbon::parse` على نص عبيط بترمي استثناء و500. الفحص
@@ -1170,11 +1183,141 @@ class JourneyController extends Controller
             fn () => today(),
             report: false,
         );
+        $dateD = $date->toDateString();
+
+        // ⚠️ كل الأوقات h:i A بتوقيت القاهرة **صراحةً** — اللايف سيرفر
+        // ممكن يكون ناسي APP_TIMEZONE (مشكلة معروفة): التحويل no-op لو
+        // التوقيت مظبوط، وصح لو UTC. نفس قاعدة الشاشة اللايف (١٢/٨).
+        $hia = fn ($dt) => $dt?->copy()->timezone('Africa/Cairo')->format('h:i A');
+
+        // ═══ الخطة مرة واحدة ═══
+        // ⚠️ كانت بتتحسب **تلات مرات**: `forDay` + `offPlan` (بتنده
+        // `forDay` من جوه) + `summary` (بتنده الاتنين). الصفوف بتتحسب
+        // مرة، و`offPlan` بتاخدها جاهزة، والسامري بيتبني منهم هنا.
+        $rows = Journeys::forDay($user, $date);
+        $offPlan = Journeys::offPlan($user, $date, $rows);
+
+        $planned = $rows->count();
+        $done = $rows->where('status', 'done')->count();
+
+        $summary = [
+            'planned' => $planned,
+            'done' => $done,
+            'in_visit' => $rows->where('status', 'in_visit')->count(),
+            'pending' => $rows->where('status', 'pending')->count(),
+            'off_plan' => $offPlan->count(),
+            'pct' => $planned > 0 ? round($done / $planned * 100, 1) : 0.0,
+        ];
+
+        // ═══ فلوس اليوم — العقيدة الموحّدة (١١/٨) بالحرف ═══
+        // **مبيعات المندوب = فواتيره (user_id) + أوامر التوريد
+        // المسلَّمة (assigned_to)** بالـ`grand_total` (اللي العميل
+        // بيدفعه). وفلوس الأوامر **من القيود مش من الأمر** — نفس
+        // كويريز `RepSettlementController::figuresBetween` بالحرف:
+        // قراية `grand_total` من الأمر كانت هتعدّ الأمانة كمان.
+        $inv = \App\Models\Invoice::where('user_id', $user->id)
+            ->whereDate('created_at', $dateD)
+            ->selectRaw('COUNT(*) AS cnt, COALESCE(SUM(grand_total),0) AS total')
+            ->first();
+
+        $po = \App\Models\Transaction::where('source_type', \App\Models\PurchaseOrder::class)
+            ->whereIn('source_id',
+                \App\Models\PurchaseOrder::where('assigned_to', $user->id)->select('id'))
+            ->whereDate('created_at', $dateD)
+            ->selectRaw("COALESCE(SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END),0) AS sale,
+                COALESCE(SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END),0) AS cash")
+            ->first();
+
+        // التحصيلات الميدانية — قيود `collection` بمرساة زيارات اليوزر
+        // (نفس مرساة التصفية)، مقسومة نقدي/غير نقدي. «غير النقدي» =
+        // الإجمالي − الكاش، مش مجموع طرق معروضة — طريقة شاذة
+        // ماتضيّعش فلوس من الكارت.
+        $coll = \App\Models\Transaction::where('kind', 'collection')
+            ->where('source_type', \App\Models\Visit::class)
+            ->whereIn('source_id', Visit::where('user_id', $user->id)->select('id'))
+            ->whereDate('created_at', $dateD)
+            ->selectRaw('COALESCE(SUM(credit),0) AS total,
+                COALESCE(SUM(CASE WHEN method = ? THEN credit ELSE 0 END),0) AS cash',
+                [\App\Models\Transaction::METHOD_CASH])
+            ->first();
+
+        $money = [
+            'sales' => round((float) $inv->total + (float) $po->sale, 2),
+            'inv_total' => round((float) $inv->total, 2),
+            'inv_count' => (int) $inv->cnt,
+            'po_sales' => round((float) $po->sale, 2),
+            'coll_total' => round((float) $coll->total, 2),
+            'coll_cash' => round((float) $coll->cash, 2),
+            'coll_other' => round((float) $coll->total - (float) $coll->cash, 2),
+        ];
+
+        // ═══ قيمة العهدة الباقية — العهدة **الحالية** (عقيدة ١٠/٨) ═══
+        // ⚠️ دي حالة «دلوقتي» مش بتاريخ منتقى — والشاشة بتقول كده
+        // صراحةً تحت الرقم. التقييم بقايمة المندوب المعتمدة (السواق
+        // قديمة والسيلز/المدير جديدة) من `CustodyValue` — ميمو
+        // للريكوست، مفيش كويري سعر لكل صنف.
+        $custody = $user->currentCustody();
+        $custody?->load('items.product');
+        $custodyList = \App\Support\CustodyValue::listForRep($user);
+        $custodyTotals = \App\Support\CustodyValue::remainingTotals($custody);
+        $custodyValue = round((float) ($custodyTotals[$custodyList?->id]['total'] ?? 0), 2);
+
+        // كيلومترات اليوم — بفلتر شوشرة الـGPS الموثّق (`cleanKm`)
+        $km = \App\Services\RepKpis::kmForDay($user, $date->copy());
+
+        // ═══ الحضور — قراءة فقط من `AttendanceDay` ═══
+        // ⚠️ مفيش `Attendance::state()` هنا — دي بتعمل `firstOrCreate`
+        // (كتابة)، وصفحة عرض ليوم ممكن يكون في الماضي ماينفعش تفتح
+        // أيام حضور. نفس قاعدة بورد المناديب بالحرف.
+        $att = \App\Models\AttendanceDay::with('punches')
+            ->where('user_id', $user->id)
+            ->whereDate('date', $dateD)
+            ->first();
+
+        $attendance = [
+            'in' => $hia($att?->first_in_at),
+            'break_at' => $hia($att?->punches
+                ->firstWhere('type', \App\Models\AttendancePunch::BREAK)?->at),
+            'break_min' => (int) ($att?->break_minutes ?? 0),
+            'out' => $hia($att?->last_out_at),
+            'worked' => $att !== null
+                ? \App\Models\AttendanceDay::hhmm($att->liveMinutes())
+                : null,
+        ];
+
+        // ═══ تايم لاين اليوم — كل حركاته من سجل التتبع ═══
+        // زي صفحة التراكينج بس ليستة من غير خريطة. `open` مستبعد عن
+        // قصد — نفس سبب فيد اللايف: المندوب بيفتح الأبلكيشن عشرات
+        // المرات في اليوم والتايم لاين بيغرق.
+        $timeline = TrackEvent::where('user_id', $user->id)
+            ->whereDate('happened_at', $dateD)
+            ->where('type', '!=', 'open')
+            ->orderBy('happened_at')
+            ->get()
+            ->map(fn ($e) => [
+                'time' => $hia($e->happened_at),
+                'icon' => $e->icon(),
+                'color' => $e->color(),
+                'title' => $e->title,
+                'subtitle' => $e->subtitle,
+            ])->values();
+
+        // ═══ منتقي الموظف — التنقل بين أيام الفريق من غير رجوع للايف ═══
+        // ⚠️ `FIELD_WORK_ROLES` مش `FIELD_ROLES` — المدير الميداني جوه
+        // القايمة (طلب المالك ١٢/٨). و`canRep` بتصفّي اللي الفاعل مش
+        // مسموح له يفتحه (مدير زميل مثلاً) — مفيش أوبشن بيودّي على 403.
+        $repOptions = User::fieldVisibleTo(
+            Branch::scope(User::whereIn('role', User::FIELD_WORK_ROLES)), $request->user())
+            ->where('active', true)
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $u) => Scope::canRep($request->user(), $u))
+            ->values();
 
         // ═══ صور ترتيب الرفوف بتاعة اليوم (2026-08-09) ═══
         // المدير بيشوف شغل المندوب على الرف قبل وبعد — مجمّعة بالعميل.
         $shelfPhotos = \App\Models\VisitPhoto::with('visit.client')
-            ->whereIn('visit_id', \App\Models\Visit::where('user_id', $user->id)
+            ->whereIn('visit_id', Visit::where('user_id', $user->id)
                 ->whereDate('created_at', $date)->select('id'))
             ->orderBy('id')
             ->get()
@@ -1183,9 +1326,18 @@ class JourneyController extends Controller
         return view('ops.rep_day', [
             'rep' => $user,
             'date' => $date,
-            'rows' => Journeys::forDay($user, $date),
-            'offPlan' => Journeys::offPlan($user, $date),
-            'summary' => Journeys::summary($user, $date),
+            'rows' => $rows,
+            'offPlan' => $offPlan,
+            'summary' => $summary,
+            'money' => $money,
+            'custodyValue' => $custodyValue,
+            'custodyList' => $custodyList,
+            'custody' => $custody,
+            'km' => $km,
+            'att' => $attendance,
+            'hasAtt' => $att !== null,
+            'timeline' => $timeline,
+            'repOptions' => $repOptions,
             'shelfPhotos' => $shelfPhotos,
         ]);
     }
