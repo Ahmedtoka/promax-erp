@@ -171,4 +171,5 @@ return [
     'pool_orphans' => 'No team',
     'pool_orphans_hint' => ':count clients have no team - assign them to any rep below and they join his manager\'s pool automatically',
     'in_pool_of' => ':name team pool',
+    'no_rep_hint' => 'Tap to start assigning',
 ];

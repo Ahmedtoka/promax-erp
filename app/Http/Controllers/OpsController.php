@@ -201,6 +201,352 @@ class OpsController extends Controller
     }
 
     /**
+     * ═══ مبيعات المناديب — بورد فلوس كل مندوب (١٢ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «زي عهد المناديب بالظبط بس للفلوس — كل مندوب باع
+     * بكام كاش وآجل وحصّل بكام وبأنهي طريقة».
+     *
+     * ⚠️ العقيدة (١١/٨): **مبيعات المندوب = فواتيره (user_id) + أوامر
+     * التوريد المسلَّمة (assigned_to)؛ مبيعات العميل = قيوده؛ التارجيت
+     * بالعميل.** وفلوس الأوامر **من القيود مش من الأمر** — نفس كويريز
+     * `RepSettlementController::figuresBetween` بالحرف: قيد `collection`
+     * على الأمر = كاش، وقيد `sale` ناقص الكاش ده = آجل. قراية
+     * `grand_total` من الأمر كانت هتعدّ الأمانة كمان.
+     *
+     * ⚠️ الكاش والآجل معروضين بتفصيلة «منها أوامر توريد: X» — نفس
+     * اللبس اللي حصل في محضر مريم (31,767 = 29,045 فواتير + 2,722
+     * أوامر): الرقم من غير التفصيلة بيبان متناقض مع شاشات الفواتير.
+     */
+    public function repSales(Request $request)
+    {
+        [$fromD, $toD] = $this->boardWindow($request);
+
+        // ⚠️ نفس سكوب «عهد المناديب»: المدير بيشوف فريقه، والمحاسب
+        // (fieldVisibleTo بتعدّيه من غير فلترة) بيشوف كل الميدان
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
+
+        $m = $this->repMoneyMaps($reps->pluck('id'), $fromD, $toD);
+
+        $rows = $reps->map(function (User $u) use ($m) {
+            $inv = $m['inv'][$u->id] ?? null;
+            $poCash = round((float) ($m['po_cash'][$u->id] ?? 0), 2);
+            // الآجل = مدين الأوامر ناقص اللي اتحصّل نقدي وقت التسليم —
+            // نفس معادلة التصفية بالظبط
+            $poCredit = round(max(0, (float) ($m['po_sale'][$u->id] ?? 0) - $poCash), 2);
+
+            $coll = $m['coll'][$u->id]
+                ?? ['total' => 0.0, 'cash' => 0.0, 'transfer' => 0.0, 'cheque_card' => 0.0];
+            $refunds = round((float) ($m['refund'][$u->id] ?? 0), 2);
+
+            $cash = round((float) ($inv->cash ?? 0) + $poCash, 2);
+            $credit = round((float) ($inv->credit ?? 0) + $poCredit, 2);
+
+            return [
+                'user' => $u,
+                'inv_count' => (int) ($inv->cnt ?? 0),
+                'cash' => $cash,
+                'po_cash' => $poCash,
+                'credit' => $credit,
+                'po_credit' => $poCredit,
+                'coll_cash' => $coll['cash'],
+                'coll_transfer' => $coll['transfer'],
+                'coll_cheque_card' => $coll['cheque_card'],
+                // ⚠️ «غير النقدي» = الإجمالي − الكاش مش مجموع الطرق
+                // المعروضة — طريقة شاذة ماتضيّعش فلوس من الكارت
+                'coll_other' => round($coll['total'] - $coll['cash'], 2),
+                'refunds' => $refunds,
+                // نفس معادلة «المتوقع» في التصفية: كاش + تحصيل نقدي − مرتجعات كاش
+                'net' => round($cash + $coll['cash'] - $refunds, 2),
+            ];
+        });
+
+        return view('ops.rep_sales', [
+            'rows' => $rows,
+            'from' => $fromD,
+            'to' => $toD,
+            // ⚠️ الكروت من نفس كوليكشن الجدول — نطاق واحد، والفوتر
+            // بيتحسب في البليد من نفس الصفوف
+            'kpi' => [
+                'cash' => round($rows->sum('cash'), 2),
+                'credit' => round($rows->sum('credit'), 2),
+                'coll_cash' => round($rows->sum('coll_cash'), 2),
+                'coll_other' => round($rows->sum('coll_other'), 2),
+                'refunds' => round($rows->sum('refunds'), 2),
+            ],
+        ]);
+    }
+
+    /**
+     * ═══ بورد المناديب — عهدة + فلوس + حركة في نظرة (١٢ أغسطس ٢٠٢٦) ═══
+     *
+     * الدمج بين «عهد المناديب» و«مبيعات المناديب» واللايف: كل مندوب
+     * صف واحد فيه حضوره، عهدته وباقيها ونسبة تصريفه، مبيعاته
+     * (بنفس عقيدة ١١/٨)، تحصيلاته، زياراته، وآخر حركة له.
+     *
+     * ⚠️ **كل الداتاسِتس مجمّعة كويري واحدة** ومترجمة لخرايط بالـid —
+     * البورد بيرسم كل الفريق، وكويري لكل صف كانت هتضرب الصفحة
+     * بعشرات الكويريز.
+     */
+    public function repBoard(Request $request)
+    {
+        [$fromD, $toD] = $this->boardWindow($request);
+
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
+
+        $repIds = $reps->pluck('id');
+        $m = $this->repMoneyMaps($repIds, $fromD, $toD);
+
+        // ═══ العهدة — النسخة المجمّعة من `currentCustody()` (عقيدة ١٠/٨) ═══
+        // نفس الاختيار بالحرف: عهدة النهارده لو موجودة (حتى المقفولة —
+        // يومه اتقفل)، وإلا آخر عهدة لسه مفتوحة من الأيام اللي فاتت.
+        // ⚠️ `status != 'closed'` في MySQL بتستبعد NULL — الـwhereNull صريحة.
+        $custodyByUser = \App\Models\Custody::with(['items.product'])
+            ->whereIn('user_id', $repIds)
+            ->where(fn ($q) => $q
+                ->whereDate('date', today())
+                ->orWhereNull('status')
+                ->orWhere('status', '<>', 'closed'))
+            ->get()
+            ->groupBy('user_id')
+            ->map(fn ($g) => $g->first(fn ($c) => $c->date->isToday())
+                ?? $g->filter(fn ($c) => $c->status !== 'closed')
+                    ->sortByDesc('date')->first());
+
+        // ═══ الحضور — دفعة واحدة مش `Attendance::state` لكل صف ═══
+        // ⚠️ `state()` بتعمل `firstOrCreate` + كويري بانشات لكل موظف —
+        // على بورد بيرسم الفريق كله دي N+1 **بكتابة** كمان. بنقرا
+        // أيام النهارده الموجودة بس، واللي مالوش يوم = off.
+        $attDays = \App\Models\AttendanceDay::with('punches')
+            ->whereDate('date', today())
+            ->whereIn('user_id', $repIds)
+            ->get()->keyBy('user_id');
+
+        $attOf = function (int $uid) use ($attDays): string {
+            // آخر بانش بالوقت ثم الـid — نفس ترتيب `lastPunch()`
+            $last = $attDays->get($uid)?->punches
+                ->sortBy([['at', 'asc'], ['id', 'asc']])->last();
+
+            return match ($last?->type) {
+                \App\Models\AttendancePunch::IN,
+                \App\Models\AttendancePunch::BACK => 'working',
+                \App\Models\AttendancePunch::BREAK => 'break',
+                default => 'off',
+            };
+        };
+
+        // زيارات النافذة: الكل + اللي اتقفلت — كويري واحدة مجمّعة
+        $visitAgg = DB::table('visits')
+            ->whereIn('user_id', $repIds)
+            ->whereDate('created_at', '>=', $fromD)
+            ->whereDate('created_at', '<=', $toD)
+            ->selectRaw('user_id, COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN checked_out_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS done')
+            ->groupBy('user_id')->get()->keyBy('user_id');
+
+        // آخر حركة تراكينج في النافذة — MAX واحدة للكل
+        $lastEvent = TrackEvent::whereIn('user_id', $repIds)
+            ->whereDate('happened_at', '>=', $fromD)
+            ->whereDate('happened_at', '<=', $toD)
+            ->selectRaw('user_id, MAX(happened_at) AS t')
+            ->groupBy('user_id')->pluck('t', 'user_id');
+
+        $rows = $reps->map(function (User $u) use ($m, $custodyByUser, $attOf, $visitAgg, $lastEvent) {
+            $c = $custodyByUser->get($u->id);
+            // ⚠️ قيمة البضاعة بسعر البيع: السواق بقايمة `old` والسيلز
+            // بـ`new` — نفس قاعدة «عهد المناديب» بالحرف
+            $mode = $u->isDriver() ? 'old' : 'new';
+
+            $assigned = (int) ($c?->items->sum('assigned') ?? 0);
+            $remaining = (int) ($c?->remainingUnits() ?? 0);
+
+            $inv = $m['inv'][$u->id] ?? null;
+            $poCash = round((float) ($m['po_cash'][$u->id] ?? 0), 2);
+            $poCredit = round(max(0, (float) ($m['po_sale'][$u->id] ?? 0) - $poCash), 2);
+            $cash = round((float) ($inv->cash ?? 0) + $poCash, 2);
+            $credit = round((float) ($inv->credit ?? 0) + $poCredit, 2);
+
+            $coll = $m['coll'][$u->id]
+                ?? ['total' => 0.0, 'cash' => 0.0, 'transfer' => 0.0, 'cheque_card' => 0.0];
+            $v = $visitAgg->get($u->id);
+            $t = $lastEvent->get($u->id);
+
+            return [
+                'user' => $u,
+                'att' => $attOf($u->id),
+                'custody' => $c,
+                'state' => $c === null ? 'none' : ($c->status === 'closed' ? 'closed' : 'open'),
+                'remaining' => $remaining,
+                'remaining_value' => round($c?->remainingValue($mode) ?? 0, 2),
+                // نسبة التصريف — المخلَّص من المحمّل، نفس معادلة «عهد المناديب»
+                'pct' => $assigned > 0 ? (int) round(($assigned - $remaining) / $assigned * 100) : 0,
+                'cash' => $cash,
+                'credit' => $credit,
+                'sales' => round($cash + $credit, 2),
+                'coll_cash' => $coll['cash'],
+                'coll_other' => round($coll['total'] - $coll['cash'], 2),
+                'coll_total' => $coll['total'],
+                'visits_done' => (int) ($v->done ?? 0),
+                'visits_total' => (int) ($v->total ?? 0),
+                'last_at' => $t ? \Illuminate\Support\Carbon::parse($t) : null,
+            ];
+        });
+
+        return view('ops.rep_board', [
+            'rows' => $rows,
+            'from' => $fromD,
+            'to' => $toD,
+            // ⚠️ الكروت من نفس كوليكشن الجدول — نطاق واحد
+            'kpi' => [
+                'working' => $rows->where('att', 'working')->count(),
+                'open_vans' => $rows->where('state', 'open')->count(),
+                'sales' => round($rows->sum('sales'), 2),
+                'collections' => round($rows->sum('coll_total'), 2),
+            ],
+        ]);
+    }
+
+    /** نافذة البوردات من الريكوست — من/إلى، والافتراضي النهارده */
+    private function boardWindow(Request $request): array
+    {
+        $data = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $from = ($data['from'] ?? null) ? \Illuminate\Support\Carbon::parse($data['from']) : today();
+        $to = ($data['to'] ?? null) ? \Illuminate\Support\Carbon::parse($data['to']) : today();
+
+        // «إلى» قبل «من» = نقلبهم بدل جدول فاضي محيّر
+        if ($to->lt($from)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        return [$from->toDateString(), $to->toDateString()];
+    }
+
+    /**
+     * فلوس المناديب دفعة واحدة — خرايط بالـid لكل داتاسِت.
+     *
+     * ⚠️ نفس مصادر `RepSettlementController::figuresBetween` بالحرف،
+     * بس `GROUP BY` على المندوب عشان البوردات بترسم الفريق كله.
+     *
+     * - فواتير المندوب: كاش/آجل بالـ`grand_total` (اللي العميل بيدفعه)
+     * - أوامر التوريد: **من القيود** — `collection` على الأمر = كاش،
+     *   و`sale` = مدين الأمر (الآجل بيتحسب عند العرض: مدين − كاش)
+     * - التحصيلات الميدانية: قيود `collection` بمرساة زيارات المندوب
+     *   مقسومة بالطريقة (`METHOD_*`)
+     * - مرتجعات الكاش: قيود `refund` بالمرساتين بتوع التصفية —
+     *   زيارة المندوب (مستند الأبلكيشن) + `ClientReturn.user_id`
+     *   (مستند الـERP اللي مالوش زيارة)
+     */
+    private function repMoneyMaps($repIds, string $fromD, string $toD): array
+    {
+        // فواتيره — NULL بيتحسب آجل زي فلتر التصفية (`payment !== 'cash'`)
+        $inv = Invoice::whereIn('user_id', $repIds)
+            ->whereDate('created_at', '>=', $fromD)
+            ->whereDate('created_at', '<=', $toD)
+            ->selectRaw("user_id, COUNT(*) AS cnt,
+                COALESCE(SUM(CASE WHEN payment = 'cash' THEN grand_total ELSE 0 END), 0) AS cash,
+                COALESCE(SUM(CASE WHEN payment = 'cash' THEN 0 ELSE grand_total END), 0) AS credit")
+            ->groupBy('user_id')->get()->keyBy('user_id');
+
+        // قيود أوامر التوريد — مجمّعة على مندوب الأمر (assigned_to)
+        $poBase = fn (string $kind) => Transaction::where('transactions.kind', $kind)
+            ->where('transactions.source_type', PurchaseOrder::class)
+            ->join('purchase_orders', 'purchase_orders.id', '=', 'transactions.source_id')
+            ->whereIn('purchase_orders.assigned_to', $repIds)
+            ->whereDate('transactions.created_at', '>=', $fromD)
+            ->whereDate('transactions.created_at', '<=', $toD)
+            ->groupBy('purchase_orders.assigned_to');
+
+        $poCash = $poBase('collection')
+            ->selectRaw('purchase_orders.assigned_to AS uid, COALESCE(SUM(transactions.credit), 0) AS v')
+            ->pluck('v', 'uid');
+
+        $poSale = $poBase('sale')
+            ->selectRaw('purchase_orders.assigned_to AS uid, COALESCE(SUM(transactions.debit), 0) AS v')
+            ->pluck('v', 'uid');
+
+        // التحصيلات الميدانية بمرساة الزيارة — مقسومة بالطريقة
+        $collRows = Transaction::where('transactions.kind', 'collection')
+            ->where('transactions.source_type', \App\Models\Visit::class)
+            ->join('visits', 'visits.id', '=', 'transactions.source_id')
+            ->whereIn('visits.user_id', $repIds)
+            ->whereDate('transactions.created_at', '>=', $fromD)
+            ->whereDate('transactions.created_at', '<=', $toD)
+            ->selectRaw('visits.user_id AS uid, transactions.method AS m,
+                COALESCE(SUM(transactions.credit), 0) AS v')
+            ->groupBy('visits.user_id', 'transactions.method')
+            ->get();
+
+        $coll = [];
+
+        foreach ($collRows as $r) {
+            $uid = (int) $r->uid;
+            $coll[$uid] ??= ['total' => 0.0, 'cash' => 0.0, 'transfer' => 0.0, 'cheque_card' => 0.0];
+            $v = round((float) $r->v, 2);
+
+            $coll[$uid]['total'] = round($coll[$uid]['total'] + $v, 2);
+
+            if ($r->m === Transaction::METHOD_CASH) {
+                $coll[$uid]['cash'] = round($coll[$uid]['cash'] + $v, 2);
+            } elseif ($r->m === Transaction::METHOD_TRANSFER) {
+                $coll[$uid]['transfer'] = round($coll[$uid]['transfer'] + $v, 2);
+            } elseif (in_array($r->m, [Transaction::METHOD_CHEQUE, Transaction::METHOD_CARD], true)) {
+                $coll[$uid]['cheque_card'] = round($coll[$uid]['cheque_card'] + $v, 2);
+            }
+        }
+
+        // مرتجعات الكاش — مرساة الزيارة (مستند الأبلكيشن)
+        $refVisit = Transaction::where('transactions.kind', 'refund')
+            ->where('transactions.source_type', \App\Models\Visit::class)
+            ->join('visits', 'visits.id', '=', 'transactions.source_id')
+            ->whereIn('visits.user_id', $repIds)
+            ->whereDate('transactions.created_at', '>=', $fromD)
+            ->whereDate('transactions.created_at', '<=', $toD)
+            ->selectRaw('visits.user_id AS uid, COALESCE(SUM(transactions.debit), 0) AS v')
+            ->groupBy('visits.user_id')->pluck('v', 'uid');
+
+        // ⚠️ ومرتجعات الكاش اللي اتسجّلت من الـERP على المندوب —
+        // مستند الـERP مالوش زيارة فقيده مرساته `ClientReturn` (تدقيق
+        // ٨/٨ في التصفية). والجدول اسمه `returns` — كلمة محجوزة:
+        // الـbuilder بيحط الباك تيكس في join/groupBy، والـselectRaw
+        // متكتبة بالباك تيكس بإيدنا.
+        $refErp = Transaction::where('transactions.kind', 'refund')
+            ->where('transactions.source_type', \App\Models\ClientReturn::class)
+            ->join('returns', 'returns.id', '=', 'transactions.source_id')
+            ->whereIn('returns.user_id', $repIds)
+            ->whereDate('transactions.created_at', '>=', $fromD)
+            ->whereDate('transactions.created_at', '<=', $toD)
+            ->selectRaw('`returns`.user_id AS uid, COALESCE(SUM(transactions.debit), 0) AS v')
+            ->groupBy('returns.user_id')->pluck('v', 'uid');
+
+        $refund = [];
+
+        foreach ($refVisit as $uid => $v) {
+            $refund[(int) $uid] = round((float) $v, 2);
+        }
+
+        foreach ($refErp as $uid => $v) {
+            $refund[(int) $uid] = round(($refund[(int) $uid] ?? 0) + (float) $v, 2);
+        }
+
+        return [
+            'inv' => $inv,
+            'po_cash' => $poCash,
+            'po_sale' => $poSale,
+            'coll' => $coll,
+            'refund' => $refund,
+        ];
+    }
+
+    /**
      * ═══ الزيارات المفتوحة — مين عامل «إن» فين دلوقتي (١١ أغسطس ٢٠٢٦) ═══
      *
      * طلب المالك: «أشوف المندوب عامل إن فين وواقف فين، وأقدر أعمله

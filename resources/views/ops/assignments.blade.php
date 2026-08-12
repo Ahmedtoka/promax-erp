@@ -98,51 +98,94 @@
             </div>
         @endif
 
-        <div class="poolgrid">
-            @foreach ($pools['cards'] as $p)
-                <div class="poolcard">
-                    <div class="pool-head">
-                        @include('partials._avatar', ['u' => $p['manager'], 'size' => 38, 'ring' => '#602D90'])
-                        <div>
-                            <b>{{ $p['manager']->displayName() }}</b>
-                            <div class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }}</div>
-                        </div>
-                        <span class="badge b-purple" style="margin-inline-start:auto">
-                            {{ __('journey.pool_shared') }}
-                        </span>
-                    </div>
+        {{-- ═══ تاب لكل مدير (طلب المالك ١١/٨ مساءً): «حاجات عمرو كلها
+             وبعدين نشوف محمد» — بوكسات بأرقام واضحة بدل الكروت الجنب بعض --}}
+        <div class="pool-tabs">
+            @foreach ($pools['cards'] as $i => $p)
+                <button type="button" class="pool-tab {{ $i === 0 ? 'on' : '' }}"
+                        onclick="poolTab({{ $i }}, this)">
+                    {{ $p['manager']->displayName() }}
+                    <span class="badge b-green">{{ $fmt($p['client_count']) }}</span>
+                    @if ($p['no_rep'] > 0)
+                        <span class="badge b-orange">{{ $fmt($p['no_rep']) }}</span>
+                    @endif
+                </button>
+            @endforeach
+        </div>
 
-                    <div class="pool-kpis">
+        @foreach ($pools['cards'] as $i => $p)
+            <div class="pool-pane" id="poolPane{{ $i }}" @if ($i !== 0) style="display:none" @endif>
+                <div class="pool-head" style="margin-bottom:10px">
+                    @include('partials._avatar', ['u' => $p['manager'], 'size' => 44, 'ring' => '#602D90'])
+                    <div>
+                        <b style="font-size:15px">{{ $p['manager']->displayName() }}</b>
+                        <div class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }} · {{ __('journey.pool_shared') }}</div>
+                    </div>
+                    <div style="margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap">
                         <span class="badge b-blue">👥 {{ $p['reps']->count() }} {{ __('journey.pool_reps') }}</span>
                         <span class="badge b-green">🏪 {{ $fmt($p['client_count']) }} {{ __('journey.pool_clients') }}</span>
                         <span class="badge b-gold">📍 {{ count($p['zones']) }} {{ __('journey.pool_zones') }}</span>
                     </div>
-
-                    {{-- مناديب الفريق — كلهم شايفين كل البول --}}
-                    @if ($p['reps']->isEmpty())
-                        <div class="s" style="color:var(--muted);padding:6px 0">{{ __('journey.pool_no_reps') }}</div>
-                    @else
-                        <div class="pool-reps">
-                            @foreach ($p['reps'] as $tr)
-                                <span class="pool-rep" title="{{ $tr->roleLabel() }}">
-                                    @include('partials._avatar', ['u' => $tr, 'size' => 24])
-                                    <span>{{ $tr->displayName() }}</span>
-                                </span>
-                            @endforeach
-                        </div>
-                    @endif
-
-                    {{-- مناطق فيها عملاء البول — بعدد العملاء، وكلها «✓» --}}
-                    @if ($p['zones'] !== [])
-                        <div class="pool-zones">
-                            @foreach ($p['zones'] as $pz)
-                                <span class="badge b-green">✓ {{ $pz['name'] }} · {{ $fmt($pz['count']) }}</span>
-                            @endforeach
-                        </div>
-                    @endif
                 </div>
-            @endforeach
-        </div>
+
+                {{-- بوكسات المناديب — تحت كل اسم عدد عملاءه الأساسيين --}}
+                <div class="pool-boxes">
+                    @foreach ($p['reps'] as $tr)
+                        <div class="pool-box">
+                            @include('partials._avatar', ['u' => $tr['user'], 'size' => 34])
+                            <div style="min-width:0">
+                                <b class="s" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $tr['user']->displayName() }}</b>
+                                <span class="s" style="color:var(--muted)">{{ $tr['user']->roleLabel() }}</span>
+                            </div>
+                            <div class="pool-box-n">{{ $fmt($tr['clients']) }}</div>
+                        </div>
+                    @endforeach
+
+                    {{-- المدير نفسه لو ليه عملاء أساسية (بيبيع بنفسه) --}}
+                    @if ($p['manager_own'] > 0)
+                        <div class="pool-box" style="border-color:#602D90">
+                            @include('partials._avatar', ['u' => $p['manager'], 'size' => 34])
+                            <div style="min-width:0">
+                                <b class="s" style="display:block">{{ $p['manager']->displayName() }}</b>
+                                <span class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }}</span>
+                            </div>
+                            <div class="pool-box-n">{{ $fmt($p['manager_own']) }}</div>
+                        </div>
+                    @endif
+
+                    {{-- تاج «بدون مندوب» — نقطة بداية التسكين؛ بيوديك
+                         للقايمة تحت متفلترة عليهم --}}
+                    <a class="pool-box pool-box-warn" href="{{ route('ops.assignments', ['only' => 'orphans']) }}">
+                        <span style="font-size:22px">⚠️</span>
+                        <div>
+                            <b class="s" style="display:block">{{ __('journey.no_rep') }}</b>
+                            <span class="s" style="color:var(--muted)">{{ __('journey.no_rep_hint') }}</span>
+                        </div>
+                        <div class="pool-box-n" style="color:#B45309">{{ $fmt($p['no_rep']) }}</div>
+                    </a>
+                </div>
+
+                {{-- بوكسات المناطق بأرقامها --}}
+                @if ($p['zones'] !== [])
+                    <div class="pool-zones" style="margin-top:10px">
+                        @foreach ($p['zones'] as $pz)
+                            <span class="badge b-green">✓ {{ $pz['name'] }} · {{ $fmt($pz['count']) }}</span>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        @endforeach
+
+        <script>
+        function poolTab(i, btn) {
+            document.querySelectorAll('.pool-pane').forEach(function (p, j) {
+                p.style.display = j === i ? '' : 'none';
+            });
+            document.querySelectorAll('.pool-tab').forEach(function (t) {
+                t.classList.toggle('on', t === btn);
+            });
+        }
+        </script>
     @endif
 </div>
 
@@ -304,6 +347,23 @@
     /* ═══ كروت بول الفريق ═══ */
     .pool-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
     .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+    /* تابات المديرين (١١/٨ مساءً) */
+    .pool-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:10px}
+    .pool-tab{
+      display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+      border:1px solid var(--border);background:var(--card);color:var(--ink);
+      padding:8px 16px;border-radius:10px;font-weight:800;font-size:13px;font-family:inherit;
+    }
+    .pool-tab.on{background:var(--royal-blue,#12399B);color:#fff;border-color:var(--royal-blue,#12399B)}
+    .pool-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+    .pool-box{
+      display:flex;align-items:center;gap:10px;padding:10px 12px;
+      border:1px solid var(--border);border-radius:12px;background:var(--card);
+      text-decoration:none;color:inherit;
+    }
+    .pool-box-n{margin-inline-start:auto;font-weight:900;font-size:18px;color:var(--royal-blue,#12399B)}
+    .pool-box-warn{border-color:#F59E0B;background:#FFFBEB}
+    .pool-box-warn:hover{box-shadow:var(--shadow)}
     .poolcard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}
     .pool-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
     .pool-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}

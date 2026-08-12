@@ -286,6 +286,20 @@ class PromoterApiController extends Controller
         foreach ($data['lines'] as $line) {
             $moved = (int) ($line['moved_qty'] ?? 0);
             $store = (int) ($line['store_qty'] ?? 0);
+            $shelfBefore = (int) ($line['shelf_before'] ?? 0);
+            $oos = (bool) ($line['out_of_stock'] ?? false);
+
+            // ⚠️ سطر كله أصفار = البروموتر شال الصنف من المنتقي المتعدد
+            // (١٢/٨) — امسح صفه القديم بدل ما يفضل معلّق في الزيارة
+            // ويعدّ في «اتنقل للرف» والنواقص. الأبلكيشن القديم عمره
+            // ما بيبعت سطر أصفار (فلتر touched) فمفيش أثر رجعي.
+            if ($moved === 0 && $store === 0 && $shelfBefore === 0 && ! $oos) {
+                ShelfRefill::where('merch_visit_id', $merchVisit->id)
+                    ->where('product_id', $line['product_id'])
+                    ->delete();
+
+                continue;
+            }
 
             if ($moved > $store) {
                 $product = Product::find($line['product_id']);

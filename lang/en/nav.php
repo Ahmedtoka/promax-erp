@@ -83,6 +83,10 @@ return [
     'group_hr' => 'Attendance',
     'vans_board' => 'Van Stock Board',
     'open_visits' => 'Open Visits',
+
+    // ═══ بوردات المناديب الجديدة (2026-08-12) ═══
+    'rep_sales' => 'Rep Sales',
+    'rep_board' => 'Rep Board',
 'field_collections' => 'Field collections',
     'shortcuts' => 'Shortcuts',
     'shortcuts_hint' => 'Tap ☆ to pin it to the header',

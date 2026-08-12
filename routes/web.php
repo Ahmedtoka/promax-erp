@@ -627,6 +627,17 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/vans', [OpsController::class, 'vans'])
             ->middleware('role:admin,manager')->name('vans');
 
+        // ═══ مبيعات المناديب — بورد فلوس كل مندوب (١٢ أغسطس ٢٠٢٦) ═══
+        // ⚠️ شاشة فلوس: نفس رولز «تحصيلات الميدان» (`erp.collections`) —
+        // الأدمن والمدير (فريقه من fieldVisibleTo) + المحاسب للمطابقة.
+        Route::get('/rep-sales', [OpsController::class, 'repSales'])
+            ->middleware('role:admin,manager,accountant')->name('sales');
+
+        // ═══ بورد المناديب — عهدة + مبيعات + حركة في نظرة (١٢ أغسطس ٢٠٢٦) ═══
+        // ⚠️ نفس رولز «عهد المناديب» بالظبط — بيانات إدارة ميدانية.
+        Route::get('/rep-board', [OpsController::class, 'repBoard'])
+            ->middleware('role:admin,manager')->name('rep_board');
+
         Route::get('/pos', [OpsController::class, 'purchaseOrders'])->name('pos');
         Route::post('/pos', [OpsController::class, 'storePurchaseOrder'])
             ->middleware('role:admin,manager')->name('pos.store');

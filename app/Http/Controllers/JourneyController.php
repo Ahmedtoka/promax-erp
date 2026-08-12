@@ -415,6 +415,22 @@ class JourneyController extends Controller
             ->groupBy('manager_id')
             ->pluck('n', 'manager_id');
 
+        // عدد عملاء كل مندوب (المسؤول الأساسي) — تحت اسمه في التاب (١١/٨)
+        $repClientCounts = Client::where('status', 'active')
+            ->whereNotNull('rep_id')
+            ->selectRaw('rep_id, COUNT(*) as n')
+            ->groupBy('rep_id')
+            ->pluck('n', 'rep_id');
+
+        // «بدون مندوب» جوه بول كل مدير — عملاء الفريق اللي لسه
+        // مالهمش مسؤول أساسي؛ المالك بيبدأ منهم التسكين
+        $noRepCounts = Client::whereIn('manager_id', $managers->pluck('id'))
+            ->where('status', 'active')
+            ->whereNull('rep_id')
+            ->selectRaw('manager_id, COUNT(*) as n')
+            ->groupBy('manager_id')
+            ->pluck('n', 'manager_id');
+
         $zoneRows = Client::whereIn('manager_id', $managers->pluck('id'))
             ->where('status', 'active')
             ->whereNotNull('zone_id')
@@ -428,8 +444,13 @@ class JourneyController extends Controller
 
         $cards = $managers->map(fn (User $m) => [
             'manager' => $m,
-            'reps' => $reps->get($m->id, collect()),
+            // كل مندوب ومعاه عدد عملاءه (المسؤول الأساسي) — والمدير
+            // نفسه ضمن الفريق لو ليه عملاء أساسية
+            'reps' => $reps->get($m->id, collect())
+                ->map(fn (User $r) => ['user' => $r, 'clients' => (int) ($repClientCounts[$r->id] ?? 0)]),
+            'manager_own' => (int) ($repClientCounts[$m->id] ?? 0),
             'client_count' => (int) ($clientCounts[$m->id] ?? 0),
+            'no_rep' => (int) ($noRepCounts[$m->id] ?? 0),
             'zones' => $zoneRows->where('manager_id', $m->id)
                 ->sortByDesc('n')
                 ->map(fn ($r) => [

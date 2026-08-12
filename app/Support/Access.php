@@ -136,6 +136,11 @@ class Access
             '!erp.clients.deactivate',
             // جرس الإشعارات + تحصيلات الميدان بصور الإثبات (2026-08-09)
             'notifications', 'erp.collections',
+            // ⚠️ بورد مبيعات المناديب (١٢/٨) — شاشة فلوس زي التحصيلات
+            // بالظبط، والراوت نفسه `role:admin,manager,accountant`.
+            // البورد المدموج (`ops.rep_board`) **مش** هنا عن قصد —
+            // ده متابعة ميدان زي «عهد المناديب» (أدمن ومدير بس).
+            'ops.sales',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -269,6 +274,11 @@ class Access
         'nav.group_custody' => [
             // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
             ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
+            // بورد فلوس المناديب (١٢/٨) — كاش/آجل/تحصيلات لكل مندوب.
+            // المحاسب شايفه من `ops.sales` في خريطته — مش من بادئة `ops.`
+            ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],
+            // البورد المدموج (١٢/٨): عهدة + مبيعات + حضور + حركة في صف واحد
+            ['ops.rep_board', '📊', 'nav.rep_board', 'ops.rep_board', null],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
         ],
