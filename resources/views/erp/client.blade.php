@@ -42,7 +42,9 @@
              بيتعلّم مكان الخانة بعينه، فكان بيدوّر على العقد في مكان
              وبيلاقيه في مكان تاني. دلوقتي الشاشتين واحدة بالحرف. --}}
         <a class="btn" href="{{ route('erp.clients.edit', $c) }}">✎ {{ __('common.edit') }}</a>
-        <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ __('client.clone_client') }}</a>
+        {{-- عضو سلسلة؟ الزرار بيتسمى باسم اللي المالك بيدوّر عليه:
+             «فرع بنفس شروط السلسلة» (١٢/٨) — نفس الاستنساخ بالظبط --}}
+        <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ $c->group_id ? __('client.new_branch_like_chain') : __('client.clone_client') }}</a>
     @endif
     @if ($money)
         <button class="btn" onclick="openDlg('dlgOpening')">{{ __('client.opening_balance') }}</button>

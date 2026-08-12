@@ -265,4 +265,25 @@ return [
     'board_visits' => 'الزيارات',
     'board_visits_hint' => 'اتقفلت / الكل',
     'board_last_event' => 'آخر حركة',
+
+    // ═══ تصحيح إداري للعهدة (١٢ أغسطس ٢٠٢٦) ═══
+    'custody_adjust' => 'تعديل العهدة',
+    'custody_adjust_hint' => 'صحّح تحميل اتسجّل غلط: اكتب المحمَّل الصح لكل صنف بالقطع. الزيادة بتتخصم من أرفف المخزن (FEFO) والنقص بيرجع للأرفف — فالمخزون بيفضل مظبوط. ومينفعش تنزل تحت المتصرّف فعلاً (مباع + مرجّع).',
+    'custody_adjust_reason' => 'سبب التعديل',
+    'custody_adjust_reason_ph' => 'مثال: التحميل اتسجّل 100 والصح 10',
+    'custody_adjust_loaded' => 'المحمَّل الحالي',
+    'custody_adjust_new' => 'المحمَّل الصح',
+    'custody_adjust_floor' => 'الحد الأدنى',
+    'custody_adjust_gift_new' => 'الهدايا الصح',
+    'custody_adjust_floor_err' => 'مينفعش :product ينزل تحت :floor — ده المتصرّف منه فعلاً (مباع + مرجّع/موزّع).',
+    'custody_adjust_no_change' => 'مفيش أي رقم اتغيّر.',
+    'custody_adjust_none' => 'مفيش عهدة مفتوحة للمندوب ده.',
+    'custody_adjust_note' => 'تصحيح إداري: :reason',
+    'event_custody_adjust' => 'تعديل إداري على العهدة',
+    'notif_custody_adjusted_title' => 'عهدتك اتعدلت إدارياً',
+    'notif_custody_adjusted_body' => ':by صحّح أرقام عهدتك — السبب: :reason. افتح شاشة العهدة تشوف الأرقام الجديدة.',
+
+    // ═══ تعديل طلب الريفيل المستني (١٢ أغسطس ٢٠٢٦) ═══
+    'notif_replenishment_edited_title' => 'طلبك :number اتعدل',
+    'notif_replenishment_edited_body' => 'المدير عدّل أصناف/كميات طلب التوريد لفرع :client قبل التنزيل.',
 ];

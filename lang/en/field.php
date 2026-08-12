@@ -266,4 +266,25 @@ return [
     'board_visits' => 'Visits',
     'board_visits_hint' => 'Checked out / total',
     'board_last_event' => 'Last activity',
+
+    // ═══ Van-stock admin correction (Aug 12, 2026) ═══
+    'custody_adjust' => 'Adjust van stock',
+    'custody_adjust_hint' => 'Fix a loading that was entered wrong: type the correct loaded quantity per item, in pieces. Increases are pulled from the warehouse shelves (FEFO) and decreases go back to the shelves - so warehouse stock stays true. You cannot go below what was already moved (sold + returned).',
+    'custody_adjust_reason' => 'Adjustment reason',
+    'custody_adjust_reason_ph' => 'e.g. loading was entered as 100 but the truth is 10',
+    'custody_adjust_loaded' => 'Currently loaded',
+    'custody_adjust_new' => 'Correct loaded qty',
+    'custody_adjust_floor' => 'Minimum',
+    'custody_adjust_gift_new' => 'Correct gift qty',
+    'custody_adjust_floor_err' => ':product cannot go below :floor - that much was already moved (sold + returned/given).',
+    'custody_adjust_no_change' => 'No number was changed.',
+    'custody_adjust_none' => 'This rep has no open van stock.',
+    'custody_adjust_note' => 'Admin correction: :reason',
+    'event_custody_adjust' => 'Van stock admin correction',
+    'notif_custody_adjusted_title' => 'Your van stock was corrected',
+    'notif_custody_adjusted_body' => ':by corrected your van stock - reason: :reason. Open the van stock screen to see the new numbers.',
+
+    // ═══ Pending replenishment edit (Aug 12, 2026) ═══
+    'notif_replenishment_edited_title' => 'Your request :number was edited',
+    'notif_replenishment_edited_body' => 'The manager edited the items/quantities of the supply request for :client before assignment.',
 ];

@@ -129,7 +129,9 @@
             </thead>
             <tbody>
             @forelse ($pos as $po)
-                <tr>
+                {{-- الصف كله بيفتح صفحة الأمر (١٢/٨) — عرض + تعديل من مكان
+                     واحد. الأزرار في آخر عمود عليها stopPropagation. --}}
+                <tr class="clickable" onclick="location.href='{{ route('ops.pos.show', $po) }}'" style="cursor:pointer">
                     <td class="num"><b>{{ $po->number }}</b>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}
                             @if ($po->source) · {{ $po->source }}@endif</span>
@@ -187,8 +189,9 @@
                             <br><a href="{{ $po->imageUrl() }}" target="_blank">🖼️ {{ __('ops.po_image') }}</a>
                         @endif
                     </td>
-                    <td>
+                    <td onclick="event.stopPropagation()">
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <a class="btn sm" href="{{ route('ops.pos.show', $po) }}" title="{{ __('ops.po_view') }}">👁</a>
                             <a class="btn sm" href="{{ route('ops.po.print', $po) }}" target="_blank" title="{{ __('ops.print') }}">🖨️</a>
                             @if ($po->sheet_path)
                                 {{-- شيت السلسلة الأصلي — المرجع المحفوظ وقت الرفع --}}

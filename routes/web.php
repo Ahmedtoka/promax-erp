@@ -609,6 +609,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // بفلو تسليم العهدة: طلب ← تجهيز ← تأكيد ← استلام المندوب
         Route::post('/reps/{user}/close', [OpsController::class, 'closeCustody'])
             ->middleware('role:admin,manager')->name('rep.close');
+        // ═══ تصحيح إداري للعهدة (١٢ أغسطس ٢٠٢٦) ═══
+        // ⚠️ `role:admin` عن قصد — بيحرّك العهدة **والأرفف** مع بعض.
+        // الزرار محكوم بأكشن `act.custody.adjust` (والأدمن يقدر يمنحه
+        // لحد بعينه من شاشة الصلاحيات — EnsureRole بيحترم المنح).
+        Route::post('/reps/{user}/custody/adjust', [OpsController::class, 'adjustCustody'])
+            ->middleware('role:admin')->name('rep.adjust');
 
         // ═══ الزيارات المفتوحة + الإخراج الإداري (١١ أغسطس ٢٠٢٦) ═══
         Route::get('/open-visits', [OpsController::class, 'openVisits'])
@@ -643,6 +649,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('pos.store');
         Route::post('/pos/{purchaseOrder}/assign', [OpsController::class, 'assignPurchaseOrder'])
             ->middleware('role:admin,manager')->name('pos.assign');
+        // ═══ صفحة الأمر الكاملة — عرض + تعديل (١٢ أغسطس ٢٠٢٦) ═══
+        // العرض لكل اللي شايف اللوحة (سكوب المدير جوه الكنترولر)،
+        // والتعديل نفسه فاضل على راوتاته (`ops.po.edit` بشرط poEditable)
+        Route::get('/pos/{purchaseOrder}', [OpsController::class, 'showPo'])->name('pos.show');
 
         // ═══ أوامر توريد الكي أكاونت (2026-08-04) ═══
         // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن
@@ -763,5 +773,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/replenishments/{replenishmentRequest}/cancel',
             [ChannelController::class, 'cancelReplenishment'])
             ->middleware('role:admin,manager')->name('replenishments.cancel');
+        // تعديل أصناف/كميات الطلب المستني — قبل التنزيل بس (١٢/٨)
+        Route::post('/replenishments/{replenishmentRequest}/update',
+            [ChannelController::class, 'updateReplenishment'])
+            ->middleware('role:admin,manager')->name('replenishments.update');
     });
 });

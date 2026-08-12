@@ -584,4 +584,7 @@ return [
 
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'cheque_due_short' => 'due',
+
+    // ═══ New branch on chain terms (Aug 12, 2026) ═══
+    'new_branch_like_chain' => 'Branch on the chain terms',
 ];

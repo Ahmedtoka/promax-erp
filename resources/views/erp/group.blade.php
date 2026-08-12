@@ -33,8 +33,20 @@
     ])->values();
 @endphp
 
+@php
+    // ═══ «+ فرع بنفس شروط السلسلة» (١٢/٨) — استنساخ فرع شقيق ═══
+    // بننسخ من فرع عنده عقد سارٍ لو فيه (الشروط الحية)، وإلا أول فرع.
+    // الاستنساخ بينسخ الشروط مش الأرقام (cloneClient الموجودة).
+    $cloneFrom = $branches->first(fn ($b) => $b->hasLiveContract()) ?? $branches->first();
+    $canClone = $cloneFrom
+        && \App\Support\Access::action(auth()->user(), 'act.clients.create');
+@endphp
+
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
+    @if ($canClone)
+        <a class="btn gold" href="{{ route('erp.clients.clone', $cloneFrom) }}">+ {{ __('client.new_branch_like_chain') }}</a>
+    @endif
     @if ($manager)
         <button class="btn" onclick="openDlg('dlgEditG')">{{ __('client.edit_chain') }}</button>
         <button class="btn gold" onclick="openDlg('dlgAttach')">+ {{ __('client.attach_branches') }}</button>

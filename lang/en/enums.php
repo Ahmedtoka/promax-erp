@@ -126,6 +126,7 @@ return [
         'collect' => 'Collected money',
         'shelf' => 'Shelf arrangement',
         'po_abort' => 'Returned an order undelivered',
+        'custody_adjust' => 'Van stock admin correction',
     ],
 
 ];

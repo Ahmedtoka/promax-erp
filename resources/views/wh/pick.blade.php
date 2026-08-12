@@ -40,7 +40,10 @@
         if ($o->purchaseOrder?->client) {
             $sourceLabel .= ' — '.$o->purchaseOrder->client->displayName();
         }
-        $sourceUrl = route('ops.pos');
+        // صفحة الأمر نفسه (١٢/٨) — مش اللوحة العامة يدوّر فيها بإيده
+        $sourceUrl = $o->purchaseOrder
+            ? route('ops.pos.show', $o->purchaseOrder)
+            : route('ops.pos');
     } elseif ($o->replenishment_request_id) {
         $sourceLabel = __('ops.request').' '.($o->replenishmentRequest?->number ?? '#'.$o->replenishment_request_id);
         if ($o->replenishmentRequest?->client) {

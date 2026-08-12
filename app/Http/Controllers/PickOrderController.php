@@ -174,11 +174,159 @@ class PickOrderController extends Controller
             $qty[(int) $productId] = $q;
         }
 
-        if ($error = $pick->editItems($qty)) {
-            return back()->withErrors(['qty' => $error])->withInput();
+        // ═══ مزامنة أمر التوريد المرتبط (١٢ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **تعديل التجهيز كان بيسيب الأمر بكمياته القديمة** — فالسواق
+        // يوصل الفرع ببضاعة مختلفة عن الورقة: الزيادة بيرفضها التسليم
+        // (`po_over_delivery`)، والصنف الجديد «مش في الأمر»، والنقص
+        // بيبان عجز وهمي. دلوقتي بنود الأمر بتتظبط مع التجهيز — بنفس
+        // أسعار السطور المخزّنة (نفس حساب تعديل الحسابات في
+        // `decidePoApproval` بالحرف)، ومفيش إعادة تسعير.
+        //
+        // ⚠️ **صنف جديد مش في الأمر = مرفوض.** إضافة صنف لأمر معتمد
+        // قرار تجاري بيتسعّر — مساره تعديل الأمر نفسه (اللي بيرجّعه
+        // لطابور الحسابات)، مش شاشة المخزن.
+        $po = $pick->purchase_order_id
+            ? $pick->purchaseOrder()->with(['items.product', 'client'])->first()
+            : null;
+
+        if ($po !== null) {
+            $poProducts = $po->items->pluck('product_id')->map(fn ($i) => (int) $i)->all();
+
+            foreach (array_keys($qty) as $pid) {
+                if (! in_array((int) $pid, $poProducts, true)) {
+                    return back()->withErrors(['qty' => __('stock.pick_edit_not_in_po', [
+                        'name' => Product::find($pid)?->displayName() ?? '#'.$pid,
+                    ])])->withInput();
+                }
+            }
+
+            // ⚠️ **أمر معتمد = الكميات تنزل بس، ماتزيدش.** التسليم
+            // الجزئي مسموح أصلاً من غير رجوع للحسابات (القيد بالمسلَّم
+            // فعلاً)، فالنقص من نفس الجنس. أما الزيادة فبتكبّر مديونية
+            // الفرع فوق اللي الحسابات اعتمدته — ومسارها الوحيد تعديل
+            // الأمر نفسه (`ops.po.edit` — بيرجّعه لطابور الحسابات).
+            if ($po->approval_status === 'approved') {
+                foreach ($po->items as $item) {
+                    if ((int) ($qty[(int) $item->product_id] ?? 0) > (int) $item->qty) {
+                        return back()->withErrors(['qty' => __('stock.pick_edit_no_increase', [
+                            'name' => $item->product?->displayName() ?? '#'.$item->product_id,
+                            'max' => (int) $item->qty,
+                        ])])->withInput();
+                    }
+                }
+            }
         }
 
-        return back()->with('ok', __('stock.pick_edited', ['number' => $pick->number]));
+        $changes = [];
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pick, $qty, $po, $request, &$changes) {
+                if ($error = $pick->editItems($qty)) {
+                    throw new \App\Exceptions\Rejected($error);
+                }
+
+                if ($po !== null) {
+                    $changes = $this->syncPoItems($po, $qty, $request->user());
+                }
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['qty' => $e->getMessage()])->withInput();
+        }
+
+        // صاحب الأمر + الحسابات (لو أمر بموافقة) يعرفوا إيه اللي اتغير —
+        // نفس مفاتيح إشعار «الأمر اتعدل» الموجودة
+        if ($po !== null && $changes !== []) {
+            $targets = collect([$po->created_by ? User::find($po->created_by) : null]);
+
+            if ($po->needsApproval()) {
+                $targets = $targets->merge(
+                    User::where('role', 'accountant')->where('active', true)->get()
+                );
+            }
+
+            foreach ($targets->filter()->unique('id') as $t) {
+                \App\Models\AppNotification::send(
+                    $t,
+                    fn () => __('field.notif_po_edited_title', ['number' => $po->number]),
+                    fn () => implode(' · ', $changes),
+                    false,
+                );
+            }
+        }
+
+        $ok = __('stock.pick_edited', ['number' => $pick->number]);
+
+        if ($po !== null && $changes !== []) {
+            $ok .= ' — '.__('stock.pick_po_synced', ['number' => $po->number]);
+        }
+
+        return back()->with('ok', $ok);
+    }
+
+    /**
+     * ظبط بنود أمر التوريد على كميات التجهيز الجديدة — جوه ترانزاكشن بس.
+     *
+     * ⚠️ نفس حساب تعديل الحسابات (`decidePoApproval`) بالحرف: السعر
+     * والضريبة ثابتين من وقت الإنشاء، الكمية بس اللي بتتغير — وصفر
+     * بيشيل البند. الإجماليات من `Tax::totals` زي كل مسارات الأوامر.
+     *
+     * @param  array<int, int>  $qtyByProduct
+     * @return list<string> ملخص التغيير «صنف: قديم ← جديد»
+     */
+    private function syncPoItems(PurchaseOrder $po, array $qtyByProduct, User $actor): array
+    {
+        $changes = [];
+
+        foreach ($po->items as $item) {
+            $newQty = (int) ($qtyByProduct[(int) $item->product_id] ?? 0);
+
+            if ($newQty === (int) $item->qty) {
+                continue;
+            }
+
+            $changes[] = ($item->product?->displayName() ?? '#'.$item->product_id)
+                .': '.$item->qty.' ← '.$newQty;
+
+            if ($newQty === 0) {
+                $item->delete();
+
+                continue;
+            }
+
+            $lineTotal = round($newQty * (float) $item->price, 2);
+            $item->update([
+                'qty' => $newQty,
+                'total' => $lineTotal,
+                'tax' => round($lineTotal * (float) ($item->tax_rate ?? 0), 2),
+            ]);
+        }
+
+        if ($changes === []) {
+            return [];
+        }
+
+        $po->load('items');
+
+        if ($po->items->isEmpty()) {
+            throw new \App\Exceptions\Rejected(__('ops.po_no_items_left'));
+        }
+
+        $rows = $po->items
+            ->map(fn ($i) => ['total' => (float) $i->total, 'tax' => (float) $i->tax])
+            ->all();
+        $sums = \App\Services\Tax::totals($rows);
+
+        $po->update([
+            'total' => $sums['net'],
+            'tax_total' => $sums['tax'],
+            'grand_total' => $sums['grand'],
+            'was_edited' => true,
+            'edited_by' => $actor->id,
+            'edited_at' => now(),
+        ]);
+
+        return $changes;
     }
 
     // ==================== سيناريو 2 و 3 ====================

@@ -330,8 +330,83 @@ class ChannelController extends Controller
             'drivers' => User::fieldVisibleTo(
                 User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
                 ->where('active', true)->orderBy('name')->get(),
+            // كتالوج منتقي الأصناف — لتعديل الطلب المستني (١٢/٨)
+            'products' => Product::where('active', true)->orderBy('code')
+                ->get(['id', 'code', 'name', 'name_en']),
             'filters' => $request->only('status'),
         ]);
+    }
+
+    /**
+     * ═══ تعديل أصناف/كميات طلب ريفيل مستني (١٢ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «أعدل وألغي طلبات الريفيل». الإلغاء كان موجود —
+     * ده التعديل: قبل التنزيل بس (`pending`)، لأن بعده الطلب بقى
+     * أمر توريد وله مساره (`poEditable` ورجوعه للحسابات).
+     *
+     * ⚠️ مفيش تسعير هنا خالص — البنود كميات بالقطع، والتسعير كله
+     * بيحصل وقت التحويل في `ReplenishmentRequest::assignTo` زي ما هو.
+     */
+    public function updateReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest)
+    {
+        // نفس حارس الإلغاء بالحرف — مدير مايلمسش طلب فرع مش بتاعه
+        Scope::assertClient($request->user(), $replenishmentRequest->client);
+
+        if ($replenishmentRequest->status !== 'pending') {
+            return back()->withErrors(['status' => __('api.request_already_assigned')]);
+        }
+
+        $data = $request->validate([
+            'qty' => ['required', 'array'],
+            // نفس سقف طلب البضاعة من الأبلكيشن (9999 بالقطع)
+            'qty.*' => ['nullable', 'integer', 'min:0', 'max:9999'],
+        ]);
+
+        $qty = [];
+        foreach ($data['qty'] as $pid => $q) {
+            if ((int) $q > 0) {
+                $qty[(int) $pid] = (int) $q;
+            }
+        }
+
+        // صنف مش موجود في الكتالوج = مفتاح مزوّر — مش فاليديشن عادي
+        $known = Product::whereIn('id', array_keys($qty))->pluck('id')
+            ->map(fn ($i) => (int) $i)->all();
+        $qty = array_intersect_key($qty, array_flip($known));
+
+        if ($qty === []) {
+            return back()->withErrors(['qty' => __('stock.pick_no_items')]);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($replenishmentRequest, $qty) {
+            $replenishmentRequest->items()->delete();
+
+            foreach ($qty as $pid => $q) {
+                \App\Models\ReplenishmentItem::create([
+                    'replenishment_request_id' => $replenishmentRequest->id,
+                    'product_id' => $pid,
+                    'qty' => $q,
+                ]);
+            }
+        });
+
+        // «طلبك اتعدل» — نفس منطق لينكات الإلغاء: طلب المندوب مالوش
+        // تاب ريفيل فلينكه فاضي، والبروموتر بيفتح تاب الريفيل
+        \App\Models\AppNotification::send(
+            $replenishmentRequest->promoter,
+            fn () => __('field.notif_replenishment_edited_title', [
+                'number' => $replenishmentRequest->number,
+            ]),
+            fn () => __('field.notif_replenishment_edited_body', [
+                'client' => $replenishmentRequest->client->displayName(),
+            ]),
+            good: true,
+            link: $replenishmentRequest->origin() === 'rep'
+                ? null
+                : \App\Models\AppNotification::replenishmentLink($replenishmentRequest->id),
+        );
+
+        return back()->with('ok', __('flash.replenishment_updated'));
     }
 
     /** تنزيل طلب الريفيل على مندوب — وبيتحول لأمر توريد */

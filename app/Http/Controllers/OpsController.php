@@ -715,6 +715,101 @@ class OpsController extends Controller
         return back()->with('ok', __('flash.van_closed'));
     }
 
+    /**
+     * ═══ تصحيح إداري لعهدة مندوب — «التحميل اتسجّل غلط» (١٢/٨/٢٠٢٦) ═══
+     *
+     * الراوت `role:admin` — قرار المالك: التصحيح ده بيحرّك مخزون حقيقي
+     * (العهدة والأرفف مع بعض)، فمش مفتوح للمديرين افتراضياً. الزرار
+     * نفسه محكوم بـ`act.custody.adjust` (أدمن بس، والأدمن يقدر يمنحه).
+     *
+     * كل الحركة في `Custody::adjustTo` — الأرضية (مباع + مرجّع) هناك،
+     * والمخزن بيتظبط بنفس مسارات التحميل والإرجاع الموجودة. هنا بس:
+     * فاليديشن + سبب إجباري + تسجيل الحدث + إشعار المندوب.
+     */
+    public function adjustCustody(Request $request, User $user)
+    {
+        // ⚠️ الراوت `role:admin`، بس المنح الصريح للأكشن بيفتحه —
+        // فالحارس لازم يفضل: لو الأدمن منح الأكشن لمدير، يظبط عهد
+        // **فريقه** بس مش أي مندوب في الشركة (الأدمن بيعدّي دايماً).
+        Scope::assertRep($request->user(), $user);
+
+        $custody = $user->currentCustody();
+
+        if ($custody === null || $custody->status === 'closed') {
+            return back()->withErrors(['adjust' => __('field.custody_adjust_none')]);
+        }
+
+        $data = $request->validate([
+            // ⚠️ السبب إجباري — التصحيح بيغيّر أرقام تصفية المندوب،
+            // ومن غير سبب مكتوب مفيش طريقة نفهم بعدها ليه الرقم اتغيّر
+            'reason' => ['required', 'string', 'max:300'],
+            'assigned' => ['required', 'array'],
+            'assigned.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'gift' => ['nullable', 'array'],
+            'gift.*' => ['nullable', 'integer', 'min:0', 'max:999999'],
+        ]);
+
+        $custody->load(['items.product', 'items.batch']);
+
+        // الأهداف — الخانة الفاضية معناها «ماتلمسش الصنف ده»
+        $assigned = [];
+        foreach ($data['assigned'] as $pid => $v) {
+            if ($v !== null && $v !== '') {
+                $assigned[(int) $pid] = (int) $v;
+            }
+        }
+
+        $gift = [];
+        foreach ($data['gift'] ?? [] as $pid => $v) {
+            if ($v !== null && $v !== '') {
+                $gift[(int) $pid] = (int) $v;
+            }
+        }
+
+        // ملخص التغيير «قديم ← جديد» — للحدث وإشعار المندوب
+        $changes = [];
+        $curOf = fn (int $pid, string $col) => (int) $custody->items->where('product_id', $pid)->sum($col);
+
+        foreach ($assigned as $pid => $v) {
+            if ($v !== $curOf($pid, 'assigned')) {
+                $changes[] = (Product::find($pid)?->displayName() ?? '#'.$pid).': '.$curOf($pid, 'assigned').' ← '.$v;
+            }
+        }
+        foreach ($gift as $pid => $v) {
+            if ($v !== $curOf($pid, 'gift_assigned')) {
+                $changes[] = '🎁 '.(Product::find($pid)?->displayName() ?? '#'.$pid).': '.$curOf($pid, 'gift_assigned').' ← '.$v;
+            }
+        }
+
+        if ($changes === []) {
+            return back()->withErrors(['adjust' => __('field.custody_adjust_no_change')]);
+        }
+
+        if ($err = $custody->adjustTo($assigned, $gift, $request->user(), $data['reason'])) {
+            return back()->withErrors(['adjust' => $err]);
+        }
+
+        // الحدث على تايم لاين المندوب — النوع في TYPES و enums.track
+        TrackEvent::log(
+            $user,
+            'custody_adjust',
+            __('field.event_custody_adjust'),
+            $data['reason'].' — '.implode(' · ', $changes),
+        );
+
+        AppNotification::send(
+            $user,
+            fn () => __('field.notif_custody_adjusted_title'),
+            fn () => __('field.notif_custody_adjusted_body', [
+                'by' => $request->user()->displayName(),
+                'reason' => $data['reason'],
+            ]),
+            false,
+        );
+
+        return back()->with('ok', __('flash.custody_adjusted'));
+    }
+
     // ================= أوامر التوريد =================
 
     /**
@@ -782,6 +877,32 @@ class OpsController extends Controller
             // دايالوج الأساين بس — دايالوج الإنشاء اليدوي اتشال (2026-08-06)
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
             'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'from', 'to']),
+        ]);
+    }
+
+    /**
+     * ═══ صفحة الأمر الكاملة — عرض + تعديل من مكان واحد (١٢/٨/٢٠٢٦) ═══
+     *
+     * طلب المالك: «لما أدخل على أوامر التوريد يتفتحلي العرض والتعديل».
+     * الصف في اللوحة بيفتح الصفحة دي: البنود بأسعارها، العميل، خط
+     * زمني للحالة، المستندات (صورة الأمر/الشيت)، وأزرار التعديل بنفس
+     * شرط `poEditable` بتاع اللوحة.
+     */
+    public function showPo(PurchaseOrder $purchaseOrder)
+    {
+        // ⚠️ سكوب التشانل مانجر — نفس حارس editPo بالحرف
+        abort_unless($purchaseOrder->client?->visibleBy(auth()->user()) ?? true, 403);
+
+        $purchaseOrder->load([
+            'client.channel', 'client.group', 'courier', 'warehouse',
+            'items.product', 'creator', 'approvedBy', 'editor', 'pickOrder',
+        ]);
+
+        return view('ops.po_show', [
+            'po' => $purchaseOrder,
+            // الأمر المتولّد من طلب ريفيل — لينك راجع للطلب الأصلي
+            'replenishment' => \App\Models\ReplenishmentRequest::where('purchase_order_id', $purchaseOrder->id)->first(),
+            'editable' => $this->poEditable($purchaseOrder),
         ]);
     }
 

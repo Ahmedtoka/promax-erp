@@ -80,4 +80,8 @@ return [
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'memo_field_collection' => 'Field collection during a visit',
     'po_back_to_accounting' => 'Edit saved - the order went back to the accounting approval queue and the old pick order was cancelled.',
+
+    // ═══ Custody correction + replenishment edit (Aug 12, 2026) ═══
+    'custody_adjusted' => 'Van stock corrected and warehouse stock adjusted with it - the rep was notified.',
+    'replenishment_updated' => 'The request was updated and the requester was notified.',
 ];

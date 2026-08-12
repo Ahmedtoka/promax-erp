@@ -525,4 +525,9 @@ return [
     'pick_add_item' => 'Add item',
     'pick_edited' => 'Pick order :number updated',
     'pick_edit_too_late' => 'Cannot edit after the order is picked or handed over - use cancel instead.',
+
+    // ═══ Pick edit ↔ sales order sync (Aug 12, 2026) ═══
+    'pick_edit_not_in_po' => 'Item :name is not on the linked sales order - new items are added by editing the order itself (which goes back to accounting approval).',
+    'pick_edit_no_increase' => 'The order is approved by accounting - quantities can only go down here. Max for :name is :max. Increases go through editing the order itself (back to accounting).',
+    'pick_po_synced' => 'The linked sales order :number was synced to the new quantities.',
 ];

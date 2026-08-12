@@ -84,4 +84,7 @@ return [
     'scope_zone_denied' => "This client is not in the rep's zones.",
     'scope_staff_denied' => 'This employee is not on your team.',
 
+    // ═══ Custody correction (Aug 12, 2026) ═══
+    'act_custody_adjust' => 'Correct a rep van stock (moves warehouse shelves)',
+
 ];

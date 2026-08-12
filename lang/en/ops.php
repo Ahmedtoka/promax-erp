@@ -335,4 +335,20 @@ return [
     'att_hours_hint' => 'The day is counted at these hours - quarter-hour steps',
     'att_note' => 'Note (optional)',
     'att_forced_ok' => ':rep was checked out at :t hours and notified.',
+
+    // ═══ Full sales-order page (Aug 12, 2026) ═══
+    'po_view' => 'Open order',
+    'po_timeline' => 'Order timeline',
+    'po_docs' => 'Order documents',
+    'po_tl_created' => 'Order created',
+    'po_tl_approved' => 'Accounting approval',
+    'po_tl_rejected' => 'Accounting rejection',
+    'po_tl_pick' => 'Warehouse picking',
+    'po_tl_arrived' => 'Rep arrived at the branch',
+    'po_tl_delivered' => 'Delivery',
+    'po_tl_edited' => 'Last edit',
+
+    // ═══ Pending replenishment edit (Aug 12, 2026) ═══
+    'replenishment_edit' => 'Edit request',
+    'replenishment_edit_hint' => 'Edit quantities in pieces or add/remove an item - only before assignment. The requester gets notified, and pricing still happens at assignment as before.',
 ];

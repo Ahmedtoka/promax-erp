@@ -224,4 +224,253 @@ class Custody extends Model
                 && $i->batch !== null
                 && $i->batch->daysLeft() <= $days);
     }
+
+    /**
+     * ═══ تصحيح إداري للعهدة — «التحميل اتسجّل غلط» (١٢ أغسطس ٢٠٢٦) ═══
+     *
+     * بياخد **أرقام مستهدفة** بالصنف (مش فروق): المحمَّل الجديد والهدايا
+     * الجديدة، وبيظبط العهدة **والمخزن مع بعض** — التصحيح معناه إن
+     * المخزن فعلياً ادّى كمية مختلفة عن المتسجّل، فالفرق لازم يرجع
+     * للأرفف أو يخرج منها، وإلا الجرد الجاي هيطلع عجز/زيادة وهمية.
+     *
+     * ⚠️ **مفيش مسار حساب موازي:**
+     *   - الزيادة بتمرّ بـ`PickOrder::issueDirect` + `handOver` — نفس
+     *     مسار التحميل الرسمي بالحرف (FEFO، باتش على البند، خصم أرفف).
+     *   - النقص بيرجع للرف بنفس `PickOrderItem::returnToShelf` بتاعة
+     *     فرق الاستلام — من بند التجهيز الأصلي للباتش نفسه.
+     *
+     * ⚠️ **الأرضية (floor):** المحمَّل الجديد ≥ المباع + المرجّع للمخزن
+     * (والمباع شامل تسليمات أوامر التوريد — `deduct` بيزوّد `sold`).
+     * والهدايا الجديدة ≥ الموزّع فعلاً. من غير الأرضية دي `remaining()`
+     * بيطلع سالب ومعادلة التصفية بتتكسر.
+     *
+     * ⚠️ بند قديم من غير باتش: العهدة بتتظبط والمخزن مابيتلمسش —
+     * البند ده أصلاً ماخصمش من باتش، فمفيش حقيقة مخزنية نرجّع لها.
+     *
+     * @param  array<int, int>  $assignedTarget  [product_id => المحمَّل الجديد]
+     * @param  array<int, int>  $giftTarget      [product_id => هدايا جديدة]
+     * @return string|null رسالة الخطأ، أو null لو تمام
+     */
+    public function adjustTo(array $assignedTarget, array $giftTarget, User $actor, string $reason): ?string
+    {
+        if ($this->status === 'closed') {
+            return __('field.custody_closed');
+        }
+        if ($this->warehouse === null || $this->user === null) {
+            return __('stock.no_warehouse');
+        }
+
+        $items = $this->items()->with(['product', 'batch'])->get();
+
+        $sum = fn (int $pid, string $col) => (int) $items->where('product_id', $pid)->sum($col);
+
+        $inc = [];
+        $dec = [];
+        $incGift = [];
+        $decGift = [];
+        $touched = [];
+
+        $productIds = array_unique(array_merge(array_keys($assignedTarget), array_keys($giftTarget)));
+
+        foreach ($productIds as $pid) {
+            $pid = (int) $pid;
+            $product = Product::find($pid);
+
+            if ($product === null) {
+                continue;
+            }
+
+            if (array_key_exists($pid, $assignedTarget)) {
+                $target = max((int) $assignedTarget[$pid], 0);
+                $cur = $sum($pid, 'assigned');
+                $floor = $sum($pid, 'sold') + $sum($pid, 'returned');
+
+                if ($target < $floor) {
+                    return __('field.custody_adjust_floor_err', [
+                        'product' => $product->displayName(),
+                        'floor' => $floor,
+                    ]);
+                }
+
+                if ($target > $cur) {
+                    $inc[$pid] = $target - $cur;
+                } elseif ($target < $cur) {
+                    $dec[$pid] = $cur - $target;
+                }
+                if ($target !== $cur) {
+                    $touched[$pid] = true;
+                }
+            }
+
+            if (array_key_exists($pid, $giftTarget)) {
+                $target = max((int) $giftTarget[$pid], 0);
+                $cur = $sum($pid, 'gift_assigned');
+                $floor = $sum($pid, 'gift_given');
+
+                if ($target < $floor) {
+                    return __('field.custody_adjust_floor_err', [
+                        'product' => $product->displayName(),
+                        'floor' => $floor,
+                    ]);
+                }
+
+                if ($target > $cur) {
+                    $incGift[$pid] = $target - $cur;
+                } elseif ($target < $cur) {
+                    $decGift[$pid] = $cur - $target;
+                }
+                if ($target !== $cur) {
+                    $touched[$pid] = true;
+                }
+            }
+        }
+
+        if ($touched === []) {
+            return __('field.custody_adjust_no_change');
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($dec, $decGift, $inc, $incGift, $actor, $reason, $touched) {
+                // ═══ ١. النقص — يرجع للرف (عكس pull بالحرف) ═══
+                foreach ($dec as $pid => $qty) {
+                    $this->pullBackToShelf((int) $pid, (int) $qty, false);
+                }
+                foreach ($decGift as $pid => $qty) {
+                    $this->pullBackToShelf((int) $pid, (int) $qty, true);
+                }
+
+                // ═══ ٢. الزيادة — أمر تجهيز حقيقي بيتسلّم فوراً ═══
+                // نفس مسار التحميل الرسمي: FEFO بيختار الباتش، البضاعة
+                // بتخرج من الأرفف في `markReady`، و`handOver` بيكمّل
+                // على **العهدة المفتوحة دي نفسها** (عقيدة ١٠/٨).
+                if ($inc !== [] || $incGift !== []) {
+                    $result = PickOrder::issueDirect(
+                        $this->warehouse,
+                        $this->user,
+                        $inc,
+                        $incGift,
+                        $actor,
+                        __('field.custody_adjust_note', ['reason' => $reason]),
+                    );
+
+                    if ($result['error'] !== null) {
+                        throw new \App\Exceptions\Rejected($result['error']);
+                    }
+
+                    if ($err = $result['order']->handOver($this->user)) {
+                        throw new \App\Exceptions\Rejected($err);
+                    }
+
+                    // ⚠️ `handOver` بيدوّر على العهدة المفتوحة بنفسه —
+                    // لو (بداتا شاذة: صفين مفتوحين) كمّل على عهدة تانية،
+                    // نرجّع كل حاجة بدل ما التصحيح ينزل على صف غلط.
+                    if ((int) $result['order']->fresh()->custody_id !== (int) $this->id) {
+                        throw new \App\Exceptions\Rejected(__('field.custody_adjust_none'));
+                    }
+                }
+
+                // ═══ ٣. `stocks` صورة من الباتشات — مصالحة ختامية ═══
+                foreach (array_keys($touched) as $pid) {
+                    \App\Services\StockCounting::resync((int) $pid, (int) $this->warehouse_id);
+                }
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return $e->getMessage();
+        }
+
+        return null;
+    }
+
+    /**
+     * إنقاص محمَّل (أو هدايا) صنف وإرجاع الفرق للرف — جوه ترانزاكشن بس.
+     *
+     * بيقلّل من البنود بعكس الـFEFO (الأبعد انتهاءً الأول — اللي كان
+     * هيخرج آخر حاجة هو اللي «ماتحمّلش أصلاً»)، وبيرجّع كل كمية لرفّ
+     * باتشها عن طريق بند التجهيز الأصلي (`returnToShelf`).
+     *
+     * @throws \App\Exceptions\Rejected لو الكمية مش متاحة للإنقاص
+     */
+    private function pullBackToShelf(int $productId, int $qty, bool $gift): void
+    {
+        $items = $this->items()
+            ->with(['product', 'batch'])
+            ->where('product_id', $productId)
+            ->lockForUpdate()
+            ->get()
+            ->sortByDesc(fn (CustodyItem $i) => $i->batch?->expires_on?->timestamp ?? -1)
+            ->values();
+
+        $left = $qty;
+
+        foreach ($items as $item) {
+            if ($left <= 0) {
+                break;
+            }
+
+            $can = $gift ? $item->giftLeft() : $item->remaining();
+            $take = min($left, max($can, 0));
+
+            if ($take <= 0) {
+                continue;
+            }
+
+            if ($gift) {
+                $item->gift_assigned = (int) $item->gift_assigned - $take;
+            } else {
+                $item->assigned = (int) $item->assigned - $take;
+            }
+            $item->save();
+            $left -= $take;
+
+            if ($item->batch_id === null || $item->batch === null) {
+                // بند قديم من غير باتش (أو باتشه اتمسح) — العهدة بس،
+                // مفيش أصل مخزني نرجّع له
+                continue;
+            }
+
+            // بند التجهيز اللي جاب الكمية دي — نفس الرف اللي طلعت منه
+            $poi = PickOrderItem::whereHas('pickOrder',
+                fn ($q) => $q->where('custody_id', $this->id))
+                ->where('product_id', $productId)
+                ->where('batch_id', $item->batch_id)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($poi !== null) {
+                $poi->returnToShelf($take);
+
+                // ⚠️ نفس دلالة فرق الاستلام الموجودة: «اتجمّع كذا،
+                // المستلم فعلياً أقل، والفرق رجع الرف». من غيرها
+                // مطابقة التجهيز بالعهدة كانت هتوري فرق وهمي دايماً.
+                $poi->qty_received = max((int) $poi->qty_received - $take, 0);
+                $poi->save();
+                $poi->pickOrder?->update(['has_variance' => true]);
+
+                continue;
+            }
+
+            // عهدة قديمة من غير أمر تجهيز — نفس حركة returnToShelf
+            // بالحرف (باتش + رف سحب)، مش مسار حساب جديد
+            $item->batch->increment('qty_remaining', $take);
+            $item->batch->decrement('qty_issued', $take);
+
+            $shelf = \App\Services\OpeningStock::pickShelf($this->warehouse);
+            $row = BatchLocation::firstOrNew([
+                'batch_id' => $item->batch_id,
+                'location_id' => $shelf->id,
+            ]);
+            $row->product_id = $productId;
+            $row->qty = (int) $row->qty + $take;
+            $row->save();
+        }
+
+        if ($left > 0) {
+            $name = Product::find($productId)?->displayName() ?? '#'.$productId;
+
+            throw new \App\Exceptions\Rejected(__('field.custody_not_enough', [
+                'product' => $name,
+                'short' => $left,
+            ]));
+        }
+    }
 }

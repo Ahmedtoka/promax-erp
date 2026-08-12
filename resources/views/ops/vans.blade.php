@@ -120,6 +120,12 @@
                     <td dir="ltr" style="font-weight:800">{{ $r['sales_today'] > 0 ? $fmt($r['sales_today']) : '—' }}</td>
                     <td style="white-space:nowrap">
                         <a class="btn sm" href="{{ route('ops.rep', $u) }}">👁 {{ __('common.details') }}</a>
+                        {{-- تصحيح إداري للعهدة (١٢/٨) — بيفتح كارت المندوب
+                             والديالوج بيتفتح لوحده (?adjust=1) --}}
+                        @if ($r['state'] === 'open' && \App\Support\Access::action(auth()->user(), 'act.custody.adjust'))
+                            <a class="btn sm" href="{{ route('ops.rep', $u) }}?adjust=1"
+                               title="{{ __('field.custody_adjust') }}">🛠️</a>
+                        @endif
                         @if ($r['state'] === 'open')
                             <form method="POST" action="{{ route('ops.rep.close', $u) }}" style="display:inline"
                                   onsubmit="return confirm(@js(__('field.vans_close_confirm', ['name' => $u->displayName()])))">

@@ -123,6 +123,9 @@ class Access
             'ops.po.approvals', 'ops.po.decide',
             // مستند الأمر — بيطبع نسختين ويختمهم بعد الموافقة
             'ops.po.print',
+            // صفحة الأمر الكاملة (١٢/٨) — عرض بس: المحاسب بيوصلها من
+            // لينكات الطباعة والموافقات، ومن غيرها اللينك يرمي 403
+            'ops.pos.show',
             // شيت الأمر الأصلي — المرجع اللي السلسلة بعتته
             'ops.po.sheet',
             // التعديل الكامل على أمر pending — قرار المالك 2026-08-04
@@ -172,6 +175,7 @@ class Access
             // فاضلة للمدير في الراوت نفسه.
             'ops.replenishments',
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
+            '!ops.replenishments.update',
         ],
     ];
 
@@ -435,13 +439,16 @@ class Access
 
         // ═══ العهدة وتوريد الكي أكاونت ═══
         'act.custody.handout' => ['perm.act_custody_handout', 'ops.handout', null, ['ops.handout.store']],
+        // تصحيح إداري للعهدة (١٢/٨) — `[]` = أدمن بس، والأدمن يقدر
+        // يمنحه لحد بعينه. بيحرّك العهدة والأرفف مع بعض.
+        'act.custody.adjust' => ['perm.act_custody_adjust', 'ops.vans', [], ['ops.rep.adjust']],
         'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
         'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide', 'ops.po.decide.all']],
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 
         // ═══ الميدان ═══
         'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder']],
-        'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.rep.close']],
+        'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close']],
 
         // ═══ الموردين والمشتريات ═══
         'act.suppliers.manage' => ['perm.act_suppliers_manage', 'erp.suppliers', ['manager'], ['erp.suppliers.store', 'erp.suppliers.update', 'erp.suppliers.opening']],

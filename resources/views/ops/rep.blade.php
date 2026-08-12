@@ -40,9 +40,30 @@
         <div class="sub2">{{ $custody?->date?->format('Y-m-d') ?? '—' }}</div></div>
 </div>
 
+@php
+    // ═══ تصحيح إداري للعهدة (١٢/٨) — زرار محكوم بأكشن أدمن ═══
+    $canAdjust = $custody && $custody->status === 'open'
+        && \App\Support\Access::action(auth()->user(), 'act.custody.adjust');
+
+    if ($canAdjust) {
+        // صف لكل صنف (البنود بالباتش بتتجمّع) — الأرضية = المتصرّف فعلاً
+        $adjRows = $custody->items->groupBy('product_id')->map(fn ($g) => [
+            'product' => $g->first()->product,
+            'assigned' => (int) $g->sum('assigned'),
+            'floor' => (int) $g->sum('sold') + (int) $g->sum('returned'),
+            'gift' => (int) $g->sum('gift_assigned'),
+            'gift_floor' => (int) $g->sum('gift_given'),
+        ])->values();
+    }
+@endphp
+
 @if ($custody)
 <div class="card">
-    <h3>📦 {{ __('ops.van_stock') }} <span class="side">{{ __('ops.loaded') }} ← {{ __('ops.remaining') }}</span></h3>
+    <h3>📦 {{ __('ops.van_stock') }} <span class="side">{{ __('ops.loaded') }} ← {{ __('ops.remaining') }}</span>
+        @if ($canAdjust)
+            <button class="btn sm" type="button" style="float:inline-end" onclick="openDlg('dlgAdjust')">🛠️ {{ __('field.custody_adjust') }}</button>
+        @endif
+    </h3>
     <div class="tablewrap">
         <table>
             <tr>
@@ -113,4 +134,129 @@
      الأبلكيشن — متناقض مع الفلو الرسمي: تسليم عهدة ← تجهيز الطلبات
      ← تأكيد ← إشعار ← استلام المندوب. الزرار فوق بقى بيوصّل للفلو ده. --}}
 
+{{-- ═══ تصحيح إداري للعهدة (١٢ أغسطس ٢٠٢٦) — «التحميل اتسجّل غلط» ═══
+     أرقام مستهدفة مش فروق: الأدمن بيكتب المحمَّل الصح، والسيرفر بيظبط
+     العهدة والأرفف مع بعض (Custody::adjustTo) — الزيادة بأمر تجهيز
+     حقيقي بيتسلّم فوراً، والنقص بيرجع لرف باتشه. --}}
+@if ($canAdjust)
+    <dialog id="dlgAdjust" class="wide">
+        <form class="dlg" method="POST" action="{{ route('ops.rep.adjust', $u) }}"
+              style="width:min(760px,96vw);max-height:88vh;overflow-y:auto">
+            @csrf
+            <h4>🛠️ {{ __('field.custody_adjust') }} — {{ $u->displayName() }}</h4>
+
+            <div class="alert warn" style="margin-bottom:12px">
+                <span>⚠️</span><span>{{ __('field.custody_adjust_hint') }}</span>
+            </div>
+
+            <div style="margin-bottom:12px">
+                <label class="f">{{ __('field.custody_adjust_reason') }} <b class="req-star">*</b></label>
+                <input type="text" name="reason" required maxlength="300" style="width:100%"
+                       placeholder="{{ __('field.custody_adjust_reason_ph') }}">
+            </div>
+
+            {{-- منتقي إضافة صنف مش في العهدة — نفس الليست المشتركة --}}
+            @php
+                $adjCatalog = $products->map(fn ($p) => [
+                    'id' => $p->id, 'code' => $p->code,
+                    'name' => $p->displayName(), 'name_ar' => $p->name,
+                    'name_en' => $p->name_en, 'image' => $p->imageSrc(),
+                ])->values()->all();
+            @endphp
+            <label class="f">{{ __('stock.pick_add_item') }}</label>
+            @include('partials._item_picker', [
+                'id' => 'cadj',
+                'catalog' => $adjCatalog,
+                'onPick' => 'custodyAdjAdd',
+            ])
+
+            <div class="tablewrap" style="margin-top:12px;max-height:46vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align:start">{{ __('stock.item') }}</th>
+                            <th>{{ __('field.custody_adjust_loaded') }}</th>
+                            {{-- الأرضية معروضة قصاد كل صنف — الحارس في السيرفر برضه --}}
+                            <th>{{ __('field.custody_adjust_floor') }}</th>
+                            <th>{{ __('field.custody_adjust_new') }}</th>
+                            <th>{{ __('field.custody_adjust_gift_new') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cadjRows">
+                        @foreach ($adjRows as $r)
+                            @php $p = $r['product']; @endphp
+                            {{-- صنف اتمسح من الكتالوج؟ مفيش مفتاح نبعته — نتخطى --}}
+                            @continue($p === null)
+                            <tr data-pid="{{ $p->id }}">
+                                <td style="text-align:start">
+                                    <b>{{ $p?->displayName() ?? '—' }}</b>
+                                    @if ($p)<div style="font-size:10.5px;color:var(--muted)">{{ $p->code }}</div>@endif
+                                </td>
+                                <td class="num">{{ $r['assigned'] }}
+                                    @if ($r['gift'] > 0)<div style="font-size:10px;color:var(--muted)">🎁 {{ $r['gift'] }}</div>@endif
+                                </td>
+                                <td class="num" style="color:var(--muted)">{{ $r['floor'] }}
+                                    @if ($r['gift_floor'] > 0)<div style="font-size:10px">🎁 {{ $r['gift_floor'] }}</div>@endif
+                                </td>
+                                <td>
+                                    <input type="number" name="assigned[{{ $p?->id }}]" min="{{ $r['floor'] }}" step="1"
+                                           value="{{ $r['assigned'] }}" style="width:92px">
+                                </td>
+                                <td>
+                                    <input type="number" name="gift[{{ $p?->id }}]" min="{{ $r['gift_floor'] }}" step="1"
+                                           value="{{ $r['gift'] }}" style="width:82px">
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                <button class="btn" type="button" onclick="closeDlg('dlgAdjust')">{{ __('common.cancel') }}</button>
+                <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+            </div>
+        </form>
+    </dialog>
+@endif
+
+@endsection
+
+@section('scripts')
+@if ($canAdjust)
+<script>
+(function () {
+    'use strict';
+
+    // صنف جديد من الليست — محمَّل حالي 0 وأرضية 0
+    window.custodyAdjAdd = function (id) {
+        const prod = (window.PICKER_CADJ || []).find(p => p.id === id);
+        if (!prod) return;
+
+        const existing = document.querySelector('#cadjRows tr[data-pid="' + id + '"]');
+        if (existing) {
+            const q = existing.querySelector('input[name^="assigned"]');
+            if (q) { q.focus(); }
+        } else {
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-pid', id);
+            tr.innerHTML =
+                '<td style="text-align:start"><b>' + (prod.name || '') + '</b>' +
+                '<div style="font-size:10.5px;color:var(--muted)">' + (prod.code || '') + '</div></td>' +
+                '<td class="num">0</td>' +
+                '<td class="num" style="color:var(--muted)">0</td>' +
+                '<td><input type="number" name="assigned[' + id + ']" min="0" step="1" value="1" style="width:92px"></td>' +
+                '<td><input type="number" name="gift[' + id + ']" min="0" step="1" value="0" style="width:82px"></td>';
+            document.getElementById('cadjRows').appendChild(tr);
+        }
+        window.cadjPickerReset();
+    };
+
+    // جاي من بورد العربيات بزرار «تعديل العهدة»؟ افتح الديالوج على طول
+    if (new URLSearchParams(location.search).get('adjust') === '1') {
+        openDlg('dlgAdjust');
+    }
+})();
+</script>
+@endif
 @endsection
