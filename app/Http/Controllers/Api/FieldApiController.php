@@ -1396,12 +1396,19 @@ class FieldApiController extends Controller
     }
 
     /**
-     * GET /api/clients/{client}/returnable — المتاح للرد وسياساته.
+     * GET /api/clients/{client}/returnable — كتالوج المرتجع وسياساته.
      *
-     * ⚠️ **الشاشة لازم تعرف حاجتين قبل ما المندوب يبدأ**: العميل ده
-     * مسموح له بأنهي طرق مرتجع، وكل صنف متاح منه كام قطعة وبكام.
-     * من غير الاتنين المندوب بيكتب أرقام والسيرفر يرفضها بعد ما
-     * يكون قال للعميل رقم.
+     * ⚠️ **المرتجع اتفتح على الكتالوج كله (قرار المالك ١٢ أغسطس ٢٠٢٦).**
+     * العملاء ماسكين بضاعة من قبل السيستم (أرصدة افتتاحية ماتسجلتش)،
+     * فقايمة «المشترى بس» كانت بتقول «مفيش حاجة ترجع» لعميل البضاعة
+     * القديمة واقفة على رفّه. القايمة بقت نفس كتالوج البيع: كل صنف
+     * نشط ومتسعّر في قايمة العميل، بسعر `Pricing` بتاعه — نفس السعر
+     * اللي فاتورة بيع كانت هتطلع بيه. التسعير النهائي في الخدمة:
+     * سطور الفواتير الأصلية أولاً بسعرها، والباقي بسعر `Pricing`.
+     *
+     * ⚠️ `qty` = المتاح من فواتير السيستم — معلومة للعرض، **مش حد**.
+     * الأبلكيشن القديم بيعامل الصفر «مش متاح» فبيفضل على سلوكه
+     * القديم بأمان، والجديد بيسيبها مفتوحة بسقف 9999.
      */
     public function returnable(Request $request, Client $client): JsonResponse
     {
@@ -1409,31 +1416,31 @@ class FieldApiController extends Controller
             return $err;
         }
 
-        $rows = [];
+        $prev = \App\Services\Returns::returnableByProduct($client);
 
-        foreach (\App\Services\Returns::returnable($client) as $r) {
-            $pid = $r['product_id'];
+        $rows = Product::where('active', true)->orderBy('name')->get()
+            ->map(function (Product $p) use ($client, $prev) {
+                $q = \App\Services\Pricing::quote($client, $p, null, 1);
 
-            // مجمّعة بالصنف — المندوب بيفكر بالصنف مش بسطر الفاتورة،
-            // والتوزيع على السطور بيحصل في السيرفر وقت الحفظ.
-            $rows[$pid] ??= [
-                'product_id' => $pid,
-                'name' => $r['product']?->displayName() ?? '—',
-                'image' => $r['product']?->imageSrc(),
-                'unit' => $r['product']?->unitLabel(),
-                'box_units' => (int) ($r['product']->box_units ?? 0),
-                'case_units' => (int) ($r['product']->units_per_case ?? 0),
-                'qty' => 0,
-                // ⚠️ **سعر آخر فاتورة** — العرض بس. الحساب الحقيقي
-                // بيوزّع على السطور بسعر كل واحدة، فالمجموع ممكن
-                // يفرق لو الصنف اتباع بسعرين.
-                'price' => $r['price'],
-                'tax_rate' => $r['tax_rate'],
-                'last_invoice' => $r['invoice_number'],
-            ];
-
-            $rows[$pid]['qty'] += $r['qty'];
-        }
+                return [
+                    'product_id' => $p->id,
+                    'name' => $p->displayName(),
+                    'image' => $p->imageSrc(),
+                    'unit' => $p->unitLabel(),
+                    'box_units' => (int) $p->box_units,
+                    'case_units' => (int) $p->units_per_case,
+                    'qty' => (int) ($prev[$p->id] ?? 0),
+                    // ⚠️ سعر العميل النهارده — عرض بس. البنود اللي
+                    // ليها سطر فاتورة أصلي بتتسعّر منه في الخدمة.
+                    'price' => (float) $q['unit_price'],
+                    'tax_rate' => \App\Services\Tax::rate($client, $p),
+                ];
+            })
+            // ⚠️ **الصنف الغير متسعّر مابيظهرش** — نفس قاعدة كتالوج
+            // البيع: لو ظهر بـ0.00 الخدمة هترفضه بعد ما المندوب
+            // يكون وعد العميل.
+            ->filter(fn ($row) => $row['price'] > 0)
+            ->values()->all();
 
         return response()->json([
             'client_id' => $client->id,
@@ -1442,7 +1449,7 @@ class FieldApiController extends Controller
                 'label' => __('field.return_policy_'.$p),
                 'hint' => __('field.return_policy_'.$p.'_hint'),
             ], $client->returnPolicies()),
-            'items' => array_values($rows),
+            'items' => $rows,
         ]);
     }
 

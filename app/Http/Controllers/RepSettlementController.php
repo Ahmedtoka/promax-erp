@@ -61,6 +61,10 @@ class RepSettlementController extends Controller
 
         return view('erp.repclose_show', [
             'rep' => $user,
+            // ⚠️ حالة العهدة للسامري (١٢/٨) — عرض بس، مفيش حساب:
+            // «مفتوحة/مقفولة» بتتقرا من العهدة الحية نفسها، لأن
+            // النافذة ممكن تكون فيها عهد قديمة اتقفلت خلاص.
+            'custody' => $user->currentCustody(),
             'invoices' => $figures['invoices'],
             'refundRows' => $figures['refund_rows'],
             // ⚠️ «الفلوس دي لمين» — المحاسب بيسأل السؤال ده في كل

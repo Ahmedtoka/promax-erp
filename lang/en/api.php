@@ -24,6 +24,7 @@ return [
     'return_condition_unknown' => 'Item condition must be sound or damaged.',
     'return_no_items' => 'No items on the return.',
     'return_over_purchased' => 'Quantity exceeds what the client purchased of :product — available to return: :qty',
+    'return_qty_cap' => 'Quantity of :product exceeds the return cap (:max pieces per product).',
     'return_exceeds_purchases' => 'The return value exceeds what this client has purchased. Available to return: :amount',
     'return_consignment' => 'Consignment client — returns are settled from the branch sales report, not here.',
     'qty_too_large' => 'Quantity exceeds the allowed limit — check the unit and the number.',
