@@ -215,9 +215,11 @@
 .lv-avatar{display:inline-block;width:36px;height:36px;border-radius:50%;flex-shrink:0;border:2px solid;overflow:hidden;background:#fff}
 .lv-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .lv-avatar span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;border-radius:50%}
-.lv-p .nm{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+/* الاسم لوحده جنب الصورة — ياخد عرض الكارت كله، والشارة سطر منفصل (١٢/٨) */
+.lv-p .nm{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-p .r2{margin-top:5px}
 .lv-p .zn{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
-.lv-status{font-size:10.5px;border-radius:999px;padding:2px 8px;white-space:nowrap;margin-inline-start:auto;flex-shrink:0}
+.lv-status{font-size:10.5px;border-radius:999px;padding:2px 8px;white-space:nowrap;flex-shrink:0;display:inline-block}
 .s-visit{background:rgba(157,111,224,.2);color:#C6A9F2}
 .s-moving{background:rgba(46,222,139,.16);color:#4ADE80}
 .s-standing{background:rgba(255,176,32,.16);color:#FBBF24}
@@ -658,12 +660,12 @@ function personCard(r) {
     <div class="lv-p ${s === 'visit' ? 'visiting' : ''} ${r.id === selectedId ? 'sel' : ''}" data-id="${r.id}">
         <div class="r1">
             <div class="lv-avatar" style="border-color:${repColor(r.id)}">${avatar}</div>
-            <div style="min-width:0">
+            <div style="min-width:0;flex:1">
                 <div class="nm">${esc(r.name)}</div>
                 <div class="zn">${esc(r.zone || '—')}</div>
             </div>
-            <span class="lv-status s-${s}">${stateTxt(r)}</span>
         </div>
+        <div class="r2"><span class="lv-status s-${s}">${stateTxt(r)}</span></div>
         ${visitLine}
         <div class="ln">${attLine(r)}</div>
         <div class="nums">
