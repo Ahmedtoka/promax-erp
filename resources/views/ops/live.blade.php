@@ -305,7 +305,9 @@
 
 /* ═════ الحالة ═════
    ⚠️ فلاجات الـHEX إجبارية: أسماء المناديب والعملاء وعناوين الأحداث
-   بتتكتب بإيد المستخدم — `</script>` جوه اسم كان بيقفل البلوك كله */
+   بتتكتب بإيد المستخدم — تاج قفل سكريبت جوه اسم كان بيقفل البلوك كله.
+   (وممنوع كتابة التاج نفسه هنا حتى في تعليق — البراوزر بيقص عنده
+   أياً كان مكانه، وده بالظبط اللي كسر الصفحة ١٢/٨) */
 let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) !!};
 let selectedId = null, followId = null, paused = false, filter = '', search = '';
 let popupId = null;
