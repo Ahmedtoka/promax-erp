@@ -1912,6 +1912,13 @@ class OpsController extends Controller
     {
         $q = PurchaseOrder::with(['client.group', 'client.channel', 'courier', 'items.product', 'creator', 'warehouse'])
             ->where('approval_status', 'pending')
+            // ⚠️ **سكوب مدير القناة (١٣ أغسطس ٢٠٢٦).** الشاشة بقت
+            // مفتوحة للمدير عشان الريدايركتات بتوديه هنا — فلازم
+            // يشوف أوامر عملائه هو بس. الأدمن والمحاسب بيشوفوا الكل
+            // (`Client::visibleTo` مابتضيّقش غير على `manager`، بس
+            // الشرط الصريح بيخلّي النية مقروءة ومايلمسش الكويري لهم).
+            ->when(auth()->user()?->role === 'manager',
+                fn ($q2) => $q2->whereHas('client', fn ($c) => Client::visibleTo($c)))
             ->when($request->string('q')->trim()->value(), function ($q2, $s) {
                 $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
                     ->orWhere('source', 'like', "%$s%")
@@ -1934,8 +1941,9 @@ class OpsController extends Controller
         return view('ops.po_approvals', [
             'pending' => $q->get(),
             // سلاسل الأوامر المستنية بس — سيلكت الفلتر
-            'groups' => \App\Models\ClientGroup::whereHas('clients.purchaseOrders',
-                fn ($p) => $p->where('approval_status', 'pending'))
+            'groups' => \App\Models\ClientGroup::whereHas('clients',
+                fn ($c) => Client::visibleTo($c)->whereHas('purchaseOrders',
+                    fn ($p) => $p->where('approval_status', 'pending')))
                 ->orderBy('name')->get(['id', 'name', 'name_en']),
             // المتاح على أرفف كل مخزن — الحسابات تشوف العجز **قبل**
             // ما تدوس موافقة بدل ما الرفض يفاجئها (2026-08-05)

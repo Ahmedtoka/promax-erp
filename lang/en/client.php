@@ -573,6 +573,7 @@ return [
     'return_policies' => 'Allowed return methods',
     'return_policies_hint' => 'Leave empty to follow payment terms (cash → cash refund & exchange · credit → account deduction, exchange & credit)',
     'pay_method_label' => 'Collection method',
+    'pick_pay_method' => 'Pick the collection method',
     'pay_method_cash' => 'Cash',
     'pay_method_card' => 'Card / POS',
     'pay_method_cheque' => 'Cheque',

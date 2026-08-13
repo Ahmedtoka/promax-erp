@@ -655,6 +655,11 @@ class JourneyController extends Controller
         $byManager = $poolRows->groupBy('manager_id');
         $repsByManager = $teamReps->groupBy('manager_id');
 
+        // ═══ فصل الرولز جوه الفريق (طلب المالك ١٣ أغسطس ٢٠٢٦) ═══
+        // «افصلي المناديب عن السواقين» — الشيبس كانت خليط واحد، فمدير
+        // عنده ٦ ناس مابتقولش كام مندوب بيع وكام سواق. الصفوف بقت
+        // مسمّاة بالرول، وكل شيب لسه بعدد عملاء صاحبه — فالمجموع
+        // بيفضل مطابق للرقم الكبير بالمليم زي ما كان.
         $teams = $managers->map(function (User $m) use ($byManager, $repsByManager, $strays, $cover) {
             $rows = $byManager->get($m->id, collect());
 
@@ -663,26 +668,61 @@ class JourneyController extends Controller
             $counts = $rows->mapWithKeys(fn ($r) => [(int) ($r->rep_id ?? 0) => (int) $r->n]);
 
             $team = $repsByManager->get($m->id, collect());
-            $chips = $team->map(fn (User $r) => [
-                'user' => $r,
-                'clients' => (int) ($counts[$r->id] ?? 0),
-            ])->values();
+
+            $groups = [];
+
+            // ⚠️ الترتيب من `User::FIELD_ROLES` نفسها مش قايمة محلية —
+            // رول ميداني جديد بيظهر هنا لوحده من غير ما حد يفتكر.
+            foreach (User::FIELD_ROLES as $role) {
+                $members = $team->where('role', $role)
+                    ->map(fn (User $r) => [
+                        'user' => $r,
+                        'clients' => (int) ($counts[$r->id] ?? 0),
+                    ])
+                    ->values();
+
+                if ($members->isEmpty()) {
+                    continue;
+                }
+
+                $groups[] = [
+                    'role' => $role,
+                    'label' => __('journey.geo_role_'.$role),
+                    'reps' => $members->all(),
+                    'clients' => (int) $members->sum('clients'),
+                ];
+            }
 
             // مناديب من بره الفريق ليهم عملاء في البول — بيبانوا عشان
             // المجموع يقفل، واللي بيقرا يعرف إن فيه تسكين غريب
+            $others = collect();
+
             foreach ($counts as $rid => $n) {
                 if ($rid === 0 || $rid === (int) $m->id || $team->contains('id', $rid)) {
                     continue;
                 }
 
                 if ($strays->has($rid)) {
-                    $chips->push(['user' => $strays->get($rid), 'clients' => $n]);
+                    $others->push(['user' => $strays->get($rid), 'clients' => $n]);
                 }
+            }
+
+            if ($others->isNotEmpty()) {
+                $groups[] = [
+                    'role' => 'other',
+                    'label' => __('journey.geo_role_other'),
+                    'reps' => $others->values()->all(),
+                    'clients' => (int) $others->sum('clients'),
+                ];
             }
 
             return [
                 'manager' => $m,
-                'reps' => $chips,
+                'groups' => $groups,
+                // عدد مناديب البيع — زرار «توزيع تلقائي» مالوش لازمة
+                // من غيرهم (السواق والبروموتر مستبعدين افتراضياً)
+                'sales_count' => (int) $team->where('role', 'sales_agent')->count(),
+                'driver_count' => (int) $team->where('role', 'driver')->count(),
                 'own' => (int) ($counts[$m->id] ?? 0),
                 'no_rep' => (int) ($counts[0] ?? 0),
                 'clients' => (int) $rows->sum('n'),
@@ -701,14 +741,26 @@ class JourneyController extends Controller
 
         $search = trim((string) $request->input('q', ''));
 
+        // ═══ فلتر «بدون مندوب» (إصلاح ١٣ أغسطس ٢٠٢٦) ═══
+        // ⚠️ **ده كان باج**: شيب «بدون مندوب» في كارت المدير كان جوه
+        // اللينك بتاع الكارت كله، فالدوسة عليه كانت بتفلتر على المدير
+        // وبس — والشاشة اللي بتفتح مليانة **مناديب** في عمود «بيغطيها».
+        // بقى فلتر حقيقي في السيرفر: الشجرة والأرقام واللوحة كلها
+        // بتتقص على `rep_id IS NULL`.
+        $noRepOnly = $request->boolean('norep');
+
         // مُنتج الكويري الأساسية — كل نداء بيرجّع بيلدر نضيف عشان
         // `selectRaw` بتاع كويري ماتسربش على اللي بعدها
-        $base = function () use ($viewer, $picked, $search) {
+        $base = function () use ($viewer, $picked, $search, $noRepOnly) {
             $q = Branch::scope(Client::visibleTo(Client::query(), $viewer))
                 ->where('status', 'active');
 
             if ($picked !== null) {
                 $q->where('manager_id', $picked->id);
+            }
+
+            if ($noRepOnly) {
+                $q->whereNull('rep_id');
             }
 
             if ($search !== '') {
@@ -836,7 +888,7 @@ class JourneyController extends Controller
             'noRepTotal' => (int) ($agg->no_rep ?? 0),
             'noLocTotal' => (int) ($agg->no_loc ?? 0),
             'nextDue' => $nextDue,
-            'filters' => ['q' => $search, 'manager' => $picked?->id],
+            'filters' => ['q' => $search, 'manager' => $picked?->id, 'norep' => $noRepOnly],
         ]);
     }
 
@@ -866,6 +918,11 @@ class JourneyController extends Controller
         $viewer = $request->user();
         $search = trim((string) $request->input('q', ''));
 
+        // ⚠️ نفس فلتر «بدون مندوب» بتاع الشجرة لازم يوصل هنا — صف
+        // بيقول «٤ محلات بلا مندوب» يفتح لوحة فيها ٤٠ محل، والمالك
+        // يفتكر الفلتر مابيشتغلش.
+        $noRepOnly = $request->boolean('norep');
+
         $clients = Branch::scope(
             Client::visibleTo(Client::with(['group', 'rep']), $viewer)
         )
@@ -873,9 +930,32 @@ class JourneyController extends Controller
             ->where('zone_id', $zone->id)
             ->when($request->filled('manager'),
                 fn ($q) => $q->where('manager_id', (int) $request->input('manager')))
+            ->when($noRepOnly, fn ($q) => $q->whereNull('rep_id'))
             ->when($search !== '', fn ($q) => Client::search($q, $search))
             ->orderBy('name')
             ->get();
+
+        // ═══ سياق المحافظة (طلب المالك ١٣/٨) ═══
+        // «في الشاشة الثانية عاوز المحافظة والمناطق» — اللوحة كانت
+        // بتقول اسم المنطقة وبس. دلوقتي فيها **المحافظة › المنطقة**
+        // وكام محل في كل مستوى، عشان اللي بيخطط يعرف نسبة المنطقة
+        // من محافظتها قبل ما يوزّع أيام الأسبوع.
+        //
+        // ⚠️ العدّ بعمود `clients.governorate` مش بمحافظة الزون —
+        // نفس مصدر الشجرة بالظبط (`geo()`)، وإلا الرقمين بيختلفوا.
+        $govKey = (string) ($zone->governorate ?? '');
+
+        $govBase = fn () => Branch::scope(Client::visibleTo(Client::query(), $viewer))
+            ->where('status', 'active')
+            ->when($request->filled('manager'),
+                fn ($q) => $q->where('manager_id', (int) $request->input('manager')))
+            ->when($noRepOnly, fn ($q) => $q->whereNull('rep_id'))
+            ->when($search !== '', fn ($q) => Client::search($q, $search))
+            ->when($govKey !== '', fn ($q) => $q->where('governorate', $govKey),
+                fn ($q) => $q->whereNull('governorate'));
+
+        $govClients = (int) $govBase()->count();
+        $govZones = (int) $govBase()->distinct()->count('zone_id');
 
         // ⚠️ `active` بس — نفس تعريف «مخطط» اللي الشجرة والـKPIs
         // شغالين بيه (`geo()` بتعدّ اللي مالوش خطة `active`). خطة
@@ -933,6 +1013,11 @@ class JourneyController extends Controller
                     'user' => $p->user?->displayName() ?? '—',
                     'weekday' => (int) $p->weekday,
                     'every_weeks' => (int) $p->every_weeks,
+                    // مرساة التاريخ والوقت — بتملى خانتي الصف عند الفتح
+                    // (`Y-m-d` للتاريخ و`H:i` لخانة الوقت، والعرض `h:i A`)
+                    'starts_on' => $p->starts_on?->format('Y-m-d'),
+                    'visit_at' => $p->visitTimeValue(),
+                    'visit_label' => $p->visitTimeLabel(),
                     'label' => __('journey.geo_planned_as', [
                         'rep' => $p->user?->displayName() ?? '—',
                         'day' => $p->weekdayLabel(),
@@ -953,6 +1038,12 @@ class JourneyController extends Controller
                 'name' => $zone->displayName(),
                 'code' => (string) $zone->code,
                 'governorate' => $zone->governorateLabel(),
+                'gov_clients' => $govClients,
+                'gov_zones' => $govZones,
+                'zone_clients' => $clients->count(),
+                // كام محل في المنطقة لسه بلا مسؤول أساسي — منها بيبان
+                // زرار «وزّع المنطقة دي» جوه اللوحة
+                'zone_no_rep' => (int) $clients->whereNull('rep_id')->count(),
             ],
             'clients' => $rows,
         ]);
@@ -986,10 +1077,34 @@ class JourneyController extends Controller
             'rows.*.user_id' => ['required', 'integer', 'exists:users,id'],
             'rows.*.weekday' => ['required', 'integer', 'between:0,6'],
             'rows.*.every_weeks' => ['required', 'integer', 'in:1,2,4'],
+            // ═══ تاريخ أول زيارة ووقتها (١٣ أغسطس ٢٠٢٦) ═══
+            // الاتنين اختياريين — الحفظ من غيرهم بيفضل شغّال زي ما كان.
+            'rows.*.starts_on' => ['nullable', 'date_format:Y-m-d'],
+            'rows.*.visit_at' => ['nullable', 'date_format:H:i'],
         ]);
 
         $viewer = $request->user();
-        $rows = collect($data['rows']);
+
+        // ⚠️ **اليوم بيتشتق من التاريخ في السيرفر** لما التاريخ يتبعت.
+        // الشاشة بتعمل نفس الاشتقاق عشان المستخدم يشوفه، بس الاعتماد
+        // عليها معناه إن بوست معدّل يحفظ خطة يوم اتنين بتاريخ بداية
+        // يوم خميس — نمط مايستحقش في تاريخه المعروض أبداً.
+        $rows = collect($data['rows'])->map(function (array $row) {
+            $start = $row['starts_on'] ?? null;
+
+            if ($start !== null && $start !== '') {
+                $row['weekday'] = (int) Carbon::createFromFormat('Y-m-d', $start)
+                    ->startOfDay()->dayOfWeek;
+            } else {
+                $row['starts_on'] = null;
+            }
+
+            if (($row['visit_at'] ?? '') === '') {
+                $row['visit_at'] = null;
+            }
+
+            return $row;
+        });
 
         $reps = User::with('zones')->whereIn('id', $rows->pluck('user_id')->unique()->all())
             ->get()->keyBy('id');
@@ -1024,12 +1139,28 @@ class JourneyController extends Controller
         $added = 0;
         $moved = 0;
 
-        DB::transaction(function () use ($rows, $existing, &$seed, &$added, &$moved) {
+        // فحص واحد للريكوست كله — مش لكل صف
+        $hasSchedule = \Illuminate\Support\Facades\Schema::hasColumn('journey_plans', 'starts_on');
+
+        DB::transaction(function () use ($rows, $existing, $hasSchedule, &$seed, &$added, &$moved) {
             foreach ($rows as $row) {
                 $clientId = (int) $row['client_id'];
                 $userId = (int) $row['user_id'];
                 $weekday = (int) $row['weekday'];
                 $freq = (int) $row['every_weeks'];
+
+                // ⚠️ المرساة بتتكتب في **كل** المسارات التلاتة بنفس
+                // الشكل — لو مسار واحد نساها، تعديل خطة موجودة كان
+                // هيسيب تاريخ بداية قديم جنب يوم جديد.
+                //
+                // ⚠️ **والحارس مش رفاهية**: السيرفر اللايف بيترفع
+                // بالإيد، فممكن الكود يوصل قبل المايجريشن. من غير
+                // الفحص ده، حفظ خط السير — اللي كان شغّال — كان
+                // هيرمي «عمود مش موجود» على كل دفعة.
+                $schedule = $hasSchedule ? [
+                    'starts_on' => $row['starts_on'] ?? null,
+                    'visit_at' => $row['visit_at'] ?? null,
+                ] : [];
 
                 $mine = $existing->get($clientId, collect());
 
@@ -1038,7 +1169,7 @@ class JourneyController extends Controller
                     && (int) $p->weekday === $weekday);
 
                 if ($same !== null) {
-                    $same->update(['every_weeks' => $freq, 'active' => true]);
+                    $same->update($schedule + ['every_weeks' => $freq, 'active' => true]);
 
                     continue;
                 }
@@ -1048,7 +1179,7 @@ class JourneyController extends Controller
 
                 // ٢. خطة واحدة بس للعميل — بتتحرّك مكانها
                 if ($mine->count() === 1) {
-                    $mine->first()->update([
+                    $mine->first()->update($schedule + [
                         'user_id' => $userId,
                         'weekday' => $weekday,
                         'every_weeks' => $freq,
@@ -1063,13 +1194,13 @@ class JourneyController extends Controller
                 // ٣. مفيش خطة، أو أكتر من واحدة (متعدد الأيام بقرار)
                 $plan = JourneyPlan::firstOrCreate(
                     ['user_id' => $userId, 'client_id' => $clientId, 'weekday' => $weekday],
-                    ['every_weeks' => $freq, 'sort' => $seed[$key], 'active' => true],
+                    $schedule + ['every_weeks' => $freq, 'sort' => $seed[$key], 'active' => true],
                 );
 
                 if ($plan->wasRecentlyCreated) {
                     $added++;
                 } else {
-                    $plan->update(['every_weeks' => $freq, 'active' => true]);
+                    $plan->update($schedule + ['every_weeks' => $freq, 'active' => true]);
                 }
             }
         });
@@ -1103,6 +1234,268 @@ class JourneyController extends Controller
         return response()->json([
             'ok' => true,
             'message' => __('journey.geo_removed', ['count' => $removed]),
+        ]);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * «المفروض اتفقنا انك توزع كل العملاء على المناديب حسب المدير»
+     *                    — طلب المالك ١٣ أغسطس ٢٠٢٦
+     * ═══════════════════════════════════════════════════════════
+     *
+     * معاينة التوزيع التلقائي: بتاخد عملاء المدير اللي **مالهمش
+     * مسؤول أساسي** (`rep_id IS NULL`) وبتقترح لكل واحد مندوب.
+     *
+     * ⚠️ **معاينة بس — مفيش كتابة هنا خالص.** التأكيد بيروح
+     * `geoAssign` وهو اللي بيكتب في ترانزاكشن واحدة. لو الاتنين
+     * اتدمجوا، ضغطة الزرار كانت هتسكّن ٢٠٠ عميل من غير ما حد
+     * يبص على الاقتراح.
+     *
+     * ═══ الخوارزم: قرابة المنطقة الأول، وبعدين التوازن ═══
+     * 1. **مناديب البيع بس** افتراضياً. السواق بيوصّل أوامر لعملاء
+     *    مش بتوعه أصلاً (`Scope::sameTeam` مابيفحصش `rep_id` عن قصد)،
+     *    والبروموتر شغله رفوف الكي أكاونت — تسكين عميل عليهم
+     *    بيبوّظ التارجت والتصفية. `drivers=1` بتضم السواقين بقرار
+     *    صريح من الشاشة، والبروموتر **مستبعد دايماً**.
+     * 2. العميل بيروح للمندوب اللي **ماسك أكتر عملاء في نفس منطقته**
+     *    — المندوب اللي بيدخل الشارع ده أصلاً مايتحطش له محل في
+     *    منطقة تانية عشان الأرقام تتساوى.
+     * 3. منطقة **مالهاش صاحب** لسه: بتروح للمندوب **الأقل حملاً**،
+     *    وبعدها باقي محلات نفس المنطقة بتلحقه (العدّاد بيتزوّد في
+     *    الذاكرة) — يعني نقطة دخول متوازنة وخط سير مترابط، مش
+     *    راوند-روبن بيرمي كل محل لواحد.
+     * 4. اللي مالوش مندوب مسموح (`Scope::inZone`/`sameTeam` بترفض)
+     *    بيرجع في الصف بلا اقتراح وبادج توضّح السبب.
+     *
+     * `suggest=0` بتلغي الاقتراح كله وترجّع القايمة خام — دي اللي
+     * شيب «بدون مندوب» بيستخدمها للتسكين اليدوي.
+     */
+    public function geoDistribute(Request $request)
+    {
+        $data = $request->validate([
+            'manager' => ['required', 'integer'],
+            'zone' => ['nullable', 'integer'],
+            'drivers' => ['nullable', 'boolean'],
+            'suggest' => ['nullable', 'boolean'],
+        ]);
+
+        $viewer = $request->user();
+
+        // ⚠️ الحارس على المدير نفسه بنفس سكوب كروت الشاشة بالحرف —
+        // `findOrFail` على بيلدر متسكوب بترمي 404 للي بره سكوبه،
+        // فمفيش «شوف فريق زميلك» بتعديل الباراميتر.
+        $manager = Branch::scope(User::where('role', 'manager')->where('active', true))
+            ->when($viewer !== null && $viewer->role === 'manager',
+                fn ($q) => $q->whereKey($viewer->id))
+            ->findOrFail((int) $data['manager']);
+
+        $withDrivers = (bool) ($data['drivers'] ?? false);
+        $suggest = ! array_key_exists('suggest', $data) || $data['suggest'] === null
+            || (bool) $data['suggest'];
+
+        $roles = $withDrivers ? ['sales_agent', 'driver'] : ['sales_agent'];
+
+        // ⚠️ `with('zones')` إجباري — `Scope::inZone` بتقراها لكل عميل
+        $reps = User::fieldVisibleTo(Branch::scope(User::with('zones')), $viewer)
+            ->where('manager_id', $manager->id)
+            ->whereIn('role', $roles)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $r) => Scope::canRep($viewer, $r))
+            ->values();
+
+        $zoneId = ($data['zone'] ?? null) !== null ? (int) $data['zone'] : null;
+
+        $clients = Branch::scope(Client::visibleTo(Client::with(['group', 'zone']), $viewer))
+            ->where('status', 'active')
+            ->where('manager_id', $manager->id)
+            ->whereNull('rep_id')
+            ->when($zoneId !== null, fn ($q) => $q->where('zone_id', $zoneId))
+            ->orderBy('zone_id')
+            ->orderBy('name')
+            ->get();
+
+        // الحمل الحالي لكل مندوب جوه بول المدير — كويري واحدة مجمّعة
+        // ⚠️ المفاتيح **بـ`(int)` صريحة** زي باقي الشاشة: بعض إعدادات
+        // PDO بترجّع أعمدة الأرقام نصوص، ومفتاح نص جنب `$rep->id` رقم
+        // بيخلّي كل الأحمال تبان صفر والتوزيع يروح لأول مندوب كله.
+        $load = [];
+
+        $loadRows = Branch::scope(Client::visibleTo(Client::query(), $viewer))
+            ->where('status', 'active')
+            ->where('manager_id', $manager->id)
+            ->whereNotNull('rep_id')
+            ->selectRaw('rep_id, COUNT(*) as n')
+            ->groupBy('rep_id')
+            ->get();
+
+        foreach ($loadRows as $row) {
+            $load[(int) $row->rep_id] = (int) $row->n;
+        }
+
+        // مين ماسك كام في كل منطقة — نفس الكويري بس بالمنطقة
+        $zoneRows = Branch::scope(Client::visibleTo(Client::query(), $viewer))
+            ->where('status', 'active')
+            ->where('manager_id', $manager->id)
+            ->whereNotNull('rep_id')
+            ->whereNotNull('zone_id')
+            ->selectRaw('zone_id, rep_id, COUNT(*) as n')
+            ->groupBy('zone_id', 'rep_id')
+            ->get();
+
+        $loadMap = [];
+
+        foreach ($reps as $r) {
+            $loadMap[(int) $r->id] = (int) ($load[(int) $r->id] ?? 0);
+        }
+
+        $zoneCount = [];
+
+        foreach ($zoneRows as $row) {
+            $rid = (int) $row->rep_id;
+
+            // مناديب بره القايمة (سواق مستبعد مثلاً) مالهمش يشدّوا
+            // منطقة ناحيتهم — القرابة بتتحسب على المرشحين بس
+            if (! array_key_exists($rid, $loadMap)) {
+                continue;
+            }
+
+            $zoneCount[(int) $row->zone_id][$rid] = (int) $row->n;
+        }
+
+        $added = [];
+        $rows = [];
+
+        foreach ($clients as $c) {
+            $allowed = $reps
+                ->filter(fn (User $r) => Scope::sameTeam($r, $c) && Scope::inZone($r, $c))
+                ->values();
+
+            $pick = null;
+
+            if ($suggest && $allowed->isNotEmpty()) {
+                $zk = $c->zone_id !== null ? (int) $c->zone_id : 0;
+
+                // (٢) صاحب المنطقة
+                $best = null;
+                $bestN = 0;
+
+                foreach ($allowed as $r) {
+                    $n = (int) ($zoneCount[$zk][(int) $r->id] ?? 0);
+
+                    if ($n > $bestN) {
+                        $bestN = $n;
+                        $best = $r;
+                    }
+                }
+
+                // (٣) مفيش صاحب — الأقل حملاً، والباقي بيلحقه
+                if ($best === null) {
+                    foreach ($allowed as $r) {
+                        if ($best === null || $loadMap[(int) $r->id] < $loadMap[(int) $best->id]) {
+                            $best = $r;
+                        }
+                    }
+                }
+
+                $pick = $best;
+                $pid = (int) $pick->id;
+
+                $loadMap[$pid] = ($loadMap[$pid] ?? 0) + 1;
+                $zoneCount[$zk][$pid] = ($zoneCount[$zk][$pid] ?? 0) + 1;
+                $added[$pid] = ($added[$pid] ?? 0) + 1;
+            }
+
+            $rows[] = [
+                'id' => (int) $c->id,
+                'name' => $c->fullName(),
+                'code' => (string) $c->code,
+                'zone_id' => $c->zone_id !== null ? (int) $c->zone_id : null,
+                'zone' => $c->zone?->displayName() ?? __('journey.geo_no_zone'),
+                'governorate' => $c->governorateLabel(),
+                'category' => $c->categoryLabel(),
+                'category_class' => $c->categoryClass(),
+                'suggested' => $pick !== null ? (int) $pick->id : null,
+                'reps' => $allowed->map(fn (User $r) => [
+                    'id' => (int) $r->id,
+                    'name' => $r->displayName(),
+                ])->all(),
+            ];
+        }
+
+        return response()->json([
+            'manager' => [
+                'id' => (int) $manager->id,
+                'name' => $manager->displayName(),
+            ],
+            'with_drivers' => $withDrivers,
+            'reps' => $reps->map(fn (User $r) => [
+                'id' => (int) $r->id,
+                'name' => $r->displayName(),
+                'role' => __('journey.geo_role_'.$r->role),
+                'current' => (int) ($load[(int) $r->id] ?? 0),
+                'added' => (int) ($added[(int) $r->id] ?? 0),
+            ])->values()->all(),
+            'clients' => $rows,
+        ]);
+    }
+
+    /**
+     * تأكيد التوزيع — كتابة `rep_id` وبس، في ترانزاكشن واحدة.
+     *
+     * ⚠️ **`manager_id` مابيتلمسش هنا** (عكس `assign()`): الشاشة دي
+     * بتوزّع عملاء **المدير على مناديبه هو**، فالمدير متسجّل خلاص.
+     * كتابته تاني كانت هتخفي أي داتا غلط بدل ما تبان في الكارت.
+     *
+     * ⚠️ نفس أربع حراس `geoPlan` بالحرف، وكلها **قبل** الترانزاكشن —
+     * صف واحد مرفوض بيوقّف الدفعة كلها، مايبقاش نص توزيع محفوظ.
+     */
+    public function geoAssign(Request $request)
+    {
+        $data = $request->validate([
+            'rows' => ['required', 'array', 'min:1'],
+            'rows.*.client_id' => ['required', 'integer', 'exists:clients,id'],
+            'rows.*.user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        $viewer = $request->user();
+        $rows = collect($data['rows']);
+
+        $reps = User::with('zones')->whereIn('id', $rows->pluck('user_id')->unique()->all())
+            ->get()->keyBy('id');
+        $clients = Client::whereIn('id', $rows->pluck('client_id')->unique()->all())
+            ->get()->keyBy('id');
+
+        foreach ($rows as $row) {
+            $rep = $reps->get((int) $row['user_id']);
+            $client = $clients->get((int) $row['client_id']);
+
+            Scope::assertRep($viewer, $rep);
+            Scope::assertClient($viewer, $client);
+            Scope::assertSameTeam($rep, $client);
+            Scope::assertInZone($rep, $client);
+        }
+
+        // تجميع بالمندوب — أبديت واحد لكل مندوب مش لكل عميل
+        $byRep = $rows->groupBy(fn ($r) => (int) $r['user_id']);
+        $count = 0;
+
+        DB::transaction(function () use ($byRep, &$count) {
+            foreach ($byRep as $userId => $group) {
+                $ids = $group->pluck('client_id')->map(fn ($v) => (int) $v)->unique()->all();
+
+                $count += (int) Client::whereIn('id', $ids)
+                    ->update(['rep_id' => (int) $userId]);
+            }
+        });
+
+        return response()->json([
+            'ok' => true,
+            'message' => __('journey.geo_dist_saved', [
+                'count' => $count,
+                'reps' => $byRep->count(),
+            ]),
         ]);
     }
 

@@ -35,6 +35,11 @@ class InvoiceTaxLedgerTest extends TestCase
         $zone = $this->makeZone();
 
         $rep = $this->makeRep(['zone_id' => $zone->id, 'channel_id' => $channel->id]);
+
+        // ⚠️ **الحضور قبل أي بيع** (حارس `RequireAttendance`، ٨/٨/٢٠٢٦).
+        // من غيره `sell()` بترجّع 423 «مش مسجّل حضور» بدل 201.
+        $this->punchIn($rep);
+
         $client = $this->makeClient([
             'zone_id' => $zone->id,
             'channel_id' => $channel->id,
@@ -82,15 +87,12 @@ class InvoiceTaxLedgerTest extends TestCase
         // يتنفذ بالطريقة اللي التيست قاصدها، والحقل في البوست بيتطنش.
         $client->update(['payment_terms' => $payment]);
 
-        // ⚠️ التوكن مش actingAs — الـ API بيصادق بالـ Bearer
-        return $this->withHeaders($this->tokenFor($rep))
-            ->postJson('/api/invoices', [
-                'client_id' => $client->id,
-                'payment' => $payment,
-                'items' => [
-                    ['product_id' => $product->id, 'qty' => $qty],
-                ],
-            ]);
+        // ⚠️ التوكن مش actingAs — الـ API بيصادق بالـ Bearer.
+        // و`sellApi` بتفتح الزيارة كمان: `visit_id` بقت `required`
+        // على الإندبوينت (تدقيق ٨/٨/٢٠٢٦).
+        return $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => $qty]],
+            ['payment' => $payment]);
     }
 
     public function test_invoice_without_tax_keeps_total_equal_to_grand_total(): void

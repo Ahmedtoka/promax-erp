@@ -167,6 +167,41 @@ class PriceList extends Model
 
     protected static bool $defaultResolved = false;
 
+    /**
+     * قايمة مفعّلة بكودها — للعملاء اللي لسه على العمود النصي
+     * `price_list` من غير `price_list_id`.
+     *
+     * ⚠️ ميمو زي `default()` بالظبط: بتتنده لكل عميل في شاشات فيها
+     * مئات الصفوف، وكويري لكل صف كان هيبقى N+1 على شاشة العملاء.
+     */
+    public static function byCode(?string $code): ?self
+    {
+        if ($code === null || $code === '') {
+            return null;
+        }
+
+        if (! array_key_exists($code, static::$codeCache)) {
+            static::$codeCache[$code] = static::where('code', $code)
+                ->where('active', true)->first();
+        }
+
+        return static::$codeCache[$code];
+    }
+
+    /** @var array<string, ?self> */
+    protected static array $codeCache = [];
+
+    /**
+     * تصفير الميمو — التيستات بتلف على داتابيز بتترجّع بين كل تيست
+     * والتاني، والموديل المكاش بيفضل شايل صف اتشال.
+     */
+    public static function flushCache(): void
+    {
+        static::$defaultResolved = false;
+        static::$defaultCache = null;
+        static::$codeCache = [];
+    }
+
     public function setDefault(): ?string
     {
         if (! $this->active) {
@@ -178,7 +213,7 @@ class PriceList extends Model
             $this->update(['is_default' => true]);
         });
 
-        static::$defaultResolved = false;   // الكاش بقى قديم
+        static::flushCache();   // الكاش بقى قديم
 
         return null;
     }

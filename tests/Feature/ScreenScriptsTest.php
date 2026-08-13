@@ -28,12 +28,18 @@ class ScreenScriptsTest extends TestCase
         'openDlg', 'closeDlg', 'confirm', 'alert', 'print',
     ];
 
+    /**
+     * ⚠️ **ممنوع `resource_path()` هنا** (إصلاح ١٢/٨): الـdata provider
+     * بيشتغل **قبل** ما الأبلكيشن يقوم — الهيلبر بينده على كونتينر
+     * فاضي ويرمي «Call to undefined method Container::resourcePath()».
+     */
     public static function screens(): array
     {
         $out = [];
+        $dir = dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'resources'.DIRECTORY_SEPARATOR.'views';
 
-        foreach (glob(resource_path('views/**/*.blade.php')) as $path) {
-            $out[str_replace(resource_path('views/'), '', $path)] = [$path];
+        foreach (glob($dir.DIRECTORY_SEPARATOR.'**'.DIRECTORY_SEPARATOR.'*.blade.php') as $path) {
+            $out[str_replace($dir.DIRECTORY_SEPARATOR, '', $path)] = [$path];
         }
 
         return $out;
@@ -53,7 +59,28 @@ class ScreenScriptsTest extends TestCase
         preg_match_all('/(?:^|\s)(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/m', $js, $defs);
         preg_match_all('/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\()/', $js, $assigned);
 
-        $defined = array_merge($defs[1], $assigned[1], self::GLOBALS);
+        // ⚠️ **`window.X = ...` تعريف كامل** (إصلاح الكاشف ١٣/٨/٢٠٢٦).
+        // الشاشات اللي بتتحمّل جوه بلوك `IIFE` أو `DOMContentLoaded`
+        // بتعرّض الهاندلرز بتاعتها على `window` عن قصد — دي الطريقة
+        // الوحيدة اللي خاصية `onclick=` في الـHTML بتشوف بيها الدالة.
+        // الكاشف القديم ماكانش بيعرف الشكل ده، فكان بيقول إن
+        // `qcTogglePin` و`rbSubmit` و`covToggleEmpty` وتسع دوال في
+        // `geo_planner` «مش معرّفة» وهي معرّفة سطر واحد فوق النداء.
+        // التلات أشكال المستعملة فعلاً:
+        //   window.X = function (…) {…}   ·   window.X = (…) => {…}
+        //   window.X = localFn;           ← تعريض دالة محلية باسم عام
+        preg_match_all(
+            '/\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\(|[A-Za-z_$][\w$]*)/',
+            $js, $exposed);
+
+        // وإسناد عام من غير `const/let/var` — `X = function (…) {…}`
+        preg_match_all(
+            '/(?:^|[;{}\s])([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^()]*\)\s*=>)/m',
+            $js, $bare);
+
+        $defined = array_merge(
+            $defs[1], $assigned[1], $exposed[1], $bare[1], self::GLOBALS,
+        );
 
         // الدوال اللي الشاشة بتناديها من خصائص الـHTML
         $called = [];

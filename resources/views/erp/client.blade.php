@@ -554,8 +554,16 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('client.pay_method_label') }} <b class="req-star">*</b></label>
+                {{-- ⚠️ **اختيار فاضي أول القايمة.** الخانة دي اتعملت
+                     أصلاً (٨/٨/٢٠٢٦) عشان «التحصيل كان رقم بلا طريقة»،
+                     و«نقدي» مختارة سلفاً كانت بترجّع نفس المشكلة: اللي
+                     بيحصّل شيك بيعدّي على الخانة من غير ما يقراها
+                     والقيد بيتكتب كاش. `required` في الشاشة و
+                     `required` في `OpsController::collect` — فالفاضي
+                     بيتلقف في الحالتين. --}}
                 <select name="method" id="collMethod" required style="width:100%"
                         onchange="collMethodChanged()">
+                    <option value="">— {{ __('client.pick_pay_method') }} —</option>
                     @foreach (\App\Models\Transaction::METHODS as $m)
                         <option value="{{ $m }}">{{ __('client.pay_method_'.$m) }}</option>
                     @endforeach
@@ -738,7 +746,10 @@ function collMethodChanged() {
   var refBox = document.getElementById('collRefBox');
   var chequeBoxes = document.querySelectorAll('.collChequeBox');
 
-  if (refBox) refBox.style.display = (v === 'cash') ? 'none' : '';
+  // ⚠️ الفاضي بيتعامل زي الكاش هنا — قبل ما يختار طريقة، طلب رقم
+  // مرجعي منه بيلخبطه، والخانة أصلاً `required_unless:method,cash`
+  // فمالهاش معنى من غير طريقة.
+  if (refBox) refBox.style.display = (v === '' || v === 'cash') ? 'none' : '';
 
   for (var i = 0; i < chequeBoxes.length; i++) {
     chequeBoxes[i].style.display = (v === 'cheque') ? '' : 'none';

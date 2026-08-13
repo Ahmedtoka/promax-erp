@@ -28,6 +28,12 @@ class CoreFlowsTest extends TestCase
     {
         $channel = $this->makeChannel(0.0);
         $rep = $this->makeRep(['channel_id' => $channel->id]);
+
+        // ⚠️ **الحضور قبل أي بيع** (حارس `RequireAttendance`، ٨/٨/٢٠٢٦).
+        // من غيره كل بوست على `/api/invoices` بيرجّع 423 «مش مسجّل
+        // حضور» — وده سلوك إنتاج صح، فالمشهد لازم يبصم زي الواقع.
+        $this->punchIn($rep);
+
         $product = $this->makeProduct(['cost' => 10, 'price_old' => 18, 'price_new' => 20]);
         $warehouse = $this->makeWarehouse();
 
@@ -67,11 +73,8 @@ class CoreFlowsTest extends TestCase
         [$rep, $product, $channel] = $this->stockedRep(10);
         $client = $this->makeClient(['channel_id' => $channel->id]);
 
-        $res = $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 999]],
-        ]);
+        $res = $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 999]], ['payment' => 'cash']);
 
         // ⚠️ 422 مش 500 — الرفض المتوقّع بيرجع رسالة مفهومة
         $res->assertStatus(422);
@@ -94,11 +97,9 @@ class CoreFlowsTest extends TestCase
             'payment_terms' => 'credit',   // بتتداس بالتصنيف
         ]);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'credit',
-            'items' => [['product_id' => $product->id, 'qty' => 1]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 1]], ['payment' => 'credit'])
+            ->assertStatus(201);
 
         $invoice = Invoice::first();
         $this->assertSame('cash', $invoice->payment, 'المفروض تتقسر كاش');
@@ -111,11 +112,9 @@ class CoreFlowsTest extends TestCase
         [$rep, $product, $channel, $custody] = $this->stockedRep(50);
         $client = $this->makeClient(['channel_id' => $channel->id]);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 12]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 12]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $item = $custody->items()->first()->fresh();
         $this->assertSame(12, (int) $item->sold);
@@ -134,11 +133,9 @@ class CoreFlowsTest extends TestCase
             'discount' => 0.10,
         ]);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 10]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 10]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $invoice = Invoice::first();
 
@@ -230,17 +227,13 @@ class CoreFlowsTest extends TestCase
         $onCredit = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل آجل', 'payment_terms' => 'credit']);
         $onCash = $this->makeClient(['channel_id' => $channel->id, 'name' => 'عميل كاش', 'payment_terms' => 'cash']);
 
-        $headers = $this->tokenFor($rep);
+        $this->sellApi($rep, $onCredit,
+            [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'credit'])
+            ->assertStatus(201);
 
-        $this->withHeaders($headers)->postJson('/api/invoices', [
-            'client_id' => $onCredit->id, 'payment' => 'credit',
-            'items' => [['product_id' => $product->id, 'qty' => 5]],
-        ])->assertStatus(201);
-
-        $this->withHeaders($headers)->postJson('/api/invoices', [
-            'client_id' => $onCash->id, 'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 5]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $onCash,
+            [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $this->assertEqualsWithDelta(100.0, (float) $onCredit->fresh()->balance, 0.01);
         $this->assertEqualsWithDelta(0.0, (float) $onCash->fresh()->balance, 0.01);
@@ -253,13 +246,10 @@ class CoreFlowsTest extends TestCase
         [$rep, $product, $channel] = $this->stockedRep(100);
         $client = $this->makeClient(['channel_id' => $channel->id]);
 
-        $headers = $this->tokenFor($rep);
-
         foreach ([3, 7, 2] as $qty) {
-            $this->withHeaders($headers)->postJson('/api/invoices', [
-                'client_id' => $client->id, 'payment' => 'credit',
-                'items' => [['product_id' => $product->id, 'qty' => $qty]],
-            ])->assertStatus(201);
+            $this->sellApi($rep, $client,
+                [['product_id' => $product->id, 'qty' => $qty]], ['payment' => 'credit'])
+                ->assertStatus(201);
         }
 
         $ledger = Transaction::where('client_id', $client->id)
@@ -285,10 +275,9 @@ class CoreFlowsTest extends TestCase
         [$rep, $product, $channel] = $this->stockedRep();
         $client = $this->makeClient(['channel_id' => $channel->id]);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id, 'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 1]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 1]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $this->assertSame('INV-1002', Invoice::nextNumber());
     }

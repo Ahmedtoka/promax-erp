@@ -100,8 +100,16 @@ return [
         'notes' => 'notes',
         'category' => 'category',
 
+        // ─── Payment terms on the client itself (2026-08-08) ───
+        'payment_terms' => 'payment method',
+        'payment_days' => 'payment days',
+        'payment_days_from' => 'how the days are counted',
+        'return_policies' => 'allowed return methods',
+        'return_policies.*' => 'return method',
+
         // ─── Pricing & contract ───
         'price_list' => 'price list',
+        'price_list_id' => 'price list',
         'discount' => 'custom discount',
         'has_contract' => 'has a contract',
         'contract_type' => 'contract type',

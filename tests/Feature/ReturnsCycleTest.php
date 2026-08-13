@@ -134,10 +134,47 @@ class ReturnsCycleTest extends TestCase
     }
 
     /**
-     * ⚠️ **الثغرة**: مندوب كان يقدر يدّي العميل رصيد بلا حد — مفيش
-     * سقف بالمشتريات.
+     * ⚠️ **قرار المالك ١٢ أغسطس ٢٠٢٦: شرط «اشتراه الأول» اتشال.**
+     *
+     * التيست ده كان اسمه `returning_more_than_purchased_is_rejected`
+     * وكان بيحرس العكس. اتغيّر لأن العميل ممكن يكون ماسك بضاعة من
+     * **قبل ما السيستم يشتغل** (رصيد افتتاحي مااتسجلتش بنوده)، وسقف
+     * «المشتريات» كان بيمنعه يرجّعها ويقفل الفلو في وش المندوب.
+     *
+     * الحزام اللي بقي: **سقف ثابت للصنف في المستند**
+     * (`Returns::MAX_QTY_PER_PRODUCT` = 9999) — بيمنع الصفر الزيادة
+     * بالغلط، وبيسيب الحالة الحقيقية تعدّي.
      */
-    public function test_returning_more_than_purchased_is_rejected(): void
+    public function test_more_than_purchased_is_allowed_and_priced_from_today(): void
+    {
+        [$client, $rep, $product] = $this->soldTen(20.0);
+
+        $doc = Returns::create(
+            client: $client,
+            items: [['product_id' => $product->id, 'qty' => 11]],
+            policy: Client::RETURN_ACCOUNT,
+            rep: $rep,
+        );
+
+        $this->assertNotNull($doc);
+        $this->assertSame(11, (int) $doc->items()->sum('qty'),
+            'الكمية الزيادة عن الفاتورة اتقصّت — القيد ده اتشال');
+
+        // ⚠️ العشرة اللي عليهم سطر فاتورة بيتسعّروا **من الفاتورة**،
+        // والحتة الزيادة (بضاعة ما قبل السيستم) بـ`Pricing` النهارده.
+        // هنا الاتنين 20 فالإجمالي 220 — والمهم إن مفيش سطر بصفر.
+        $this->assertEqualsWithDelta(220.0, (float) $doc->total, 0.01);
+        $this->assertSame(1, $doc->items()->whereNull('invoice_item_id')->count(),
+            'القطعة اللي مالهاش فاتورة لازم تتسجل بلا مرساة — دي اللي بتبان في المراجعة');
+    }
+
+    /**
+     * حزام الأمان الوحيد الباقي: سقف الصنف في المستند.
+     *
+     * ⚠️ من غيره، صفر زيادة بالغلط (`100` بدل `10`) بيكتب قيد دائن
+     * بمبلغ محدش قرره — والدفتر مايبانش فيه غلط.
+     */
+    public function test_a_quantity_over_the_per_product_cap_is_rejected(): void
     {
         [$client, $rep, $product] = $this->soldTen();
 
@@ -145,7 +182,7 @@ class ReturnsCycleTest extends TestCase
 
         Returns::create(
             client: $client,
-            items: [['product_id' => $product->id, 'qty' => 11]],
+            items: [['product_id' => $product->id, 'qty' => Returns::MAX_QTY_PER_PRODUCT + 1]],
             policy: Client::RETURN_ACCOUNT,
             rep: $rep,
         );

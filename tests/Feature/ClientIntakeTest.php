@@ -122,9 +122,16 @@ class ClientIntakeTest extends TestCase
         $this->assertNull(Governorates::guessFromZone(null, null));
     }
 
+    /**
+     * ⚠️ **المصدر بقى `BUILTIN` مش `KEYS`** (المحافظات اتنقلت لجدول
+     * `governorates` في مايجريشن 000150، والثابت `KEYS` اتشال).
+     * الـ27 المدفونين في الكود هما اللي **لازم** يكون ليهم نص في
+     * اللغتين — المحافظة اللي بتتضاف من الشاشة بتحمل اسمها العربي
+     * والإنجليزي في صفّها فمالهاش مفتاح لغة أصلاً.
+     */
     public function test_every_governorate_key_has_a_label_in_both_languages(): void
     {
-        foreach (Governorates::KEYS as $key) {
+        foreach (Governorates::BUILTIN as $key) {
             foreach (['ar', 'en'] as $locale) {
                 $label = __('geo.gov.'.$key, [], $locale);
 
@@ -303,7 +310,18 @@ class ClientIntakeTest extends TestCase
 
     // ═══════════════════ 4. أيام السداد ═══════════════════
 
-    public function test_payment_days_are_counted_from_the_first_supply_by_default(): void
+    /**
+     * ⚠️ **دورة بتتكرر مش تاريخ واحد** (تدقيق ٨ أغسطس ٢٠٢٦).
+     *
+     * التيست ده كان بيقارن بـ`first_activity_at + days` مرة واحدة —
+     * وده كان بيدي ميعاد بيعدّي مرة وبعدها **كل** فاتورة، حتى بتاعة
+     * النهارده، تبان متأخرة. الحساب الصح إن العميل بيسدد كل `days`
+     * يوم والعدّاد بادئ من أول توريد، فالمستحق هو حد الدورة الجاية.
+     *
+     * ⚠️ وبنمرّر تاريخ مرجعي صراحةً — من غيره النتيجة بتتغيّر كل يوم
+     * (`today()`) والتيست بيقع بعد شهرين من غير ما حد يلمس الكود.
+     */
+    public function test_payment_days_are_counted_in_cycles_from_the_first_supply(): void
     {
         $client = $this->makeClient(['first_activity_at' => '2026-01-10']);
 
@@ -315,7 +333,14 @@ class ClientIntakeTest extends TestCase
         ]);
 
         $this->assertSame(Contract::DAYS_FROM_FIRST_SUPPLY, $contract->paymentBasis());
-        $this->assertSame('2026-03-11', $contract->dueDateFor($client)->toDateString());
+
+        // الدورة الأولى: من 10 يناير + 60 يوم
+        $this->assertSame('2026-03-11',
+            $contract->dueDateFor($client, '2026-02-01')->toDateString());
+
+        // فاتورة بعد ما الدورة الأولى عدّت ⇒ حد الدورة التانية
+        $this->assertSame('2026-05-10',
+            $contract->dueDateFor($client, '2026-04-01')->toDateString());
     }
 
     public function test_the_invoice_basis_counts_from_the_invoice_date(): void
@@ -700,6 +725,11 @@ class ClientIntakeTest extends TestCase
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
+            // ⚠️ **نوع العقد بقى `required_if:has_contract,1`** — من
+            // غيره الحفظ بيترفض، و`assertRedirect` بتعدّي لأن
+            // `back()` ريدايركت برضه، وبعدين `firstOrFail` بترمي
+            // `ModelNotFoundException` بدل ما تقول «الفاليديشن رفض».
+            'contract_type' => 'agreement',
             'clause' => ['invoice_discount' => ['on' => 1, 'value' => 35]],
         ]))->assertRedirect();
 
@@ -717,6 +747,9 @@ class ClientIntakeTest extends TestCase
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
+            // ⚠️ نوع العقد `required_if:has_contract,1` — من غيره الحفظ
+            // بيترفض و`Contract::firstOrFail()` تحت بترمي بدل التيست.
+            'contract_type' => 'agreement',
             'contract_file' => UploadedFile::fake()->create('circlek.pdf', 12, 'application/pdf'),
         ]))->assertRedirect();
 
@@ -799,7 +832,11 @@ class ClientIntakeTest extends TestCase
             'sub_channel' => 'convenience',
             'governorate' => 'cairo',
             'discount' => 55,
+            // ⚠️ **القايمة بقت بالـid** (2026-08-07) — العمود النصي
+            // `price_list` بيتزامن من `price_list_id` في `clientFields`،
+            // فبعت النص لوحده كان بيخلّي الاستنساخ يهبط على الافتراضية.
             'price_list' => 'old',
+            'price_list_id' => $this->makePriceList('old')->id,
             'taxable' => 1,
             'tax_rate' => 14,
             'tax_cycle' => 'quarterly',
@@ -807,7 +844,12 @@ class ClientIntakeTest extends TestCase
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
+            // ⚠️ نوع العقد `required_if:has_contract,1` — نفس نوع المصدر
+            'contract_type' => 'agreement',
             'contract_payment_days' => 60,
+            // ⚠️ **الأساس إجباري مع الأيام** (`required_with`) — الرقم
+            // من غير نقطة بداية بيولّد استحقاق مالوش أساس حد قرره.
+            'contract_payment_days_from' => Contract::DAYS_FROM_FIRST_SUPPLY,
             'clause' => [
                 'invoice_discount' => ['on' => 1, 'value' => 55],
                 'annual_rebate' => ['on' => 1, 'value' => 2],

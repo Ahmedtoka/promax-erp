@@ -274,4 +274,51 @@ return [
     'geo_zone_empty' => 'No clients in this zone',
     'geo_saved' => 'Saved: :added new stops and :moved updated',
     'geo_removed' => ':count stops removed from the route',
+
+    // ═══ Owner feedback on the screen (2026-08-13 — second pass) ═══
+    // Roles split inside the manager panel
+    'geo_role_sales_agent' => 'Sales agents',
+    'geo_role_driver' => 'Drivers',
+    'geo_role_promoter' => 'Promoters',
+    'geo_role_manager' => 'Manager',
+    'geo_role_other' => 'Reps outside the team',
+    'geo_panel_hint' => 'Every manager gets a full-width panel: his numbers, his team split by role, and his distribution tools.',
+    'geo_no_members' => 'Nobody is assigned to this manager yet',
+    'geo_view_geo' => 'Show his geography',
+    'geo_viewing_geo' => 'Geography is showing his team',
+
+    // The "no rep" chip — a real control now, not part of the card link
+    'geo_norep_title' => 'Clients with no primary rep',
+    'geo_norep_hint' => 'Every shop without a primary rep, grouped by zone — pick a rep per row and save. Or hit "Auto-distribute" to have the system propose all of them at once.',
+    'geo_norep_filter' => 'Filter the tree to clients with no rep',
+    'geo_norep_on' => 'Geography filtered to clients with no primary rep',
+    'geo_norep_clear' => 'Clear the "no rep" filter',
+    'geo_norep_empty' => 'No clients without a rep in this scope',
+
+    // Auto-distribute
+    'geo_dist_btn' => 'Auto-distribute',
+    'geo_dist_zone_btn' => 'Distribute this zone',
+    'geo_dist_title' => 'Distribute :name clients across his reps',
+    'geo_dist_hint' => 'A shop goes to the rep who already owns the most clients in its zone. A zone with no owner yet goes to the least-loaded rep and the rest of that zone follows him. Change any row before confirming.',
+    'geo_dist_drivers' => 'Include drivers as well',
+    'geo_dist_suggested' => 'Suggested rep',
+    'geo_dist_zone' => 'Zone',
+    'geo_dist_current' => 'Has',
+    'geo_dist_added' => 'Gets',
+    'geo_dist_confirm' => 'Confirm the distribution',
+    'geo_dist_none' => 'No row has a rep picked',
+    'geo_dist_empty' => 'No clients without a primary rep in this scope',
+    'geo_dist_no_reps' => 'This manager has no sales agents yet — assign them first from the team screen',
+    'geo_dist_blocked' => 'No rep is allowed on this shop',
+    'geo_dist_saved' => ':count clients distributed across :reps reps',
+    'geo_dist_pick_manager' => 'Filter to a manager first to distribute this zone',
+    'geo_dist_skip' => 'Skip',
+
+    // Visit date and time on the stop
+    'geo_date' => 'First visit date',
+    'geo_time' => 'Visit time',
+    'geo_date_hint' => 'The date sets the weekday automatically, and the pattern starts from it',
+
+    // Governorate context in the zone panel
+    'geo_gov_line' => ':gov holds :govn shops across :zones zones — this zone has :zonen',
 ];

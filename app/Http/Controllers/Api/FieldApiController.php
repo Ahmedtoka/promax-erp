@@ -543,6 +543,10 @@ class FieldApiController extends Controller
                 'status' => $r['status'],
                 'visit_id' => $r['visit']?->id,
                 'sort' => $r['sort'],
+                // ⚠️ مفتاح **إضافي** (١٣ أغسطس ٢٠٢٦) — وقت الزيارة
+                // المتفق عليه جاهز للعرض `h:i A`، و`null` للخطط اللي
+                // مالهاش وقت. الأبلكيشن القديم بيتجاهله والجديد بيوريه.
+                'visit_at' => $r['plan']->visitTimeLabel() ?: null,
             ])->values()->all(),
         ];
     }

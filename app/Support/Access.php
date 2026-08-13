@@ -57,6 +57,13 @@ class Access
             // جرس الإشعارات + تحصيلات الميدان (2026-08-09)
             'notifications', 'erp.collections',
             'wh.', 'ops.',
+            // ⚠️ **قرار الموافقة على أوامر الكي أكاونت شغل الحسابات**
+            // (فلو 2026-08-04). المدير بيشوف الطابور (بيتوجّه له بعد
+            // رفع الشيتات وبعد تعديل أمر) بس مايقررش — الراوتس
+            // `ops.po.decide` و`ops.po.decide.all` عليها
+            // `role:admin,accountant`، ومن غير الاستثناء ده بادئة
+            // `ops.` كانت بتقول إنه مسموح والراوت يرفضه.
+            '!ops.po.decide',
         ],
 
         // ═══ مدير الفرع — نفس المدير، بس البيانات مفلترة بفرعه ═══
@@ -455,7 +462,7 @@ class Access
         // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan']],
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign']],
         'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close']],
 
         // ═══ الموردين والمشتريات ═══

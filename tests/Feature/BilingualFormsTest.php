@@ -253,6 +253,11 @@ class BilingualFormsTest extends TestCase
             // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
             // موضوعه حاجة تانية والتواريخ مش جزء منه.
             'contract_duration' => 'open',
+            // ⚠️ **نوع العقد `required_if:has_contract,1`** — من غيره
+            // الحفظ بيترفض، و`assertRedirect` بتعدّي لأن `back()`
+            // ريدايركت، وبعدين `Client::firstOrFail()` بترمي
+            // `ModelNotFoundException` بدل ما تقول «الفاليديشن رفض».
+            'contract_type' => 'agreement',
             'contract_note' => 'Renewal pending',
             'contract_clauses' => ['First clause', 'Second clause'],
             'clause' => ['invoice_discount' => ['on' => 1, 'value' => 10]],
@@ -284,21 +289,46 @@ class BilingualFormsTest extends TestCase
         $this->assertSame(4, Channel::count());
     }
 
-    public function test_seeding_twice_does_not_overwrite_a_changed_discount(): void
+    /**
+     * ⚠️ **التيست ده كان على نسبة خصم القناة — والعمود اتشال بقرار
+     * ٣١ يوليو ٢٠٢٦** (مايجريشن `000025_drop_channel_discount`).
+     * القناة بقت بُعد تجميع مالوش سعر، فالكويري القديمة كانت بترمي
+     * «Unknown column 'discount'».
+     *
+     * القرار اللي التيست بيحرسه فضل هو هو: **إعادة تشغيل السيدر
+     * ممنوع تدوس على تعديل تجاري**. اللي بيتعدّل من `/erp/channels`
+     * دلوقتي هو **الاسم** (عربي/إنجليزي) — فده اللي بنحرسه.
+     */
+    public function test_seeding_twice_does_not_overwrite_a_renamed_channel(): void
     {
-        // ⚠️ النِسَب دي بتتعدّل بقرار تجاري من `/erp/channels`. إعادة
-        // تشغيل السيدر مالازمش ترجّعها للافتراضي.
         $this->seed(\Database\Seeders\ModernTradeSeeder::class);
 
-        Channel::where('code', Channel::CASH_VAN)->update(['discount' => 0.07]);
+        Channel::where('code', Channel::CASH_VAN)->update([
+            'name' => 'كاش فان — القاهرة',
+            'name_en' => 'Cash Van - Cairo',
+        ]);
 
         $this->seed(\Database\Seeders\ModernTradeSeeder::class);
 
-        $this->assertEqualsWithDelta(
-            0.07,
-            (float) Channel::where('code', Channel::CASH_VAN)->value('discount'),
-            0.0001,
-            'السيدر دعس على نسبة اتغيّرت بقرار تجاري',
+        $channel = Channel::where('code', Channel::CASH_VAN)->firstOrFail();
+
+        $this->assertSame('كاش فان — القاهرة', $channel->name,
+            'السيدر دعس على اسم اتغيّر بقرار تجاري');
+        $this->assertSame('Cash Van - Cairo', $channel->name_en,
+            'السيدر دعس على الاسم الإنجليزي');
+    }
+
+    /**
+     * الحارس على القرار نفسه: العمود ممنوع يرجع.
+     *
+     * ⚠️ أول ما يرجع، حد هيكتب فيه رقم وهيتطبق على عملاء محدش راجعهم
+     * — وده بالظبط اللي قرار ٣١ يوليو اتاخد عشانه.
+     */
+    public function test_the_channel_still_has_no_discount_column(): void
+    {
+        $this->assertFalse(
+            \Illuminate\Support\Facades\Schema::hasColumn('channels', 'discount'),
+            'عمود خصم القناة رجع — الخصم على العميل مش على القناة',
         );
     }
 

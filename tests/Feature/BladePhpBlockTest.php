@@ -30,12 +30,24 @@ use Tests\TestCase;
  */
 class BladePhpBlockTest extends TestCase
 {
+    /**
+     * ⚠️ **ممنوع `resource_path()` هنا** (إصلاح ١٢/٨): الـdata provider
+     * بيشتغل **قبل** ما الأبلكيشن يقوم، فالهيلبر بينده على كونتينر
+     * فاضي ويرمي «Call to undefined method Container::resourcePath()»
+     * والتيست كله بيفشل قبل ما يبدأ. المسار بيتحسب من مكان الملف.
+     */
+    private static function viewsDir(): string
+    {
+        return dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'resources'.DIRECTORY_SEPARATOR.'views';
+    }
+
     public static function views(): array
     {
         $out = [];
+        $dir = self::viewsDir();
 
-        foreach (glob(resource_path('views/**/*.blade.php')) as $path) {
-            $out[str_replace(resource_path('views/'), '', $path)] = [$path];
+        foreach (glob($dir.DIRECTORY_SEPARATOR.'**'.DIRECTORY_SEPARATOR.'*.blade.php') as $path) {
+            $out[str_replace($dir.DIRECTORY_SEPARATOR, '', $path)] = [$path];
         }
 
         return $out;

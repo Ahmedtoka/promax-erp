@@ -6,7 +6,6 @@ use App\Models\Batch;
 use App\Models\Custody;
 use App\Models\CustodyItem;
 use App\Models\Invoice;
-use App\Models\PriceList;
 use App\Models\PriceListItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -38,6 +37,11 @@ class UnitsOfMeasureTest extends TestCase
         $zone = $this->makeZone();
 
         $rep = $this->makeRep(['zone_id' => $zone->id, 'channel_id' => $channel->id]);
+
+        // ⚠️ **الحضور قبل أي بيع** (حارس `RequireAttendance`، ٨/٨/٢٠٢٦).
+        // من غيره كل بوست على `/api/invoices` بيرجّع 423 «مش مسجّل حضور».
+        $this->punchIn($rep);
+
         $client = $this->makeClient([
             'zone_id' => $zone->id,
             'channel_id' => $channel->id,
@@ -86,11 +90,10 @@ class UnitsOfMeasureTest extends TestCase
     {
         [$rep, $client] = $scene;
 
-        return $this->withHeaders($this->tokenFor($rep))
-            ->postJson('/api/invoices', [
-                'client_id' => $client->id,
-                'items' => $items,
-            ]);
+        // ⚠️ `sellApi` بتفتح الزيارة وبتبعت `visit_id` — الحقل بقى
+        // `required` على الإندبوينت (تدقيق ٨/٨/٢٠٢٦): الزيارة هي
+        // الإثبات إن المندوب كان واقف قدام المحل.
+        return $this->sellApi($rep, $client, $items);
     }
 
     // ═══ 1+3: البيع بالكرتونة بيتخزن قطع وبيتسعّر سعر قطعة × العدد ═══
@@ -188,9 +191,12 @@ class UnitsOfMeasureTest extends TestCase
         $admin = $this->makeAdmin();
         $product = $this->makeProduct(['cost' => 10, 'price_new' => 20, 'price_old' => 18]);
 
-        $list = PriceList::create([
-            'code' => 'new', 'name' => 'الجديدة', 'active' => true, 'is_default' => true,
-        ]);
+        // ⚠️ **`makePriceList` مش `PriceList::create`.** مايجريشن
+        // `000060_named_price_lists` بتزرع القايمتين `old` و`new`
+        // وقت `migrate` — فإنشاء «new» تاني بيقع على قيد التفرد
+        // (`price_lists.code` unique) وبيفشّل التيست في السطر ده،
+        // مش في اللي بيتفحص. الهيلبر `firstOrCreate`.
+        $list = $this->makePriceList('new');
         PriceListItem::create([
             'price_list_id' => $list->id, 'product_id' => $product->id, 'price' => 20,
         ]);
@@ -223,9 +229,12 @@ class UnitsOfMeasureTest extends TestCase
         $admin = $this->makeAdmin();
         $product = $this->makeProduct(['cost' => 10, 'price_new' => 20]);
 
-        $list = PriceList::create([
-            'code' => 'new', 'name' => 'الجديدة', 'active' => true, 'is_default' => true,
-        ]);
+        // ⚠️ **`makePriceList` مش `PriceList::create`.** مايجريشن
+        // `000060_named_price_lists` بتزرع القايمتين `old` و`new`
+        // وقت `migrate` — فإنشاء «new» تاني بيقع على قيد التفرد
+        // (`price_lists.code` unique) وبيفشّل التيست في السطر ده،
+        // مش في اللي بيتفحص. الهيلبر `firstOrCreate`.
+        $list = $this->makePriceList('new');
 
         $this->actingAs($admin)
             ->put(route('erp.products.update', $product), [

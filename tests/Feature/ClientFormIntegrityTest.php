@@ -36,6 +36,32 @@ class ClientFormIntegrityTest extends TestCase
         'cloned_from', '_token', '_method',
     ];
 
+    /**
+     * خانات على نفس الصفحة بس تابعة **لفورم تاني بإندبوينت تاني** —
+     * فقواعدها مش في `ErpController::clientRules()`.
+     *
+     * ⚠️ **كارت العميل (`erp/client`) مابقاش فيه فورم تعريف خالص**
+     * (المحرّر اتنقل للويزارد `erp/client_form`). اللي فاضل فيه
+     * مودالين بس:
+     *   • رصيد أول المدة → `erp.clients.opening`
+     *     (`ErpController::openingBalance`): amount · date · memo
+     *   • تحصيل من الكارت → `erp.clients.collect`
+     *     (`OpsController::collect`): amount · date · memo · method ·
+     *     reference · cheque_bank · cheque_due
+     *
+     * القواعد بتتفحص في مكانها الصح — `OpsControllerTest`/`LedgerTest`
+     * بيغطوا التحصيل. اللي هنا موضوعه فورم العميل بس.
+     *
+     * @var array<string, list<string>>
+     */
+    private const OTHER_FORMS = [
+        'erp/client' => [
+            'amount', 'date', 'memo',
+            'method', 'reference', 'cheque_bank', 'cheque_due',
+        ],
+        'erp/client_form' => ['amount', 'date', 'memo'],
+    ];
+
     // ═══════════════════ 1. القواعد مقابل الأعمدة ═══════════════════
 
     public function test_every_validated_field_has_a_real_column(): void
@@ -158,12 +184,20 @@ class ClientFormIntegrityTest extends TestCase
             'notes' => 'ملاحظات على العميل',
 
             // ─── مرحلة 2: التسعير والعقد ───
+            // ⚠️ **`price_list_id` بقى `required`** (2026-08-07) —
+            // والعمود النصي `price_list` بيتزامن منه في `clientFields`،
+            // فبعت النص لوحده كان بيترفض ويخلّي كل اللي تحت يقع على
+            // `Client::firstOrFail()`.
             'price_list' => 'old',
+            'price_list_id' => $this->makePriceList('old')->id,
             'discount' => 55,
             'has_contract' => 1,
-            // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
-            // موضوعه حاجة تانية والتواريخ مش جزء منه.
-            'contract_duration' => 'open',
+            // ⚠️ **المدة `year` مش `open`.** التيست ده موضوعه إن
+            // **كل خانة** تترجع زي ما اتكتبت، والتواريخ تحت جزء منه:
+            // 2026-07-01 ← 2027-06-30 دي سنة بالظبط. `open` كانت
+            // بترفض المستند كله (`Contract::checkDuration`: «مفتوح
+            // بنهاية» غلط) وكمان بتصفّر `ends_at`.
+            'contract_duration' => 'year',
             'contract_type' => 'supply',
             'contract_payment_days' => 60,
             'contract_payment_days_from' => Contract::DAYS_FROM_INVOICE,
@@ -230,10 +264,14 @@ class ClientFormIntegrityTest extends TestCase
         // ─── التسعير ───
         $this->assertSame('old', $c->price_list);
         $this->assertEqualsWithDelta(0.55, (float) $c->discount, 0.0001);
-        // ⚠️ العمود ده **مهجور** — القناة مابقاش لها نسبة. بنتأكد
-        // إن الخصم الخاص هو المصدر فعلاً بدل ما نفحص علم مالوش أثر.
+        // ⚠️ العمود `uses_channel_discount` **مهجور** — القناة مابقاش
+        // لها نسبة. بنتأكد إن الرقم جاي من الاتفاق مش من القناة.
         $this->assertEqualsWithDelta(0.55, $c->effectiveDiscount(), 0.0001);
-        $this->assertSame('custom_discount', $c->discountSourceKey());
+        // ⚠️ **`contract` مش `custom_discount`** — الفورم ده بيعمل عقد
+        // سارٍ بخصم فاتورة 55%، وترتيب `effectiveDiscount` بيحط العقد
+        // قبل الخصم الخاص (عقيدة التسعير). الاتنين 55% هنا، والمهم
+        // إن المصدر **اتفاق مكتوب** مش القناة.
+        $this->assertSame('contract', $c->discountSourceKey());
 
         // ─── الضريبة ───
         $this->assertTrue((bool) $c->taxable);
@@ -332,15 +370,11 @@ class ClientFormIntegrityTest extends TestCase
 
             $html = (string) file_get_contents($path);
 
-            // الفورمات التانية على نفس الصفحة (تحصيل، رصيد أول مدة)
-            // ليها قواعدها الخاصة — بنستثني خاناتها بالاسم.
-            $other = ['amount', 'date', 'memo'];
-
             preg_match_all('/name="([^"]+)"/', $html, $m);
 
             $out[$view] = array_values(array_filter(
                 array_unique($m[1]),
-                fn ($n) => ! in_array($n, $other, true),
+                fn ($n) => ! in_array($n, self::OTHER_FORMS[$view] ?? [], true),
             ));
         }
 
@@ -766,7 +800,12 @@ class ClientFormIntegrityTest extends TestCase
      */
     public function test_a_locked_clause_still_submits_its_value(): void
     {
-        $html = (string) file_get_contents(resource_path('views/erp/client.blade.php'));
+        // ⚠️ **الفيو اتغيّر: محرّر العقد بقى في الويزارد.**
+        // `erp/client.blade.php` بقى **كارت** العميل بس (كشف حساب +
+        // مودال التحصيل + مودال الرصيد الافتتاحي)، وفورم التعريف
+        // والتعديل كله في `erp/client_form.blade.php`. التيست كان لسه
+        // بيدوّر على البند المقفول في الكارت.
+        $html = (string) file_get_contents(resource_path('views/erp/client_form.blade.php'));
 
         $this->assertMatchesRegularExpression(
             '/locked.*?<input type="hidden" name="clause\[invoice_discount\]\[value\]"/s',
@@ -955,7 +994,14 @@ class ClientFormIntegrityTest extends TestCase
         ]))->assertSessionHasNoErrors();
     }
 
-    /** المدة إجبارية مع العقد */
+    /**
+     * المدة إجبارية مع العقد.
+     *
+     * ⚠️ **`contract_duration` مش مبعوتة عن قصد** — دي نقطة التيست
+     * كلها. تعليق «`open` عشان التيست ده موضوعه حاجة تانية» اتلزق
+     * هنا بالغلط في تمشيطة جماعية، والنتيجة إن التيست كان بيبعت
+     * المدة وبعدين بيطلب خطأ عليها.
+     */
     public function test_the_duration_is_required_with_a_contract(): void
     {
         $this->actingAs($this->makeAdmin());
@@ -965,9 +1011,6 @@ class ClientFormIntegrityTest extends TestCase
             'price_list' => 'new',
             'channel_id' => $this->makeChannel()->id,
             'price_list_id' => $this->makePriceList()->id, 'discount' => 0, 'has_contract' => 1,
-            // ⚠️ المدة بقت إجبارية مع العقد — `open` عشان التيست ده
-            // موضوعه حاجة تانية والتواريخ مش جزء منه.
-            'contract_duration' => 'open',
             'contract_type' => 'supply',
             'clause' => ['invoice_discount' => ['on' => 1, 'value' => 10]],
         ])->assertSessionHasErrors('contract_duration');
@@ -1137,12 +1180,18 @@ class ClientFormIntegrityTest extends TestCase
             'price_list_id' => $this->makePriceList()->id,
             'discount' => 0,
             // كل الاختياري فاضي — زي فورم اتساب من غير ما حد يلمسه
+            //
+            // ⚠️ **`channel_id` مش هنا.** كان مكتوب مرتين في نفس
+            // المصفوفة — التانية (`''`) كانت بتدوس على الأولى،
+            // فالتيست كان بيرفض بـ«القناة مطلوبة». والقناة **فعلاً**
+            // إجبارية من 2026-08-08 (عليها `data-req` في الفورم و
+            // `required` في `clientRules`)، فمكانها مش في قايمة
+            // «الاختياري الفاضي».
             'phone' => '',
             'governorate' => '',
             'zone_id' => '',
             'address' => '',
             'location_url' => '',
-            'channel_id' => '',
             'sub_channel' => '',
             'group_id' => '',
             'manager_id' => '',

@@ -113,8 +113,16 @@ return [
         'notes' => 'الملاحظات',
         'category' => 'التصنيف',
 
+        // ─── شروط الدفع على العميل نفسه (2026-08-08) ───
+        'payment_terms' => 'طريقة الدفع',
+        'payment_days' => 'أيام السداد',
+        'payment_days_from' => 'طريقة حساب الأيام',
+        'return_policies' => 'طرق المرتجع المسموحة',
+        'return_policies.*' => 'طريقة المرتجع',
+
         // ─── التسعير والعقد ───
         'price_list' => 'قائمة السعر',
+        'price_list_id' => 'قائمة السعر',
         'discount' => 'الخصم الخاص',
         'has_contract' => 'العميل له عقد',
         'contract_type' => 'نوع العقد',

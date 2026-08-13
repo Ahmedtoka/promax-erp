@@ -63,13 +63,15 @@ return [
     'approve_hint' => 'The system auto-closed this shift because the employee forgot to check out. Review the hours and adjust if needed.',
     'computed' => 'Computed from the log',
     'approved_minutes' => 'Approved hours',
-    'approved_hint' => 'Format hours:minutes - e.g. 7:30',
+    // ⚠️ ممنوع `hours:minutes` — `:minutes` بيتقرا كبديل (placeholder)
+    // ومالوش مقابل في العربي، والتيست بيمسك الفرق. اكتبها بالكلام.
+    'approved_hint' => 'Format hours and minutes - e.g. 7:30',
     'approve_note' => 'Note',
     'approved' => 'Approved',
     'approved_by' => 'Approved by :name',
     'not_approved' => 'Pending',
     'saved' => 'Approval saved',
-    'bad_time' => 'Use hours:minutes format - e.g. 7:30',
+    'bad_time' => 'Use the hours and minutes format - e.g. 7:30',
     'review_count' => ':n shifts need review',
     'no_review' => 'No shifts need review',
 

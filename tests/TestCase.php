@@ -31,6 +31,13 @@ abstract class TestCase extends BaseTestCase
         // بيسرّب الحالة للتيست اللي بعده وبيخلّي النتيجة تعتمد على
         // الترتيب. ده أسوأ نوع تيست: بينجح لوحده وبيفشل في المجموعة.
         Setting::flushCache();
+
+        // ⚠️ نفس السبب: `PriceList::default()`/`byCode()` و
+        // `Governorates::rows()` ميمو ستاتيك، و`RefreshDatabase`
+        // بترجّع الصفوف بين كل تيست والتاني — فالكاش بيفضل شايل
+        // موديل لصف مابقاش موجود.
+        PriceList::flushCache();
+        \App\Support\Governorates::flush();
     }
 
     // ═══════════════════════ بنّائين ═══════════════════════
@@ -78,7 +85,11 @@ abstract class TestCase extends BaseTestCase
     protected function makeChannel(float $ignoredDiscount = 0.0): Channel
     {
         return Channel::create([
-            'code' => 'CH'.random_int(100, 999),
+            // ⚠️ `uniqid()` مش `random_int` — نفس درس `makeAdmin`
+            // الموثّق فوق. `CH100..CH999` = 900 قيمة بس، والتيست
+            // الواحد بيعمل قناتين وتلاتة فالتصادم كان بيقع على قيد
+            // التفرد كل شوية من غير أي علاقة باللي بيتفحص.
+            'code' => 'CH-'.strtoupper(uniqid()),
             'name' => 'قناة التيست',
             'name_en' => 'Test channel',
             'active' => true,
@@ -87,8 +98,9 @@ abstract class TestCase extends BaseTestCase
 
     protected function makeZone(): Zone
     {
+        // ⚠️ عمود `zones.code` طوله 20 — `Z-` + 13 حرف = 15
         return Zone::create([
-            'code' => 'Z'.random_int(10, 99),
+            'code' => 'Z-'.strtoupper(uniqid()),
             'name' => 'زون التيست',
             'name_en' => 'Test zone',
             'active' => true,
@@ -152,7 +164,9 @@ abstract class TestCase extends BaseTestCase
     protected function makeWarehouse(): Warehouse
     {
         return Warehouse::create([
-            'code' => 'WH'.random_int(10, 99),
+            // ⚠️ `WH10..WH99` = 90 قيمة بس على عمود `unique` — تصادم
+            // عشوائي. نفس علاج `makeChannel`/`makeZone`.
+            'code' => 'WH-'.strtoupper(uniqid()),
             'name' => 'مخزن التيست',
             'name_en' => 'Test warehouse',
             'type' => 'main',
@@ -176,6 +190,74 @@ abstract class TestCase extends BaseTestCase
         ]);
 
         return ['Authorization' => 'Bearer '.$token->token];
+    }
+
+    /**
+     * تسجيل حضور الموظف — **إجباري قبل أي أكشن ميداني**.
+     *
+     * ⚠️ **حارس الحضور شغّال من ٨ أغسطس ٢٠٢٦** (`RequireAttendance`
+     * على مجموعة شغل الشارع): الموظف اللي مش `working` بياخد
+     * **423** على أي بوست — فاتورة، مرتجع، تحصيل، تسليم أمر.
+     * ده سلوك إنتاج صح ومقصود، فالتيست اللي بيبيع لازم يبصم أول.
+     *
+     * ⚠️ **مش جوه `makeRep()` عن قصد** — تيستات الحضور نفسها
+     * بتحتاج مندوب لسه مابصمش، ولو البصمة اتحطت في البنّاء الحارس
+     * ده مايتفحصش في أي تيست تاني.
+     */
+    protected function punchIn(User $user): User
+    {
+        [$err] = \App\Services\Attendance::punch($user, \App\Models\AttendancePunch::IN);
+
+        $this->assertNull($err, 'مقدرش يسجّل حضور المندوب في التيست: '.(string) $err);
+
+        return $user;
+    }
+
+    /**
+     * زيارة مفتوحة على العميل — **مرساة أي أكشن ميداني**.
+     *
+     * ⚠️ **`visit_id` بقت `required` على `/api/invoices` و`/api/returns`
+     * (تدقيق ٨ أغسطس ٢٠٢٦).** الزيارة هي الإثبات إن المندوب كان واقف
+     * قدام المحل — من غيرها كان أي مندوب يفوتر أي عميل ويمدّن حسابه.
+     * ده سلوك إنتاج صح، فالتيست بيفتح زيارة زي الواقع.
+     *
+     * ⚠️ **الزيارة المفتوحة القديمة بتتقفل الأول** — المندوب مابيكونش
+     * واقف في محلين في نفس الوقت، والحارس بتاع الانصراف بيعد الزيارات
+     * المفتوحة.
+     */
+    protected function openVisit(User $rep, Client $client): \App\Models\Visit
+    {
+        \App\Models\Visit::where('user_id', $rep->id)
+            ->whereNull('checked_out_at')
+            ->update(['checked_out_at' => now()]);
+
+        return \App\Models\Visit::create([
+            'user_id' => $rep->id,
+            'client_id' => $client->id,
+            'checked_in_at' => now(),
+        ]);
+    }
+
+    /**
+     * فاتورة من الأبلكيشن — بتفتح الزيارة وبتبعت التوكن.
+     *
+     * ⚠️ **مكان واحد** عشان أي حارس جديد على الإندبوينت (الحضور،
+     * الزيارة، المفتاح…) يتظبط مرة واحدة بدل ما ٤ ملفات تيست تتعدّل
+     * كل مرة — وده بالظبط اللي حصل في حارس الحضور ٨/٨.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<string, mixed>  $extra
+     */
+    protected function sellApi(User $rep, Client $client, array $items, array $extra = [])
+    {
+        $visit = $this->openVisit($rep, $client);
+
+        return $this->withHeaders($this->tokenFor($rep))
+            ->postJson('/api/invoices', array_merge([
+                'client_id' => $client->id,
+                'visit_id' => $visit->id,
+                'items' => $items,
+            ], $extra));
     }
 
     /** تفعيل الضريبة بنسبة معيّنة */

@@ -81,6 +81,12 @@
                             @if ($p->every_weeks > 1)
                                 <br><span class="s">{{ $p->frequencyLabel() }}</span>
                             @endif
+                            {{-- وقت الزيارة المتفق عليه (١٣ أغسطس ٢٠٢٦) —
+                                 بيتحط من الشاشة الجغرافية، وبيبان هنا عشان
+                                 اللي بيرتّب اليوم يعرف المواعيد المثبتة --}}
+                            @if ($p->visitTimeLabel() !== '')
+                                <br><span class="badge b-blue">🕒 {{ $p->visitTimeLabel() }}</span>
+                            @endif
                         </div>
                         <span class="ordbtns">
                             @unless ($loop->first)

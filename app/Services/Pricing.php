@@ -56,10 +56,26 @@ class Pricing
             return $fromContract;
         }
 
+        // ⚠️ **العمود النصي القديم لازم يتحترم قبل الافتراضية**
+        // (إصلاح ١٣ أغسطس ٢٠٢٦). العميل اللي `price_list_id` بتاعه
+        // فاضي و`price_list` بتاعه `old` كان بيقع على `default()`
+        // (اللي هي `new`) — يعني **عميل على القايمة القديمة يتحاسب
+        // بالجديدة في صمت**، وده كسر لاتفاق مكتوب. المسار ده حقيقي:
+        // تحويل ليد، موافقة طلب عميل، والاستيراد بيكتبوا العمود
+        // النصي من غير الـid. الاحتياطي اللي في `listFor` كان ميت
+        // لأن `default()` عمرها ماترجّع `null` بعد مايجريشن 000060.
+        if ($contract && ($row = PriceList::byCode($contract->price_list)) !== null) {
+            return $row;
+        }
+
         $own = $client->priceListRow;
 
         if ($own && $own->active) {
             return $own;
+        }
+
+        if (($row = PriceList::byCode($client->price_list)) !== null) {
+            return $row;
         }
 
         return PriceList::default();

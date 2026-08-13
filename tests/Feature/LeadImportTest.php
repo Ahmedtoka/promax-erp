@@ -160,7 +160,9 @@ class LeadImportTest extends TestCase
 
         $rep = $this->makeRep(['zone_id' => $near->id]);
 
-        Channel::create(['code' => Channel::CASH_VAN, 'name' => 'كاش فان', 'active' => true]);
+        // ⚠️ `firstOrCreate` مش `create` (إصلاح ١٢/٨): القنوات بتتزرع مع
+        // الداتابيز، و`create` كانت بترمي Duplicate entry على الكود الفريد.
+        Channel::firstOrCreate(['code' => Channel::CASH_VAN], ['name' => 'كاش فان', 'active' => true]);
 
         $checked = (new LeadImporter)->validateAll($this->rows(
             ['name' => 'جيم المعادي', 'category' => 'Gym', 'lat' => '29.9610', 'lng' => '31.2580', 'reviews' => '800', 'rating' => '4.6'],
@@ -239,7 +241,7 @@ class LeadImportTest extends TestCase
 
     public function test_hypermarkets_carry_their_sub_channel_into_the_client(): void
     {
-        Channel::create(['code' => Channel::KEY_ACCOUNT, 'name' => 'كي أكاونت', 'active' => true]);
+        Channel::firstOrCreate(['code' => Channel::KEY_ACCOUNT], ['name' => 'كي أكاونت', 'active' => true]);
         $this->makePriceList('new');
         $admin = $this->makeAdmin();
 

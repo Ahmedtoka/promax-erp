@@ -682,8 +682,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // تنزيل شيت الأمر الأصلي — المرجع المحفوظ وقت الرفع
         Route::get('/pos/{purchaseOrder}/sheet', [OpsController::class, 'downloadPoSheet'])
             ->middleware('role:admin,manager,accountant')->name('po.sheet');
+        // ⚠️ **العرض للمدير كمان (١٣ أغسطس ٢٠٢٦).** الطابور ده كان
+        // `admin,accountant` بس، بينما `poImportStore` و`updatePo`
+        // و`editPo` — وكلهم مفتوحين لمدير القناة — بيعملوا
+        // `redirect()->route('ops.po.approvals')`. يعني المدير يرفع
+        // شيت أوامر أو يعدّل أمر وياخد 403 في وشه بدل رسالة النجاح.
+        // القرار **مش** قرار عرض: `po.decide`/`po.decide.all` فاضلين
+        // `admin,accountant`، و`poApprovals` بتفلتر أوامر المدير على
+        // عملائه هو بس (`Client::visibleTo`).
         Route::get('/po-approvals', [OpsController::class, 'poApprovals'])
-            ->middleware('role:admin,accountant')->name('po.approvals');
+            ->middleware('role:admin,manager,accountant')->name('po.approvals');
         // ⚠️ البلك قبل الراوت البارامتري — /po-approvals-bulk مساره مختلف أصلاً
         Route::post('/po-approvals-bulk', [OpsController::class, 'decideAllPoApprovals'])
             ->middleware('role:admin,accountant')->name('po.decide.all');
@@ -754,6 +762,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('geo.plan');
             Route::post('/geo-planner/unplan', [\App\Http\Controllers\JourneyController::class, 'geoUnplan'])
                 ->name('geo.unplan');
+            // ═══ التوزيع التلقائي (١٣ أغسطس ٢٠٢٦) ═══
+            // `distribute` معاينة (GET، مفيش كتابة) و`assign` هو اللي
+            // بيكتب `rep_id` — الاتنين تحت نفس أكشن `act.field.plan`.
+            Route::get('/geo-planner/distribute', [\App\Http\Controllers\JourneyController::class, 'geoDistribute'])
+                ->name('geo.distribute');
+            Route::post('/geo-planner/assign', [\App\Http\Controllers\JourneyController::class, 'geoAssign'])
+                ->name('geo.assign');
             Route::get('/live', [\App\Http\Controllers\JourneyController::class, 'live'])->name('live');
             // داتا التيرمينال JSON — فولباك البولينج لو الـSSE مش شغال (2026-08-06)
             Route::get('/live/data', [\App\Http\Controllers\JourneyController::class, 'liveData'])->name('live.data');

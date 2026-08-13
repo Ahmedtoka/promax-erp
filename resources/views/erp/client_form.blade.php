@@ -481,10 +481,17 @@
             </div>
             <div class="payDaysBox">
                 <label class="f">{{ __('client.pay_days_from') }}</label>
+                {{-- ⚠️ **اختيار فاضي أول القايمة** — الخانة `nullable` في
+                     السكيما وفي القواعد (`required_with:payment_days` بس)،
+                     وأول عنصر مختار سلفاً كان بيختم **كل** عميل بـ«من
+                     تاريخ الفاتورة» حتى لو مافيش أيام سداد أصلاً — قرار
+                     محدش أخده وبيطلع بعدين في حساب الاستحقاق. نفس شكل
+                     التوأم بتاع العقد (`contract_payment_days_from`). --}}
                 <select name="payment_days_from" style="width:100%" class="{{ trim($bad('payment_days_from')) }}">
+                    <option value="">— {{ __('client.pick_days_basis') }} —</option>
                     @foreach (\App\Models\Contract::DAYS_FROM as $df)
                         <option value="{{ $df }}"
-                            @selected(old('payment_days_from', $src?->payment_days_from ?? \App\Models\Contract::DAYS_FROM_INVOICE) === $df)>
+                            @selected(old('payment_days_from', $src?->payment_days_from) === $df)>
                             {{ __('client.days_from_'.$df) }}
                         </option>
                     @endforeach

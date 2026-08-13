@@ -39,6 +39,11 @@ class LedgerTest extends TestCase
     {
         $channel = $this->makeChannel();
         $rep = $this->makeRep(['channel_id' => $channel->id]);
+
+        // ⚠️ **الحضور قبل أي بيع** (حارس `RequireAttendance`، ٨/٨/٢٠٢٦).
+        // من غيره كل بوست على `/api/invoices` بيرجّع 423 «مش مسجّل حضور».
+        $this->punchIn($rep);
+
         $product = $this->makeProduct(['cost' => 10, 'price_old' => 18, 'price_new' => 20]);
         $warehouse = $this->makeWarehouse();
 
@@ -90,11 +95,9 @@ class LedgerTest extends TestCase
         [$rep, $product] = $this->stockedRep();
         $client = $this->makeClient(['payment_terms' => 'cash']);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 5]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $invoice = Invoice::firstOrFail();
         $rows = Transaction::where('client_id', $client->id)->get();
@@ -132,11 +135,9 @@ class LedgerTest extends TestCase
         [$rep, $product] = $this->stockedRep();
         $client = $this->makeClient(['payment_terms' => 'cash']);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'cash',
-            'items' => [['product_id' => $product->id, 'qty' => 2]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 2]], ['payment' => 'cash'])
+            ->assertStatus(201);
 
         $invoice = Invoice::firstOrFail();
 
@@ -164,11 +165,9 @@ class LedgerTest extends TestCase
             'category' => 'ok',
         ]);
 
-        $this->withHeaders($this->tokenFor($rep))->postJson('/api/invoices', [
-            'client_id' => $client->id,
-            'payment' => 'credit',
-            'items' => [['product_id' => $product->id, 'qty' => 5]],
-        ])->assertStatus(201);
+        $this->sellApi($rep, $client,
+            [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'credit'])
+            ->assertStatus(201);
 
         $invoice = Invoice::firstOrFail();
         $rows = Transaction::where('client_id', $client->id)->get();
@@ -195,14 +194,10 @@ class LedgerTest extends TestCase
         [$rep, $product] = $this->stockedRep();
         $client = $this->makeClient(['payment_terms' => 'credit', 'category' => 'ok']);
 
-        $headers = $this->tokenFor($rep);
-
         foreach ([3, 7, 2] as $qty) {
-            $this->withHeaders($headers)->postJson('/api/invoices', [
-                'client_id' => $client->id,
-                'payment' => 'credit',
-                'items' => [['product_id' => $product->id, 'qty' => $qty]],
-            ])->assertStatus(201);
+            $this->sellApi($rep, $client,
+                [['product_id' => $product->id, 'qty' => $qty]], ['payment' => 'credit'])
+                ->assertStatus(201);
         }
 
         // (3 + 7 + 2) × 20 = 240

@@ -99,8 +99,12 @@ class BranchScopeTest extends TestCase
         $maadi = $this->branch('MAADI');
         $manager = $this->makeAdmin(['role' => 'branch_manager', 'branch_id' => $maadi->id]);
 
+        // ⚠️ `clients.status` عمود `enum('active','pending','rejected')`.
+        // «موقوف» في السيستم = `pending` (`ClientActivationController::
+        // deactivate`) — و`inactive` اللي كان مكتوب هنا مش قيمة موجودة
+        // في أي مكان في الكود، فكان بيرمي «Data truncated for column».
         $this->makeClient(['name' => 'نشط', 'branch_id' => null, 'status' => 'active']);
-        $this->makeClient(['name' => 'موقوف', 'branch_id' => null, 'status' => 'inactive']);
+        $this->makeClient(['name' => 'موقوف', 'branch_id' => null, 'status' => 'pending']);
 
         $count = Branch::scope(Client::query(), $manager)->where('status', 'active')->count();
 
