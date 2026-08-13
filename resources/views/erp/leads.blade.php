@@ -63,6 +63,16 @@
                 <option value="{{ $r->id }}" @selected(($filters['rep'] ?? '') == $r->id)>{{ $r->displayName() }}</option>
             @endforeach
         </select>
+        <select name="source">
+            <option value="">{{ __('lead.all_sources') }}</option>
+            @foreach ($sources as $s)
+                <option value="{{ $s }}" @selected(($filters['source'] ?? '') === $s)>{{ __('lead.source_'.$s) }}</option>
+            @endforeach
+        </select>
+        <select name="sort">
+            <option value="score" @selected($sort === 'score')>{{ __('lead.sort_score') }}</option>
+            <option value="recent" @selected($sort === 'recent')>{{ __('lead.sort_recent') }}</option>
+        </select>
         <button class="btn">{{ __('common.filter') }}</button>
     </form>
 </div>
@@ -72,6 +82,11 @@
         <div class="lbl">{{ __('lead.open_leads') }}</div>
         <div class="val">{{ $fmt($stats['open']) }}</div>
         <div class="sub2">{{ __('lead.page') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('lead.top_score') }}</div>
+        <div class="val pos">{{ $fmt($stats['strong']) }}</div>
+        <div class="sub2">{{ __('lead.top_score_note') }}</div>
     </div>
     <div class="kpi">
         <div class="lbl">{{ __('lead.overdue') }}</div>
@@ -100,6 +115,8 @@
         <table>
             <tr>
                 <th>{{ __('common.code') }}</th>
+                {{-- ⚠️ `data-nosum` — القوة ترتيب مالوش وحدة، ومجموعه في فوتر الجدول مالوش معنى --}}
+                <th class="num" data-nosum title="{{ __('lead.score_hint') }}">{{ __('lead.score') }}</th>
                 <th>{{ __('common.name') }}</th>
                 <th>{{ __('common.phone') }}</th>
                 <th>{{ __('client.zone') }}</th>
@@ -113,10 +130,23 @@
             @forelse ($leads as $l)
                 <tr>
                     <td class="num s">{{ $l->number }}</td>
+                    <td class="num">
+                        <span class="badge {{ $l->scoreClass() }}">{{ (int) $l->score }}</span>
+                        @if ($l->reviews_count > 0)
+                            <br><span style="font-size:10.5px;color:var(--muted)">
+                                {{ $l->rating !== null ? number_format((float) $l->rating, 1).' ★ · ' : '' }}{{ $fmt($l->reviews_count) }}
+                            </span>
+                        @endif
+                    </td>
                     <td>
                         <b>{{ $l->displayName() }}</b>
                         @if ($l->contact_name)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $l->contact_name }}</span>
+                        @endif
+                        @if ($l->category_raw || $l->sourceLabel())
+                            <br><span style="font-size:10.5px;color:var(--muted)">
+                                {{ collect([$l->category_raw, $l->sourceLabel()])->filter()->implode(' · ') }}
+                            </span>
                         @endif
                     </td>
                     <td class="num s">{{ $l->phone ?: '—' }}</td>
@@ -171,7 +201,8 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
+                {{-- ⚠️ زوّدت عمود القوة ⇒ الـcolspan بقى 10 --}}
+                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('lead.none') }}
                 </td></tr>
             @endforelse

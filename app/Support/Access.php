@@ -323,6 +323,10 @@ class Access
             ['ops.open_visits', '🚪', 'nav.open_visits', 'ops.open_visits', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
+            // الخريطة الجغرافية وخط السير (١٣/٨) — المحافظة ← المنطقة
+            // ← المحل، والتخطيط من نفس الشاشة. النمط بالظبط `ops.geo`
+            // عشان `ops.geo.zone/plan/unplan` مايلوّنوش اللينك لوحدهم.
+            ['ops.geo', '🧭', 'nav.geo_planner', 'ops.geo', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
@@ -447,7 +451,11 @@ class Access
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 
         // ═══ الميدان ═══
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder']],
+        // ⚠️ كتابة الخريطة الجغرافية (`ops.geo.plan/unplan`) تحت نفس
+        // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
+        // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
+        // ويسيبه مفتوح في التانية من غير ما ياخد باله.
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan']],
         'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close']],
 
         // ═══ الموردين والمشتريات ═══

@@ -89,4 +89,40 @@ class JourneyPlan extends Model
 
         return abs($weeks) % $this->every_weeks === 0;
     }
+
+    /**
+     * أول تاريخ مستحق لنمط (يوم × تردد) — لمعاينة «أول زيارة».
+     *
+     * ⚠️ **مش تاريخ بيتخزن.** المالك بيقول «أختار تاريخ زيارة»،
+     * والسيستم نمط أسبوعي — فبنعرض له التاريخ اللي النمط بتاعه
+     * هيقع عليه فعلاً. اختراع جدول تواريخ لمرة واحدة كان هيعمل
+     * مصدرين لخط السير، وأول ما الاتنين يختلفوا محدش يعرف مين الصح.
+     *
+     * ⚠️ الحساب من `dueOn` نفسها مش من معادلة جديدة — التردد له
+     * نقطة صفر ثابتة (`epoch`)، وأي نسخة تانية من المنطق بتفترق
+     * عنها أول ما تتعدّل.
+     *
+     * السقف 35 يوم: أطول تردد شهري (4 أسابيع = 28 يوم) + هامش يوم
+     * الأسبوع، فأي نمط صالح لازم يقع جواها.
+     */
+    public static function nextDue(int $weekday, int $everyWeeks, ?\Illuminate\Support\Carbon $from = null): ?\Illuminate\Support\Carbon
+    {
+        $probe = new self([
+            'weekday' => $weekday,
+            'every_weeks' => $everyWeeks,
+            'active' => true,
+        ]);
+
+        $date = ($from ? $from->copy() : today())->startOfDay();
+
+        for ($i = 0; $i < 35; $i++) {
+            if ($probe->dueOn($date)) {
+                return $date;
+            }
+
+            $date->addDay();
+        }
+
+        return null;
+    }
 }

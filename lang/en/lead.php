@@ -20,6 +20,8 @@ return [
     // ═══ Sources ═══
     'source' => 'Source',
     'source_sheet' => 'Spreadsheet',
+    'source_gmaps' => 'Google Maps',
+    'source_facebook' => 'Facebook / Instagram',
     'source_field' => 'Found in the field',
     'source_referral' => 'Referral',
     'source_inbound' => 'They contacted us',
@@ -54,4 +56,25 @@ return [
     'none' => 'No leads',
     'overdue_note' => 'The next step is past its date',
     'code_clash' => 'The code was taken at the same moment — try again',
+
+    // ═══ Sourcing (2026-08-13) ═══
+    'score' => 'Score',
+    'score_hint' => 'How strong this lead looks — activity, size and rating. It is a ranking, not money.',
+    'rating' => 'Rating',
+    'reviews' => 'Reviews',
+    'category_raw' => 'Listed activity',
+    'website' => 'Website',
+    'top_score' => 'Strong leads',
+    'top_score_note' => 'Score 70 and above',
+    'sort_score' => 'Strongest first',
+    'sort_recent' => 'Newest first',
+    'all_sources' => 'Any source',
+
+    // Import summary notes
+    'dup_client_note' => '":name" skipped — already a client (:code)',
+    'skip_dup_clients' => ':n rows skipped: already registered as clients',
+    'skip_dup_leads' => ':n rows skipped: already in the leads list',
+    'skip_dup_sheet' => ':n rows skipped: repeated inside the uploaded file',
+    'skip_closed' => ':n rows skipped: the place is marked closed',
+    'skip_off_target' => ':n rows skipped: the activity is not one we sell to',
 ];

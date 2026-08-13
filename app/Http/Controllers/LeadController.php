@@ -25,11 +25,28 @@ class LeadController extends Controller
 
         // ⚠️ الليدز مربوطة بالزون، والزون مربوط بالفرع — بنسكّبها
         // بزون الفرع عشان مدير فرع مايشوفش خط أنابيب فرع تاني.
-        $q = \App\Models\Branch::scope(
-            Lead::with(['zone', 'channel', 'assignee', 'client']),
-            $user,
-            'zone_id',
-        );
+        //
+        // ⚠️⚠️ **مش `Branch::scope($q, $user, 'zone_id')`** (إصلاح
+        // 2026-08-13). `Branch::scope` بيعمل `where(<العمود>, branch_id)`
+        // — يعني كان بيقارن `leads.zone_id` برقم **الفرع**. جدول
+        // `leads` أصلاً مالوش `branch_id` (مش في `Branch::SCOPED`)،
+        // فالنتيجة كانت تسريب وضياع في الاتجاهين معاً: المدير بيشوف
+        // ليدز فرع تاني لو رقم الزون صادف رقم فرعه، وباقي ليداته
+        // بتختفي خالص. السكوب لازم يعدّي **على الزون**.
+        $q = Lead::with(['zone', 'channel', 'assignee', 'client']);
+
+        if (! $user->seesAllBranches() && $user->branch_id !== null) {
+            $branchId = $user->branch_id;
+
+            $q->where(function ($w) use ($branchId) {
+                // الزونز المركزية (`branch_id` فاضي) بتفضل مشتركة —
+                // نفس قاعدة `Branch::scope` بالظبط
+                $w->whereNull('zone_id')
+                    ->orWhereIn('zone_id', Zone::query()
+                        ->where(fn ($z) => $z->where('branch_id', $branchId)->orWhereNull('branch_id'))
+                        ->select('id'));
+            });
+        }
 
         // ⚠️ المندوب بيشوف ليداته هو بس. من غير الفلتر ده كل مندوب
         // بيشوف قايمة الشركة كلها ويقدر ياخد ليد حد تاني.
@@ -40,6 +57,12 @@ class LeadController extends Controller
         $q->when($request->filled('status'), fn ($x) => $x->where('status', $request->input('status')))
             ->when($request->filled('zone'), fn ($x) => $x->where('zone_id', $request->input('zone')))
             ->when($request->filled('rep'), fn ($x) => $x->where('assigned_to', $request->input('rep')))
+            // ⚠️ فلتر المصدر لازم يتحقق من القايمة مش يعدّي خام —
+            // `?source=<script>` كان بيرجع صفر نتايج ويتطبع في اللينك
+            ->when(
+                in_array($request->input('source'), Lead::SOURCES, true),
+                fn ($x) => $x->where('source', $request->input('source')),
+            )
             ->when($request->filled('search'), function ($x) use ($request) {
                 $s = '%'.$request->input('search').'%';
                 $x->where(function ($w) use ($s) {
@@ -61,8 +84,34 @@ class LeadController extends Controller
 
         $open = collect(Lead::OPEN_STATUSES);
 
+        // ⚠️⚠️ **العدّادات كلها قبل الترتيب.** `count()` في لارافيل
+        // مابيشيلش الـ`ORDER BY`، و`SELECT COUNT(*) ... ORDER BY score`
+        // من غير `GROUP BY` بترمي خطأ على MySQL بـ`ONLY_FULL_GROUP_BY`
+        // (الوضع الافتراضي على السيرفر اللايف). الكلوجر اللي تحت كان
+        // بيتنفّذ **بعد** ما الترتيب اتحط على `$q`.
+        $overdue = (clone $q)
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->whereNotNull('next_action_on')
+            ->whereDate('next_action_on', '<', today())
+            ->count();
+
+        // فرص قوية — نفس الثابت اللي `LeadScore::badgeClass()` بيخضّر عنده
+        $strong = (clone $q)->whereIn('status', Lead::OPEN_STATUSES)
+            ->where('score', '>=', \App\Support\LeadScore::STRONG)
+            ->count();
+
+        // ⚠️ **الترتيب الافتراضي بالقوة مش بالتاريخ** (2026-08-13).
+        // بعد استيراد آلاف الليدز من دليل خارجي، `latest()` بيحط أضعف
+        // الأماكن فوق لمجرد إنها كانت آخر صف في الملف — والمندوب
+        // بيمشي من فوق. الترتيب هو المنتج هنا، مش القايمة.
+        // `id` تاني عشان الترتيب يفضل ثابت بين الصفحات لما السكور يتساوى.
+        $sort = $request->input('sort') === 'recent' ? 'recent' : 'score';
+
+        $q->when($sort === 'score', fn ($x) => $x->orderByDesc('score')->orderByDesc('id'))
+            ->when($sort === 'recent', fn ($x) => $x->orderByDesc('id'));
+
         return view('erp.leads', [
-            'leads' => $q->latest()->paginate(30)->withQueryString(),
+            'leads' => $q->paginate(30)->withQueryString(),
             // ⚠️ **كل** الزونز والمناديب، مش النشطين بس. لو زون
             // اتوقّف، الليد المرتبط بيه كان بيلاقي الاختيار مش موجود
             // في القايمة فبيرجع فاضي، وأول حفظ بيمسح التخصيص في صمت.
@@ -75,14 +124,12 @@ class LeadController extends Controller
                 'open' => (int) $open->sum(fn ($s) => $counts[$s]->n ?? 0),
                 'won' => (int) ($counts['won']->n ?? 0),
                 'lost' => (int) ($counts['lost']->n ?? 0),
-                'overdue' => (clone $q)
-                    ->whereIn('status', Lead::OPEN_STATUSES)
-                    ->whereNotNull('next_action_on')
-                    ->whereDate('next_action_on', '<', today())
-                    ->count(),
+                'overdue' => $overdue,
+                'strong' => $strong,
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
-            'filters' => $request->only(['status', 'zone', 'rep', 'search']),
+            'sort' => $sort,
+            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort']),
             'canConvert' => $user->isManager(),
         ]);
     }

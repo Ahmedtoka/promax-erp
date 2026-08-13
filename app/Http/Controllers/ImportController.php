@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Import;
 use App\Services\Importers\ClientImporter;
 use App\Services\Importers\Importer;
+use App\Services\Importers\LeadImporter;
 use App\Services\Importers\ProductImporter;
 use App\Services\Importers\StockImporter;
 use App\Services\Importers\TeamImporter;
@@ -30,6 +31,10 @@ class ImportController extends Controller
         'clients' => ClientImporter::class,
         'team' => TeamImporter::class,
         'stock' => StockImporter::class,
+        // ⚠️ **آخر واحد عن قصد.** الليدز بتتديدوب ضد `clients` و`zones`،
+        // فرفعها قبل ما العملاء والزونز يكونوا موجودين معناها إن كل
+        // عميل حالي هيدخل تاني كليد، وكل ليد هينزل بلا زون ولا مندوب.
+        'leads' => LeadImporter::class,
     ];
 
     public function index()
@@ -84,6 +89,13 @@ class ImportController extends Controller
 
         $checked = $importer->validateAll($read['rows']);
 
+        // ⚠️ **ملاحظات المعاينة كانت بتترمي** (إصلاح 2026-08-13).
+        // المستوردات اللي بتتخطى صفوف **بهدوء** (ليد مكرر، مكان مقفول،
+        // نشاط مرفوض) كانت بتعدّي الصفوف دي في `rows_failed` والـ
+        // `errors` فاضية — فاليوزر بيشوف «٢٠٠٠ صف · ٤٠٠ ناجح · ١٦٠٠
+        // فشل» وصفر أسباب، وبيرجع يدوّر في الشيت على حاجة مش غلط فيه.
+        $notes = method_exists($importer, 'notes') ? $importer->notes() : [];
+
         $import = Import::create([
             'kind' => $data['kind'],
             'file_name' => $request->file('file')->getClientOriginalName(),
@@ -93,8 +105,10 @@ class ImportController extends Controller
             'rows_total' => count($read['rows']),
             'rows_ok' => count($checked['ok']),
             'rows_failed' => count($read['rows']) - count($checked['ok']),
-            // أول 60 خطأ بس — الباقي نفس النمط غالباً
-            'errors' => array_slice($checked['errors'], 0, 60),
+            // أول 60 سطر بس — الباقي نفس النمط غالباً.
+            // الملاحظات الأول: فيها الملخص اللي بيفسّر الفرق بين
+            // عدد الصفوف وعدد الناجح.
+            'errors' => array_slice(array_merge($notes, $checked['errors']), 0, 60),
             'summary' => [
                 'mapped' => $read['mapped'],
                 'headers' => $read['headers'],
@@ -172,7 +186,7 @@ class ImportController extends Controller
             'status' => Import::STATUS_APPLIED,
             'rows_ok' => count($checked['ok']),
             'rows_failed' => count($read['rows']) - count($checked['ok']),
-            'errors' => array_slice(array_merge($checked['errors'], $notes), 0, 60),
+            'errors' => array_slice(array_merge($notes, $checked['errors']), 0, 60),
             'summary' => array_merge($import->summary ?? [], ['result' => $summary]),
             'applied_at' => now(),
         ]);
@@ -209,6 +223,7 @@ class ImportController extends Controller
             'clients' => \App\Models\Client::count(),
             'team' => \App\Models\User::count(),
             'stock' => \App\Models\Batch::count(),
+            'leads' => \App\Models\Lead::count(),
         ];
     }
 }

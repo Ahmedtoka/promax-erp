@@ -102,4 +102,12 @@ return [
     'geo_zone' => 'approximate area centre',
     'result_skipped' => 'skipped (near existing)',
     'result_geocoded' => 'geocoded from address',
+
+    // Lead sourcing (2026-08-13)
+    'kind_leads' => 'Leads (prospects)',
+    'result_zoned' => 'matched to a zone',
+    'result_unzoned' => 'without a zone',
+    'result_assigned' => 'assigned to a rep',
+    'bad_lat' => 'the latitude is outside the valid range (:value) — the columns are probably swapped',
+    'bad_lng' => 'the longitude is outside the valid range (:value) — the columns are probably swapped',
 ];

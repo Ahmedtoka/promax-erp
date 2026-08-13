@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\Rejected;
+use App\Models\Channel;
 use App\Models\Client;
 use App\Models\Lead;
 use App\Models\User;
@@ -50,6 +51,17 @@ class Leads
                 'address' => $locked->address,
                 'zone_id' => $overrides['zone_id'] ?? $locked->zone_id,
                 'channel_id' => $overrides['channel_id'] ?? $locked->channel_id,
+                // ⚠️ **القسم والمحافظة بيتنقلوا مع الليد** (2026-08-13).
+                // قبل كده كانوا بيتحسبوا وقت الاستيراد وبيضيعوا وقت
+                // التحويل، فالسلسلة كانت بتطلع عميل كي أكاونت بلا قسم
+                // ومحدش يعرف إن المعلومة كانت موجودة أصلاً.
+                //
+                // ⚠️ القسم بيتكتب بس لو القناة النهائية كي أكاونت —
+                // المدير ممكن يكون غيّر القناة في `$overrides`.
+                'sub_channel' => Channel::codeHasSubChannels(
+                    Channel::find($overrides['channel_id'] ?? $locked->channel_id)?->code,
+                ) ? $locked->sub_channel : null,
+                'governorate' => $locked->governorate,
                 // المندوب اللي شغّال على الليد بياخد العميل
                 'rep_id' => $locked->assigned_to,
                 'lat' => $locked->lat,

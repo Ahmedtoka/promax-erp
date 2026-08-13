@@ -6,7 +6,10 @@
     $fmt = fn ($n) => number_format((float) $n);
 
     // ترتيب التنفيذ المفروض — الرقم بيظهر جنب كل نوع
-    $order = ['products' => 1, 'clients' => 2, 'team' => 3, 'stock' => 4];
+    // ⚠️ أي نوع جديد في `ImportController::KINDS` لازم ياخد رقم هنا —
+    // من غيره `$order[$kind]` بترمي Undefined array key وكل الصفحة
+    // بتقع، مش الكارت بتاعه بس.
+    $order = ['products' => 1, 'clients' => 2, 'team' => 3, 'stock' => 4, 'leads' => 5];
 @endphp
 
 @section('content')

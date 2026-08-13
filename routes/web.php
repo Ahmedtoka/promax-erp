@@ -739,6 +739,21 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('journeys');
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])
                 ->name('assignments');
+
+            // ═══ الخريطة الجغرافية وخط السير (١٣ أغسطس ٢٠٢٦) ═══
+            // نفس رولز «تسكين العملاء» و«خطط السير» بالظبط — الشاشة
+            // بتعرض عملاء الفريق وبتكتب خطط سير، فمالهاش تبقى أوسع.
+            // ⚠️ الراوت الثابت قبل البارامتري: `/geo-planner/plan`
+            // و`/geo-planner/unplan` مسارهم POST و`/zone/{zone}` GET،
+            // فمفيش تعارض — بس الترتيب متسايب زي ما هو للوضوح.
+            Route::get('/geo-planner', [\App\Http\Controllers\JourneyController::class, 'geo'])
+                ->name('geo');
+            Route::get('/geo-planner/zone/{zone}', [\App\Http\Controllers\JourneyController::class, 'geoZone'])
+                ->name('geo.zone');
+            Route::post('/geo-planner/plan', [\App\Http\Controllers\JourneyController::class, 'geoPlan'])
+                ->name('geo.plan');
+            Route::post('/geo-planner/unplan', [\App\Http\Controllers\JourneyController::class, 'geoUnplan'])
+                ->name('geo.unplan');
             Route::get('/live', [\App\Http\Controllers\JourneyController::class, 'live'])->name('live');
             // داتا التيرمينال JSON — فولباك البولينج لو الـSSE مش شغال (2026-08-06)
             Route::get('/live/data', [\App\Http\Controllers\JourneyController::class, 'liveData'])->name('live.data');

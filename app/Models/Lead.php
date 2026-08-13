@@ -22,6 +22,11 @@ class Lead extends Model
         'zone_id', 'channel_id', 'assigned_to', 'status', 'source', 'lost_reason',
         'lat', 'lng', 'expected_monthly', 'client_id', 'converted_at',
         'next_action_on', 'notes', 'created_by',
+        // ⚠️ أعمدة السورسنج (2026-08-13) — من غيرها في `$fillable`
+        // المستورد بيكتبها في صمت من غير ما تتحفظ، والاستيراد بيقول
+        // «تم» والليدز بتنزل بسكور صفر وبلا مرجع خارجي.
+        'external_id', 'website', 'rating', 'reviews_count', 'category_raw',
+        'score', 'governorate', 'sub_channel',
     ];
 
     public const STATUSES = ['new', 'contacted', 'visited', 'negotiating', 'won', 'lost'];
@@ -38,7 +43,12 @@ class Lead extends Model
         'lost' => 'b-red',
     ];
 
-    public const SOURCES = ['sheet', 'field', 'referral', 'inbound', 'other'];
+    /**
+     * ⚠️ `gmaps` و`facebook` بيتحطوا من `LeadImporter` أوتوماتيك حسب
+     * شكل المرجع الخارجي — مش من دروب داون. سيبهم في القايمة عشان
+     * الفلتر في الشاشة والفاليديشن في الكنترولر يعرفوهم.
+     */
+    public const SOURCES = ['sheet', 'gmaps', 'facebook', 'field', 'referral', 'inbound', 'other'];
 
     protected function casts(): array
     {
@@ -46,7 +56,16 @@ class Lead extends Model
             'expected_monthly' => 'decimal:2',
             'next_action_on' => 'date',
             'converted_at' => 'datetime',
+            'rating' => 'decimal:2',
+            'reviews_count' => 'integer',
+            'score' => 'integer',
         ];
+    }
+
+    /** لون شارة السكور — من نفس المحرك اللي حسبه */
+    public function scoreClass(): string
+    {
+        return \App\Support\LeadScore::badgeClass((int) $this->score);
     }
 
     public function zone(): BelongsTo

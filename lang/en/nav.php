@@ -67,6 +67,7 @@ return [
     'leads' => 'Leads',
     'journeys' => 'Journey Plans',
     'assignments' => 'Client Assignments',
+    'geo_planner' => 'Geo Coverage & Route Planner',
     'live' => 'Live Board',
     'reps' => 'Reps',
     'branches' => 'Branches',
