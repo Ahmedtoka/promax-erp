@@ -58,6 +58,7 @@ return [
     'act_wh_receive' => 'New goods receipt',
     'act_wh_putaway' => 'Put-away & shelf moves',
     'act_wh_transfer' => 'Warehouse transfers',
+    'act_wh_van_transfer' => 'Transfer goods out of a rep van (changes his van stock & settlement)',
     'act_wh_count' => 'Stock counts & approval',
     'act_wh_pick' => 'Pick orders & processing',
     'act_warehouses_manage' => 'Manage warehouses & adjust stock',

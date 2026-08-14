@@ -127,6 +127,7 @@ return [
         'shelf' => 'Shelf arrangement',
         'po_abort' => 'Returned an order undelivered',
         'custody_adjust' => 'Van stock admin correction',
+        'custody_transfer' => 'Van stock transfer',
         'set_location' => 'Client location set',
     ],
 

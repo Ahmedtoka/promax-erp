@@ -92,7 +92,15 @@
                         @else — @endif
                     </td>
                     <td dir="ltr">{{ $c ? $fmt($r['sold']) : '—' }}</td>
-                    <td dir="ltr">{{ $c ? $fmt($r['returned']) : '—' }}</td>
+                    <td dir="ltr">
+                        @if ($c)
+                            {{ $fmt($r['returned']) }}
+                            {{-- محوَّل لمندوب تاني (١٤/٨) — بره «مرجّع للمخزن» --}}
+                            @if ($r['transferred_out'] > 0)
+                                <div style="font-size:10px;color:var(--muted)">🔄 {{ $fmt($r['transferred_out']) }}</div>
+                            @endif
+                        @else — @endif
+                    </td>
                     <td dir="ltr">{{ $c && $r['gifts_left'] > 0 ? '🎁 '.$fmt($r['gifts_left']) : '—' }}</td>
                     <td dir="ltr">
                         @if ($c)
@@ -130,6 +138,13 @@
                         @if ($r['state'] === 'open' && \App\Support\Access::action(auth()->user(), 'act.custody.adjust'))
                             <a class="btn sm" href="{{ route('ops.rep', $u) }}?adjust=1"
                                title="{{ __('field.custody_adjust') }}">🛠️</a>
+                        @endif
+                        {{-- تحويل بضاعة من العربية (١٤/٨) — بيفتح شاشة التحويل
+                             على المندوب ده. أكشن مستقل عن تصحيح العهدة: ده
+                             بينقل بضاعة موجودة، والتاني بيصحّح رقم اتسجّل غلط --}}
+                        @if ($r['state'] === 'open' && \App\Support\Access::action(auth()->user(), 'act.wh.van_transfer'))
+                            <a class="btn sm" href="{{ route('wh.transfers.van') }}?rep={{ $u->id }}"
+                               title="{{ __('stock.van_transfer') }}">🔄</a>
                         @endif
                         @if ($r['state'] === 'open')
                             <form method="POST" action="{{ route('ops.rep.close', $u) }}" style="display:inline"

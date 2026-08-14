@@ -16,6 +16,9 @@ class StockTransferItem extends Model
     protected $fillable = [
         'stock_transfer_id', 'product_id', 'source_batch_id', 'batch_no',
         'produced_on', 'expires_on', 'qty_sent', 'qty_received', 'qty_short', 'cost', 'notes',
+        // التحويل الميداني (١٤/٨): بند العهدة الأصلي ومصدر بضاعته
+        // **مجمّد** لحظة التحويل — البند ممكن يتغيّر بعدها، والورقة لأ
+        'custody_item_id', 'source', 'source_ref_id',
     ];
 
     protected function casts(): array
@@ -47,6 +50,46 @@ class StockTransferItem extends Model
     public function sourceBatch(): BelongsTo
     {
         return $this->belongsTo(Batch::class, 'source_batch_id');
+    }
+
+    public function custodyItem(): BelongsTo
+    {
+        return $this->belongsTo(CustodyItem::class);
+    }
+
+    /** «عهدة عادية» / «بضاعة أمر توريد» / «جت بتحويل» — للتحويل الميداني */
+    public function sourceLabel(): ?string
+    {
+        if ($this->source === null) {
+            return null;
+        }
+
+        $key = array_key_exists((string) $this->source, CustodyItem::SOURCES)
+            ? (string) $this->source
+            : 'legacy';
+
+        return __('stock.src_'.$key);
+    }
+
+    public function sourceClass(): string
+    {
+        return CustodyItem::SOURCES[(string) $this->source] ?? 'b-gray';
+    }
+
+    /** رقم أمر التوريد أو التحويل اللي البضاعة جت منه */
+    public function sourceRefLabel(): ?string
+    {
+        $ref = (int) $this->source_ref_id;
+
+        if ($ref <= 0) {
+            return null;
+        }
+
+        return match ((string) $this->source) {
+            'purchase_order' => PurchaseOrder::find($ref)?->number,
+            'transfer' => StockTransfer::find($ref)?->number,
+            default => null,
+        };
     }
 
     public function hasVariance(): bool

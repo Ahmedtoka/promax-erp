@@ -180,6 +180,10 @@ class OpsController extends Controller
                 'assigned_value' => round($c?->assignedValue($mode) ?? 0, 2),
                 'sold' => (int) ($c?->items->sum('sold') ?? 0),
                 'returned' => (int) ($c?->items->sum('returned') ?? 0),
+                // اتحوّل لعربية مندوب تاني (١٤/٨) — خرج من العربية زي
+                // المرجّع بالظبط، ولو مابانش الصف بيقول «الباقي أقل»
+                // من غير سبب ظاهر
+                'transferred_out' => (int) ($c?->items->sum('transferred_out') ?? 0),
                 // هدايا لسه معاه — الموزّع بيتخصم من المخصص
                 'gifts_left' => (int) ($c?->items->sum(fn ($i) => max((int) $i->gift_assigned - (int) $i->gift_given, 0)) ?? 0),
                 'remaining' => $remaining,

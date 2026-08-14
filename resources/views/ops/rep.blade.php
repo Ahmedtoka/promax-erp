@@ -62,6 +62,12 @@
 @if ($custody)
 <div class="card">
     <h3>📦 {{ __('ops.van_stock') }} <span class="side">{{ __('ops.loaded') }} ← {{ __('ops.remaining') }}</span>
+        {{-- ⚠️ الأزرار متحرسة بنفس مفاتيح أكشناتها — زرار بيودّي
+             لـ403 أسوأ من زرار مش موجود --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.van_transfer') && $custody->status === 'open')
+            <a class="btn sm" style="float:inline-end;margin-inline-start:6px"
+               href="{{ route('wh.transfers.van') }}?rep={{ $u->id }}">🔄 {{ __('stock.van_transfer_short') }}</a>
+        @endif
         @if ($canAdjust)
             <button class="btn sm" type="button" style="float:inline-end" onclick="openDlg('dlgAdjust')">🛠️ {{ __('field.custody_adjust') }}</button>
         @endif
@@ -77,6 +83,9 @@
         <table>
             <tr>
                 <th>{{ __('common.code') }}</th><th>{{ __('stock.item') }}</th><th>{{ __('stock.unit') }}</th>
+                {{-- مصدر البضاعة (١٤/٨) — طلب المالك: «تقوللي البضاعة دي
+                     بتاعة أنهي مصدر: عهدة عادية ولا أمر توريد ولا تحويل» --}}
+                <th data-nosum>{{ __('stock.source') }}</th>
                 <th>{{ __('ops.loaded') }}</th><th>{{ __('field.sold') }}</th><th>{{ __('ops.remaining') }}</th>
                 @foreach ($cvLists as $cvL)
                     <th>{{ __('ops.remaining_value') }}
@@ -89,6 +98,12 @@
                     <td class="num">{{ $it->product->code }}</td>
                     <td><b>{{ $it->product->displayName() }}</b></td>
                     <td style="color:var(--muted);font-size:11.5px">{{ $it->product->unitLabel() }}</td>
+                    <td>
+                        <span class="badge {{ $it->sourceClass() }}">{{ $it->sourceLabel() }}</span>
+                        @if ($it->sourceRefLabel())
+                            <div style="font-size:10px;color:var(--muted)" dir="ltr">{{ $it->sourceRefLabel() }}</div>
+                        @endif
+                    </td>
                     <td class="num">{{ $it->assigned }}</td>
                     <td class="num" style="color:var(--blue)">{{ $it->sold }}</td>
                     <td class="num pos"><b>{{ $it->remaining() }}</b>
@@ -110,6 +125,8 @@
                 <tr>
                     <td></td>
                     <td><b>Σ {{ __('common.total') }}</b></td>
+                    <td></td>
+                    {{-- ⚠️ زوّدنا عمود «المصدر» — خانة فاضية في الفوتر تقابله --}}
                     <td></td>
                     <td class="num"><b>{{ $custody->items->sum('assigned') }}</b></td>
                     <td class="num"><b>{{ $custody->items->sum('sold') }}</b></td>

@@ -444,8 +444,18 @@ class Returns
     {
         // ⚠️ `batch_id = null` عن قصد — اللي راجع من العميل مش معروف
         // من أنهي تشغيلة، والافتراض بيخرّب تتبّع الصلاحية.
+        //
+        // ⚠️ **`source` جوه المفتاح** (١٤/٨): مرتجع العميل مش «بضاعة
+        // أمر توريد» ولا «جت بتحويل» — بند عهدة عادي. من غيره
+        // `firstOrCreate` كان هيلاقي صف بمصدر تاني ويحط فيه المرتجع.
         $item = CustodyItem::firstOrCreate(
-            ['custody_id' => $custody->id, 'product_id' => $productId, 'batch_id' => null],
+            [
+                'custody_id' => $custody->id,
+                'product_id' => $productId,
+                'batch_id' => null,
+                'source' => 'custody',
+                'source_ref_id' => 0,
+            ],
             ['assigned' => 0, 'sold' => 0, 'returned' => 0, 'returned_in' => 0, 'damaged_in' => 0],
         );
 

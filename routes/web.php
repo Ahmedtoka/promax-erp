@@ -518,6 +518,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ⚠️ قبل `{transfer}` — وإلا «new» بتتفسر كـid ياخد 404
         Route::get('/transfers/new', [WarehouseController::class, 'newTransfer'])
             ->middleware('role:admin,manager')->name('transfers.new');
+        // ═══ تحويل من عربية مندوب (١٤ أغسطس ٢٠٢٦) ═══
+        // ⚠️ قبل `{transfer}` كمان — «van» كانت هتتفسر كـid.
+        // نفس رولز بورد العربيات (`ops.vans`): أدمن ومدير — القرار ده
+        // بيحرّك عهدة مندوب وأرفف مخزن مع بعض.
+        Route::get('/transfers/van', [WarehouseController::class, 'newVanTransfer'])
+            ->middleware('role:admin,manager')->name('transfers.van');
         // ⚠️ **العرض والطباعة مفتوحين لكل اللي بيدخل شاشة المخزن.**
         // أمين المخزن المستقبِل لازم يفتح الشحنة ويطبع الورقة اللي
         // هيمضي عليها — لو محتاج المدير يفتحها له، الورقة مش هتتطبع
@@ -585,6 +591,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // بينفّذ، والمدير بيقرر.
         Route::middleware('role:admin,manager')->group(function () {
             Route::post('/transfers', [WarehouseController::class, 'storeTransfer'])->name('transfers.store');
+            // تحويل من عربية مندوب — للمخزن أو لمندوب تاني (١٤/٨)
+            Route::post('/transfers/van', [WarehouseController::class, 'storeVanTransfer'])
+                ->name('transfers.van.store');
 
             Route::post('/counts', [\App\Http\Controllers\StockCountController::class, 'store'])->name('counts.store');
             Route::post('/counts/{stockCount}/approve',

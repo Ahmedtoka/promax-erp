@@ -444,6 +444,12 @@ class Access
         'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', null, ['wh.receipts.store', 'wh.receipts.import', 'wh.batch.update']],
         'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', null, ['wh.putaway', 'wh.receipt.putaway', 'wh.move', 'wh.locations.store']],
         'act.wh.transfer' => ['perm.act_wh_transfer', 'wh.transfers', null, ['wh.transfers.store', 'wh.transfers.receive', 'wh.transfers.new']],
+        // ═══ تحويل من عربية مندوب (١٤/٨) ═══
+        // ⚠️ **أكشن مستقل عن تحويل المخازن عن قصد.** ده بيسحب بضاعة
+        // من عهدة مندوب ويغيّر أرقام تصفيته — قرار إداري مش شغل مخزن
+        // يومي. `['manager']` = الأدمن والمدير، والأدمن يقدر يمنحه
+        // لأمين مخزن عشان يستقبل في مخزنه هو (`guardWarehouse`).
+        'act.wh.van_transfer' => ['perm.act_wh_van_transfer', 'wh.transfers', ['manager'], ['wh.transfers.van', 'wh.transfers.van.store']],
         'act.wh.count' => ['perm.act_wh_count', 'wh.counts', null, ['wh.counts.store', 'wh.count.record', 'wh.count.approve', 'wh.count.cancel']],
         'act.wh.pick' => ['perm.act_wh_pick', 'wh.picks', null, ['wh.picks.start', 'wh.picks.ready', 'wh.picks.update', 'wh.picks.cancel', 'wh.picks.po', 'wh.picks.rpl']],
         'act.warehouses.manage' => ['perm.act_warehouses_manage', 'erp.warehouses', ['manager'], ['erp.warehouses.store', 'erp.warehouses.update', 'erp.warehouses.stock.save']],

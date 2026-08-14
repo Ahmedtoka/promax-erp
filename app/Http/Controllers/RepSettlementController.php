@@ -175,6 +175,7 @@ class RepSettlementController extends Controller
                     'gift' => $l['gift_given'],
                     'gift_left' => $l['gift_left'],
                     'returned_wh' => $l['returned'],
+                    'transfer_out' => $l['transfer_out'],
                     'returned_in' => $l['returned_in'],
                     'damaged_in' => $l['damaged_in'],
                     'remaining' => $l['remaining'],
@@ -569,6 +570,16 @@ class RepSettlementController extends Controller
                 $rows[$pid]['remaining'] += $it->remaining();
                 $rows[$pid]['returned'] += (int) $it->returned;
 
+                // ⚠️ **حدّ مستقل في المعادلة** (١٤ أغسطس ٢٠٢٦): بضاعة
+                // اتحوّلت لمندوب **تاني** بمستند تحويل. مش «مباع» ومش
+                // «مرجّع للمخزن» — وهي بقت في عهدة الزميل فبتتحاسب
+                // عليه هو في تصفيته. من غير الحد ده المحمَّل كان
+                // بيفضل أكبر من المجموع للأبد والفرق يبان عجز وهمي.
+                //
+                // ⚠️ تحويل المندوب **للمخزن** بينزل `returned` فوق —
+                // خانة «مرجع للمخزن» الموجودة أصلاً، مش حد جديد.
+                $rows[$pid]['transfer_out'] += (int) $it->transferred_out;
+
                 // ⚠️ بره المعادلة بقصد — دي بضاعة العملاء اللي في
                 // العربية، مالهاش أصل في المحمَّل. بتتسلّم مع التصفية.
                 //
@@ -637,7 +648,7 @@ class RepSettlementController extends Controller
 
             // المصروف والموجود — **من غير `returned_in`**
             $accounted = $r['cash_qty'] + $r['credit_qty'] + $r['po_qty']
-                + $r['gift_given'] + $r['returned']
+                + $r['gift_given'] + $r['returned'] + $r['transfer_out']
                 + $r['remaining'] + $r['gift_left'];
 
             $r['accounted'] = $accounted;
@@ -662,6 +673,8 @@ class RepSettlementController extends Controller
             'gift_qty' => (int) $lines->sum('gift_given'),
             'gift_left_qty' => (int) $lines->sum('gift_left'),
             'returned_wh_qty' => (int) $lines->sum('returned'),
+            // محوَّل لمندوب تاني — حدّ مستقل في المعادلة (١٤/٨)
+            'transfer_out_qty' => (int) $lines->sum('transfer_out'),
             // ⚠️ بره المعادلة — بضاعة العملاء اللي لازم تتسلّم
             'returned_qty' => (int) $lines->sum('returned_in'),
             'damaged_qty' => (int) $lines->sum('damaged_in'),
@@ -686,7 +699,7 @@ class RepSettlementController extends Controller
             'product' => $product,
             'assigned' => 0, 'gift_assigned' => 0,
             'remaining' => 0, 'returned' => 0, 'returned_in' => 0, 'damaged_in' => 0,
-            'gift_given' => 0, 'gift_left' => 0, 'po_qty' => 0,
+            'gift_given' => 0, 'gift_left' => 0, 'po_qty' => 0, 'transfer_out' => 0,
             'cash_qty' => 0, 'cash_value' => 0.0,
             'credit_qty' => 0, 'credit_value' => 0.0,
         ];

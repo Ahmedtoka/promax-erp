@@ -87,6 +87,16 @@
             </div>
         </div>
 
+        {{-- ═══ السبب — إجباري لكل التحويلات (١٤/٨) ═══
+             نفس قاعدة التحويل الميداني: بضاعة بتتنقل بين مخزنين من غير
+             سبب مكتوب = مراجعة بعد شهر بتبقى تخمين. --}}
+        <div style="margin-top:12px">
+            <label class="f">{{ __('stock.transfer_reason') }} <b class="req-star">*</b></label>
+            <input type="text" name="reason" required minlength="3" maxlength="300" style="width:100%"
+                   value="{{ old('reason') }}"
+                   placeholder="{{ __('stock.transfer_reason_ph') }}">
+        </div>
+
         {{-- ═══ ملخصات لايف — البوكسات بتتحدث مع كل سطر ═══ --}}
         <div class="kpis" style="margin-top:12px">
             <div class="kpi">

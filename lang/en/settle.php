@@ -20,6 +20,8 @@ return [
     'returned_in' => 'Returned into van',
     'returned_in_hint' => "Clients' goods — handed over at settlement",
     'returned_wh' => 'Returned to warehouse',
+    // Own term in the goods equation (14 Aug 2026) - moved to a colleague's van
+    'transfer_out' => 'Transferred to a rep',
     'delivered_pos' => 'Delivered on sales orders',
     'gift_left' => 'Gifts still on van',
     'of_which_gift' => 'of which gifts',

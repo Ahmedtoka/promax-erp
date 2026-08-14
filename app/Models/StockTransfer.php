@@ -10,12 +10,28 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 /**
- * أمر تحويل بين مخزنين — المصنع بيبعت للفرع.
- * Stock transfer between warehouses — the factory ships to a branch.
+ * أمر تحويل — مستند واحد بتلات اتجاهات.
+ * Stock transfer — ONE document, three directions.
  *
- * الفلو: المصنع بيبعت (sent) → الفرع يستلم ويأكد الكميات (received)
- * والاستلام بيولّد GRN وباتشات في مخزن الفرع.
- * الفرق بين المبعوت والمستلم بيفضل مسجّل على البند.
+ * ═══ الاتجاهات (`kind`) ═══
+ *   wh_wh    🏭→🏭  مخزن لمخزن — المصنع بيبعت للفرع.
+ *                   الفلو: بعت (sent) → الفرع يستلم ويأكد (received)،
+ *                   والاستلام بيولّد GRN وباتشات في مخزن الفرع.
+ *   rep_wh   🚐→🏭  مندوب بيرجّع بضاعة من عربيته للمخزن (١٤/٨).
+ *   rep_rep  🚐→🚐  بضاعة بتتنقل من عربية لعربية (١٤/٨).
+ *
+ * ⚠️ **مستند واحد مش تلاتة.** نفس الترقيم ونفس الشاشة ونفس الورقة
+ * ونفس الصلاحيات — جدول موازي كان معناه إن أي تعديل على الورقة أو
+ * على الحارس يتعمل مرتين، والمرة اللي بتتنسى بتسيب باب مفتوح.
+ *
+ * ⚠️ **التحويلات الميدانية بتتنفّذ في خطوة واحدة** (`received`) —
+ * مش `sent` بعدين `received`. السبب: البضاعة بتتسلّم إيد بإيد لحظة
+ * عمل المستند (المندوب واقف عند شباك المخزن أو قدام زميله)، وحالة
+ * «في الطريق» كانت هتخلق بضاعة مالهاش مالك: خرجت من العهدة وماوصلتش
+ * الرف. الورقة المطبوعة فيها إمضاء الطرفين.
+ *
+ * ⚠️ **السبب (`reason`) إجباري في كل تحويل جديد**، أياً كان الاتجاه —
+ * `nullable` في السكيما للشحنات القديمة بس.
  */
 class StockTransfer extends Model
 {
@@ -27,10 +43,18 @@ class StockTransfer extends Model
         'cancelled' => 'b-red',
     ];
 
+    /** الاتجاه => [شارة الاتجاه، كلاس البادج] */
+    public const KINDS = [
+        'wh_wh' => ['🏭→🏭', 'b-gray'],
+        'rep_wh' => ['🚐→🏭', 'b-blue'],
+        'rep_rep' => ['🚐→🚐', 'b-purple'],
+    ];
+
     protected $fillable = [
-        'number', 'from_warehouse_id', 'to_warehouse_id', 'status',
-        'sent_on', 'received_on', 'sent_by', 'received_by', 'carrier_name',
-        'goods_receipt_id', 'notes',
+        'number', 'kind', 'from_warehouse_id', 'from_user_id',
+        'to_warehouse_id', 'to_user_id', 'status',
+        'sent_on', 'received_on', 'sent_by', 'received_by', 'created_by', 'carrier_name',
+        'goods_receipt_id', 'notes', 'reason',
     ];
 
     protected function casts(): array
@@ -68,6 +92,23 @@ class StockTransfer extends Model
         return $this->belongsTo(User::class, 'received_by');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** المندوب اللي البضاعة طلعت من عربيته */
+    public function fromUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'from_user_id');
+    }
+
+    /** المندوب اللي البضاعة نزلت عربيته */
+    public function toUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'to_user_id');
+    }
+
     public function statusLabel(): string
     {
         return __('stock.transfer_status_'.$this->status);
@@ -76,6 +117,52 @@ class StockTransfer extends Model
     public function statusClass(): string
     {
         return self::STATUSES[$this->status] ?? 'b-gray';
+    }
+
+    // ==================== الاتجاه ====================
+
+    public function kindKey(): string
+    {
+        $kind = (string) ($this->kind ?: 'wh_wh');
+
+        return array_key_exists($kind, self::KINDS) ? $kind : 'wh_wh';
+    }
+
+    public function kindArrow(): string
+    {
+        return self::KINDS[$this->kindKey()][0];
+    }
+
+    public function kindClass(): string
+    {
+        return self::KINDS[$this->kindKey()][1];
+    }
+
+    public function kindLabel(): string
+    {
+        return __('stock.kind_'.$this->kindKey());
+    }
+
+    /** تحويل ميداني (طرفه الأول عربية مندوب) */
+    public function isVan(): bool
+    {
+        return in_array($this->kindKey(), ['rep_wh', 'rep_rep'], true);
+    }
+
+    /** اسم الطرف المرسل — مخزن أو مندوب */
+    public function fromLabel(): string
+    {
+        return $this->isVan()
+            ? ($this->fromUser?->displayName() ?? '—')
+            : ($this->fromWarehouse?->displayName() ?? '—');
+    }
+
+    /** اسم الطرف المستقبِل — مندوب لو rep_rep، وإلا مخزن */
+    public function toLabel(): string
+    {
+        return $this->kindKey() === 'rep_rep'
+            ? ($this->toUser?->displayName() ?? '—')
+            : ($this->toWarehouse?->displayName() ?? '—');
     }
 
     /**
@@ -100,6 +187,11 @@ class StockTransfer extends Model
         return static::query()
             ->join('stock_transfer_items as i', 'i.stock_transfer_id', '=', 'stock_transfers.id')
             ->where('stock_transfers.status', 'sent')
+            // ⚠️ **مخزن لمخزن بس** (١٤/٨). التحويلات الميدانية بتتنفّذ
+            // في خطوة واحدة فمالهاش حالة «في الطريق» أصلاً — ولو حصل
+            // ودخلت هنا كانت هتقول إن بضاعة طالعة من رفوف مخزن وهي
+            // أصلاً في عربية مندوب من إمبارح.
+            ->where('stock_transfers.kind', 'wh_wh')
             ->when($warehouseId !== null,
                 fn ($q) => $q->where('stock_transfers.from_warehouse_id', $warehouseId))
             ->groupBy($key)
@@ -157,6 +249,7 @@ class StockTransfer extends Model
         array $lines,
         ?string $carrier = null,
         ?string $notes = null,
+        ?string $reason = null,
     ): array {
         // ⚠️ **`Rejected` مش `RuntimeException` ومش `rescue`.**
         // `QueryException` بترث من `RuntimeException`، فلقف العام كان
@@ -167,17 +260,20 @@ class StockTransfer extends Model
         // القاعدة دي مكتوبة صراحةً في `App\Exceptions\Rejected`.
         try {
             $transfer = DB::transaction(function () use (
-                $user, $fromWarehouseId, $toWarehouseId, $sentOn, $lines, $carrier, $notes
+                $user, $fromWarehouseId, $toWarehouseId, $sentOn, $lines, $carrier, $notes, $reason
             ) {
                 $transfer = static::create([
                     'number' => static::nextNumber(),
+                    'kind' => 'wh_wh',
                     'from_warehouse_id' => $fromWarehouseId,
                     'to_warehouse_id' => $toWarehouseId,
                     'status' => 'sent',
                     'sent_on' => $sentOn,
                     'sent_by' => $user->id,
+                    'created_by' => $user->id,
                     'carrier_name' => $carrier,
                     'notes' => $notes,
+                    'reason' => $reason,
                 ]);
 
                 $touched = [];
@@ -318,6 +414,317 @@ class StockTransfer extends Model
                 fn () => __('stock.notif_transfer_in_body', [
                     'from' => $this->fromWarehouse?->displayName() ?? '—',
                     'qty' => $this->qtySent(),
+                ]),
+            );
+        }
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * تحويل من عربية مندوب — للمخزن أو لمندوب تاني (١٤ أغسطس ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * طلب المالك: «عملت تسليم عهدة ومندوب خرج بيها ولقينا غلط في
+     * التحضير — عاوز أحوّل بضاعة **موجودة فعلاً** معاه للمخزن أو
+     * لمندوب تاني، بسبب مكتوب، وأعرف البضاعة دي مصدرها إيه».
+     *
+     * ⚠️ **مفيش مسار مخزون موازي:**
+     *   - `rep_wh`  البضاعة بترجع الرف بـ`Custody::restockFromItem` —
+     *     نفس الحركة بالحرف بتاعة تصحيح العهدة (١٢/٨) وفرق الاستلام.
+     *   - `rep_rep` **مافيش حركة مخزن خالص** — البضاعة أصلاً `qty_issued`
+     *     على الباتش من ساعة التحميل، وهي بتنتقل من عربية لعربية.
+     *     أي كتابة على الباتش هنا كانت هتخلق بضاعة من العدم.
+     *
+     * ⚠️ **المعادلة بتفضل مقفولة:**
+     *   - `rep_wh`  → `custody_items.returned` (خانة «مرجع للمخزن»
+     *     الموجودة أصلاً في معادلة التصفية، وماكانش فيه مسار بيكتبها).
+     *   - `rep_rep` → `custody_items.transferred_out` (حدّ جديد صريح
+     *     في المعادلة) عند المرسِل، و`assigned` عند المستقبِل.
+     *
+     * ⚠️ **بضاعة موجودة فعلاً بس:** كل سطر بند عهدة حقيقي، متقفول
+     * بـ`lockForUpdate`، والكمية ≤ `remaining()` — الفحص جوه الترانزاكشن
+     * لأن الفحص اللي قبلها بيسقط أول ما المندوب يبيع في نفس اللحظة.
+     *
+     * @param  array<int, array{custody_item_id:int, qty:int}>  $lines
+     * @return array{transfer: ?self, error: ?string}
+     */
+    public static function sendFromCustody(
+        User $actor,
+        User $fromRep,
+        string $kind,
+        ?Warehouse $toWarehouse,
+        ?User $toRep,
+        array $lines,
+        string $reason,
+        ?string $notes = null,
+    ): array {
+        if (! in_array($kind, ['rep_wh', 'rep_rep'], true)) {
+            return ['transfer' => null, 'error' => __('stock.transfer_kind_bad')];
+        }
+
+        if ($kind === 'rep_wh' && $toWarehouse === null) {
+            return ['transfer' => null, 'error' => __('stock.no_warehouse')];
+        }
+
+        if ($kind === 'rep_rep' && ($toRep === null || $toRep->id === $fromRep->id)) {
+            return ['transfer' => null, 'error' => __('stock.transfer_same_rep')];
+        }
+
+        $custody = $fromRep->currentCustody();
+
+        if ($custody === null || $custody->status === 'closed') {
+            return ['transfer' => null, 'error' => __('field.custody_adjust_none')];
+        }
+
+        try {
+            $transfer = DB::transaction(function () use (
+                $actor, $fromRep, $kind, $toWarehouse, $toRep, $lines, $reason, $notes, $custody
+            ) {
+                // ⚠️ إعادة قراية بقفل — العهدة ممكن تكون اتقفلت من
+                // شاشة تانية بين فتح الفورم والحفظ
+                $source = Custody::whereKey($custody->id)->lockForUpdate()->first();
+
+                if (! $source || $source->status === 'closed') {
+                    throw new Rejected(__('field.custody_closed'));
+                }
+
+                // ═══ عهدة المستقبِل — نفس منطق `PickOrder::handOver` ═══
+                // عهدة **واحدة مفتوحة** لكل مندوب، والقفل بينهيها مش
+                // منتصف الليل (عقيدة ١٠/٨).
+                $target = null;
+
+                if ($kind === 'rep_rep') {
+                    $target = Custody::where('user_id', $toRep->id)
+                        ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+                        ->orderByDesc('date')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($target === null) {
+                        $closedToday = Custody::where('user_id', $toRep->id)
+                            ->whereDate('date', today())->first();
+
+                        if ($closedToday !== null) {
+                            throw new Rejected(__('field.custody_closed'));
+                        }
+
+                        $target = Custody::create([
+                            'user_id' => $toRep->id,
+                            'date' => today(),
+                            'warehouse_id' => $toRep->warehouse_id ?? $source->warehouse_id,
+                            'status' => 'open',
+                        ]);
+                    }
+                }
+
+                // ⚠️ **مرساة المخزن** — `from_warehouse_id` و
+                // `to_warehouse_id` أعمدة NOT NULL في السكيما، وتغيير
+                // nullability لعمود عليه FK على سيرفر لايف مش ريبو جيت
+                // مخاطرة مالهاش لزوم. بنرسي على مخزن العهدة (المخزن
+                // اللي البضاعة اتحمّلت منه) — وده رقم حقيقي مفيد.
+                // الفولباك بالترتيب: مخزن عهدة المستقبِل ← باتش أول بند
+                // ← مخزن الوجهة.
+                $fromWarehouseId = (int) (
+                    $source->warehouse_id
+                    ?: ($target?->warehouse_id
+                        ?: (Batch::whereIn('id', CustodyItem::where('custody_id', $source->id)
+                            ->whereNotNull('batch_id')->pluck('batch_id'))
+                            ->value('warehouse_id')
+                            ?: ($toWarehouse?->id ?? 0)))
+                );
+                $toWarehouseId = (int) ($kind === 'rep_wh'
+                    ? $toWarehouse->id
+                    : ($target?->warehouse_id ?: $fromWarehouseId));
+
+                if ($fromWarehouseId <= 0 || $toWarehouseId <= 0) {
+                    throw new Rejected(__('stock.no_warehouse'));
+                }
+
+                $transfer = static::create([
+                    'number' => static::nextNumber(),
+                    'kind' => $kind,
+                    'from_warehouse_id' => $fromWarehouseId,
+                    'from_user_id' => $fromRep->id,
+                    'to_warehouse_id' => $toWarehouseId,
+                    'to_user_id' => $kind === 'rep_rep' ? $toRep->id : null,
+                    // ⚠️ **خطوة واحدة** — البضاعة بتتسلّم إيد بإيد لحظة
+                    // المستند. شوف الشرح في رأس الكلاس.
+                    'status' => 'received',
+                    'sent_on' => today(),
+                    'received_on' => today(),
+                    'sent_by' => $actor->id,
+                    'received_by' => $actor->id,
+                    'created_by' => $actor->id,
+                    'notes' => $notes,
+                    'reason' => $reason,
+                ]);
+
+                $touched = [];
+
+                foreach ($lines as $line) {
+                    $qty = (int) ($line['qty'] ?? 0);
+
+                    if ($qty <= 0) {
+                        continue;
+                    }
+
+                    /** @var CustodyItem|null $item */
+                    $item = CustodyItem::whereKey($line['custody_item_id'])
+                        ->where('custody_id', $source->id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($item === null) {
+                        throw new Rejected(__('stock.transfer_line_gone'));
+                    }
+
+                    $item->loadMissing(['product', 'batch']);
+
+                    if ($qty > $item->remaining()) {
+                        throw new Rejected(__('field.custody_not_enough', [
+                            'product' => $item->product?->displayName() ?? '#'.$item->product_id,
+                            'short' => $qty - $item->remaining(),
+                        ]));
+                    }
+
+                    // ⚠️ **البضاعة بترجع لمخزن باتشها، مش لأي مخزن.**
+                    // `restockFromItem` بترجّع للرف اللي طلعت منه —
+                    // ولو الوجهة مخزن تاني كانت البضاعة هتتحط على رف
+                    // مخزن ثالث والرقمين يفترقوا. الشاشة بتفلتر البنود
+                    // بمخزن الوجهة، والحارس ده هو اللي بيمنع POST مباشر.
+                    if ($kind === 'rep_wh' && $item->batch !== null
+                        && (int) $item->batch->warehouse_id !== (int) $toWarehouse->id) {
+                        throw new Rejected(__('stock.transfer_batch_other_wh', [
+                            'product' => $item->product?->displayName() ?? '#'.$item->product_id,
+                            'warehouse' => $item->batch->warehouse?->displayName() ?? '—',
+                        ]));
+                    }
+
+                    // ═══ ١. خانة العهدة عند المرسِل ═══
+                    if ($kind === 'rep_wh') {
+                        $item->increment('returned', $qty);
+                    } else {
+                        $item->increment('transferred_out', $qty);
+                    }
+
+                    // ═══ ٢. بند المستند — بمصدر البضاعة مجمّد ═══
+                    StockTransferItem::create([
+                        'stock_transfer_id' => $transfer->id,
+                        'product_id' => $item->product_id,
+                        'source_batch_id' => $item->batch_id,
+                        'custody_item_id' => $item->id,
+                        'source' => $item->sourceKey(),
+                        'source_ref_id' => (int) $item->source_ref_id,
+                        'batch_no' => $item->batch?->batch_no ?? '—',
+                        'produced_on' => $item->batch?->produced_on,
+                        'expires_on' => $item->batch?->expires_on,
+                        'qty_sent' => $qty,
+                        'qty_received' => $qty,
+                        'qty_short' => 0,
+                        'cost' => $item->batch?->cost ?? $item->product?->cost,
+                    ]);
+
+                    // ═══ ٣. الطرف التاني ═══
+                    if ($kind === 'rep_wh') {
+                        // نفس مسار الإرجاع للرف بتاع تصحيح العهدة
+                        $source->restockFromItem($item, $qty, $toWarehouse);
+                        $touched[(int) $item->product_id] = true;
+
+                        continue;
+                    }
+
+                    // مندوب لمندوب: البضاعة مابتلمسش المخزن — بند
+                    // جديد بمصدر `transfer` ومرجعه رقم المستند ده،
+                    // فالمندوب التاني يعرف الكراتين دي جت منين.
+                    $dest = $target->items()->firstOrNew([
+                        'product_id' => $item->product_id,
+                        'batch_id' => $item->batch_id,
+                        'source' => 'transfer',
+                        'source_ref_id' => $transfer->id,
+                    ]);
+
+                    $dest->assigned = (int) $dest->assigned + $qty;
+                    $dest->save();
+                }
+
+                if ($transfer->items()->count() === 0) {
+                    throw new Rejected(__('stock.pick_no_items'));
+                }
+
+                // ⚠️ `stocks` صورة من الباتشات — مصالحة ختامية للمخزن
+                // اللي البضاعة رجعت له (تحويل مندوب لمندوب مالوش مخزن)
+                foreach (array_keys($touched) as $productId) {
+                    \App\Services\StockCounting::resync((int) $productId, $toWarehouseId);
+                }
+
+                return $transfer;
+            });
+        } catch (Rejected $e) {
+            return ['transfer' => null, 'error' => $e->getMessage()];
+        }
+
+        // ⚠️ بره الترانزاكشن — الإشعار مش جزء من صحة الحركة
+        $transfer->notifyVanTransfer();
+
+        return ['transfer' => $transfer->fresh(['items']), 'error' => null];
+    }
+
+    /**
+     * إشعارات التحويل الميداني — المندوب اللي اتسحب منه أولاً.
+     *
+     * ⚠️ **المندوب لازم يعرف قبل ما يقف قدام العميل.** بضاعة اختفت
+     * من عربيته من غير إشعار = هو يقول «معايا» والسيستم يقول «مفيش».
+     */
+    public function notifyVanTransfer(): void
+    {
+        $this->loadMissing(['items', 'fromUser', 'toUser', 'toWarehouse']);
+
+        $items = $this->items->count();
+        $qty = $this->qtySent();
+
+        AppNotification::send(
+            $this->fromUser,
+            fn () => __('stock.notif_van_out_title'),
+            fn () => __('stock.notif_van_out_body', [
+                'items' => $items,
+                'qty' => $qty,
+                'to' => $this->toLabel(),
+                'reason' => (string) $this->reason,
+            ]),
+            good: false,
+        );
+
+        if ($this->kindKey() === 'rep_rep') {
+            AppNotification::send(
+                $this->toUser,
+                fn () => __('stock.notif_van_in_title'),
+                fn () => __('stock.notif_van_in_body', [
+                    'items' => $items,
+                    'qty' => $qty,
+                    'from' => $this->fromLabel(),
+                    'reason' => (string) $this->reason,
+                ]),
+            );
+
+            return;
+        }
+
+        // أمين المخزن المستقبِل والمسؤول عنه — نفس قاعدة `notifyDestination`
+        $targets = User::query()
+            ->where('active', true)
+            ->where(fn ($q) => $q
+                ->where('warehouse_id', $this->to_warehouse_id)
+                ->orWhereKey($this->toWarehouse?->manager_id))
+            ->get();
+
+        foreach ($targets as $user) {
+            AppNotification::send(
+                $user,
+                fn () => __('stock.notif_van_wh_title', ['number' => $this->number]),
+                fn () => __('stock.notif_van_wh_body', [
+                    'rep' => $this->fromLabel(),
+                    'qty' => $qty,
+                    'reason' => (string) $this->reason,
                 ]),
             );
         }

@@ -9,7 +9,10 @@ use App\Models\Location;
 use App\Models\Product;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
+use App\Models\TrackEvent;
+use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -701,9 +704,18 @@ class WarehouseController extends Controller
             ->when($request->string('q')->trim()->value(),
                 fn ($q, $s) => $q->where('number', 'like', "%$s%"))
             ->when($request->integer('wh'), fn ($q, $w) => $q->where(fn ($x) => $x
-                ->where('from_warehouse_id', $w)->orWhere('to_warehouse_id', $w)));
+                ->where('from_warehouse_id', $w)->orWhere('to_warehouse_id', $w)))
+            // فلتر الاتجاه (١٤/٨): مخزن↔مخزن / مندوب←مخزن / مندوب←مندوب
+            ->when(
+                array_key_exists($request->string('kind')->value(), StockTransfer::KINDS),
+                fn ($q) => $q->where('kind', $request->string('kind')->value()),
+            );
 
-        $q = $base()->with(['fromWarehouse', 'toWarehouse', 'items.product', 'sender']);
+        $q = $base()->with([
+            'fromWarehouse', 'toWarehouse', 'items.product', 'sender',
+            // الأطراف الميدانية والسبب واللي عمل المستند — بيتعرضوا في الجدول
+            'fromUser', 'toUser', 'creator',
+        ]);
 
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
@@ -716,11 +728,14 @@ class WarehouseController extends Controller
                 'total' => $base()->count(),
                 'sent' => $base()->where('status', 'sent')->count(),
                 'received' => $base()->where('status', 'received')->count(),
+                // ⚠️ «في الطريق» = مخزن لمخزن بس — التحويلات الميدانية
+                // بتتنفّذ في خطوة واحدة فمالهاش لحظة على الطريق
                 'transit_units' => (int) StockTransferItem::whereHas('transfer',
-                    fn ($t) => $t->where('status', 'sent'))->sum('qty_sent'),
+                    fn ($t) => $t->where('status', 'sent')->where('kind', 'wh_wh'))->sum('qty_sent'),
+                'van' => $base()->whereIn('kind', ['rep_wh', 'rep_rep'])->count(),
             ],
             'warehouses' => $this->visibleWarehouses($request),
-            'filters' => $request->only(['q', 'status', 'wh']),
+            'filters' => $request->only(['q', 'status', 'wh', 'kind']),
         ]);
     }
 
@@ -752,6 +767,11 @@ class WarehouseController extends Controller
             'to_warehouse_id' => ['required', 'different:from_warehouse_id', 'exists:warehouses,id'],
             'sent_on' => ['required', 'date'],
             'carrier_name' => ['nullable', 'string', 'max:120'],
+            // ⚠️ **السبب إجباري لكل التحويلات** (قرار ١٤/٨، امتداد لطلب
+            // المالك على التحويل الميداني). تحويل مخزن لمخزن من غير سبب
+            // مكتوب كان نفس المشكلة بالظبط: بضاعة بتتنقل ومحدش يعرف ليه
+            // بعد شهر. `notes` حقل حر مش بديل — مش إجباري ومحدش بيقراه.
+            'reason' => ['required', 'string', 'min:3', 'max:300'],
             'notes' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_id' => ['required', 'exists:products,id'],
@@ -797,6 +817,7 @@ class WarehouseController extends Controller
             $data['lines'],
             $data['carrier_name'] ?? null,
             $data['notes'] ?? null,
+            $data['reason'],
         );
 
         if ($result['error']) {
@@ -811,10 +832,186 @@ class WarehouseController extends Controller
             ->with('ok', __('stock.transfer_sent', ['number' => $result['transfer']->number]));
     }
 
+    // ============ التحويل من عربية مندوب (١٤ أغسطس ٢٠٢٦) ============
+
+    /**
+     * شاشة «تحويل من عربية» — مندوب ← مخزن، أو مندوب ← مندوب.
+     *
+     * ⚠️ **الأصناف من العهدة الحية مش من الكتالوج.** المالك طلبها
+     * بالنص: «أحوّل بضاعة موجودة فعلاً … اختار حسب المتوفر مع المندوب».
+     * فالمنتقي بيتغذّى من `custody_items` بالمتاح والباتش وشارة المصدر،
+     * والكتالوج العام مش موجود في الشاشة دي أصلاً.
+     *
+     * ⚠️ العهدة من `currentCustody()` — عقيدة ١٠/٨.
+     */
+    public function newVanTransfer(Request $request)
+    {
+        $actor = $request->user();
+
+        // نفس سكوب بورد العربيات: المدير فريقه، والأدمن الكل
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
+
+        $lines = [];
+
+        foreach ($reps as $rep) {
+            $custody = $rep->currentCustody();
+
+            if ($custody === null || $custody->status === 'closed') {
+                continue;
+            }
+
+            $custody->load(['items.product', 'items.batch']);
+
+            foreach ($custody->items as $item) {
+                if ($item->remaining() <= 0) {
+                    continue;
+                }
+
+                $lines[] = [
+                    'id' => (int) $item->id,
+                    // «rep» عشان المنتقي يفلتر بالمندوب من غير راوند تريب
+                    'rep' => (int) $rep->id,
+                    'code' => (string) ($item->product?->code ?? ''),
+                    'name' => $item->product?->displayName() ?? '—',
+                    'name_ar' => (string) ($item->product?->name ?? ''),
+                    'name_en' => (string) ($item->product?->name_en ?? ''),
+                    'image' => $item->product?->imageSrc(),
+                    'avail' => $item->remaining(),
+                    'batch' => $item->batchLabel(),
+                    'exp' => $item->batch?->expires_on?->toDateString(),
+                    // ⚠️ مخزن الباتش — البضاعة بترجع لمخزنها هي، والفلتر
+                    // ده هو اللي بيمنع اختيار وجهة غلط من الأساس
+                    'wh' => (int) ($item->batch?->warehouse_id ?? 0),
+                    'src' => $item->sourceKey(),
+                    'src_label' => $item->sourceLabel(),
+                    'src_ref' => $item->sourceRefLabel(),
+                ];
+            }
+        }
+
+        return view('wh.transfer_van', [
+            'reps' => $reps,
+            'warehouses' => $this->visibleWarehouses($request),
+            'lines' => $lines,
+            'actor' => $actor,
+        ]);
+    }
+
+    /**
+     * تنفيذ التحويل الميداني — كل الحركة في `StockTransfer::sendFromCustody`.
+     *
+     * هنا: فاليديشن + **سبب إجباري** + حارس `Scope` على الطرفين +
+     * الحدث على تايم لاين المندوب. مفيش أي كتابة مخزون في الكنترولر.
+     */
+    public function storeVanTransfer(Request $request)
+    {
+        $data = $request->validate([
+            'kind' => ['required', 'in:rep_wh,rep_rep'],
+            'from_user_id' => ['required', 'exists:users,id'],
+            'to_warehouse_id' => ['required_if:kind,rep_wh', 'nullable', 'exists:warehouses,id'],
+            // ⚠️ **من غير `different:from_user_id`.** السيلكت المخفي بيتبعت
+            // برضه (`display:none` مش بيمنع الإرسال)، فتحويل «مندوب ←
+            // مخزن» كان بيترفض برسالة عن حقل مش ظاهر أصلاً. الشاشة
+            // بتعطّل السيلكت المخفي، والحالة الحقيقية («نفس المندوب»)
+            // بترفض في `sendFromCustody` برسالة مفهومة.
+            'to_user_id' => ['required_if:kind,rep_rep', 'nullable', 'exists:users,id'],
+            // ⚠️ **السبب إجباري** — قرار المالك بالنص: «لازم أكتب
+            // السبب». من غيره بضاعة بتختفي من عربية ومحدش يعرف ليه
+            // بعد أسبوع، والمندوب بيتحاسب على رقم مالوش تفسير.
+            'reason' => ['required', 'string', 'min:3', 'max:300'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.custody_item_id' => ['required', 'integer'],
+            'lines.*.qty' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $actor = $request->user();
+        $fromRep = User::find($data['from_user_id']);
+        $toRep = ($data['to_user_id'] ?? null) ? User::find($data['to_user_id']) : null;
+
+        // ⚠️⚠️ **الحارس على الطرفين.** `exists:users,id` بتقول إن
+        // اليوزر موجود وبس — مش إنه ميداني ولا أكتيف ولا تحت نفس
+        // المدير. من غير ده مدير قناة كان يقدر يسحب بضاعة من عربية
+        // مندوب فريق تاني ويحطها في عربية مندوبه.
+        Scope::assertRep($actor, $fromRep);
+
+        if ($data['kind'] === 'rep_rep') {
+            Scope::assertRep($actor, $toRep);
+        }
+
+        $toWarehouse = ($data['to_warehouse_id'] ?? null)
+            ? Warehouse::find($data['to_warehouse_id'])
+            : null;
+
+        // أمين المخزن (لو الأدمن منحه الأكشن) بيستقبل في مخزنه هو بس
+        if ($data['kind'] === 'rep_wh') {
+            $this->guardWarehouse($request, $data['to_warehouse_id']);
+        }
+
+        $result = StockTransfer::sendFromCustody(
+            $actor,
+            $fromRep,
+            $data['kind'],
+            $toWarehouse,
+            $toRep,
+            $data['lines'],
+            $data['reason'],
+            $data['notes'] ?? null,
+        );
+
+        if ($result['error'] !== null) {
+            return back()->withErrors(['lines' => $result['error']])->withInput();
+        }
+
+        /** @var StockTransfer $transfer */
+        $transfer = $result['transfer'];
+
+        // الحدث على تايم لاين المندوب — النوع في `TrackEvent::TYPES`
+        // و`enums.track` في ملفي اللغة (الفخ الموثّق)
+        TrackEvent::log(
+            $fromRep,
+            'custody_transfer',
+            __('stock.event_van_transfer', ['number' => $transfer->number]),
+            __('stock.event_van_transfer_sub', [
+                'qty' => $transfer->qtySent(),
+                'to' => $transfer->toLabel(),
+                'reason' => $transfer->reason,
+            ]),
+        );
+
+        if ($toRep !== null) {
+            TrackEvent::log(
+                $toRep,
+                'custody_transfer',
+                __('stock.event_van_transfer_in', ['number' => $transfer->number]),
+                __('stock.event_van_transfer_in_sub', [
+                    'qty' => $transfer->qtySent(),
+                    'from' => $transfer->fromLabel(),
+                ]),
+            );
+        }
+
+        // ⚠️ على ورقة التحويل على طول — البضاعة اللي مشيت من غير ورق
+        // ممضي مالهاش إثبات، واللي بيحوّل مش هيفتكر يطبع بعدين
+        return redirect()
+            ->route('wh.transfers.print', $transfer)
+            ->with('ok', __('stock.transfer_sent', ['number' => $transfer->number]));
+    }
+
     /** صفحة استلام التحويل — الكميات وتواريخ الإنتاج قابلة للتعديل */
     public function transfer(Request $request, StockTransfer $transfer)
     {
         $this->guardTransfer($request, $transfer);
+
+        // ⚠️ **التحويل الميداني مالوش شاشة استلام.** بيتنفّذ في خطوة
+        // واحدة (البضاعة بتتسلّم إيد بإيد)، فالشاشة دي كانت هتوري
+        // فورم استلام لمستند مقفول — والزرار بياخد 422 من `receive`.
+        if ($transfer->isVan()) {
+            return redirect()->route('wh.transfers.print', $transfer);
+        }
 
         $transfer->load(['items.product', 'items.sourceBatch', 'fromWarehouse', 'toWarehouse', 'sender', 'receiver']);
 
@@ -826,7 +1023,10 @@ class WarehouseController extends Controller
     {
         $this->guardTransfer($request, $transfer);
 
-        $transfer->load(['items.product', 'fromWarehouse', 'toWarehouse', 'sender']);
+        $transfer->load([
+            'items.product', 'fromWarehouse', 'toWarehouse', 'sender',
+            'fromUser', 'toUser', 'creator',
+        ]);
 
         return view('wh.transfer_print', ['t' => $transfer, 'mode' => 'issue']);
     }
@@ -836,7 +1036,8 @@ class WarehouseController extends Controller
     {
         $this->guardTransfer($request, $transfer);
 
-        if ($transfer->status !== 'received') {
+        // التحويل الميداني ورقته واحدة (إذن صرف بإمضاء الطرفين)
+        if ($transfer->status !== 'received' || $transfer->isVan()) {
             return redirect()->route('wh.transfers.print', $transfer);
         }
 

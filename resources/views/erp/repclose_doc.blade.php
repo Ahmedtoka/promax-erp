@@ -196,6 +196,8 @@
                         <th class="num">{{ __('settle.delivered_pos') }}</th>
                         <th class="num">{{ __('settle.gifts') }}</th>
                         <th class="num">{{ __('settle.returned_wh') }}</th>
+                        {{-- حد التحويل لمندوب تاني (١٤/٨) --}}
+                        <th class="num">{{ __('settle.transfer_out') }}</th>
                         <th class="num">{{ __('settle.still_on_van') }}</th>
                         <th class="num">{{ __('settle.shortage') }}</th>
                     </tr>
@@ -211,6 +213,7 @@
                             <td class="num">{{ number_format((int) ($l['po_qty'] ?? 0)) }}</td>
                             <td class="num">{{ number_format((int) ($l['gift'] ?? 0)) }}</td>
                             <td class="num">{{ number_format((int) ($l['returned_wh'] ?? 0)) }}</td>
+                            <td class="num">{{ number_format((int) ($l['transfer_out'] ?? 0)) }}</td>
                             <td class="num">{{ number_format((int) ($l['remaining'] ?? 0)) }}</td>
                             <td class="num">
                                 {{ (int) ($l['diff'] ?? 0) === 0 ? '—' : number_format((int) $l['diff']) }}
@@ -227,6 +230,7 @@
                         <td class="num"><b>{{ number_format($gSum('po_qty')) }}</b></td>
                         <td class="num"><b>{{ number_format($gSum('gift')) }}</b></td>
                         <td class="num"><b>{{ number_format($gSum('returned_wh')) }}</b></td>
+                        <td class="num"><b>{{ number_format($gSum('transfer_out')) }}</b></td>
                         <td class="num"><b>{{ number_format($gSum('remaining')) }}</b></td>
                         <td class="num {{ $diffTotal === 0 ? '' : 'st-short-cell' }}">
                             <b>{{ $diffTotal === 0 ? '0 ✓' : number_format($diffTotal) }}</b>

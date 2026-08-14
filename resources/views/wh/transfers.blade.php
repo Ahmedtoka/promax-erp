@@ -25,6 +25,10 @@
     @if ($manager && \App\Support\Access::action(auth()->user(), 'act.wh.transfer'))
         <a class="btn gold" href="{{ route('wh.transfers.new') }}">+ {{ __('stock.new_transfer') }}</a>
     @endif
+    {{-- ⚠️ أكشن مستقل (١٤/٨): ده بيسحب من عهدة مندوب مش من رف مخزن --}}
+    @if ($manager && \App\Support\Access::action(auth()->user(), 'act.wh.van_transfer'))
+        <a class="btn" href="{{ route('wh.transfers.van') }}">🔄 {{ __('stock.van_transfer') }}</a>
+    @endif
 @endsection
 
 @section('content')
@@ -42,6 +46,11 @@
     <div class="kpi">
         <div class="lbl">✅ {{ __('stock.received_count') }}</div>
         <div class="val pos">{{ $fmt($kpi['received']) }}</div>
+    </div>
+    {{-- التحويلات الميدانية (١٤/٨) — من نفس الأساس المفلتر --}}
+    <div class="kpi">
+        <div class="lbl">🚐 {{ __('stock.van_transfers_count') }}</div>
+        <div class="val">{{ $fmt($kpi['van']) }}</div>
     </div>
 </div>
 
@@ -66,6 +75,15 @@
             <option value="sent" @selected(($f['status'] ?? '') === 'sent')>{{ __('stock.in_transit') }}</option>
             <option value="received" @selected(($f['status'] ?? '') === 'received')>{{ __('stock.received_count') }}</option>
         </select>
+        {{-- فلتر الاتجاه (١٤/٨) --}}
+        <select name="kind" style="min-width:170px">
+            <option value="">{{ __('stock.all_kinds') }}</option>
+            @foreach (\App\Models\StockTransfer::KINDS as $kCode => $kMeta)
+                <option value="{{ $kCode }}" @selected(($f['kind'] ?? '') === $kCode)>
+                    {{ $kMeta[0] }} {{ __('stock.kind_'.$kCode) }}
+                </option>
+            @endforeach
+        </select>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.transfers') }}">{{ __('common.clear') }}</a>
     </form>
@@ -75,6 +93,7 @@
             <thead>
             <tr>
                 <th>{{ __('stock.transfer') }}</th>
+                <th>{{ __('stock.kind') }}</th>
                 <th>{{ __('stock.from_warehouse') }}</th>
                 <th>{{ __('stock.to_warehouse') }}</th>
                 <th>{{ __('stock.sent_on') }}</th>
@@ -90,11 +109,15 @@
                     <td class="num">
                         <a href="{{ route('wh.transfers.show', $t) }}"><b>{{ $t->number }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">
-                            {{ __('stock.sent_by') }}: {{ $t->sender?->name ?? '—' }}
+                            {{ __('stock.transfer_created_by') }}:
+                            {{ $t->creator?->displayName() ?? $t->sender?->displayName() ?? '—' }}
                         </span>
                     </td>
-                    <td>{{ $t->fromWarehouse?->displayName() ?? '—' }}</td>
-                    <td>{{ $t->toWarehouse?->displayName() ?? '—' }}</td>
+                    {{-- شارة الاتجاه (١٤/٨) — 🏭→🏭 / 🚐→🏭 / 🚐→🚐 --}}
+                    <td><span class="badge {{ $t->kindClass() }}" style="white-space:nowrap">
+                        {{ $t->kindArrow() }} {{ $t->kindLabel() }}</span></td>
+                    <td>{{ $t->fromLabel() }}</td>
+                    <td>{{ $t->toLabel() }}</td>
                     <td>{{ $t->sent_on?->format('Y-m-d') ?? '—' }}</td>
                     <td class="num">{{ $fmt($t->qtySent()) }}</td>
                     <td class="num">
@@ -114,7 +137,9 @@
                              تضيع، واللي محتاج نسخة تانية مش هيعرف يطلّعها
                              من غير اللينك ده. --}}
                         <a class="btn sm" href="{{ route('wh.transfers.print', $t) }}">🖨️</a>
-                        @if ($t->status === 'received')
+                        @if ($t->isVan())
+                            {{-- ورقة واحدة للتحويل الميداني — مفيش استلام منفصل --}}
+                        @elseif ($t->status === 'received')
                             <a class="btn sm" href="{{ route('wh.transfers.receipt_print', $t) }}">
                                 {{ __('stock.receipt_note') }}
                             </a>
@@ -126,9 +151,19 @@
                     </td>
                 </tr>
 
-                {{-- بنود التحويل تحت كل صف — المستلم يشوف اللي جايله من غير ما يفتح صفحة --}}
+                {{-- بنود التحويل تحت كل صف — المستلم يشوف اللي جايله من غير ما يفتح صفحة.
+                     ⚠️ زوّدنا عمود الاتجاه فوق فالـcolspan بقى 9. --}}
                 <tr>
-                    <td colspan="8" style="padding:6px 14px 12px">
+                    <td colspan="9" style="padding:6px 14px 12px">
+                        {{-- ⚠️ **السبب بيبان في القايمة نفسها.** مستند بيسحب
+                             بضاعة من عربية وسببه مدفون جوه صفحة = محدش
+                             هيقراه، والمراجعة بعد أسبوع بتبقى تخمين. --}}
+                        @if ($t->reason)
+                            <div style="font-size:11.5px;margin-bottom:4px">
+                                <b>{{ __('stock.transfer_reason') }}:</b>
+                                <span style="color:var(--muted)">{{ $t->reason }}</span>
+                            </div>
+                        @endif
                         @foreach ($t->items as $it)
                             <span class="badge b-gray" style="margin:2px 2px 0 0;display:inline-block">
                                 {{ $it->product?->displayName() ?? '—' }}
@@ -137,12 +172,16 @@
                                 @if ($it->expires_on)
                                     · {{ $it->expires_on->format('Y-m-d') }}
                                 @endif
+                                {{-- مصدر البضاعة اللي اتسحبت — طلب المالك --}}
+                                @if ($it->sourceLabel())
+                                    · {{ $it->sourceLabel() }}{{ $it->sourceRefLabel() ? ' '.$it->sourceRefLabel() : '' }}
+                                @endif
                             </span>
                         @endforeach
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('stock.no_transfers') }}
                 </td></tr>
             @endforelse

@@ -119,8 +119,13 @@ class ChannelController extends Controller
             ->join('users', 'users.id', '=', 'custodies.user_id')
             ->where('custodies.status', 'open')
             ->whereNotNull('users.channel_id')
+            // ⚠️ **و`transferred_out` انضم للمعادلة (١٤/٨).** التحويل من
+            // عربية لعربية بيطلّع بضاعة من غير بيع ومن غير إرجاع للمخزن
+            // — الكويري دي لازم تفضل مطابقة لـ`CustodyItem::remaining()`
+            // بالحرف، وإلا الشاشة بتعد نفس الكرتونة في العربيتين.
             ->selectRaw('users.channel_id, custody_items.product_id,
-                SUM(custody_items.assigned - custody_items.sold - custody_items.returned) as units')
+                SUM(custody_items.assigned - custody_items.sold - custody_items.returned
+                    - custody_items.transferred_out) as units')
             ->groupBy('users.channel_id', 'custody_items.product_id')
             ->get();
 

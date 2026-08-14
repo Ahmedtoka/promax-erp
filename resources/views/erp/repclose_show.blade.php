@@ -32,6 +32,9 @@
     $soldQty = $goods['cash_qty'] + $goods['credit_qty'];
     $spentQty = $soldQty + $goods['po_qty'] + $goods['gift_qty'];
     $vanLeftQty = $goods['remaining_qty'] + $goods['gift_left_qty'];
+    // ⚠️ **حدّ التحويل لمندوب تاني** (١٤/٨) — `?? 0` عشان التصفيات
+    // المقفولة القديمة (لقطة `goods_json` قبل العمود) ماترميش مفتاح ناقص
+    $transferOutQty = (int) ($goods['transfer_out_qty'] ?? 0);
 
     // ═══ قيمة الباقي في العربية بكل قايمة مفعّلة (طلب المالك ١٢/٨) ═══
     // ⚠️ **عرض فقط** — معادلة التصفية ومطابقة العهدة بالقطع زي ما هي.
@@ -151,9 +154,12 @@
         <div class="val">{{ number_format($spentQty) }}</div>
         <div class="sub2">{{ __('settle.spent_split', ['sold' => number_format($soldQty), 'po' => number_format($goods['po_qty']), 'gift' => number_format($goods['gift_qty'])]) }}</div>
     </div>
-    <div class="kpi {{ $goods['returned_wh_qty'] == 0 ? 'st-zero' : '' }}">
+    <div class="kpi {{ ($goods['returned_wh_qty'] + $transferOutQty) == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.returned_wh') }}</div>
         <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div>
+        {{-- حدّ مستقل في المعادلة (١٤/٨): اتحوّل لعربية زميل بمستند
+             تحويل — مش مباع ومش راجع المخزن، وبيتحاسب عليه هو --}}
+        <div class="sub2">{{ __('settle.transfer_out') }}: {{ number_format($transferOutQty) }}</div>
     </div>
     <div class="kpi {{ $vanLeftQty == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.still_on_van') }}</div>
@@ -584,6 +590,9 @@
                     <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div></div>
                 <div class="kpi"><div class="lbl">{{ __('settle.returned_wh') }}</div>
                     <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div></div>
+                {{-- حد التحويل لمندوب تاني (١٤/٨) — جوه المعادلة --}}
+                <div class="kpi"><div class="lbl">{{ __('settle.transfer_out') }}</div>
+                    <div class="val">{{ number_format($transferOutQty) }}</div></div>
                 <div class="kpi"><div class="lbl">{{ __('settle.still_on_van') }}</div>
                     <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div>
                     {{-- القيمة بكل قايمة — عرض فقط، المعادلة بالقطع (١٢/٨) --}}
@@ -620,6 +629,7 @@
                         <th>{{ __('settle.delivered_pos') }}</th>
                         <th>{{ __('settle.gifts') }}</th>
                         <th>{{ __('settle.returned_wh') }}</th>
+                        <th>{{ __('settle.transfer_out') }}</th>
                         <th>{{ __('settle.still_on_van') }}</th>
                         {{-- قيمة الباقي بقايمة المندوب — عرض فقط (١٢/٨).
                              خلية رقم نضيف فالفوتر الأوتوماتيك بيجمعها --}}
@@ -652,6 +662,7 @@
                                 @endif
                             </td>
                             <td class="num">{{ number_format($l['returned']) }}</td>
+                            <td class="num">{{ number_format($l['transfer_out'] ?? 0) }}</td>
                             <td class="num" style="color:var(--primary);font-weight:900">{{ number_format($l['remaining']) }}</td>
                             @php $lRemVal = (int) $l['remaining'] * \App\Support\CustodyValue::priceIn($repPriceList, $l['product']); @endphp
                             <td class="num">{{ $l['remaining'] > 0 ? number_format($lRemVal, 2) : '—' }}</td>
@@ -662,7 +673,8 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:26px">
+                        {{-- ⚠️ زوّدت عمود «محوَّل لمندوب»؟ الـcolspan اتحدّث معاه --}}
+                        <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('settle.no_custody') }}</td></tr>
                     @endforelse
                     </tbody>

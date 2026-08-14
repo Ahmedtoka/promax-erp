@@ -283,7 +283,10 @@ class Custody extends Model
             if (array_key_exists($pid, $assignedTarget)) {
                 $target = max((int) $assignedTarget[$pid], 0);
                 $cur = $sum($pid, 'assigned');
-                $floor = $sum($pid, 'sold') + $sum($pid, 'returned');
+                // ⚠️ **والمحوَّل لمندوب تاني جوه الأرضية كمان** (١٤/٨).
+                // من غيره تصحيح إداري بعد تحويل كان بيقدر ينزّل المحمَّل
+                // تحت اللي خرج فعلاً — و`remaining()` تطلع سالبة.
+                $floor = $sum($pid, 'sold') + $sum($pid, 'returned') + $sum($pid, 'transferred_out');
 
                 if ($target < $floor) {
                     return __('field.custody_adjust_floor_err', [
@@ -422,46 +425,7 @@ class Custody extends Model
             $item->save();
             $left -= $take;
 
-            if ($item->batch_id === null || $item->batch === null) {
-                // بند قديم من غير باتش (أو باتشه اتمسح) — العهدة بس،
-                // مفيش أصل مخزني نرجّع له
-                continue;
-            }
-
-            // بند التجهيز اللي جاب الكمية دي — نفس الرف اللي طلعت منه
-            $poi = PickOrderItem::whereHas('pickOrder',
-                fn ($q) => $q->where('custody_id', $this->id))
-                ->where('product_id', $productId)
-                ->where('batch_id', $item->batch_id)
-                ->orderByDesc('id')
-                ->first();
-
-            if ($poi !== null) {
-                $poi->returnToShelf($take);
-
-                // ⚠️ نفس دلالة فرق الاستلام الموجودة: «اتجمّع كذا،
-                // المستلم فعلياً أقل، والفرق رجع الرف». من غيرها
-                // مطابقة التجهيز بالعهدة كانت هتوري فرق وهمي دايماً.
-                $poi->qty_received = max((int) $poi->qty_received - $take, 0);
-                $poi->save();
-                $poi->pickOrder?->update(['has_variance' => true]);
-
-                continue;
-            }
-
-            // عهدة قديمة من غير أمر تجهيز — نفس حركة returnToShelf
-            // بالحرف (باتش + رف سحب)، مش مسار حساب جديد
-            $item->batch->increment('qty_remaining', $take);
-            $item->batch->decrement('qty_issued', $take);
-
-            $shelf = \App\Services\OpeningStock::pickShelf($this->warehouse);
-            $row = BatchLocation::firstOrNew([
-                'batch_id' => $item->batch_id,
-                'location_id' => $shelf->id,
-            ]);
-            $row->product_id = $productId;
-            $row->qty = (int) $row->qty + $take;
-            $row->save();
+            $this->restockFromItem($item, $take);
         }
 
         if ($left > 0) {
@@ -472,5 +436,77 @@ class Custody extends Model
                 'short' => $left,
             ]));
         }
+    }
+
+    /**
+     * ═══ إرجاع كمية من بند عهدة للرف — الحركة المخزنية لوحدها ═══
+     *
+     * ⚠️ **المسار الوحيد اللي بيرجّع بضاعة عربية لرف.** اتفصل من
+     * `pullBackToShelf` (١٤ أغسطس ٢٠٢٦) عشان تحويل «مندوب ← مخزن»
+     * يستخدمه بالحرف بدل ما يكتب خصم/إضافة موازية. الفرق بين
+     * النداءين إن `pullBackToShelf` بتنقّص `assigned` كمان (تصحيح
+     * إداري: «التحميل اتسجّل غلط»)، والتحويل بيسجّل `returned`
+     * (البضاعة اتحمّلت صح ورجعت فعلاً) — والحركة المخزنية واحدة.
+     *
+     * ⚠️ **مابتلمسش أي عمود على بند العهدة.** اللي بيندهها هو اللي
+     * بيقرّر أنهي خانة تتحرّك، وده بيمنع أي مسار يخصم مرتين.
+     *
+     * ⚠️ لازم تتنادى **جوه** `DB::transaction` — بتكتب على الباتش
+     * والرف مع بعض.
+     *
+     * @param  Warehouse|null  $into  المخزن اللي البضاعة بترجع له
+     *                                (الافتراضي مخزن العهدة) — بيستخدم
+     *                                في مسار الفولباك بس
+     */
+    public function restockFromItem(CustodyItem $item, int $qty, ?Warehouse $into = null): void
+    {
+        if ($qty <= 0) {
+            return;
+        }
+
+        $item->loadMissing('batch');
+
+        if ($item->batch_id === null || $item->batch === null) {
+            // بند قديم من غير باتش (أو باتشه اتمسح) — العهدة بس،
+            // مفيش أصل مخزني نرجّع له
+            return;
+        }
+
+        $productId = (int) $item->product_id;
+
+        // بند التجهيز اللي جاب الكمية دي — نفس الرف اللي طلعت منه
+        $poi = PickOrderItem::whereHas('pickOrder',
+            fn ($q) => $q->where('custody_id', $this->id))
+            ->where('product_id', $productId)
+            ->where('batch_id', $item->batch_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($poi !== null) {
+            $poi->returnToShelf($qty);
+
+            // ⚠️ نفس دلالة فرق الاستلام الموجودة: «اتجمّع كذا،
+            // المستلم فعلياً أقل، والفرق رجع الرف». من غيرها
+            // مطابقة التجهيز بالعهدة كانت هتوري فرق وهمي دايماً.
+            $poi->qty_received = max((int) $poi->qty_received - $qty, 0);
+            $poi->save();
+            $poi->pickOrder?->update(['has_variance' => true]);
+
+            return;
+        }
+
+        // عهدة قديمة من غير أمر تجهيز — نفس حركة returnToShelf
+        // بالحرف (باتش + رف سحب)، مش مسار حساب جديد
+        $item->batch->increment('qty_remaining', $qty);
+        $item->batch->decrement('qty_issued', $qty);
+
+        $shelf = \App\Services\OpeningStock::pickShelf($into ?? $this->warehouse);
+        $row = BatchLocation::firstOrNew([
+            'batch_id' => $item->batch_id,
+            'location_id' => $shelf->id,
+        ]);
+        $row->product_id = $productId;
+        $row->qty = (int) $row->qty + $qty;
+        $row->save();
     }
 }
