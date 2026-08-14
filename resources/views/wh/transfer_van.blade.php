@@ -119,6 +119,9 @@
             <label class="f">{{ __('stock.van_pick_line') }}
                 <span style="font-weight:600;color:var(--muted);font-size:11px">{{ __('stock.van_line_hint') }}</span>
             </label>
+            {{-- سبب المنتقي الفاضي — بيتملى بالجافاسكربت (١٤/٨) --}}
+            <div class="alert warn" id="vtNoStock" hidden style="margin-bottom:8px"></div>
+
             @include('partials._item_picker', [
                 'id' => 'vtpick',
                 'catalog' => $lines,
@@ -176,6 +179,8 @@
     const VT_HINT_WH = @json(__('stock.van_transfer_wh_hint'));
     const VT_HINT_REP = @json(__('stock.van_transfer_rep_hint'));
     const VT_AVAIL = @json(__('stock.available'));
+    const VT_NO_CUSTODY = @json(__('stock.van_no_custody'));
+    const VT_NO_MATCH = @json(__('stock.van_no_match'));
     const VT_BATCH = @json(__('stock.batch_no'));
 
     let vtIdx = 0;
@@ -284,6 +289,19 @@
     window.vtSourceChanged = function () {
         // تغيير المصدر بيغيّر قايمة الوجهة كمان (مايحوّلش لنفسه)
         if (window.vtToRepOptions) vtToRepOptions();
+
+        // ⚠️ **المنتقي الفاضي لازم يقول ليه** (بلاغ المالك ١٤/٨):
+        // المندوب اللي حوّل كل بضاعته أو عهدته مقفولة كان بيفتح
+        // المنتقي ويلاقيه فاضي من غير أي سبب — «مطلعش منتجات».
+        // بنعد بنوده الصالحة ونقول الحقيقة قبل ما يدوّر.
+        const has = VT_LINES.filter(l => l.rep === fromId()).length;
+        const pickable = VT_LINES.filter(l => window.vtPickable(l)).length;
+        const warn = document.getElementById('vtNoStock');
+
+        if (warn) {
+            warn.hidden = pickable > 0;
+            warn.textContent = has === 0 ? VT_NO_CUSTODY : VT_NO_MATCH;
+        }
 
         document.querySelectorAll('#vtRows tr[data-lid]').forEach(tr => tr.remove());
 

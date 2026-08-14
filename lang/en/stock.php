@@ -579,4 +579,6 @@ return [
     'pick_edit_not_in_po' => 'Item :name is not on the linked sales order - new items are added by editing the order itself (which goes back to accounting approval).',
     'pick_edit_no_increase' => 'The order is approved by accounting - quantities can only go down here. Max for :name is :max. Increases go through editing the order itself (back to accounting).',
     'pick_po_synced' => 'The linked sales order :number was synced to the new quantities.',
+    'van_no_custody' => '🚐 This rep has nothing available to transfer - his custody is closed or fully consumed',
+    'van_no_match' => '📦 Nothing matches this destination - goods return to their own batch warehouse, try another one',
 ];
