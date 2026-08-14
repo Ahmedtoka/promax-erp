@@ -282,6 +282,9 @@
 
     /** تغيير المندوب أو المخزن بيفضّي السطور — سطر من مندوب تاني غلط */
     window.vtSourceChanged = function () {
+        // تغيير المصدر بيغيّر قايمة الوجهة كمان (مايحوّلش لنفسه)
+        if (window.vtToRepOptions) vtToRepOptions();
+
         document.querySelectorAll('#vtRows tr[data-lid]').forEach(tr => tr.remove());
 
         if (!document.getElementById('vtEmpty')) {
@@ -304,13 +307,51 @@
         // ⚠️ **`disabled` مش بس `display:none`.** السيلكت المخفي بيتبعت
         // مع الفورم، فكان «مندوب ← مخزن» بيبعت `to_user_id` كمان
         // والسيرفر يشوف طرفين متناقضين.
-        document.getElementById('vtWh').disabled = rep;
-        document.getElementById('vtToRep').disabled = !rep;
-        document.getElementById('vtWh').required = !rep;
-        document.getElementById('vtToRep').required = rep;
+        const wh = document.getElementById('vtWh');
+        const toRep = document.getElementById('vtToRep');
+
+        wh.disabled = rep;
+        toRep.disabled = !rep;
+        wh.required = !rep;
+        toRep.required = rep;
         document.getElementById('vtKindHintText').textContent = rep ? VT_HINT_REP : VT_HINT_WH;
 
+        // ⚠️ **لازم `change` بعد تغيير `disabled`** (إصلاح ١٤/٨): محسّن
+        // القوايم القابلة للبحث بيرسم زرار بديل للسيلكت وبيزامن حالته
+        // (`btn.disabled = sel.disabled`) في `refresh()` — واللي بتتنادى
+        // من حدث `change` بس. إحنا بنغيّر `disabled` بالكود، فالزرار كان
+        // بيفضل مقفول رمادي و«للمندوب مش بيختار حد» (بلاغ المالك).
+        wh.dispatchEvent(new Event('change', { bubbles: false }));
+        toRep.dispatchEvent(new Event('change', { bubbles: false }));
+
+        vtToRepOptions();
         vtSourceChanged();
+    };
+
+    /**
+     * ⚠️ **المندوب مايحوّلش لنفسه.** القايمتين بتتبنوا من نفس المصدر،
+     * فأول اسم بيتختار في الاتنين تلقائياً — والمالك بيبص يلاقي
+     * «من اسلام ← لاسلام». بنخبّي المصدر من قايمة الوجهة، ولو كان
+     * هو المختار بننقل الاختيار لأول حد تاني.
+     */
+    window.vtToRepOptions = function () {
+        const from = document.getElementById('vtFrom');
+        const toRep = document.getElementById('vtToRep');
+        if (!from || !toRep) return;
+
+        let firstOther = null;
+
+        Array.from(toRep.options).forEach(function (o) {
+            const same = o.value === from.value;
+            o.hidden = same;
+            o.disabled = same;
+            if (!same && firstOther === null) firstOther = o.value;
+        });
+
+        if (toRep.value === from.value && firstOther !== null) toRep.value = firstOther;
+
+        // نفس السبب: الزرار البديل لازم يعرف إن الاختيار اتغيّر
+        toRep.dispatchEvent(new Event('change', { bubbles: false }));
     };
 
     vtKindChanged();
