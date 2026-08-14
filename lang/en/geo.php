@@ -104,4 +104,16 @@ return [
     'f_unconfirmed_hint' => 'Has coordinates nobody confirmed',
     'f_no_location' => 'No location',
     'f_no_location_hint' => 'No coordinates, no visit — needs a field trip',
+
+    // Location captured from the app (2026-08-14)
+    'f_from_app' => 'From the app',
+    'f_from_app_hint' => 'A rep captured it at the shop',
+    'from_app' => 'From the app',
+    'set_by' => 'Set by',
+    'src' => [
+        'visit' => 'From a visit',
+        'manual' => 'Manual entry',
+        'map' => 'From a maps link',
+        'rep_app' => 'From the app',
+    ],
 ];

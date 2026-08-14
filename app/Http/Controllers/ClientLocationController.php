@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Visit;
 use App\Models\Zone;
-use App\Support\Geocoder;
+use App\Support\GeoSuggest;
 use App\Support\Governorates;
 use App\Support\MapLink;
 use Illuminate\Http\Request;
@@ -29,6 +29,27 @@ use Illuminate\Validation\Rule;
  * ⚠️ **والتأكيد بياخد العنوان معاه.** نقطة من غير عنوان مكتوب
  * مابتكفيش: التقارير والفواتير بتعرض نص، والمحافظة والمنطقة هما
  * أساس تسكين المناديب. عشان كده المودال بيطلب الاتنين مع بعض.
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * ⚠️⚠️ **الشاشة دي مصدر الحقيقة للوكيشن العميل** (١٤ أغسطس ٢٠٢٦)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * بلاغ المالك: «كنت عامل حسابي إن التشيك إن بتاع المندوب بيكون قدام
+ * المحل — لكن المندوب بيعمل تشيك إن وهو في الطريق». يعني **نقطة
+ * الزيارة تخمين مش دليل**، وشاشة كانت بتعتمد عليها لوحدها كانت
+ * بتكتب نقط الطريق على العملاء.
+ *
+ * الحل: المندوب بقى عنده شاشة «ضيف لوكيشن العميل» في الأبلكيشن
+ * بيسحب فيها نقطة **وهو واقف قدام المحل** — و`FieldApiController::
+ * saveClientLocation` بتكتبها بـ`location_source = 'rep_app'` مع
+ * `location_confirmed_at/by`. والنتيجة:
+ *
+ *   • العميل ده **بيخرج من «جاهز للتأكيد» فوراً** — كل الفلاتر
+ *     المستنية شرطها `whereNull('location_confirmed_at')`.
+ *   • وبيبان في «المتأكدة» ببصمة كاملة: مين ضبطها، من الأبلكيشن
+ *     ولا من الداشبورد، وإمتى.
+ *   • والأدمن لسه بيقدر **يصحّح** بزرار «تعديل» — الأبلكيشن بيسبق
+ *     في الوقت، والمراجعة بتغلب في النهاية.
  */
 class ClientLocationController extends Controller
 {
@@ -60,15 +81,29 @@ class ClientLocationController extends Controller
         // لو موجودة بتتعرض، ولو مش موجودة العمود بيقول «مفيش نقطة».
         $visitClientIds = Visit::select('client_id')->distinct();
 
+        // ⚠️ `locationConfirmer` جوّه الـ`with` — عمود «الحالة» بقى
+        // بيعرض مين ضبط اللوكيشن، ومن غير التحميل المسبق ده كان
+        // كويري لكل صف في قايمة ٦٥٤ عميل.
         $q = Client::query()
-            ->with(['zone', 'channel', 'group'])
+            ->with(['zone', 'channel', 'group', 'locationConfirmer'])
             ->where('status', '!=', 'rejected');
 
         $q->when(
             // ✅ جاهز للتأكيد: مندوب سحب نقطة والعميل لسه مااتأكّدش
+            //
+            // ⚠️ **العميل اللي المندوب ضبط لوكيشنه من الأبلكيشن بيخرج
+            // من هنا لوحده** (١٤/٨) — `location_confirmed_at` بتتكتب
+            // في `saveClientLocation`، والشرط ده `whereNull`. مفيش
+            // استثناء مكتوب بالإيد ومفيش صف بيتعدّ مرتين: الشغل
+            // اللي خلص فعلاً مابيقعدش في طابور المراجعة.
             $filter === 'from_visit',
             fn ($qq) => $qq->whereNull('location_confirmed_at')
                 ->whereIn('id', $visitClientIds),
+        )->when(
+            // 📱 اللي المندوب ضبطه من الأبلكيشن — بصمة كاملة، والمراجع
+            // بيعدي عليها بالعين ويصحّح اللي مش مظبوط
+            $filter === 'from_app',
+            fn ($qq) => $qq->where('location_source', Client::LOC_SRC_APP),
         )->when(
             // ⚪ مفيش أي لوكيشن: لا إحداثيات على العميل ولا زيارة
             //    بإحداثيات — ده شغل ميدان، مش مراجعة
@@ -126,6 +161,11 @@ class ClientLocationController extends Controller
                     ->whereNull('location_confirmed_at')->whereNotNull('lat')->count(),
                 'done' => Client::visibleTo(Client::query())
                     ->whereNotNull('location_confirmed_at')->count(),
+                // 📱 عدّاد «من الأبلكيشن» — بيقول للمراجع الميدان
+                // شغّال قد إيه من غير ما يفتح الفلتر
+                'from_app' => Client::visibleTo(Client::query())
+                    ->where('status', '!=', 'rejected')
+                    ->where('location_source', Client::LOC_SRC_APP)->count(),
             ],
         ]);
     }
@@ -135,6 +175,16 @@ class ClientLocationController extends Controller
      *
      * ⚠️ **اقتراح مش حفظ.** الرد بيتحط في خانات قابلة للتعديل، واللي
      * بيراجع بيصلّح قبل ما يأكّد. OSM بتدي أقرب معلَم مش عنوان المحل.
+     *
+     * ⚠️ **المنطق نفسه في `App\Support\GeoSuggest`** (١٤ أغسطس ٢٠٢٦)
+     * — الأبلكيشن بينده على نفس الخدمة من
+     * `FieldApiController::geocodeClient`، فالداشبورد والموبايل
+     * بيقترحوا **نفس** المنطقة ونفس المحافظة لنفس النقطة.
+     *
+     * ⚠️ **المفاتيح القديمة `ar`/`en` فاضلة زي ما هي.** الجافاسكربت
+     * في شاشتين (`erp.client_locations` و`ops.requests`) بتقراهم
+     * بالاسم ده — والمفاتيح القياسية (`address_ar`…) اتضافت **جنبهم**
+     * مش مكانهم. أي حذف هنا بيكسّر فورم اعتماد العميل الجديد بصمت.
      */
     public function suggest(Request $request)
     {
@@ -143,90 +193,33 @@ class ClientLocationController extends Controller
             'lng' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
-        $hit = Geocoder::reverse((float) $data['lat'], (float) $data['lng']);
+        $hit = GeoSuggest::forPoint((float) $data['lat'], (float) $data['lng']);
 
-        if ($hit === null) {
+        // ⚠️ الداشبورد بيرجّع 422 لما العنوان مايجيش — الرسالة بتظهر
+        // جنب الزرار واللي بيراجع بيكتب بإيده. (الأبلكيشن بيتصرّف
+        // غير كده: بيرجّع 200 بخانات فاضية عشان المنطقة تفضل تفيده.)
+        if (! $hit['matched']) {
             return response()->json(['message' => __('geo.reverse_failed')], 422);
         }
 
-        $gov = Governorates::match((string) ($hit['governorate'] ?? ''));
-
         return response()->json([
-            'ar' => $hit['ar'],
-            'en' => $hit['en'],
+            // المفاتيح القديمة — الجافاسكربت الموجود بيقراهم
+            'ar' => (string) ($hit['address_ar'] ?? ''),
+            'en' => (string) ($hit['address_en'] ?? ''),
             // ═══ المنطقة كمان (طلب المالك ٨/٨/٢٠٢٦) ═══
             //
             // ⚠️ **الزرار كان بيملا العنوان والمحافظة ويسيب المنطقة
             // فاضية** — واللي بيراجع بيفتح الدروب داون ويدوّر في ٣٦٢
             // منطقة بإيده في كل عميل. المنطقة أهم من المحافظة أصلاً:
             // هي أساس تسكين المناديب.
-            'zone_id' => self::nearestZone((float) $data['lat'], (float) $data['lng'], $gov),
-            // ⚠️ اسم المحافظة اللي OSM بترجّعه نص حر («محافظة القاهرة»)
-            // — بنحوّله لكود السيستم، ولو مالقيناش بنسيبه للمستخدم
-            // ⚠️ `match()` مش مقارنة نصية: OSM بترجّع «محافظة القاهرة»
-            // أو «Cairo Governorate» حسب اللغة، وهي بتعرف تطابق
-            // الاتنين مع كود السيستم — نفس الدالة اللي المستورد بيستخدمها
-            'governorate' => $gov,
+            'zone_id' => $hit['zone_id'],
+            'governorate' => $hit['governorate'],
+            // المفاتيح القياسية — نفس شكل رد الأبلكيشن بالحرف
+            'address_ar' => $hit['address_ar'],
+            'address_en' => $hit['address_en'],
+            'governorate_label' => $hit['governorate_label'],
+            'zone_name' => $hit['zone_name'],
         ]);
-    }
-
-    /**
-     * أقرب منطقة للنقطة — أو `null` لو مفيش حاجة قريبة كفاية.
-     *
-     * ⚠️ **بيتفلتر بالمحافظة الأول لو معروفة.** أقرب منطقة جغرافياً
-     * ممكن تكون في محافظة تانية على الحدود — والتسكين على منطقة في
-     * محافظة غلط أسوأ من خانة فاضية، لأنه بيبان صح.
-     *
-     * ⚠️ **٢٥ كم سقف.** المناطق اللي مالهاش إحداثيات بتتستبعد
-     * (`whereNotNull`)، ومن غير السقف كانت أي نقطة هتلاقي «أقرب»
-     * منطقة حتى لو على بعد محافظتين.
-     *
-     * ⚠️ **هافرساين بالكيلومتر** — الفخ المعروف في المشروع إن
-     * الدالة بترجّع كيلومترات والكود بيفتكرها أمتار.
-     */
-    private static function nearestZone(float $lat, float $lng, ?string $gov): ?int
-    {
-        $zones = Zone::query()
-            ->where('active', true)
-            ->whereNotNull('lat')->whereNotNull('lng')
-            ->when($gov, fn ($q) => $q->where('governorate', $gov))
-            ->get(['id', 'lat', 'lng']);
-
-        // ⚠️ المحافظة مالهاش مناطق بإحداثيات؟ نجرب من غير فلترها بدل
-        // ما نرجّع فاضي — الاقتراح بيتعدّل بالإيد على أي حال.
-        if ($zones->isEmpty() && $gov !== null) {
-            $zones = Zone::query()
-                ->where('active', true)
-                ->whereNotNull('lat')->whereNotNull('lng')
-                ->get(['id', 'lat', 'lng']);
-        }
-
-        $best = null;
-        $bestKm = 25.0;
-
-        foreach ($zones as $z) {
-            $km = self::haversineKm($lat, $lng, (float) $z->lat, (float) $z->lng);
-
-            if ($km < $bestKm) {
-                $bestKm = $km;
-                $best = (int) $z->id;
-            }
-        }
-
-        return $best;
-    }
-
-    /** المسافة بالكيلومتر بين نقطتين */
-    private static function haversineKm(float $aLat, float $aLng, float $bLat, float $bLng): float
-    {
-        $r = 6371.0;
-        $dLat = deg2rad($bLat - $aLat);
-        $dLng = deg2rad($bLng - $aLng);
-
-        $h = sin($dLat / 2) ** 2
-            + cos(deg2rad($aLat)) * cos(deg2rad($bLat)) * sin($dLng / 2) ** 2;
-
-        return $r * 2 * asin(min(1.0, sqrt($h)));
     }
 
     /** التأكيد — النقطة والعنوان بيتكتبوا على العميل مع بصمة المراجع */
@@ -242,7 +235,13 @@ class ClientLocationController extends Controller
             'address_ar' => ['required', 'string', 'max:190'],
             'governorate' => ['nullable', Governorates::rule()],
             'zone_id' => ['nullable', 'exists:zones,id'],
-            'source' => ['nullable', Rule::in(['visit', 'manual', 'map'])],
+            // ⚠️ **`rep_app` مش مسموح هنا عن قصد.** المصدر ده معناه
+            // «المندوب سحب النقطة من الأبلكيشن»، والداشبورد مايقدرش
+            // يدّعيه. أدمن بيصحّح نقطة جات من الأبلكيشن بيكتب `manual`
+            // — وده بالظبط اللي عايزين نشوفه في السجل بعد سنة.
+            'source' => ['nullable', Rule::in([
+                Client::LOC_SRC_VISIT, Client::LOC_SRC_MANUAL, Client::LOC_SRC_MAP,
+            ])],
         ]);
 
         if (! MapLink::inEgypt((float) $data['lat'], (float) $data['lng'])) {
@@ -262,7 +261,7 @@ class ClientLocationController extends Controller
             ...(($data['zone_id'] ?? null) ? ['zone_id' => (int) $data['zone_id']] : []),
             'location_confirmed_at' => now(),
             'location_confirmed_by' => $request->user()->id,
-            'location_source' => $data['source'] ?? 'visit',
+            'location_source' => $data['source'] ?? Client::LOC_SRC_VISIT,
         ])->save();
 
         return back()->with('ok', __('geo.confirmed_ok', ['client' => $client->displayName()]));

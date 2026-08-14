@@ -58,6 +58,11 @@ class AppNotification extends Model
             'request' => route('ops.requests'),
             'replenishment' => route('ops.replenishments'),
             'collections' => route('erp.collections'),
+            // ⚠️ **بيفتح على «المتأكدة»** — الإشعار بيقول «المندوب ضبط
+            // لوكيشن فلان»، والمدير المفروض يشوف اللي اتضبط فعلاً.
+            // الفلتر الافتراضي (`from_visit`) كان هيوديه لطابور
+            // المستنية اللي العميل ده **خرج منه** لحظتها.
+            'client_locations' => route('erp.client_locations', ['show' => 'from_app']),
             'custody' => route('ops.handout'),
             default => null,
         };

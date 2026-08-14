@@ -39,6 +39,11 @@
     <div class="kpi"><div class="lbl">{{ __('geo.f_no_location') }}</div>
         <div class="val neg">{{ number_format($counts['no_location']) }}</div>
         <div class="sub2">{{ __('geo.f_no_location_hint') }}</div></div>
+    {{-- 📱 المندوب بيسحب النقطة قدام المحل من الأبلكيشن (١٤/٨) —
+         الكارت ده بيقول الميدان شغّال قد إيه من غير ما تفتح الفلتر --}}
+    <div class="kpi"><div class="lbl">{{ __('geo.f_from_app') }}</div>
+        <div class="val">{{ number_format($counts['from_app']) }}</div>
+        <div class="sub2">{{ __('geo.f_from_app_hint') }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('geo.confirmed') }}</div>
         <div class="val">{{ number_format($counts['done']) }}</div></div>
 </div>
@@ -55,6 +60,7 @@
             'from_visit' => __('geo.f_from_visit'),
             'unconfirmed' => __('geo.f_unconfirmed'),
             'no_location' => __('geo.f_no_location'),
+            'from_app' => '📱 '.__('geo.f_from_app'),
             'done' => __('geo.f_done'),
             'all' => __('common.all'),
         ] as $k => $label)
@@ -112,8 +118,21 @@
                     <td>
                         @if ($c->locationTrusted())
                             <span class="badge b-green">✅ {{ __('geo.confirmed') }}</span>
+                            {{-- ⚠️ **بصمة كاملة مش تاريخ بس** (١٤/٨): مين ضبطها،
+                                 من فين، وإمتى بالساعة. من غيرها المراجع كان بيشوف
+                                 «متأكدة» ومايعرفش لو مندوب سحبها قدام المحل ولا
+                                 أدمن كتبها من لينك — والفرق ده هو كل الفيتشر. --}}
+                            @if ($c->locationFromApp())
+                                <span class="badge b-purple">📱 {{ __('geo.from_app') }}</span>
+                            @endif
                             <br><span style="font-size:10px;color:var(--muted)">
-                                {{ $c->location_confirmed_at?->format('Y-m-d') }}</span>
+                                @if ($c->locationConfirmer)
+                                    {{ __('geo.set_by') }}: {{ $c->locationConfirmer->displayName() }} ·
+                                @elseif ($c->locationSourceLabel())
+                                    {{ $c->locationSourceLabel() }} ·
+                                @endif
+                                {{ $c->location_confirmed_at?->format('Y-m-d') }}
+                                {{ $c->location_confirmed_at?->format('h:i A') }}</span>
                         @elseif ($c->hasLocation())
                             <span class="badge b-orange">{{ __('geo.unverified') }}</span>
                         @else

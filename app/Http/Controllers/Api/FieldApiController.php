@@ -985,6 +985,186 @@ class FieldApiController extends Controller
         return response()->json(['items' => $items]);
     }
 
+    // ═══════ لوكيشن العميل من الأبلكيشن (١٤ أغسطس ٢٠٢٦) ═══════
+    //
+    // ⚠️⚠️ **بلاغ المالك اللي بنى الفيتشر ده**: «كنت عامل حسابي إن
+    // التشيك إن بتاع المندوب بيكون قدام المحل فيبقى ده لوكيشن
+    // المكان — لكن المندوب بيعمل تشيك إن وهو في الطريق وبيدخل
+    // يجهّز الفاتورة».
+    //
+    // يعني `visits.lat` **مش** لوكيشن المحل: نقطة تشيك إن ممكن تكون
+    // من العربية على بعد شارع. الحل مش تحسين التخمين — الحل إن
+    // المندوب يسحب نقطة **بقصد** وهو واقف قدام المحل.
+    //
+    // ⚠️ **الحارس هو نفس مرساة الزيارة** (`guardClient` ← `ownsClient`):
+    // عميله أو بول فريقه أو في زوناته أو عنده عليه أمر توريد.
+    // من غيرها أي توكن ميداني كان يقدر يعيد كتابة لوكيشن **أي** عميل
+    // في الشركة — والعنوان بيتطبع على الفاتورة وبيسكّن المندوب.
+    //
+    // ⚠️ **مش مربوطين بزيارة مفتوحة عن قصد.** الكارت في الأبلكيشن
+    // بيوري «ليس له لوكيشن» على العميل قبل التشيك إن كمان، والمندوب
+    // اللي عدّى قدام محل ولاقى نقطته ناقصة لازم يقدر يظبطها.
+
+    /**
+     * POST /api/clients/{client}/geocode { lat, lng }
+     *
+     * بيرجّع اقتراح العنوان والمحافظة والمنطقة من `GeoSuggest` —
+     * **نفس الخدمة** اللي شاشة «تأكيد لوكيشن العملاء» في الداشبورد
+     * بتناديها (`ClientLocationController::suggest`). جيوكودر واحد،
+     * مش اتنين بيقترحوا مناطق مختلفة لنفس النقطة.
+     *
+     * ⚠️ **بيرجّع 200 حتى لو العنوان مالقيناهوش** — عكس الداشبورد.
+     * المندوب في الشارع على شبكة ضعيفة: لو رمينا 422 كانت الشاشة
+     * هتبان «فشل» وهو أصلاً معاه النقطة (وهي أهم حاجة) والمنطقة
+     * (محسوبة من الداتابيز بتاعتنا مش من الإنترنت). `matched: false`
+     * بتخلّي الشاشة تقول «اكتب العنوان بإيدك» بدل ما توقف.
+     *
+     * ⚠️ **قوايم المحافظات والمناطق بترجع هنا مش في البوت ستراب** —
+     * البوت ستراب بيتنده عشرات المرات في اليوم لكل مندوب، والليستة
+     * دي ثابتة ومحتاجة شاشة واحدة بس.
+     */
+    public function geocodeClient(Request $request, Client $client): JsonResponse
+    {
+        $data = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $user = $request->user();
+
+        if ($err = $this->guardClient($user, $client)) {
+            return $err;
+        }
+
+        // ⚠️ **نفس فلتر `egyptPoint`** — الإميوليتر لوكيشنه الافتراضي
+        // مقر جوجل في كاليفورنيا، وجيوكودينج نقطة هناك كان هيرجّع
+        // عنوان أمريكي ويحطه في خانة عنوان عميل مصري.
+        [$lat, $lng] = $this->egyptPoint($data);
+
+        if ($lat === null) {
+            return response()->json(['message' => __('geo.bad_point')], 422);
+        }
+
+        return response()->json(\App\Support\GeoSuggest::forPoint($lat, $lng) + [
+            'governorates' => \App\Support\GeoSuggest::governorateOptions(),
+            'zones' => \App\Support\GeoSuggest::zoneOptions(),
+        ]);
+    }
+
+    /**
+     * POST /api/clients/{client}/location
+     * { lat, lng, address?, address_ar?, governorate?, zone_id? }
+     *
+     * المندوب سحب النقطة وصحّح العنوان → بتتكتب على العميل بمصدر
+     * `rep_app` وبصمة `location_confirmed_at/by`.
+     *
+     * ⚠️ **بتتعامل كـ«تأكيد» كامل مش كاقتراح** (قرار المالك ١٤/٨):
+     * «وخلّي صفحة تأكيد اللوكيشن في الداشبورد تبقى هي الصفحة الصح».
+     * يعني العميل ده **بيخرج فوراً** من «جاهز للتأكيد» في
+     * `ClientLocationController::index` (كل فلاترها `whereNull
+     * ('location_confirmed_at')`) وبيدخل «المتأكدة» ببصمة كاملة —
+     * والأدمن لسه بيقدر يصحّح بزرار «تعديل».
+     *
+     * ⚠️ **إعادة الإرسال بتكتب فوق** — مفيش `idem_key` هنا عن قصد.
+     * ده مش قيد مالي بيتكرر؛ ده عمود بيتحدّث. إرسال نفس النقطة
+     * مرتين بيدي نفس النتيجة بالحرف.
+     *
+     * ⚠️ **الخانة الفاضية معناها «ماتغيّرش» مش «امسح»** — نفس دوكترين
+     * `ClientLocationController::confirm`. مسح المحافظة أو المنطقة
+     * كان بيخرّج العميل من تسكين مندوبه في صمت.
+     */
+    public function saveClientLocation(Request $request, Client $client): JsonResponse
+    {
+        $data = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'address' => ['nullable', 'string', 'max:190'],
+            'address_ar' => ['nullable', 'string', 'max:190'],
+            // ⚠️ مصدر واحد لقايمة المحافظات — نفس `Governorates::rule()`
+            // اللي الداشبورد بيستخدمها، فمحافظة جديدة بتشتغل في
+            // الاتنين من غير أي تعديل هنا.
+            'governorate' => ['nullable', \App\Support\Governorates::rule()],
+            'zone_id' => ['nullable', 'exists:zones,id'],
+        ]);
+
+        $user = $request->user();
+
+        if ($err = $this->guardClient($user, $client)) {
+            return $err;
+        }
+
+        [$lat, $lng] = $this->egyptPoint($data);
+
+        if ($lat === null) {
+            return response()->json(['message' => __('geo.bad_point')], 422);
+        }
+
+        $address = trim((string) ($data['address'] ?? ''));
+        $addressAr = trim((string) ($data['address_ar'] ?? ''));
+
+        DB::transaction(function () use ($client, $user, $lat, $lng, $address, $addressAr, $data) {
+            $client->forceFill([
+                'lat' => $lat,
+                'lng' => $lng,
+                ...($address !== '' ? ['address' => $address] : []),
+                ...($addressAr !== '' ? ['address_ar' => $addressAr] : []),
+                ...(($data['governorate'] ?? null) ? ['governorate' => $data['governorate']] : []),
+                ...(($data['zone_id'] ?? null) ? ['zone_id' => (int) $data['zone_id']] : []),
+                'location_confirmed_at' => now(),
+                'location_confirmed_by' => $user->id,
+                'location_source' => Client::LOC_SRC_APP,
+            ])->save();
+        });
+
+        $client->refresh();
+
+        TrackEvent::log($user, 'set_location',
+            __('field.event_set_location', ['client' => $client->displayName()]),
+            $client->displayAddress() ?: null,
+            $lat, $lng);
+
+        // ═══ النوتفيكيشن للمدير (طلب المالك) ═══
+        //
+        // ⚠️ **مدير العميل هو المستهدف**، ولو العميل يتيم (مفيش
+        // `manager_id`) بنرجع لمدير المندوب — من غير الفولباك ده
+        // العميل اللي لسه ماتسكّنش لمدير كان بيتظبط لوكيشنه ومحدش
+        // يعرف. ولو الفاعل هو المدير نفسه مابنبعتش لنفسه.
+        //
+        // ⚠️ **`teamManager` مش `manager`** — الأخيرة مش موجودة على
+        // `User` (الموديل فيه `teamManager`/`teamMembers`)، ونداء
+        // خاصية مش موجودة على Eloquent بيرجّع `null` **في صمت**
+        // فالإشعار كان هيتبلع من غير أي خطأ.
+        $manager = $client->manager ?? $user->teamManager;
+
+        if ($manager !== null && (int) $manager->id !== (int) $user->id) {
+            AppNotification::send(
+                $manager,
+                fn () => __('field.notif_rep_location_title'),
+                fn () => __('field.notif_rep_location_body', [
+                    'user' => $user->displayName(),
+                    'client' => $client->displayName(),
+                ]),
+                link: 'client_locations',
+            );
+        }
+
+        return response()->json([
+            'client' => [
+                'id' => $client->id,
+                'lat' => (float) $client->lat,
+                'lng' => (float) $client->lng,
+                'address' => $client->displayAddress(),
+                'address_en' => $client->address,
+                'address_ar' => $client->address_ar,
+                'governorate' => $client->governorate,
+                'governorate_label' => $client->governorateLabel(),
+                'zone_id' => $client->zone_id,
+                'zone_name' => $client->zone?->displayName(),
+                'confirmed_at' => $client->location_confirmed_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
     /**
      * POST /api/goods-requests — طلب بضاعة لعميل من عند العميل.
      * { visit_id, items: [{product_id, qty, unit?}], note? }

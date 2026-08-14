@@ -114,6 +114,20 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // المرساة جوّه `storeGoodsRequest` زي ما هي: زيارة **مفتوحة بتاعته**.
         Route::post('/goods-requests', [FieldApiController::class, 'storeGoodsRequest']);
 
+        // ═══ لوكيشن العميل من الأبلكيشن (١٤ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **جوّه المجموعة دي عن قصد** — نفس رولز شغل الشارع
+        // (`FIELD_WORK_ROLES` بالحرف) ونفس حارس الحضور. الفشل بيبقى
+        // **بدري**: أول ما المندوب يسحب النقطة، نداء الجيوكود بيرجّع
+        // 423 وبوابة الحضور بتفتح — بدل ما يملا الشاشة كلها ويكتشف
+        // عند الحفظ إنه مش مسجّل حضور.
+        //
+        // ⚠️ **مافيش `in.warehouse` ولا زيارة مفتوحة** — المندوب واقف
+        // قدام المحل، والحارس الوحيد المطلوب هو «العميل ده بتاعه»
+        // وهو جوّه `guardClient` في الكنترولر.
+        Route::post('/clients/{client}/geocode', [FieldApiController::class, 'geocodeClient']);
+        Route::post('/clients/{client}/location', [FieldApiController::class, 'saveClientLocation']);
+
         // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);

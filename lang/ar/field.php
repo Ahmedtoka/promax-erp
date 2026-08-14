@@ -199,6 +199,10 @@ return [
     'notif_goods_request_body' => ':client — :qty قطعة، طلبها :user من عند العميل. راجع ووافق.',
     'notif_goods_request_wh_title' => 'طلب بضاعة في السكة :number',
     'notif_goods_request_wh_body' => ':client — :qty قطعة. أمر التجهيز هينزل أول ما الموافقة تتم.',
+    // ═══ لوكيشن العميل من الأبلكيشن (١٤ أغسطس ٢٠٢٦) ═══
+    'event_set_location' => 'ضبط لوكيشن :client',
+    'notif_rep_location_title' => 'لوكيشن عميل اتظبط من الأبلكيشن',
+    'notif_rep_location_body' => 'المندوب :user ضبط لوكيشن :client وهو قدام المحل — راجعه في شاشة تأكيد اللوكيشن.',
     'notif_client_request_title' => 'طلب عميل جديد: :name',
     'notif_client_request_body' => 'قدّمه :user ومستني موافقتك.',
     'replenishment_origin_rep' => 'طلب مندوب عند العميل',

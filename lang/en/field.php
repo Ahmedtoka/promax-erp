@@ -200,6 +200,10 @@ return [
     'notif_goods_request_body' => ':client — :qty pcs, requested by :user at the client. Review and approve.',
     'notif_goods_request_wh_title' => 'Goods request coming up :number',
     'notif_goods_request_wh_body' => ':client — :qty pcs. The pick order drops once it is approved.',
+    // Client location captured from the app (2026-08-14)
+    'event_set_location' => 'Set location for :client',
+    'notif_rep_location_title' => 'A client location was set from the app',
+    'notif_rep_location_body' => ':user captured the location of :client while standing at the shop - review it on the location confirmation screen.',
     'notif_client_request_title' => 'New client request: :name',
     'notif_client_request_body' => 'Submitted by :user and awaiting your approval.',
     'replenishment_origin_rep' => 'Rep at client',

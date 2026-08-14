@@ -96,6 +96,34 @@ class Client extends Model
      */
     public const TAX_CYCLES = ['monthly', 'quarterly', 'annual'];
 
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * مصدر نقطة العميل — `clients.location_source`
+     * ═══════════════════════════════════════════════════════════
+     *
+     * ⚠️ **العمود ده كان نصوص حرة متناثرة في الكود** ('visit' ·
+     * 'manual' · 'map' مكتوبين بالنص في الكنترولر والفاليديشن).
+     * أول ما اتضاف مصدر رابع (الأبلكيشن، ١٤ أغسطس ٢٠٢٦) الحاجة بقت
+     * محتاجة اسم واحد: غلطة حرف في مكان واحد كانت هتخلّي صف
+     * `rep-app` مايتعدّش مع `rep_app` وعدّاد الشاشة يكدب.
+     *
+     * ⚠️ **`rep_app` أقوى مصدر عندنا.** المندوب سحب النقطة بإيده وهو
+     * **واقف قدام المحل** — عكس `visit` اللي نقطة تشيك إن ممكن تكون
+     * من العربية في الطريق (بلاغ المالك ١٤/٨). الأدمن لسه بيقدر
+     * يصحّحها من شاشة تأكيد اللوكيشن، وساعتها بتبقى `manual`.
+     */
+    public const LOC_SRC_VISIT = 'visit';
+    public const LOC_SRC_MANUAL = 'manual';
+    public const LOC_SRC_MAP = 'map';
+    public const LOC_SRC_APP = 'rep_app';
+
+    public const LOC_SOURCES = [
+        self::LOC_SRC_VISIT,
+        self::LOC_SRC_MANUAL,
+        self::LOC_SRC_MAP,
+        self::LOC_SRC_APP,
+    ];
+
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
         'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',
@@ -251,6 +279,19 @@ public function zone(): BelongsTo
             ->filter(fn ($c) => $c['name'] !== '' || $c['phone'] !== null)
             ->values()
             ->all();
+    }
+
+    /**
+     * الموظف اللي ضبط/أكّد لوكيشن العميل — بصمة على النقطة نفسها.
+     *
+     * ⚠️ **غير `rep` وغير `manager`.** ممكن يكون مندوب سحب النقطة من
+     * الأبلكيشن، وممكن يكون أدمن أكّدها من الداشبورد — والفرق بين
+     * الاتنين في `location_source`. شاشة تأكيد اللوكيشن بتعرض
+     * الاسمين مع بعض عشان اللي بيراجع يعرف يسأل مين.
+     */
+    public function locationConfirmer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'location_confirmed_by');
     }
 
     /** السلسلة اللي الفرع تابع لها */
@@ -857,6 +898,25 @@ public function zone(): BelongsTo
     public function locationTrusted(): bool
     {
         return $this->hasLocation() && $this->location_confirmed_at !== null;
+    }
+
+    /** النقطة جاية من الأبلكيشن؟ — المندوب سحبها وهو قدام المحل */
+    public function locationFromApp(): bool
+    {
+        return $this->location_source === self::LOC_SRC_APP;
+    }
+
+    /**
+     * مسمى مصدر النقطة — «من الأبلكيشن» / «من زيارة» / «يدوي» / «من لينك».
+     *
+     * ⚠️ المصدر الغير معروف بيرجّع `null` مش نص خام: صف قديم فيه قيمة
+     * مالهاش مفتاح لغة كان هيطبع `geo.src.xxx` في وش المستخدم.
+     */
+    public function locationSourceLabel(): ?string
+    {
+        $src = (string) $this->location_source;
+
+        return in_array($src, self::LOC_SOURCES, true) ? __('geo.src.'.$src) : null;
     }
 
     public function collectionRate(): float
