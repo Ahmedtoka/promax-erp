@@ -96,6 +96,32 @@ abstract class TestCase extends BaseTestCase
         ]);
     }
 
+    /**
+     * قناة من **الأربعة الثابتة** بكودها الحقيقي — `firstOrCreate`.
+     *
+     * ⚠️ **مايجريشن `000024_seed_four_channels` بتزرع الأربعة**
+     * (`key_account` / `online` / `cash_van` / `wholesale`)، و
+     * `RefreshDatabase` بتشغّل المايجريشنات — يعني الصفوف موجودة
+     * قبل أول سطر في أي تيست. `Channel::create(['code' =>
+     * Channel::CASH_VAN, …])` بترمي «Duplicate entry 'cash_van' for
+     * key 'channels_code_unique'» — رسالة مالهاش أي علاقة باللي
+     * بيتفحص، والتيست بيبان كأنه بيكشف باج في الدومين.
+     *
+     * القاعدة: اللي محتاج قناة **كودها مايفرقش** يستخدم
+     * `makeChannel()`؛ واللي محتاج **كود بعينه** (عشان `sub_channel`
+     * أو `paymentTerms()` أو التقارير) يستخدم دي.
+     */
+    protected function seededChannel(string $code = Channel::KEY_ACCOUNT, array $attrs = []): Channel
+    {
+        [$name, $nameEn] = Channel::DEFAULTS[$code] ?? ['قناة التيست', 'Test channel'];
+
+        return Channel::firstOrCreate(['code' => $code], array_merge([
+            'name' => $name,
+            'name_en' => $nameEn,
+            'active' => true,
+        ], $attrs));
+    }
+
     protected function makeZone(): Zone
     {
         // ⚠️ عمود `zones.code` طوله 20 — `Z-` + 13 حرف = 15

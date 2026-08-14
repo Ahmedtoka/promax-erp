@@ -26,6 +26,17 @@ use Tests\TestCase;
  *   1. أي حاجة الشاشة بتقول عليها إجبارية — السيرفر يرفضها فاضية.
  *   2. أي حاجة اتكتبت — تبان تاني لما أفتح التعديل.
  *   3. تعديل خانة واحدة — مايمسحش الباقي.
+ *
+ * ⚠️⚠️ **فخ الإنتربوليشن العربي — «$var» جوه دبل كوت.**
+ * PHP في التركيب البسيط جوه `"..."` بيعتبر أي بايت من `\x80` لـ`\xFF`
+ * **حرف صالح في اسم المتغيّر**. يعني `"«$field» فاضية"` بيتقري متغيّر
+ * اسمه `field»` (بالبايتين `\xC2\xBB` ملزوقين في الاسم) — و
+ * `Undefined variable $field` بترمي `ErrorException` وتفشّل التيست
+ * برسالة مالهاش أي علاقة باللي بيتفحص.
+ *
+ * القاعدة: **أي متغيّر وراه حرف عربي أو علامة تنصيص «» أو أي بايت
+ * غير أسكي — يتحط بين أقواس معكوفة**: `{$field}`. الأقواس بتقفل
+ * الاسم صراحةً فالبايت اللي بعدها بيبقى نص عادي.
  */
 class ClientFlowTest extends TestCase
 {
@@ -152,7 +163,7 @@ class ClientFlowTest extends TestCase
             ->assertSessionHasErrors($field);
 
         $this->assertSame(0, Client::count(),
-            "العميل اتحفظ رغم إن «$field» فاضية — الشاشة بتقول عليها إجبارية");
+            "العميل اتحفظ رغم إن «{$field}» فاضية — الشاشة بتقول عليها إجبارية");
     }
 
     public static function requiredFields(): array
@@ -246,7 +257,7 @@ class ClientFlowTest extends TestCase
             'الملاحظات' => 'ملاحظة داخلية على الحساب',
         ] as $label => $needle) {
             $this->assertStringContainsString($needle, $html,
-                "«$label» اتحفظت بس مش ظاهرة في شاشة التعديل");
+                "«{$label}» اتحفظت بس مش ظاهرة في شاشة التعديل");
         }
 
         // الدروب داونز: المختار لازم يكون عليه `selected`
@@ -304,7 +315,7 @@ class ClientFlowTest extends TestCase
 
         foreach ($before as $key => $value) {
             $this->assertEquals($value, $after->{$key},
-                "«$key» اتغيّرت وانت بتعدّل التليفون بس");
+                "«{$key}» اتغيّرت وانت بتعدّل التليفون بس");
         }
     }
 
@@ -537,7 +548,7 @@ class ClientFlowTest extends TestCase
             'payment_days', 'price_list_id', 'category', 'tax_id', 'eta_type',
         ] as $field) {
             $this->assertNotSame('client.hint_'.$field, __('client.hint_'.$field),
-                "خانة «$field» مالهاش شرح — ضيف `hint_$field` في lang/ar و lang/en");
+                "خانة «{$field}» مالهاش شرح — ضيف `hint_{$field}` في lang/ar و lang/en");
         }
 
         $this->assertStringContainsString('class="fhint"', $html,

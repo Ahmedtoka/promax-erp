@@ -29,14 +29,16 @@ class ChannelIsNotPricingTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * ⚠️ **`firstOrCreate` مش `create`.** الأكواد اللي هنا هي الأربعة
+     * الثابتة، ومايجريشن `000024_seed_four_channels` بتزرعهم قبل أي
+     * تيست — فـ`Channel::create` بترمي «Duplicate entry 'key_account'
+     * for key 'channels_code_unique'». الحارس المشترك في
+     * `Tests\TestCase::seededChannel()`.
+     */
     private function channel(string $code = Channel::KEY_ACCOUNT): Channel
     {
-        return Channel::create([
-            'code' => $code,
-            'name' => 'قناة',
-            'name_en' => 'Channel',
-            'active' => true,
-        ]);
+        return $this->seededChannel($code);
     }
 
     // ═══════════════════ السكيما ═══════════════════

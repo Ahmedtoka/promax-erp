@@ -159,7 +159,14 @@ class ClientFormIntegrityTest extends TestCase
         $manager = $this->makeAdmin(['role' => 'manager', 'name' => 'مدير القناة']);
         $branch = Branch::create(['code' => 'FULL', 'name' => 'فرع كامل', 'active' => true]);
         $zone = $this->makeZone();
-        $channel = $this->makeChannel(0.50);
+        // ⚠️ **لازم تكون `key_account` بالكود.** الـpayload تحت فيه
+        // `sub_channel = chain`، و`Client::booted()` بيصفّي القسم لأي
+        // قناة كودها مش `key_account` (عقيدة القنوات: الكي أكاونت
+        // وحده اللي بينقسم سلاسل/كونفينيانس). `makeChannel()` بتدي
+        // كود عشوائي `CH-…` فالقسم كان بيترمي والتيست يقول
+        // «`sub_channel` اتحفظ null». `seededChannel()` بترجّع الصف
+        // اللي المايجريشن زرعته بدل ما تعمل واحد جديد بنفس الكود.
+        $channel = $this->seededChannel();
         $group = ClientGroup::create(['code' => 'CK', 'name' => 'سيركل كيه', 'active' => true]);
 
         $payload = [
@@ -836,10 +843,39 @@ class ClientFormIntegrityTest extends TestCase
 
     /**
      * كل خانة عليها `data-req-contract` إجبارية مع العقد في السيرفر.
+     *
+     * ⚠️ **استثناء مقصود: خانات التواريخ.** `contract_starts_at`
+     * و`contract_ends_at` قاعدين جوه `#startsAtBox` و`#endsAtBox`،
+     * و`syncDuration()` **بيخبّيهم ويفضّيهم** لما المدة المختارة
+     * مالهاش تواريخ («تعامل بالطلب») أو مالهاش نهاية («مفتوح المدة»).
+     * يعني دول إجباريين **بشرط** على الشاشة مش دايماً — وحارس
+     * الجافاسكربت نفسه بيتخطّاهم وهما مخبّيين (`hiddenInPane`).
+     *
+     * لو حطّينا `required_if:has_contract,1` على `contract_starts_at`،
+     * كل عقد «تعامل بالطلب» كان هيترفض — وده نوع عقد شرعي وليه تيست
+     * لوحده (`test_a_per_order_arrangement_saves_with_no_dates`).
+     * فالقاعدة الصح ليه شرطية: `nullable|required_with:contract_ends_at|date`
+     * — نهاية من غير بداية مرفوضة، وعقد من غير تواريخ خالص مسموح.
+     *
+     * ⚠️ **الاستثناء مش بلانك شيك.** الخانة المستثناة لازم يكون
+     * عليها قاعدة `required*` من أي نوع؛ اللي مالهاش أي قاعدة إجبار
+     * خالص لسه بتقع هنا — وده اللي التيست اتكتب عشانه.
      */
     public function test_contract_only_required_fields_are_enforced_by_the_server(): void
     {
         $rules = $this->clientRules();
+
+        $form = (string) file_get_contents(resource_path('views/erp/client_form.blade.php'));
+        $conditional = $this->hiddenBoxFields($form);
+
+        // الحارس على الاستثناء نفسه: لو الخانة خرجت من البوكس المخبّي
+        // يبقى بقت ظاهرة دايماً ولازم ترجع للقاعدة الصارمة.
+        $this->assertContains('contract_starts_at', $conditional,
+            'تاريخ البداية مابقاش جوه بوكس بيتخبّى — يبقى لازم يبقى `required_if:has_contract`');
+
+        // وسبب الاستثناء لازم يفضل قايم: فيه مدة شرعية من غير تواريخ
+        $this->assertFalse(Contract::durationHasDates('per_order'),
+            'كل المدد بقت بتواريخ — الاستثناء مالوش سبب، رجّع القاعدة الصارمة');
 
         foreach (['erp/client_form.blade.php', 'erp/client.blade.php'] as $screen) {
             $html = (string) file_get_contents(resource_path('views/'.$screen));
@@ -854,10 +890,79 @@ class ClientFormIntegrityTest extends TestCase
                 $field = str_replace(['][', '[', ']'], ['.', '.', ''], $nm[1]);
                 $set = implode('|', (array) ($rules[$field] ?? []));
 
+                if (in_array($field, $conditional, true)) {
+                    $this->assertMatchesRegularExpression('/\brequired(_if|_with|_unless|_without)?\b/', $set,
+                        "{$screen} → «{$field}» الشاشة بتوقف عليها والسيرفر مالوش عليها أي قاعدة إجبار خالص");
+
+                    continue;
+                }
+
                 $this->assertStringContainsString('required_if:has_contract', $set,
                     "{$screen} → «{$field}» الشاشة بتوقف عليها مع العقد والسيرفر مش بيطلبها");
             }
         }
+    }
+
+    /**
+     * أسماء الخانات اللي جوه بوكس بيبدأ مخبّي وبيتظهر بالجافاسكربت
+     * (`#startsAtBox` / `#endsAtBox` اللي `syncDuration()` بيتحكم فيهم).
+     *
+     * ⚠️ **بيتقرا من الـBlade مش قايمة مكتوبة بالإيد.** لو حد طلّع
+     * خانة من البوكس أو ضاف واحدة جواه، التيست بيتحرّك معاه بدل ما
+     * الاستثناء يفضل شايل اسم قديم مالوش لازمة.
+     *
+     * @return list<string>
+     */
+    private function hiddenBoxFields(string $html): array
+    {
+        $out = [];
+        $len = strlen($html);
+
+        preg_match_all(
+            '/<div id="(?:startsAtBox|endsAtBox)"[^>]*style="display:none"[^>]*>/',
+            $html, $m, PREG_OFFSET_CAPTURE,
+        );
+
+        foreach ($m[0] as [, $at]) {
+            // عدّاد `<div>`/`</div>` — النافذة الثابتة بتقطع البوكس
+            // في نصه أول ما حد يزوّد سطر جواه.
+            $depth = 0;
+            $i = $at;
+            $end = $len;
+
+            while ($i < $len) {
+                $nextOpen = strpos($html, '<div', $i + 1);
+                $nextClose = strpos($html, '</div>', $i + 1);
+
+                if ($nextClose === false) {
+                    break;
+                }
+
+                if ($nextOpen !== false && $nextOpen < $nextClose) {
+                    $depth++;
+                    $i = $nextOpen;
+
+                    continue;
+                }
+
+                if ($depth === 0) {
+                    $end = $nextClose;
+
+                    break;
+                }
+
+                $depth--;
+                $i = $nextClose;
+            }
+
+            preg_match_all('/name="([^"]+)"/', substr($html, $at, $end - $at), $nm);
+
+            foreach ($nm[1] as $name) {
+                $out[] = str_replace(['][', '[', ']'], ['.', '.', ''], $name);
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     // ═══════════════ 8. مدة التعاقد ═══════════════

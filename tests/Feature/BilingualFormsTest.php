@@ -218,19 +218,92 @@ class BilingualFormsTest extends TestCase
 
     /**
      * الخانات دي لازم تقول للي بيكتب إنها إنجليزي — بـ`dir=ltr`
-     * وبـplaceholder إنجليزي.
+     * وبـplaceholder بيقوله «اكتب بالإنجليزي».
+     *
+     * ⚠️ **الـplaceholder اتنقل لملفات اللغة (٢٠٢٦-٠٨).** قبل كده كان
+     * مثال إنجليزي مكتوب بالنص جوه البليد («Mohamed Ahmed» /
+     * «Branch Manager») — والمثال بيتقري كأنه قيمة موجودة فعلاً، وفيه
+     * ناس كانت بتسيب الخانة فاكرة إنها مليانة. والأهم: الصف اللي
+     * الجافاسكربت بيضيفه كان بيتكتب مرة تانية بالإيد، فأول ما النصين
+     * يختلفوا بيطلع صف جديد بلغة غير صفوف البليد.
+     *
+     * التيست ده كان بيدوّر على النص القديم حرفياً فبقى قديم هو كمان.
+     * **نفس النية اتحرست بمصدرها الجديد:** الاتجاه `ltr` على كل خانة
+     * نص حر، والـplaceholder مربوط بمفتاح اللغة **في البليد وفي
+     * الجافاسكربت بنفس المفتاح**، والنص الإنجليزي للمفتاح إنجليزي فعلاً.
      */
     public function test_free_text_fields_signal_that_they_are_english(): void
     {
         $html = (string) file_get_contents(resource_path('views/erp/client_form.blade.php'));
 
-        $this->assertMatchesRegularExpression(
-            '/name="address"[^>]*dir="ltr"|dir="ltr"[^>]*name="address"/', $html,
-            'خانة العنوان لازم تكون LTR',
-        );
+        preg_match_all('/<input\b[^>]*>/', $html, $m);
 
-        $this->assertStringContainsString('Mohamed Ahmed', $html, 'placeholder إنجليزي لاسم جهة التواصل');
-        $this->assertStringContainsString('Branch Manager', $html, 'placeholder إنجليزي لصفة جهة التواصل');
+        $tagWith = function (string $needle) use ($m): string {
+            foreach ($m[0] as $tag) {
+                if (str_contains($tag, $needle)) {
+                    return $tag;
+                }
+            }
+
+            return '';
+        };
+
+        // ═══ الاتجاه + الـplaceholder على كل خانة نص حر ═══
+        $fields = [
+            'العنوان' => ['name="address"', 'client.address_ph'],
+            'اسم جهة التواصل' => ['][name]"', 'client.contact_name_ph'],
+            'صفة جهة التواصل' => ['][role]"', 'client.contact_role_ph'],
+        ];
+
+        foreach ($fields as $label => [$needle, $langKey]) {
+            $tag = $tagWith($needle);
+
+            $this->assertNotSame('', $tag, "خانة «{$label}» مش موجودة في الفورم خالص");
+
+            $this->assertStringContainsString('dir="ltr"', $tag,
+                "خانة «{$label}» لازم تكون LTR — من غيرها المؤشر بيبدأ يمين والكتابة الإنجليزية بتتلغبط");
+
+            $this->assertStringContainsString("__('".$langKey."')", $tag,
+                "خانة «{$label}» مالهاش placeholder من ملف اللغة — النص المكتوب بالإيد "
+                .'بيختلف عن الصف اللي الجافاسكربت بيضيفه');
+        }
+
+        // ═══ الصف اللي الجافاسكربت بيضيفه بنفس المفاتيح بالظبط ═══
+        foreach (['contactNamePh' => 'contact_name_ph', 'contactRolePh' => 'contact_role_ph'] as $js => $key) {
+            $this->assertStringContainsString("'".$js."' => __('client.".$key."')", $html,
+                "مفتاح «{$key}» مش متمرّر للجافاسكربت — الصف الجديد هيطلع بلا placeholder");
+
+            $this->assertStringContainsString('T.'.$js, $html,
+                "الجافاسكربت مش بيستخدم «{$js}» — يبقى بيكتب النص بإيده تاني");
+        }
+
+        preg_match('/const cell = \(name, ph\) =>(.{0,400})/s', $html, $cm);
+        $cell = $cm[1] ?? '';
+
+        $this->assertNotSame('', $cell, 'دالة بناء صف جهة التواصل في الجافاسكربت اتشالت');
+        $this->assertStringContainsString('dir="ltr"', $cell,
+            'الصف اللي الجافاسكربت بيضيفه مش LTR — بيختلف عن صفوف البليد');
+        $this->assertStringContainsString("placeholder=\"' + ph + '\"", $cell,
+            'الصف الجديد بيتكتب بـplaceholder ثابت بدل اللي جاي من ملف اللغة');
+
+        // ═══ والنص الإنجليزي للمفاتيح دي إنجليزي فعلاً ═══
+        foreach (['address_ph', 'contact_name_ph', 'contact_role_ph'] as $key) {
+            $en = (string) __('client.'.$key, [], 'en');
+            $ar = (string) __('client.'.$key, [], 'ar');
+
+            $this->assertStringNotContainsString('client.', $en,
+                "المفتاح «{$key}» ناقص في lang/en — هيطلع خام على الشاشة");
+            $this->assertStringNotContainsString('client.', $ar,
+                "المفتاح «{$key}» ناقص في lang/ar");
+
+            // لاتيني بحت — لو اتكتب عربي في `lang/en` الخانة بتقول
+            // العكس بالظبط: «دي خانة عربي».
+            $this->assertSame($en, (string) preg_replace('/[^\x20-\x7E]/', '', $en),
+                "«{$key}» في lang/en فيه حروف مش لاتينية");
+
+            $this->assertStringContainsString('English', $en,
+                "«{$key}» لازم يقول للمستخدم إن الخانة إنجليزي");
+        }
     }
 
     public function test_the_free_text_still_saves_end_to_end(): void
@@ -348,10 +421,11 @@ class BilingualFormsTest extends TestCase
     {
         // ⚠️ الحارس على **الموديل** مش على الفورم: العميل بيتعمل من 5
         // مسارات (شاشة، تحويل ليد، موافقة طلب، استيراد، سيدر).
-        $cashVan = Channel::create([
-            'code' => Channel::CASH_VAN, 'name' => 'كاش فان', 'name_en' => 'Cash Van',
-            'discount' => 0, 'active' => true,
-        ]);
+        //
+        // ⚠️ **`seededChannel` مش `Channel::create`** — الأربعة اتزرعوا
+        // في مايجريشن `000024_seed_four_channels`، و`create` بكود منهم
+        // بترمي «Duplicate entry» على `channels_code_unique`.
+        $cashVan = $this->seededChannel(Channel::CASH_VAN);
 
         $client = $this->makeClient([
             'channel_id' => $cashVan->id,
@@ -366,14 +440,8 @@ class BilingualFormsTest extends TestCase
     {
         // ⚠️ ده السيناريو الحقيقي: عميل كان كي أكاونت/سلاسل واتنقل
         // كاش فان. القناة بتتغيّر والقسم كان بيفضل.
-        $ka = Channel::create([
-            'code' => Channel::KEY_ACCOUNT, 'name' => 'كي أكاونت', 'name_en' => 'Key Account',
-            'discount' => 0.5, 'active' => true,
-        ]);
-        $cashVan = Channel::create([
-            'code' => Channel::CASH_VAN, 'name' => 'كاش فان', 'name_en' => 'Cash Van',
-            'discount' => 0, 'active' => true,
-        ]);
+        $ka = $this->seededChannel(Channel::KEY_ACCOUNT);
+        $cashVan = $this->seededChannel(Channel::CASH_VAN);
 
         $client = $this->makeClient(['channel_id' => $ka->id, 'sub_channel' => 'convenience']);
         $this->assertSame('convenience', $client->fresh()->sub_channel, 'الكي أكاونت مسموح له');
@@ -385,10 +453,7 @@ class BilingualFormsTest extends TestCase
 
     public function test_a_key_account_client_keeps_his_segment(): void
     {
-        $ka = Channel::create([
-            'code' => Channel::KEY_ACCOUNT, 'name' => 'كي أكاونت', 'name_en' => 'Key Account',
-            'discount' => 0.5, 'active' => true,
-        ]);
+        $ka = $this->seededChannel(Channel::KEY_ACCOUNT);
 
         $client = $this->makeClient(['channel_id' => $ka->id, 'sub_channel' => 'chain']);
         $client->update(['phone' => '01000000000']);
