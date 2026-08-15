@@ -531,6 +531,7 @@ return [
     // ═══ تفعيل العملاء المستوردين ═══
     'status_waiting' => 'مستني التفعيل',
     'status_active' => 'شغّال',
+    'status_rejected' => 'مرفوض',
     'status_all' => 'الكل',
     'tap_to_review' => 'اضغط تراجعهم أو توقف واحد اتفعّل بالغلط',
     'deactivate' => 'إيقاف',

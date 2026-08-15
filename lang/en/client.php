@@ -516,6 +516,7 @@ return [
     // ═══ تفعيل العملاء المستوردين ═══
     'status_waiting' => 'Awaiting activation',
     'status_active' => 'Active',
+    'status_rejected' => 'Rejected',
     'status_all' => 'All',
     'tap_to_review' => 'Tap to review, or stop one activated by mistake',
     'deactivate' => 'Deactivate',

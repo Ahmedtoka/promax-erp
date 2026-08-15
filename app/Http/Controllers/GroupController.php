@@ -202,11 +202,16 @@ class GroupController extends Controller
             'action' => ['required', 'in:attach,detach'],
         ]);
 
-        Client::whereIn('id', $data['client_ids'])->update([
+        // ⚠️ سكوب: المدير يضمّ/يفكّ عملاءه هو بس. من غير `visibleTo`
+        // كان يقدر يبعت أي `client_id` (الفاليديشن `exists` بس) ويضم
+        // فروع فريق تاني لسلسلته — وعضوية السلسلة بتورّث خصم/عقد. نفس
+        // حارس الإخوة فوق (سطر 149/171). العدّ من الصفوف المتأثرة فعلاً.
+        $n = Client::visibleTo(
+            Client::whereIn('id', $data['client_ids']),
+            $request->user()
+        )->update([
             'group_id' => $data['action'] === 'attach' ? $group->id : null,
         ]);
-
-        $n = count($data['client_ids']);
 
         return back()->with('ok', $data['action'] === 'attach'
             ? __('flash.branches_attached', ['count' => $n])

@@ -154,7 +154,7 @@
                         @if ($c->status === 'active')
                             <span class="badge b-green">{{ __('client.status_active') }}</span>
                         @elseif ($c->status === 'rejected')
-                            <span class="badge b-red">{{ __('enums.client_status.rejected') }}</span>
+                            <span class="badge b-red">{{ __('client.status_rejected') }}</span>
                         @else
                             <span class="badge b-orange">{{ __('client.status_waiting') }}</span>
                         @endif
