@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class PurchaseOrder extends Model
@@ -125,6 +126,44 @@ class PurchaseOrder extends Model
     public function sourceClass(): string
     {
         return $this->fromReplenishment() ? 'b-orange' : 'b-purple';
+    }
+
+    /**
+     * طلب البضاعة اللي الأمر ده اتولد منه — سؤال المالك بالنص
+     * (١٥ أغسطس): «مكتوب عليه replenishment، يبقى ده PO منين؟».
+     *
+     * ⚠️ العلاقة **معكوسة**: الرابط متخزّن على الطلب
+     * (`replenishment_requests.purchase_order_id`) مش على الأمر،
+     * فمافيش عمود هنا نعمل عليه `belongsTo`. الاتجاه ده هو الصح
+     * منطقياً كمان — الطلب هو اللي بيتحوّل لأمر، مش العكس.
+     *
+     * `hasOne` مش `hasMany`: `assignTo` بترفض أي طلب حالته مش
+     * `pending`، فمستحيل طلبين يتحوّلوا لنفس الأمر.
+     */
+    public function replenishmentRequest(): HasOne
+    {
+        return $this->hasOne(ReplenishmentRequest::class);
+    }
+
+    /**
+     * سطر «جاي منين» جاهز للعرض: «ريفيل RPL-1042 — طلبه محمد حجر».
+     * بيرجع null للأوامر العادية (مصدرها مكتوب في `source` أصلاً).
+     */
+    public function originLine(): ?string
+    {
+        if (! $this->fromReplenishment()) {
+            return null;
+        }
+
+        $rpl = $this->replenishmentRequest;
+
+        if ($rpl === null) {
+            return null;
+        }
+
+        $who = $rpl->requester?->displayName();
+
+        return $rpl->number.($who === null ? '' : ' — '.$who);
     }
 
     public function client(): BelongsTo

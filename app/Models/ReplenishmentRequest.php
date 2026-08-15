@@ -73,6 +73,18 @@ class ReplenishmentRequest extends Model
         return $this->belongsTo(User::class, 'requested_by');
     }
 
+    /**
+     * نفس `promoter()` بالظبط، بس بالاسم الصح.
+     *
+     * ⚠️ الطلب بقى **أي مندوب** يعمله من عند العميل مش البروموتر بس
+     * (توحيد الريفيل). `promoter` اتساب زي ما هو عشان الكود القديم
+     * مايتكسرش، والكود الجديد يستخدم ده.
+     */
+    public function requester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requested_by');
+    }
+
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');

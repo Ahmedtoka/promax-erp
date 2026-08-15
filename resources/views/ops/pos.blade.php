@@ -132,9 +132,19 @@
                 {{-- الصف كله بيفتح صفحة الأمر (١٢/٨) — عرض + تعديل من مكان
                      واحد. الأزرار في آخر عمود عليها stopPropagation. --}}
                 <tr class="clickable" onclick="location.href='{{ route('ops.pos.show', $po) }}'" style="cursor:pointer">
+                    {{-- ⚠️ **`sourceLabel()` مش `source` الخام** (بلاغ المالك
+                         ١٥/٨: «مكتوب replenishment، ده PO منين؟»). العمود
+                         كان بيطبع قيمة الإينَم الإنجليزية زي ما هي، وهي
+                         مصطلح داخلي مش مسمى معتمد. والسطر اللي تحته بيقول
+                         الأصل بالظبط: رقم طلب البضاعة ومين طلبه. --}}
                     <td class="num"><b>{{ $po->number }}</b>
-                        <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}
-                            @if ($po->source) · {{ $po->source }}@endif</span>
+                        <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}</span>
+                        @if ($po->source)
+                            <br><span class="badge {{ $po->sourceClass() }}" style="font-size:9.5px">{{ $po->sourceLabel() }}</span>
+                        @endif
+                        @if ($po->originLine())
+                            <br><span style="font-size:9.5px;color:var(--muted)">{{ $po->originLine() }}</span>
+                        @endif
                     </td>
                     <td>
                         <b>{{ $po->client?->fullName() ?? '—' }}</b>

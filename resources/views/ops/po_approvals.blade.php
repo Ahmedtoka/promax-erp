@@ -110,7 +110,9 @@
                     <tr onclick="poToggle({{ $po->id }})" style="cursor:pointer" id="poRow{{ $po->id }}">
                         <td>
                             <b>{{ $po->number }}</b>
-                            @if ($po->source)<div style="font-size:10px;color:var(--muted)" dir="ltr">{{ $po->source }}</div>@endif
+                            {{-- `sourceLabel()` مش الخام — نفس إصلاح ١٥/٨ --}}
+                            @if ($po->source)<div style="font-size:10px;color:var(--muted)">{{ $po->sourceLabel() }}</div>@endif
+                            @if ($po->originLine())<div style="font-size:9.5px;color:var(--muted)">{{ $po->originLine() }}</div>@endif
                         </td>
                         <td>
                             <b style="font-size:12.5px">{{ $client?->fullName() ?? '—' }}</b>

@@ -1448,7 +1448,13 @@ class OpsController extends Controller
             ->where('status', '!=', 'delivered')
             ->where(fn ($w) => $w->whereNull('approval_status')->orWhere('approval_status', '!=', 'rejected'));
 
-        $q = $base()->with(['client.channel', 'courier', 'items', 'creator', 'approvedBy', 'editor']);
+        // ⚠️ `replenishmentRequest.requester` في الإيجر لودينج: العمود
+        // بيعرض «جاي من أنهي طلب ومين طلبه» لكل صف (إصلاح ١٥/٨)، ومن
+        // غيرها دي كويريتين لكل أمر في الصفحة.
+        $q = $base()->with([
+            'client.channel', 'courier', 'items', 'creator', 'approvedBy', 'editor',
+            'replenishmentRequest.requester',
+        ]);
 
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
@@ -1498,6 +1504,7 @@ class OpsController extends Controller
         $purchaseOrder->load([
             'client.channel', 'client.group', 'courier', 'warehouse',
             'items.product', 'creator', 'approvedBy', 'editor', 'pickOrder',
+            'replenishmentRequest.requester',
         ]);
 
         return view('ops.po_show', [
@@ -2500,7 +2507,8 @@ class OpsController extends Controller
      */
     public function poApprovals(Request $request)
     {
-        $q = PurchaseOrder::with(['client.group', 'client.channel', 'courier', 'items.product', 'creator', 'warehouse'])
+        $q = PurchaseOrder::with(['client.group', 'client.channel', 'courier', 'items.product', 'creator', 'warehouse',
+            'replenishmentRequest.requester'])
             ->where('approval_status', 'pending')
             // ⚠️ **سكوب مدير القناة (١٣ أغسطس ٢٠٢٦).** الشاشة بقت
             // مفتوحة للمدير عشان الريدايركتات بتوديه هنا — فلازم

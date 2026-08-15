@@ -106,7 +106,16 @@
 
         <div class="doc-id">
             <div class="doc-no">{{ $po->number }}</div>
-            @if ($po->source)
+            {{-- ⚠️ **«رقم أمر العميل» مش صح للريفيل** (إصلاح ١٥/٨).
+                 الورقة كانت بتطبع `source` الخام تحت اللابل ده، فالأمر
+                 اللي جاي من طلب بضاعة كان بيتطبع «رقم أمر العميل:
+                 replenishment» — العميل مابعتش أمر أصلاً. دلوقتي بيتطبع
+                 رقم طلب البضاعة تحت لابله الصح. --}}
+            @if ($po->fromReplenishment())
+                @if ($rplNumber = $po->replenishmentRequest?->number)
+                    <div class="doc-date">{{ __('field.replenishment') }}: <b dir="ltr">{{ $rplNumber }}</b></div>
+                @endif
+            @elseif ($po->source)
                 <div class="doc-date">{{ __('ops.po_source_no') }}: <b>{{ $po->source }}</b></div>
             @endif
             <div class="doc-date">{{ __('doc.date') }}:
