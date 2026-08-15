@@ -138,8 +138,65 @@ class AuditRefillDuplicates extends Command
                 }
             }
 
+            // ═══════════════════════════════════════════════════
+            // ⚠️ **حارس التطابق الكامل** — أُضيف بعد غلطة حقيقية
+            // ═══════════════════════════════════════════════════
+            //
+            // النسخة الأولى كانت بتعكس الأمر **كله** لمجرد إن فيه
+            // فاتورة فيها نفس الصنف. ده عكس PO-2026 (١٤٤ قطعة ×٦٠)
+            // على أساس INV-1003 (١٢ قطعة ×٤٥) — كمية مختلفة وسعر
+            // مختلف، يعني بيعة منفصلة مش نسخة. النتيجة: بضاعة
+            // راحت للعميل واتشال تسجيلها.
+            //
+            // القاعدة دلوقتي: الازدواج الحقيقي معناه الفاتورة
+            // بتغطي **كل** كمية الأمر لكل صنف. أي حاجة أقل من كده
+            // بتتعرض كتحذير والأمر **مابيتلمسش**.
+            $need = [];
+
+            foreach ($po->items as $it) {
+                $need[(int) $it->product_id] = (int) $it->delivered_qty;
+            }
+
+            $covered = [];
+
+            foreach ($invoices as $inv) {
+                foreach ($inv->items as $li) {
+                    $pid = (int) $li->product_id;
+
+                    if (isset($need[$pid])) {
+                        $covered[$pid] = ($covered[$pid] ?? 0) + (int) $li->qty;
+                    }
+                }
+            }
+
+            $partial = [];
+
+            foreach ($need as $pid => $n) {
+                $got = $covered[$pid] ?? 0;
+
+                if ($got < $n) {
+                    $partial[] = ['pid' => $pid, 'need' => $n, 'got' => $got];
+                }
+            }
+
+            if ($partial !== []) {
+                $this->warn('  ⚠ تطابق **جزئي** — الفاتورة ماتغطّيش كل كمية الأمر:');
+
+                foreach ($partial as $p) {
+                    $name = $po->items->firstWhere('product_id', $p['pid'])?->product?->displayName()
+                        ?? '#'.$p['pid'];
+                    $this->warn(sprintf('      %-38s الأمر %d · الفاتورة %d',
+                        mb_substr($name, 0, 38), $p['need'], $p['got']));
+                }
+
+                $this->warn('  ⚠ الأمر ده **مش هيتعكس**. الازدواج بيتأكد لما الفاتورة');
+                $this->warn('    تغطّي كل كمية الأمر بنفس الأصناف. راجعه يدوي.');
+
+                continue;
+            }
+
             if (! $fix) {
-                $this->comment('  (تقرير بس — للعكس: --fix --po='.$po->number.')');
+                $this->comment('  ✓ تطابق كامل — للعكس: --fix --po='.$po->number);
 
                 continue;
             }
