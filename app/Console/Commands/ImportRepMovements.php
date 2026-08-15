@@ -572,13 +572,21 @@ class ImportRepMovements extends Command
         $number = trim((string) ($c['pick_number'] ?? ''));
 
         if ($number === '') {
-            $this->error('`pick_number` مطلوب.');
+            $this->error('`pick_number` مطلوب — أو حطه "auto".');
 
             return self::FAILURE;
         }
 
-        if (\App\Models\PickOrder::where('number', $number)->exists()) {
-            $this->error("  إذن التجهيز {$number} موجود بالفعل — مفيش إدخال مكرر.");
+        // ⚠️ **`auto` بتاخد الرقم التالي من السلسلة الحقيقية.** اخترت
+        // PCK-1022 بالإيد فطلع محجوز لإذن تاني في السيستم. الرقم
+        // المكتوب بالإيد مفيد بس لما يكون **ورقة موجودة فعلاً** (زي
+        // PCK-1021 اللي المالك بعت صورتها) — العهدة المُعاد بناؤها
+        // مالهاش ورقة أصلية، فالسلسلة تديها رقمها الصح.
+        if (strtolower($number) === 'auto') {
+            $number = \App\Models\PickOrder::nextNumber();
+            $this->line('  الرقم التلقائي: '.$number);
+        } elseif (\App\Models\PickOrder::where('number', $number)->exists()) {
+            $this->error("  إذن التجهيز {$number} موجود بالفعل — غيّر الرقم أو حطه \"auto\".");
 
             return self::FAILURE;
         }
