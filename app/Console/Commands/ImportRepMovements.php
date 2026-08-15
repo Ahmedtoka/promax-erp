@@ -88,6 +88,11 @@ class ImportRepMovements extends Command
             return self::FAILURE;
         }
 
+        // ═══ العهدة لو الملف فيه قسم `custody` ═══
+        if (($data['custody'] ?? []) !== []) {
+            return $this->importCustody($rep, $data['custody'], $fix);
+        }
+
         // ═══ الفواتير لو الملف فيه قسم `invoices` ═══
         if (($data['invoices'] ?? []) !== []) {
             return $this->importInvoices($rep, $data['invoices'], $fix);
@@ -522,6 +527,218 @@ class ImportRepMovements extends Command
         }
 
         $this->comment('  ⚠ العهدة مااتخصمتش — هتتحسب لما تدخّل العهدة.');
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * إدخال العهدة بإذن تسليمها — بنفس الريفرنس
+     * ═══════════════════════════════════════════════════════════
+     *
+     * بيعمل حاجتين مربوطين: **إذن التجهيز** (بنفس رقمه الأصلي زي
+     * PCK-1021) و**العهدة** اللي البضاعة نزلت فيها.
+     *
+     * ⚠️ **مابيلمسش الأرفف إطلاقاً.** البضاعة خرجت من المخزن فعلاً
+     * أيام ٠٩/٨، ورصيد الأرفف الأقل ده **صح**. لو عدّينا على
+     * `PickOrder::raise/markReady` كنا هنخصم نفس البضاعة **تاني**
+     * ونخلّي المخزن ناقص ضعف الحقيقة. فالكتابة مباشرة في
+     * `pick_order_items` و`custody_items`.
+     *
+     * ⚠️ **`sold` بيتحسب من الفواتير المستوردة** مش من الملف. ده
+     * اللي بيخلّي معادلة التصفية تقفل:
+     *     المحمَّل = مباع + هدايا + مرجّع + محوَّل + الباقي
+     * ولو كتبناه بالإيد كان أي غلطة رقم تفضل مخبّية لحد التصفية.
+     *
+     * ⚠️ التوزيع على البنود **FEFO** — الأقرب انتهاءً يتخصم الأول،
+     * نفس `Custody::planDeduction` بالظبط عشان الرقمين مايفترقوش.
+     *
+     * @param  array<string, mixed>  $c
+     */
+    private function importCustody(User $rep, array $c, bool $fix): int
+    {
+        $number = trim((string) ($c['pick_number'] ?? ''));
+
+        if ($number === '') {
+            $this->error('`pick_number` مطلوب.');
+
+            return self::FAILURE;
+        }
+
+        if (\App\Models\PickOrder::where('number', $number)->exists()) {
+            $this->error("  إذن التجهيز {$number} موجود بالفعل — مفيش إدخال مكرر.");
+
+            return self::FAILURE;
+        }
+
+        try {
+            $at = Carbon::parse((string) ($c['at'] ?? ''), 'Africa/Cairo');
+        } catch (\Throwable) {
+            $this->error('`at` تاريخ غلط.');
+
+            return self::FAILURE;
+        }
+
+        $wh = \App\Models\Warehouse::where('name', $c['warehouse'] ?? '')
+            ->orWhere('name_en', $c['warehouse'] ?? '')
+            ->orWhere('id', (int) ($c['warehouse'] ?? 0))->first();
+
+        if ($wh === null) {
+            $this->error('المخزن «'.($c['warehouse'] ?? '').'» مش موجود.');
+
+            return self::FAILURE;
+        }
+
+        $picker = empty($c['picker']) ? null
+            : User::where('name', $c['picker'])->orWhere('name_en', $c['picker'])->first();
+
+        // ═══ المبيعات من الفواتير المستوردة، بالصنف ═══
+        $sold = DB::table('invoice_items as ii')
+            ->join('invoices as i', 'i.id', '=', 'ii.invoice_id')
+            ->where('i.user_id', $rep->id)
+            ->groupBy('ii.product_id')
+            ->selectRaw('ii.product_id, SUM(ii.qty) as q')
+            ->pluck('q', 'product_id');
+
+        $lines = [];
+        $bad = 0;
+
+        foreach (($c['items'] ?? []) as $n => $it) {
+            $code = trim((string) ($it['code'] ?? ''));
+            $product = \App\Models\Product::where('code', $code)->orWhere('barcode', $code)->first();
+
+            if ($product === null) {
+                $this->error('  صنف مش موجود: '.$code);
+                $bad++;
+
+                continue;
+            }
+
+            $batch = empty($it['batch']) ? null
+                : \App\Models\Batch::where('batch_no', $it['batch'])
+                    ->where('product_id', $product->id)->first();
+
+            if (! empty($it['batch']) && $batch === null) {
+                $this->warn('  ⚠ باتش «'.$it['batch'].'» مش موجود للصنف '.$code.' — هيتساب فاضي');
+            }
+
+            $lines[] = [
+                'product' => $product,
+                'batch' => $batch,
+                'sale' => (int) ($it['sale_qty'] ?? 0),
+                'gift' => (int) ($it['gift_qty'] ?? 0),
+            ];
+        }
+
+        if ($bad > 0 || $lines === []) {
+            $this->error('  فيه صفوف غلط — مفيش إدخال جزئي.');
+
+            return self::FAILURE;
+        }
+
+        // ═══ توزيع المباع على البنود FEFO ═══
+        $left = $sold->map(fn ($q) => (int) $q)->all();
+        $byProduct = [];
+
+        foreach ($lines as $k => $l) {
+            $byProduct[$l['product']->id][] = $k;
+        }
+
+        foreach ($byProduct as $pid => $keys) {
+            usort($keys, fn ($a, $b) => ($lines[$a]['batch']?->expires_on ?? '9999')
+                <=> ($lines[$b]['batch']?->expires_on ?? '9999'));
+
+            foreach ($keys as $k) {
+                $take = min($left[$pid] ?? 0, $lines[$k]['sale']);
+                $lines[$k]['sold'] = $take;
+                $left[$pid] = ($left[$pid] ?? 0) - $take;
+            }
+        }
+
+        $this->line('  إذن: '.$number.'  ·  '.$at->format('Y-m-d H:i')
+            .'  ·  '.$wh->displayName().'  ·  سلّمها: '.($picker?->displayName() ?? '—'));
+        $this->line('');
+        $this->line(sprintf('  %-42s %6s %6s %6s %8s', 'الصنف', 'للبيع', 'هدايا', 'مباع', 'الباقي'));
+
+        $tSale = $tGift = $tSold = 0;
+
+        foreach ($lines as $l) {
+            $rem = $l['sale'] - ($l['sold'] ?? 0);
+            $this->line(sprintf('  %-42s %6d %6d %6d %8d',
+                mb_substr($l['product']->displayName(), 0, 42),
+                $l['sale'], $l['gift'], $l['sold'] ?? 0, $rem));
+            $tSale += $l['sale'];
+            $tGift += $l['gift'];
+            $tSold += $l['sold'] ?? 0;
+        }
+
+        $this->line(sprintf('  %-42s %6d %6d %6d %8d', 'الإجمالي',
+            $tSale, $tGift, $tSold, $tSale - $tSold));
+
+        foreach ($left as $pid => $rest) {
+            if ($rest > 0) {
+                $this->warn("  ⚠ الصنف #{$pid}: فيه {$rest} قطعة مباعة في الفواتير "
+                    .'مالهاش رصيد في العهدة دي — راجع الكميات.');
+            }
+        }
+
+        if (! $fix) {
+            $this->comment('  (معاينة — ضيف --fix للتنفيذ)');
+
+            return self::SUCCESS;
+        }
+
+        DB::transaction(function () use ($rep, $number, $at, $wh, $picker, $lines) {
+            $custody = \App\Models\Custody::create([
+                'user_id' => $rep->id,
+                'warehouse_id' => $wh->id,
+                'date' => $at->toDateString(),
+                'status' => 'open',
+            ]);
+
+            $custody->forceFill(['created_at' => $at, 'updated_at' => $at])->saveQuietly();
+
+            $pick = \App\Models\PickOrder::create([
+                'number' => $number,
+                'warehouse_id' => $wh->id,
+                'assigned_to' => $rep->id,
+                'picked_by' => $picker?->id,
+                'purpose' => \App\Models\PickOrder::PURPOSE_VAN_LOAD,
+                'status' => 'handed',
+                'custody_id' => $custody->id,
+                'started_at' => $at,
+                'ready_at' => $at,
+                'handed_at' => $at,
+            ]);
+
+            $pick->forceFill(['created_at' => $at, 'updated_at' => $at])->saveQuietly();
+
+            foreach ($lines as $l) {
+                $total = $l['sale'] + $l['gift'];
+
+                $pick->items()->create([
+                    'product_id' => $l['product']->id,
+                    'batch_id' => $l['batch']?->id,
+                    'qty_requested' => $total,
+                    'qty_picked' => $total,
+                    'qty_received' => $total,
+                    'gift_qty' => $l['gift'],
+                ]);
+
+                $custody->items()->create([
+                    'product_id' => $l['product']->id,
+                    'batch_id' => $l['batch']?->id,
+                    'assigned' => $l['sale'],
+                    'gift_assigned' => $l['gift'],
+                    'sold' => $l['sold'] ?? 0,
+                    // ⚠️ عهدة عادية — مش أمر توريد ولا تحويل
+                    'source' => 'custody',
+                    'source_ref_id' => 0,
+                ]);
+            }
+        });
+
+        $this->info('  ✓ اتدخّلت العهدة بإذن '.$number.'.');
 
         return self::SUCCESS;
     }
