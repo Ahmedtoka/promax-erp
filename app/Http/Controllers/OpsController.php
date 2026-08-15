@@ -91,6 +91,36 @@ class OpsController extends Controller
         ];
     }
 
+    /** عدد صفوف كل جدول حركة في كارت المندوب — والباقي على «كل ...» */
+    private const REP_ROWS = 15;
+
+    /**
+     * ═══════════════════════════════════════════════════════════════
+     * كارت المندوب — كل حاجة عن شخص ميداني واحد (١٥ أغسطس ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════════
+     *
+     * بلاغ المالك: «المباع 156 قطعة وأنا مش لاقي باعهم فين» + «خلي
+     * الأرقام كليك-إبل: أدوس على المباع أعرف اتباعوا فين، وأدوس على
+     * المحمَّل أعرف العهد بتاعتهم».
+     *
+     * ⚠️⚠️ **إجابة السؤال في `Custody::deduct`**: العمود
+     * `custody_items.sold` بيتزوّد من **مكانين بس** —
+     * `FieldApiController::storeInvoice` (فاتورة) و`::deliver`
+     * (تسليم أمر توريد). يعني «المباع» **مش** «المتفوتر»: القطع
+     * اللي خرجت بأمر توريد بتزوّد `sold` من غير أي سطر في
+     * `invoice_items`، وده بالظبط سبب «باع 156 ومش لاقيهم».
+     * الدريل داون بيفصل الاتنين — «مباع بفاتورة» و«مسلَّم بأمر
+     * توريد» — زي مطابقة العهدة في التصفية بالحرف
+     * (`RepSettlementController::goodsReconciliation`).
+     *
+     * ⚠️ **الشاشة دي بتتفتح باستمرار** — كل داتاسِت كويري مجمّعة
+     * واحدة بمفتاح id، ومفيش كويري جوه أي لوب.
+     *
+     * ⚠️ **العهدة لايف والفلوس بالفترة.** العهدة من `currentCustody()`
+     * (عقيدة ١٠/٨ — القفل بينهيها مش منتصف الليل)، والدريل داون
+     * بتاعها بنافذة العهدة نفسها (`created_at` ← `closed_at`/دلوقتي).
+     * فلاتر «من/إلى» بتحرّك أقسام الفلوس والزيارات بس، والليبل بيقول كده.
+     */
     public function rep(Request $request, User $user)
     {
         // ⚠️ نفس القاعدة: الشاشة بتوري عهدة المندوب وفواتيره وتحركاته
@@ -99,23 +129,568 @@ class OpsController extends Controller
         abort_unless($request->user()->role !== 'manager'
             || (int) $user->manager_id === (int) $request->user()->id, 403);
 
+        [$fromD, $toD] = $this->boardWindow($request);
+        $from = \Illuminate\Support\Carbon::parse($fromD)->startOfDay();
+        $to = \Illuminate\Support\Carbon::parse($toD)->endOfDay();
+
+        $user->loadMissing(['zone', 'branch', 'teamManager', 'channel']);
+
         $custody = $user->currentCustody();
-        $custody?->load('items.product');
+        $custody?->load(['items.product', 'items.batch', 'warehouse', 'vehicle']);
+
+        // ═══ العهدة + كل الدريل داونز — كويريز مجمّعة (تحت) ═══
+        $drill = $this->custodyDrill($user, $custody);
+
+        // ⚠️ نفس شرط الزرار في الفيو بالحرف — كتالوج الأصناف بيتحمّل
+        // للديالوج بس، مش لكل واحد بيفتح الكارت
+        $canAdjust = $custody !== null && $custody->status === 'open'
+            && \App\Support\Access::action($request->user(), 'act.custody.adjust');
+
+        // ═══════════ الفلوس في الفترة ═══════════
+        // ⚠️ نفس عقيدة ١١/٨: **مبيعات المندوب = فواتيره (`user_id`)
+        // + أوامر التوريد المسلَّمة (`assigned_to`)**، وبالـ`grand_total`
+        // (اللي العميل بيدفعه). و`payment` الفاضية بتتحسب آجل — نفس
+        // فلتر التصفية بالحرف.
+        $invQ = Invoice::where('user_id', $user->id)->whereBetween('created_at', [$from, $to]);
+        $invAgg = (clone $invQ)->selectRaw("COUNT(*) AS n,
+            COALESCE(SUM(grand_total), 0) AS grand,
+            COALESCE(SUM(CASE WHEN payment = 'cash' THEN grand_total ELSE 0 END), 0) AS cash,
+            COALESCE(SUM(CASE WHEN payment = 'cash' THEN 0 ELSE grand_total END), 0) AS credit")
+            ->first();
+        $invoices = (clone $invQ)->with('client')->latest()->take(self::REP_ROWS)->get();
+
+        $poQ = PurchaseOrder::where('assigned_to', $user->id)
+            ->where('status', 'delivered')
+            ->whereBetween('delivered_at', [$from, $to]);
+        $poAgg = (clone $poQ)->selectRaw('COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS grand')->first();
+        $pos = (clone $poQ)->with('client')->orderByDesc('delivered_at')->take(self::REP_ROWS)->get();
+
+        // التحصيلات الميدانية — قيود `collection` بمرساة زيارات المندوب
+        // (عقيدة ٩/٨: المرساة `source_type = Visit` مش عمود على القيد)
+        $collQ = Transaction::where('kind', 'collection')
+            ->where('source_type', \App\Models\Visit::class)
+            ->whereIn('source_id', \App\Models\Visit::where('user_id', $user->id)->select('id'))
+            ->whereBetween('created_at', [$from, $to]);
+        $collAgg = (clone $collQ)->selectRaw("COUNT(*) AS n,
+            COALESCE(SUM(credit), 0) AS total,
+            COALESCE(SUM(CASE WHEN method = 'cash' THEN credit ELSE 0 END), 0) AS cash")
+            ->first();
+        $collections = (clone $collQ)->with('client')->latest()->take(self::REP_ROWS)->get();
+
+        $retQ = \App\Models\ClientReturn::where('user_id', $user->id)
+            ->whereBetween('created_at', [$from, $to]);
+        $retAgg = (clone $retQ)->selectRaw('COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS grand,
+            COALESCE(SUM(good_units), 0) AS good, COALESCE(SUM(damaged_units), 0) AS damaged')->first();
+        $returns = (clone $retQ)->with('client')->latest()->take(self::REP_ROWS)->get();
+
+        // ═══════════ الميدان في الفترة ═══════════
+        $visitQ = \App\Models\Visit::where('user_id', $user->id)
+            ->whereBetween('checked_in_at', [$from, $to]);
+        $visitAgg = (clone $visitQ)->selectRaw('COUNT(*) AS n,
+            COALESCE(SUM(CASE WHEN checked_out_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS done,
+            COUNT(DISTINCT client_id) AS clients')->first();
+        $visits = (clone $visitQ)->with('client')->latest('checked_in_at')->take(self::REP_ROWS)->get();
+
+        // نقاط التراك مرة واحدة — التايم لاين والكيلومترات من نفس القراية
+        $points = TrackEvent::where('user_id', $user->id)
+            ->whereBetween('happened_at', [$from, $to])
+            ->orderBy('happened_at')
+            ->get(['id', 'type', 'title', 'subtitle', 'lat', 'lng', 'happened_at']);
+
+        // ⚠️ `cleanKm` هي المصدر الوحيد للكيلومترات (فلتر شوشرة الـGPS)
+        $km = \App\Services\RepKpis::cleanKm(
+            $points->filter(fn ($p) => $p->lat !== null && $p->lng !== null)
+                ->map(fn ($p) => [
+                    'lat' => (float) $p->lat,
+                    'lng' => (float) $p->lng,
+                    'at' => $p->happened_at,
+                ])->values()->all(),
+        );
 
         return view('ops.rep', [
             'u' => $user,
-            'stats' => $this->userStats($user),
+            'from' => $fromD,
+            'to' => $toD,
+
+            // ═══ الهيدر ═══
+            'att' => \App\Models\AttendanceDay::with('punches')
+                ->where('user_id', $user->id)->whereDate('date', today())->first(),
+            'openVisit' => $user->openVisit(),
+
+            // ═══ العهدة ═══
             'custody' => $custody,
+            'drill' => $drill,
             // عرض فقط (١٢/٨): قيمة الباقي بكل قايمة مفعّلة + قايمة
             // المندوب المعتمدة (السواق قديمة والسيلز جديدة) لديالوج التعديل
             'custodyValues' => \App\Support\CustodyValue::remainingTotals($custody),
             'repList' => \App\Support\CustodyValue::listForRep($user),
-            'invoices' => Invoice::with('client')->where('user_id', $user->id)
-                ->latest()->take(30)->get(),
-            'visits' => $user->visits()->with('client')->take(30)->get(),
-            'events' => $user->trackEvents()->whereDate('happened_at', today())->get(),
-            'products' => Product::orderBy('code')->get(),
+            'products' => $canAdjust ? Product::orderBy('code')->get() : collect(),
+
+            // ═══ الحركة ═══
+            'invoices' => $invoices,
+            'invAgg' => $invAgg,
+            'pos' => $pos,
+            'poAgg' => $poAgg,
+            'collections' => $collections,
+            'collAgg' => $collAgg,
+            'returns' => $returns,
+            'retAgg' => $retAgg,
+            'transfers' => \App\Models\StockTransfer::with([
+                'items.product', 'fromUser', 'toUser', 'toWarehouse', 'fromWarehouse',
+            ])
+                ->whereIn('kind', ['rep_wh', 'rep_rep'])
+                ->where(fn ($q) => $q->where('from_user_id', $user->id)
+                    ->orWhere('to_user_id', $user->id))
+                ->whereBetween('created_at', [$from, $to])
+                ->latest()->take(self::REP_ROWS)->get(),
+            'goods' => \App\Models\ReplenishmentRequest::with(['client', 'purchaseOrder'])
+                ->where('requested_by', $user->id)
+                ->whereBetween('created_at', [$from, $to])
+                ->latest()->take(self::REP_ROWS)->get(),
+
+            // ═══ الميدان ═══
+            'visits' => $visits,
+            'visitAgg' => $visitAgg,
+            'outcomes' => \App\Support\VisitOutcomes::map($visits->pluck('id')->all()),
+            'events' => $points->sortByDesc('happened_at')->take(10)->values(),
+            'km' => $km,
+            'plan' => \App\Services\Journeys::summary($user),
+            'merch' => $user->isPromoter()
+                ? \App\Models\MerchVisit::with('client')->where('user_id', $user->id)
+                    ->whereBetween('created_at', [$from, $to])
+                    ->latest()->take(self::REP_ROWS)->get()
+                : collect(),
+
+            // ═══ الأداء والتصفيات ═══
+            // ⚠️ التارجيت شهري — الشهر بتاع «إلى»، والليبل بيقوله
+            'perf' => \App\Services\RepKpis::forMonth($user, \Illuminate\Support\Carbon::parse($toD)),
+            'perfMonth' => \Illuminate\Support\Carbon::parse($toD)->format('Y-m'),
+            // ⚠️ سكوب العملاء دايماً `visibleTo` — حتى في عدّاد
+            'myClients' => Client::visibleTo(
+                Client::where('rep_id', $user->id), $request->user(),
+            )->count(),
+            'settlements' => \App\Models\RepSettlement::where('user_id', $user->id)
+                ->orderByDesc('to_at')->take(5)->get(),
+
+            // ═══ مدير بيشتغل ميدان — فريقه كمان ═══
+            'team' => $user->isManager()
+                ? User::fieldVisibleTo(User::where('manager_id', $user->id)
+                    ->where('active', true), $request->user())
+                    ->orderBy('name')->get()
+                : collect(),
         ]);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════
+     * دريل داون العهدة — كل رقم في الجدول بيرجّع مستنداته
+     * ═══════════════════════════════════════════════════════════════
+     *
+     * بيرجّع كوليكشنات جاهزة للعرض، كل صف فيها `pid` (الصنف) عشان
+     * المودال يفلتر عليه في الفرونت من غير أي كويري تانية.
+     *
+     * ⚠️ **النافذة = نافذة العهدة نفسها** (من `created_at` لحد
+     * `closed_at` أو دلوقتي) — مش «النهارده». العهدة المفتوحة من
+     * تلات أيام باعت على مدار التلاتة، وقصر النافذة على النهارده كان
+     * هيخلّي «المباع 156» يقابله سطرين بس والفرق يبان سحر.
+     *
+     * ⚠️ **مفيش إعادة حساب لأي رقم عنده خدمة**: الكميات من
+     * `custody_items`، فلوس الفواتير من `invoice_items`، فلوس الأوامر
+     * من بنود الأمر المخزّنة (`price`/`total`/`tax` وقت التسعير)،
+     * وقيمة الباقي من `CustodyValue` (اللي بيقرا `Pricing`).
+     *
+     * @return array<string, mixed>
+     */
+    private function custodyDrill(User $rep, ?\App\Models\Custody $custody): array
+    {
+        $blank = [
+            'from' => null, 'to' => null,
+            'rows' => collect(),
+            'loaded' => collect(), 'sold_inv' => collect(), 'sold_po' => collect(),
+            'batches' => collect(), 'gifts' => collect(),
+            'returns_wh' => collect(), 'returns_in' => collect(), 'transfers' => collect(),
+            'totals' => [
+                'assigned' => 0, 'gift_assigned' => 0, 'loaded' => 0, 'sold' => 0,
+                'inv_qty' => 0, 'po_qty' => 0, 'gift_given' => 0, 'gift_left' => 0,
+                'returned' => 0, 'transferred_out' => 0, 'remaining' => 0,
+                'returned_in' => 0, 'damaged_in' => 0, 'diff' => 0, 'sold_gap' => 0,
+            ],
+        ];
+
+        if ($custody === null) {
+            return $blank;
+        }
+
+        $cFrom = $custody->created_at ?? $custody->date?->copy()->startOfDay() ?? today()->startOfDay();
+        $cTo = $custody->closed_at ?? now();
+
+        // ═══════════ ١. المحمَّل — أوامر التجهيز اللي حمّلت العربية ═══════════
+        // ⚠️ `pick_orders.custody_id` بيتكتب في `handOver` — فده الرابط
+        // المباشر بين البضاعة اللي في العربية والورقة اللي طلعتها من
+        // الرف. و`purchase_order_id` هو اللي بيحدد المصدر (نفس فيصل
+        // `handOver` بالحرف — طلب الريفيل بيتحوّل PO كمان).
+        $picks = PickOrder::with(['items.product', 'items.batch', 'warehouse', 'purchaseOrder', 'picker'])
+            ->where('custody_id', $custody->id)
+            ->orderBy('handed_at')
+            ->get();
+
+        // ⚠️ **أرقام المستندات المرجعية دفعة واحدة.**
+        // `CustodyItem::sourceRefLabel()` بتعمل `find()` لكل بند —
+        // على عهدة فيها 40 صنف دي 40 كويري في لوب. الخريطتين دول
+        // كويريتين ثابتتين، والـ`closure` تحت بتقرا منهم.
+        $refIds = fn (string $src) => $custody->items
+            ->filter(fn ($i) => $i->sourceKey() === $src)
+            ->pluck('source_ref_id')->filter()->unique()->values()->all();
+
+        $poRefs = PurchaseOrder::whereIn('id', $refIds('purchase_order'))->pluck('number', 'id');
+        $trRefs = \App\Models\StockTransfer::whereIn('id', $refIds('transfer'))->pluck('number', 'id');
+
+        $refOf = fn (\App\Models\CustodyItem $i) => match ($i->sourceKey()) {
+            'purchase_order' => $poRefs[$i->source_ref_id] ?? null,
+            'transfer' => $trRefs[$i->source_ref_id] ?? null,
+            default => null,
+        };
+
+        // البضاعة اللي جت بتحويل من زميل — بند العهدة بيحمل رقم المستند
+        $inRefs = $refIds('transfer');
+
+        $inTransfers = $inRefs === []
+            ? collect()
+            : \App\Models\StockTransfer::with(['items.product', 'fromUser', 'fromWarehouse'])
+                ->whereIn('id', $inRefs)->orderBy('id')->get();
+
+        $loaded = collect();
+
+        foreach ($picks as $pick) {
+            $src = $pick->purchase_order_id ? 'purchase_order' : 'custody';
+
+            foreach ($pick->items as $it) {
+                $got = (int) ($it->qty_received ?? 0);
+
+                if ($got <= 0) {
+                    continue;
+                }
+
+                // نفس قسمة `handOver`: الهدية بتتقص من المستلم فعلاً
+                $gift = min((int) ($it->gift_qty ?? 0), $got);
+
+                $loaded->push([
+                    'pid' => (int) $it->product_id,
+                    'product' => $it->product?->displayName(),
+                    'doc' => $pick->number,
+                    'kind' => 'pick',
+                    'id' => $pick->id,
+                    'ref' => $pick->purchaseOrder?->number,
+                    'at' => $pick->handed_at ?? $pick->created_at,
+                    'qty' => $got - $gift,
+                    'gift' => $gift,
+                    'batch' => $it->batch?->batch_no,
+                    'expires' => $it->batch?->expires_on,
+                    'place' => $pick->warehouse?->displayName(),
+                    'by' => $pick->picker?->displayName(),
+                    'source' => $src,
+                ]);
+            }
+        }
+
+        foreach ($inTransfers as $t) {
+            foreach ($t->items as $it) {
+                $loaded->push([
+                    'pid' => (int) $it->product_id,
+                    'product' => $it->product?->displayName(),
+                    'doc' => $t->number,
+                    'kind' => 'transfer',
+                    'id' => $t->id,
+                    'ref' => null,
+                    'at' => $t->created_at,
+                    'qty' => (int) $it->qty_sent,
+                    'gift' => 0,
+                    'batch' => $it->batch_no,
+                    'expires' => $it->expires_on,
+                    'place' => $t->fromUser?->displayName() ?? $t->fromWarehouse?->displayName(),
+                    'by' => $t->fromUser?->displayName(),
+                    'source' => 'transfer',
+                ]);
+            }
+        }
+
+        // ═══════════ ٢. المباع — الفواتير + تسليمات أوامر التوريد ═══════════
+        // ⚠️⚠️ **دي الإجابة على «باع 156 فين».** `Custody::deduct`
+        // بتزوّد `sold` في الحالتين، لكن الفاتورة بس هي اللي بتسيب
+        // سطر في `invoice_items` — فتسليم الأمر كان بيختفي من أي شاشة
+        // بتقرا الفواتير وحدها (نفس الحد الناقص اللي كسر معادلة
+        // التصفية قبل تدقيق ٨/٨).
+        $invoices = Invoice::with('client')
+            ->where('user_id', $rep->id)
+            ->whereBetween('created_at', [$cFrom, $cTo])
+            ->orderBy('id')
+            ->get();
+
+        $soldInv = collect();
+
+        if ($invoices->isNotEmpty()) {
+            $byId = $invoices->keyBy('id');
+
+            foreach (\App\Models\InvoiceItem::whereIn('invoice_id', $invoices->pluck('id'))
+                ->orderBy('id')->get() as $l) {
+                $inv = $byId->get($l->invoice_id);
+
+                $soldInv->push([
+                    'pid' => (int) $l->product_id,
+                    'doc' => $inv?->number,
+                    'id' => (int) $l->invoice_id,
+                    'at' => $inv?->created_at,
+                    'client' => $inv?->client?->displayName(),
+                    'client_id' => $inv?->client_id,
+                    'cash' => $inv?->payment === 'cash',
+                    'qty' => (int) $l->qty,
+                    'price' => (float) $l->price,
+                    // ⚠️ اللي العميل دفعه على السطر = الصافي + ضريبته
+                    'total' => round((float) $l->total + (float) $l->tax, 2),
+                ]);
+            }
+        }
+
+        $soldPo = collect();
+
+        $poDocs = PurchaseOrder::with(['client', 'items.product'])
+            ->where('assigned_to', $rep->id)
+            ->where('status', 'delivered')
+            ->whereBetween('delivered_at', [$cFrom, $cTo])
+            ->orderBy('delivered_at')
+            ->get();
+
+        foreach ($poDocs as $po) {
+            foreach ($po->items as $it) {
+                // ⚠️ `delivered_qty` مش `qty` — التسليم الجزئي مسموح،
+                // والخصم من العهدة بيحصل بالمسلَّم فعلاً
+                $dq = (int) $it->delivered_qty;
+
+                if ($dq <= 0) {
+                    continue;
+                }
+
+                $full = $dq === (int) $it->qty;
+                $net = $full ? (float) $it->total : round($dq * (float) $it->price, 2);
+                $tax = $full
+                    ? (float) $it->tax
+                    : round($net * (float) ($it->tax_rate ?? 0), 2);
+
+                $soldPo->push([
+                    'pid' => (int) $it->product_id,
+                    'doc' => $po->number,
+                    'id' => $po->id,
+                    'at' => $po->delivered_at,
+                    'client' => $po->client?->displayName(),
+                    'client_id' => $po->client_id,
+                    'qty' => $dq,
+                    'ordered' => (int) $it->qty,
+                    'price' => (float) $it->price,
+                    'total' => round($net + $tax, 2),
+                ]);
+            }
+        }
+
+        // ═══════════ ٣. الباقي — الباتشات وقيمتها بكل قايمة ═══════════
+        $lists = \App\Support\CustodyValue::lists();
+
+        $batches = $custody->items
+            ->filter(fn ($i) => $i->remaining() > 0)
+            ->map(fn ($i) => [
+                'pid' => (int) $i->product_id,
+                'batch' => $i->batchLabel(),
+                'expires' => $i->batch?->expires_on,
+                'days' => $i->batch?->daysLeft(),
+                'state' => $i->expiryState(),
+                'qty' => $i->remaining(),
+                'source' => $i->sourceKey(),
+                'source_ref' => $refOf($i),
+                'values' => $lists->mapWithKeys(fn ($l) => [
+                    $l->id => round($i->remaining() * \App\Support\CustodyValue::priceIn($l, $i->product), 2),
+                ])->all(),
+            ])->values();
+
+        // ═══════════ ٤. الهدايا — اللوج اللي كان مخفي ═══════════
+        $gifts = \App\Models\GiftHandout::with(['product', 'client', 'clientRequest'])
+            ->where('custody_id', $custody->id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($g) => [
+                'pid' => (int) $g->product_id,
+                'at' => $g->created_at,
+                'client' => $g->recipientName(),
+                'client_id' => $g->client_id,
+                'qty' => (int) $g->qty,
+                'reason' => $g->reason,
+                'note' => $g->note,
+            ]);
+
+        // ═══════════ ٥. التحويلات — رايح وجاي ═══════════
+        $transfers = \App\Models\StockTransfer::with([
+            'items.product', 'fromUser', 'toUser', 'toWarehouse', 'fromWarehouse',
+        ])
+            ->whereIn('kind', ['rep_wh', 'rep_rep'])
+            ->where(fn ($q) => $q->where('from_user_id', $rep->id)->orWhere('to_user_id', $rep->id))
+            ->whereBetween('created_at', [$cFrom, $cTo])
+            ->orderBy('id')
+            ->get();
+
+        $trRows = collect();
+        $retWh = collect();
+
+        foreach ($transfers as $t) {
+            $out = (int) $t->from_user_id === (int) $rep->id;
+            $toWh = $t->kindKey() === 'rep_wh';
+
+            foreach ($t->items as $it) {
+                $row = [
+                    'pid' => (int) $it->product_id,
+                    'doc' => $t->number,
+                    'id' => $t->id,
+                    'at' => $t->created_at,
+                    'out' => $out,
+                    'kind' => $t->kindKey(),
+                    'party' => $out
+                        ? ($toWh ? $t->toWarehouse?->displayName() : $t->toUser?->displayName())
+                        : ($t->fromUser?->displayName() ?? $t->fromWarehouse?->displayName()),
+                    'qty' => (int) $it->qty_sent,
+                    'batch' => $it->batch_no,
+                    'reason' => $t->reason,
+                ];
+
+                $trRows->push($row);
+
+                // «مرجّع للمخزن» = خانة `returned` بالظبط (`sendFromCustody`)
+                if ($out && $toWh) {
+                    $retWh->push($row);
+                }
+            }
+        }
+
+        // ═══════════ ٦. مرتجعات العملاء — بره المعادلة، جوه العربية ═══════════
+        // ⚠️ `returned_in`/`damaged_in` مالهمش أصل في المحمَّل: دي
+        // بضاعة العملاء اللي دخلت العربية وبتتسلّم مع التصفية.
+        $retIn = collect();
+
+        $retDocs = \App\Models\ClientReturn::with(['client', 'items.product'])
+            ->where(fn ($q) => $q->where('custody_id', $custody->id)
+                ->orWhere(fn ($w) => $w->where('user_id', $rep->id)
+                    ->whereBetween('created_at', [$cFrom, $cTo])))
+            ->orderBy('id')
+            ->get();
+
+        foreach ($retDocs as $doc) {
+            foreach ($doc->items as $it) {
+                $retIn->push([
+                    'pid' => (int) $it->product_id,
+                    'doc' => $doc->number,
+                    'id' => $doc->id,
+                    'at' => $doc->created_at,
+                    'client' => $doc->client?->displayName(),
+                    'client_id' => $doc->client_id,
+                    'qty' => (int) $it->qty,
+                    'condition' => $it->condition,
+                    'total' => round((float) $it->total + (float) $it->tax, 2),
+                ]);
+            }
+        }
+
+        // ═══════════ ٧. صف المطابقة لكل صنف ═══════════
+        // ⚠️ نفس معادلة `goodsReconciliation` بالحرف:
+        //   المحمَّل (عادي + هدايا) = مباع + هدايا موزّعة + مرجّع للمخزن
+        //                            + محوَّل + الباقي + هدايا فاضلة
+        $rows = [];
+
+        foreach ($custody->items as $it) {
+            $pid = (int) $it->product_id;
+
+            $rows[$pid] ??= [
+                'pid' => $pid,
+                'product' => $it->product,
+                'sources' => [],
+                'assigned' => 0, 'gift_assigned' => 0, 'sold' => 0,
+                'returned' => 0, 'transferred_out' => 0, 'remaining' => 0,
+                'gift_given' => 0, 'gift_left' => 0,
+                'returned_in' => 0, 'damaged_in' => 0,
+                'inv_qty' => 0, 'po_qty' => 0,
+                'values' => [],
+            ];
+
+            $rows[$pid]['product'] ??= $it->product;
+            $rows[$pid]['assigned'] += (int) $it->assigned;
+            $rows[$pid]['gift_assigned'] += (int) $it->gift_assigned;
+            $rows[$pid]['sold'] += (int) $it->sold;
+            $rows[$pid]['returned'] += (int) $it->returned;
+            $rows[$pid]['transferred_out'] += (int) $it->transferred_out;
+            $rows[$pid]['remaining'] += $it->remaining();
+            $rows[$pid]['gift_given'] += (int) $it->gift_given;
+            $rows[$pid]['gift_left'] += $it->giftLeft();
+            $rows[$pid]['returned_in'] += (int) $it->returned_in;
+            $rows[$pid]['damaged_in'] += (int) $it->damaged_in;
+
+            // شارة مصدر لكل مصدر موجود بالصنف ده، بكميته
+            $key = $it->sourceKey();
+            $rows[$pid]['sources'][$key] ??= [
+                'key' => $key,
+                'class' => $it->sourceClass(),
+                'label' => $it->sourceLabel(),
+                'ref' => $refOf($it),
+                'qty' => 0,
+            ];
+            $rows[$pid]['sources'][$key]['qty'] += (int) $it->assigned + (int) $it->gift_assigned;
+        }
+
+        foreach ($soldInv as $l) {
+            if (isset($rows[$l['pid']])) {
+                $rows[$l['pid']]['inv_qty'] += $l['qty'];
+            }
+        }
+
+        foreach ($soldPo as $l) {
+            if (isset($rows[$l['pid']])) {
+                $rows[$l['pid']]['po_qty'] += $l['qty'];
+            }
+        }
+
+        $totals = $blank['totals'];
+
+        foreach ($rows as $pid => $r) {
+            $r['loaded'] = $r['assigned'] + $r['gift_assigned'];
+            $r['accounted'] = $r['sold'] + $r['gift_given'] + $r['returned']
+                + $r['transferred_out'] + $r['remaining'] + $r['gift_left'];
+            $r['diff'] = $r['loaded'] - $r['accounted'];
+            // ⚠️ **الفجوة اللي المالك سأل عنها**: المباع في العهدة
+            // ناقص اللي لاقينا له مستند في نافذة العهدة. المفروض صفر —
+            // وأي رقم هنا معناه مستند بره النافذة أو خصم بلا مستند.
+            $r['sold_gap'] = $r['sold'] - $r['inv_qty'] - $r['po_qty'];
+
+            $r['values'] = $lists->mapWithKeys(fn ($l) => [
+                $l->id => round($r['remaining'] * \App\Support\CustodyValue::priceIn($l, $r['product']), 2),
+            ])->all();
+
+            $rows[$pid] = $r;
+
+            foreach (['assigned', 'gift_assigned', 'loaded', 'sold', 'inv_qty', 'po_qty',
+                'gift_given', 'gift_left', 'returned', 'transferred_out', 'remaining',
+                'returned_in', 'damaged_in', 'diff', 'sold_gap'] as $k) {
+                $totals[$k] += $r[$k];
+            }
+        }
+
+        return [
+            'from' => $cFrom,
+            'to' => $cTo,
+            'rows' => collect($rows)->sortByDesc('loaded')->values(),
+            'loaded' => $loaded,
+            'sold_inv' => $soldInv,
+            'sold_po' => $soldPo,
+            'batches' => $batches,
+            'gifts' => $gifts,
+            'returns_wh' => $retWh,
+            'returns_in' => $retIn,
+            'transfers' => $trRows,
+            'totals' => $totals,
+        ];
     }
 
     // ================= العهدة =================
