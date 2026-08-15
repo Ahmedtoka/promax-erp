@@ -57,6 +57,8 @@ return [
     'replenishment_assigned' => 'The request became sales order :number and was assigned to the rep.',
     // 15 Aug flow: approval raises a picking order - no sales order, no ledger entries
     'replenishment_picked' => 'Request approved and sent to the warehouse as picking order :number.',
+    // Reversing a sales order that duplicated an invoice - 15 August correction
+    'memo_po_dupe_reversed' => 'Reversal of :kind for order :number - duplicated by an invoice for the same goods',
     'replenishment_cancelled' => 'Request cancelled.',
 
     // ---------- Ledger memos (persisted with the transaction) ----------
