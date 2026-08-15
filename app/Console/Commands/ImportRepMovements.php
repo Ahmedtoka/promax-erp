@@ -335,6 +335,18 @@ class ImportRepMovements extends Command
                 continue;
             }
 
+            // ⚠️ **تاريخ في المستقبل = غلطة كتابة في ٩٩٪ من الحالات.**
+            // فاتورة بتاريخ بكرة بتقع بره نافذة أي تصفية، وبتتصدّر
+            // كشف الحساب وأعمار المديونية بترتيب غلط — ومحدش بياخد
+            // باله غير بعد شهر. الرفض هنا أرخص من الاكتشاف بعدين.
+            if ($at->isFuture()) {
+                $this->error("  فاتورة #{$line}: التاريخ ".$at->format('Y-m-d H:i')
+                    .' **في المستقبل** (النهارده '.now('Africa/Cairo')->format('Y-m-d').') — أكّده.');
+                $bad++;
+
+                continue;
+            }
+
             $lines = [];
             $bust = false;
 
@@ -600,6 +612,18 @@ class ImportRepMovements extends Command
             ->selectRaw('ii.product_id, SUM(ii.qty) as q')
             ->pluck('q', 'product_id');
 
+        // ⚠️ **المباع اللي عهدة سابقة استوعبته بالفعل يتشال** — باج
+        // اتكشف عند إدخال العهدة التانية: الدالة بتحسب المبيعات من
+        // **كل** فواتير المندوب، فالعهدة التانية كانت هتاخد نفس
+        // الـ١٦٦ قطعة اللي العهدة الأولى خصمتها خلاص → `sold`
+        // مضروب في ٢ ومعادلة التصفية تنهار.
+        $already = DB::table('custody_items as ci')
+            ->join('custodies as c', 'c.id', '=', 'ci.custody_id')
+            ->where('c.user_id', $rep->id)
+            ->groupBy('ci.product_id')
+            ->selectRaw('ci.product_id, SUM(ci.sold) as q')
+            ->pluck('q', 'product_id');
+
         $lines = [];
         $bad = 0;
 
@@ -636,8 +660,12 @@ class ImportRepMovements extends Command
             return self::FAILURE;
         }
 
-        // ═══ توزيع المباع على البنود FEFO ═══
-        $left = $sold->map(fn ($q) => (int) $q)->all();
+        // ═══ توزيع المباع **الباقي** على البنود FEFO ═══
+        $left = [];
+
+        foreach ($sold as $pid => $q) {
+            $left[$pid] = max((int) $q - (int) ($already[$pid] ?? 0), 0);
+        }
         $byProduct = [];
 
         foreach ($lines as $k => $l) {
