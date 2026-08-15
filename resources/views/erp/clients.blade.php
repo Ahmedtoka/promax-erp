@@ -248,7 +248,14 @@
                         @if ($state === 'live')
                             <span class="badge {{ $ct->statusClass() }}">{{ $ct->statusLabel() }}</span>
                             <br><span style="font-size:10px;color:var(--muted)">
-                                {{ $ct->number }}@if ($ct->ends_at) · {{ $ct->ends_at->format('Y-m-d') }}@endif@if ($ct->group_id) · {{ __('client.from_chain') }}@endif
+                                {{-- ⚠️ **مسافة بين `@endif` واللي بعده إجبارية** (إصلاح ١٥/٨):
+                                     ريجيكس بليد بيبدأ بـ`\B@` — يعني الدايركتيف اللي
+                                     قبله حرف مابيتشافش. `@endif@if(...)` كان بيترجم
+                                     الـ`@endif` بس ويسيب الـ`@if` نص عادي، فالـ`@endif`
+                                     بتاعه يتحسب زيادة و`@elseif` اللي تحت تبقى يتيمة —
+                                     «syntax error, unexpected token elseif» على اللايف. --}}
+                                {{ $ct->number }}@if ($ct->ends_at) · {{ $ct->ends_at->format('Y-m-d') }} @endif
+                                @if ($ct->group_id) · {{ __('client.from_chain') }} @endif
                             </span>
                         @elseif ($state === 'expired')
                             <span class="badge b-red">{{ __('client.contract_expired') }}</span>
