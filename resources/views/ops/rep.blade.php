@@ -131,11 +131,29 @@
 .lnk{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;
      text-decoration:underline dotted;text-underline-offset:3px}
 .lnk:hover{color:var(--royal-blue, #12399B)}
+
+/* ═══ هيدر الكارت + علامة الصاعقة ═══
+   الصورة `position:absolute` فمابتاخدش مساحة في التدفق خالص —
+   وده اللي كان بيعمل الفراغ الضخم لما كانت `img` عادية بحجمها
+   الطبيعي. والكارت `overflow:hidden` عشان الصاعقة ماتخرجش بره حدوده. */
+.rc-hero{position:relative;overflow:hidden}
+.rc-hero > *:not(.rc-bolt){position:relative;z-index:1}
+.rc-bolt{
+  position:absolute;inset-inline-end:18px;top:50%;
+  transform:translateY(-50%) rotate(-9deg);
+  height:120px;width:auto;opacity:.06;pointer-events:none;user-select:none;z-index:0;
+}
+@media (max-width:760px){.rc-bolt{display:none}}
 </style>
 
 {{-- ═══════════════════ ١. الهيدر ═══════════════════ --}}
-<div class="card has-bolt" style="margin-bottom:14px">
-    <img class="bolt-mark" src="{{ asset('brand/bolt.svg') }}" alt="">
+{{-- ⚠️ **ستايل الصاعقة inline هنا عن قصد** (إصلاح ١٥/٨): كلاسات
+     `.has-bolt`/`.bolt-mark` معرّفة في `partials/_doc_style` — وده
+     بيتحمّل في المستندات المطبوعة بس. الصفحة دي مش مستند، فالصورة
+     كانت بتنزل بحجمها الطبيعي (٤١٦px) وتدفع كل المحتوى تحتها وتسيب
+     فراغ ضخم في الهيدر (بلاغ المالك). --}}
+<div class="card rc-hero" style="margin-bottom:14px">
+    <img class="rc-bolt" src="{{ asset('brand/bolt.svg') }}" alt="" aria-hidden="true">
     <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         @include('partials._avatar', ['u' => $u, 'size' => 64])
         <div style="flex:1;min-width:220px">
