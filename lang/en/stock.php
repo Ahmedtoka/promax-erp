@@ -248,6 +248,8 @@ return [
     'pick_from_van' => 'From the van stock',
     'pick_from_warehouse' => 'From the warehouse',
     'van_short_for' => ':product — needs :need, van has :have.',
+    // Stock is there but already promised to another order - 15 Aug
+    'van_short_committed' => ':product - needs :need, only :have free after :committed reserved for open orders.',
     'van_cannot_cover' => 'The van stock cannot cover this order.',
 
     // ---------- Messages ----------

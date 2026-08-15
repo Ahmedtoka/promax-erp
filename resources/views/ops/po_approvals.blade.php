@@ -110,9 +110,15 @@
                     <tr onclick="poToggle({{ $po->id }})" style="cursor:pointer" id="poRow{{ $po->id }}">
                         <td>
                             <b>{{ $po->number }}</b>
-                            {{-- `sourceLabel()` مش الخام — نفس إصلاح ١٥/٨ --}}
-                            @if ($po->source)<div style="font-size:10px;color:var(--muted)">{{ $po->sourceLabel() }}</div>@endif
-                            @if ($po->originLine())<div style="font-size:9.5px;color:var(--muted)">{{ $po->originLine() }}</div>@endif
+                            {{-- الأصل بدل كلمة «replenishment» — نفس إصلاح ١٥/٨ --}}
+                            @php $orig = $po->origin(); @endphp
+                            @if ($orig)
+                                <div style="font-size:10px;font-weight:800" dir="ltr">{{ $orig['number'] }}</div>
+                                @if ($orig['requester'])<div style="font-size:9.5px;color:var(--muted)">🙋 {{ $orig['requester'] }}</div>@endif
+                                @if ($orig['approver'])<div style="font-size:9.5px;color:var(--muted)">🔏 {{ $orig['approver'] }}</div>@endif
+                            @elseif ($po->source)
+                                <div style="font-size:10px;color:var(--muted)" dir="ltr">{{ $po->source }}</div>
+                            @endif
                         </td>
                         <td>
                             <b style="font-size:12.5px">{{ $client?->fullName() ?? '—' }}</b>

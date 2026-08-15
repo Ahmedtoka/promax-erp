@@ -658,6 +658,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/vans', [OpsController::class, 'vans'])
             ->middleware('role:admin,manager')->name('vans');
 
+        // ═══ الموعود مقابل المتاح (١٥ أغسطس ٢٠٢٦) ═══
+        // المناديب اللي اتوعدوا بأكتر من اللي في عربياتهم — الفجوة
+        // اللي اتعملت قبل ما الحجز (`Custody::committedFor`) يتضاف.
+        // ⚠️ نفس رولز بورد العربيات: أدمن ومدير، والمدير بيشوف فريقه
+        // من `fieldVisibleTo` جوه الكنترولر مش من الراوت.
+        Route::get('/commitments', [OpsController::class, 'commitments'])
+            ->middleware('role:admin,manager')->name('commitments');
+
         // ═══ مبيعات المناديب — بورد فلوس كل مندوب (١٢ أغسطس ٢٠٢٦) ═══
         // ⚠️ شاشة فلوس: نفس رولز «تحصيلات الميدان» (`erp.collections`) —
         // الأدمن والمدير (فريقه من fieldVisibleTo) + المحاسب للمطابقة.

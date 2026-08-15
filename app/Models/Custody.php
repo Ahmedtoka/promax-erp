@@ -55,12 +55,71 @@ class Custody extends Model
     }
 
     /**
+     * ═══════════════════════════════════════════════════════════
+     * البضاعة **المحجوزة** لأوامر توريد مفتوحة  ·  ١٥ أغسطس ٢٠٢٦
+     * ═══════════════════════════════════════════════════════════
+     *
+     * بلاغ المالك: «الرصيد بايظ بتاعه، ومش لاقيه في تجهيز الطلبات
+     * ولا العهد».
+     *
+     * ⚠️ **ده كان أخطر ثغرة في فلو الريفيل.** `availableFor()`
+     * بترجّع `assigned - sold - returned - transferred_out` — يعني
+     * البضاعة اللي **اتوعد بيها** أمر توريد معلّق لسه محسوبة متاحة،
+     * لأن الخصم مابيحصلش غير لحظة التسليم.
+     *
+     * السيناريو الحقيقي اللي حصل:
+     *   المندوب معاه ١٠٠ قطعة.
+     *   طلب ريفيل (أ) بـ٨٠ → `canCover` تشوف ١٠٠ → «العربية كفاية»
+     *      → **مافيش أمر تجهيز اتعمل خالص**.
+     *   طلب ريفيل (ب) بـ٨٠ → لسه مافيش بيع، فـ`canCover` تشوف
+     *      ١٠٠ تاني → «العربية كفاية» → ولا أمر تجهيز.
+     *   بقى عليه ١٦٠ قطعة يسلّمها من ١٠٠ — الرصيد بايظ، ومحدش
+     *   لقى ورقة تجهيز في المخزن لأن مااتعملتش أصلاً.
+     *
+     * الدالة دي بتقفل الثغرة: البضاعة المرتبطة بأمر مفتوح
+     * (`pending`/`arrived`) على نفس المندوب بتتحسب **مشغولة**.
+     *
+     * ⚠️ `qty - delivered_qty`: الأمر اللي اتسلّم جزئياً بيحجز
+     * الباقي بس. و`max(...,0)` عشان التسليم الزيادة (لو حصل)
+     * مايطلّعش حجز بالسالب يفتح ثغرة تانية.
+     *
+     * ⚠️ `$exceptPoId` **ضروري**: `fulfil` بتتنده بعد إنشاء الأمر
+     * على طول، فالأمر بيبقى `pending` وهيحجز ضد نفسه ويقول
+     * «العربية مش كفاية» غلط.
+     */
+    public function committedFor(int $productId, ?int $exceptPoId = null): int
+    {
+        $q = PurchaseOrderItem::query()
+            ->where('purchase_order_items.product_id', $productId)
+            ->whereHas('purchaseOrder', function ($po) use ($exceptPoId) {
+                $po->where('assigned_to', $this->user_id)
+                    ->whereIn('status', ['pending', 'arrived']);
+
+                if ($exceptPoId !== null) {
+                    $po->whereKeyNot($exceptPoId);
+                }
+            });
+
+        return (int) $q->get()->sum(
+            fn ($i) => max((int) $i->qty - (int) $i->delivered_qty, 0),
+        );
+    }
+
+    /** المتاح فعلاً للوعد بيه = الموجود ناقص المحجوز لأوامر مفتوحة */
+    public function freeFor(int $productId, ?int $exceptPoId = null): int
+    {
+        return max($this->availableFor($productId) - $this->committedFor($productId, $exceptPoId), 0);
+    }
+
+    /**
      * هل العهدة تكفي الكميات دي؟ بيرجع أول صنف ناقص.
      *
+     * ⚠️ بيقيس على `freeFor` مش `availableFor` — شوف `committedFor`.
+     *
      * @param  array<int, int>  $qtyByProduct
-     * @return array{ok: bool, short: array<int, array{product: string, need: int, have: int}>}
+     * @return array{ok: bool, short: array<int, array{product: string, need: int, have: int, committed: int}>}
      */
-    public function canCover(array $qtyByProduct): array
+    public function canCover(array $qtyByProduct, ?int $exceptPoId = null): array
     {
         $this->loadMissing(['items.product', 'items.batch']);
         $short = [];
@@ -71,12 +130,16 @@ class Custody extends Model
                 continue;
             }
 
-            $have = $this->availableFor((int) $productId);
+            $productId = (int) $productId;
+            $committed = $this->committedFor($productId, $exceptPoId);
+            $have = max($this->availableFor($productId) - $committed, 0);
+
             if ($have < $need) {
                 $short[] = [
                     'product' => Product::find($productId)?->displayName() ?? '#'.$productId,
                     'need' => $need,
                     'have' => $have,
+                    'committed' => $committed,
                 ];
             }
         }

@@ -132,18 +132,28 @@
                 {{-- الصف كله بيفتح صفحة الأمر (١٢/٨) — عرض + تعديل من مكان
                      واحد. الأزرار في آخر عمود عليها stopPropagation. --}}
                 <tr class="clickable" onclick="location.href='{{ route('ops.pos.show', $po) }}'" style="cursor:pointer">
-                    {{-- ⚠️ **`sourceLabel()` مش `source` الخام** (بلاغ المالك
-                         ١٥/٨: «مكتوب replenishment، ده PO منين؟»). العمود
-                         كان بيطبع قيمة الإينَم الإنجليزية زي ما هي، وهي
-                         مصطلح داخلي مش مسمى معتمد. والسطر اللي تحته بيقول
-                         الأصل بالظبط: رقم طلب البضاعة ومين طلبه. --}}
+                    {{-- ⚠️ **كلمة «replenishment» اتشالت** (طلب المالك ١٥/٨).
+                         كانت بتتطبع خام (مصطلح داخلي مش مسمى معتمد)، وحتى
+                         بعد ترجمتها الشارة ماكانتش بتضيف معلومة — الأمر
+                         أمر توريد في كل الأحوال. مكانها بقى الأصل الحقيقي:
+                         رقم طلب البضاعة · مين طلبه · مين وافق. --}}
+                    @php $orig = $po->origin(); @endphp
                     <td class="num"><b>{{ $po->number }}</b>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}</span>
-                        @if ($po->source)
-                            <br><span class="badge {{ $po->sourceClass() }}" style="font-size:9.5px">{{ $po->sourceLabel() }}</span>
-                        @endif
-                        @if ($po->originLine())
-                            <br><span style="font-size:9.5px;color:var(--muted)">{{ $po->originLine() }}</span>
+                        @if ($orig)
+                            <br><a href="{{ route('ops.replenishments') }}" target="_blank" rel="noopener"
+                                   onclick="event.stopPropagation()"
+                                   style="font-size:10px;font-weight:800" dir="ltr">{{ $orig['number'] }}</a>
+                            @if ($orig['requester'])
+                                <div style="font-size:9.5px;color:var(--muted)">🙋 {{ $orig['requester'] }}</div>
+                            @endif
+                            @if ($orig['approver'])
+                                <div style="font-size:9.5px;color:var(--muted)">🔏 {{ $orig['approver'] }}</div>
+                            @else
+                                <div style="font-size:9.5px;color:var(--red)">🔏 {{ __('ops.po_creator_unknown') }}</div>
+                            @endif
+                        @elseif ($po->source)
+                            <br><span style="font-size:9.5px;color:var(--muted)">{{ $po->source }}</span>
                         @endif
                     </td>
                     <td>

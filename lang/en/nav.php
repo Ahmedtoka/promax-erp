@@ -83,6 +83,7 @@ return [
     // ═══ بورد الأونلاين + المجموعة المستقلة (2026-08-09) ═══
     'group_hr' => 'Attendance',
     'vans_board' => 'Van Stock Board',
+    'commitments' => 'Promised vs Available',
     'open_visits' => 'Open Visits',
 
     // ═══ Visits board (Aug 15, 2026) ═══

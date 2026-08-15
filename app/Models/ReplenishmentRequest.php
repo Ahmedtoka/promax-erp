@@ -25,7 +25,7 @@ class ReplenishmentRequest extends Model
 
     protected $fillable = [
         'number', 'client_id', 'merch_visit_id', 'visit_id', 'requested_by', 'status',
-        'assigned_to', 'purchase_order_id', 'assigned_at', 'delivered_at', 'note',
+        'assigned_to', 'assigned_by', 'purchase_order_id', 'assigned_at', 'delivered_at', 'note',
     ];
 
     /**
@@ -88,6 +88,16 @@ class ReplenishmentRequest extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * المدير اللي وافق على الطلب ونزّله (سؤال المالك ١٥ أغسطس).
+     * الموافقة قرار بيحرّك بضاعة ويولّد أمر توريد بقيمة مالية —
+     * فليها صاحب موثّق زي موافقة الحسابات على أمر التوريد.
+     */
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_by');
     }
 
     public function purchaseOrder(): BelongsTo
@@ -282,6 +292,10 @@ class ReplenishmentRequest extends Model
             $this->update([
                 'status' => 'assigned',
                 'assigned_to' => $assignee->id,
+                // ⚠️ **الموافق كان مابيتسجّلش خالص** (سؤال المالك ١٥/٨).
+                // نفس مصدر `created_by` بتاع الأمر عشان الاتنين
+                // مايفترقوش، و`assigned_at` هو وقت الموافقة نفسه.
+                'assigned_by' => $actor?->id,
                 'purchase_order_id' => $po->id,
                 'assigned_at' => now(),
             ]);

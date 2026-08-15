@@ -285,6 +285,9 @@ class Access
         'nav.group_custody' => [
             // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
             ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
+            // الموعود مقابل المتاح (١٥/٨) — تشخيص عجز العربيات قبل ما
+            // المندوب يقف قدام العميل. جنب بورد العهد لأنه نفس السؤال.
+            ['ops.commitments', '🚨', 'nav.commitments', 'ops.commitments', null],
             // بورد فلوس المناديب (١٢/٨) — كاش/آجل/تحصيلات لكل مندوب.
             // المحاسب شايفه من `ops.sales` في خريطته — مش من بادئة `ops.`
             ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],

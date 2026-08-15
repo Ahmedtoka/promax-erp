@@ -247,6 +247,8 @@ return [
     'pick_from_van' => 'من عهدة المندوب',
     'pick_from_warehouse' => 'من المخزن',
     'van_short_for' => ':product — محتاج :need والعهدة فيها :have.',
+    // البضاعة موجودة بس متوعّد بيها لأمر تاني — حل مختلف تماماً (١٥/٨)
+    'van_short_committed' => ':product — محتاج :need، المتاح :have بعد حجز :committed لأوامر مفتوحة.',
     'van_cannot_cover' => 'عهدة المندوب مش كفاية للأمر ده.',
 
     // ---------- الرسايل ----------

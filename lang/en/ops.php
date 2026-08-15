@@ -457,6 +457,32 @@ return [
     'po_created_by' => 'Created by',
     'po_creator_unknown' => 'Not recorded',
 
+    // === Promised vs Available screen - 15 August ===
+    'cm_title' => 'Promised vs Available',
+    'cm_reps_at_risk' => 'Reps over-committed',
+    'cm_reps_at_risk_hint' => 'Promised more than their van holds',
+    'cm_units_short' => 'Units short',
+    'cm_units_short_hint' => 'Total shortfall across all reps',
+    'cm_orders_at_risk' => 'Orders at risk',
+    'cm_orders_at_risk_hint' => 'Open orders the current stock cannot fill',
+    'cm_clean' => 'Reps fully covered',
+    'cm_clean_hint' => 'Have open orders and enough van stock',
+    'cm_formula' => 'Promised = sum of undelivered quantities on open orders (pending or arrived). '
+        .'Available = loaded minus sold, returned and transferred, excluding expired batches. '
+        .'Shortfall = promised minus available - what the rep will be missing at the shop.',
+    'cm_promised' => 'Promised',
+    'cm_available' => 'Available',
+    'cm_gap' => 'Shortfall',
+    'cm_orders' => 'Orders involved',
+    'cm_gap_units' => ':n units short',
+    'cm_covered_lines' => 'Covered items',
+    'cm_no_custody' => 'This rep has open orders but no open custody at all - every quantity is a shortfall.',
+    'cm_fix_pick' => 'Request a van load',
+    'cm_fix_transfer' => 'Transfer from another rep',
+    'cm_fix_hint' => 'Or edit the order quantity on its own page.',
+    'cm_none_title' => 'No rep is over-committed',
+    'cm_none_hint' => 'Every open order is backed by real stock in the van.',
+
     'rc_c_gifts' => 'Gifts handed out',
     'rc_c_gift_left' => 'Gifts still in the van',
     'rc_c_returned' => 'Returned to warehouse',

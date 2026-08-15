@@ -338,7 +338,7 @@ class PickOrderController extends Controller
      * @param  array<int, int>  $qtyByProduct
      * @return array{ok: bool, message: ?string, custody: ?Custody}
      */
-    public static function checkVanStock(User $rep, array $qtyByProduct): array
+    public static function checkVanStock(User $rep, array $qtyByProduct, ?int $exceptPoId = null): array
     {
         $custody = $rep->currentCustody();
 
@@ -350,14 +350,19 @@ class PickOrderController extends Controller
             ];
         }
 
-        $check = $custody->canCover($qtyByProduct);
+        $check = $custody->canCover($qtyByProduct, $exceptPoId);
 
         if ($check['ok']) {
             return ['ok' => true, 'message' => null, 'custody' => $custody];
         }
 
+        // ⚠️ الرسالة بتفرّق بين «مش معاه» و«معاه بس محجوز لأمر تاني»
+        // — الاتنين بيمنعوا الوعد، بس الحل مختلف تماماً، والمدير لازم
+        // يعرف إن البضاعة موجودة فعلاً بس متوعّد بيها لعميل تاني.
         $lines = collect($check['short'])
-            ->map(fn ($s) => __('stock.van_short_for', $s))
+            ->map(fn ($s) => ($s['committed'] ?? 0) > 0
+                ? __('stock.van_short_committed', $s)
+                : __('stock.van_short_for', $s))
             ->join(' ');
 
         return [
@@ -381,7 +386,14 @@ class PickOrderController extends Controller
         ?User $requestedBy = null,
         ?Warehouse $warehouse = null,
     ): array {
-        $van = self::checkVanStock($rep, $qtyByProduct);
+        // ⚠️ الأمر اللي بنجهّزه دلوقتي مايحجزش ضد نفسه — `assignTo`
+        // بتنده `fulfil` بعد `PurchaseOrder::create` على طول، فالأمر
+        // بقى `pending` وهيتحسب في المحجوز لو ماستثنيناهوش.
+        $van = self::checkVanStock(
+            $rep,
+            $qtyByProduct,
+            isset($extra['purchase_order_id']) ? (int) $extra['purchase_order_id'] : null,
+        );
 
         if ($van['ok']) {
             return ['mode' => 'van', 'pick' => null, 'error' => null];
@@ -449,11 +461,18 @@ class PickOrderController extends Controller
 
         $qty = $replenishmentRequest->items->pluck('qty', 'product_id')->all();
 
+        // ⚠️ **الأمر المتولّد من الطلب لازم يستثنى من الحجز.** الزرار ده
+        // بيتضغط على طلب **متنزّل بالفعل**، يعني له أمر توريد `pending`.
+        // من غير الاستثناء، الأمر بيحجز ضد نفسه فالفحص يقول «العربية مش
+        // كفاية» ويرفع أمر تجهيز مالوش لزوم — بضاعة تخرج من الرف مرتين.
         $result = self::fulfil(
             $replenishmentRequest->assignee,
             $qty,
             PickOrder::PURPOSE_REPLENISHMENT,
-            ['replenishment_request_id' => $replenishmentRequest->id],
+            [
+                'replenishment_request_id' => $replenishmentRequest->id,
+                'purchase_order_id' => $replenishmentRequest->purchase_order_id,
+            ],
             $request->user(),
         );
 

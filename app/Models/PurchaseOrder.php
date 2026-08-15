@@ -146,10 +146,17 @@ class PurchaseOrder extends Model
     }
 
     /**
-     * سطر «جاي منين» جاهز للعرض: «ريفيل RPL-1042 — طلبه محمد حجر».
-     * بيرجع null للأوامر العادية (مصدرها مكتوب في `source` أصلاً).
+     * سطر «جاي منين» جاهز للعرض — بيرجع null للأوامر العادية
+     * (مصدرها مكتوب في `source` أصلاً).
+     *
+     * ⚠️ المالك طلب إن كلمة «ريفيل» تتشال من على الأمر (١٥ أغسطس):
+     * الشارة لوحدها ماكانتش بتضيف معلومة — الأمر أمر توريد في كل
+     * الأحوال. اللي بيفيد فعلاً هو **رقم الطلب ومين طلبه ومين وافق**،
+     * وده اللي بيرجع هنا بدلها.
+     *
+     * @return array{number: string, requester: ?string, approver: ?string, id: int}|null
      */
-    public function originLine(): ?string
+    public function origin(): ?array
     {
         if (! $this->fromReplenishment()) {
             return null;
@@ -161,9 +168,12 @@ class PurchaseOrder extends Model
             return null;
         }
 
-        $who = $rpl->requester?->displayName();
-
-        return $rpl->number.($who === null ? '' : ' — '.$who);
+        return [
+            'id' => (int) $rpl->id,
+            'number' => (string) $rpl->number,
+            'requester' => $rpl->requester?->displayName(),
+            'approver' => $rpl->approver?->displayName(),
+        ];
     }
 
     public function client(): BelongsTo
