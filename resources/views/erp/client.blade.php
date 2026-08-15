@@ -422,43 +422,45 @@
     <div class="tablewrap">
         <table>
             <thead><tr>
-                <th>{{ __('common.date') }}</th>
+                <th data-nosum>{{ __('common.date') }}</th>
+                <th data-nosum>{{ __('ops.vb_in_out') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th data-nosum>{{ __('ops.vb_duration') }}</th>
+                <th>{{ __('ops.vb_visit_value') }}</th>
                 <th data-nosum>{{ __('ops.vb_outcome') }}</th>
                 <th data-nosum>{{ __('field.shelf_photos') }}</th>
             </tr></thead>
             <tbody>
             @foreach ($visits as $v)
-                @php $vo = $visitOut[$v->id] ?? \App\Support\VisitOutcomes::blank(); @endphp
+                @php
+                    $vo = $visitOut[$v->id] ?? \App\Support\VisitOutcomes::blank();
+                    $tz = fn ($d) => $d?->copy()->timezone('Africa/Cairo');
+                    // ⚠️ **قيمة الزيارة = المباع ناقص المرتجع.** التحصيل
+                    // **مش** داخل: هو تسديد لمديونية قديمة مش بيعة جديدة،
+                    // وجمعه هنا كان هيعدّ نفس الفلوس مرتين.
+                    $vValue = $vo['inv_total'] - $vo['ret_total'];
+                @endphp
                 <tr>
                     <td class="num s" dir="ltr">
-                        {{ $v->checked_in_at?->copy()->timezone('Africa/Cairo')->format('Y-m-d h:i A') ?? '—' }}
+                        {{ $tz($v->checked_in_at)?->format('Y-m-d') ?? '—' }}
+                    </td>
+                    <td class="num s" dir="ltr">
+                        {{ $tz($v->checked_in_at)?->format('h:i A') ?? '—' }}
+                        → {{ $tz($v->checked_out_at)?->format('h:i A') ?? '—' }}
                     </td>
                     <td>{{ $v->user?->displayName() ?? '—' }}</td>
                     <td class="num s">
                         {{ $v->minutes() !== null ? __('ops.minutes', ['count' => $v->minutes()]) : __('ops.in_progress') }}
                     </td>
+                    <td class="num {{ $vValue > 0 ? 'pos' : '' }}">
+                        {{ $vValue != 0 ? number_format($vValue, 2) : '—' }}
+                    </td>
+                    {{-- ⚠️ **البارشال المشترك مش نسخة محلية** (١٥/٨):
+                         الشارات كانت متكرّرة هنا بالحرف، فأي تحسين في
+                         `_visit_outcome` ماكانش بيوصل الشاشة دي —
+                         وده اللي خلّى «📦 1» تفضل بلا لابل هنا. --}}
                     <td style="white-space:normal">
-                        @foreach ($vo['invoices'] as $iv)
-                            <a class="badge b-green" style="text-decoration:none"
-                               href="{{ route('ops.invoice', $iv->id) }}">🧾 {{ $iv->number }} · {{ number_format((float) $iv->grand_total, 2) }}</a>
-                        @endforeach
-                        @if ($vo['coll_count'] > 0)
-                            <span class="badge b-blue">💵 {{ number_format($vo['coll_total'], 2) }}</span>
-                        @endif
-                        @if ($vo['ret_count'] > 0)
-                            <span class="badge b-red">↩️ {{ number_format($vo['ret_total'], 2) }}</span>
-                        @endif
-                        @if ($vo['gift_count'] > 0)
-                            <span class="badge b-gold">🎁 {{ $vo['gift_qty'] }}</span>
-                        @endif
-                        @if ($vo['goods_count'] > 0)
-                            <span class="badge b-orange">📦 {{ $vo['goods_count'] }}</span>
-                        @endif
-                        @if (! $vo['any'])
-                            <span class="badge b-gray">{{ __('ops.vb_nothing') }}</span>
-                        @endif
+                        @include('partials._visit_outcome', ['o' => $vo, 'thumbs' => false])
                     </td>
                     <td style="white-space:normal;min-width:150px">
                         @if ($vo['photo_count'] === 0)

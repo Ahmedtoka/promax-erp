@@ -10,32 +10,47 @@
 --}}
 @php
     $thumbs = $thumbs ?? true;
-    $money = fn ($n) => number_format((float) $n, 2);
+    $cur = __('common.currency');
+    $money = fn ($n) => number_format((float) $n, 2).' '.$cur;
 @endphp
+
+{{-- ⚠️ **كل شارة عليها لابل بالكلام** (بلاغ المالك ١٥/٨: «مش فاهم
+     إيه الشحنة دي ومكتوب 1»). الأيقونة لوحدها مع رقم عريان كانت
+     بتخلّي «📦 1» لغز — دلوقتي مكتوب «طلب بضاعة: 1». والفلوس
+     بعملتها عشان الرقم مايتلخبطش مع عدد. --}}
 
 @foreach ($o['invoices'] as $iv)
     <a class="badge b-green" style="text-decoration:none"
-       href="{{ route('ops.invoice', $iv->id) }}">🧾 {{ $iv->number }} · {{ $money($iv->grand_total) }}</a>
+       title="{{ __('ops.vo_invoice_hint') }}"
+       href="{{ route('ops.invoice', $iv->id) }}">🧾 {{ __('ops.invoice') }}
+        <span dir="ltr">{{ $iv->number }}</span> · {{ $money($iv->grand_total) }}
+        · {{ $iv->payment === 'cash' ? __('enums.payment.cash') : __('enums.payment.credit') }}</a>
 @endforeach
 
 @if ($o['coll_count'] > 0)
-    <span class="badge b-blue">💵 {{ $money($o['coll_total']) }}</span>
+    <span class="badge b-blue" title="{{ __('ops.vo_collection_hint') }}">
+        💵 {{ __('ops.vo_collection') }}: {{ $money($o['coll_total']) }}</span>
 @endif
 
 @if ($o['ret_count'] > 0)
-    <span class="badge b-red">↩️ {{ $money($o['ret_total']) }}</span>
+    <span class="badge b-red" title="{{ __('ops.vo_return_hint') }}">
+        ↩️ {{ __('ops.vo_return') }}: {{ $money($o['ret_total']) }}</span>
 @endif
 
 @if ($o['photo_count'] > 0)
-    <span class="badge b-purple">📸 {{ $o['photo_count'] }}</span>
+    <span class="badge b-purple" title="{{ __('ops.vo_photos_hint') }}">
+        📸 {{ __('ops.vo_photos') }}: {{ $o['photo_count'] }}</span>
 @endif
 
 @if ($o['gift_count'] > 0)
-    <span class="badge b-gold">🎁 {{ $o['gift_qty'] }}</span>
+    <span class="badge b-gold" title="{{ __('ops.vo_gift_hint') }}">
+        🎁 {{ __('ops.vo_gift') }}: {{ number_format($o['gift_qty']) }} {{ __('common.piece') }}</span>
 @endif
 
 @if ($o['goods_count'] > 0)
-    <span class="badge b-orange">📦 {{ $o['goods_count'] }}</span>
+    {{-- دي اللي كانت «📦 1» — طلب بضاعة (ريفيل) اتعمل من الزيارة --}}
+    <span class="badge b-orange" title="{{ __('ops.vo_goods_hint') }}">
+        📦 {{ __('ops.vo_goods') }}: {{ $o['goods_count'] }}</span>
 @endif
 
 @if (! $o['any'])
