@@ -865,6 +865,12 @@ class WarehouseController extends Controller
 
             $custody->load(['items.product', 'items.batch']);
 
+            // ⚠️ شارة المصدر من `CustodySource` مش من البند نفسه —
+            // البنود الأقدم من عمود `source` بتقول «غير محدد» مع إن
+            // إذن التسليم اللي جابها مربوط بالعهدة أصلاً (بلاغ المالك
+            // ١٥ أغسطس). كويريز ثابتة للعهدة، مش للبند.
+            $srcMap = \App\Support\CustodySource::forCustody($custody, $custody->items);
+
             foreach ($custody->items as $item) {
                 if ($item->remaining() <= 0) {
                     continue;
@@ -885,9 +891,9 @@ class WarehouseController extends Controller
                     // ⚠️ مخزن الباتش — البضاعة بترجع لمخزنها هي، والفلتر
                     // ده هو اللي بيمنع اختيار وجهة غلط من الأساس
                     'wh' => (int) ($item->batch?->warehouse_id ?? 0),
-                    'src' => $item->sourceKey(),
-                    'src_label' => $item->sourceLabel(),
-                    'src_ref' => $item->sourceRefLabel(),
+                    'src' => $srcMap->keyFor($item),
+                    'src_label' => $srcMap->labelFor($item),
+                    'src_ref' => $srcMap->refFor($item),
                 ];
             }
         }

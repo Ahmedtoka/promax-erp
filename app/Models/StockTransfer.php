@@ -561,6 +561,13 @@ class StockTransfer extends Model
 
                 $touched = [];
 
+                // خريطة مصادر عهدة المرسِل — كويريز ثابتة مرة واحدة
+                // قبل اللوب، مش لكل بند (شوف `CustodySource`).
+                $srcMap = \App\Support\CustodySource::forCustody(
+                    $source,
+                    CustodyItem::where('custody_id', $source->id)->get(),
+                );
+
                 foreach ($lines as $line) {
                     $qty = (int) ($line['qty'] ?? 0);
 
@@ -608,12 +615,17 @@ class StockTransfer extends Model
                     }
 
                     // ═══ ٢. بند المستند — بمصدر البضاعة مجمّد ═══
+                    // ⚠️ **المصدر المشتَق مش الخام** (١٥ أغسطس): البند
+                    // الأقدم من عمود `source` بيقول `legacy`، ولو جمّدناه
+                    // كده على مستند التحويل نكون طبعنا «مصدر غير محدد»
+                    // على ورقة موقّعة — والحقيقة إن إذن تسليمه معروف.
+                    // `CustodySource` بترقّيه لـ`custody` لو لقيت إذنه.
                     StockTransferItem::create([
                         'stock_transfer_id' => $transfer->id,
                         'product_id' => $item->product_id,
                         'source_batch_id' => $item->batch_id,
                         'custody_item_id' => $item->id,
-                        'source' => $item->sourceKey(),
+                        'source' => $srcMap->keyFor($item),
                         'source_ref_id' => (int) $item->source_ref_id,
                         'batch_no' => $item->batch?->batch_no ?? '—',
                         'produced_on' => $item->batch?->produced_on,

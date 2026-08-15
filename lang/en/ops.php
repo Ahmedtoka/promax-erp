@@ -450,6 +450,9 @@ return [
     'rc_sold_gap_hint' => 'Custody sold is higher than what we found an invoice or a delivered purchase order for inside the custody window - either the document predates the custody, or a deduction happened with no document.',
     'rc_client_goods' => 'Client goods in the van: good :good · damaged :damaged - outside the loaded equation, handed over at settlement.',
     'rc_show_docs' => 'Documents',
+    // Row view button - 15 August
+    'rc_no_doc' => 'No document to open',
+    'rc_view' => 'View',
 
     'rc_c_gifts' => 'Gifts handed out',
     'rc_c_gift_left' => 'Gifts still in the van',

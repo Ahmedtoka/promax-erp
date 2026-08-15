@@ -144,6 +144,25 @@
   height:120px;width:auto;opacity:.06;pointer-events:none;user-select:none;z-index:0;
 }
 @media (max-width:760px){.rc-bolt{display:none}}
+
+/* رقم المستند جنب شارة المصدر — PCK / PO / TRF */
+.src-ref{display:inline-block;font-size:10px;font-weight:800;color:var(--muted);
+         letter-spacing:.3px;margin-inline-start:4px;text-decoration:none}
+a.src-ref{color:var(--royal-blue, #12399B);text-decoration:underline dotted;text-underline-offset:2px}
+a.src-ref:hover{text-decoration-style:solid}
+
+/* ═══ زرار «عرض» في آخر كل صف ═══
+   أيقونة بس على الشاشات الضيقة، أيقونة + كلمة على الواسعة. */
+.vbtn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;
+      border:1px solid var(--border);background:var(--card);color:var(--royal-blue, #12399B);
+      font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap;
+      line-height:1.6;transition:.15s}
+a.vbtn:hover{border-color:var(--royal-blue, #12399B);
+             background:var(--royal-blue, #12399B);color:#fff}
+.vbtn.off{color:var(--muted);opacity:.35;cursor:not-allowed}
+.vbtn-i{font-size:12px;line-height:1}
+th.act,td.act{width:1%;white-space:nowrap;text-align:center}
+@media (max-width:1100px){.vbtn-t{display:none}}
 </style>
 
 {{-- ═══════════════════ ١. الهيدر ═══════════════════ --}}
@@ -336,6 +355,7 @@
                     </th>
                 @endforeach
                 <th data-nosum>{{ __('ops.rc_c_diff') }}</th>
+                <th class="act" data-nosum></th>
             </tr>
             </thead>
             <tbody>
@@ -350,9 +370,17 @@
                     <td>
                         @foreach ($r['sources'] as $s)
                             <span class="badge {{ $s['class'] }}">{{ $s['label'] }} · {{ $fm($s['qty']) }}</span>
-                            @if ($s['ref'])
-                                <span style="font-size:10px;color:var(--muted)" dir="ltr">{{ $s['ref'] }}</span>
-                            @endif
+                            {{-- رقم المستند اللي جاب البضاعة — إذن التسليم
+                                 PCK أو أمر التوريد PO أو التحويل TRF، وكل
+                                 واحد بيفتح ورقته. --}}
+                            @foreach ($s['refs'] as $text => $url)
+                                @if ($url)
+                                    <a href="{{ $url }}" target="_blank" rel="noopener"
+                                       class="src-ref" dir="ltr">{{ $text }}</a>
+                                @else
+                                    <span class="src-ref" dir="ltr">{{ $text }}</span>
+                                @endif
+                            @endforeach
                         @endforeach
                     </td>
                     <td class="num">
@@ -410,9 +438,13 @@
                             <span class="badge b-red">{{ $fm($r['diff'] !== 0 ? $r['diff'] : $r['sold_gap']) }}</span>
                         @endif
                     </td>
+                    <td class="act">@include('partials._view', [
+                        'url' => route('erp.products.show', $r['pid']),
+                        'label' => __('stock.product'),
+                    ])</td>
                 </tr>
             @empty
-                <tr><td colspan="{{ 10 + $lists->count() }}" style="text-align:center;color:var(--muted);padding:24px">
+                <tr><td colspan="{{ 11 + $lists->count() }}" style="text-align:center;color:var(--muted);padding:24px">
                     {{ __('ops.rc_no_items') }}
                 </td></tr>
             @endforelse
@@ -502,6 +534,7 @@
                     <th data-nosum>{{ __('ops.payment') }}</th>
                     <th>{{ __('common.total') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -512,9 +545,10 @@
                         <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                         <td class="num pos">{{ $fm2($inv->grand_total) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($inv->created_at) }}</td>
+                        <td class="act">@include('partials._view', ['url' => route('ops.invoice', $inv)])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_invoices') }}</td></tr>
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_invoices') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -543,6 +577,7 @@
                     <th>{{ __('ops.rc_d_qty') }}</th>
                     <th>{{ __('common.total') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -553,9 +588,10 @@
                         <td class="num">{{ $fm($po->deliveredQtyTotal()) }}</td>
                         <td class="num pos">{{ $fm2($po->grand_total) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($po->delivered_at) }}</td>
+                        <td class="act">@include('partials._view', ['url' => route('ops.pos.show', $po)])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -582,6 +618,7 @@
                     <th>{{ __('common.amount') }}</th>
                     <th data-nosum>{{ __('ops.rc_d_ref') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -598,9 +635,15 @@
                         <td class="num pos">{{ $fm2($t->credit) }}</td>
                         <td class="num" dir="ltr">{{ $t->reference ?: '—' }}</td>
                         <td class="num" dir="ltr">{{ $dtm($t->created_at) }}</td>
+                        {{-- التحصيل قيد في كشف الحساب مالوش ورقة مستقلة —
+                             فالعرض بيفتح كارت العميل اللي القيد عليه. --}}
+                        <td class="act">@include('partials._view', [
+                            'url' => $t->client_id ? route('erp.clients.show', $t->client_id) : null,
+                            'label' => __('client.client'),
+                        ])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -625,6 +668,7 @@
                     <th>{{ __('ops.rc_c_damaged') }}</th>
                     <th>{{ __('common.total') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -636,9 +680,10 @@
                         <td class="num neg">{{ $fm($d->damaged_units) }}</td>
                         <td class="num">{{ $fm2($d->grand_total) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($d->created_at) }}</td>
+                        <td class="act">@include('partials._view', ['url' => route('ops.returns.show', $d)])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                    <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -658,6 +703,7 @@
                     <th>{{ __('ops.rc_d_qty') }}</th>
                     <th style="text-align:start" data-nosum>{{ __('stock.transfer_reason') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -676,9 +722,14 @@
                         <td class="num">{{ $fm($t->qtySent()) }}</td>
                         <td style="text-align:start;font-size:11.5px;color:var(--muted)">{{ $t->reason ?: '—' }}</td>
                         <td class="num" dir="ltr">{{ $dtm($t->created_at) }}</td>
+                        {{-- ⚠️ ورقة التحويل محكومة بالصلاحية زي ما هي —
+                             الزرار بيتعرض مطفي لغير المصرّح مش بيختفي. --}}
+                        <td class="act">@include('partials._view', [
+                            'url' => $seeTransferDoc ? route('wh.transfers.print', $t) : null,
+                        ])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                    <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -696,6 +747,7 @@
                     <th data-nosum>{{ __('common.status') }}</th>
                     <th>{{ __('ops.rc_d_qty') }}</th>
                     <th data-nosum>{{ __('common.time') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -710,9 +762,17 @@
                         <td><span class="badge {{ $g->statusClass() }}">{{ $g->statusLabel() }}</span></td>
                         <td class="num">{{ $fm($g->qtyTotal()) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($g->created_at) }}</td>
+                        {{-- ⚠️ طلب البضاعة **مالوش صفحة مستقلة** — الفلو
+                             بيحوّله أمر توريد، والأمر ده هو الورقة. فلو
+                             لسه ماتحوّلش، الزرار بيفضل مطفي بدل ما نبعت
+                             المستخدم لليست عامة مش دي اللي هو عايزها. --}}
+                        <td class="act">@include('partials._view', [
+                            'url' => $g->purchaseOrder ? route('ops.pos.show', $g->purchase_order_id) : null,
+                            'label' => __('ops.purchase_order'),
+                        ])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -738,6 +798,7 @@
                     <th data-nosum>{{ __('ops.check_in') }}</th>
                     <th data-nosum>{{ __('ops.vb_duration') }}</th>
                     <th data-nosum style="text-align:start">{{ __('ops.vb_outcome') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -780,9 +841,18 @@
                                 <span class="badge b-gray">{{ __('ops.vb_nothing') }}</span>
                             @endif
                         </td>
+                        {{-- ⚠️ الزيارة مالهاش صفحة مستقلة، وبورد الزيارات
+                             **مافيهوش فلتر عميل** (`VisitBoardController`
+                             بيقرا user/zone/has_* بس) — فلينك ليه كان
+                             هيرمي البارامتر بصمت ويفتح الليست كلها.
+                             كارت العميل هو الوجهة الصادقة. --}}
+                        <td class="act">@include('partials._view', [
+                            'url' => $v->client_id ? route('erp.clients.show', $v->client_id) : null,
+                            'label' => __('client.client'),
+                        ])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_visits') }}</td></tr>
+                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.no_visits') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -840,6 +910,7 @@
                 <th>{{ __('ops.rc_f_moved') }}</th>
                 <th>{{ __('ops.rc_f_oos') }}</th>
                 <th data-nosum>{{ __('field.shelf_photos') }}</th>
+                <th class="act" data-nosum></th>
             </tr>
             </thead>
             <tbody>
@@ -861,9 +932,13 @@
                                      style="width:38px;height:38px;object-fit:cover;border-radius:7px;border:1px solid var(--border)"></a>
                         @endif
                     </td>
+                    <td class="act">@include('partials._view', [
+                        'url' => $mv->client_id ? route('erp.clients.show', $mv->client_id) : null,
+                        'label' => __('client.client'),
+                    ])</td>
                 </tr>
             @empty
-                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_none') }}</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -930,6 +1005,7 @@
                     <th>{{ __('ops.rc_s_expected') }}</th>
                     <th>{{ __('ops.rc_s_received') }}</th>
                     <th>{{ __('ops.rc_s_balance') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -940,9 +1016,10 @@
                         <td class="num">{{ $fm2($s->expected) }}</td>
                         <td class="num pos">{{ $fm2($s->received) }}</td>
                         <td class="num {{ (float) $s->balance > 0 ? 'neg' : 'pos' }}">{{ $fm2($s->balance) }}</td>
+                        <td class="act">@include('partials._view', ['url' => route('erp.repclose.doc', $s)])</td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_s_none') }}</td></tr>
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">{{ __('ops.rc_s_none') }}</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -960,6 +1037,7 @@
                     <th style="text-align:start">{{ __('ops.rep') }}</th>
                     <th data-nosum>{{ __('team.role') }}</th>
                     <th data-nosum>{{ __('client.zone') }}</th>
+                    <th class="act" data-nosum></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -973,6 +1051,7 @@
                         </td>
                         <td>{{ $m->roleLabel() }}</td>
                         <td>{{ $m->zone?->displayName() ?? '—' }}</td>
+                        <td class="act">@include('partials._view', ['url' => route('ops.rep', $m)])</td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -1004,21 +1083,25 @@
                         <th>{{ __('ops.rc_c_gifts') }}</th>
                         <th data-nosum>{{ __('stock.batch') }}</th>
                         <th style="text-align:start" data-nosum>{{ __('ops.rc_d_from') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
                     @foreach ($drill['loaded'] as $r)
+                        @php
+                            // ورقة الصف: إذن التجهيز أو مستند التحويل،
+                            // كل واحد بصلاحيته. الشارة القديمة «المستندات»
+                            // اتشالت — بقى زرار العرض الموحّد في آخر الصف.
+                            $rowDoc = match (true) {
+                                $r['kind'] === 'pick' && $seePicks => route('wh.picks.show', $r['id']),
+                                $r['kind'] === 'transfer' && $seeTransferDoc => route('wh.transfers.print', $r['id']),
+                                default => null,
+                            };
+                        @endphp
                         <tr data-pid="{{ $r['pid'] }}">
                             <td><b>{{ $r['doc'] }}</b>
                                 @if ($r['ref'])
                                     <div style="font-size:10px;color:var(--muted)" dir="ltr">{{ $r['ref'] }}</div>
-                                @endif
-                                @if ($r['kind'] === 'pick' && $seePicks)
-                                    <a class="badge b-gray" style="text-decoration:none"
-                                       href="{{ route('wh.picks.show', $r['id']) }}">{{ __('ops.rc_show_docs') }}</a>
-                                @elseif ($r['kind'] === 'transfer' && $seeTransferDoc)
-                                    <a class="badge b-gray" style="text-decoration:none"
-                                       href="{{ route('wh.transfers.print', $r['id']) }}">{{ __('ops.rc_show_docs') }}</a>
                                 @endif
                             </td>
                             <td><span class="badge {{ \App\Models\CustodyItem::SOURCES[$r['source']] ?? 'b-gray' }}">{{ __('stock.src_'.$r['source']) }}</span></td>
@@ -1035,6 +1118,7 @@
                                     <div style="font-size:10px;color:var(--muted)">{{ $r['by'] }}</div>
                                 @endif
                             </td>
+                            <td class="act">@include('partials._view', ['url' => $rowDoc])</td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -1069,6 +1153,7 @@
                         <th>{{ __('ops.rc_d_qty') }}</th>
                         <th data-nosum>{{ __('ops.rc_d_price') }}</th>
                         <th>{{ __('common.total') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1087,6 +1172,7 @@
                             <td class="num"><b>{{ $fm($r['qty']) }}</b></td>
                             <td class="num">{{ $fm2($r['price']) }}</td>
                             <td class="num pos">{{ $fm2($r['total']) }}</td>
+                            <td class="act">@include('partials._view', ['url' => route('ops.invoice', $r['id'])])</td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -1107,6 +1193,7 @@
                         <th data-nosum>{{ __('ops.rc_d_ordered') }}</th>
                         <th data-nosum>{{ __('ops.rc_d_price') }}</th>
                         <th>{{ __('common.total') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1125,6 +1212,7 @@
                             <td class="num">{{ $fm($r['ordered']) }}</td>
                             <td class="num">{{ $fm2($r['price']) }}</td>
                             <td class="num pos">{{ $fm2($r['total']) }}</td>
+                            <td class="act">@include('partials._view', ['url' => route('ops.pos.show', $r['id'])])</td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -1155,6 +1243,7 @@
                         @foreach ($lists as $L)
                             <th>{{ $L->displayName() }}</th>
                         @endforeach
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1175,6 +1264,13 @@
                             @foreach ($lists as $L)
                                 <td class="num">{{ $fm2($r['values'][$L->id] ?? 0) }}</td>
                             @endforeach
+                            {{-- الباتش مالوش صفحة — كارت الصنف فيه حركته
+                                 وباتشاته وأسعاره، وده اللي المستخدم بيدوّر
+                                 عليه وهو واقف على صف باتش. --}}
+                            <td class="act">@include('partials._view', [
+                                'url' => route('erp.products.show', $r['pid']),
+                                'label' => __('stock.product'),
+                            ])</td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -1201,6 +1297,7 @@
                         <th style="text-align:start">{{ __('ops.rc_d_recipient') }}</th>
                         <th>{{ __('ops.rc_d_qty') }}</th>
                         <th style="text-align:start" data-nosum>{{ __('stock.transfer_reason') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1221,6 +1318,10 @@
                                     <div>{{ $r['note'] }}</div>
                                 @endif
                             </td>
+                            <td class="act">@include('partials._view', [
+                                'url' => $r['client_id'] ? route('erp.clients.show', $r['client_id']) : null,
+                                'label' => __('client.client'),
+                            ])</td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -1273,6 +1374,7 @@
                         <th data-nosum>{{ __('ops.rc_d_condition') }}</th>
                         <th>{{ __('ops.rc_d_qty') }}</th>
                         <th>{{ __('common.total') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1291,6 +1393,7 @@
                                 {{ $r['condition'] === 'damaged' ? __('ops.rc_c_damaged') : __('ops.rc_c_good') }}</span></td>
                             <td class="num"><b>{{ $fm($r['qty']) }}</b></td>
                             <td class="num">{{ $fm2($r['total']) }}</td>
+                            <td class="act">@include('partials._view', ['url' => route('ops.returns.show', $r['id'])])</td>
                         </tr>
                     @endforeach
                     </tbody>

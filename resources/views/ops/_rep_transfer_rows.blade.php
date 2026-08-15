@@ -26,6 +26,7 @@
                 <th>{{ __('ops.rc_d_qty') }}</th>
                 <th data-nosum>{{ __('stock.batch') }}</th>
                 <th style="text-align:start" data-nosum>{{ __('stock.transfer_reason') }}</th>
+                <th class="act" data-nosum></th>
             </tr>
             </thead>
             <tbody>
@@ -48,6 +49,9 @@
                     <td class="num"><b>{{ $trFm($r['qty']) }}</b></td>
                     <td class="num" dir="ltr">{{ $r['batch'] ?: '—' }}</td>
                     <td style="text-align:start;font-size:11.5px;color:var(--muted)">{{ $r['reason'] ?: '—' }}</td>
+                    <td class="act">@include('partials._view', [
+                        'url' => $seeDoc ? route('wh.transfers.print', $r['id']) : null,
+                    ])</td>
                 </tr>
             @endforeach
             </tbody>

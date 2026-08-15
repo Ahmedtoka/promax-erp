@@ -334,25 +334,25 @@ class OpsController extends Controller
             ->orderBy('handed_at')
             ->get();
 
-        // ⚠️ **أرقام المستندات المرجعية دفعة واحدة.**
-        // `CustodyItem::sourceRefLabel()` بتعمل `find()` لكل بند —
-        // على عهدة فيها 40 صنف دي 40 كويري في لوب. الخريطتين دول
-        // كويريتين ثابتتين، والـ`closure` تحت بتقرا منهم.
-        $refIds = fn (string $src) => $custody->items
-            ->filter(fn ($i) => $i->sourceKey() === $src)
-            ->pluck('source_ref_id')->filter()->unique()->values()->all();
+        // ⚠️ **أرقام المستندات المرجعية دفعة واحدة** — `CustodySource`
+        // بتعمل تلات كويريز ثابتة للعهدة كلها بدل `find()` لكل بند
+        // (٤٠ صنف = ٤٠ كويري في لوب).
+        //
+        // ⚠️ وهي كمان اللي بتصلّح بلاغ المالك (١٥ أغسطس): «مكتوب
+        // المصدر مش معروف وده أصلاً استلامه بريفرنس في العهد».
+        // البنود الأقدم من عمود `source` كانت بتتقال `legacy`، مع إن
+        // `pick_orders.custody_id` رابطها بإذن التسليم من زمان —
+        // فالكلاس بيرجّع رقم الإذن الحقيقي (PCK-) بدل «غير محدد»،
+        // وبيضيفه كمان للعهدة العادية الجديدة اللي `source_ref_id`
+        // بتاعها صفر.
+        $srcMap = \App\Support\CustodySource::forCustody($custody, $custody->items);
 
-        $poRefs = PurchaseOrder::whereIn('id', $refIds('purchase_order'))->pluck('number', 'id');
-        $trRefs = \App\Models\StockTransfer::whereIn('id', $refIds('transfer'))->pluck('number', 'id');
-
-        $refOf = fn (\App\Models\CustodyItem $i) => match ($i->sourceKey()) {
-            'purchase_order' => $poRefs[$i->source_ref_id] ?? null,
-            'transfer' => $trRefs[$i->source_ref_id] ?? null,
-            default => null,
-        };
+        $refOf = fn (\App\Models\CustodyItem $i) => $srcMap->refFor($i);
 
         // البضاعة اللي جت بتحويل من زميل — بند العهدة بيحمل رقم المستند
-        $inRefs = $refIds('transfer');
+        $inRefs = $custody->items
+            ->filter(fn ($i) => $i->sourceKey() === 'transfer')
+            ->pluck('source_ref_id')->filter()->unique()->values()->all();
 
         $inTransfers = $inRefs === []
             ? collect()
@@ -503,7 +503,7 @@ class OpsController extends Controller
                 'days' => $i->batch?->daysLeft(),
                 'state' => $i->expiryState(),
                 'qty' => $i->remaining(),
-                'source' => $i->sourceKey(),
+                'source' => $srcMap->keyFor($i),
                 'source_ref' => $refOf($i),
                 'values' => $lists->mapWithKeys(fn ($l) => [
                     $l->id => round($i->remaining() * \App\Support\CustodyValue::priceIn($l, $i->product), 2),
@@ -628,16 +628,27 @@ class OpsController extends Controller
             $rows[$pid]['returned_in'] += (int) $it->returned_in;
             $rows[$pid]['damaged_in'] += (int) $it->damaged_in;
 
-            // شارة مصدر لكل مصدر موجود بالصنف ده، بكميته
-            $key = $it->sourceKey();
+            // شارة مصدر لكل مصدر موجود بالصنف ده، بكميته.
+            // ⚠️ المفتاح من `CustodySource` مش من البند: البند القديم
+            // بيقول `legacy` والخريطة بترقّيه لـ`custody` لما تلاقي
+            // إذن تسليمه — والشارة لازم تتجمّع على المفتاح المعروض.
+            $key = $srcMap->keyFor($it);
             $rows[$pid]['sources'][$key] ??= [
                 'key' => $key,
-                'class' => $it->sourceClass(),
-                'label' => $it->sourceLabel(),
-                'ref' => $refOf($it),
+                'class' => $srcMap->classFor($it),
+                'label' => $srcMap->labelFor($it),
+                'refs' => [],
                 'qty' => 0,
             ];
             $rows[$pid]['sources'][$key]['qty'] += (int) $it->assigned + (int) $it->gift_assigned;
+
+            // ⚠️ **المراجع بتتجمّع مش بتاخد أول واحد.** الصنف الواحد
+            // ممكن يكون له أكتر من باتش، وكل باتش جه على إذن مختلف —
+            // عرض أول إذن بس كان هيخفي الباقي. المفتاح رقم المستند
+            // نفسه فالتكرار بيتشال لوحده.
+            foreach ($srcMap->linksFor($it) as $lnk) {
+                $rows[$pid]['sources'][$key]['refs'][$lnk['text']] ??= $lnk['url'];
+            }
         }
 
         foreach ($soldInv as $l) {
