@@ -173,6 +173,23 @@ class ImportRepMovements extends Command
                 continue;
             }
 
+            // ⚠️ **حارس التكرار** — نفس سبب حارس الفواتير: تحصيل
+            // لنفس العميل بنفس الثانية ونفس المبلغ = نسخة.
+            $dupe = Transaction::where('client_id', $client->id)
+                ->where('kind', 'collection')
+                ->where('created_at', $at)
+                ->whereRaw('ROUND(credit, 2) = ?', [round($amount, 2)])
+                ->exists();
+
+            if ($dupe) {
+                $this->error("  #{$line}  **متدخّل قبل كده**: "
+                    .$client->displayName().' · '.$at->format('Y-m-d H:i')
+                    .' · '.number_format($amount, 2));
+                $bad++;
+
+                continue;
+            }
+
             $visit = Visit::where('user_id', $rep->id)
                 ->where('client_id', $client->id)
                 ->whereDate('checked_in_at', $at->toDateString())
@@ -371,6 +388,23 @@ class ImportRepMovements extends Command
             $sub = round(array_sum(array_map(fn ($l) => $l['q']['list_price'] * $l['qty'], $lines)), 2);
             $net = round(array_sum(array_map(fn ($l) => $l['q']['line_total'], $lines)), 2);
             $cost = round(array_sum(array_map(fn ($l) => $l['q']['line_cost'], $lines)), 2);
+
+            // ⚠️ **حارس التكرار** — أُضيف بعد ما الاستيراد اتشغّل مرتين
+            // فالأرصدة اتضاعفت. فاتورة لنفس العميل بنفس **الثانية**
+            // ونفس الإجمالي = مستحيل تكون حقيقية مرتين.
+            $exists = \App\Models\Invoice::where('client_id', $client->id)
+                ->where('user_id', $rep->id)
+                ->where('created_at', $at)
+                ->whereRaw('ROUND(grand_total, 2) = ?', [round($net, 2)])
+                ->first();
+
+            if ($exists !== null) {
+                $this->error("  فاتورة #{$line}: **متدخّلة قبل كده** كـ{$exists->number}"
+                    .' ('.$at->format('Y-m-d H:i').' · '.number_format($net, 2).')');
+                $bad++;
+
+                continue;
+            }
 
             $plan[] = compact('client', 'at', 'payment', 'lines', 'sub', 'net', 'cost');
 
