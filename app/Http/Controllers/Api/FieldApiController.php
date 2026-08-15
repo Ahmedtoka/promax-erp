@@ -1287,9 +1287,14 @@ class FieldApiController extends Controller
      */
     public function myGoodsRequests(Request $request): JsonResponse
     {
+        // ⚠️ `pickOrder` انضم (فلو ١٥/٨): طلب الريفيل مابقاش ياخد أمر
+        // توريد — بينزل المخزن بأمر تجهيز، والمندوب لازم يشوف رقمه
+        // وحالته عشان يعرف إن بضاعته اتجهّزت. `purchaseOrder` باقي
+        // للطلبات القديمة اللي اتعملت قبل التغيير.
         $rows = \App\Models\ReplenishmentRequest::with([
             'client.group', 'items.product', 'assignee:id,name,name_en',
             'purchaseOrder:id,number,status',
+            'pickOrder:id,number,status,warehouse_id', 'pickOrder.warehouse:id,name,name_en',
         ])
             ->where('requested_by', $request->user()->id)
             ->latest()->take(30)->get()
@@ -1301,6 +1306,11 @@ class FieldApiController extends Controller
                 'status_label' => $r->statusLabel(),
                 'qty_total' => $r->qtyTotal(),
                 'note' => $r->note,
+                // أمر التجهيز — ده المسار الحقيقي دلوقتي
+                'pick_number' => $r->pickOrder?->number,
+                'pick_status' => $r->pickOrder?->status,
+                'pick_warehouse' => $r->pickOrder?->warehouse?->displayName(),
+                // ⚠️ باقيين للطلبات القديمة وللنسخ القديمة من الأبلكيشن
                 'po_number' => $r->purchaseOrder?->number,
                 'po_status' => $r->purchaseOrder?->status,
                 'assignee' => $r->assignee?->displayName(),

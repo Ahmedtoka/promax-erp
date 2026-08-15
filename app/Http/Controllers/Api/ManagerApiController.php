@@ -433,7 +433,7 @@ class ManagerApiController extends Controller
         }
 
         try {
-            $po = $replenishmentRequest->assignTo(
+            $pick = $replenishmentRequest->assignTo(
                 User::findOrFail($data['assigned_to']),
                 $data['price_mode'] ?? 'client',
                 $request->user(),
@@ -443,12 +443,19 @@ class ManagerApiController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        // ⚠️ **`po_number` و`po_total` باقيين في الرد عن قصد** — النسخ
+        // القديمة من الأبلكيشن بتقراهم وبتعرضهم، وشيلهم كان هيوقّع
+        // شاشة المدير بـ null. بقوا فاضيين: مافيش أمر توريد في فلو
+        // الريفيل بعد ١٥/٨، والنسخة الجديدة بتقرا `pick_number`.
         return response()->json([
             'status' => 'assigned',
             'status_label' => $replenishmentRequest->statusLabel(),
-            'po_number' => $po->number,
-            'po_total' => (float) $po->total,
-            'assignee' => $po->courier?->displayName(),
+            'pick_number' => $pick->number,
+            'pick_id' => (int) $pick->id,
+            'warehouse' => $pick->warehouse?->displayName(),
+            'assignee' => $pick->rep?->displayName(),
+            'po_number' => null,
+            'po_total' => 0.0,
         ]);
     }
 

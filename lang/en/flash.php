@@ -55,6 +55,8 @@ return [
 
     // ---------- Replenishment ----------
     'replenishment_assigned' => 'The request became sales order :number and was assigned to the rep.',
+    // 15 Aug flow: approval raises a picking order - no sales order, no ledger entries
+    'replenishment_picked' => 'Request approved and sent to the warehouse as picking order :number.',
     'replenishment_cancelled' => 'Request cancelled.',
 
     // ---------- Ledger memos (persisted with the transaction) ----------

@@ -453,10 +453,21 @@ class PickOrderController extends Controller
     /** نفس الفحص لطلب الريفيل */
     public function fulfilReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest)
     {
-        $replenishmentRequest->loadMissing(['items', 'assignee']);
+        $replenishmentRequest->loadMissing(['items', 'assignee', 'pickOrder']);
 
         if ($replenishmentRequest->assigned_to === null) {
             return back()->withErrors(['status' => __('stock.rpl_no_rep')]);
+        }
+
+        // ⚠️ **الموافقة بقت هي اللي بترفع أمر التجهيز** (فلو ١٥/٨)،
+        // فالراوت ده لو اتنده على طلب متوافق عليه كان هيرفع أمر
+        // **تاني** لنفس الكميات — بضاعة تخرج من الرف مرتين. الراوت
+        // مالوش زرار في أي شاشة، بس مفتوح، فالحارس هنا مش في الفيو.
+        if ($replenishmentRequest->pickOrder !== null) {
+            return redirect()->route('wh.picks.show', $replenishmentRequest->pickOrder)
+                ->with('ok', __('stock.rpl_already_picked', [
+                    'number' => $replenishmentRequest->pickOrder->number,
+                ]));
         }
 
         $qty = $replenishmentRequest->items->pluck('qty', 'product_id')->all();

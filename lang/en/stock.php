@@ -420,6 +420,7 @@ return [
     // ---------- Van vs warehouse ----------
     'po_no_rep' => 'Assign the order to a rep first.',
     'rpl_no_rep' => 'Assign the request to a rep first.',
+    'rpl_already_picked' => 'This request is already at the warehouse as picking order :number.',
     'po_from_van' => "The rep's van stock covers this order — no picking needed.",
     'rpl_from_van' => "The rep's van stock covers this request — no picking needed.",
     'po_needs_pick' => 'Van stock is short — picking order :number raised.',

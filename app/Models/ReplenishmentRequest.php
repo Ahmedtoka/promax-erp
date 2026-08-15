@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * طلب ريفيل: البروموتر لقى الصنف ناقص من الرف والمخزن،
@@ -17,9 +18,12 @@ class ReplenishmentRequest extends Model
     use HasFactory;
 
     public const STATUSES = [
-        'pending' => ['مستني التوزيع', 'b-orange'],
-        'assigned' => ['اتنزّل على مندوب', 'b-blue'],
-        'delivered' => ['اتورد', 'b-green'],
+        // ⚠️ المسميات اتغيّرت مع فلو ١٥/٨ (مفيش أمر توريد): الطلب
+        // بيتوافق عليه ← ينزل المخزن يتجهّز ← يدخل عهدة المندوب.
+        'pending' => ['مستني موافقة المدير', 'b-orange'],
+        'assigned' => ['تحت التجهيز في المخزن', 'b-blue'],
+        'ready' => ['اتجهّز — مستني الاستلام', 'b-gold'],
+        'delivered' => ['دخل عهدة المندوب', 'b-green'],
         'cancelled' => ['ملغي', 'b-red'],
     ];
 
@@ -130,9 +134,20 @@ class ReplenishmentRequest extends Model
         return (int) $this->items->sum('qty');
     }
 
+    /**
+     * ⚠️ `ready` انضمت للحالات المفتوحة (فلو ١٥/٨): الطلب اتجهّز في
+     * المخزن بس المندوب لسه مااستلمهوش — البضاعة لسه بره عهدته،
+     * فالطلب لسه شغل مفتوح على حد ما يستلم.
+     */
     public function isOpen(): bool
     {
-        return in_array($this->status, ['pending', 'assigned'], true);
+        return in_array($this->status, ['pending', 'assigned', 'ready'], true);
+    }
+
+    /** أمر التجهيز اللي الطلب نزل بيه المخزن (فلو ١٥/٨) */
+    public function pickOrder(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(PickOrder::class);
     }
 
     public static function nextNumber(): string
@@ -144,14 +159,53 @@ class ReplenishmentRequest extends Model
     }
 
     /**
-     * تحويل الطلب لأمر توريد وتنزيله على مندوب/سواق.
-     * ده المكان الوحيد اللي بيعمل التحويل — الويب والأبلكيشن الاتنين بينادوا عليه،
-     * عشان الفلو ما يتفرّعش لنسختين بيختلفوا مع الوقت.
+     * ═══════════════════════════════════════════════════════════
+     * الموافقة على الطلب — أمر تجهيز للمخزن، **مش** أمر توريد
+     * إعادة بناء ١٥ أغسطس ٢٠٢٦
+     * ═══════════════════════════════════════════════════════════
      *
-     * @param  string  $priceMode  channel | old | new
-     * @param  User|null  $actor  اللي بينزّل الطلب — لو اتبعت بيتفحص سكوبه
+     * قرار المالك بالنص: «طلبات الريفيل دي تبقى ريبلانشمنت عادي
+     * وماتاخدش PO ولا تتعامل المعاملة دي … المندوب بيطلب، ينزل
+     * ريكويست، لما يتوافق عليه من التشانل مانجر ينزل في المخزن
+     * علشان يتجهز، وبعد كده يظهر للمندوب إن طلب الريفيل بتاعه
+     * اتجهز. لا يدخل في الـPO لا يدخل في الحسابات».
+     * وعلى سؤال «الطلب بينتهي فين؟» رد: «في عربية المندوب بعد
+     * تجهيز المخزن مش قبل».
+     *
+     * ═══ إيه اللي اتغيّر وليه ═══
+     *
+     * الفلو القديم كان بيعمل `PurchaseOrder` بأسعار وضريبة وخصم،
+     * والتسليم بيكتب قيد `sale` على حساب الفرع. يعني **طلب تحميل
+     * عربية كان بيتسجّل كبيعة للعميل** — ده كان بيلوّث:
+     *   · كشف حساب الفرع بمديونية مالهاش أصل
+     *   · تصفية المندوب («أوامر توريد اتسلّمت»)
+     *   · الضريبة والفاتورة الإلكترونية
+     *   · شاشة الأوامر بصفوف مش أوامر عملاء أصلاً
+     *
+     * دلوقتي الطلب بيفضل طلب بضاعة من أوله لآخره: الموافقة بترفع
+     * **أمر تجهيز** (`PickOrder`) على المخزن، أمين المخزن بيجهّز،
+     * المندوب بيستلم في **عهدته**، وخلاص. البيع للعميل بيحصل بعد
+     * كده بفاتورة عادية زي أي بضاعة تانية في العربية.
+     *
+     * ⚠️ **مفيش `Transaction` ولا `PurchaseOrder` في المسار ده
+     * خالص** — لا هنا ولا في أي مكان بيتنده منه.
+     *
+     * ⚠️ **بيرفع أمر تجهيز دايماً، مايبصّش على العربية الأول.**
+     * `PickOrderController::fulfil` بتتخطى المخزن لو البضاعة معاه
+     * أصلاً — وده صح لأمر توريد (البضاعة رايحة للعميل حالاً)، لكن
+     * غلط هنا: الطلب ده **طلب تحميل** غرضه يزوّد رصيد العربية،
+     * ولو اتخطى المخزن يبقى مااتنفّذش. المالك حدّد: «بعد تجهيز
+     * المخزن مش قبل».
+     *
+     * ⚠️ `$priceMode` اتساب في التوقيع عن قصد: الأبلكيشن القديم
+     * على تليفونات المناديب لسه بيبعته، وشيله كان هيرمي
+     * `ArgumentCountError` على كل موافقة من نسخة قديمة. بقى
+     * متجاهَل — مافيش سعر في الفلو ده أصلاً.
+     *
+     * @param  string  $priceMode  متجاهَل — باقي للتوافق مع الأبلكيشن القديم
+     * @param  User|null  $actor  المدير اللي بيوافق — بيتفحص سكوبه وبيتسجّل
      */
-    public function assignTo(User $assignee, string $priceMode = 'channel', ?User $actor = null): PurchaseOrder
+    public function assignTo(User $assignee, string $priceMode = 'client', ?User $actor = null): PickOrder
     {
         // الرسايل دي بترجع للأبلكيشن كـ message في رد 422، فلازم تكون مترجمة
         if ($this->status !== 'pending') {
@@ -159,13 +213,9 @@ class ReplenishmentRequest extends Model
         }
 
         // ⚠️ **`exists:users,id` في الكنترولرز مش كفاية** (تدقيق ٨/٨):
-        // كان ينفع PO يتنزّل على محاسب مالوش عهدة أصلاً، أو على حساب
-        // موقوف. الفحص هنا مش في الكنترولر عشان الويب والأبلكيشن
-        // الاتنين يعدّوا عليه — المسار ده هو المكان الوحيد للتحويل.
-        //
-        // ⚠️ `FIELD_WORK_ROLES` مش `FIELD_ROLES` (طلب المالك ١١/٨ مساءً):
-        // المدير بقى بيسلّم أوردرات بنفسه — و`Scope::assertRep` تحت
-        // لسه بتحكم إن المدير-كمستلم يعدّي لنفسه أو من الأدمن بس.
+        // كان ينفع الطلب يتنزّل على محاسب مالوش عهدة أصلاً، أو على
+        // حساب موقوف. الفحص هنا مش في الكنترولر عشان الويب
+        // والأبلكيشن الاتنين يعدّوا عليه.
         if (! $assignee->active || ! in_array($assignee->role, User::FIELD_WORK_ROLES, true)) {
             throw new Rejected(__('field.not_a_field_role'));
         }
@@ -175,192 +225,91 @@ class ReplenishmentRequest extends Model
         if ($actor !== null) {
             \App\Support\Scope::assertRep($actor, $assignee, $this->client);
         }
-        // ⚠️ `channel` اتغيّرت لـ`client`. القناة مابقاش لها سعر ولا
-        // خصم — التسعير بيتحدد من قائمة العميل وخصمه (عقد/خاص/سلسلة).
-        // القيمة القديمة لسه مقبولة عشان أي طلب معلّق في الأبلكيشن
-        // اتبعت قبل التحديث مايترفضش.
-        if (! in_array($priceMode, ['client', 'channel', 'old', 'new'], true)) {
-            throw new Rejected(__('api.unknown_price_mode'));
-        }
 
         $this->loadMissing(['client', 'items.product', 'promoter']);
 
-        $po = \Illuminate\Support\Facades\DB::transaction(function () use ($assignee, $priceMode, $actor) {
-            $client = $this->client;
+        $qtyByProduct = [];
 
-            // ⚠️ **`created_by` كان ناقص هنا** (بلاغ المالك ١٥ أغسطس:
-            // «عاوز أعرف مين عمل الـPO ومفيش مين اللي عمله»).
-            //
-            // تلات مسارات في `OpsController` بتكتب `created_by` صح،
-            // والمسار ده — تحويل طلب البضاعة لأمر توريد — كان بيسيبه
-            // NULL. وده أكتر مسار بيتنفّذ فعلاً، فأغلب الأوامر
-            // المعلّمة `replenishment` في الليست طلعت بلا صاحب.
-            //
-            // ⚠️ الترتيب مقصود: **اللي نزّل الطلب** أولاً (هو اللي عمل
-            // أمر التوريد فعلاً)، وبعده **اللي طلب البضاعة** كفولباك
-            // لما الاستدعاء ييجي من مسار مافيهوش actor. أصل الطلب
-            // نفسه محفوظ في `requested_by` على الـRPL وماتغيّرش.
-            $po = PurchaseOrder::create([
-                'created_by' => $actor?->id ?? $this->requested_by,
-                'number' => PurchaseOrder::nextNumber(),
-                'client_id' => $client->id,
-                'source' => PurchaseOrder::SOURCE_REPLENISHMENT,
-                'address' => $client->address,
-                'assigned_to' => $assignee->id,
-                'status' => 'pending',
-                // ⚠️ تسعيرة العميل بتتحسب على السطور وبتتخزن فيها،
-                // فالـPO بيتسجل بقائمة ثابتة عشان مايعيدش الحساب عند
-                // التسليم ويطلع رقم تاني.
-                'price_mode' => in_array($priceMode, ['client', 'channel'], true) ? 'new' : $priceMode,
-                'total' => 0,
-            ]);
-
-            $rows = [];
-            foreach ($this->items as $item) {
-                $product = $item->product;
-                if ($product === null) {
-                    continue; // صنف اتمسح من الكتالوج — بنتخطاه بدل ما نقع
-                }
-                // ⚠️ `priceFor($client)` بيمشي على الدوكترين: قائمة
-                // العميل ← خصمه (عقد/خاص/سلسلة). القناة مالهاش دخل.
-                $price = in_array($priceMode, ['client', 'channel'], true)
-                    ? $client->priceFor($product)
-                    : $product->priceFor($priceMode);
-
-                // ⚠️ **سعر صفر = أمر مرفوض** (تدقيق ٨/٨/٢٠٢٦). نفس
-                // الحارس اللي في `OpsController::fillPoItems` واتنسي
-                // هنا — والصنف اللي مش متسعّر في قايمة العميل كان
-                // بيعدّي بسطر 0.00 من غير أي رسالة. السواق بيوصّل
-                // بضاعة ببلاش والرقم مابيبانش غير في مراجعة آخر الشهر.
-                if ((float) $price <= 0) {
-                    throw new Rejected(__('api.product_not_priced', [
-                        'product' => $product->displayName(),
-                    ]));
-                }
-
-                $lineTotal = round($item->qty * $price, 2);
-
-                // ⚠️ الضريبة هنا كمان، مش في `OpsController` بس. ده تاني
-                // مسار بيولّد أمر توريد، ولو ساب الضريبة صفر فـ `payable()`
-                // بترجع الصافي في صمت، والسواق بيحصّل ناقص قيمة الضريبة
-                // اللي بروماكس بتدفعها للمصلحة برضو.
-                $taxRate = \App\Services\Tax::rate($client, $product);
-                $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
-
-                // ⚠️ **تاني مسار بيولّد أمر توريد** — لو الخصم اتسجّل في
-                // `OpsController` بس، الأوامر الجاية من الريفيل هتتطبع
-                // بعمود خصم فاضي وكأن الفرع مخدش خصم. نفس القاعدة:
-                // `client` بياخد خصم العميل، و`old`/`new` سعر صافي.
-                $withDiscount = in_array($priceMode, ['client', 'channel'], true);
-
-                // ⚠️ من العميل مباشرة — عكسها من السعر المقرّب بيطلّع
-                // 9.98% لعقد 10% (نفس الإصلاح في `OpsController`)
-                $discountPct = $withDiscount ? $client->effectiveDiscount() : 0.0;
-
-                $listPrice = $withDiscount
-                    ? \App\Services\Pricing::listPriceFor($client, $product)
-                    : (float) $price;
-
-                if ($listPrice <= 0) {
-                    $listPrice = (float) $price;
-                }
-
-                PurchaseOrderItem::create([
-                    'purchase_order_id' => $po->id,
-                    'product_id' => $product->id,
-                    'qty' => $item->qty,
-                    'price' => $price,
-                    'list_price' => $listPrice,
-                    'discount_pct' => $discountPct,
-                    'total' => $lineTotal,
-                    'tax_rate' => $taxRate,
-                    'tax' => $lineTax,
-                ]);
-
-                $rows[] = ['total' => $lineTotal, 'tax' => $lineTax];
+        foreach ($this->items as $item) {
+            if ($item->product === null) {
+                continue;   // صنف اتمسح من الكتالوج — بنتخطاه بدل ما نقع
             }
 
-            $sums = \App\Services\Tax::totals($rows);
-            $total = $sums['net'];
+            $pid = (int) $item->product_id;
+            $qtyByProduct[$pid] = ($qtyByProduct[$pid] ?? 0) + (int) $item->qty;
+        }
 
-            $po->update([
-                'total' => $sums['net'],
-                'tax_total' => $sums['tax'],
-                'grand_total' => $sums['grand'],
-            ]);
+        if ($qtyByProduct === []) {
+            throw new Rejected(__('stock.pick_no_items'));
+        }
+
+        // ⚠️ مخزن العهدة المفتوحة، وإلا الفرع الافتراضي — نفس اختيار
+        // `PickOrderController::fulfil` بالحرف عشان المسارين مايفترقوش.
+        $warehouse = $assignee->currentCustody()?->warehouse ?? Warehouse::defaultBranch();
+
+        if ($warehouse === null) {
+            throw new Rejected(__('stock.no_warehouse'));
+        }
+
+        $pick = DB::transaction(function () use ($assignee, $actor, $qtyByProduct, $warehouse) {
+            // ⚠️ **جوه الترانزاكشن**: لو المخزن مافيهوش رصيد، `raise`
+            // بترجّع خطأ والموافقة كلها بترجع — فالمدير يشوف السبب
+            // بدل ما الطلب يتقفل والبضاعة ماتخرجش.
+            $raised = PickOrder::raise(
+                $warehouse,
+                $assignee,
+                $qtyByProduct,
+                PickOrder::PURPOSE_REPLENISHMENT,
+                $actor,
+                ['replenishment_request_id' => $this->id],
+            );
+
+            if ($raised['error'] !== null) {
+                throw new Rejected($raised['error']);
+            }
 
             $this->update([
                 'status' => 'assigned',
                 'assigned_to' => $assignee->id,
-                // ⚠️ **الموافق كان مابيتسجّلش خالص** (سؤال المالك ١٥/٨).
-                // نفس مصدر `created_by` بتاع الأمر عشان الاتنين
-                // مايفترقوش، و`assigned_at` هو وقت الموافقة نفسه.
+                // ⚠️ الموافق كان مابيتسجّلش خالص (سؤال المالك ١٥/٨).
                 'assigned_by' => $actor?->id,
-                'purchase_order_id' => $po->id,
                 'assigned_at' => now(),
             ]);
 
-            // ═══ التجهيز بينزل هنا (إصلاح تدقيق ٩/٨/٢٠٢٦) ═══
-            //
-            // ⚠️ **الفلو كان بيقف عند إنشاء الـPO.** الموافقة بتعمل
-            // أمر توريد، والمندوب بيوصله «سلّم»، وعربيته فاضية —
-            // ومفيش أي حاجة بتطلب البضاعة من المخزن. مسار
-            // `wh.picks.rpl` كان مبني ومن غير أي زرار بينده عليه
-            // (نفس فخ «شاشة من غير مدخل» الموثّق).
-            //
-            // `fulfil` بيفحص عربية المندوب الأول: لو البضاعة معاه،
-            // مفيش تجهيز والتسليم من عهدته. لو ناقصة، بيرفع أمر
-            // تجهيز من مخزنه (أو الرئيسي) — وأمين المخزن بيوصله
-            // إشعار من جوه `PickOrder::raise` نفسها.
-            //
-            // ⚠️ **جوه نفس الترانزاكشن** — لو مفيش رصيد لا في
-            // العربية ولا المخزن، `Rejected` بترجّع الموافقة كلها،
-            // والمدير بيشوف السبب بدل ما يتفاجئ المندوب عند الفرع.
-            $result = \App\Http\Controllers\PickOrderController::fulfil(
-                $assignee,
-                $this->items->pluck('qty', 'product_id')->all(),
-                PickOrder::PURPOSE_CUSTOMER_PO,
-                ['purchase_order_id' => $po->id],
-                $assignee,
-            );
-
-            if ($result['error']) {
-                throw new Rejected($result['error']);
-            }
-
-            return $po;
+            return $raised['order'];
         });
 
+        // ═══ إشعار المندوب: طلبك اتوافق عليه وتحت التجهيز ═══
+        // ⚠️ اللينك على **أمر التجهيز** مش على أمر توريد — مافيش
+        // أمر توريد في الفلو ده خالص.
         AppNotification::send(
             $assignee,
-            fn () => __('field.notif_replenishment_new_title', ['number' => $po->number]),
-            fn () => __('field.notif_replenishment_new_body', [
+            fn () => __('field.notif_rpl_approved_title', ['number' => $this->number]),
+            fn () => __('field.notif_rpl_approved_body', [
                 'client' => $this->client->displayName(),
-                'amount' => number_format((float) $po->total),
-            ]),
-            link: \App\Models\AppNotification::poLink($po->id),
-        );
-
-        AppNotification::send(
-            $this->promoter,
-            fn () => __('field.notif_replenishment_assigned_title', [
-                'number' => $this->number,
-                'name' => $assignee->name,
-            ]),
-            fn () => __('field.notif_replenishment_assigned_body', [
-                'client' => $this->client->displayName(),
+                'pick' => $pick->number,
             ]),
             good: true,
-            // ⚠️ طلب المندوب لينكه **الأمر نفسه** (`po:`) — شاشة
-            // المندوب مافيهاش تاب ريفيل، فلينك `replenishment:` كان
-            // بيقع على «مفتاح مش معروف = الرئيسية» والإشعار يبان
-            // مكسور. البروموتر ليه تاب ريفيل فلينكه زي ما هو.
-            link: $this->origin() === 'rep'
-                ? \App\Models\AppNotification::poLink($po->id)
-                : \App\Models\AppNotification::replenishmentLink($this->id),
+            link: AppNotification::pickLink($pick->id),
         );
 
-        return $po;
+        // ═══ وإشعار الطالب لو مش هو نفسه المستلم ═══
+        if ((int) $this->requested_by !== (int) $assignee->id) {
+            AppNotification::send(
+                $this->promoter,
+                fn () => __('field.notif_replenishment_assigned_title', [
+                    'number' => $this->number,
+                    'name' => $assignee->displayName(),
+                ]),
+                fn () => __('field.notif_replenishment_assigned_body', [
+                    'client' => $this->client->displayName(),
+                ]),
+                good: true,
+                link: AppNotification::replenishmentLink($this->id),
+            );
+        }
+
+        return $pick;
     }
 
     /**

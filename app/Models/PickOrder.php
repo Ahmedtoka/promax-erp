@@ -523,6 +523,12 @@ class PickOrder extends Model
                     'picked_by' => $picker->id,
                     'ready_at' => now(),
                 ]);
+
+                // ⚠️ طلب الريفيل بيتحرّك مع أمر تجهيزه (فلو ١٥/٨).
+                // من غير السطر ده الطلب بيفضل «اتنزّل على مندوب»
+                // للأبد والمندوب مايعرفش إن بضاعته جاهزة — وده
+                // بالظبط اللي المالك طلب إنه يبان.
+                $this->replenishmentRequest?->update(['status' => 'ready']);
             });
         } catch (StockShortage $e) {
             // نقص على الرف بس — أي خطأ SQL بيكمّل لـ 500 عن قصد
@@ -694,6 +700,14 @@ class PickOrder extends Model
                     'handed_at' => now(),
                     'custody_id' => $custody->id,
                     'has_variance' => $variance,
+                ]);
+
+                // ⚠️ **هنا بينتهي طلب الريفيل** (فلو ١٥/٨): البضاعة
+                // دخلت عهدة المندوب وخلاص — مفيش أمر توريد ولا قيد
+                // على حساب العميل. البيع بيحصل بعدين بفاتورة عادية.
+                $this->replenishmentRequest?->update([
+                    'status' => 'delivered',
+                    'delivered_at' => now(),
                 ]);
             });
         } catch (StockShortage $e) {

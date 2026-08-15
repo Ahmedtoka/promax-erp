@@ -480,6 +480,8 @@ return [
     'cm_fix_pick' => 'Request a van load',
     'cm_fix_transfer' => 'Transfer from another rep',
     'cm_fix_hint' => 'Or edit the order quantity on its own page.',
+    // Legacy sales order from before the 15 Aug flow - historical display only
+    'rpl_legacy_po' => 'Legacy sales order from before replenishment was split from accounting',
     'cm_none_title' => 'No rep is over-committed',
     'cm_none_hint' => 'Every open order is backed by real stock in the van.',
 

@@ -74,10 +74,13 @@ return [
         'rejected' => 'Rejected',
     ],
 
+    // 15 Aug flow: manager approves > warehouse prepares > rep custody.
+    // No sales order and no ledger entries on this path.
     'replenishment_status' => [
-        'pending' => 'Awaiting Dispatch',
-        'assigned' => 'Assigned',
-        'delivered' => 'Delivered',
+        'pending' => 'Awaiting Approval',
+        'assigned' => 'Being Prepared',
+        'ready' => 'Ready for Collection',
+        'delivered' => 'In Rep Custody',
         'cancelled' => 'Cancelled',
     ],
 

@@ -63,13 +63,32 @@
                         @endforeach
                     </td>
                     <td class="num"><b>{{ $r->qtyTotal() }}</b></td>
+                    {{-- ⚠️ **عمود أمر التوريد اتشال** (قرار المالك ١٥/٨):
+                         الريفيل مابقاش ياخد PO ولا يدخل الحسابات. مكانه
+                         بقى **أمر التجهيز** — ده المسار الحقيقي دلوقتي:
+                         موافقة ← تجهيز في المخزن ← عهدة المندوب.
+                         الأوامر القديمة المتسلّمة بتفضل ظاهرة لأنها
+                         حقيقة تاريخية (قرار المالك: سيبهم زي ما هم). --}}
                     <td><span class="badge {{ $r->statusClass() }}">{{ $r->statusLabel() }}</span>
-                        @if ($r->purchaseOrder)
-                            {{-- صفحة الأمر نفسه (١٢/٨) — مش اللوحة العامة --}}
-                            <br><a style="font-size:10.5px;color:var(--blue)" href="{{ route('ops.pos.show', $r->purchaseOrder) }}">{{ $r->purchaseOrder->number }}</a>
+                        @if ($r->pickOrder)
+                            <br><a style="font-size:10.5px;font-weight:800" dir="ltr"
+                                   href="{{ route('wh.picks.show', $r->pickOrder) }}"
+                                   target="_blank" rel="noopener">{{ $r->pickOrder->number }}</a>
+                        @elseif ($r->purchaseOrder)
+                            <br><a style="font-size:10.5px;color:var(--muted)" dir="ltr"
+                                   href="{{ route('ops.pos.show', $r->purchaseOrder) }}"
+                                   target="_blank" rel="noopener"
+                                   title="{{ __('ops.rpl_legacy_po') }}">{{ $r->purchaseOrder->number }}</a>
                         @endif
                     </td>
-                    <td>{{ $r->assignee?->displayName() ?? '—' }}</td>
+                    <td>{{ $r->assignee?->displayName() ?? '—' }}
+                        {{-- مين وافق — كان مابيتسجّلش خالص قبل ١٥/٨ --}}
+                        @if ($r->approver)
+                            <div style="font-size:9.5px;color:var(--muted)">🔏 {{ $r->approver->displayName() }}</div>
+                        @elseif ($r->status !== 'pending' && $r->status !== 'cancelled')
+                            <div style="font-size:9.5px;color:var(--muted)">🔏 {{ __('ops.po_creator_unknown') }}</div>
+                        @endif
+                    </td>
                     <td style="white-space:normal;max-width:200px;color:var(--muted);font-size:11px">{{ $r->note }}</td>
                     @if ($manager)
                         <td>

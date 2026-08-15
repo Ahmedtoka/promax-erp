@@ -500,7 +500,12 @@ class ChannelController extends Controller
         // ⚠️ سكوب الفريق — نفس سبب `merchVisits` فوق. الفلترة على
         // العميل (مش على البروموتر) عشان الطلب بيتحوّل لـPO على
         // حساب العميل، والمدير المسؤول عن العميل هو صاحب القرار.
-        $q = ReplenishmentRequest::with(['client', 'promoter', 'assignee', 'items.product'])
+        // ⚠️ `approver` و`pickOrder` في الإيجر لودينج (فلو ١٥/٨) —
+        // العمود بيعرض مين وافق وأمر التجهيز لكل صف، ومن غيرها
+        // دي كويريتين لكل طلب في الصفحة.
+        $q = ReplenishmentRequest::with([
+            'client', 'promoter', 'assignee', 'approver', 'pickOrder', 'purchaseOrder', 'items.product',
+        ])
             ->whereIn('client_id', Client::visibleTo(Client::query(), $request->user())->select('id'));
 
         if ($status = $request->string('status')->value()) {
@@ -595,14 +600,20 @@ class ChannelController extends Controller
         return back()->with('ok', __('flash.replenishment_updated'));
     }
 
-    /** تنزيل طلب الريفيل على مندوب — وبيتحول لأمر توريد */
+    /**
+     * الموافقة على طلب الريفيل وتنزيله على مندوب.
+     *
+     * ⚠️ **مابقاش بيعمل أمر توريد** (قرار المالك ١٥/٨) — بيرفع أمر
+     * تجهيز على المخزن، والمندوب بيستلم في عهدته. مفيش قيود مالية.
+     */
     public function assignReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest)
     {
         $data = $request->validate([
             'assigned_to' => ['required', 'exists:users,id'],
-            // ⚠️ `channel` اتشالت — القناة مابقاش لها سعر. التسعير
-            // بيتحدد من قائمة العميل وخصمه.
-            'price_mode' => ['required', 'in:client,old,new'],
+            // ⚠️ `price_mode` بقى **متجاهَل** — مافيش سعر في فلو
+            // الريفيل أصلاً. باقي `nullable` عشان أي فورم قديم
+            // لسه بيبعته مايتردّش بـ422.
+            'price_mode' => ['nullable', 'in:client,channel,old,new'],
         ]);
 
         try {
@@ -610,9 +621,9 @@ class ChannelController extends Controller
             // ⚠️ الفاعل بيتبعت للموديل عشان الحارس يتنفّذ هناك —
             // الراوت ده كان بلا حارس قناة ولا فحص مستلم، والتوأم في
             // الـAPI كان بيفحص الطلب مش المستلم.
-            $po = $replenishmentRequest->assignTo(
+            $pick = $replenishmentRequest->assignTo(
                 User::findOrFail($data['assigned_to']),
-                $data['price_mode'],
+                $data['price_mode'] ?? 'client',
                 $request->user(),
             );
         } catch (Rejected $e) {
@@ -620,7 +631,7 @@ class ChannelController extends Controller
             return back()->withErrors(['status' => $e->getMessage()]);
         }
 
-        return back()->with('ok', __('flash.replenishment_assigned', ['number' => $po->number]));
+        return back()->with('ok', __('flash.replenishment_picked', ['number' => $pick->number]));
     }
 
     public function cancelReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest)
