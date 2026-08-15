@@ -163,10 +163,23 @@ class ReplenishmentRequest extends Model
 
         $this->loadMissing(['client', 'items.product', 'promoter']);
 
-        $po = \Illuminate\Support\Facades\DB::transaction(function () use ($assignee, $priceMode) {
+        $po = \Illuminate\Support\Facades\DB::transaction(function () use ($assignee, $priceMode, $actor) {
             $client = $this->client;
 
+            // ⚠️ **`created_by` كان ناقص هنا** (بلاغ المالك ١٥ أغسطس:
+            // «عاوز أعرف مين عمل الـPO ومفيش مين اللي عمله»).
+            //
+            // تلات مسارات في `OpsController` بتكتب `created_by` صح،
+            // والمسار ده — تحويل طلب البضاعة لأمر توريد — كان بيسيبه
+            // NULL. وده أكتر مسار بيتنفّذ فعلاً، فأغلب الأوامر
+            // المعلّمة `replenishment` في الليست طلعت بلا صاحب.
+            //
+            // ⚠️ الترتيب مقصود: **اللي نزّل الطلب** أولاً (هو اللي عمل
+            // أمر التوريد فعلاً)، وبعده **اللي طلب البضاعة** كفولباك
+            // لما الاستدعاء ييجي من مسار مافيهوش actor. أصل الطلب
+            // نفسه محفوظ في `requested_by` على الـRPL وماتغيّرش.
             $po = PurchaseOrder::create([
+                'created_by' => $actor?->id ?? $this->requested_by,
                 'number' => PurchaseOrder::nextNumber(),
                 'client_id' => $client->id,
                 'source' => PurchaseOrder::SOURCE_REPLENISHMENT,

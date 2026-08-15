@@ -453,6 +453,9 @@ return [
     // Row view button - 15 August
     'rc_no_doc' => 'No document to open',
     'rc_view' => 'View',
+    // Who created the purchase order - 15 August
+    'po_created_by' => 'Created by',
+    'po_creator_unknown' => 'Not recorded',
 
     'rc_c_gifts' => 'Gifts handed out',
     'rc_c_gift_left' => 'Gifts still in the van',

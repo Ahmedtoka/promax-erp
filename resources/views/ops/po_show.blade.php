@@ -21,7 +21,18 @@
 
     // خط السير: [الليبل، التفصيلة، حصل؟]
     $timeline = [];
-    $timeline[] = [__('ops.po_tl_created'), ($po->creator?->name ?? '—').' · '.$po->created_at->format('Y-m-d h:i A'), true];
+    // ⚠️ «غير مسجَّل» مش «—»: الأوامر الأقدم من عمود `created_by`
+    // (٤ أغسطس) واللي جت من تحويل طلب بضاعة قبل إصلاح ١٥ أغسطس
+    // مالهاش صاحب محفوظ — والشرطة الغامضة كانت بتتقرا كأن الخانة
+    // فاضية بالصدفة مش كأن البيانات ناقصة فعلاً.
+    $timeline[] = [
+        __('ops.po_tl_created'),
+        ($po->creator
+            ? $po->creator->displayName().' · '.$po->creator->roleLabel()
+            : __('ops.po_creator_unknown')
+        ).' · '.$po->created_at->format('Y-m-d h:i A'),
+        true,
+    ];
 
     if ($po->needsApproval()) {
         if ($po->approval_status === 'rejected') {

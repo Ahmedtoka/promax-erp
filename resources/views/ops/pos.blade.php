@@ -170,9 +170,20 @@
                             <br><span style="font-size:10px;color:var(--red)" title="{{ $po->abort_reason }}">⛔ {{ __('ops.po_aborted_note') }}: {{ \Illuminate\Support\Str::limit($po->abort_reason, 40) }}</span>
                         @endif
                     </td>
-                    {{-- التراك: مين أنشأ / وافق / عدّل — كله موثق --}}
+                    {{-- التراك: مين أنشأ / وافق / عدّل — كله موثق.
+                         ⚠️ الأيقونة لوحدها ماكانتش بتقول إيه ده (بلاغ
+                         المالك ١٥/٨: «مفيش مين اللي عمله» مع إن الاسم
+                         كان معروض) — بقى قدامها لابل صريح، والفاضي
+                         بقى «غير مسجَّل» مش شرطة غامضة. --}}
                     <td style="font-size:10.5px;color:var(--muted);line-height:1.9">
-                        ✍️ {{ $po->creator?->name ?? '—' }}
+                        @if ($po->creator)
+                            <span title="{{ __('ops.po_created_by') }}">✍️ {{ __('ops.po_created_by') }}:</span>
+                            <b style="color:var(--text)">{{ $po->creator->displayName() }}</b>
+                            <span style="font-size:9.5px">· {{ $po->creator->roleLabel() }}</span>
+                        @else
+                            <span title="{{ __('ops.po_created_by') }}">✍️ {{ __('ops.po_created_by') }}:</span>
+                            <span style="color:var(--red)">{{ __('ops.po_creator_unknown') }}</span>
+                        @endif
                         @if ($po->approvedBy)<br>🔏 {{ $po->approvedBy->name }} <span dir="ltr">{{ $po->approved_at?->format('m-d h:i A') }}</span>@endif
                         @if ($po->editor)<br>✏️ {{ $po->editor->name }} <span dir="ltr">{{ $po->edited_at?->format('m-d h:i A') }}</span>@endif
                         {{-- ⚠️ **مدة التجهيز كانت بتتقاس ومحدش بيعرضها**
