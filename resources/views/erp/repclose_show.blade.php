@@ -293,6 +293,7 @@
                                 <th>{{ __('settle.invoices') }}</th>
                                 <th>{{ __('common.qty') }}</th>
                                 <th>{{ __('common.total') }}</th>
+                                <th class="act" data-nosum></th>
                             </tr>
                             </thead>
                             <tbody>
@@ -305,9 +306,13 @@
                                          مهما كانت الوحدة اللي المندوب كتب بيها --}}
                                     <td class="num">{{ number_format($r['qty']) }}</td>
                                     <td class="num {{ $box['cls'] }}">{{ number_format($r['total'], 2) }}</td>
+                                    <td class="act">@include('partials._view', [
+                                        'url' => $r['client'] ? route('erp.clients.show', $r['client']) : null,
+                                        'label' => __('client.client'),
+                                    ])</td>
                                 </tr>
                             @empty
-                                <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:22px">
+                                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:22px">
                                     {{ __('settle.none') }}</td></tr>
                             @endforelse
                             </tbody>
@@ -341,6 +346,7 @@
                         <th>{{ __('common.qty') }}</th>
                         <th>{{ __('ops.payment') }}</th>
                         <th>{{ __('common.total') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -357,9 +363,10 @@
                                 </span>
                             </td>
                             <td class="num mid">{{ number_format((float) $po->deliveredValue(), 2) }}</td>
+                            <td class="act">@include('partials._view', ['url' => route('ops.pos.show', $po)])</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:22px">
+                        <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">
                             {{ __('settle.none') }}</td></tr>
                     @endforelse
                     </tbody>
@@ -368,6 +375,7 @@
                         <tr>
                             <td colspan="5" style="text-align:start"><b>Σ {{ __('common.total') }}</b></td>
                             <td class="num"><b>{{ number_format($poDeliveredValue, 2) }}</b></td>
+                            <td class="act"></td>
                         </tr>
                         </tfoot>
                     @endif
@@ -398,7 +406,7 @@
                             <th>{{ __('common.date') }}</th>
                             <th>{{ __('ops.payment') }}</th>
                             <th>{{ __('common.total') }}</th>
-                            <th></th>
+                            <th class="act" data-nosum></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -416,7 +424,9 @@
                                 </td>
                                 {{-- بالإجمالي — نفس اللي العميل دفعه (عقيدة الليدجر) --}}
                                 <td class="num"><b>{{ $fmt($inv->grand_total) }}</b></td>
-                                <td><a class="btn sm" href="{{ route('ops.invoice', $inv) }}" target="_blank">👁️</a></td>
+                                {{-- كان زرار عين محلي — بقى البارشال الموحّد
+                                     عشان كل الصفوف في السيستم تبقى بنفس الشكل. --}}
+                                <td class="act">@include('partials._view', ['url' => route('ops.invoice', $inv)])</td>
                             </tr>
                         @empty
                             <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">{{ __('settle.no_open') }}</td></tr>
@@ -639,6 +649,7 @@
                         <th>{{ __('settle.returned_in') }}</th>
                         <th>{{ __('field.return_damaged_units') }}</th>
                         <th>{{ __('settle.shortage') }}</th>
+                        <th class="act" data-nosum></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -671,10 +682,14 @@
                             <td class="num {{ $l['diff'] == 0 ? '' : 'neg' }}">
                                 {{ $l['diff'] == 0 ? '—' : number_format($l['diff']) }}
                             </td>
+                            <td class="act">@include('partials._view', [
+                                'url' => $l['product'] ? route('erp.products.show', $l['product']->id) : null,
+                                'label' => __('stock.product'),
+                            ])</td>
                         </tr>
                     @empty
                         {{-- ⚠️ زوّدت عمود «محوَّل لمندوب»؟ الـcolspan اتحدّث معاه --}}
-                        <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:26px">
+                        <tr><td colspan="14" style="text-align:center;color:var(--muted);padding:26px">
                             {{ __('settle.no_custody') }}</td></tr>
                     @endforelse
                     </tbody>

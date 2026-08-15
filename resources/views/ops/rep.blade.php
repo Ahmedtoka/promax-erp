@@ -151,18 +151,9 @@
 a.src-ref{color:var(--royal-blue, #12399B);text-decoration:underline dotted;text-underline-offset:2px}
 a.src-ref:hover{text-decoration-style:solid}
 
-/* ═══ زرار «عرض» في آخر كل صف ═══
-   أيقونة بس على الشاشات الضيقة، أيقونة + كلمة على الواسعة. */
-.vbtn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;
-      border:1px solid var(--border);background:var(--card);color:var(--royal-blue, #12399B);
-      font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap;
-      line-height:1.6;transition:.15s}
-a.vbtn:hover{border-color:var(--royal-blue, #12399B);
-             background:var(--royal-blue, #12399B);color:#fff}
-.vbtn.off{color:var(--muted);opacity:.35;cursor:not-allowed}
-.vbtn-i{font-size:12px;line-height:1}
-th.act,td.act{width:1%;white-space:nowrap;text-align:center}
-@media (max-width:1100px){.vbtn-t{display:none}}
+{{-- ⚠️ ستايل `.vbtn` **مش هنا** — اتنقل لـ`layouts/system` لما
+     الزرار اتوسّع لصفحة التصفية كمان. أي صفحة تانية تستخدم
+     `partials._view` تلاقيه شغال من غير ما تنسخ CSS. --}}
 </style>
 
 {{-- ═══════════════════ ١. الهيدر ═══════════════════ --}}

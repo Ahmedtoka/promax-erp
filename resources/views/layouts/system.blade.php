@@ -405,6 +405,23 @@ a.kpi:hover{box-shadow:var(--shadow-lift);transform:translateY(-1px)}
 .btn.green{background:#E7F7EE;color:#0F7A38;border-color:transparent}
 .btn.red{background:#FDECEC;color:var(--red);border-color:transparent}
 .btn.sm{padding:5px 12px;font-size:11.5px}
+
+/* ═══ زرار «عرض» في آخر صف الجدول — `partials/_view` ═══
+   طلب المالك (١٥ أغسطس): «أي حاجة في الجدول اعملي فيو ليها في تاب
+   جديد أو يفتح على صفحتها». الستايل هنا مش في الصفحات عشان أي شاشة
+   تستخدم البارشال تلاقيه شغال من غير نسخ CSS.
+   ⚠️ `td.act` عرضه `1%` — التريك المعروفة اللي بتخلّي العمود ياخد
+   أقل عرض ممكن، فمابياكلش من عرض أعمدة البيانات. */
+.vbtn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;
+      border:1px solid var(--border);background:var(--card);color:var(--royal-blue);
+      font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap;
+      line-height:1.6;transition:.15s}
+a.vbtn:hover{border-color:var(--royal-blue);background:var(--royal-blue);color:#fff}
+.vbtn.off{color:var(--muted);opacity:.35;cursor:not-allowed}
+.vbtn-i{font-size:12px;line-height:1}
+th.act,td.act{width:1%;white-space:nowrap;text-align:center}
+@media (max-width:1100px){.vbtn-t{display:none}}
+@media print{th.act,td.act{display:none}}
 .flash{background:#E7F7EE;color:#0F7A38;border-radius:12px;padding:11px 16px;font-weight:800;font-size:13px;margin-bottom:14px}
 .flash.err{background:#FDECEC;color:var(--red)}
 /* ═══════════════════════════════════════════════════════════
@@ -1016,7 +1033,101 @@ document.addEventListener('DOMContentLoaded', function () {
     search: {!! json_encode(__('common.search'), JSON_UNESCAPED_UNICODE) !!},
     total:  {!! json_encode(__('common.total'), JSON_UNESCAPED_UNICODE) !!},
     rows:   {!! json_encode(__('common.rows_count'), JSON_UNESCAPED_UNICODE) !!},
+    view:   {!! json_encode(__('common.view'), JSON_UNESCAPED_UNICODE) !!},
   };
+
+  /* ══════════════════════════════════════════════════════════════
+     زرار «عرض» التلقائي لصفوف الجداول  ·  ١٥ أغسطس ٢٠٢٦
+     ══════════════════════════════════════════════════════════════
+
+     طلب المالك: «أي حاجة في الجدول اعملي فيو ليها في تاب جديد أو
+     يفتح على صفحتها».
+
+     في السيستم ٢٠+ شاشة صفوفها `class="clickable"` مع
+     `onclick="location.href='…'"` — أفوردانس مخفي (المستخدم لازم
+     يخمّن إن الصف بيتدوس) وبيفتح في نفس التاب فبيضيّع الفلتر
+     والسكرول. تعديل الـ٢٠ بليد بالإيد كان معناه ٢٠ فرصة لخطأ في
+     عدّ الأعمدة، وأي شاشة جديدة تنسى الزرار من تاني.
+
+     فالمصدر واحد: الصف نفسه. الفانكشن دي بتقرا الـURL اللي **موجود
+     أصلاً** في الـonclick وتبني منه عمود أكشن حقيقي.
+
+     ⚠️ **بتشتغل قبل أدوات الجدول** (الترتيب/البحث/الإجماليات) عشان
+     دي بتقرا `headRow.cells.length` — لو زوّدنا عمود بعدها، صف
+     الإجماليات يطلع ناقص خانة.
+
+     ⚠️ الجدول اللي فيه `.act` أصلاً (البليد حاطط `partials/_view`
+     بإيده) بيتساب زي ما هو — مافيش عمودين.
+
+     ⚠️ `data-no-act` على الـtable بيوقّفها لو صفحة عايزة كده. */
+  function addRowViewButtons(table, headRow) {
+    if (table.querySelector('th.act, td.act')) return 0;
+    if (table.hasAttribute('data-no-act')) return 0;
+
+    const bodyRows = Array.from(table.querySelectorAll('tr'))
+      .filter(r => r !== headRow && r.querySelector('td'));
+
+    // الـURL من الـonclick: location.href='…' أو window.open('…')
+    const urlOf = function (tr) {
+      const raw = tr.getAttribute('onclick') || '';
+      const m = raw.match(/(?:location\.href\s*=|window\.open\s*\()\s*(['"])(.*?)\1/);
+      return m ? m[2] : null;
+    };
+
+    const linked = bodyRows.filter(r => r.classList.contains('clickable') && urlOf(r));
+    if (linked.length === 0) return 0;
+
+    const th = document.createElement('th');
+    th.className = 'act';
+    th.setAttribute('data-nosum', '');
+    headRow.appendChild(th);
+
+    bodyRows.forEach(function (tr) {
+      // ⚠️ صف الحالة الفاضية بيمدّ خانته بدل ما ياخد خانة جديدة —
+      // لو زوّدنا `td` كان هيبان عمود فاضي جنب رسالة «مفيش بيانات».
+      const spanning = tr.querySelector('td[colspan]');
+      if (spanning && tr.cells.length === 1) {
+        spanning.colSpan = (parseInt(spanning.colSpan, 10) || 1) + 1;
+        return;
+      }
+
+      const td = document.createElement('td');
+      td.className = 'act';
+      const url = urlOf(tr);
+
+      if (url) {
+        const a = document.createElement('a');
+        a.className = 'vbtn';
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = T.view;
+        a.setAttribute('aria-label', T.view);
+        // ⚠️ من غير دي الدوسة كانت هتفتح التاب الجديد **و** تنقل
+        // التاب الحالي في نفس اللحظة (الصف لسه `clickable`).
+        a.addEventListener('click', e => e.stopPropagation());
+        a.innerHTML = '<span class="vbtn-i" aria-hidden="true">↗</span>'
+                    + '<span class="vbtn-t"></span>';
+        a.querySelector('.vbtn-t').textContent = T.view;
+        td.appendChild(a);
+      }
+
+      tr.appendChild(td);
+    });
+
+    // صفوف الـtfoot لازم تكبر معاهم وإلا الجدول يتزحلق
+    Array.from(table.tFoot ? table.tFoot.rows : []).forEach(function (tr) {
+      const last = tr.cells[tr.cells.length - 1];
+      const total = Array.from(tr.cells).reduce((n, c) => n + (c.colSpan || 1), 0);
+      if (total < headRow.cells.length && last) {
+        const td = document.createElement('td');
+        td.className = 'act';
+        tr.appendChild(td);
+      }
+    });
+
+    return 1;
+  }
 
   /* عدد صفوف الصفحة في الباجينيشن المحلي */
   const PAGE = 25;
@@ -1071,6 +1182,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const headRow = table.tHead ? table.tHead.rows[0] : table.querySelector('tr');
     if (!headRow || !headRow.querySelector('th')) return;
+
+    // ⚠️ **قبل أي حاجة تانية.** الأدوات تحت بتقرا عدد الأعمدة مرة
+    // واحدة (`cols`)، فزيادة عمود بعد كده بتكسّر صف الإجماليات.
+    addRowViewButtons(table, headRow);
 
     const allRows = () => Array.from(table.querySelectorAll('tr'))
       .filter(r => r !== headRow && r.querySelector('td') && !r.closest('tfoot'));
