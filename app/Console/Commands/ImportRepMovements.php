@@ -599,6 +599,21 @@ class ImportRepMovements extends Command
             return self::FAILURE;
         }
 
+        // ⚠️ **حارس تكرار العهدة نفسها** — رقم الإذن ماكانش كافي:
+        // `auto` بتولّد رقم جديد كل مرة، فتشغيلتين = عهدتين بنفس
+        // البضاعة، ورصيد العربية يتضاعف. البصمة هنا هي **المندوب +
+        // لحظة التحميل بالثانية** — مستحيل عهدتين حقيقيتين لنفس
+        // المندوب في نفس الثانية.
+        $twin = \App\Models\Custody::where('user_id', $rep->id)
+            ->where('created_at', $at)->first();
+
+        if ($twin !== null) {
+            $this->error('  عهدة لنفس المندوب بنفس اللحظة ('.$at->format('Y-m-d H:i')
+                .') موجودة بالفعل — عهدة #'.$twin->id.'. مفيش إدخال مكرر.');
+
+            return self::FAILURE;
+        }
+
         $wh = \App\Models\Warehouse::where('name', $c['warehouse'] ?? '')
             ->orWhere('name_en', $c['warehouse'] ?? '')
             ->orWhere('id', (int) ($c['warehouse'] ?? 0))->first();
