@@ -2178,8 +2178,33 @@ class OpsController extends Controller
             $q->where('status', $status);
         }
 
+        $requests = $q->latest()->paginate(30)->withQueryString();
+
+        // ═══ تشابه مع عملاء موجودين (١٥ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **الشاشة دي آخر فرصة نمسك فيها التكرار.** المندوب ممكن
+        // يكون عدّى حارس الأبلكيشن بـ«متأكد إنه مختلف»، وممكن يكون
+        // العميل الشبيه اتعمل من الويب بعد ما هو بعت طلبه. المعتمِد
+        // لازم يشوف التشابه قبل ما يدوس «اعتماد» — بعدها بيبقى فيه
+        // حسابين لنفس المحل ومحدش يعرف يدمجهم.
+        //
+        // ⚠️ للطلبات المفتوحة بس — المقفولة اتقرر فيها خلاص، وفحصها
+        // بيضيف 30 كويري في الصفحة على معلومة محدش هيتصرف فيها.
+        $dupes = [];
+
+        foreach ($requests as $r) {
+            if ($r->isOpen()) {
+                $dupes[$r->id] = \App\Support\Dupes::matches([
+                    'name' => $r->name,
+                    'phone' => $r->phone,
+                    'zone_id' => $r->zone_id,
+                ], $r->client_id, $request->user());
+            }
+        }
+
         return view('ops.requests', [
-            'requests' => $q->latest()->paginate(30)->withQueryString(),
+            'requests' => $requests,
+            'dupes' => $dupes,
             'zones' => Zone::orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
             'filters' => $request->only('status'),
             // ═══ داتا فورم الاعتماد الغني (١١ أغسطس ٢٠٢٦) ═══
@@ -2210,12 +2235,42 @@ class OpsController extends Controller
             'has_contract' => ['nullable', 'boolean'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],
+            // تجاوز واعٍ لحارس التكرار — تشيك بوكس في المودال
+            'confirm_duplicate' => ['nullable', 'boolean'],
         ]);
 
         // ⚠️ **التوأم في الأبلكيشن بيرجّع 403 والويب كان بيعدّي** —
         // مسار الويب كان مفيهوش حارس خالص، فمدير بيعتمد عميل مندوب
         // مدير تاني. الحارس على المندوب صاحب الطلب.
         Scope::assertRep($request->user(), $clientRequest->rep);
+
+        // ═══ حارس التكرار قبل ما العميل يتخلق (١٥ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **الاعتماد كان بيعمل `Client::create` من غير أي فحص.**
+        // شاشة الـERP بتفحص من ٦ أغسطس، والاستيراد بيفحص — والمسار
+        // ده، اللي بيولّد أغلب العملاء الجداد فعلاً، ماكانش بيفحص.
+        // نفس `Dupes::matches` بتاعة الشاشة والأبلكيشن بالحرف.
+        //
+        // ⚠️ **مش قبل الترانزاكشن بمسافة** — لازم يكون آخر حاجة قبل
+        // ما نكتب. وبيتخطّى لو المعتمِد علّم «متأكد إنه مختلف».
+        if ($data['decision'] === 'approved' && empty($data['confirm_duplicate'])) {
+            $dupes = \App\Support\Dupes::matches([
+                'name' => $clientRequest->name,
+                'phone' => $clientRequest->phone,
+                'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id,
+                'group_id' => $data['group_id'] ?? null,
+            ], $clientRequest->client_id, $request->user());
+
+            if ($dupes !== []) {
+                return back()->withInput()->withErrors([
+                    'decision' => __('ops.dup_blocked', [
+                        'names' => collect($dupes)->take(3)
+                            ->map(fn ($d) => $d['name'].' ('.$d['code'].')')
+                            ->implode(' · '),
+                    ]),
+                ]);
+            }
+        }
 
         DB::transaction(function () use ($data, $clientRequest, $request) {
             $clientRequest->status = $data['decision'];

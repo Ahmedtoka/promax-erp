@@ -293,4 +293,7 @@ return [
     // ═══ Pending replenishment edit (Aug 12, 2026) ═══
     'notif_replenishment_edited_title' => 'Your request :number was edited',
     'notif_replenishment_edited_body' => 'The manager edited the items/quantities of the supply request for :client before assignment.',
+
+    // ═══ Duplicate guard on the new-client request (Aug 15, 2026) ═══
+    'dup_client_found' => ':count client(s) are already registered with this name or phone - review them before you continue.',
 ];

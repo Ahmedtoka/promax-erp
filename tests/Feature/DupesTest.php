@@ -193,4 +193,100 @@ class DupesTest extends TestCase
         $this->assertNotNull($byPhone);
         $this->assertSame('phone', $byPhone['by']);
     }
+
+    // ═══════════════ 4. النسخة الغنية اللي الشاشات بتستخدمها ═══════════════
+
+    /**
+     * `matches()` بترجّع كل الشبيهين مش أول واحد، ومعاهم درجة ثقة.
+     *
+     * ⚠️ الشاشة محتاجة **قايمة** عشان اللي بيسجّل يقارن بنفسه. رد
+     * بواحد بس كان بيخلّيه يشوف الشبيه الغلط ويقول «لأ ده مختلف»
+     * وهو مشافش الشبيه الحقيقي.
+     */
+    public function test_matches_returns_every_similar_client_with_a_confidence(): void
+    {
+        $this->makeClient(['name' => 'المعادي 1', 'phone' => '01284082945']);
+        $this->makeClient(['name' => 'مخبز الشروق', 'phone' => '01000000001']);
+
+        $hits = Dupes::matches(['name' => 'فرع المعادى ١', 'phone' => null]);
+
+        $this->assertCount(1, $hits);
+        $this->assertSame('name', $hits[0]['by']);
+        $this->assertSame(Dupes::SURE, $hits[0]['confidence']);
+        $this->assertTrue(Dupes::hasSure($hits));
+    }
+
+    /**
+     * التليفون المشترك جوّه السلسلة **محتمل** مش مؤكد.
+     *
+     * ⚠️ سلسلة زي Circle K عندها عشرات الفروع كلهم مكتوب عليهم رقم
+     * الإدارة. لو الرقم لوحده «مؤكد»، فلو «فرع جديد بشروط السلسلة»
+     * بيتحرس على كل فرع — واللي بيسجّل بيتعلّم يدوس «كمّل» من غير
+     * ما يقرا، فالحارس يبقى شكل.
+     */
+    public function test_a_shared_head_office_number_inside_one_chain_is_only_likely(): void
+    {
+        $group = \App\Models\ClientGroup::create([
+            'code' => 'GRP-TEST', 'name' => 'سلسلة التيست', 'active' => true,
+        ]);
+
+        $this->makeClient([
+            'name' => 'سلسلة التيست — المعادي',
+            'phone' => '01284082945',
+            'group_id' => $group->id,
+        ]);
+
+        $hits = Dupes::matches([
+            'name' => 'سلسلة التيست — مدينة نصر',
+            'phone' => '01284082945',
+            'group_id' => $group->id,
+        ]);
+
+        $this->assertCount(1, $hits);
+        $this->assertSame('phone', $hits[0]['by']);
+        $this->assertSame(Dupes::LIKELY, $hits[0]['confidence']);
+        $this->assertFalse(Dupes::hasSure($hits));
+    }
+
+    /** العميل الجديد تماماً مالوش أي شبيه */
+    public function test_matches_is_empty_for_a_brand_new_client(): void
+    {
+        $this->makeClient(['name' => 'المعادي 1', 'phone' => '01284082945']);
+
+        $this->assertSame([], Dupes::matches([
+            'name' => 'مخبز الشروق الحديث',
+            'phone' => '01000000002',
+        ]));
+    }
+
+    /**
+     * العميل مش تكرار لنفسه في `matches()` كمان.
+     *
+     * ⚠️ من غير ده، فتح كارت العميل والضغط على «حفظ» من غير أي
+     * تغيير كان هيوري بانل أصفر بيقول إنه تكرار لنفسه.
+     */
+    public function test_matches_never_flags_the_client_being_edited(): void
+    {
+        $client = $this->makeClient(['name' => 'المعادي 1', 'phone' => '01284082945']);
+
+        $this->assertSame([], Dupes::matches(
+            ['name' => 'المعادي 1', 'phone' => '01284082945'],
+            $client->id,
+        ));
+    }
+
+    /**
+     * عمود `dupe_key` بيتملى أوتوماتيك من الموديل.
+     *
+     * ⚠️ هو اللي بيخلّي اللقطة فهرس مش مسح كامل على 10 آلاف عميل.
+     * لو الهوك اتشال، الحارس هيفضل شغّال (فيه مسار احتياطي) بس
+     * هيقرا الجدول كله في كل ضغطة على خانة الاسم.
+     */
+    public function test_the_normalised_keys_are_stored_on_save(): void
+    {
+        $client = $this->makeClient(['name' => 'فرع المعادى ١', 'phone' => '+20 128 408 2945']);
+
+        $this->assertSame(Dupes::nameKey('المعادي 1'), $client->fresh()->dupe_key);
+        $this->assertSame('01284082945', $client->fresh()->dupe_phone);
+    }
 }

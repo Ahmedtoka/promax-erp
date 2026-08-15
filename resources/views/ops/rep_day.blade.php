@@ -186,6 +186,8 @@
                 <th>{{ __('ops.check_in') }}</th>
                 <th>{{ __('ops.check_out') }}</th>
                 <th data-nosum>{{ __('journey.rd_duration') }}</th>
+                {{-- الناتج + الصور (١٥/٨) — الصف كان بيقول «تمت» بس --}}
+                <th data-nosum>{{ __('ops.vb_outcome') }}</th>
                 <th>{{ __('common.status') }}</th>
             </tr>
 
@@ -208,6 +210,15 @@
                         @php $vm = $visitMins($row['visit']); @endphp
                         {{ $vm !== null ? __('journey.dur_min', ['count' => $vm]) : '—' }}
                     </td>
+                    <td style="white-space:normal;max-width:280px">
+                        @if ($row['visit'])
+                            @include('partials._visit_outcome', [
+                                'o' => $visitOut[$row['visit']->id] ?? \App\Support\VisitOutcomes::blank(),
+                            ])
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
                     <td>
                         <span class="badge {{ $statusClass[$row['status']] ?? 'b-gray' }}">
                             {{ __('journey.'.$row['status']) }}
@@ -215,7 +226,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('journey.no_plan_day') }}
                 </td></tr>
             @endforelse
@@ -236,6 +247,7 @@
                 <th>{{ __('ops.check_in') }}</th>
                 <th>{{ __('ops.check_out') }}</th>
                 <th data-nosum>{{ __('journey.rd_duration') }}</th>
+                <th data-nosum>{{ __('ops.vb_outcome') }}</th>
                 <th></th>
             </tr>
             @foreach ($offPlan as $v)
@@ -250,6 +262,11 @@
                     <td class="num s">
                         @php $vm = $visitMins($v); @endphp
                         {{ $vm !== null ? __('journey.dur_min', ['count' => $vm]) : '—' }}
+                    </td>
+                    <td style="white-space:normal;max-width:280px">
+                        @include('partials._visit_outcome', [
+                            'o' => $visitOut[$v->id] ?? \App\Support\VisitOutcomes::blank(),
+                        ])
                     </td>
                     <td><span class="badge b-purple">{{ __('journey.off_plan') }}</span></td>
                 </tr>

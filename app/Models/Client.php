@@ -205,6 +205,28 @@ class Client extends Model
                 $client->sub_channel = null;
             }
         });
+
+        // ═══════════════════════════════════════════════════════
+        // مفاتيح كشف التكرار — مشتقة، بتتكتب هنا وبس (١٥/٨/٢٠٢٦)
+        // ═══════════════════════════════════════════════════════
+        //
+        // ⚠️ **على الموديل مش على الفورم.** العميل بيتعمل من خمس
+        // مسارات (شاشة الـERP، الاستنساخ، طلب الأبلكيشن، الاعتماد،
+        // الاستيراد) — لو المفتاح اتكتب في واحد منهم بس، الأربعة
+        // التانيين بيولّدوا صفوف الحارس مش شايفها.
+        //
+        // ⚠️ **محروس بـ`hasKeyColumns`** — السيرفر اللايف مش ريبو
+        // جيت والمالك بيرفع الملفات بإيده، فممكن الكود يوصل قبل
+        // المايجريشن. من غير الحارس ده أول حفظ عميل بيرمي
+        // «Unknown column 'dupe_key'».
+        static::saving(function (Client $client) {
+            if (! \App\Support\Dupes::hasKeyColumns()) {
+                return;
+            }
+
+            $client->dupe_key = \App\Support\Dupes::nameKey($client->name);
+            $client->dupe_phone = \App\Support\Dupes::phoneKey($client->phone) ?: null;
+        });
     }
 
     // ---------- Relations ----------
@@ -353,6 +375,46 @@ public function zone(): BelongsTo
         $fromGroup = $this->group?->contract;
 
         return $live($fromGroup) ? $fromGroup : null;
+    }
+
+    /**
+     * أي عقد مسجّل للعميل ولو مش سارٍ — بتاعه هو الأول وإلا بتاع سلسلته.
+     *
+     * ⚠️ **غير `liveContract()` تماماً.** دي بترجّع الصف الموجود
+     * مهما كانت حالته؛ دي اللي بتخلّي الشاشة تفرّق بين «العقد خلص»
+     * و«مفيش عقد أصلاً». ممنوع تستخدمها في أي حساب سعر أو خصم —
+     * التسعير `liveContract()` وبس.
+     */
+    public function anyContract(): ?Contract
+    {
+        $this->loadMissing(['contract', 'group.contract']);
+
+        return $this->contract ?? $this->group?->contract;
+    }
+
+    /**
+     * حالة التعاقد للعرض والفلترة.
+     *
+     * ⚠️ **«منتهي» ≠ «بدون عقد»** (بلاغ المالك ١٥/٨). الشاشة كانت
+     * بتقرا `liveContract()` بس، وده بيرجّع `null` للاتنين — فالعميل
+     * اللي عقده خلص إمبارح كان بيبان زي عميل عمره ما تعاقد، والفرصة
+     * الوحيدة إن حد ياخد باله من التجديد بتضيع.
+     *
+     * @return 'live'|'expired'|'inactive'|'none'
+     */
+    public function contractState(): string
+    {
+        if ($this->liveContract() !== null) {
+            return 'live';
+        }
+
+        $any = $this->anyContract();
+
+        if ($any === null) {
+            return 'none';
+        }
+
+        return $any->isExpired() ? 'expired' : 'inactive';
     }
 
     /**

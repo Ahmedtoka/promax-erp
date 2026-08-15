@@ -75,6 +75,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/clients', [ErpController::class, 'storeClient'])
             ->middleware('role:admin,manager,branch_manager')->name('clients.store');
 
+        // ⚠️ **قبل `/clients/{client}`** — لارافيل بيطابق بالترتيب،
+        // وإلا هيدوّر على عميل كوده «check-duplicate».
+        // فحص حي أثناء الكتابة في فورم العميل — بيرجّع JSON بس،
+        // من غير ما الصفحة تتحرك (نفس نمط `zones/quick`).
+        Route::post('/clients/check-duplicate', [ErpController::class, 'checkDuplicate'])
+            ->middleware('role:admin,manager,branch_manager')->name('clients.dupes');
+
         // ═══ تفعيل العملاء المستوردين ═══
         // ⚠️ **قبل `/clients/{client}`.** لو `{client}` اتعرّف الأول،
         // لارافيل هيحاول يلاقي عميل كوده «activate» ويرمي 404.
@@ -624,6 +631,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // لحد بعينه من شاشة الصلاحيات — EnsureRole بيحترم المنح).
         Route::post('/reps/{user}/custody/adjust', [OpsController::class, 'adjustCustody'])
             ->middleware('role:admin')->name('rep.adjust');
+
+        // ═══ الزيارات — اللي حصل فعلاً في الشارع (١٥ أغسطس ٢٠٢٦) ═══
+        // ⚠️ **الراوت الثابت قبل أي بارامتري** تحت `ops/` — و`/visits`
+        // مش متعارضة مع `/open-visits`. الرولز نفس «الزيارات المفتوحة»
+        // بالظبط: أدمن ومدير (فريقه من `fieldVisibleTo` جوه الكنترولر).
+        // المحاسب **مستبعد عن قصد** — دي متابعة أداء ميداني مش فلوس،
+        // وأرقام فلوس الميدان ليها `ops.sales` و`erp.collections`.
+        Route::get('/visits', [\App\Http\Controllers\VisitBoardController::class, 'index'])
+            ->middleware('role:admin,manager')->name('visits');
 
         // ═══ الزيارات المفتوحة + الإخراج الإداري (١١ أغسطس ٢٠٢٦) ═══
         Route::get('/open-visits', [OpsController::class, 'openVisits'])

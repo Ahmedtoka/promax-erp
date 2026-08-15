@@ -41,13 +41,38 @@
                         'lng' => $r->lng,
                         // القناة المبدئية من قناة المندوب صاحب الطلب
                         'channel' => $r->rep?->channel_id,
+                        // التشابه بيتعرض جوه المودال كمان — المعتمِد
+                        // بيقرر من هناك، ولازم التحذير يكون قدام عينه
+                        // في نفس اللحظة مش في صف الجدول ورا المودال.
+                        'dupes' => array_map(fn ($d) => [
+                            'name' => $d['name'],
+                            'code' => $d['code'],
+                            'by' => $d['by_label'],
+                            'conf' => $d['confidence_label'],
+                            'sure' => $d['confidence'] === 'sure',
+                        ], $dupes[$r->id] ?? []),
                     ],
                     JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
                 ); @endphp
                 <tr>
                     <td class="num">{{ $r->number }}<br><span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d h:i A') }}</span></td>
-                    <td><b>{{ $r->name }}</b>
+                    <td style="white-space:normal;max-width:260px"><b>{{ $r->name }}</b>
                         @if ($r->client)<br><a style="font-size:11px;color:var(--blue)" href="{{ route('erp.clients.show', $r->client) }}">{{ __('client.client_card') }} ←</a>@endif
+                        {{-- ⚠️ **التشابه بيتعرض هنا مش في عمود لوحده**
+                             (١٥ أغسطس ٢٠٢٦): المعتمِد بيقرا الاسم وبيقرر،
+                             فالتحذير لازم يكون **تحت الاسم** مش في آخر
+                             الجدول اللي محتاج سكرول أفقي عشان يشوفه. --}}
+                        @foreach ($dupes[$r->id] ?? [] as $d)
+                            <br><span style="font-size:10.5px;color:{{ $d['confidence'] === 'sure' ? 'var(--red)' : 'var(--orange)' }}">
+                                ⚠️ {{ __('ops.dup_similar_to') }}
+                                @if (! empty($d['url']))
+                                    <a href="{{ $d['url'] }}" target="_blank" rel="noopener" style="color:inherit;font-weight:800">{{ $d['name'] }}</a>
+                                @else
+                                    <b>{{ $d['name'] }}</b>
+                                @endif
+                                ({{ $d['code'] }}) · {{ $d['by_label'] }} · {{ $d['confidence_label'] }}
+                            </span>
+                        @endforeach
                     </td>
                     <td>{{ $r->rep->displayName() }}</td>
                     <td style="color:var(--muted)">{{ $r->zone?->displayName() ?? '—' }}</td>
@@ -209,6 +234,22 @@
                 </div>
             </div>
             <div style="font-size:11px;color:var(--muted);margin:-4px 0 4px">{{ __('ops.contract_finish_hint') }}</div>
+
+            {{-- ⚠️ **تجاوز واعٍ لحارس التكرار.** السيرفر بيرفض الاعتماد
+                 لو فيه عميل شبيه إلا لو دي متعلّمة — الرفض القاطع كان
+                 هيقفل فروع حقيقية بنفس الاسم ونفس رقم الإدارة. --}}
+            <div id="dDupeBox" style="display:none;margin:8px 0 4px">
+                <div class="alert warn" style="align-items:flex-start">
+                    <span>⚠️</span>
+                    <div style="flex:1">
+                        <div id="dDupeList" style="font-size:11.5px"></div>
+                        <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px;font-weight:800;cursor:pointer">
+                            <input type="checkbox" name="confirm_duplicate" value="1" id="dDupeConfirm">
+                            {{ __('client.dup_confirm_label') }}
+                        </label>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div><label class="f">{{ __('ops.note_to_rep') }}</label><input type="text" name="note" placeholder="{{ __('common.optional') }}" style="width:100%"></div>
@@ -235,6 +276,7 @@
         'fAddr' => __('geo.address'),
         'fGov' => __('geo.governorate'),
         'fZone' => __('geo.zone'),
+        'dupSimilar' => __('ops.dup_similar_to'),
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 @endphp
 <script>
@@ -257,6 +299,8 @@ function decide(r) {
     document.querySelector('#formDecide input[name="discount"]').value = '0';
     document.getElementById('dGeoMsg').textContent = '';
 
+    renderRequestDupes(r.dupes || []);
+
     CUR = { lat: r.lat != null ? r.lat : null, lng: r.lng != null ? r.lng : null };
     updateCaptured();
     syncSubChannel();
@@ -268,6 +312,31 @@ function decide(r) {
 function toggleFields() {
     const approved = document.getElementById('dDecision').value === 'approved';
     document.getElementById('approveFields').style.display = approved ? '' : 'none';
+}
+
+/* ⚠️ **التشيك بوكس بيتفك مع كل فتحة للمودال.** المودال واحد لكل
+   الطلبات — لو فضل متعلّم من طلب فات، الطلب اللي بعده كان بيعدّي
+   حارس التكرار من غير ما حد يقرأه. */
+function renderRequestDupes(list) {
+    const box = document.getElementById('dDupeBox');
+    const out = document.getElementById('dDupeList');
+    const cb = document.getElementById('dDupeConfirm');
+    if (!box || !out) return;
+
+    if (cb) cb.checked = false;
+    out.textContent = '';
+
+    if (!list.length) { box.style.display = 'none'; return; }
+
+    list.forEach(function (d) {
+        const line = document.createElement('div');
+        line.style.color = d.sure ? 'var(--red)' : 'var(--orange)';
+        line.style.fontWeight = '700';
+        line.textContent = '⚠️ ' + DEC.dupSimilar + ' ' + d.name + ' (' + d.code + ') · ' + d.by + ' · ' + d.conf;
+        out.appendChild(line);
+    });
+
+    box.style.display = '';
 }
 
 // النقطة موجودة؟ نوري لينك الخريطة ونفعّل زرار الكشف — وإلا نعطّله

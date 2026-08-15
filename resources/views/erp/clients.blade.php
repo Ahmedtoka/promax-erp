@@ -57,6 +57,26 @@
         <div class="val pos">{{ $fmt($kpi['credit_sum']) }}</div>
         <div class="sub2">{{ __('client.client_countable', ['count' => $kpi['credit_n']]) }}</div>
     </div>
+    {{-- الحالة التجارية بضغطة (١٥ أغسطس ٢٠٢٦): مين متعاقد، مين واخد
+         خصم، ومين مالوش مدير حساب — تلاتتهم كانوا مدفونين في الأعمدة --}}
+    <a class="kpi" style="text-decoration:none;color:inherit;{{ ($filters['contract'] ?? '') === 'yes' ? 'outline:2px solid var(--royal-blue)' : '' }}"
+       href="{{ route('erp.clients', ['contract' => ($filters['contract'] ?? '') === 'yes' ? null : 'yes']) }}">
+        <div class="lbl">📄 {{ __('client.kpi_live_contract') }}</div>
+        <div class="val">{{ $fmt($kpi['live_contract']) }}</div>
+        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+    </a>
+    <a class="kpi" style="text-decoration:none;color:inherit;{{ ($filters['disc'] ?? '') === 'yes' ? 'outline:2px solid var(--royal-blue)' : '' }}"
+       href="{{ route('erp.clients', ['disc' => ($filters['disc'] ?? '') === 'yes' ? null : 'yes']) }}">
+        <div class="lbl">🏷️ {{ __('client.kpi_discounted') }}</div>
+        <div class="val">{{ $fmt($kpi['discounted']) }}</div>
+        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+    </a>
+    <a class="kpi" style="text-decoration:none;color:inherit;{{ ($filters['manager'] ?? '') === 'none' ? 'outline:2px solid var(--royal-blue)' : '' }}"
+       href="{{ route('erp.clients', ['manager' => ($filters['manager'] ?? '') === 'none' ? null : 'none']) }}">
+        <div class="lbl">🙍 {{ __('client.kpi_no_manager') }}</div>
+        <div class="val {{ $kpi['no_manager'] > 0 ? 'mid' : '' }}">{{ $fmt($kpi['no_manager']) }}</div>
+        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+    </a>
 </div>
 
 <div class="card">
@@ -103,10 +123,31 @@
             'selected' => $filters['zone'] ?? null,
             'placeholder' => __('client.all_zones'),
         ])
-        <select name="contract" style="min-width:110px">
+        {{-- ⚠️ «منتهي» أوبشن مستقل — قبل كده كان مندمج في «بدون عقد»
+             فالعميل اللي محتاج تجديد بيضيع وسط اللي عمرهم ما تعاقدوا --}}
+        <select name="contract" style="min-width:120px">
             <option value="">{{ __('client.contracts_all') }}</option>
-            <option value="yes" @selected(($filters['contract'] ?? '') === 'yes')>{{ __('client.with_contract') }}</option>
+            <option value="yes" @selected(($filters['contract'] ?? '') === 'yes')>{{ __('client.contract_active') }}</option>
+            <option value="expired" @selected(($filters['contract'] ?? '') === 'expired')>{{ __('client.contract_expired') }}</option>
             <option value="no" @selected(($filters['contract'] ?? '') === 'no')>{{ __('client.without_contract') }}</option>
+        </select>
+        <select name="disc" style="min-width:130px">
+            <option value="">{{ __('client.discount_all') }}</option>
+            <option value="yes" @selected(($filters['disc'] ?? '') === 'yes')>{{ __('client.discount_has') }}</option>
+            <option value="no" @selected(($filters['disc'] ?? '') === 'no')>{{ __('client.discount_none') }}</option>
+            <option value="custom" @selected(($filters['disc'] ?? '') === 'custom')>{{ __('client.discount_custom_only') }}</option>
+        </select>
+        {{-- ⚠️ المدير بيشوف نفسه بس في القايمة دي — الكنترولر بيبنيها --}}
+        <select name="manager" style="min-width:150px">
+            <option value="">{{ __('client.managers_all') }}</option>
+            <option value="none" @selected(($filters['manager'] ?? '') === 'none')>{{ __('client.no_manager') }}</option>
+            @foreach ($managerOptions as $m)
+                <option value="{{ $m->id }}" @selected(($filters['manager'] ?? '') === (string) $m->id)>{{ $m->displayName() }}</option>
+            @endforeach
+        </select>
+        <select name="flag" style="min-width:130px">
+            <option value="">{{ __('client.assignment_all') }}</option>
+            <option value="norep" @selected(($filters['flag'] ?? '') === 'norep')>{{ __('client.no_rep') }}</option>
         </select>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.clients') }}">{{ __('common.clear') }}</a>
@@ -119,13 +160,20 @@
             {{-- سورت من السيرفر (2026-08-06): العمود لينك بيحافظ على كل
                  الفلاتر، وأول ضغطة على الأرقام تنازلي وبعدين بتتقلب --}}
             @php
+                // ⚠️⚠️ **العمود الفاضي جنب الخصم** (بلاغ المالك ١٥/٨/٢٠٢٦):
+                // العمود المرتَّب حالياً كان بياخد `color:var(--primary)`،
+                // وترويسة الجدول نفسها `background:var(--primary)` (قرار
+                // ٨/٨) — يعني **أزرق ملكي على أزرق ملكي**. والافتراضي
+                // `sort=purchases`، فعمود «المشتريات» كان بيبان **فاضي
+                // خالص** على كل فتحة للصفحة، هو والسهم.
+                // الأصفر هو لون الـactive على الغامق في دليل الهوية.
                 $thSort = function ($key, $label, $numericDefault = true) use ($sort, $dir) {
                     $active = $sort === $key;
                     $nextDir = $active ? ($dir === 'desc' ? 'asc' : 'desc') : ($numericDefault ? 'desc' : 'asc');
                     $url = request()->fullUrlWithQuery(['sort' => $key, 'dir' => $nextDir, 'page' => null]);
                     $arrow = $active ? ($dir === 'desc' ? ' ▼' : ' ▲') : '';
 
-                    return '<a href="'.$url.'" style="color:'.($active ? 'var(--primary)' : 'inherit').';text-decoration:none;white-space:nowrap">'
+                    return '<a href="'.$url.'" style="color:'.($active ? '#FFF927' : 'inherit').';text-decoration:none;white-space:nowrap">'
                         .e($label).$arrow.'</a>';
                 };
             @endphp
@@ -134,9 +182,12 @@
                 <th>{!! $thSort('name', __('client.client'), false) !!}</th>
                 <th>{!! $thSort('status', __('common.status'), false) !!}</th>
                 <th>{{ __('client.channel') }}</th><th>{{ __('client.zone') }}</th>
+                {{-- ⚠️ `data-nosum` — العمود ده صور وأسماء، ومجموعه
+                     في فوتر الجدول العام مالوش أي معنى --}}
+                <th data-nosum>{{ __('client.channel_manager') }}</th>
                 <th>{!! $thSort('category', __('client.category'), false) !!}</th>
                 <th>{{ __('client.price_list') }}</th><th>{{ __('client.contract') }}</th>
-                <th class="num">{!! $thSort('discount', __('client.discount')) !!}</th>
+                <th class="num" data-nosum>{!! $thSort('discount', __('client.discount')) !!}</th>
                 <th class="num">{!! $thSort('purchases', __('client.purchases')) !!}</th>
                 <th class="num">{!! $thSort('collections', __('client.collected')) !!}</th>
                 <th class="num">{!! $thSort('returns', __('client.returns')) !!}</th>
@@ -168,24 +219,59 @@
                         @else — @endif
                     </td>
                     <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>
+                    {{-- مدير القناة — المسؤول التجاري عن الحساب، غير
+                         المندوب اللي بيتغيّر مع خط السير --}}
+                    <td>
+                        @if ($c->manager)
+                            <span style="display:inline-flex;align-items:center;gap:6px">
+                                @include('partials._avatar', ['u' => $c->manager, 'size' => 24])
+                                <span style="font-size:12px">{{ $c->manager->displayName() }}</span>
+                            </span>
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
                     <td><span class="badge {{ $c->categoryClass() }}">{{ $c->categoryLabel() }}</span></td>
                     <td>
                         <span class="badge {{ $c->priceList() === 'new' ? 'b-blue' : 'b-gray' }}">{{ $c->priceListLabel() }}</span>
                     </td>
+                    {{-- ⚠️ **«منتهي» ≠ «بدون عقد»** (بلاغ المالك ١٥/٨).
+                         `liveContract()` بترجّع null للاتنين، فالعميل
+                         اللي عقده خلص كان بيبان زي اللي عمره ما تعاقد
+                         ومحدش بياخد باله من التجديد. `contractState()`
+                         بتفرّق، و`anyContract()` بتجيب الصف المنتهي. --}}
                     <td>
-                        @php $ct = $c->liveContract(); @endphp
-                        @if ($ct)
+                        @php
+                            $state = $c->contractState();
+                            $ct = $state === 'live' ? $c->liveContract() : $c->anyContract();
+                        @endphp
+                        @if ($state === 'live')
                             <span class="badge {{ $ct->statusClass() }}">{{ $ct->statusLabel() }}</span>
                             <br><span style="font-size:10px;color:var(--muted)">
-                                {{ $ct->number }}@if ($ct->group_id) · {{ __('client.from_chain') }}@endif
+                                {{ $ct->number }}@if ($ct->ends_at) · {{ $ct->ends_at->format('Y-m-d') }}@endif@if ($ct->group_id) · {{ __('client.from_chain') }}@endif
                             </span>
+                        @elseif ($state === 'expired')
+                            <span class="badge b-red">{{ __('client.contract_expired') }}</span>
+                            <br><span style="font-size:10px;color:var(--muted)">
+                                {{ $ct->number }}@if ($ct->ends_at) · {{ $ct->ends_at->format('Y-m-d') }}@endif
+                            </span>
+                        @elseif ($state === 'inactive')
+                            <span class="badge b-orange">{{ __('client.contract_inactive') }}</span>
+                            <br><span style="font-size:10px;color:var(--muted)">{{ $ct->number }}</span>
                         @else
                             <span class="badge b-gray">{{ __('client.no_contract') }}</span>
                         @endif
                     </td>
-                    <td class="num">
+                    {{-- الخصم = النسبة + **مصدرها**. الاتنين من
+                         `effectiveDiscount()`/`discountSource()` — ممنوع
+                         أي حساب هنا (دوكترين التسعير). --}}
+                    <td class="num" data-nosum>
+                        @php
+                            $src = $c->discountSourceKey();
+                            $srcClass = ['contract' => 'b-purple', 'custom_discount' => 'b-blue'][$src] ?? 'b-gray';
+                        @endphp
                         <b>{{ number_format($c->effectiveDiscount() * 100, 1) }}%</b>
-                        <br><span style="font-size:10px;color:var(--muted)">{{ $c->discountSource() }}</span>
+                        <br><span class="badge {{ $srcClass }}" style="font-size:9.5px">{{ $c->discountSource() }}</span>
                     </td>
                     <td class="num">{{ $fmt($c->purchases) }}</td>
                     <td class="num pos">{{ $fmt($c->collections) }}</td>
@@ -203,7 +289,8 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 15 : 14 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('client.no_clients') }}</td></tr>
+                {{-- ⚠️ زوّدت عمود؟ حدّث الرقمين دول (١٥/٨: +مدير القناة) --}}
+                <tr><td colspan="{{ $manager ? 16 : 15 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('client.no_clients') }}</td></tr>
             @endforelse
             </tbody>
         </table>

@@ -405,6 +405,84 @@
 
 <div class="card"><h3>{{ __('client.monthly_movement') }}</h3><div class="chartbox"><canvas id="chM"></canvas></div></div>
 
+{{-- ═══════════ آخر الزيارات (١٥ أغسطس ٢٠٢٦) ═══════════
+     بلاغ المالك: «مش شايف الزيارات اللي اتعملت، ولا صور الرف».
+     كارت العميل بيقول دلوقتي: مين جه، امتى، قعد قد إيه، وطلع من
+     الزيارة إيه — والصور بتفتح بالحجم الكامل في تاب. --}}
+@if ($visits->isNotEmpty())
+<div class="card">
+    <h3>🚪 {{ __('ops.vb_recent') }}
+        <span class="side">{{ __('ops.vb_recent_hint', ['count' => $visits->count()]) }}</span>
+        @if (\App\Support\Access::allows(auth()->user(), 'ops.visits'))
+            <a class="btn sm" style="float:inline-end"
+               href="{{ route('ops.visits', ['q' => $c->code]) }}">{{ __('ops.vb_see_all') }}</a>
+        @endif
+    </h3>
+
+    <div class="tablewrap">
+        <table>
+            <thead><tr>
+                <th>{{ __('common.date') }}</th>
+                <th>{{ __('ops.rep') }}</th>
+                <th data-nosum>{{ __('ops.vb_duration') }}</th>
+                <th data-nosum>{{ __('ops.vb_outcome') }}</th>
+                <th data-nosum>{{ __('field.shelf_photos') }}</th>
+            </tr></thead>
+            <tbody>
+            @foreach ($visits as $v)
+                @php $vo = $visitOut[$v->id] ?? \App\Support\VisitOutcomes::blank(); @endphp
+                <tr>
+                    <td class="num s" dir="ltr">
+                        {{ $v->checked_in_at?->copy()->timezone('Africa/Cairo')->format('Y-m-d h:i A') ?? '—' }}
+                    </td>
+                    <td>{{ $v->user?->displayName() ?? '—' }}</td>
+                    <td class="num s">
+                        {{ $v->minutes() !== null ? __('ops.minutes', ['count' => $v->minutes()]) : __('ops.in_progress') }}
+                    </td>
+                    <td style="white-space:normal">
+                        @foreach ($vo['invoices'] as $iv)
+                            <a class="badge b-green" style="text-decoration:none"
+                               href="{{ route('ops.invoice', $iv->id) }}">🧾 {{ $iv->number }} · {{ number_format((float) $iv->grand_total, 2) }}</a>
+                        @endforeach
+                        @if ($vo['coll_count'] > 0)
+                            <span class="badge b-blue">💵 {{ number_format($vo['coll_total'], 2) }}</span>
+                        @endif
+                        @if ($vo['ret_count'] > 0)
+                            <span class="badge b-red">↩️ {{ number_format($vo['ret_total'], 2) }}</span>
+                        @endif
+                        @if ($vo['gift_count'] > 0)
+                            <span class="badge b-gold">🎁 {{ $vo['gift_qty'] }}</span>
+                        @endif
+                        @if ($vo['goods_count'] > 0)
+                            <span class="badge b-orange">📦 {{ $vo['goods_count'] }}</span>
+                        @endif
+                        @if (! $vo['any'])
+                            <span class="badge b-gray">{{ __('ops.vb_nothing') }}</span>
+                        @endif
+                    </td>
+                    <td style="white-space:normal;min-width:150px">
+                        @if ($vo['photo_count'] === 0)
+                            <span style="color:var(--muted)">—</span>
+                        @else
+                            <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                @foreach ($vo['photos'] as $p)
+                                    <a href="{{ $p->url() }}" target="_blank" rel="noopener"
+                                       title="{{ $p->stage === 'before' ? __('field.shelf_before') : __('field.shelf_after') }}">
+                                        <img src="{{ $p->url() }}" alt="" loading="lazy"
+                                             style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:2px solid {{ $p->stage === 'before' ? 'var(--orange)' : 'var(--green)' }}">
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+@endif
+
 @if ($c->invoices->isNotEmpty())
 <div class="card">
     <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>

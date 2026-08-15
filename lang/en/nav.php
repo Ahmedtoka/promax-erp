@@ -85,6 +85,9 @@ return [
     'vans_board' => 'Van Stock Board',
     'open_visits' => 'Open Visits',
 
+    // ═══ Visits board (Aug 15, 2026) ═══
+    'visits' => 'Visits',
+
     // ═══ بوردات المناديب الجديدة (2026-08-12) ═══
     'rep_sales' => 'Rep Sales',
     'rep_board' => 'Rep Board',

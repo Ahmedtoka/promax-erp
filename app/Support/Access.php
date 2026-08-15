@@ -326,8 +326,13 @@ class Access
 
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══
         'nav.group_field' => [
+            // ⚠️ **«الزيارات» جنب «الزيارات المفتوحة» عن قصد** (١٥/٨):
+            // دي اللي حصلت، ودي اللي لسه مفتوحة — والمالك بيدور
+            // عليهم في نفس اللحظة. النمط بالظبط `ops.visits` عشان
+            // `ops.open_visits` ماينوّرش الاتنين مع بعض.
+            ['ops.visits', '🚪', 'nav.visits', 'ops.visits', null],
             // مين عامل «إن» فين دلوقتي + الإخراج الإداري (١١/٨)
-            ['ops.open_visits', '🚪', 'nav.open_visits', 'ops.open_visits', null],
+            ['ops.open_visits', '🔓', 'nav.open_visits', 'ops.open_visits', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
             ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
             // الخريطة الجغرافية وخط السير (١٣/٨) — المحافظة ← المنطقة

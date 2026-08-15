@@ -589,4 +589,38 @@ return [
 
     // ═══ New branch on chain terms (Aug 12, 2026) ═══
     'new_branch_like_chain' => 'Branch on the chain terms',
+
+    // ═══ Clients screen: channel manager & commercial state (Aug 15, 2026) ═══
+    'channel_manager' => 'Channel Manager',
+    'managers_all' => 'All managers',
+    'no_manager' => 'No channel manager',
+    'no_rep' => 'No primary rep',
+    'assignment_all' => 'Assignment: all',
+    'discount_all' => 'Discount: all',
+    'discount_has' => 'Has a discount',
+    'discount_none' => 'No discount',
+    'discount_custom_only' => 'Custom discount only',
+    'kpi_live_contract' => 'Clients on a live contract',
+    'kpi_discounted' => 'Clients with a discount',
+    'kpi_no_manager' => 'Without a channel manager',
+
+    // ═══ Duplicate guard (Aug 15, 2026) ═══
+    'dup_blocked' => 'We found :count client(s) that look like the one you are adding. Review them below — if it really is a different place, tick "different client" and continue.',
+    'dup_panel_title' => 'Similar clients already exist',
+    'dup_panel_hint' => "A duplicate client means two accounts for one shop: the rep sells on one and accounting collects on the other, and the real balance lives nowhere.",
+    'dup_confirm_label' => "I am sure it is a different client — continue",
+    'dup_checking' => 'Checking whether this client already exists…',
+    'dup_none' => 'No client is registered with this name or number.',
+    'dup_check_failed' => 'Could not run the duplicate check right now — saving will still check.',
+    'dup_other_team' => 'Client registered to another team',
+    'dup_last_activity' => 'Last activity',
+    'dup_no_activity' => 'No activity',
+    'dup_open_card' => 'Open card',
+    'dup_by_phone' => 'Same phone',
+    'dup_by_name' => 'Same Arabic name',
+    'dup_by_name_en' => 'Same English name',
+    'dup_by_near_chain' => 'Close name inside the same chain',
+    'dup_by_near_zone' => 'Close name in the same zone',
+    'dup_conf_sure' => 'Confirmed',
+    'dup_conf_likely' => 'Possible',
 ];

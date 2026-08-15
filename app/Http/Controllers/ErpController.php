@@ -153,8 +153,10 @@ class ErpController extends Controller
         // contract و group لازم eager — effectiveDiscount() بتنادي عليهم لكل صف
         // ⚠️ وسكوب الفرع: مدير المعادي بيشوف عملاء المعادي والمركزي بس
         // ⚠️ وسكوب التشانل مانجر: عملاءه المسكّنين له بس (2026-08-05)
+        // ⚠️ **`manager` eager** (١٥ أغسطس ٢٠٢٦) — عمود «مدير القناة»
+        // بيقرا العلاقة لكل صف، ومن غيرها 40 صف = 40 كويري زيادة.
         $q = Client::visibleTo(\App\Models\Branch::scope(
-            Client::query()->with(['zone', 'contract', 'group.contract']),
+            Client::query()->with(['zone', 'contract', 'group.contract', 'manager']),
         ));
 
         // ⚠️ **الافتراضي الكل مش الشغّال بس.** بعد استيراد الـ455،
@@ -193,12 +195,68 @@ class ErpController extends Controller
         $hasAny = fn ($q) => $q->where(fn ($w) => $w
             ->whereHas('contract', $liveContract)
             ->orWhereHas('group.contract', $liveContract));
+        $noLive = fn ($q) => $q->whereDoesntHave('contract', $liveContract)
+            ->whereDoesntHave('group.contract', $liveContract);
 
-        if ($request->string('contract')->value() === 'yes') {
+        // ═══ حالة التعاقد التلاتة (بلاغ المالك ١٥/٨) ═══
+        //
+        // ⚠️ **«منتهي» كان مندمج في «بدون عقد».** الفلتر القديم كان
+        // `yes` / `no` بس، و`no` بترجّع اللي عقده خلص مع اللي عمره
+        // ما تعاقد — فالعميل اللي محتاج تجديد بيضيع وسط 400 عميل
+        // مالهمش عقد أصلاً. `expired` = مفيش عقد سارٍ **ومع ذلك فيه
+        // صف عقد**، و`no` = مفيش صف عقد خالص.
+        $contractFilter = $request->string('contract')->value();
+
+        if ($contractFilter === 'yes') {
             $hasAny($q);
-        } elseif ($request->string('contract')->value() === 'no') {
-            $q->whereDoesntHave('contract', $liveContract)
-                ->whereDoesntHave('group.contract', $liveContract);
+        } elseif ($contractFilter === 'expired') {
+            $noLive($q)->where(fn ($w) => $w
+                ->whereHas('contract')
+                ->orWhereHas('group.contract'));
+        } elseif ($contractFilter === 'no') {
+            $q->whereDoesntHave('contract')->whereDoesntHave('group.contract');
+        }
+
+        // ═══ الخصم ومصدره ═══
+        //
+        // ⚠️ **نفس ترتيب `Client::effectiveDiscount()` بالحرف**: العقد
+        // السارٍ الأول وبعده الخصم الخاص. لو الفلتر حكم بترتيب تاني،
+        // الشاشة بتوري عميل في نتيجة «بدون خصم» والعمود جنبه بيقول 50%.
+        $contractDisc = fn ($c) => $liveContract($c)->where('discount', '>', 0);
+        $noContractDisc = fn ($q) => $q->whereDoesntHave('contract', $contractDisc)
+            ->whereDoesntHave('group.contract', $contractDisc);
+        $discFilter = $request->string('disc')->value();
+
+        if ($discFilter === 'yes') {
+            $q->where(fn ($w) => $w->where('discount', '>', 0)
+                ->orWhereHas('contract', $contractDisc)
+                ->orWhereHas('group.contract', $contractDisc));
+        } elseif ($discFilter === 'no') {
+            $noContractDisc($q)->where(fn ($w) => $w
+                ->whereNull('discount')->orWhere('discount', '<=', 0));
+        } elseif ($discFilter === 'custom') {
+            // خصم خاص فقط = مكتوب على العميل ومفيش عقد سارٍ بيغطيه
+            $noContractDisc($q)->where('discount', '>', 0);
+        }
+
+        // ═══ مدير القناة (١٥ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **مالوش لازمة يتحرس هنا** — `Client::visibleTo` فوق أصلاً
+        // بتقفل المدير على `manager_id` بتاعه، فأي قيمة تانية بترجّع
+        // صفر صفوف. الحارس الحقيقي هناك مش في الفلتر.
+        $managerFilter = $request->string('manager')->value();
+
+        if ($managerFilter === 'none') {
+            $q->whereNull('manager_id');
+        } elseif (ctype_digit($managerFilter)) {
+            $q->where('manager_id', (int) $managerFilter);
+        }
+
+        // ⚠️ «بدون مندوب أساسي» غير «بدون مدير قناة»: المندوب بيتغيّر
+        // مع خط السير، والمدير هو المسؤول التجاري. عميل من غير مندوب
+        // مافيش حد بيزوره، وعميل من غير مدير مافيش حد بيتحاسب عليه.
+        if ($request->string('flag')->value() === 'norep') {
+            $q->whereNull('rep_id');
         }
 
         // ═══ KPIs بمعنى (قرار المالك 2026-08-05): بدل كروت التصنيف
@@ -228,6 +286,17 @@ class ErpController extends Controller
             ->selectRaw('channel_id, COUNT(*) as n')
             ->groupBy('channel_id')->pluck('n', 'channel_id')->all();
 
+        // ═══ كروت الحالة التجارية (١٥ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **نفس نطاق باقي الكروت** (`$scoped()` من غير فلاتر الشاشة)
+        // — الدوكترين بتقول صف الـKPIs مايخلطش نطاقين. الكارت لينك
+        // بيحط الفلتر، فاللي عايز الرقم المفلتر بيدوس عليه.
+        $liveContractN = $hasAny($scoped())->count();
+        $discountedN = $scoped()->where(fn ($w) => $w->where('discount', '>', 0)
+            ->orWhereHas('contract', $contractDisc)
+            ->orWhereHas('group.contract', $contractDisc))->count();
+        $noManagerN = $scoped()->whereNull('manager_id')->count();
+
         return view('erp.clients', [
             // ⚠️ فورم الإضافة اتنقل لصفحة مستقلة (`erp.clients.new`)،
             // فالقايمة دي مابقتش محتاجة الفروع والسلاسل والمناديب.
@@ -247,14 +316,28 @@ class ErpController extends Controller
                 'debt_sum' => (float) $debt->s,
                 'credit_n' => (int) $credit->n,
                 'credit_sum' => abs((float) $credit->s),
+                'live_contract' => $liveContractN,
+                'discounted' => $discountedN,
+                'no_manager' => $noManagerN,
             ],
+            // ⚠️ **المدير بيشوف نفسه بس.** القايمة دي بتتعرض في فلتر،
+            // وعرض أسماء مديرين تانيين لمدير معناه كشف هيكل فريق مش
+            // بتاعه — حتى لو الفلترة نفسها مش هترجّعله صفوفهم.
+            'managerOptions' => $request->user()?->role === 'manager'
+                ? User::whereKey($request->user()->id)->get()
+                : \App\Models\Branch::scope(User::query(), $request->user())
+                    ->whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
+                    ->where('active', true)->orderBy('name')->get(),
             'zones' => Zone::orderBy('code')->get(),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'catCounts' => Client::visibleTo(Client::query())->selectRaw('category, COUNT(*) as n')
                 ->groupBy('category')->pluck('n', 'category')->all(),
             'channelCounts' => Client::visibleTo(Client::query())->selectRaw('channel_id, COUNT(*) as n')
                 ->groupBy('channel_id')->pluck('n', 'channel_id')->all(),
-            'filters' => $request->only(['q', 'cat', 'zone', 'gov', 'contract', 'channel', 'sub', 'status']),
+            // ⚠️ أي مفتاح جديد هنا لازم يكون له `<select>` في الفيو —
+            // فلتر بيتقرا ومالوش خانة معناه رابط شغّال ومحدش يعرف يلغيه.
+            'filters' => $request->only(['q', 'cat', 'zone', 'gov', 'contract', 'channel',
+                'sub', 'status', 'manager', 'disc', 'flag']),
             // ⚠️ بنفس سكوب الفرع بتاع القايمة — عداد بيقول 455 وقايمة
             // بتوري 80 بيخلّي مدير الفرع يفتكر في حاجة مخفية عنه.
             'statusCounts' => Client::visibleTo(\App\Models\Branch::scope(Client::query()))
@@ -528,15 +611,26 @@ class ErpController extends Controller
         // ⚠️ ونفس الكلام لسكوب التشانل مانجر — عملاءه بس (2026-08-05)
         abort_unless($client->visibleBy($request->user()), 403);
 
+        // ⚠️ **`visits.user` اتشالت من التحميل المسبق (١٥ أغسطس ٢٠٢٦)**
+        // — كانت بتحمّل **كل** زيارات العميل من أول يوم والفيو
+        // مابيستخدمهاش أصلاً. كارت «آخر الزيارات» تحت بياخد آخر ١٠ بس.
         $client->load([
             'zone', 'channel', 'rep',
             'contract.contractClauses', 'group.contract.contractClauses',
-            'invoices.items.product', 'invoices.items.batch', 'visits.user',
+            'invoices.items.product', 'invoices.items.batch',
         ]);
 
         // ⚠️ العقد الفعّال ممكن يكون موروث من السلسلة — بنحسبه هنا مرة واحدة
         // بدل ما الفيو ينادي liveContract() في كل سطر.
         $contract = $client->liveContract();
+
+        // آخر ١٠ زيارات على العميل ده — أي مندوب، بأحدث تشيك إن
+        $recentVisits = \App\Models\Visit::where('client_id', $client->id)
+            ->with('user')
+            ->orderByDesc('checked_in_at')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get();
 
         return view('erp.client', [
             // ⚠️ مسكوبة — القايمة دي في المودال وبتكشف كود واسم كل فرع
@@ -591,6 +685,13 @@ class ErpController extends Controller
                     'product' => $p,
                     'quote' => \App\Services\Pricing::quote($client, $p),
                 ]),
+            // ═══ آخر الزيارات (١٥ أغسطس ٢٠٢٦) ═══
+            // ⚠️ بلاغ المالك: «مش شايف الزيارات اللي اتعملت». كارت
+            // العميل هو أول مكان بيفتحه، فلازم يقول له: مين جه، امتى،
+            // قعد قد إيه، وطلع من الزيارة إيه — وصور الرف لو فيه.
+            // الناتج بيتجمّع بكويريز باتش (`VisitOutcomes`) مش صف صف.
+            'visits' => $recentVisits,
+            'visitOut' => \App\Support\VisitOutcomes::map($recentVisits->pluck('id')->all()),
         ]);
     }
 
@@ -603,6 +704,13 @@ class ErpController extends Controller
 
         $data = $this->guardBranch($request, $request->validate($this->clientRules()), creating: false);
         $this->checkContractDuration($data);
+
+        // ⚠️ **التعديل محتاج نفس الحارس** — تغيير اسم عميل لاسم عميل
+        // تاني موجود بيعمل نفس التكرار بالظبط، والمسار ده كان مفتوح
+        // خالص. `$client` بيتستثنى عشان «العميل مش تكرار لنفسه».
+        if ($blocked = $this->dupeGuard($request, $data, $client)) {
+            return $blocked;
+        }
 
         DB::transaction(function () use ($data, $request, $client) {
             $client->update($this->clientFields($data));
@@ -861,17 +969,11 @@ class ErpController extends Controller
         $data = $request->validate($this->clientRules());
         $this->checkContractDuration($data);
 
-        // ⚠️ **حارس التكرار (2026-08-06)** — نفس منطق الاستيراد بالظبط
-        // (Dupes): اسم مطبّع («المعادى ١» = «فرع المعادي 1») أو تليفون
-        // مسجل لعميل تاني ⇒ رفض برسالة بتقول مين الموجود. عمر ما
-        // عميل يتسجل مرتين من الشاشة ولا من الشيت.
-        if ($dupe = \App\Support\Dupes::existing($data['name'] ?? null, $data['phone'] ?? null)) {
-            $field = $dupe['by'] === 'name' ? 'name' : 'phone';
-
-            return back()->withInput()->withErrors([$field => __('client.dup_'.$dupe['by'], [
-                'name' => $dupe['client']->name,
-                'code' => $dupe['client']->code,
-            ])]);
+        // ⚠️ **حارس التكرار** — نفس منطق الاستيراد بالظبط (`Dupes`):
+        // اسم مطبّع («المعادى ١» = «فرع المعادي 1») أو تليفون مسجل
+        // لعميل تاني أو اسم قريب جداً جوّه نفس السلسلة/الزون.
+        if ($blocked = $this->dupeGuard($request, $data, null)) {
+            return $blocked;
         }
 
         $data = $this->guardBranch($request, $data, creating: true);
@@ -903,6 +1005,82 @@ class ErpController extends Controller
 
         return redirect()->route('erp.clients.show', $client)
             ->with('ok', __('flash.client_added'));
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * حارس التكرار — بيوقف الحفظ، ومابيمنعوش
+     * ═══════════════════════════════════════════════════════════
+     *
+     * ⚠️ **بيرجّع الفورم بتحذير، مش برفض نهائي** (قرار ١٥ أغسطس
+     * ٢٠٢٦). الرفض القاطع القديم كان بيقف قدام حالة حقيقية: فرعين
+     * لنفس السلسلة في نفس المول باسم واحد ورقم إدارة واحد. اللي
+     * بيدخل الداتا ماكانش بيقدر يعرّف التاني، فكان بيغيّر الاسم
+     * شوية («المعادي 2») عشان يلف حوالين الحارس — والنتيجة عميل
+     * باسم غلط في كل مطبوعة.
+     *
+     * دلوقتي: الشاشة بتوري الشبيه بكوده ومنطقته ومندوبه ومديره وآخر
+     * حركة، ولو المستخدم علّم «أنا متأكد إنه عميل مختلف» بيعدّي.
+     * **عمر ما بيتخلق في صمت** — لازم قرار مكتوب.
+     *
+     * ⚠️ `confirm_duplicate` **مش في `clientRules()`** عن قصد: لو
+     * دخل `$data` كان هيوصل لـ`clientFields()` ومنها لـ`create()`
+     * على عمود مش موجود في الجدول. بيتقرا من الريكوست مباشرة كبوليان.
+     */
+    private function dupeGuard(Request $request, array $data, ?Client $ignore)
+    {
+        if ($request->boolean('confirm_duplicate')) {
+            return null;
+        }
+
+        $hits = \App\Support\Dupes::matches([
+            'name' => $data['name'] ?? null,
+            'name_en' => $data['name_en'] ?? null,
+            'phone' => $data['phone'] ?? null,
+            'zone_id' => $data['zone_id'] ?? null,
+            'group_id' => $data['group_id'] ?? null,
+        ], $ignore?->id, $request->user());
+
+        if ($hits === []) {
+            return null;
+        }
+
+        // ⚠️ الخطأ متعلّق على **الاسم** حتى لو المطابقة بالتليفون —
+        // دي أول خانة في الفورم واللي المستخدم بيبص لها، والبانل
+        // الأصفر تحتها بيقول السبب الحقيقي لكل صف على حدة.
+        return back()->withInput()
+            ->with('dupes', $hits)
+            ->withErrors(['name' => __('client.dup_blocked', ['count' => count($hits)])]);
+    }
+
+    /**
+     * فحص حي أثناء الكتابة — `POST /erp/clients/check-duplicate`.
+     *
+     * ⚠️ **مالهاش صفحة ومابتعملش redirect** (نفس نمط `quickZone`).
+     * المستخدم واقف في ويزارد من 3 مراحل؛ أي navigation هنا معناه
+     * إن اللي كتبه يضيع. بترجّع JSON والفورم بيرسم بانل تحت الخانة.
+     *
+     * ⚠️ **بترجّع نفس نتيجة الحارس بالظبط** — لو الاتنين اختلفوا،
+     * المستخدم بيشوف «مفيش تكرار» وهو بيكتب وبعدين الحفظ يترفض.
+     */
+    public function checkDuplicate(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'zone_id' => ['nullable', 'integer'],
+            'group_id' => ['nullable', 'integer'],
+            'ignore_id' => ['nullable', 'integer'],
+        ]);
+
+        return response()->json([
+            'matches' => \App\Support\Dupes::matches(
+                $data,
+                $data['ignore_id'] ?? null,
+                $request->user(),
+            ),
+        ]);
     }
 
     /**

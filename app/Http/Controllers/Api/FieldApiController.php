@@ -2130,6 +2130,40 @@ class FieldApiController extends Controller
 
         $user = $request->user();
 
+        // ═══ حارس التكرار (١٥ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **المسار ده كان مفتوح خالص.** شاشة الـERP بتفحص التكرار
+        // من ٦ أغسطس، والاستيراد بيفحص — لكن المندوب من الأبلكيشن كان
+        // بيسجّل نفس المحل تاني من غير أي سؤال، والمدير بيعتمده وهو
+        // مش شايف إن فيه واحد زيه. أغلب التكرار الحقيقي جه من هنا.
+        //
+        // ⚠️ **بيرجّع 409 مش 422** — ده مش خطأ في المدخلات، ده سؤال:
+        // «فيه واحد شبهه، تكمّل؟». الأبلكيشن بيوري الشبيهين وبيبعت
+        // تاني بـ`confirm_duplicate=1` لو المندوب متأكد. **ومابنمنعوش
+        // نهائي** — فيه فروع حقيقية بنفس الاسم ونفس رقم الإدارة.
+        //
+        // ⚠️ ونفس الحارس بيتكرر في `OpsController::decideRequest`:
+        // الطلب ممكن يتعمل النهارده ويتعتمد بعد أسبوع، وفي الوقت ده
+        // يكون حد تاني سجّل نفس المحل من الويب.
+        $confirmDupe = filter_var($request->input('confirm_duplicate', false), FILTER_VALIDATE_BOOLEAN);
+
+        if (! $confirmDupe) {
+            $dupes = \App\Support\Dupes::matches([
+                'name' => $data['name'],
+                'phone' => $data['phone'] ?? null,
+                'zone_id' => $user->zone_id,
+            ], null, $user);
+
+            if ($dupes !== []) {
+                return response()->json([
+                    // ⚠️ المفتاح `message` مش `error` — الأبلكيشن بيقرا ده
+                    'message' => __('field.dup_client_found', ['count' => count($dupes)]),
+                    'needs_confirm' => true,
+                    'duplicates' => $dupes,
+                ], 409);
+            }
+        }
+
         $photoPath = $request->hasFile('photo')
             ? $request->file('photo')->store('client-requests/photos', 'public')
             : null;

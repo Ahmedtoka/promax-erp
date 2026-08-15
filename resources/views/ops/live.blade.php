@@ -396,6 +396,7 @@ const T = {
     durHr: {!! json_encode(__('journey.dur_hr'), JSON_UNESCAPED_UNICODE) !!},
     openTracking: {!! json_encode(__('journey.open_tracking'), JSON_UNESCAPED_UNICODE) !!},
     repDay: {!! json_encode(__('journey.rep_day'), JSON_UNESCAPED_UNICODE) !!},
+    shelfT: {!! json_encode(__('field.shelf_photos'), JSON_UNESCAPED_UNICODE) !!},
     lastEvents: {!! json_encode(__('journey.last_events'), JSON_UNESCAPED_UNICODE) !!},
     noEvents: {!! json_encode(__('journey.no_events_today'), JSON_UNESCAPED_UNICODE) !!},
     statusL: {!! json_encode(__('journey.status_label'), JSON_UNESCAPED_UNICODE) !!},
@@ -796,6 +797,7 @@ function renderPopup() {
             <div class="lv-stat"><div class="v">${r.done}/${r.planned}</div><div class="l">${T.done}</div></div>
             <div class="lv-stat"><div class="v">${r.visits || 0}</div><div class="l">${T.visitsT}</div></div>
             <div class="lv-stat"><div class="v">${r.pos || 0}</div><div class="l">${T.posT}</div></div>
+            ${r.shelf ? `<div class="lv-stat"><div class="v">📸 ${r.shelf}</div><div class="l">${T.shelfT}</div></div>` : ''}
             <div class="lv-stat"><div class="v">${r.km}</div><div class="l">${T.kmU}</div></div>
             <div class="lv-stat"><div class="v">${fmt(r.value)}</div><div class="l">${T.custody}</div></div>
         </div>

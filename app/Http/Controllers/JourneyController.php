@@ -1773,6 +1773,14 @@ class JourneyController extends Controller
                 )
                 : 0.0;
 
+            // ═══ ماركر «صوّر الرف» (١٥ أغسطس ٢٠٢٦) ═══
+            // ⚠️ **من الفيد المحمّل أصلاً — مفيش كويري زيادة.** الحمولة
+            // بتترسل كل ٣ ثواني، فأي سؤال جديد للداتابيز هنا بيتضرب في
+            // عدد المناديب × ٢٠ مرة في الدقيقة. حدث `shelf` بيتسجّل
+            // مرة لكل مرحلة لكل زيارة، فالعدّ ده «كام لقطة رف النهارده».
+            $shelfToday = ($feedByUser->get($rep->id) ?? collect())
+                ->where('type', 'shelf')->count();
+
             // آخر ٥ أحداث للبوب أب — أوقات h:i A جاهزة من السيرفر
             $recent = ($feedByUser->get($rep->id) ?? collect())
                 ->take(5)
@@ -1804,6 +1812,7 @@ class JourneyController extends Controller
                 // وزار ولا لأ وعمل أوامر ولا لأ وآخر حالة إيه» ═══
                 'visits_today' => (int) ($visitsToday[$rep->id] ?? 0),
                 'pos_today' => (int) ($poToday->get($rep->id)?->c ?? 0),
+                'shelf_today' => $shelfToday,
                 'work' => $onShift ? $attState : 'off',
                 'open_client' => $openV?->client?->displayName(),
                 'last_event' => $last !== null
@@ -2045,6 +2054,8 @@ class JourneyController extends Controller
                 'last_event_icon' => $r['last_event_icon'],
                 'visits' => $r['visits_today'],
                 'pos' => $r['pos_today'],
+                // ماركر صور الرف في البوب أب (١٥/٨) — additive
+                'shelf' => $r['shelf_today'],
                 'track' => $r['track'],
                 // ═══ إضافات شاشة التلفزيون (١٢/٨) — additive برضه:
                 // الصفحة القديمة بتتجاهلها والجديدة بتبني عليها ═══
@@ -2260,6 +2271,15 @@ class JourneyController extends Controller
             ->get()
             ->groupBy(fn ($p) => $p->visit->client?->displayName() ?? '—');
 
+        // ═══ ناتج كل زيارة في اليوم (١٥ أغسطس ٢٠٢٦) ═══
+        // ⚠️ **باتش واحد لكل الصفوف** (`VisitOutcomes`) — الصفوف كانت
+        // بتقول «تمت» وخلاص، من غير ما تقول طلع منها إيه. صف صف كان
+        // معناه ٦ كويريز لكل زيارة في اليوم.
+        $dayVisitIds = $rows->pluck('visit')->filter()
+            ->pluck('id')
+            ->merge($offPlan->pluck('id'))
+            ->unique()->values()->all();
+
         return view('ops.rep_day', [
             'rep' => $user,
             'date' => $date,
@@ -2276,6 +2296,7 @@ class JourneyController extends Controller
             'timeline' => $timeline,
             'repOptions' => $repOptions,
             'shelfPhotos' => $shelfPhotos,
+            'visitOut' => \App\Support\VisitOutcomes::map($dayVisitIds),
         ]);
     }
 }

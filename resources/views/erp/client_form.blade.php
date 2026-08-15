@@ -208,6 +208,44 @@
     <div class="card step-pane" data-pane="1">
         <h3>{{ __('client.step_identity') }}</h3>
 
+        {{-- ═════════ حارس التكرار (١٥ أغسطس ٢٠٢٦) ═════════
+             ⚠️ البانل **جوّه الفورم** عن قصد — التشيك بوكس بتاع
+             «عميل مختلف» لازم يتبعت مع الحفظ، ولو كان بره الفورم
+             المستخدم كان هيعلّمه ويفضل الحفظ بيترفض من غير سبب
+             ظاهر. --}}
+        @php $serverDupes = collect(session('dupes', [])); @endphp
+        <div class="alert warn" id="dupePanel"
+             style="margin-bottom:14px;align-items:flex-start;{{ $serverDupes->isEmpty() ? 'display:none' : '' }}">
+            <span>⚠️</span>
+            <div style="flex:1;min-width:0">
+                <b>{{ __('client.dup_panel_title') }}</b>
+                <div style="font-size:11.5px;color:var(--muted);margin:4px 0 8px">{{ __('client.dup_panel_hint') }}</div>
+                <div id="dupeList" style="display:flex;flex-direction:column;gap:6px">
+                    @foreach ($serverDupes as $d)
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 10px">
+                            <span class="badge {{ ($d['confidence'] ?? '') === 'sure' ? 'b-red' : 'b-orange' }}">{{ $d['confidence_label'] ?? '' }}</span>
+                            <b>{{ $d['name'] ?? '' }}</b>
+                            <span style="color:var(--muted)">{{ $d['code'] ?? '' }}</span>
+                            <span class="badge b-gray">{{ $d['by_label'] ?? '' }}</span>
+                            @if (! empty($d['zone']))<span style="color:var(--muted)">📍 {{ $d['zone'] }}</span>@endif
+                            @if (! empty($d['rep']))<span style="color:var(--muted)">🚗 {{ $d['rep'] }}</span>@endif
+                            @if (! empty($d['manager']))<span style="color:var(--muted)">🙍 {{ $d['manager'] }}</span>@endif
+                            <span style="color:var(--muted)">🕒 {{ $d['last_activity'] ?? __('client.dup_no_activity') }}</span>
+                            @if (! empty($d['url']))
+                                <a class="btn sm" href="{{ $d['url'] }}" target="_blank" rel="noopener"
+                                   style="margin-inline-start:auto">{{ __('client.dup_open_card') }} ↗</a>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12.5px;font-weight:800;cursor:pointer">
+                    <input type="checkbox" name="confirm_duplicate" value="1" id="dupeConfirm"
+                           @checked(old('confirm_duplicate'))>
+                    {{ __('client.dup_confirm_label') }}
+                </label>
+            </div>
+        </div>
+
         <div class="alert info" style="margin-bottom:14px">
             <span>🔤</span><span>{{ __('client.name_en_first_hint') }}</span>
         </div>
@@ -1094,6 +1132,15 @@
         'saving' => __('common.saving'),
         'save' => __('common.save'),
         'failed' => __('common.failed'),
+        // ═══ حارس التكرار (١٥ أغسطس ٢٠٢٦) ═══
+        'dupeUrl' => route('erp.clients.dupes'),
+        // ⚠️ العميل مش تكرار لنفسه — وقت التعديل بنستثني الـid بتاعه
+        'dupeIgnore' => $editing ? $src?->id : null,
+        'dupeChecking' => __('client.dup_checking'),
+        'dupeNone' => __('client.dup_none'),
+        'dupeFailed' => __('client.dup_check_failed'),
+        'dupeNoActivity' => __('client.dup_no_activity'),
+        'dupeOpen' => __('client.dup_open_card'),
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 
     $presetKeys = json_encode(array_keys(App\Models\Contract::CLAUSE_PRESETS));
@@ -1836,6 +1883,144 @@ document.addEventListener('DOMContentLoaded', function () {
         const btn = document.querySelector('.step-btn[data-step="' + pane.dataset.pane + '"]');
         if (btn) btn.classList.add('has-error');
     });
+
+    initDupeCheck();
 });
+
+/* ═══════════════════════════════════════════════════════════════
+   حارس التكرار الحي (١٥ أغسطس ٢٠٢٦)
+   ═══════════════════════════════════════════════════════════════
+   ⚠️ **على `blur` مش على كل حرف.** الاسم بيتكتب حرف حرف، وفحص مع
+   كل ضغطة كان هيبعت 30 ريكوست للاسم الواحد ويرسم بانل بيرقص قدام
+   اللي بيكتب. الديباونس موجود كمان كشبكة أمان للصق واللصق السريع.
+
+   ⚠️ **الفحص ده تنبيه مش حماية.** الحارس الحقيقي في
+   `ErpController::dupeGuard` وقت الحفظ — الاتنين بينادوا
+   `App\Support\Dupes::matches` فالحكم واحد. لو الشبكة وقعت هنا،
+   الحفظ لسه بيمسك. */
+let dupeTimer = null;
+let dupeLast = '';
+
+function dupeVal(field) {
+    const el = document.querySelector('#clientForm [name="' + field + '"]');
+    return el ? el.value.trim() : '';
+}
+
+function dupeRow(m) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;'
+        + 'background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 10px';
+
+    const chip = function (text, cls, muted) {
+        if (!text) return;
+        const s = document.createElement('span');
+        if (cls) s.className = cls;
+        if (muted) s.style.color = 'var(--muted)';
+        s.textContent = text;
+        row.appendChild(s);
+    };
+
+    chip(m.confidence_label, m.confidence === 'sure' ? 'badge b-red' : 'badge b-orange');
+
+    const nm = document.createElement('b');
+    nm.textContent = m.name || '';
+    row.appendChild(nm);
+
+    chip(m.code, null, true);
+    chip(m.by_label, 'badge b-gray');
+    chip(m.zone ? '📍 ' + m.zone : '', null, true);
+    chip(m.rep ? '🚗 ' + m.rep : '', null, true);
+    chip(m.manager ? '🙍 ' + m.manager : '', null, true);
+    chip('🕒 ' + (m.last_activity || T.dupeNoActivity), null, true);
+
+    if (m.url) {
+        const a = document.createElement('a');
+        a.className = 'btn sm';
+        a.href = m.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.style.marginInlineStart = 'auto';
+        a.textContent = T.dupeOpen + ' ↗';
+        row.appendChild(a);
+    }
+
+    return row;
+}
+
+function renderDupes(matches) {
+    const panel = document.getElementById('dupePanel');
+    const list = document.getElementById('dupeList');
+    if (!panel || !list) return;
+
+    list.textContent = '';
+
+    if (!matches || matches.length === 0) {
+        panel.style.display = 'none';
+        const box = document.getElementById('dupeConfirm');
+        // ⚠️ التشيك بوكس بيتفك لما التكرار يختفي — سيبانه متعلّم
+        // بعد ما المستخدم غيّر الاسم معناه تجاوز صامت لحارس تاني.
+        if (box) box.checked = false;
+        return;
+    }
+
+    matches.forEach(function (m) { list.appendChild(dupeRow(m)); });
+    panel.style.display = '';
+}
+
+async function runDupeCheck() {
+    const payload = {
+        name: dupeVal('name'),
+        name_en: dupeVal('name_en'),
+        phone: dupeVal('phone'),
+        zone_id: dupeVal('zone_id') || null,
+        group_id: dupeVal('group_id') || null,
+        ignore_id: T.dupeIgnore || null,
+    };
+
+    // مفيش اسم ولا رقم = مفيش حاجة نفحصها
+    if (!payload.name && !payload.name_en && !payload.phone) { renderDupes([]); return; }
+
+    // نفس المدخلات = نفس النتيجة — مانبعتش تاني
+    const sig = JSON.stringify(payload);
+    if (sig === dupeLast) return;
+    dupeLast = sig;
+
+    try {
+        const res = await fetch(T.dupeUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error(res.status);
+
+        const j = await res.json();
+        renderDupes(j.matches || []);
+    } catch (e) {
+        // ⚠️ **مابنمسحش البانل عند الفشل.** لو السيرفر رد قبل كده
+        // بتكرار، مسحه دلوقتي بيقول للمستخدم «بقى نضيف» وهو مش كده.
+        dupeLast = '';
+    }
+}
+
+function initDupeCheck() {
+    const form = document.getElementById('clientForm');
+    if (!form || !T.dupeUrl) return;
+
+    ['name', 'name_en', 'phone'].forEach(function (field) {
+        const el = form.querySelector('[name="' + field + '"]');
+        if (!el) return;
+
+        el.addEventListener('blur', runDupeCheck);
+        el.addEventListener('input', function () {
+            clearTimeout(dupeTimer);
+            dupeTimer = setTimeout(runDupeCheck, 700);
+        });
+    });
+}
 </script>
 @endsection
