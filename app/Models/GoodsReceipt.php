@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class GoodsReceipt extends Model
 {
-    use HasFactory;
+    use HasDocumentNumber, HasFactory;
 
     protected $fillable = [
         'number', 'warehouse_id', 'source_warehouse_id', 'received_on', 'status',
@@ -80,9 +82,7 @@ class GoodsReceipt extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'GRN-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('GRN-', 1001);
     }
 }

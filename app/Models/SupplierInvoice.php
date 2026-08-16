@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SupplierInvoice extends Model
 {
+    use HasDocumentNumber;
+
     protected $fillable = [
         'number', 'supplier_id', 'supplier_order_id', 'supplier_ref',
         'invoice_date', 'due_on', 'subtotal', 'tax', 'total', 'notes', 'created_by',
@@ -48,10 +52,8 @@ class SupplierInvoice extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'SINV-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('SINV-', 1001);
     }
 
     /** فاتورة + قيدها الدائن — البوابة الوحيدة للإنشاء */

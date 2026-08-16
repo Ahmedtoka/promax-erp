@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use App\Exceptions\Rejected;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -35,7 +37,7 @@ use Illuminate\Support\Facades\DB;
  */
 class StockTransfer extends Model
 {
-    use HasFactory;
+    use HasDocumentNumber, HasFactory;
 
     public const STATUSES = [
         'sent' => 'b-orange',
@@ -744,10 +746,8 @@ class StockTransfer extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'TRF-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('TRF-', 1001);
     }
 
     /**

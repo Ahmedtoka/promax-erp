@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use App\Exceptions\Rejected;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ReplenishmentRequest extends Model
 {
-    use HasFactory;
+    use HasDocumentNumber, HasFactory;
 
     public const STATUSES = [
         // ⚠️ المسميات اتغيّرت مع فلو ١٥/٨ (مفيش أمر توريد): الطلب
@@ -152,10 +154,8 @@ class ReplenishmentRequest extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 5001;
-
-        return 'RPL-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('RPL-', 5001);
     }
 
     /**

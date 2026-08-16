@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class RepSettlement extends Model
 {
+    use HasDocumentNumber;
+
     protected $fillable = [
         'number', 'user_id', 'from_at', 'to_at', 'invoices_count',
         'cash_sales', 'credit_sales', 'cash_refunds', 'expected',
@@ -57,10 +61,8 @@ class RepSettlement extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'RS-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('RS-', 1001);
     }
 
     public function balanceLabel(): string

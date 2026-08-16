@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ClientReturn extends Model
 {
-    use HasFactory;
+    use HasDocumentNumber, HasFactory;
 
     protected $table = 'returns';
 
@@ -118,10 +120,8 @@ class ClientReturn extends Model
      */
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'RET-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('RET-', 1001);
     }
 
     /** اللي العميل بياخده فعلاً — الإجمالي شامل الضريبة، زي الفاتورة */

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class StockCount extends Model
 {
+    use HasDocumentNumber;
+
     protected $fillable = [
         'number', 'warehouse_id', 'status', 'started_by', 'approved_by',
         'count_date', 'approved_at', 'lines', 'diff_lines', 'qty_diff', 'value_diff', 'notes',
@@ -83,12 +87,7 @@ class StockCount extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-
-        // ⚠️ ممنوع filter_var(FILTER_SANITIZE_NUMBER_INT) — بيسيب
-        // الإشارة السالبة وبيكسّر الترقيم
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'CNT-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('CNT-', 1001);
     }
 }

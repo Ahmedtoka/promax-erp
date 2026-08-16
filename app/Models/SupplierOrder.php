@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use App\Exceptions\Rejected;
 use App\Services\StockCounting;
 use Illuminate\Database\Eloquent\Model;
@@ -22,6 +24,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SupplierOrder extends Model
 {
+    use HasDocumentNumber;
+
     protected $fillable = [
         'number', 'supplier_id', 'warehouse_id', 'status',
         'ordered_on', 'expected_on', 'total', 'notes', 'created_by',
@@ -70,10 +74,8 @@ class SupplierOrder extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'SPO-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('SPO-', 1001);
     }
 
     public function isOpen(): bool

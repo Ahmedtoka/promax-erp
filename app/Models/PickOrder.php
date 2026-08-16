@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use App\Exceptions\StockShortage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,7 +29,7 @@ use Illuminate\Support\Facades\DB;
  */
 class PickOrder extends Model
 {
-    use HasFactory;
+    use HasDocumentNumber, HasFactory;
 
     public const PURPOSE_VAN_LOAD = 'van_load';
     public const PURPOSE_CUSTOMER_PO = 'customer_po';
@@ -151,10 +153,8 @@ class PickOrder extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'PCK-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('PCK-', 1001);
     }
 
     public function scopeForRep(Builder $q, int $userId): Builder

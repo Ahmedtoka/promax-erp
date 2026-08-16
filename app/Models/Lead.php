@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDocumentNumber;
+
 use App\Models\Concerns\HasBilingualName;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Lead extends Model
 {
-    use HasBilingualName;
+    use HasBilingualName, HasDocumentNumber;
 
     protected $fillable = [
         'number', 'name', 'name_en', 'phone', 'contact_name', 'address',
@@ -128,9 +130,7 @@ class Lead extends Model
 
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'LD-'.$n;
+        // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
+        return static::nextDocumentNumber('LD-', 1001);
     }
 }
