@@ -173,14 +173,21 @@ final class Governorates
 
         $hints = [
             'giza' => ['مهندسين', 'دقي', 'هرم', 'فيصل', 'أكتوبر', 'اكتوبر', 'زايد', 'العجوزة', 'إمبابة',
-                'امبابة', 'بولاق', 'الوراق', 'mohandessin', 'dokki', 'haram', 'faisal', 'october', 'zayed', 'agouza'],
+                'امبابة', 'بولاق', 'الوراق', 'mohandessin', 'dokki', 'haram', 'faisal', 'october', 'zayed', 'agouza',
+                // إضافة ١٥/٨ — أسماء مناطق حقيقية كانت بتقع في «بلا محافظة»
+                'ميدان سفنكس', 'سفنكس', 'محور التعمير', 'ميت عقبة', 'الدقي',
+                'sphinx', 'mit okba'],
             'qalyubia' => ['شبرا الخيمة', 'بنها', 'القناطر', 'قليوب', 'banha', 'qalyub'],
             'cairo' => ['مصر الجديدة', 'مدينة نصر', 'شبرا', 'وسط البلد', 'الزمالك', 'التجمع', 'الرحاب',
                 'مدينتي', 'الشروق', 'المستقبل', 'العبور', 'المقطم', 'المعادي', 'حلوان', 'عين شمس',
                 'المرج', 'السلام', 'الزيتون', 'حدائق القبة', 'heliopolis', 'nasr city', 'shubra',
                 'downtown', 'zamalek', 'settlement', 'rehab', 'madinaty', 'shorouk', 'mostakbal',
-                'obour', 'mokattam', 'maadi', 'helwan'],
-            'alexandria' => ['إسكندرية', 'اسكندرية', 'العجمي', 'المنتزه', 'alexandria', 'agami'],
+                'obour', 'mokattam', 'maadi', 'helwan',
+                // إضافة ١٥/٨ — أسماء مناطق حقيقية كانت بتقع في «بلا محافظة»
+                'سيتي ستارز', 'البساتين', 'الظاهر', 'غمرة', 'حلمية الزيتون',
+                'city stars', 'basateen', 'ghamra'],
+            'alexandria' => ['إسكندرية', 'اسكندرية', 'العجمي', 'المنتزه', 'alexandria', 'agami',
+                'سموحة', 'ستانلي', 'smouha', 'stanley'],
             'sharqia' => ['العاشر من رمضان', 'الزقازيق', 'بلبيس', 'ramadan', 'zagazig'],
             'ismailia' => ['الإسماعيلية', 'الاسماعيلية', 'ismailia'],
             'port_said' => ['بورسعيد', 'port said', 'portsaid'],
@@ -191,7 +198,11 @@ final class Governorates
             'beheira' => ['دمنهور', 'كفر الدوار', 'damanhour'],
             'damietta' => ['دمياط', 'damietta'],
             'kafr_el_sheikh' => ['كفر الشيخ', 'دسوق', 'kafr el'],
-            'matrouh' => ['مرسى مطروح', 'العلمين', 'الساحل الشمالي', 'marsa matrouh', 'alamein', 'north coast'],
+            // ⚠️ القرى السياحية بتتكتب باسمها من غير ذكر المحافظة
+            // (إضافة ١٥/٨) — «مراسي» و«سيدي عبد الرحمن» كانوا بيقعوا
+            // في «بلا محافظة».
+            'matrouh' => ['مرسى مطروح', 'العلمين', 'الساحل الشمالي', 'مراسي', 'سيدي عبد الرحمن',
+                'marsa matrouh', 'alamein', 'north coast', 'marassi', 'sidi abdel rahman'],
             'south_sinai' => ['شرم', 'دهب', 'طور سيناء', 'sharm', 'dahab'],
             'north_sinai' => ['العريش', 'arish'],
             'red_sea' => ['الغردقة', 'الجونة', 'سفاجا', 'مرسى علم', 'hurghada', 'gouna', 'safaga'],
