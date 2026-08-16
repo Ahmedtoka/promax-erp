@@ -79,6 +79,16 @@ class AuditGovNamedZones extends Command
         $this->line('  مناطق اسمها اسم محافظة: '.$bad->count());
         $this->line('');
 
+        // ═══ ٢. المناطق الحقيقية — الوجهات الممكنة ═══
+        //
+        // ⚠️⚠️ **البحث في كل المحافظات مش في محافظة المنطقة الحالية**
+        // (تصحيح بعد أول تشغيل). العميل الجالس تحت «القاهرة» عنوانه
+        // «٦ أكتوبر» منطقته في **الجيزة** — والبحث المحصور في القاهرة
+        // كان بيفشل ويرميه في «يدوي». الجلوس تحت منطقة اسمها محافظة
+        // معناه **«مش مصنّف»** مش «موجود في المحافظة دي»، فماينفعش
+        // نستخدمه كقيد على البحث.
+        $real = $all->filter(fn ($t) => $govOf($t) === null);
+
         $moves = [];
         $manual = [];
 
@@ -89,30 +99,8 @@ class AuditGovNamedZones extends Command
             $this->line("  #{$z->id}  {$z->name}  ·  عملاء: {$z->clients_count}"
                 .'  ·  المحافظة: '.Governorates::label($govKey));
 
-            // المناطق الحقيقية في نفس المحافظة — الوجهات الممكنة
-            $targets = $all->filter(fn ($t) => $t->id !== $z->id
-                && $t->governorate === $govKey
-                && $govOf($t) === null);
-
-            if ($targets->isEmpty()) {
-                $this->warn('    ⚠ مفيش مناطق تانية في المحافظة دي — اعمل المناطق الأول.');
-            }
-
             foreach (Client::where('zone_id', $z->id)->orderBy('id')->get() as $c) {
-                $addr = mb_strtolower((string) $c->address.' '.$c->name);
-                $hit = null;
-
-                foreach ($targets as $t) {
-                    foreach ([$t->name, $t->name_en] as $tn) {
-                        $tn = mb_strtolower(trim((string) $tn));
-
-                        if ($tn !== '' && mb_strpos($addr, $tn) !== false) {
-                            $hit = $t;
-
-                            break 2;
-                        }
-                    }
-                }
+                $hit = $this->bestZone($c, $real, $z->id);
 
                 if ($hit === null) {
                     $manual[] = $c;
@@ -124,8 +112,15 @@ class AuditGovNamedZones extends Command
                 }
 
                 $moves[] = ['client' => $c, 'zone' => $hit];
-                $this->line(sprintf('    ✓ #%-5d %-26s → %s',
-                    $c->id, mb_substr($c->displayName(), 0, 26), $hit->name));
+
+                // ⚠️ المحافظة بتتكتب لما تختلف — النقل عبر المحافظات
+                // هو الحالة الشائعة هنا، ولازم تبان عشان تتراجع.
+                $cross = $hit->governorate !== $govKey
+                    ? '  ['.Governorates::label($hit->governorate).']'
+                    : '';
+
+                $this->line(sprintf('    ✓ #%-5d %-26s → %s%s',
+                    $c->id, mb_substr($c->displayName(), 0, 26), $hit->name, $cross));
             }
         }
 
@@ -153,5 +148,49 @@ class AuditGovNamedZones extends Command
         $this->comment('  المناطق اللي فضلت فاضية تقدر تقفلها من /erp/zones.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * أنسب منطقة لعميل من عنوانه — أطول اسم منطقة موجود في العنوان.
+     *
+     * ⚠️ **أطول مطابقة تكسب**: «القاهرة الجديدة» و«القاهرة» الاتنين
+     * ممكن يطابقوا نفس العنوان، والأطول هي الأدق. أول مطابقة كانت
+     * بترمي العميل على المنطقة الأعم حسب ترتيب الجدول.
+     *
+     * ⚠️ **٤ حروف على الأقل**: أسماء قصيرة زي «مصر» أو «K23» بتطابق
+     * نصوص عشوائية في العناوين وبتنقل عملاء لمناطق مالهاش علاقة.
+     */
+    private function bestZone(Client $c, $real, int $skipZoneId): ?Zone
+    {
+        $addr = mb_strtolower((string) $c->address.' '.$c->name);
+
+        if (trim($addr) === '') {
+            return null;
+        }
+
+        $best = null;
+        $bestLen = 0;
+
+        foreach ($real as $t) {
+            if ($t->id === $skipZoneId) {
+                continue;
+            }
+
+            foreach ([$t->name, $t->name_en] as $tn) {
+                $tn = mb_strtolower(trim((string) $tn));
+                $len = mb_strlen($tn);
+
+                if ($len < 4 || mb_strpos($addr, $tn) === false) {
+                    continue;
+                }
+
+                if ($len > $bestLen) {
+                    $best = $t;
+                    $bestLen = $len;
+                }
+            }
+        }
+
+        return $best;
     }
 }
