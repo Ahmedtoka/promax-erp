@@ -340,6 +340,28 @@ class FieldApiController extends Controller
         $todayVisits = Visit::where('user_id', $user->id)
             ->whereDate('created_at', today())->get()->keyBy('client_id');
 
+        // ═══ آخر زيارة لكل عميل (١٥ أغسطس) ═══
+        //
+        // طلب المالك: كارت العميل يقول «آخر زيارة يوم كام». الرقم ده
+        // بيقول للمندوب مين مهمَل من غير ما يفتح حد.
+        //
+        // ⚠️ **كويري واحدة مجمّعة لكل العملاء** — لا علاقة `latestVisit`
+        // على الموديل (بتعمل كويري لكل عميل = N+1 على ٢٠٠ عميل)، ولا
+        // تحميل كل الزيارات في الذاكرة.
+        //
+        // ⚠️ **من كل المناديب مش منه هو** — العميل في البول المشترك
+        // ممكن يكون زميله زاره امبارح، ولو حسبنا زياراته هو بس
+        // الكارت هيقول «من ٣٠ يوم» والمحل اتزار من يومين.
+        $clientIds = $zones->flatMap(fn ($z) => $z->clients->pluck('id'))->unique();
+
+        $lastVisits = $clientIds->isEmpty()
+            ? collect()
+            : Visit::whereIn('client_id', $clientIds)
+                ->whereNotNull('checked_in_at')
+                ->selectRaw('client_id, MAX(checked_in_at) as last_at')
+                ->groupBy('client_id')
+                ->pluck('last_at', 'client_id');
+
         // ⚠️ **المناطق اللي فيها شغل ليه بس** (قرار المالك 2026-08-03).
         // التسكين ممكن يكون على ٢٠ منطقة والعملاء في ٤ — عرض الفاضي
         // زحمة بلا فايدة. أول ما يتسكن عليه عميل في منطقة هتظهر لوحدها.
@@ -354,7 +376,13 @@ class FieldApiController extends Controller
             // ⚠️ additive (١١/٨ مساءً) — بادج «كام عميل» على كارت
             // المنطقة في الأبلكيشن. النسخ القديمة بتتجاهله عادي.
             'client_count' => $z->clients->count(),
-            'clients' => $z->clients->map(function ($c) use ($todayVisits) {
+            // ⚠️ **المحافظة** (١٥/٨) — الأبلكيشن بقى بيجمّع المناطق
+            // تحت محافظاتها بدل ليست مسطّحة كانت بتخلط المستويين
+            // («القاهرة» و«الدقي» جنب بعض وهي جواها). الكود للتجميع
+            // واللابل للعرض.
+            'gov' => $z->governorate,
+            'gov_label' => $z->governorateLabel(),
+            'clients' => $z->clients->map(function ($c) use ($todayVisits, $lastVisits) {
                 $v = $todayVisits->get($c->id);
 
                 // ⚠️ الاسم الكامل «السلسلة — الفرع» زي الـERP بالظبط —
@@ -369,6 +397,10 @@ class FieldApiController extends Controller
                     'name' => $c->fullName(),
                     'chain' => $chain,
                     'branch' => $c->displayName(),
+                    // آخر زيارة — ISO أو null لو العميل ماتزارش قبل كده
+                    'last_visit_at' => ($lv = $lastVisits->get($c->id)) !== null
+                        ? \Illuminate\Support\Carbon::parse($lv)->toIso8601String()
+                        : null,
                     // ⚠️ كتلة البحث عابرة اللغات (١١/٨): الاسم المعروض
                     // بلغة الأبلكيشن بس — والمندوب بيكتب بأي لغة.
                     // بنبعت كل الأسماء (فرع+سلسلة عربي وإنجليزي) في
