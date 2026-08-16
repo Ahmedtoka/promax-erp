@@ -109,6 +109,11 @@ return [
     'f_from_app' => 'From the app',
     'f_from_app_hint' => 'A rep captured it at the shop',
     'from_app' => 'From the app',
+    // ═══ Address-change request queue - 17 Aug 2026 ═══
+    'f_requests' => 'Address change requests',
+    'f_requests_hint' => 'A rep sent a point from the shop - waiting for your confirmation',
+    'pending_review' => 'Awaiting review',
+    'sent_by' => 'Sent by',
     'set_by' => 'Set by',
     'src' => [
         'visit' => 'From a visit',

@@ -415,6 +415,16 @@ class FieldApiController extends Controller
                     'lat' => $c->lat === null ? null : (float) $c->lat,
                     'lng' => $c->lng === null ? null : (float) $c->lng,
                     'location_url' => $c->location_url,
+                    // ⚠️ **اللوكيشن اتأكّد من الداشبورد** (طلب المالك
+                    // ١٦/٨: «أنا أعمل كونفيرم عليه في الداش بورد،
+                    // الزرار ده مايظهرش تاني»). زرار «عدّل لوكيشن
+                    // العميل» بيختفي من الأبلكيشن أول ما يترفع هنا.
+                    //
+                    // ⚠️ **الوجود مش الفراغ**: عميل ليه إحداثيات
+                    // مش معناه إن حد أكّدها — ممكن تكون من جيوكودينج
+                    // تقريبي على نص عنوان. البصمة دي بتتكتب لما بني
+                    // آدم يراجع النقطة، وهي وحدها اللي بتخفي الزرار.
+                    'location_confirmed' => $c->location_confirmed_at !== null,
                     'category' => $c->category,
                     'category_label' => $c->categoryLabel(),
                     'balance' => (float) $c->balance,
@@ -559,6 +569,11 @@ class FieldApiController extends Controller
                 'lat' => $r['client']->lat !== null ? (float) $r['client']->lat : null,
                 'lng' => $r['client']->lng !== null ? (float) $r['client']->lng : null,
                 'location_url' => $r['client']->location_url,
+                // ⚠️ **لازم هنا كمان زي حمولة الزونز.** المحطة دي
+                // بتتحوّل لـ`Client` لما المندوب يفتحها من خط السير،
+                // ولو الحقل ناقص نفس العميل بيوري زرار «عدّل
+                // اللوكيشن» من شاشة ويخبّيه من التانية.
+                'location_confirmed' => $r['client']->location_confirmed_at !== null,
                 'balance' => (float) $r['client']->balance,
                 'cash_only' => $r['client']->cashOnly(),
                 'payment_terms' => $r['client']->paymentTerms(),
@@ -1377,8 +1392,26 @@ class FieldApiController extends Controller
                 ...($addressAr !== '' ? ['address_ar' => $addressAr] : []),
                 ...(($data['governorate'] ?? null) ? ['governorate' => $data['governorate']] : []),
                 ...(($data['zone_id'] ?? null) ? ['zone_id' => (int) $data['zone_id']] : []),
-                'location_confirmed_at' => now(),
-                'location_confirmed_by' => $user->id,
+                // ⚠️⚠️ **دي بقت «طلب» مش «تأكيد»** (١٧ أغسطس ٢٠٢٦).
+                //
+                // كانت بتكتب `location_confirmed_at/by` باليوزر —
+                // يعني **المندوب بيأكّد لنفسه**: العميل بيخرج من
+                // طابور المراجعة من غير ما حد يبصّ، وشاشة تأكيد
+                // اللوكيشن (اللي الغرض منها بناء داتابيز عناوين
+                // صحيحة) مابتشوفهوش أصلاً.
+                //
+                // ⚠️ وبعد ما الأبلكيشن بقى يخبّي زرار «عدّل لوكيشن
+                // العميل» على العميل المؤكَّد، التأكيد الذاتي ده كان
+                // هيقفل الباب: المندوب يحفظ نقطة غلط، الزرار يختفي،
+                // ومايقدرش يصحّحها ولا حد راجعها.
+                //
+                // ⚠️ **`location_confirmed_at` مابتتلمسش هنا خالص** —
+                // لا بتتكتب ولا بتتفضّى. عملياً العميل المؤكَّد
+                // مايوصلش هنا أصلاً (الأبلكيشن بيخبّي الزرار عنه)،
+                // بس لو وصل بأي طريقة تانية فمسح تأكيد الأدمن من
+                // نداء مندوب هيبقى أسوأ من سيبانه.
+                'location_submitted_at' => now(),
+                'location_submitted_by' => $user->id,
                 'location_source' => Client::LOC_SRC_APP,
             ])->save();
         });
@@ -1428,6 +1461,14 @@ class FieldApiController extends Controller
                 'zone_id' => $client->zone_id,
                 'zone_name' => $client->zone?->displayName(),
                 'confirmed_at' => $client->location_confirmed_at?->toIso8601String(),
+                // ⚠️ **الأبلكيشن حالياً بيتجاهل الرد ده ويعمل
+                // `refresh()`** — فالحالة بتيجي من البوت ستراب مش من
+                // هنا، وزرار «عدّل اللوكيشن» بيفضل ظاهر صح لوحده.
+                // الحقلين موجودين عشان الرد مايكدبش على اللي يقراه:
+                // إندبوينت حفظ بيرجّع نص الحالة بيغري أي كود جاي
+                // إنه يستنتج الباقي غلط.
+                'location_confirmed' => $client->location_confirmed_at !== null,
+                'submitted_at' => $client->location_submitted_at?->toIso8601String(),
             ],
         ]);
     }

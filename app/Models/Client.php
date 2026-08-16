@@ -131,6 +131,9 @@ class Client extends Model
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng', 'address_ar',
         'location_confirmed_at', 'location_confirmed_by', 'location_source',
+        // ⚠️ **الإرسال غير التأكيد** (١٧/٨) — المندوب بيبعت طلب،
+        // والأدمن بيأكّد. خلطهم كان بيخلّي المندوب يأكّد لنفسه.
+        'location_submitted_at', 'location_submitted_by',
         // ⚠️ **لازم يكون fillable** — من غيره `update()` بيتجاهله في
         // صمت وشاشة العميل بتحفظ من غير ما تحفظ.
         'return_policies',
@@ -165,6 +168,7 @@ class Client extends Model
             'last_activity_at' => 'date',
             'last_payment_at' => 'date',
             'location_confirmed_at' => 'datetime',
+            'location_submitted_at' => 'datetime',
         ];
     }
 
@@ -314,6 +318,18 @@ public function zone(): BelongsTo
     public function locationConfirmer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'location_confirmed_by');
+    }
+
+    /**
+     * المندوب اللي **بعت** النقطة من الأبلكيشن — غير اللي أكّدها.
+     *
+     * ⚠️ الاتنين كانوا نفس العمود قبل ١٧/٨، فالمندوب كان بيظهر
+     * كإنه هو اللي راجع وأكّد. الفصل ده بيخلّي سؤال «مين بعتها؟»
+     * و«مين وافق؟» ليهم إجابتين مختلفتين.
+     */
+    public function locationSubmitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'location_submitted_by');
     }
 
     /** السلسلة اللي الفرع تابع لها */
@@ -966,6 +982,19 @@ public function zone(): BelongsTo
     public function locationFromApp(): bool
     {
         return $this->location_source === self::LOC_SRC_APP;
+    }
+
+    /**
+     * طلب تعديل لوكيشن مستنّي مراجعة؟
+     *
+     * ⚠️ **الشرطين مع بعض.** `submitted_at` لوحدها بتفضل مكتوبة بعد
+     * التأكيد (بصمة تاريخية)، فلو الطابور اتبنى عليها لوحدها كان
+     * هيفضل يعرض عملاء اتراجعوا خلاص.
+     */
+    public function locationPending(): bool
+    {
+        return $this->location_submitted_at !== null
+            && $this->location_confirmed_at === null;
     }
 
     /**

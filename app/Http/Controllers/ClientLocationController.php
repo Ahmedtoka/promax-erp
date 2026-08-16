@@ -56,7 +56,10 @@ class ClientLocationController extends Controller
     /** العملاء المستنية تأكيد + النقطة اللي جت من آخر زيارة */
     public function index(Request $request)
     {
-        $filter = $request->string('show')->toString() ?: 'from_visit';
+        // ⚠️ **الافتراضي بقى «الطلبات»** (١٧/٨). ده الطابور اللي
+        // بيتعمّر من الميدان كل يوم ومحدش غير المراجع بيفضّيه —
+        // و«جاهز للتأكيد» شغل تخميني أقل أولوية منه.
+        $filter = $request->string('show')->toString() ?: 'requests';
 
         // ═══════════════════════════════════════════════════════════
         // الفلاتر (اتعادت في ٨ أغسطس ٢٠٢٦ بطلب المالك)
@@ -85,10 +88,29 @@ class ClientLocationController extends Controller
         // بيعرض مين ضبط اللوكيشن، ومن غير التحميل المسبق ده كان
         // كويري لكل صف في قايمة ٦٥٤ عميل.
         $q = Client::query()
-            ->with(['zone', 'channel', 'group', 'locationConfirmer'])
+            ->with(['zone', 'channel', 'group', 'locationConfirmer', 'locationSubmitter'])
             ->where('status', '!=', 'rejected');
 
         $q->when(
+            // ═══════════════════════════════════════════════════
+            // 🚩 طلبات تعديل العنوان — ١٧ أغسطس ٢٠٢٦
+            // ═══════════════════════════════════════════════════
+            //
+            // طلب المالك: «شاشة أكّد منها كل الطلبات اللي اتعمل
+            // تعديل العنوان بتاعها عشان نبني داتابيز قوية فيها
+            // العناوين صح».
+            //
+            // ⚠️ **دي أقوى نقطة في السيستم ومستنية مراجعة.** المندوب
+            // سحبها بإيده وهو **واقف قدام المحل** — مش نقطة تشيك إن
+            // ممكن تكون من العربية في الطريق. فالمراجعة هنا غالباً
+            // «بصّة وتأكيد»، مش تصحيح.
+            //
+            // ⚠️ **الشرطين مع بعض**: `submitted_at` بتفضل مكتوبة بعد
+            // التأكيد كبصمة، فالطابور لازم يستثني اللي اتأكّد.
+            $filter === 'requests',
+            fn ($qq) => $qq->whereNotNull('location_submitted_at')
+                ->whereNull('location_confirmed_at'),
+        )->when(
             // ✅ جاهز للتأكيد: مندوب سحب نقطة والعميل لسه مااتأكّدش
             //
             // ⚠️ **العميل اللي المندوب ضبط لوكيشنه من الأبلكيشن بيخرج
@@ -96,8 +118,13 @@ class ClientLocationController extends Controller
             // في `saveClientLocation`، والشرط ده `whereNull`. مفيش
             // استثناء مكتوب بالإيد ومفيش صف بيتعدّ مرتين: الشغل
             // اللي خلص فعلاً مابيقعدش في طابور المراجعة.
+            // ⚠️ **الطلبات اتشالت من هنا** (١٧/٨): العميل اللي المندوب
+            // بعت نقطته من الأبلكيشن كان بيظهر في الطابورين — مرة في
+            // «طلبات تعديل العنوان» ومرة هنا (لأن عنده زيارة برضه).
+            // المراجع كان هيأكّده من شاشة ويلاقيه لسه في التانية.
             $filter === 'from_visit',
             fn ($qq) => $qq->whereNull('location_confirmed_at')
+                ->whereNull('location_submitted_at')
                 ->whereIn('id', $visitClientIds),
         )->when(
             // 📱 اللي المندوب ضبطه من الأبلكيشن — بصمة كاملة، والمراجع
@@ -149,9 +176,15 @@ class ClientLocationController extends Controller
             // ⚠️ عدّاد لكل فلتر — الشارة على الزرار بتقول فيه شغل
             // قد إيه من غير ما تفتحه
             'counts' => [
+                // 🚩 الطابور الأهم — أول رقم المراجع بيبصّ عليه
+                'requests' => Client::visibleTo(Client::query())
+                    ->where('status', '!=', 'rejected')
+                    ->whereNotNull('location_submitted_at')
+                    ->whereNull('location_confirmed_at')->count(),
                 'from_visit' => Client::visibleTo(Client::query())
                     ->where('status', '!=', 'rejected')
                     ->whereNull('location_confirmed_at')
+                    ->whereNull('location_submitted_at')
                     ->whereIn('id', $visitClientIds)->count(),
                 'no_location' => Client::visibleTo(Client::query())
                     ->where('status', '!=', 'rejected')
@@ -261,7 +294,15 @@ class ClientLocationController extends Controller
             ...(($data['zone_id'] ?? null) ? ['zone_id' => (int) $data['zone_id']] : []),
             'location_confirmed_at' => now(),
             'location_confirmed_by' => $request->user()->id,
-            'location_source' => $data['source'] ?? Client::LOC_SRC_VISIT,
+            // ⚠️ **الأصل بيتحفظ لما المراجع مايختارش** (١٧/٨).
+            // الافتراضي القديم `visit` كان بيمسح `rep_app` على كل
+            // طلب يتأكّد — يعني بعد أسبوع مفيش طريقة تعرف بيها إن
+            // النقطة دي جات من مندوب واقف قدام المحل ولا من تخمين
+            // نقطة تشيك إن. المراجع اللي **بيصحّح** النقطة بيبعت
+            // `manual` صراحةً، وساعتها بس المصدر بيتغيّر.
+            'location_source' => $data['source']
+                ?? $client->location_source
+                ?? Client::LOC_SRC_VISIT,
         ])->save();
 
         return back()->with('ok', __('geo.confirmed_ok', ['client' => $client->displayName()]));

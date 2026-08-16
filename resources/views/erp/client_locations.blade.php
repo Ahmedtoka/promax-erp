@@ -30,6 +30,12 @@
 {{-- ⚠️ **الكروت بقت أربعة بدل اتنين** (طلب المالك ٨/٨/٢٠٢٦):
      «مستنية» لوحدها كانت بتجمع شغل جاهز مع شغل ميدان في رقم واحد. --}}
 <div class="kpis">
+    {{-- 🚩 **الطابور الأهم أول كارت** (١٧/٨). دي نقط المندوب سحبها
+         وهو واقف قدام المحل ومستنية مراجعة — أدق مصدر عندنا، والوحيد
+         اللي بيتعمّر يومياً من الميدان. --}}
+    <div class="kpi"><div class="lbl">🚩 {{ __('geo.f_requests') }}</div>
+        <div class="val {{ ($counts['requests'] ?? 0) > 0 ? 'mid' : '' }}">{{ number_format($counts['requests'] ?? 0) }}</div>
+        <div class="sub2">{{ __('geo.f_requests_hint') }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('geo.f_from_visit') }}</div>
         <div class="val pos">{{ number_format($counts['from_visit']) }}</div>
         <div class="sub2">{{ __('geo.f_from_visit_hint') }}</div></div>
@@ -57,6 +63,7 @@
          الأرشيف. والعدّاد على كل زرار عشان محدش يفتح فلتر فاضي. --}}
     <div class="searchbar">
         @foreach ([
+            'requests' => '🚩 '.__('geo.f_requests'),
             'from_visit' => __('geo.f_from_visit'),
             'unconfirmed' => __('geo.f_unconfirmed'),
             'no_location' => __('geo.f_no_location'),
@@ -133,6 +140,19 @@
                                 @endif
                                 {{ $c->location_confirmed_at?->format('Y-m-d') }}
                                 {{ $c->location_confirmed_at?->format('h:i A') }}</span>
+                        @elseif ($c->locationPending())
+                            {{-- 🚩 **طلب من الميدان مستنّي مراجعة** (١٧/٨).
+                                 الحالة دي ماكانتش موجودة: المندوب كان بيأكّد
+                                 لنفسه، فالصف كان بيظهر «متأكد» على طول ومحدش
+                                 راجعه. دلوقتي ليها لون وبصمة مين بعتها وإمتى
+                                 — والمراجع عارف إنه قدام شغل مش أرشيف. --}}
+                            <span class="badge b-purple">🚩 {{ __('geo.pending_review') }}</span>
+                            <br><span style="font-size:10px;color:var(--muted)">
+                                @if ($c->locationSubmitter)
+                                    {{ __('geo.sent_by') }}: {{ $c->locationSubmitter->displayName() }} ·
+                                @endif
+                                {{ $c->location_submitted_at?->format('Y-m-d') }}
+                                {{ $c->location_submitted_at?->format('h:i A') }}</span>
                         @elseif ($c->hasLocation())
                             <span class="badge b-orange">{{ __('geo.unverified') }}</span>
                         @else
@@ -146,12 +166,24 @@
                              أول اسم فيه أبوستروف. --}}
                         {{-- ⚠️ المتأكد خلاص مايتأكدش تاني (طلب المالك ١١/٨) —
                              زراره «تعديل» رمادي، للتصحيح بس. --}}
+                        {{-- ⚠️⚠️ **نقطة المندوب بتغلب نقطة الزيارة** (١٧/٨).
+                             الافتراضي كان `$v?->lat ?? $c->lat` — يعني نقطة
+                             التشيك إن **دايماً** بتسبق. وده كان بيقلب طابور
+                             الطلبات رأساً على عقب: المندوب يسحب نقطة وهو واقف
+                             قدام المحل، والمودال يفتح على نقطة تشيك إن ممكن
+                             تكون من العربية في الطريق — والمراجع يدوس «تأكيد»
+                             فيكتب الأضعف مكان الأقوى.
+
+                             ⚠️ والمصدر الافتراضي بيتقلب معاها: طلب من
+                             الأبلكيشن بيفضل `rep_app` (الكنترولر بيحافظ عليه
+                             لما المراجع مايختارش)، مش `visit`. --}}
+                        @php $pending = $c->locationPending(); @endphp
                         <button type="button" class="btn sm {{ $c->locationTrusted() ? '' : 'gold' }}"
                                 data-id="{{ $c->id }}"
                                 data-name="{{ $c->fullName() }}"
-                                data-lat="{{ $v?->lat ?? $c->lat }}"
-                                data-lng="{{ $v?->lng ?? $c->lng }}"
-                                data-src="{{ $v ? 'visit' : 'manual' }}"
+                                data-lat="{{ $pending ? ($c->lat ?? $v?->lat) : ($v?->lat ?? $c->lat) }}"
+                                data-lng="{{ $pending ? ($c->lng ?? $v?->lng) : ($v?->lng ?? $c->lng) }}"
+                                data-src="{{ $pending ? '' : ($v ? 'visit' : 'manual') }}"
                                 data-address="{{ $c->address }}"
                                 data-address-ar="{{ $c->address_ar }}"
                                 data-gov="{{ $c->governorate }}"
@@ -259,7 +291,15 @@ function openGeo(btn) {
     document.getElementById('geoName').textContent = d.name || '';
     document.getElementById('geoLat').value = d.lat || '';
     document.getElementById('geoLng').value = d.lng || '';
-    document.getElementById('geoSrc').value = d.src || 'manual';
+    // ⚠️⚠️ **الخانة بتتقفل لما مايكونش فيه مصدر** (١٧/٨). طلب من
+    // الأبلكيشن بيجي بـ`data-src=""` عشان الكنترولر يحافظ على
+    // `rep_app`. `|| 'manual'` القديمة كانت بتحوّل الفاضي لـ«يدوي»
+    // وتمسح أصل النقطة على كل تأكيد. والخانة **بتتعطّل** مش بتتساب
+    // فاضية: الخانة المعطّلة مابتتبعتش أصلاً، فالفاليديشن
+    // (`Rule::in`) ماتشوفش نص فاضي وترفضه.
+    const src = document.getElementById('geoSrc');
+    src.value = d.src || '';
+    src.disabled = !d.src;
     document.getElementById('geoAddr').value = d.address || '';
     document.getElementById('geoAddrAr').value = d.addressAr || '';
     document.getElementById('geoGov').value = d.gov || '';
