@@ -42,4 +42,5 @@ return [
 
     'product_not_priced' => '":product" has no price in this client\'s price list — set it on the price-lists screen first.',
     'returns_closed' => 'Returns intake is currently closed by management - contact accounting.',
+    'bad_request' => 'Request not understood - update the app and try again.',
 ];

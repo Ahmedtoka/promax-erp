@@ -196,6 +196,22 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // عليها عند الفتح. قراءة، فبره حارس الحضور زي `prices`.
         Route::get('/clients/{client}/catalog', [FieldApiController::class, 'catalog']);
 
+        // ═══ تاريخ العميل (١٦ أغسطس ٢٠٢٦) ═══
+        //
+        // قراءة بحتة، فبره حارس الحضور: المندوب بيراجع تاريخ العميل
+        // وهو في الطريق قبل ما يعمل تشيك إن.
+        //
+        // ⚠️ **الحارس هو `guardClient` جوّه الميثود** — نفس مرساة
+        // العلاقة اللي بتحكم كل إندبوينت فيه `{client}`. من غيرها أي
+        // توكن ميداني كان يقرا تاريخ **أي** عميل في الشركة.
+        Route::get('/clients/{client}/history', [FieldApiController::class, 'clientHistory']);
+
+        // ⚠️ **النوع محصور في الراوت** — من غير `whereIn` أي نص
+        // بيوصل للميثود ويعدّي على `match`، والراوت بيبقى مفتوح
+        // لقيم مالهاش معنى.
+        Route::get('/clients/{client}/history/{type}', [FieldApiController::class, 'clientHistoryList'])
+            ->whereIn('type', ['sales', 'collections', 'returns', 'gifts', 'shelf']);
+
         // طلبات البضاعة بتاعتي — شاشة «طلباتي» (2026-08-09). قراءة.
         Route::get('/my-goods-requests', [FieldApiController::class, 'myGoodsRequests']);
 

@@ -1002,6 +1002,12 @@ class FieldApiController extends Controller
                 return [
                     'product_id' => $p->id,
                     'name' => $p->displayName(),
+                    // ⚠️ **الصورة كانت ناقصة هنا بس** (بلاغ المالك
+                    // ١٦/٨). باقي الإندبوينتس بترجّع `imageSrc()`،
+                    // فشاشة طلب البضاعة كانت الوحيدة اللي بتوري
+                    // أيقونات رمادية — والمندوب بيدوّر على الصنف
+                    // بشكله وسط أصناف أسماؤها متشابهة.
+                    'image' => $p->imageSrc(),
                     'barcode' => $p->barcode,
                     'price' => (float) $q['unit_price'],
                     'units_per_case' => (int) $p->units_per_case,
@@ -1015,6 +1021,208 @@ class FieldApiController extends Controller
             ->values()->all();
 
         return response()->json(['items' => $items]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // تاريخ العميل  ·  ١٦ أغسطس ٢٠٢٦
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // طلب المالك: «مربعات كليكابل في صفحة العميل — كل مبيعاته، كل
+    // تحصيلاته، كل مرتجعاته، كل هداياه، كل صور ترتيب الأرفف. في
+    // المربع السامري، ولما أدوس تطلع ليستة، وأدخل على الليست أشوف
+    // التفاصيل».
+    //
+    // ⚠️ **المندوب واقف قدام العميل والعميل بيقول «أنا دفعتلك
+    // الأسبوع اللي فات»** — من غير الشاشة دي مافيش رد غير «هرجعلك».
+    // ده مش عرض بيانات، ده إنهاء نقاش في الزيارة.
+    //
+    // ⚠️ **كله من مصادره الأصلية مش من عدادات محفوظة على العميل.**
+    // `clients.purchases/collections/returns` أرقام مجمّعة بتتحدّث
+    // بـ`recalculate()`؛ الشاشة دي بتوري **مستندات** والمندوب
+    // بيقارنها بورقه. لو قرينا العدّادات كنا هنوري رقم مش وراه ورق.
+
+    /**
+     * GET /api/clients/{client}/history
+     *
+     * سامري المربعات الخمسة — عدد وإجمالي وآخر تاريخ لكل نوع.
+     *
+     * ⚠️ **استعلام عدّ لكل نوع، مش تحميل الصفوف وعدّها.** العميل
+     * القديم عنده مئات الفواتير، وتحميلها كلها عشان نطبع رقم على
+     * مربع كان هيقفّل الشاشة على شبكة الشارع.
+     */
+    public function clientHistory(Request $request, Client $client): JsonResponse
+    {
+        if ($err = $this->guardClient($request->user(), $client)) {
+            return $err;
+        }
+
+        $sales = Invoice::where('client_id', $client->id);
+        $returns = \App\Models\ClientReturn::where('client_id', $client->id);
+        $gifts = \App\Models\GiftHandout::where('client_id', $client->id);
+
+        // ⚠️ **التحصيل قيد دائن نوعه `collection`** — مش أي قيد دائن.
+        // المرتجع كمان بيعمل قيد دائن، وخلطهم كان هيعرض المرتجعات
+        // مرتين: مرة في مربعها ومرة في التحصيلات.
+        $collections = \App\Models\Transaction::where('client_id', $client->id)
+            ->where('kind', 'collection');
+
+        // صور الأرفف بتتعلّق بالزيارة مش بالعميل — الربط عن طريقها
+        $photos = \App\Models\VisitPhoto::whereHas(
+            'visit', fn ($q) => $q->where('client_id', $client->id)
+        );
+
+        return response()->json(['summary' => [
+            'sales' => [
+                'count' => (clone $sales)->count(),
+                'total' => (float) (clone $sales)->sum('grand_total'),
+                'last_at' => $this->lastAt(clone $sales),
+            ],
+            'collections' => [
+                'count' => (clone $collections)->count(),
+                'total' => (float) (clone $collections)->sum('credit'),
+                'last_at' => $this->lastAt(clone $collections),
+            ],
+            'returns' => [
+                'count' => (clone $returns)->count(),
+                'total' => (float) (clone $returns)->sum('grand_total'),
+                'last_at' => $this->lastAt(clone $returns),
+            ],
+            'gifts' => [
+                // ⚠️ الهدايا **بالقطع مش بالفلوس** — مالهاش قيمة في
+                // كشف الحساب أصلاً، وعرضها بالجنيه كان هيوحي إنها
+                // مديونية.
+                'count' => (clone $gifts)->count(),
+                'total' => (float) (clone $gifts)->sum('qty'),
+                'last_at' => $this->lastAt(clone $gifts),
+            ],
+            'shelf' => [
+                'count' => (clone $photos)->count(),
+                'total' => 0.0,
+                'last_at' => $this->lastAt(clone $photos),
+            ],
+        ]]);
+    }
+
+    private function lastAt($query): ?string
+    {
+        $at = $query->max('created_at');
+
+        return $at ? \Illuminate\Support\Carbon::parse($at)->toIso8601String() : null;
+    }
+
+    /**
+     * GET /api/clients/{client}/history/{type}
+     *
+     * ليستة نوع واحد بتفاصيله. البنود **جوّه الصف** مش في نداء
+     * تاني — المندوب بيفتح الليستة ويدوس على عنصر وهو في الشارع،
+     * ونداء لكل عنصر كان معناه انتظار في كل دوسة.
+     *
+     * ⚠️ **سقف ١٠٠ صف.** مفيش صفحات في الشاشة دي عن قصد: المندوب
+     * محتاج «آخر اللي حصل» مش أرشيف كامل، والأرشيف مكانه الداشبورد.
+     */
+    public function clientHistoryList(Request $request, Client $client, string $type): JsonResponse
+    {
+        if ($err = $this->guardClient($request->user(), $client)) {
+            return $err;
+        }
+
+        $rows = match ($type) {
+            'sales' => Invoice::with('items.product')
+                ->where('client_id', $client->id)
+                ->latest()->take(100)->get()
+                ->map(fn ($i) => [
+                    'id' => $i->id,
+                    'title' => $i->number,
+                    'amount' => (float) $i->grand_total,
+                    'time' => $i->created_at->toIso8601String(),
+                    // ⚠️ **القيمة الخام مش نص مترجم.** الأبلكيشن هو
+                    // طبقة اللغة (`L.t`) وعنده `cash`/`credit` أصلاً؛
+                    // لو السيرفر بعت عربي، المندوب اللي شغّال إنجليزي
+                    // كان هيشوف كلمة عربية وسط شاشة إنجليزي.
+                    'payment' => $i->payment,
+                    'lines' => $i->items->map(fn ($it) => [
+                        'name' => $it->product?->displayName() ?? '—',
+                        'image' => $it->product?->imageSrc(),
+                        'qty' => (int) $it->qty,
+                        'total' => (float) $it->total,
+                    ])->values(),
+                ]),
+
+            'collections' => \App\Models\Transaction::where('client_id', $client->id)
+                ->where('kind', 'collection')
+                ->latest()->take(100)->get()
+                ->map(fn ($t) => [
+                    'id' => $t->id,
+                    'title' => $t->reference ?: $t->memo ?: '—',
+                    'amount' => (float) $t->credit,
+                    'time' => $t->created_at->toIso8601String(),
+                    // خام — الأبلكيشن بيترجمها
+                    'method' => $t->method,
+                    // صورة إثبات التحصيل الميداني — الشيك أو التحويل
+                    'photo' => $t->proofUrl(),
+                    'lines' => [],
+                ]),
+
+            'returns' => \App\Models\ClientReturn::with('items.product')
+                ->where('client_id', $client->id)
+                ->latest()->take(100)->get()
+                ->map(fn ($r) => [
+                    'id' => $r->id,
+                    'title' => $r->number,
+                    'amount' => (float) $r->grand_total,
+                    'time' => $r->created_at->toIso8601String(),
+                    // ⚠️ **دي استثناء مقصود**: `policyLabel()` نص
+                    // مترجم من السيرفر لأن سياسات المرتجع بتتعرّف في
+                    // الإعدادات ومالهاش مقابل ثابت في ملف لغة
+                    // الأبلكيشن. نفس اللي `invoices()` بتعمله.
+                    'policy_label' => $r->policyLabel(),
+                    'lines' => $r->items->map(fn ($it) => [
+                        'name' => $it->product?->displayName() ?? '—',
+                        'image' => $it->product?->imageSrc(),
+                        'qty' => (int) $it->qty,
+                        'total' => (float) $it->total,
+                        // سليم ولا تالف — الفرق ده بيحدّد السياسة
+                        'condition' => $it->condition,
+                    ])->values(),
+                ]),
+
+            'gifts' => \App\Models\GiftHandout::with('product')
+                ->where('client_id', $client->id)
+                ->latest()->take(100)->get()
+                ->map(fn ($g) => [
+                    'id' => $g->id,
+                    'title' => $g->product?->displayName() ?? '—',
+                    // ⚠️ **قطع مش جنيه** — الهدية مش قيد على الحساب
+                    'qty' => (int) $g->qty,
+                    'time' => $g->created_at->toIso8601String(),
+                    // ⚠️ **السبب مش اسم المنتج.** `title` هو اسم
+                    // الصنف؛ لو بعتناه هنا كمان اللابل الجانبي كان
+                    // هيكرّر نفس الكلام اللي فوقه بالظبط.
+                    'reason' => $g->reason,
+                    'image' => $g->product?->imageSrc(),
+                    'lines' => [],
+                ]),
+
+            'shelf' => \App\Models\VisitPhoto::with('visit')
+                ->whereHas('visit', fn ($q) => $q->where('client_id', $client->id))
+                ->latest()->take(100)->get()
+                ->map(fn ($p) => [
+                    'id' => $p->id,
+                    // خام (`before`/`after`) — الأبلكيشن بيترجمها
+                    'stage' => $p->stage,
+                    'time' => $p->created_at->toIso8601String(),
+                    'photo' => $p->url(),
+                    'lines' => [],
+                ]),
+
+            default => null,
+        };
+
+        if ($rows === null) {
+            return response()->json(['message' => __('api.bad_request')], 422);
+        }
+
+        return response()->json(['type' => $type, 'items' => $rows->values()]);
     }
 
     // ═══════ لوكيشن العميل من الأبلكيشن (١٤ أغسطس ٢٠٢٦) ═══════
