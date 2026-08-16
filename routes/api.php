@@ -128,6 +128,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/clients/{client}/geocode', [FieldApiController::class, 'geocodeClient']);
         Route::post('/clients/{client}/location', [FieldApiController::class, 'saveClientLocation']);
 
+        // المحافظات والمناطق من غير نقطة — شاشة اللوكيشن بتحمّلها
+        // أول ما تفتح عشان المندوب يقدر يختار يدوي حتى قبل السحب
+        // أو لو السحب فشل (إصلاح ١٥/٨).
+        Route::get('/geo/options', [FieldApiController::class, 'geoOptions']);
+
         // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);
         Route::post('/pos/{purchaseOrder}/deliver', [FieldApiController::class, 'deliver']);

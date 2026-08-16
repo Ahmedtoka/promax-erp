@@ -1041,11 +1041,38 @@ class FieldApiController extends Controller
         // عنوان أمريكي ويحطه في خانة عنوان عميل مصري.
         [$lat, $lng] = $this->egyptPoint($data);
 
+        // ⚠️ **القوايم بترجع حتى لما النقطة مرفوضة** (إصلاح ١٥/٨).
+        // قبل كده الرد كان `message` بس، فالأبلكيشن مايوصلوش
+        // المحافظات ولا المناطق — والمندوب يلاقي الدروب داون فاضية
+        // ومالوش أي طريقة يكمّل. حصل حرفياً على الإميوليتر (لوكيشنه
+        // كاليفورنيا)، وبيحصل في الواقع لو الـGPS زاغ بره الحدود أو
+        // الجيوكودينج فشل. القوايم دي **ثابتة ومالهاش علاقة بالنقطة**،
+        // فحجبها كان عقاب بلا سبب.
+        $lists = [
+            'governorates' => \App\Support\GeoSuggest::governorateOptions(),
+            'zones' => \App\Support\GeoSuggest::zoneOptions(),
+        ];
+
         if ($lat === null) {
-            return response()->json(['message' => __('geo.bad_point')], 422);
+            return response()->json(['message' => __('geo.bad_point')] + $lists, 422);
         }
 
-        return response()->json(\App\Support\GeoSuggest::forPoint($lat, $lng) + [
+        return response()->json(\App\Support\GeoSuggest::forPoint($lat, $lng) + $lists);
+    }
+
+    /**
+     * GET /api/geo/options
+     *
+     * المحافظات والمناطق لوحدها — من غير نقطة.
+     *
+     * ⚠️ شاشة لوكيشن العميل كانت بتستنى سحب GPS ناجح عشان تملأ
+     * الدروب داون، فالمندوب مايقدرش يختار محافظة يدوي قبل ما يسحب
+     * — ولا خالص لو السحب فشل. القوايم دي داتا مرجعية ثابتة،
+     * فالشاشة بتحمّلها أول ما تفتح.
+     */
+    public function geoOptions(Request $request)
+    {
+        return response()->json([
             'governorates' => \App\Support\GeoSuggest::governorateOptions(),
             'zones' => \App\Support\GeoSuggest::zoneOptions(),
         ]);
