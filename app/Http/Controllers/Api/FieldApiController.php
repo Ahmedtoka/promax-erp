@@ -1342,8 +1342,14 @@ class FieldApiController extends Controller
                 'po_status' => $r->purchaseOrder?->status,
                 'assignee' => $r->assignee?->displayName(),
                 'time' => $r->created_at->toIso8601String(),
+                // ⚠️ **`image` كان ناقص** (بلاغ المالك ١٥/٨: «صفحة
+                // طلبات الريفيل مش بتطلع صور المنتجات»). الأبلكيشن
+                // بيرسم الصورة لو موجودة، والسيرفر ماكانش بيبعتها
+                // أصلاً — فالشاشة كانت أسماء عريانة والمندوب بيقرا
+                // بدل ما يتعرّف بالعين، وهو واقف في الشارع.
                 'items' => $r->items->map(fn ($i) => [
                     'name' => $i->product?->displayName() ?? '—',
+                    'image' => $i->product?->imageSrc(),
                     'qty' => (int) $i->qty,
                 ])->values()->all(),
             ])->values()->all();
