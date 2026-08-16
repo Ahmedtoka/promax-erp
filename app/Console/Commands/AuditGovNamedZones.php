@@ -85,9 +85,14 @@ class AuditGovNamedZones extends Command
      * العنوان مش دايماً الاسم الرسمي للمنطقة.
      *
      * ⚠️ **دي مش مناطق جديدة**، دي أسماء زيادة لمناطق **موجودة**.
-     * المفتاح هو اسم المنطقة زي ما هو في `zones.name` بالظبط؛ لو
-     * المنطقة مش موجودة الصف بيتجاهَل في صمت — فتقدر تسيب صفوف
+     * لو المنطقة مش موجودة الصف بيتجاهَل في صمت — فتقدر تسيب صفوف
      * لمناطق هتعملها بعدين وهي تشتغل لوحدها أول ما تتعمل.
+     *
+     * ⚠️⚠️ **المفتاح بيتقارن بعد التطبيع مش حرفياً.** أول نسخة كانت
+     * `ALIASES[$zone->name]` بالظبط، فالمنطقة اللي اتكتبت «طريق مصر
+     * اسكندرية الصحراوي» بألف بدل «إسكندرية» بهمزة ماكانتش تلاقي
+     * صفها، والأداة بتسكت — تفضل تتفرج على صفر نقلات من غير ما
+     * تعرف السبب. المقارنة بقت بـ`norm()` زي أي مقارنة تانية هنا.
      *
      * ⚠️ **البدائل بتعدّي على نفس الحراس**: حد الكلمة، الـ٤ حروف،
      * وحارس أسماء الشوارع. فـ«شارع التجمع» لو موجود هيتحجب برضه.
@@ -103,10 +108,17 @@ class AuditGovNamedZones extends Command
         'مدينة نصر' => ['nasr city'],
         'الزمالك' => ['zamalek'],
         'المهندسين' => ['mohandessin', 'mohandiseen'],
-        'المعادي' => ['maadi'],
+        // «دجلة» حي جوّه المعادي ومالوش منطقة لوحده
+        'المعادي' => ['maadi', 'دجله', 'degla'],
         'الدقي' => ['dokki'],
         'الهرم' => ['haram', 'pyramids'],
         'شبرا الخيمة' => ['شبراالخيمه', 'shubra el kheima'],
+        // «٦ أكتوبر» بيتكتب بالرقم دايماً، والاسم الرسمي بالحروف.
+        // «شارع ٦ أكتوبر» في مدن تانية بيتحجب بحارس الشوارع.
+        'السادس من أكتوبر' => ['6 اكتوبر', 'اكتوبر', 'october'],
+        'الشيخ زايد' => ['zayed', 'الشيح زايد'],
+        'سموحة' => ['smoha', 'smouha'],
+        'سيدي جابر' => ['sidi gabir', 'sidi gaber'],
         // ⚠️ المنطقة دي **لسه ماتعملتش** — الصف مستنيها. محطات
         // البنزين على الطريق مش تابعة لأي حي، ومن غير منطقة ليها
         // مايينفعش يتعمل لها خط سير.
@@ -165,8 +177,17 @@ class AuditGovNamedZones extends Command
         // بعدين يحاول يكتب عمود مش موجود.
         $needles = [];
 
+        // مفاتيح البدائل مطبّعة مرة واحدة — المقارنة بالمعنى مش بالحرف
+        $aliasMap = [];
+
+        foreach (self::ALIASES as $zoneName => $words) {
+            $aliasMap[$this->norm($zoneName)] = $words;
+        }
+
         foreach ($real as $t) {
-            $extra = self::ALIASES[trim((string) $t->name)] ?? [];
+            $extra = $aliasMap[$this->norm((string) $t->name)]
+                ?? $aliasMap[$this->norm((string) $t->name_en)]
+                ?? [];
 
             $needles[$t->id] = collect([$t->name, $t->name_en])
                 ->merge($extra)
@@ -176,6 +197,24 @@ class AuditGovNamedZones extends Command
         }
 
         $real = $real->filter(fn ($t) => $needles[$t->id] !== [])->values();
+
+        // ⚠️ صف بدائل لمنطقة مش موجودة = عملاء مستنيين في «يدوي» من
+        // غير أي إشارة. الأداة لازم تقول ده بصوت عالي بدل ما تسكت.
+        $missing = collect(array_keys($aliasMap))
+            ->reject(fn ($k) => $real->contains(fn ($t) => $this->norm((string) $t->name) === $k
+                || $this->norm((string) $t->name_en) === $k));
+
+        if ($missing->isNotEmpty()) {
+            $this->warn('  ⚠ صفوف بدائل مستنية مناطق ماتعملتش — اعملها من /erp/zones:');
+
+            foreach (array_keys(self::ALIASES) as $name) {
+                if ($missing->contains($this->norm($name))) {
+                    $this->warn('      • '.$name);
+                }
+            }
+
+            $this->line('');
+        }
 
         $sure = [];      // نفس المحافظة أو داخل القاهرة الكبرى
         $review = [];    // نقل بين محافظات بعيدة — محتاج عين بشرية
