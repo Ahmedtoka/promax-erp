@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Support\Divisions;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -22,15 +23,33 @@ class DivisionController extends Controller
     {
         $division = $request->string('division')->value();
 
-        // ⚠️ استعلام تجميعي واحد لكل الكروت — مش ١١ استعلام
+        // ⚠️ استعلام تجميعي واحد لكل الجدول — مش ١١ استعلام.
+        // نفس أعمدة شاشة القنوات القديمة بس على الديفيجنز — «السايكل
+        // الجديدة» (طلب المالك ١٧/٨).
         $agg = Client::visibleTo(Client::query())
             ->where('status', '!=', 'rejected')
             ->selectRaw('division,
                          COUNT(*) as n,
                          SUM(purchases) as purchases,
-                         SUM(balance) as balance')
+                         SUM(collections) as collections,
+                         SUM(balance) as balance,
+                         MIN(NULLIF(discount, 0)) as dmin,
+                         MAX(discount) as dmax,
+                         AVG(NULLIF(discount, 0)) as davg')
             ->groupBy('division')
             ->get()->keyBy('division');
+
+        // مبيعات النهارده والكميات — من مصادرها الأصلية (الدوكترين)
+        $today = \App\Models\Invoice::join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->whereDate('invoices.created_at', today())
+            ->selectRaw('clients.division, SUM(invoices.grand_total) as t')
+            ->groupBy('clients.division')->pluck('t', 'division');
+
+        $qty = DB::table('invoice_items')
+            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
+            ->join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->selectRaw('clients.division, SUM(invoice_items.qty) as q')
+            ->groupBy('clients.division')->pluck('q', 'division');
 
         $clients = collect();
 
@@ -54,9 +73,11 @@ class DivisionController extends Controller
 
         return view('erp.divisions', [
             'agg' => $agg,
+            'today' => $today,
+            'qty' => $qty,
             'division' => $division,
             'clients' => $clients,
-            // عدّاد الغير مسكَّن — كارت لوحده في الشاشة
+            // عدّاد الغير مسكَّن — صف لوحده في الجدول
             'unassigned' => $agg->get(null)?->n ?? ($agg->get('')?->n ?? 0),
         ]);
     }

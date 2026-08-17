@@ -39,6 +39,8 @@ class Access
     public const SCREENS = [
         // ═══ Channel Manager — الشركة كلها ما عدا الإعدادات ═══
         'manager' => [
+            // السايكل الجديدة (١٧/٨): الديفيجنز + الإعداد + رصيد العناوين
+            'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
@@ -70,6 +72,9 @@ class Access
         // ⚠️ الفلترة نفسها مش هنا. دي بتحصل في الكويري بـ`canSeeBranch`.
         // الخريطة بتقول «الشاشة دي مسموحة»، والكويري بتقول «الصفوف دي».
         'branch_manager' => [
+            // الديفيجنز **قراءة** — الإعداد الجماعي مش هنا عن قصد:
+            // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
+            'erp.divisions',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             'erp.leads', 'erp.stock', 'erp.batches', 'erp.reports',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
@@ -317,9 +322,20 @@ class Access
         'nav.group_clients' => [
             ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
             ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
+            // ═══ السايكل الجديدة (١٧/٨) ═══
+            //
+            // ⚠️⚠️ **المنيو الرئيسي بيتبني من `Access::NAV` مش من
+            // `$shortcutDefs` في اللايوت** — أول ما اتضافت الشاشات
+            // الجديدة اتحطت في الشورتكاتس بس، والمنيو فضل فاضي منها
+            // (بلاغ المالك). أي شاشة جديدة لازم تتسجل **هنا** عشان
+            // تبان في المنيو، والشورتكاتس رفاهية فوقها.
+            ['erp.divisions', '🗂️', 'client.divisions', 'erp.divisions', null],
+            ['erp.setup.chains', '⚙️', 'client.setup_chains', 'erp.setup.chains', null],
+            ['erp.setup.clients', '🧩', 'client.setup_clients', 'erp.setup.clients', null],
             // ⚠️ العدّاد `null` مش رولز — الخانة دي مفتاح عدّاد
             // (`?string`)، وحطّ أراي فيها كان بيرمي 500 على كل صفحة
             ['erp.client_locations', '📍', 'nav.client_locations', 'erp.client_locations', null],
+            ['erp.client_locations.credits', '🧭', 'geo.rep_credits', 'erp.client_locations.credits', null],
             ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
