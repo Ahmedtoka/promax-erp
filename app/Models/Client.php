@@ -127,7 +127,7 @@ class Client extends Model
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
         'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',
-        'channel_id', 'group_id', 'branch_id', 'sub_channel', 'parent_id', 'uses_channel_discount',
+        'channel_id', 'group_id', 'branch_id', 'sub_channel', 'division', 'parent_id', 'uses_channel_discount',
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng', 'address_ar',
         'location_confirmed_at', 'location_confirmed_by', 'location_source',
@@ -697,6 +697,29 @@ public function zone(): BelongsTo
     public function hasLocation(): bool
     {
         return $this->lat !== null && $this->lng !== null;
+    }
+
+    /** اسم القسم التجاري — «—» للغير مسكَّن */
+    public function divisionLabel(): string
+    {
+        return \App\Support\Divisions::label($this->division);
+    }
+
+    /**
+     * طريقة التعامل — مشتقة من القسم، مش عمود.
+     *
+     * ⚠️ cashvan = عهدة + خط سير · delivery = PO · online = كوريير.
+     * تخزينها كعمود تاني كان معناه إن القسم يتغيّر والطريقة تفضل
+     * قديمة — والاشتقاق بيخلّيهم مستحيل يفترقوا.
+     */
+    public function fulfillment(): ?string
+    {
+        return \App\Support\Divisions::fulfillmentOf($this->division);
+    }
+
+    public function fulfillmentLabel(): string
+    {
+        return \App\Support\Divisions::fulfillmentLabel($this->division);
     }
 
     /**

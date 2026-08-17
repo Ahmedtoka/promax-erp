@@ -704,6 +704,8 @@ select.ssel-native{display:none!important}
                 ['erp.collections', 'erp.collections', '💵', __('nav.field_collections')],
                 ['erp.repclose', 'erp.repclose', '🤝', __('settle.title')],
                 ['erp.clients', 'erp.clients', '👥', __('nav.clients')],
+                // ⚠️ مدخل الديفيجنز (١٧/٨) — شاشة بلا لينك شاشة محدش هيفتحها
+                ['erp.divisions', 'erp.divisions', '🗂️', __('client.divisions')],
                 ['erp.client_locations', 'erp.client_locations', '📍', __('geo.confirm_locations')],
                 // ⚠️ **مدخل للشاشة الجديدة** (١٧/٨) — الشاشة اللي
                 // مالهاش لينك في المنيو شاشة محدش هيفتحها. نفس

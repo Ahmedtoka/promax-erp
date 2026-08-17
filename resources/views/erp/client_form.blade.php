@@ -308,6 +308,20 @@
                 {!! $err('sub_channel') !!}
                 {!! $hint('sub_channel') !!}
             </div>
+            {{-- ═══ الديفيجن التجاري (١٧/٨) ═══
+                 ⚠️ طريقة التعامل بتتكتب جنب كل قسم في القايمة —
+                 اللي بيسكّن لازم يعرف إن اختياره بيحدد إزاي البضاعة
+                 هتوصل، مش مجرد تصنيف تقارير. --}}
+            <div>
+                <label class="f">{{ __('client.division') }}</label>
+                <select name="division" style="width:100%">
+                    <option value="">— {{ __('client.no_division') }} —</option>
+                    @foreach (\App\Support\Divisions::options() as $k => $lbl)
+                        <option value="{{ $k }}" @selected($v('division') === $k)>
+                            {{ $lbl }} · {{ \App\Support\Divisions::fulfillmentLabel($k) }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div>
                 <label class="f">{{ __('common.phone') }}</label>
                 <input type="text" name="phone" maxlength="30" dir="ltr" placeholder="01000000000"

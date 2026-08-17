@@ -502,6 +502,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('groups.contract');
         });
 
+        // ===== الديفيجنز (١٧/٨) =====
+        Route::get('/divisions', [\App\Http\Controllers\DivisionController::class, 'index'])
+            ->name('divisions');
+        Route::post('/divisions/{client}', [\App\Http\Controllers\DivisionController::class, 'assign'])
+            ->middleware('role:admin,manager')->name('divisions.assign');
+
         // ===== القنوات =====
         Route::get('/channels', [ChannelController::class, 'index'])->name('channels');
         Route::put('/channels/{channel}', [ChannelController::class, 'update'])

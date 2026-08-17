@@ -871,6 +871,8 @@ class ErpController extends Controller
             'channel_id' => ['required', 'exists:channels,id'],
             'group_id' => ['nullable', 'exists:client_groups,id'],
             'sub_channel' => ['nullable', 'in:chain,convenience'],
+            // الديفيجن التجاري (١٧/٨) — القايمة من مصدرها الوحيد
+            'division' => ['nullable', \App\Support\Divisions::rule()],
             // ⚠️ **مش في فورم العميل الجديد.** التصنيف نتيجة سلوك مش
             // مدخل: بيدفع في مواعيده ولا لأ، بيكبر ولا لأ. تحديده وقت
             // التعريف تخمين بيتحوّل لحقيقة في الشاشة — عميل يتعلّم
