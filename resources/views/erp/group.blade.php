@@ -440,6 +440,18 @@
             @endif
         </div>
 
+        {{-- ═════ الديفيجن على كل الفروع (١٧/٨) ═════
+             السلسلة نشاطها واحد — الفاضي = ماتلمسش. --}}
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
+            <label class="f">{{ __('client.chain_apply_division') }}</label>
+            <select name="apply_division" style="width:100%">
+                <option value="">— {{ __('client.chain_apply_keep') }} —</option>
+                @foreach (\App\Support\Divisions::options() as $dk => $dl)
+                    <option value="{{ $dk }}">{{ $dl }} · {{ \App\Support\Divisions::fulfillmentLabel($dk) }}</option>
+                @endforeach
+            </select>
+        </div>
+
         {{-- ═════ قايمة السعر على كل الفروع ═════
              طلب المالك ١٧/٨: «أحدّد بالسلسلة السعر اللي بيتحاسب بيه
              فيطبّق على كل الفروع، وبعدين أدخل أغيّر كام عميل بس».

@@ -63,7 +63,12 @@ class AssignDivisions extends Command
         'modern_trade' => ['gourrmet', 'gourmet', 'seoudi', 'metro', 'kazyon', 'spinneys',
             'carrefour', 'ragab', 'hyper', 'zahran', 'kheir zaman', 'fresh food', 'oscar',
             'bounjour', 'flamingo', 'exception', 'grab and go', 'خير زمان', 'سعودي', 'كازيون',
-            'كارفور', 'مترو', 'راجب', 'سبينس', 'زهران', 'دايلي مارت', 'daily mart', 'dailymart'],
+            'كارفور', 'مترو', 'راجب', 'سبينس', 'زهران',
+            // إضافات بعد أول معاينة (١٧/٨) — من قايمة «بدون قسم»
+            'دايلي مارت', 'ديلي مارت', 'daily mart', 'dailymart', 'dail mart', 'dail  mart',
+            // ⚠️ الحسيني **مش هنا عن قصد** — ماعرفش نشاطه، والتخمين
+            // الغلط بيدّي طريقة تعامل غلط. اتسكّن من صفحة سلسلته.
+            'بونجور', 'جراب اند جو', 'holly mart'],
         // ═══ كونفينيانس ومحطات — كاش فان ═══
         'convenience' => ['circle k', 'on the run', 'speerr', 'kwak', 'traffic', 'grease',
             'master on the go', 'way to go', 'pickup', 'chillout', 'شل اوت', 'سيركل',
@@ -72,7 +77,10 @@ class AssignDivisions extends Command
         'supplement_stores' => ['max muscle', 'supplement', 'مكملات', 'ماكس ماسل'],
         // ═══ چيمات — كاش فان ═══
         'gyms' => ['gym', 'fitness', 'golds', 'جيم', 'چيم', 'فيتنس', 'لياقة',
-            'crossfit', 'كروس فيت', 'health', 'باديل', 'padel'],
+            'crossfit', 'كروس فيت', 'health', 'باديل', 'padel',
+            // إضافات بعد أول معاينة — «muscle» بييجي **بعد** قاموس
+            // المكملات، فـMax Muscle بياخد قسمه الأدق الأول
+            'muscle', 'power fit', 'h20'],
         // ═══ صيدليات — كاش فان ═══
         'pharmacies' => ['pharmacy', 'pharma', 'صيدلية', 'صيدليه'],
         // ═══ فنادق — كاش فان ═══
@@ -182,19 +190,20 @@ class AssignDivisions extends Command
         return self::SUCCESS;
     }
 
-    /** تصنيف عميل واحد — `null` لو مفيش قاعدة واثقة */
+    /**
+     * تصنيف عميل واحد — `null` لو مفيش قاعدة واثقة.
+     *
+     * ⚠️⚠️ **البراند أولاً، و`sub_channel` احتياطي** (تصحيح بعد أول
+     * تشغيلة ١٧/٨). الترتيب الأول كان بالعكس — و`sub_channel=chain`
+     * متكتوب في الداتا على **أي حاجة ليها فروع** (سيركل · ماكس
+     * ماسل · الحسيني) بمعنى «سلسلة» مش «هايبر ماركت». النتيجة:
+     * ٦١٤ من ٧٠١ راحوا مودرن تريد، والمكملات خدت **صفر** وسيركل
+     * كيه الـ١٩٩ فرع اتبلعوا. الاسم أدق من تصنيف قديم اتكتب بمعنى
+     * مختلف.
+     */
     private function classify(Client $c): ?string
     {
-        // ═══ 1. التصنيف اليدوي القديم أقوى إشارة ═══
-        if ($c->sub_channel === 'chain') {
-            return 'modern_trade';
-        }
-
-        if ($c->sub_channel === 'convenience') {
-            return 'convenience';
-        }
-
-        // ═══ 2. الاسم — بتاعه وبتاع سلسلته ═══
+        // ═══ 1. البراند — بتاعه وبتاع سلسلته ═══
         $hay = mb_strtolower(implode(' ', array_filter([
             $c->name, $c->name_en, $c->group?->name, $c->group?->name_en,
         ])));
@@ -207,12 +216,17 @@ class AssignDivisions extends Command
             }
         }
 
-        // ═══ 3. قناة أونلاين من غير براند معروف → إيكوميرس ═══
-        //
-        // ⚠️ بعد فحص الاسم مش قبله — عشان Rabbit (كويك كوميرس)
-        // اللي قناته أونلاين ياخد قسمه الأدق من البراند الأول.
+        // ═══ 2. قناة أونلاين من غير براند معروف → إيكوميرس ═══
         if ($c->channel?->code === Channel::ONLINE) {
             return 'ecommerce';
+        }
+
+        // ═══ 3. `sub_channel` كاحتياطي أخير ═══
+        //
+        // ⚠️ `chain` **مش** إشارة مودرن تريد في الداتا دي — بيتساب
+        // للاسم. `convenience` بس اللي لسه إشارة موثوقة.
+        if ($c->sub_channel === 'convenience') {
+            return 'convenience';
         }
 
         return null;

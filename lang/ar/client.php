@@ -223,6 +223,8 @@ return [
     'ff_cashvan' => 'كاش فان — عهدة وخط سير',
     'ff_delivery' => 'ديلفري — أوامر توريد',
     'ff_online' => 'أونلاين — كوريير',
+    'chain_apply_division' => 'الديفيجن على كل الفروع',
+    'chain_division_applied' => 'قسم «:division» اتطبّق على :count فرع.',
     'chain_apply_price_list' => 'قايمة السعر على كل الفروع',
     'chain_apply_keep' => 'ماتغيّرش قوايم الفروع',
     'chain_apply_price_list_hint' => 'بتتكتب على كل الـ:count فرع. الفرع اللي عقده ماسك قايمة، قايمة العقد هي اللي بتتحاسب.',

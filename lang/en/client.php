@@ -221,6 +221,8 @@ return [
     'ff_cashvan' => 'Cashvan - custody & journey plan',
     'ff_delivery' => 'Delivery - purchase orders',
     'ff_online' => 'Online - courier',
+    'chain_apply_division' => 'Division for all branches',
+    'chain_division_applied' => '":division" applied to :count branches.',
     'chain_apply_price_list' => 'Price list for all branches',
     'chain_apply_keep' => 'Leave branch lists unchanged',
     'chain_apply_price_list_hint' => 'Written on all :count branches. A branch whose contract holds a price list keeps charging the contract list.',

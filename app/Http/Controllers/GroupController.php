@@ -116,6 +116,9 @@ class GroupController extends Controller
             // طلب المالك: «أحدّد بالسلسلة السعر اللي بيتحاسب بيه
             // فيطبّق على كل الفروع، وبعدين أدخل أغيّر كام عميل بس».
             'apply_price_list' => ['nullable', 'exists:price_lists,id'],
+            // الديفيجن على كل الفروع (١٧/٨) — السلسلة نشاطها واحد،
+            // وتسكين ٦٠٠ فرع واحد واحد مش شغل بني آدم
+            'apply_division' => ['nullable', \App\Support\Divisions::rule()],
         ]);
 
         $group->update($this->validated($request));
@@ -209,6 +212,19 @@ class GroupController extends Controller
 
             $msgs[] = __('client.chain_discount_applied', [
                 'pct' => $pct,
+                'count' => $n,
+            ]);
+        }
+
+        // ═══ الديفيجن على كل الفروع ═══
+        if ($request->filled('apply_division')) {
+            $div = $request->string('apply_division')->toString();
+
+            $n = Client::visibleTo($group->clients(), $request->user())
+                ->update(['division' => $div]);
+
+            $msgs[] = __('client.chain_division_applied', [
+                'division' => \App\Support\Divisions::label($div),
                 'count' => $n,
             ]);
         }
