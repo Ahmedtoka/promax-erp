@@ -229,6 +229,7 @@ return [
     'setup_all_saved' => 'Saved :count rows - written to :clients clients.',
     'save_all' => 'Save all',
     'apply_to_all' => 'Apply to all',
+    'apply_to_selected' => 'Apply to selected',
     'ff_type' => 'Mode',
     'divisions_hint' => 'Each division with its mode and figures - click a row for its clients',
     'collected' => 'Collected',

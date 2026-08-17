@@ -231,6 +231,7 @@ return [
     'setup_all_saved' => 'اتحفظ :count صف — اتكتب على :clients عميل.',
     'save_all' => 'حفظ الكل',
     'apply_to_all' => 'طبّق على الكل',
+    'apply_to_selected' => 'طبّق على المتعلّم عليهم',
     'ff_type' => 'النوع',
     'divisions_hint' => 'كل قسم بطريقة تعامله وأرقامه — دوس على أي صف لعملائه',
     'collected' => 'المحصَّل',

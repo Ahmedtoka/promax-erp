@@ -79,15 +79,24 @@
         <label style="display:flex;gap:5px;align-items:center;font-size:12px;padding-bottom:8px">
             <input type="checkbox" id="aaInc"> {{ __('client.tax_inclusive') }}
         </label>
-        {{-- ⚠️ بيملا بس — مش بيحفظ. الحفظ قرار منفصل بعد ما تشوف --}}
-        <button class="btn" type="button" onclick="applyAll()">⤵ {{ __('client.apply_to_all') }}</button>
+        {{-- ⚠️ بيملا بس — مش بيحفظ. الحفظ قرار منفصل بعد ما تشوف.
+             لو فيه صفوف معلّم عليها بيملاها هي بس؛ من غير تعليم
+             بيملا الكل — والزرار بيقول بنفسه هيعمل إيه. --}}
+        <button class="btn" type="button" id="aaBtn" onclick="applyAll()">⤵ {{ __('client.apply_to_all') }}</button>
         <button class="btn gold" type="submit">💾 {{ __('client.save_all') }}</button>
+        <span id="selInfo" style="font-size:12px;color:var(--muted);padding-bottom:9px"></span>
     </div>
 
     <div class="tablewrap">
         <table data-page="50">
             <thead>
             <tr>
+                {{-- ⚠️ «علّم على الكل» بيعلّم على **المطابق للفلتر**
+                     (البحث السريع) مش الصفحة الظاهرة بس — نفس دوكترين
+                     صف الإجماليات، والعدّاد جنب الزراير بيقول كام
+                     واحد متعلّم عشان مفيش مفاجآت. --}}
+                <th style="width:34px" data-nosum>
+                    <input type="checkbox" id="selAll" onchange="toggleSel(this)"></th>
                 <th>{{ $isChains ? __('client.chain') : __('client.client') }}</th>
                 <th style="min-width:170px" data-nosum>{{ __('client.division') }}</th>
                 <th style="min-width:150px" data-nosum>{{ __('client.ff_type') }}</th>
@@ -105,6 +114,7 @@
                     $rid = $r->id;
                 @endphp
                 <tr>
+                    <td><input type="checkbox" class="su-sel" onchange="syncSel()"></td>
                     <td>
                         @if ($isChains)
                             <a href="{{ route('erp.groups.show', $r) }}"><b>{{ $r->displayName() }}</b></a>
@@ -159,7 +169,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">
                     {{ __('client.all_assigned') }}</td></tr>
             @endforelse
             </tbody>
@@ -178,13 +188,29 @@
 @section('scripts')
 <script>
 /**
- * ⚠️ **بيملا كل الصفوف — بما فيها اللي في صفحات الباجينيشن المخفية**
- * (`querySelectorAll` بيشوف الـDOM كله مش الظاهر بس). ده مقصود:
- * «طبّق على الكل» يعني الكل، مش صفحة الـ50 الحالية.
+ * ⚠️ **النطاق بيتحدد بالتعليم** (طلب المالك ١٧/٨: «سيلكت بالعميل
+ * أو بالسلسلة علشان لما أعمل طبّق يبقى على المعمولة سيلكت»):
+ *   • فيه صفوف متعلّمة → «طبّق» بيملاها **هي بس**.
+ *   • مفيش تعليم → بيملا الكل (بما فيه صفحات الباجينيشن المخفية).
+ * الزرار نفسه بيغيّر كتابته حسب الحالة عشان مفيش مفاجآت.
  *
  * الخانة الفاضية في الشريط **مش بتلمس** الخانة المقابلة في الصفوف —
  * تقدر تطبّق الديفيجن بس وتسيب الخصومات زي ما هي.
  */
+const AA_ALL = @json(__('client.apply_to_all'));
+const AA_SEL = @json(__('client.apply_to_selected'));
+const SEL_TXT = @json(__('client.selected'));
+
+function selRows() {
+    return [...document.querySelectorAll('.su-sel:checked')].map(c => c.closest('tr'));
+}
+
+function scopeRows() {
+    const sel = selRows();
+
+    return sel.length ? sel : [...document.querySelectorAll('.su-sel')].map(c => c.closest('tr'));
+}
+
 function applyAll() {
     const div = document.getElementById('aaDiv').value;
     const ff = document.getElementById('aaFf').value;
@@ -192,11 +218,40 @@ function applyAll() {
     const disc = document.getElementById('aaDisc').value;
     const inc = document.getElementById('aaInc').checked;
 
-    if (div) document.querySelectorAll('.su-div').forEach(s => { s.value = div; });
-    if (ff) document.querySelectorAll('.su-ff').forEach(s => { s.value = ff; });
-    if (pl) document.querySelectorAll('.su-pl').forEach(s => { s.value = pl; });
-    if (disc !== '') document.querySelectorAll('.su-disc').forEach(i => { i.value = disc; });
-    document.querySelectorAll('.su-inc').forEach(c => { c.checked = inc; });
+    scopeRows().forEach(tr => {
+        if (div) tr.querySelector('.su-div').value = div;
+        if (ff) tr.querySelector('.su-ff').value = ff;
+        if (pl) tr.querySelector('.su-pl').value = pl;
+        if (disc !== '') tr.querySelector('.su-disc').value = disc;
+        tr.querySelector('.su-inc').checked = inc;
+    });
 }
+
+/**
+ * ⚠️ «علّم على الكل» بيعلّم على **المطابق لبحث الجدول** مش الصفحة
+ * الظاهرة بس — نفس دوكترين صف الإجماليات: الفلتر بيغيّر النطاق،
+ * والصفحة لأ. الصف المستبعد بالبحث `dataset.hidden === '1'`.
+ */
+function toggleSel(box) {
+    document.querySelectorAll('.su-sel').forEach(c => {
+        if (box.checked && c.closest('tr').dataset.hidden === '1') return;
+        c.checked = box.checked;
+    });
+    syncSel();
+}
+
+function syncSel() {
+    const n = selRows().length;
+    const all = document.querySelectorAll('.su-sel').length;
+
+    document.getElementById('selInfo').textContent = n ? `${n} ${SEL_TXT}` : '';
+    document.getElementById('aaBtn').textContent = '⤵ ' + (n ? AA_SEL : AA_ALL);
+
+    const head = document.getElementById('selAll');
+    head.checked = n > 0 && n === all;
+    head.indeterminate = n > 0 && n < all;
+}
+
+syncSel();
 </script>
 @endsection
