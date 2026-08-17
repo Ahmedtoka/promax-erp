@@ -37,6 +37,20 @@
                 <input type="number" name="pts_per_100_pieces" required min="0" step="1" dir="ltr"
                        value="{{ $values['pts_per_100_pieces'] }}" style="width:100%;text-align:center">
             </div>
+            {{-- ═══ عناوين العملاء المتأكّدة — ١٧ أغسطس ٢٠٢٦ ═══
+                 «مع كل ٥ عناوين تأكيد ياخد نقطة».
+                 ⚠️ **العدّ على التأكيد مش على الإرسال** — وإلا المندوب
+                 بياخد نقط على ضغطة زرار من غير ما يتحرك من مكانه. --}}
+            <div>
+                <label class="f">{{ __('incent.locations_per_point') }}</label>
+                <input type="number" name="locations_per_point" required min="1" max="1000" step="1" dir="ltr"
+                       value="{{ $values['locations_per_point'] }}" style="width:100%;text-align:center">
+            </div>
+            <div>
+                <label class="f">{{ __('incent.pts_per_locations') }}</label>
+                <input type="number" name="pts_per_locations" required min="0" step="1" dir="ltr"
+                       value="{{ $values['pts_per_locations'] }}" style="width:100%;text-align:center">
+            </div>
             <div>
                 <label class="f">{{ __('incent.lead_alert_km') }}</label>
                 <input type="number" name="lead_alert_km" required min="0.1" max="20" step="0.1" dir="ltr"

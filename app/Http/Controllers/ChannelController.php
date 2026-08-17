@@ -561,7 +561,13 @@ class ChannelController extends Controller
         }
 
         // صنف مش موجود في الكتالوج = مفتاح مزوّر — مش فاليديشن عادي
-        $known = Product::whereIn('id', array_keys($qty))->pluck('id')
+        //
+        // ⚠️ **`sellable()`** (١٧/٨) — دي كانت `Product::whereIn` من
+        // غير فلتر، بينما `SupplierController::storeOrder` (نفس
+        // النمط بالحرف) فيها `->where('active', true)`. الفرق ده كان
+        // بيخلّي صنف درافت يتحقن في طلب ريفيل معلّق → يتوافق عليه →
+        // يبقى أمر توريد.
+        $known = Product::sellable()->whereIn('id', array_keys($qty))->pluck('id')
             ->map(fn ($i) => (int) $i)->all();
         $qty = array_intersect_key($qty, array_flip($known));
 

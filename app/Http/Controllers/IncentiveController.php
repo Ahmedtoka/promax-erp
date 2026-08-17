@@ -153,6 +153,11 @@ class IncentiveController extends Controller
                 'pts_per_visit' => Setting::read('pts_per_visit', '1'),
                 'pts_per_new_client' => Setting::read('pts_per_new_client', '10'),
                 'pts_per_100_pieces' => Setting::read('pts_per_100_pieces', '1'),
+                // ═══ عناوين العملاء المتأكّدة — ١٧ أغسطس ٢٠٢٦ ═══
+                // «مع كل ٥ عناوين تأكيد ياخد نقطة» — الرقمين قابلين
+                // للتعديل: كام عنوان، وكام نقطة عليهم.
+                'locations_per_point' => Setting::read('locations_per_point', '5'),
+                'pts_per_locations' => Setting::read('pts_per_locations', '1'),
                 'lead_alert_km' => Setting::read('lead_alert_km', '1'),
             ],
         ]);
@@ -165,6 +170,11 @@ class IncentiveController extends Controller
             'pts_per_visit' => ['required', 'integer', 'min:0'],
             'pts_per_new_client' => ['required', 'integer', 'min:0'],
             'pts_per_100_pieces' => ['required', 'integer', 'min:0'],
+            // ⚠️ **`min:1` مش `min:0`** — ده مقام قسمة، والصفر
+            // بيرمي `DivisionByZeroError` في `RepKpis`. الحارس هناك
+            // موجود برضه، بس الرفض هنا بيمنع إعداد مالوش معنى أصلاً.
+            'locations_per_point' => ['required', 'integer', 'min:1', 'max:1000'],
+            'pts_per_locations' => ['required', 'integer', 'min:0'],
             'lead_alert_km' => ['required', 'numeric', 'min:0.1', 'max:20'],
             // الشرايح: نسبة تحقيق ← نسبة عمولة (مئوية في الشاشة)
             'tiers' => ['nullable', 'array'],
@@ -177,6 +187,8 @@ class IncentiveController extends Controller
             'pts_per_visit' => (string) $data['pts_per_visit'],
             'pts_per_new_client' => (string) $data['pts_per_new_client'],
             'pts_per_100_pieces' => (string) $data['pts_per_100_pieces'],
+            'locations_per_point' => (string) $data['locations_per_point'],
+            'pts_per_locations' => (string) $data['pts_per_locations'],
             'lead_alert_km' => (string) $data['lead_alert_km'],
         ]);
 

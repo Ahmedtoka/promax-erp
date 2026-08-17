@@ -221,7 +221,21 @@ class FieldApiController extends Controller
             // المندوب يفتكر إن عنده بضاعة أكتر مما هو فعلاً قادر
             // يبيعه أو يرجّعه سليم.
             'damaged_in_units' => (int) $custody->items->sum(fn ($i) => (int) ($i->damaged_in ?? 0)),
-            'items' => $custody->items->map(fn ($i) => [
+            // ⚠️⚠️ **الفلترة دي هي اللي بتمنع بيع الدرافت** (١٧/٨).
+            // الحمولة دي هي **كتالوج شاشة البيع** في الأبلكيشن —
+            // بتتبني من `custody_items` مش من جدول المنتجات، فكل
+            // فلاتر `active` اللي في الشاشات التانية ماكانتش بتمرّ
+            // من هنا خالص. صنف درافت دخل عربية مندوب كان بيتباع
+            // عادي بسعره وضريبته (أودِت ١٧/٨).
+            //
+            // ⚠️ **بتتشال من العرض بس، مش من الأرصدة فوق.** لو
+            // شِلناها من `total_in`/`remaining` كمان، معادلة العهدة
+            // (محمَّل = مباع + مرجَّع + الباقي) كانت هتقع، والمندوب
+            // بيتحاسب على بضاعة في عربيته مش شايفها. المطلوب إنه
+            // مايبيعهاش — مش إننا ننكر إنها معاه.
+            'items' => $custody->items
+                ->filter(fn ($i) => $i->product?->isSellable())
+                ->map(fn ($i) => [
                 'product_id' => $i->product_id,
                 'code' => $i->product->code,
                 'name' => $i->product->displayName(),
@@ -774,7 +788,14 @@ class FieldApiController extends Controller
         $rows = [];
 
         foreach ($custody?->items ?? [] as $it) {
-            if ($it->product === null || isset($rows[$it->product_id])) {
+            // ⚠️ **`isSellable` هنا كمان** (١٧/٨) — الإندبوينت ده
+            // بيسعّر أصناف العهدة للعميل وقت الزيارة. من غيره الصنف
+            // الدرافت كان بياخد سعر عميل كامل حتى بعد ما اختفى من
+            // كتالوج البيع، والأبلكيشن القديم اللي لسه شايفه بيبيعه
+            // بسعر رسمي.
+            if ($it->product === null
+                || ! $it->product->isSellable()
+                || isset($rows[$it->product_id])) {
                 continue;
             }
 
@@ -1490,7 +1511,7 @@ class FieldApiController extends Controller
         $data = $request->validate([
             'visit_id' => ['required', 'exists:visits,id'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:9999'],
             'items.*.unit' => ['nullable', 'string', 'max:20'],
             'note' => ['nullable', 'string', 'max:500'],
@@ -1656,7 +1677,7 @@ class FieldApiController extends Controller
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'items.*.unit' => ['nullable', 'in:piece,box,case'],
         ]);
@@ -1992,7 +2013,7 @@ class FieldApiController extends Controller
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:9999'],
             'items.*.unit' => ['nullable', 'in:piece,box,case'],
             'items.*.condition' => ['nullable', 'in:good,damaged'],
@@ -2259,7 +2280,7 @@ class FieldApiController extends Controller
         // بالمطلوب. من غير items = الفلو القديم (تسليم كامل) زي ما هو.
         $data = $request->validate([
             'items' => ['nullable', 'array'],
-            'items.*.product_id' => ['required_with:items', 'exists:products,id'],
+            'items.*.product_id' => ['required_with:items', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required_with:items', 'integer', 'min:0'],
             'items.*.unit' => ['nullable', 'in:piece,box,case'],
         ]);

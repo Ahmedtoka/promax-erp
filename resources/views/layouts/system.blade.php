@@ -705,6 +705,12 @@ select.ssel-native{display:none!important}
                 ['erp.repclose', 'erp.repclose', '🤝', __('settle.title')],
                 ['erp.clients', 'erp.clients', '👥', __('nav.clients')],
                 ['erp.client_locations', 'erp.client_locations', '📍', __('geo.confirm_locations')],
+                // ⚠️ **مدخل للشاشة الجديدة** (١٧/٨) — الشاشة اللي
+                // مالهاش لينك في المنيو شاشة محدش هيفتحها. نفس
+                // الدرس اللي اتكرر النهاردة مرتين: عقد السلسلة
+                // وتعديل اسم قايمة الأسعار، الاتنين باك إند كامل
+                // بلا مدخل.
+                ['erp.client_locations.credits', 'erp.client_locations', '🧭', __('geo.rep_credits')],
                 ['wh.picks', 'wh.picks', '📋', __('nav.prep_orders')],
                 ['erp.dues', 'erp.dues', '💰', __('nav.dues')],
             ];

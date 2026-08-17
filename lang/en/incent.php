@@ -48,6 +48,9 @@ return [
     'pts_per_visit' => 'Points per completed visit',
     'pts_per_new_client' => 'Points per new client',
     'pts_per_100_pieces' => 'Points per 100 pieces',
+    // ═══ Confirmed client addresses - 17 Aug 2026 ═══
+    'locations_per_point' => 'Confirmed addresses per point',
+    'pts_per_locations' => 'Points per address batch',
     'lead_alert_km' => 'Lead alert radius (km)',
     'settings_saved' => 'Incentive settings saved.',
 

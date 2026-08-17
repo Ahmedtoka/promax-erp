@@ -198,6 +198,10 @@ return [
     'chain_contracts' => 'Chain Contracts',
     // ═══ Chain contract - 17 Aug 2026 ═══
     'chain_contract' => 'Chain contract',
+    'chain_apply_price_list' => 'Price list for all branches',
+    'chain_apply_keep' => 'Leave branch lists unchanged',
+    'chain_apply_price_list_hint' => 'Written on all :count branches. A branch whose contract holds a price list keeps charging the contract list.',
+    'chain_price_list_applied' => '":list" applied to :count branches.',
     'chain_contract_create' => 'Create a chain contract',
     'chain_contract_saved' => 'Chain contract saved - every branch without its own contract now uses its terms.',
     'chain_contract_hint' => 'This discount is charged on all :count branches that have no contract of their own. A branch with its own contract keeps its terms.',

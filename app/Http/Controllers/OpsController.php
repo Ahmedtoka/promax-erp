@@ -224,7 +224,11 @@ class OpsController extends Controller
             // المندوب المعتمدة (السواق قديمة والسيلز جديدة) لديالوج التعديل
             'custodyValues' => \App\Support\CustodyValue::remainingTotals($custody),
             'repList' => \App\Support\CustodyValue::listForRep($user),
-            'products' => $canAdjust ? Product::orderBy('code')->get() : collect(),
+            // ⚠️ **`sellable()`** (١٧/٨) — منتقي «تظبيط العهدة» كان
+            // بيعرض كل المنتجات، فالأدمن كان يقدر **يحط صنف درافت في
+            // عربية مندوب**. والعهدة هي كتالوج شاشة البيع، يعني الصنف
+            // كان بيوصل للبيع من الباب الخلفي.
+            'products' => $canAdjust ? Product::sellable()->orderBy('code')->get() : collect(),
 
             // ═══ الحركة ═══
             'invoices' => $invoices,
@@ -1866,6 +1870,16 @@ class OpsController extends Controller
             $product = Product::find($productId);
             if (! $product) {
                 continue;
+            }
+
+            // ⚠️ **الصنف الدرافت بيترفض بصوت عالي مش `continue`** (١٧/٨).
+            // التخطي في صمت هنا كان هيخلّي أمر التوريد يتحفظ **ناقص
+            // سطر** والمستخدم فاكر إنه اتحفظ كامل — والعميل يستلم أقل
+            // مما اتفق عليه. الرفض بيوقف الحفظ كله ويقول اسم الصنف.
+            if (! $product->isSellable()) {
+                throw new \App\Exceptions\Rejected(
+                    __('api.product_draft', ['product' => $product->displayName()])
+                );
             }
 
             $price = $priceMode === 'channel'

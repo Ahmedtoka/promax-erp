@@ -30,6 +30,9 @@ return [
     // ---------- Filters ----------
     'search_item' => 'Search by item code or name',
     'all_families' => 'All Families',
+    // ═══ Draft product - 17 Aug 2026 ═══
+    'draft' => 'Draft',
+    'draft_only' => 'Drafts only',
 
     // ---------- Columns ----------
     'item' => 'Item',

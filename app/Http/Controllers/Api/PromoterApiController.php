@@ -279,7 +279,7 @@ class PromoterApiController extends Controller
 
         $data = $request->validate([
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.product_id' => ['required', 'exists:products,id'],
+            'lines.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'lines.*.shelf_before' => ['nullable', 'integer', 'min:0'],
             'lines.*.store_qty' => ['nullable', 'integer', 'min:0'],
             'lines.*.moved_qty' => ['nullable', 'integer', 'min:0'],
@@ -350,7 +350,7 @@ class PromoterApiController extends Controller
 
         $data = $request->validate([
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);

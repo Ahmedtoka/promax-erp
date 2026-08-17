@@ -112,6 +112,10 @@ class GroupController extends Controller
             'apply_payment_terms' => ['nullable', 'in:channel,'.implode(',', Client::PAY_TERMS)],
             'apply_payment_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'apply_payment_days_from' => ['nullable', 'in:'.implode(',', Contract::DAYS_FROM)],
+            // ═══ قايمة السعر على كل الفروع — ١٧ أغسطس ٢٠٢٦ ═══
+            // طلب المالك: «أحدّد بالسلسلة السعر اللي بيتحاسب بيه
+            // فيطبّق على كل الفروع، وبعدين أدخل أغيّر كام عميل بس».
+            'apply_price_list' => ['nullable', 'exists:price_lists,id'],
         ]);
 
         $group->update($this->validated($request));
@@ -207,6 +211,33 @@ class GroupController extends Controller
                 'pct' => $pct,
                 'count' => $n,
             ]);
+        }
+
+        // ═══ قايمة السعر على كل الفروع ═══
+        //
+        // ⚠️ **العمودين مع بعض.** `Pricing::listRowFor()` بتقرا
+        // `price_list_id` الأول وبعدين العمود النصي `price_list`
+        // كاحتياطي. لو كتبنا الـid بس، الفرع اللي عموده النصي
+        // `old` بيفضل شايل تناقض — وأول كود بيقرا النصي (استيراد،
+        // تحويل ليد، موافقة طلب عميل) بيرجّعه للقايمة القديمة.
+        //
+        // ⚠️ **والعقد لسه بيغلب.** الفرع اللي عقده ماسك قايمة،
+        // `listRowFor` بتاخد قايمة العقد قبل خانة العميل — فالختم
+        // ده بيملا الاحتياطي مش بيدهس على اتفاق مكتوب.
+        if ($request->filled('apply_price_list')) {
+            $list = \App\Models\PriceList::find((int) $request->input('apply_price_list'));
+
+            if ($list !== null) {
+                $n = Client::visibleTo($group->clients(), $request->user())->update([
+                    'price_list_id' => $list->id,
+                    'price_list' => $list->code,
+                ]);
+
+                $msgs[] = __('client.chain_price_list_applied', [
+                    'list' => $list->displayName(),
+                    'count' => $n,
+                ]);
+            }
         }
 
         return back()->with('ok', $msgs === []

@@ -66,7 +66,7 @@ class GiftApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'product_id' => ['required', 'exists:products,id'],
+            'product_id' => ['required', new \App\Rules\SellableProduct],
             'qty' => ['required', 'integer', 'min:1'],
             // ⚠️ العميل اختياري: العينة ممكن تتوزّع في معرض أو على
             // المارّة. إجباره كان هيخلّي المندوب يختار أي عميل عشان

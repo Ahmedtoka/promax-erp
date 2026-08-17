@@ -204,6 +204,70 @@ class ClientLocationController extends Controller
     }
 
     /**
+     * ═══════════════════════════════════════════════════════════
+     * رصيد المناديب من العناوين  ·  ١٧ أغسطس ٢٠٢٦
+     * ═══════════════════════════════════════════════════════════
+     *
+     * طلب المالك: «شاشة فيها كل مندوب عمل طلب تعديل لوكيشن كام مرة،
+     * ولما أدوس عليهم يطلع ليست بكل العملاء اللي عملهم تعديل».
+     *
+     * شاشة واحدة بمستويين: من غير `?rep=` بتوري المناديب، ومعاه
+     * بتوري عملاء المندوب ده. اتنين مالهمش لازمة.
+     *
+     * ⚠️⚠️ **الفرق بين «بعت» و«اتأكّد» هو كل الشاشة.** المندوب
+     * بيبعت، والأدمن بيأكّد — و**النقط بتتحسب على المتأكّد بس**.
+     * لو المكافأة على الإرسال، يقدر يبعت لعشرين عميل في ساعة من
+     * غير ما يتحرك. العمودين الاتنين ظاهرين عشان تشوف مين بيبعت
+     * كتير وبيتأكّدله قليل.
+     *
+     * ⚠️ **الصفر مابيظهرش.** المندوب اللي مابعتش ولا عنوان مالوش
+     * صف — الشاشة دي عن اللي اشتغل، مش كشف حضور.
+     */
+    public function credits(Request $request)
+    {
+        $repId = (int) $request->integer('rep');
+
+        // ⚠️ استعلام تجميعي واحد — مش لوب على المناديب بعدّاد لكل
+        // واحد. عندنا مئات العملاء وعشرات المناديب.
+        $rows = Client::query()
+            ->whereNotNull('location_submitted_by')
+            ->selectRaw('location_submitted_by as uid,
+                         COUNT(*) as sent,
+                         SUM(location_confirmed_at IS NOT NULL) as confirmed,
+                         MAX(location_submitted_at) as last_at')
+            ->groupBy('location_submitted_by')
+            ->orderByDesc('confirmed')
+            ->get();
+
+        $users = \App\Models\User::whereIn('id', $rows->pluck('uid'))->get()->keyBy('id');
+
+        // ⚠️ نفس إعدادات `RepKpis` بالحرف — مصدر واحد للقاعدة، وإلا
+        // الشاشة بتقول نقطتين والتصفية بتدي تلاتة.
+        $perPoint = max(1, (int) \App\Models\Setting::read('locations_per_point', '5'));
+        $ptsPer = (int) \App\Models\Setting::read('pts_per_locations', '1');
+
+        $clients = collect();
+
+        if ($repId > 0) {
+            $clients = Client::with(['zone', 'locationConfirmer'])
+                ->where('location_submitted_by', $repId)
+                ->orderByDesc('location_submitted_at')
+                ->get();
+        }
+
+        return view('erp.location_credits', [
+            'rows' => $rows,
+            'users' => $users,
+            'repId' => $repId,
+            'rep' => $repId > 0 ? ($users->get($repId) ?? \App\Models\User::find($repId)) : null,
+            'clients' => $clients,
+            'perPoint' => $perPoint,
+            'ptsPer' => $ptsPer,
+            'pointValue' => (float) \App\Models\Setting::read('point_value', '5'),
+        ]);
+    }
+
+    /**
      * اقتراح عنوان من إحداثيات — بيرجّع JSON للمودال.
      *
      * ⚠️ **اقتراح مش حفظ.** الرد بيتحط في خانات قابلة للتعديل، واللي

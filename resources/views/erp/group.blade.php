@@ -440,6 +440,25 @@
             @endif
         </div>
 
+        {{-- ═════ قايمة السعر على كل الفروع ═════
+             طلب المالك ١٧/٨: «أحدّد بالسلسلة السعر اللي بيتحاسب بيه
+             فيطبّق على كل الفروع، وبعدين أدخل أغيّر كام عميل بس».
+
+             ⚠️ **الفاضي = ماتلمسش** زي باقي خانات الشاشة — مش
+             «رجّعهم للافتراضي». --}}
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
+            <label class="f">{{ __('client.chain_apply_price_list') }}</label>
+            <select name="apply_price_list" style="width:100%">
+                <option value="">— {{ __('client.chain_apply_keep') }} —</option>
+                @foreach (\App\Models\PriceList::where('active', true)->orderBy('id')->get() as $pl)
+                    <option value="{{ $pl->id }}">{{ $pl->displayName() }}</option>
+                @endforeach
+            </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                {{ __('client.chain_apply_price_list_hint', ['count' => $g->clients()->count()]) }}
+            </div>
+        </div>
+
         {{-- ═════ شروط الدفع على كل الفروع ═════ --}}
         {{-- ⚠️ **نفس نمط الخصم فوق:** الخانة الفاضية معناها «ماتلمسش
              الفروع» — ده الوضع الطبيعي لأي حفظ عادي للاسم أو الملاحظات.

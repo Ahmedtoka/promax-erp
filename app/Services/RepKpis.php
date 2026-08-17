@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Client;
 use App\Models\ClientRequest;
 use App\Models\CommissionTier;
 use App\Models\Invoice;
@@ -123,10 +124,35 @@ class RepKpis
         $rate = CommissionTier::rateFor($achievement);
         $commission = round($netSales * $rate, 2);
 
+        // ═══ عناوين العملاء المتأكّدة — ١٧ أغسطس ٢٠٢٦ ═══
+        //
+        // طلب المالك: «مع كل مثلاً ٥ عناوين تأكيد ياخد نقطة».
+        //
+        // ⚠️⚠️ **العدّ على `location_confirmed_at` مش على الإرسال.**
+        // لو حسبنا الإرسال، المندوب بياخد نقط على مجرد إنه بعت نقطة
+        // — يقدر يبعت لعشرين عميل في ساعة من غير ما يتحرك من مكانه.
+        // النقطة بتتحسب لما **الأدمن يراجع ويأكّد**، فالمكافأة على
+        // عنوان صح مش على ضغطة زرار.
+        //
+        // ⚠️ **الشهر من تاريخ التأكيد.** المندوب اللي بعت الشهر اللي
+        // فات والأدمن أكّد الشهر ده، النقطة تتحسب في شهر التأكيد —
+        // وإلا كنا هنعدّل نقط شهر مقفول كل ما الأدمن يفضّي طابور.
+        $locationsConfirmed = Client::where('location_submitted_by', $rep->id)
+            ->whereNotNull('location_confirmed_at')
+            ->whereBetween('location_confirmed_at', [$start, $end])
+            ->count();
+
+        // ⚠️ **القسمة على صفر محروسة.** الإعداد بيتكتب من شاشة
+        // الحوافز، و«٠ عنوان لكل نقطة» قيمة يقدر حد يكتبها.
+        $perPoint = max(1, (int) Setting::read('locations_per_point', '5'));
+        $locationPoints = intdiv($locationsConfirmed, $perPoint)
+            * (int) Setting::read('pts_per_locations', '1');
+
         // ═══ النقاط: أوتوماتيك مشتقة + يدوي مخزّن ═══
         $autoPoints = $visitCount * (int) Setting::read('pts_per_visit', '1')
             + $newClients * (int) Setting::read('pts_per_new_client', '10')
-            + intdiv($pieces, 100) * (int) Setting::read('pts_per_100_pieces', '1');
+            + intdiv($pieces, 100) * (int) Setting::read('pts_per_100_pieces', '1')
+            + $locationPoints;
         $manualPoints = (int) RepPoint::where('user_id', $rep->id)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->sum('points');
@@ -149,6 +175,10 @@ class RepKpis
             'visits' => $visitCount,
             'avg_visit_minutes' => $avgMinutes,
             'new_clients' => $newClients,
+            // العناوين المتأكّدة ونقطها — الشاشة بتوري الاتنين عشان
+            // المندوب يعرف فاضله كام عنوان للنقطة الجاية
+            'locations_confirmed' => $locationsConfirmed,
+            'location_points' => $locationPoints,
             'app_opens' => (int) ($events->opens ?? 0) + (int) ($events->starts ?? 0),
             'check_ins' => (int) ($events->ins ?? 0),
             'check_outs' => (int) ($events->outs ?? 0),

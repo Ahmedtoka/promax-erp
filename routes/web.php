@@ -238,6 +238,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->name('client_locations');
         Route::post('/client-locations/suggest', [\App\Http\Controllers\ClientLocationController::class, 'suggest'])
             ->name('client_locations.suggest');
+
+        // ⚠️ **قبل `{client}`** — الراوت اللي تحت باراميتره `{client}`
+        // وبياخد أي سيجمنت. لو حطيناها بعده كان `credits` هيتقرا
+        // كأنه رقم عميل ويدي 404. (نفس الفخ اللي بيتكرر في لارافيل.)
+        Route::get('/client-locations/credits', [\App\Http\Controllers\ClientLocationController::class, 'credits'])
+            ->name('client_locations.credits');
         Route::post('/client-locations/{client}', [\App\Http\Controllers\ClientLocationController::class, 'confirm'])
             ->middleware('role:admin,manager,branch_manager')
             ->name('client_locations.confirm');

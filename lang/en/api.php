@@ -43,4 +43,7 @@ return [
     'product_not_priced' => '":product" has no price in this client\'s price list — set it on the price-lists screen first.',
     'returns_closed' => 'Returns intake is currently closed by management - contact accounting.',
     'bad_request' => 'Request not understood - update the app and try again.',
+    // ═══ Draft product - 17 Aug 2026 ═══
+    'product_missing' => 'That item does not exist.',
+    'product_draft' => '":product" is a draft item and cannot be sold - remove it from the request, or activate it from the products screen first.',
 ];

@@ -108,6 +108,17 @@
             <option value="">{{ __('stock.all_families') }}</option>
             @foreach ($families as $k => $v)<option value="{{ $k }}" @selected(($f['family'] ?? '') === $k)>{{ $v }}</option>@endforeach
         </select>
+        {{-- ⚠️ **فلتر الحالة** (١٧/٨) — الشاشة ماكانتش بتفرّق بين
+             المفعّل والدرافت: مفيش فلتر ولا شارة ولا عمود. المالك
+             أوقف صنف ومالقاش طريقة يلاقيه تاني غير إنه يفتح المنتجات
+             واحد واحد. --}}
+        <select name="status">
+            <option value="" @selected(($f['status'] ?? '') === '')>{{ __('stock.all_statuses') }}</option>
+            <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('common.active') }}</option>
+            <option value="draft" @selected(($f['status'] ?? '') === 'draft')>
+                {{ __('stock.draft_only') }}@if (($draftCount ?? 0) > 0) ({{ $draftCount }})@endif
+            </option>
+        </select>
         <select name="sort">
             <option value="" @selected(($f['sort'] ?? '') === '')>{{ __('stock.sort_code') }}</option>
             <option value="qty" @selected(($f['sort'] ?? '') === 'qty')>{{ __('stock.sort_qty') }}</option>
@@ -163,7 +174,17 @@
                     <td class="num">
                         <a href="{{ route('erp.products.show', $p) }}" style="font-weight:700">{{ $p->code }}</a>
                     </td>
-                    <td style="text-align:start"><b>{{ $p->displayName() }}</b></td>
+                    <td style="text-align:start">
+                        <b>{{ $p->displayName() }}</b>
+                        {{-- ⚠️ **الشارة كانت موجودة في كارت المنتج بس**
+                             — يعني عشان تعرف إن صنف موقوف كنت لازم
+                             تفتحه. في القايمة كان شكله زي المفعّل
+                             بالظبط، والمالك أوقف صنف ومالقاهوش. --}}
+                        @unless ($p->active)
+                            <span class="badge b-orange" style="margin-inline-start:6px">
+                                ⏸ {{ __('stock.draft') }}</span>
+                        @endunless
+                    </td>
                     <td><span class="badge b-gray">{{ $p->familyLabel() }}</span></td>
                     <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                     @if ($seeCost)<td class="num" style="color:var(--muted)">{{ number_format($p->cost, 2) }}</td>@endif

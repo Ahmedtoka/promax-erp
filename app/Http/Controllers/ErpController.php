@@ -1569,6 +1569,24 @@ class ErpController extends Controller
             $q->where('family', $fam);
         }
 
+        // ═══ فلتر الحالة — ١٧ أغسطس ٢٠٢٦ ═══
+        //
+        // ⚠️ **الشاشة دي ماكانتش بتفرّق بين المفعّل والدرافت خالص**:
+        // مفيش فلتر ولا شارة ولا عمود (أودِت ١٧/٨). المالك أوقف صنف
+        // ومالقاش طريقة يلاقيه تاني غير إنه يفتح كل منتج لوحده.
+        //
+        // ⚠️ **الافتراضي «الكل» مش «المفعّل».** دي **شاشة الإدارة**
+        // — لو خبّينا الدرافت هنا كمان، الصنف اللي اتوقف يبقى مش
+        // موجود في أي مكان في السيستم بما فيها المكان اللي المفروض
+        // تفعّله منه.
+        $status = $request->string('status')->value();
+
+        if ($status === 'active') {
+            $q->where('active', true);
+        } elseif ($status === 'draft') {
+            $q->where('active', false);
+        }
+
         $products = $q->orderBy('code')->get();
         $all = Product::with('stocks')->get();
 
@@ -1601,7 +1619,9 @@ class ErpController extends Controller
             'families' => \App\Models\ProductFamily::options(),
             'warehouses' => $warehouses,
             'defaultList' => $defaultList,
-            'filters' => $request->only(['q', 'family', 'sort']),
+            'filters' => $request->only(['q', 'family', 'sort', 'status']),
+            // شارة على زرار الفلتر — «عندك ٧ درافت» من غير ما تفتحه
+            'draftCount' => Product::where('active', false)->count(),
             // ⚠️ كل الـ KPIs دي على $all (المخزن كله) — ممنوع تخلط واحد منهم
             // مع رقم محسوب من $products المفلترة، الهامش يطلع غلط.
             'totalVal' => $all->sum(fn ($p) => $p->qtyTotal() * $priceOf($p)),
