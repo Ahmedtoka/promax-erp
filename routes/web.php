@@ -508,6 +508,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/divisions/{client}', [\App\Http\Controllers\DivisionController::class, 'assign'])
             ->middleware('role:admin,manager')->name('divisions.assign');
 
+        // ===== إعداد السلاسل والعملاء (١٧/٨) =====
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::get('/setup/chains', [\App\Http\Controllers\ClientSetupController::class, 'chains'])
+                ->name('setup.chains');
+            Route::post('/setup/chains/{group}', [\App\Http\Controllers\ClientSetupController::class, 'saveChain'])
+                ->name('setup.chains.save');
+            Route::get('/setup/clients', [\App\Http\Controllers\ClientSetupController::class, 'clients'])
+                ->name('setup.clients');
+            Route::post('/setup/clients/{client}', [\App\Http\Controllers\ClientSetupController::class, 'saveClient'])
+                ->name('setup.clients.save');
+        });
+
         // ===== القنوات =====
         Route::get('/channels', [ChannelController::class, 'index'])->name('channels');
         Route::put('/channels/{channel}', [ChannelController::class, 'update'])

@@ -127,7 +127,7 @@ class Client extends Model
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
         'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',
-        'channel_id', 'group_id', 'branch_id', 'sub_channel', 'division', 'parent_id', 'uses_channel_discount',
+        'channel_id', 'group_id', 'branch_id', 'sub_channel', 'division', 'fulfillment_mode', 'parent_id', 'uses_channel_discount',
         'price_list', 'price_list_id', 'taxable', 'tax_rate', 'tax_id', 'eta_type', 'tax_cycle',
         'governorate', 'location_url', 'lat', 'lng', 'address_ar',
         'location_confirmed_at', 'location_confirmed_by', 'location_source',
@@ -714,12 +714,17 @@ public function zone(): BelongsTo
      */
     public function fulfillment(): ?string
     {
-        return \App\Support\Divisions::fulfillmentOf($this->division);
+        // ⚠️ **التجاوز يغلب** (١٧/٨) — المالك ممكن يحدد لسلسلة
+        // كونفينيانس إنها تتعامل ديلفري. الفاضي = افتراضي القسم.
+        return $this->fulfillment_mode
+            ?: \App\Support\Divisions::fulfillmentOf($this->division);
     }
 
     public function fulfillmentLabel(): string
     {
-        return \App\Support\Divisions::fulfillmentLabel($this->division);
+        $f = $this->fulfillment();
+
+        return $f === null ? '—' : __('client.ff_'.$f);
     }
 
     /**
