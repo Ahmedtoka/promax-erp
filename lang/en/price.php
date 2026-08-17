@@ -44,6 +44,9 @@ return [
     'apply_bulk' => 'Apply',
     'list_created' => '":name" created. Price the items, then activate it.',
     'list_updated' => 'List updated.',
+    // ═══ Edit list details - 17 Aug 2026 ═══
+    'edit_list' => 'Edit list details',
+    'code_locked_hint' => 'The code cannot change - clients are linked to it, and changing it would cut them off from their prices.',
     'prices_saved' => ':count prices saved. :missing items still missing.',
     'bulk_done' => ':count items priced. :skipped skipped for having no base price.',
     'activated' => '":name" is now active.',

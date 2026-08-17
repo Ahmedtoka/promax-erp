@@ -337,6 +337,21 @@ tfoot td.num{color:var(--primary)}
 .gs-pager button[disabled]{opacity:.4;cursor:default}
 .gs-pager button.on{background:var(--primary);color:#fff;border-color:var(--primary)}
 .gs-pager .gs-info{color:var(--muted);margin-inline-end:6px}
+/* قايمة «كام صف في الصفحة» — جنب أزرار الترقيم */
+.gs-pager .gs-size{border:1px solid var(--border);background:var(--card);
+  border-radius:7px;padding:3px 6px;font:inherit;font-size:11.5px;
+  color:var(--muted);cursor:pointer;margin-inline-end:8px}
+
+/* ═══ تكبير صورة المنتج — `data-zoom` على أي <img> ═══
+   ⚠️ صور المنتجات في الجداول ٥٦ بكسل، واللي بيسعّر بيدوّر على
+   الفرق بين «زبدة فول سوداني ٣٠٠» و«٥٠٠» — والفرق في الشكل مش
+   في الاسم. الصورة الصغيرة مابتفرّقش. */
+img[data-zoom]{cursor:zoom-in}
+#imgZoom{border:0;background:transparent;padding:0;max-width:92vw;max-height:92vh}
+#imgZoom::backdrop{background:rgba(0,0,0,.72)}
+#imgZoom img{max-width:92vw;max-height:88vh;object-fit:contain;
+  border-radius:12px;background:#fff;display:block}
+#imgZoom .zcap{color:#fff;text-align:center;font-size:12.5px;margin-top:8px}
 .pos{color:var(--green)}.neg{color:var(--red)}.mid{color:var(--orange)}.muted{color:var(--muted)}
 .badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800}
 .b-red{background:#FDECEC;color:var(--red)}
@@ -1034,6 +1049,8 @@ document.addEventListener('DOMContentLoaded', function () {
     total:  {!! json_encode(__('common.total'), JSON_UNESCAPED_UNICODE) !!},
     rows:   {!! json_encode(__('common.rows_count'), JSON_UNESCAPED_UNICODE) !!},
     view:   {!! json_encode(__('common.view'), JSON_UNESCAPED_UNICODE) !!},
+    all:    {!! json_encode(__('common.all'), JSON_UNESCAPED_UNICODE) !!},
+    zoom:   {!! json_encode(__('common.close'), JSON_UNESCAPED_UNICODE) !!},
   };
 
   /* ══════════════════════════════════════════════════════════════
@@ -1129,8 +1146,69 @@ document.addEventListener('DOMContentLoaded', function () {
     return 1;
   }
 
-  /* عدد صفوف الصفحة في الباجينيشن المحلي */
-  const PAGE = 25;
+  /* ═══════════════════════════════════════════════════════════════
+     عدد صفوف الصفحة  ·  ١٧ أغسطس ٢٠٢٦
+     ═══════════════════════════════════════════════════════════════
+     كان ثابت `25` لكل جدول في السيستم. طلب المالك مقاسات مختلفة
+     (٥٠/١٠٠/الكل) في شاشة التسعير — والحل مايبقاش خاص بشاشة واحدة،
+     الجدول واحد في كل مكان.
+
+     ⚠️ **الترتيب: اختيار المستخدم ← اللي البليد طالبه ← الافتراضي.**
+     البليد بيحط `data-page="50"` على الجدول لما الشاشة طبيعتها
+     تحتاج كده (التسعير: بتسعّر ٥٠ صنف في جلسة)، والمستخدم بيغلب
+     على الاتنين واختياره بيتفكر.
+
+     ⚠️ **الصفر = الكل.** مش `Infinity` — القيمة بتتخزن في
+     localStorage كنص، و`Infinity` بترجع `null` من `JSON` وبتتقرا
+     غلط. */
+  const PAGE_OPTS = [25, 50, 100, 0];
+  const PAGE_KEY = 'promax.pageSize';
+
+  const savedPage = function () {
+    try {
+      const v = parseInt(localStorage.getItem(PAGE_KEY), 10);
+      return PAGE_OPTS.includes(v) ? v : null;
+    } catch (e) { return null; }
+  };
+
+  /* ═══════════════════════════════════════════════════════════════
+     تكبير الصور  ·  ١٧ أغسطس ٢٠٢٦
+     ═══════════════════════════════════════════════════════════════
+     أي `<img data-zoom>` بيتفتح في مودال بالحجم الكامل.
+
+     ⚠️ **مستمع واحد على `document` مش مستمع لكل صورة** — الجدول
+     فيه ١٠٠ صورة، وربط مستمع لكل واحدة بيتكرر مع كل رندر.
+
+     ⚠️ **`<dialog>` أصلي مش div** — بيقفل بـEsc لوحده وبياخد
+     الفوكس، ومحتاجش أي كود إدارة طبقات. */
+  const zoomImage = function (src, cap) {
+    let dlg = document.getElementById('imgZoom');
+
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'imgZoom';
+      dlg.innerHTML = '<img alt=""><div class="zcap"></div>';
+      /* الدوس على أي مكان بيقفل — الصورة نفسها مفيهاش أكشن تاني */
+      dlg.addEventListener('click', () => dlg.close());
+      document.body.appendChild(dlg);
+    }
+
+    dlg.querySelector('img').src = src;
+    dlg.querySelector('.zcap').textContent = cap || '';
+    dlg.showModal();
+  };
+
+  document.addEventListener('click', function (e) {
+    const img = e.target.closest('img[data-zoom]');
+
+    if (!img || !img.src) return;
+
+    /* ⚠️ الصورة ممكن تكون جوّه صف `clickable` بيفتح صفحة — لازم
+       نمنع الانتشار وإلا الدوسة بتكبّر وتنقل في نفس الوقت. */
+    e.preventDefault();
+    e.stopPropagation();
+    zoomImage(img.src, img.getAttribute('data-zoom') || img.alt);
+  });
 
   /* ⚠️ **تحويل نص الخلية لرقم** — بيشيل الفواصل والعملة والنسبة.
      بيرجع NaN للنص العادي، وده اللي بيفرّق العمود الرقمي عن غيره. */
@@ -1378,6 +1456,11 @@ document.addEventListener('DOMContentLoaded', function () {
        اتصفّر — تجربة مكسورة. */
     let pager = null, page = 1;
 
+    /* حجم الصفحة لهذا الجدول — اختيار المستخدم يغلب على طلب البليد */
+    const askedPage = parseInt(table.dataset.page, 10);
+    let PAGE = savedPage()
+      ?? (PAGE_OPTS.includes(askedPage) ? askedPage : 25);
+
     const filtered = () => allRows().filter(r => r.dataset.hidden !== '1');
 
     const applyPage = function (p) {
@@ -1390,10 +1473,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (!pager) { rows.forEach(r => r.style.display = ''); refreshTotals(); return; }
 
-      const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+      /* ⚠️ **الصفر = الكل** — بنستخدم عدد الصفوف كمقاس صفحة واحدة
+         بدل ما نقسم على صفر. و`|| 1` عشان الجدول الفاضي. */
+      const size = PAGE || rows.length || 1;
+      const pages = Math.max(1, Math.ceil(rows.length / size));
       page = Math.min(Math.max(1, p), pages);
 
-      rows.slice((page - 1) * PAGE, page * PAGE).forEach(r => r.style.display = '');
+      rows.slice((page - 1) * size, page * size).forEach(r => r.style.display = '');
 
       pager.innerHTML = '';
 
@@ -1401,6 +1487,26 @@ document.addEventListener('DOMContentLoaded', function () {
       info.className = 'gs-info';
       info.textContent = T.rows.replace(':n', rows.length);
       pager.appendChild(info);
+
+      /* ═══ مقاس الصفحة ═══
+         ⚠️ **جوّه الـpager عن قصد** — المستخدم بيدوّر على «الصفحة
+         الجاية» ويلاقي «كام في الصفحة» جنبها. حطها فوق الجدول كان
+         هيخلّيها تضيع وسط الفلاتر. */
+      const sizeSel = document.createElement('select');
+      sizeSel.className = 'gs-size';
+      PAGE_OPTS.forEach(function (n) {
+        const o = document.createElement('option');
+        o.value = String(n);
+        o.textContent = n === 0 ? T.all : String(n);
+        if (n === PAGE) o.selected = true;
+        sizeSel.appendChild(o);
+      });
+      sizeSel.addEventListener('change', function () {
+        PAGE = parseInt(this.value, 10);
+        try { localStorage.setItem(PAGE_KEY, String(PAGE)); } catch (e) { /* خاص/ممتلئ */ }
+        applyPage(1);
+      });
+      pager.appendChild(sizeSel);
 
       const btn = function (label, target, on, dis) {
         const b = document.createElement('button');
@@ -1427,7 +1533,11 @@ document.addEventListener('DOMContentLoaded', function () {
       refreshTotals();
     };
 
-    if (!serverPager && rows0.length > PAGE) {
+    /* ⚠️ **الشرط على أصغر مقاس مش على المقاس الحالي** (١٧/٨).
+       كان `rows0.length > PAGE` — فلو المستخدم اختار «١٠٠» على جدول
+       فيه ٣١ صف، الـpager مايتعملش خالص و**قايمة المقاسات تختفي
+       معاه**، ومايبقاش فيه طريقة يرجع لـ٢٥ تاني. */
+    if (!serverPager && rows0.length > PAGE_OPTS[0]) {
       pager = document.createElement('div');
       pager.className = 'gs-pager';
       wrap.parentNode.insertBefore(pager, wrap.nextSibling);

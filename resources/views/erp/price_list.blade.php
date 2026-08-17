@@ -17,6 +17,19 @@
 @section('title', $list->displayName())
 
 @section('actions')
+    {{-- ⚠️⚠️ **زرار «تعديل» كان ناقص** (بلاغ المالك ١٧/٨: «مفيش مكان
+         أعرف أعدّل منه الاسم»). الراوت `erp.prices.update` موجود من
+         الأول، والكنترولر بيحفظ، والصلاحية `act.prices.edit` مسجّلة
+         — **الفورم اللي بينده عليهم هو الناقص**. نفس النمط بالظبط
+         اللي كان في عقد السلسلة: باك إند كامل بلا مدخل.
+
+         ⚠️ **الكود مش في الفورم عن قصد.** `price_lists.code` مفتاح
+         بيتخزن على العميل (`clients.price_list`) وبيتقارن بيه في
+         `Pricing` — تغييره من شاشة تعديل اسم كان هيفصل كل العملاء
+         المربوطين بالقايمة عن أسعارهم في صمت. --}}
+    @if ($canEdit && \App\Support\Access::action(auth()->user(), 'act.prices.edit'))
+        <button class="btn" type="button" onclick="openDlg('dlgEditL')">✏️ {{ __('common.edit') }}</button>
+    @endif
     <a class="btn" href="{{ route('erp.prices') }}">← {{ __('price.price_lists') }}</a>
 @endsection
 
@@ -66,10 +79,17 @@
     <form class="searchbar" method="GET" style="margin-bottom:12px">
         <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
                placeholder="{{ __('stock.search_item') }}" style="flex:1;min-width:180px">
-        <select name="family" style="min-width:150px">
+        {{-- ⚠️⚠️ **`$lbl` مش `__('enums.family.'.$k)`** (إصلاح ١٧/٨).
+             `ProductFamily::options()` بترجّع **[مفتاح ⇒ الاسم
+             المعروض]** جاهز من جدول العائلات، والبليد كان برمي القيمة
+             ويترجم المفتاح من ملف اللغة. النتيجة: أي عائلة اتعملت من
+             شاشة العائلات (مش موجودة في `enums`) كانت بتظهر في القايمة
+             باسمها الخام `enums.family.xxx` — فالمستخدم يشوف كود
+             ومايعرفش يختار. --}}
+        <select name="family" style="min-width:160px">
             <option value="">— {{ __('stock.family') }} —</option>
             @foreach ($families as $k => $lbl)
-                <option value="{{ $k }}" @selected(($f['family'] ?? '') === $k)>{{ __('enums.family.'.$k) }}</option>
+                <option value="{{ $k }}" @selected(($f['family'] ?? '') === $k)>{{ $lbl }}</option>
             @endforeach
         </select>
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;white-space:nowrap">
@@ -152,21 +172,29 @@
 
     <form method="POST" action="{{ route('erp.prices.save', $list) }}" id="priceForm">
         @csrf
+        {{-- ⚠️ **`data-page="50"`** — الشاشة دي بتسعّر ٥٠ صنف في جلسة،
+             و٢٥ (الافتراضي العام) كانت بتقسّم ٣١ صنف على صفحتين من
+             غير أي داعي. المستخدم يقدر يغيّرها من قايمة المقاسات
+             جنب الترقيم واختياره بيتفكر. --}}
         <div class="tablewrap">
-            <table>
+            <table data-page="50">
                 <tr>
                     @if ($canEdit)
                         <th style="width:34px"><input type="checkbox" id="allBox" onchange="toggleAll(this)"></th>
                     @endif
-                    <th style="width:40px"></th>
-                    <th>{{ __('common.code') }}</th>
+                    {{-- ⚠️ **الأعمدة بعرض ثابت** (طلب المالك ١٧/٨).
+                         من غير عرض، المتصفح بيدي «الصنف» كل المساحة
+                         الفاضلة والسعر بيتزنق — وخانة السعر هي اللي
+                         الشاشة كلها موجودة عشانها. --}}
+                    <th style="width:64px"></th>
+                    <th style="width:130px" data-nosum>{{ __('common.code') }}</th>
                     <th>{{ __('stock.item') }}</th>
-                    <th>{{ __('stock.family') }}</th>
-                    <th>{{ __('stock.unit') }}</th>
+                    <th style="width:120px">{{ __('stock.family') }}</th>
+                    <th style="width:110px">{{ __('stock.unit') }}</th>
                     @if ($reference && $reference->id !== $list->id)
-                        <th class="num">{{ $reference->displayName() }}</th>
+                        <th class="num" style="width:120px">{{ $reference->displayName() }}</th>
                     @endif
-                    <th class="num" style="width:130px">{{ __('price.price') }}</th>
+                    <th class="num" style="width:140px">{{ __('price.price') }}</th>
                 </tr>
 
                 @forelse ($products as $p)
@@ -181,10 +209,19 @@
                                        onchange="syncCount()"></td>
                         @endif
                         <td>
+                            {{-- ⚠️ **`data-zoom` بيفتح الصورة بالحجم
+                                 الكامل.** ٥٦ بكسل مابتفرّقش بين «زبدة
+                                 فول سوداني ٣٠٠» و«٥٠٠» — والفرق في
+                                 العبوة مش في الاسم، واللي بيسعّر
+                                 محتاج يتأكد إنه بيسعّر الصح. --}}
                             @if ($p->imageSrc())
-                                <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                     style="width:56px;height:56px;object-fit:contain;border-radius:5px;
+                                <img src="{{ $p->imageSrc() }}" loading="lazy"
+                                     alt="{{ $p->displayName() }}"
+                                     data-zoom="{{ $p->displayName() }}"
+                                     style="width:56px;height:56px;object-fit:contain;border-radius:6px;
                                             border:1px solid var(--border);background:#fff">
+                            @else
+                                <span style="color:var(--muted);font-size:18px">📦</span>
                             @endif
                         </td>
                         <td class="num">
@@ -225,6 +262,54 @@
         @endif
     </form>
 </div>
+
+{{-- ═══ تعديل بيانات القايمة ═══ --}}
+@if ($canEdit && \App\Support\Access::action(auth()->user(), 'act.prices.edit'))
+<dialog id="dlgEditL">
+    <form class="dlg" method="POST" action="{{ route('erp.prices.update', $list) }}">
+        @csrf
+        @method('PUT')
+        <h4>✏️ {{ __('price.edit_list') }}</h4>
+
+        <div class="frow" style="margin-top:10px">
+            <div>
+                <label class="f">{{ __('common.name_ar') }} <b class="req-star">*</b></label>
+                <input type="text" name="name" required maxlength="190" style="width:100%"
+                       value="{{ old('name', $list->name) }}">
+            </div>
+            <div>
+                {{-- ⚠️ `displayName()` بترجّع العربي فولباك لو الإنجليزي
+                     فاضي — فالخانة دي مش إجبارية، بس من غيرها الشاشة
+                     الإنجليزية بتوري اسم عربي. --}}
+                <label class="f">{{ __('common.name_en') }}</label>
+                <input type="text" name="name_en" dir="ltr" maxlength="190" style="width:100%"
+                       value="{{ old('name_en', $list->name_en) }}">
+            </div>
+        </div>
+
+        <div style="margin-top:10px">
+            <label class="f">{{ __('common.notes') }}</label>
+            <textarea name="notes" rows="2" style="width:100%">{{ old('notes', $list->notes) }}</textarea>
+        </div>
+
+        {{-- ⚠️ **الكود معروض ومقفول** — مش مخفي. اللي بيعدّل لازم
+             يشوفه (بيميّز القايمة في كل الشاشات)، وفي نفس الوقت
+             مايقدرش يغيّره: العملاء مربوطين بيه. --}}
+        <div style="margin-top:10px">
+            <label class="f">{{ __('common.code') }}</label>
+            <input type="text" value="{{ $list->code }}" disabled style="width:100%">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                {{ __('price.code_locked_hint') }}
+            </div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgEditL')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
 
 @endsection
 
