@@ -60,45 +60,89 @@ class ClientSetupController extends Controller
         ]);
     }
 
-    /** حفظ صف سلسلة — بينشر على كل فروعها */
-    public function saveChain(Request $request, ClientGroup $group)
+    /**
+     * حفظ صفوف السلاسل — الكل أو صف واحد.
+     *
+     * ⚠️ **فورم واحد كبير + زرار الصف بيبعت `only`** (طلب المالك
+     * ١٧/٨: «عاوز Save All»). الفورمات المنفصلة القديمة ماينفعش
+     * تتحفظ كلها بضغطة؛ والفورم الواحد من غير `only` كان بيضيّع
+     * ميزة حفظ صف لوحده. الاتنين بقوا شغالين من نفس الفورم.
+     */
+    public function saveChains(Request $request)
     {
-        $data = $this->validated($request);
+        $rows = $this->validatedRows($request);
+        $only = $request->integer('only');
+        $saved = 0;
+        $branches = 0;
 
-        DB::transaction(function () use ($group, $data, $request) {
-            Client::visibleTo($group->clients(), $request->user())
-                ->update($this->payload($data));
+        DB::transaction(function () use ($rows, $only, $request, &$saved, &$branches) {
+            foreach ($rows as $id => $data) {
+                if ($only && (int) $id !== $only) {
+                    continue;
+                }
+
+                $group = ClientGroup::find((int) $id);
+
+                if ($group === null) {
+                    continue;
+                }
+
+                $branches += Client::visibleTo($group->clients(), $request->user())
+                    ->update($this->payload($data));
+                $saved++;
+            }
         });
 
-        return back()->with('ok', __('client.setup_chain_saved', [
-            'chain' => $group->displayName(),
-            'count' => $group->clients()->count(),
+        return back()->with('ok', __('client.setup_all_saved', [
+            'count' => $saved, 'clients' => $branches,
         ]));
     }
 
-    /** حفظ صف عميل واحد */
-    public function saveClient(Request $request, Client $client)
+    /** حفظ صفوف العملاء — الكل أو صف واحد */
+    public function saveClients(Request $request)
     {
-        $client->update($this->payload($this->validated($request)));
+        $rows = $this->validatedRows($request);
+        $only = $request->integer('only');
+        $saved = 0;
 
-        return back()->with('ok', __('client.setup_client_saved', [
-            'client' => $client->displayName(),
+        DB::transaction(function () use ($rows, $only, $request, &$saved) {
+            foreach ($rows as $id => $data) {
+                if ($only && (int) $id !== $only) {
+                    continue;
+                }
+
+                $client = Client::visibleTo(Client::query(), $request->user())
+                    ->find((int) $id);
+
+                if ($client === null) {
+                    continue;
+                }
+
+                $client->update($this->payload($data));
+                $saved++;
+            }
+        });
+
+        return back()->with('ok', __('client.setup_all_saved', [
+            'count' => $saved, 'clients' => $saved,
         ]));
     }
 
-    private function validated(Request $request): array
+    /** @return array<int|string, array> */
+    private function validatedRows(Request $request): array
     {
         return $request->validate([
-            'division' => ['nullable', Divisions::rule()],
-            'fulfillment_mode' => ['nullable', Rule::in([
+            'rows' => ['required', 'array'],
+            'rows.*.division' => ['nullable', Divisions::rule()],
+            'rows.*.fulfillment_mode' => ['nullable', Rule::in([
                 Divisions::FULFILLMENT_CASHVAN,
                 Divisions::FULFILLMENT_DELIVERY,
                 Divisions::FULFILLMENT_ONLINE,
             ])],
-            'price_list_id' => ['nullable', 'exists:price_lists,id'],
-            'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'inclusive' => ['nullable', 'boolean'],
-        ]);
+            'rows.*.price_list_id' => ['nullable', 'exists:price_lists,id'],
+            'rows.*.discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'rows.*.inclusive' => ['nullable', 'boolean'],
+        ])['rows'];
     }
 
     /**

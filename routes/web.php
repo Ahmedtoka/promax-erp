@@ -512,11 +512,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::middleware('role:admin,manager')->group(function () {
             Route::get('/setup/chains', [\App\Http\Controllers\ClientSetupController::class, 'chains'])
                 ->name('setup.chains');
-            Route::post('/setup/chains/{group}', [\App\Http\Controllers\ClientSetupController::class, 'saveChain'])
+            // ⚠️ من غير `{group}`/`{client}` — الفورم بقى واحد بيبعت
+            // `rows[id][…]` كلها، و`only` للصف الواحد (١٧/٨)
+            Route::post('/setup/chains', [\App\Http\Controllers\ClientSetupController::class, 'saveChains'])
                 ->name('setup.chains.save');
             Route::get('/setup/clients', [\App\Http\Controllers\ClientSetupController::class, 'clients'])
                 ->name('setup.clients');
-            Route::post('/setup/clients/{client}', [\App\Http\Controllers\ClientSetupController::class, 'saveClient'])
+            Route::post('/setup/clients', [\App\Http\Controllers\ClientSetupController::class, 'saveClients'])
                 ->name('setup.clients.save');
         });
 
