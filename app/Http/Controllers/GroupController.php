@@ -68,7 +68,9 @@ class GroupController extends Controller
             ->groupBy('m')->orderBy('m')->get();
 
         return view('erp.group', [
-            'g' => $group->load('channel'),
+            // ⚠️ `contract` في الـload — كارت عقد السلسلة بيقراه،
+            // ومن غيره كويري زيادة على كل تحميل للصفحة
+            'g' => $group->load(['channel', 'contract']),
             'branches' => $branches,
             'monthly' => $monthly,
             'todaySales' => (float) Invoice::whereIn('client_id', $ids)
@@ -98,6 +100,9 @@ class GroupController extends Controller
 
     public function update(Request $request, ClientGroup $group)
     {
+        /** رسايل النجاح — بتتجمّع عشان الحفظ الواحد ممكن يعمل حاجتين */
+        $msgs = [];
+
         $request->validate([
             'apply_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             // ⚠️ **`channel` قيمة صريحة مش فاضي.** الفاضي معناه
@@ -110,6 +115,30 @@ class GroupController extends Controller
         ]);
 
         $group->update($this->validated($request));
+
+        // ⚠️⚠️ **الخصم الجماعي مقفول لما يكون فيه عقد سلسلة سارٍ**
+        // (بلاغ المالك ١٧ أغسطس ٢٠٢٦).
+        //
+        // الخانة بتكتب `clients.discount`، و`effectiveDiscount()`
+        // بتقرا **العقد الأول**. يعني على سلسلة زي سيركل كيه (عقد
+        // ٣٠٪ سارٍ) المستخدم بيكتب ٢٦٫٦٧٪، الرسالة بتقول «اتطبق على
+        // ١٩٩ فرع»، والفواتير بتفضل تتحسب بـ٣٠٪. رقم اتكتب، ومحدش
+        // كذب عليه صراحةً، والنتيجة غلط.
+        //
+        // ⚠️ **الرفض أحسن من التحذير**: التحذير بيتقري بعد الحفظ،
+        // والرقم بيبقى اتكتب على ١٩٩ صف خلاص.
+        if ($request->filled('apply_discount')) {
+            $ct = $group->contract;
+
+            if ($ct !== null && $ct->active && ! $ct->isExpired()) {
+                return back()->withErrors([
+                    'apply_discount' => __('client.chain_discount_locked', [
+                        'pct' => rtrim(rtrim(number_format((float) $ct->discount * 100, 2), '0'), '.'),
+                        'number' => $ct->number,
+                    ]),
+                ]);
+            }
+        }
 
         // ═══ شروط الدفع على كل الفروع ═══
         //
@@ -148,12 +177,16 @@ class GroupController extends Controller
 
             $n = Client::visibleTo($group->clients(), $request->user())->update($fields);
 
-            return back()->with('ok', __('client.chain_payment_applied', [
+            // ⚠️ **مابنرجعش من هنا** (إصلاح ١٧/٨). كان `return back()`
+            // — فلو المستخدم ملا شروط الدفع **والخصم** في نفس الحفظ،
+            // الخصم كان بيتبلع في صمت والرسالة تقول إن الشروط اتطبقت
+            // بس. الاتنين بيتنفّذوا دلوقتي والرسالة بتجمّعهم.
+            $msgs[] = __('client.chain_payment_applied', [
                 'terms' => $fields['payment_terms'] === null
                     ? __('client.terms_by_channel')
                     : __('client.terms_'.$fields['payment_terms']),
                 'count' => $n,
-            ]));
+            ]);
         }
 
         // ⚠️ **الخانة الفاضية غير الصفر.** فاضية = ماتلمسش خصومات
@@ -170,13 +203,80 @@ class GroupController extends Controller
             // خصم العقد هو اللي بيتحاسب بيه (أولوية `effectiveDiscount`).
             $n = Client::visibleTo($group->clients(), $request->user())->update(['discount' => $pct / 100]);
 
-            return back()->with('ok', __('client.chain_discount_applied', [
+            $msgs[] = __('client.chain_discount_applied', [
                 'pct' => $pct,
                 'count' => $n,
-            ]));
+            ]);
         }
 
-        return back()->with('ok', __('flash.chain_saved'));
+        return back()->with('ok', $msgs === []
+            ? __('flash.chain_saved')
+            : implode(' · ', $msgs));
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * عقد السلسلة — إنشاء وتعديل  ·  ١٧ أغسطس ٢٠٢٦
+     * ═══════════════════════════════════════════════════════════
+     *
+     * بلاغ المالك: «العقد مكتوب إنه مربوط بالسلسلة، ومفيش أوبشن
+     * أصلاً إننا نعمل عقد للسلسلة — إحنا عاملين العقد بالعميل وهو
+     * المكان الوحيد اللي ينفع نعمل عقد فيه».
+     *
+     * ⚠️ **والبلاغ صح.** `contracts.group_id` موجود من الأول
+     * و`Client::liveContract()` بتورّثه لكل فروع السلسلة — بس مفيش
+     * أي شاشة بتكتبه. `ErpController::storeContract` بتعمل
+     * `updateOrCreate(['client_id' => …])` فمستحيل توصل لصف
+     * `client_id` بتاعه `null`. عقد سيركل كيه اتزرع من السيدر،
+     * وبعدها بقى **غير قابل للتعديل**: المالك عايز يغيّر الـ٣٠٪
+     * ومالقاش مكان.
+     *
+     * ⚠️ **الخصم بيتخزن كسر مش نسبة** (`discount / 100`) — نفس
+     * `storeContract` بالحرف. الخلط ده كان هيدي خصم ٣٠٠٠٪.
+     *
+     * ⚠️ **ممنوع ننسخ خصم العقد في `clients.discount`** — نفس
+     * التحذير المكتوب في `storeContract`: لما العقد يقف أو ينتهي،
+     * `effectiveDiscount()` بتسيبه وتلاقي النسخة القديمة، والفرع
+     * يفضل ياخد خصم عقد ميت للأبد.
+     */
+    public function saveContract(Request $request, ClientGroup $group)
+    {
+        $data = $request->validate([
+            'type' => ['nullable', 'in:'.implode(',', array_keys(Contract::TYPE_KEYS))],
+            'discount' => ['required', 'numeric', 'min:0', 'max:100'],
+            'terms' => ['nullable', 'string', 'max:100'],
+            'starts_at' => ['nullable', 'date'],
+            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
+            'note' => ['nullable', 'string'],
+            'active' => ['nullable', 'boolean'],
+        ]);
+
+        $data['discount'] = $data['discount'] / 100;
+        $data['type_key'] = $data['type'] ?? Contract::TYPE_DEFAULT;
+        unset($data['type']);
+
+        // الشيك بوكس الغير متعلّم مابيتبعتش — الغياب معناه «موقوف»
+        $data['active'] = $request->boolean('active');
+
+        // ⚠️ اسم السلسلة بيتنسخ في العقد عشان الورق المطبوع يقوله
+        // من غير جوين — نفس اللي `syncContract` بتعمله للعميل.
+        $data['chain'] = $group->name;
+        $data['chain_en'] = $group->name_en;
+
+        $ct = $group->contract;
+
+        if ($ct === null) {
+            // ⚠️ الرقم من `HasDocumentNumber` — نفس مصدر أرقام كل
+            // المستندات، مش `count()+1` (الفخ الموثّق في المشروع).
+            Contract::create($data + [
+                'group_id' => $group->id,
+                'number' => Contract::nextNumber(),
+            ]);
+        } else {
+            $ct->update($data);
+        }
+
+        return back()->with('ok', __('client.chain_contract_saved'));
     }
 
     public function destroy(ClientGroup $group)

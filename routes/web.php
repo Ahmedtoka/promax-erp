@@ -486,6 +486,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::put('/groups/{group}', [GroupController::class, 'update'])->name('groups.update');
             Route::delete('/groups/{group}', [GroupController::class, 'destroy'])->name('groups.destroy');
             Route::post('/groups/{group}/attach', [GroupController::class, 'attach'])->name('groups.attach');
+
+            // ⚠️ **عقد السلسلة** (١٧/٨) — `contracts.group_id` كان
+            // موجود والفروع بتورثه، بس مفيش شاشة بتكتبه:
+            // `storeContract` بتعمل `updateOrCreate(['client_id'…])`
+            // فمابتوصلش لصف `client_id` بتاعه `null`. النتيجة إن عقد
+            // السلسلة يتزرع مرة ويفضل غير قابل للتعديل للأبد.
+            Route::post('/groups/{group}/contract', [GroupController::class, 'saveContract'])
+                ->name('groups.contract');
         });
 
         // ===== القنوات =====

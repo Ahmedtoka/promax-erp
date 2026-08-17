@@ -237,9 +237,104 @@
     #brTbl th.srt .arw{font-size:9px;margin-inline-start:4px;color:var(--primary)}
 </style>
 
+{{-- ═══════════════════════════════════════════════════════════
+     عقد السلسلة — ١٧ أغسطس ٢٠٢٦
+     ═══════════════════════════════════════════════════════════
+
+     بلاغ المالك: «مفيش أوبشن أصلاً إننا نعمل عقد للسلسلة».
+
+     ⚠️ العمود `contracts.group_id` موجود من الأول والفروع بتورثه
+     (`Client::liveContract()`)، بس مفيش شاشة بتكتبه — فعقد سيركل
+     كيه اتزرع من السيدر وبقى **غير قابل للتعديل**. الكارت ده هو
+     المكان الوحيد اللي بيتعدّل منه.
+
+     ⚠️ **الخصم ده بيتحاسب بيه فعلاً على كل فرع مالوش عقد خاص** —
+     مش رقم للعرض. عشان كده اللافتة تحته بتقول عدد الفروع. --}}
+@php
+    $gct = $g->contract;
+    $gctLive = $gct !== null && $gct->active && ! $gct->isExpired();
+@endphp
+<div class="card">
+    <h3>📜 {{ __('client.chain_contract') }}
+        @if ($gct)
+            <span class="side">{{ $gct->number }}</span>
+        @endif
+    </h3>
+
+    @if ($gct && ! $gctLive)
+        {{-- ⚠️ العقد الموجود ومش سارٍ **مش زي مفيش عقد**: الفروع
+             بترجع لخصمها الخاص، والمستخدم لازم يعرف ده صراحةً بدل
+             ما يستنتجه من اختفاء رقم. --}}
+        <div class="alert warn" style="margin-bottom:12px">
+            {{ __('client.chain_contract_not_live') }}
+        </div>
+    @endif
+
+    <form method="POST" action="{{ route('erp.groups.contract', $g) }}">
+        @csrf
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.discount_pct') }} <b class="req-star">*</b></label>
+                {{-- ⚠️ `step="0.01"` مش `0.5` — ٢٦٫٦٧٪ رقم اتفاق
+                     حقيقي، والمتصفح كان بيرفضه برسالة مالهاش معنى. --}}
+                <input type="number" name="discount" step="0.01" min="0" max="100" required
+                       style="width:100%"
+                       value="{{ old('discount', $gct ? rtrim(rtrim(number_format((float) $gct->discount * 100, 2, '.', ''), '0'), '.') : '') }}">
+            </div>
+            <div>
+                {{-- ⚠️ `contract_type_*` — نفس المفاتيح اللي
+                     `Contract::typeLabel()` وفورم عقد العميل
+                     بيستخدموها. مفاتيح جديدة بنفس المعنى كانت
+                     هتخلّي نفس النوع مترجم في مكانين ويفترقوا. --}}
+                <label class="f">{{ __('client.type') }}</label>
+                <select name="type" style="width:100%">
+                    @foreach (array_keys(\App\Models\Contract::TYPE_KEYS) as $tk)
+                        <option value="{{ $tk }}"
+                            @selected(old('type', $gct?->type_key ?? \App\Models\Contract::TYPE_DEFAULT) === $tk)>
+                            {{ __('client.contract_type_'.$tk) }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.starts_at') }}</label>
+                <input type="date" name="starts_at" style="width:100%"
+                       value="{{ old('starts_at', $gct?->starts_at?->format('Y-m-d')) }}">
+            </div>
+            <div>
+                <label class="f">{{ __('client.expires_on') }}</label>
+                <input type="date" name="ends_at" style="width:100%"
+                       value="{{ old('ends_at', $gct?->ends_at?->format('Y-m-d')) }}">
+            </div>
+        </div>
+        <div>
+            <label class="f">{{ __('client.payment_terms') }}</label>
+            <input type="text" name="terms" maxlength="100" style="width:100%"
+                   value="{{ old('terms', $gct?->terms) }}">
+        </div>
+        <div style="margin-top:10px">
+            <label class="f">{{ __('common.notes') }}</label>
+            <textarea name="note" rows="2" style="width:100%">{{ old('note', $gct?->note) }}</textarea>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;margin:12px 0;font-size:12.5px">
+            <input type="checkbox" name="active" value="1" @checked(old('active', $gct?->active ?? true))>
+            {{ __('client.contract_active') }}
+        </label>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+            {{ __('client.chain_contract_hint', ['count' => $g->clients()->count()]) }}
+        </div>
+        <button class="btn primary">💾 {{ $gct ? __('common.save') : __('client.chain_contract_create') }}</button>
+    </form>
+</div>
+
 @if ($contracts->isNotEmpty())
 <div class="card">
-    <h3>📜 {{ __('client.chain_contracts') }} <span class="side">{{ __('client.contract_countable', ['count' => $contracts->count()]) }}</span></h3>
+    <h3>📜 {{ __('client.chain_branch_contracts') }} <span class="side">{{ __('client.contract_countable', ['count' => $contracts->count()]) }}</span></h3>
+    {{-- ⚠️ **دول عقود الفروع الخاصة، وكل واحد فيهم بيحجب عقد
+         السلسلة على فرعه** (`liveContract()` بتجرّب عقد العميل
+         الأول). الجدول ده كان اسمه «عقود السلسلة» فكان بيوحي إنهم
+         نسخ من عقد واحد — وهما بالعكس: الاستثناءات. --}}
     <div class="tablewrap">
         <table>
             <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.chain_in_contract') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.discount') }}</th><th>{{ __('client.payment_terms') }}</th><th>{{ __('client.expires_on') }}</th><th>{{ __('common.notes') }}</th></tr>
@@ -317,13 +412,32 @@
             </div>
         </div>
         {{-- ═════ خصم على كل الفروع ═════ --}}
+        {{-- ⚠️⚠️ **بيتقفل لما يكون فيه عقد سلسلة سارٍ** (١٧/٨).
+             الخانة دي بتكتب `clients.discount`، و`effectiveDiscount()`
+             بتقرا **العقد الأول** — يعني على سيركل كيه (عقد ٣٠٪) كان
+             المستخدم يكتب ٢٦٫٦٧٪، الرسالة تقول «اتطبق على ١٩٩ فرع»،
+             والفواتير تفضل بـ٣٠٪. الكنترولر بيرفض كمان، والقفل هنا
+             عشان محدش يوصل للرفض أصلاً. --}}
         <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
             <label class="f">{{ __('client.chain_apply_discount') }} %</label>
-            <input type="number" name="apply_discount" step="0.5" min="0" max="100"
-                   style="width:100%" value="" placeholder="{{ __('client.chain_apply_discount_ph') }}">
-            <div style="font-size:11px;color:var(--muted);margin-top:5px">
-                {{ __('client.chain_apply_discount_hint', ['count' => $g->clients()->count()]) }}
-            </div>
+            @if ($gctLive)
+                <input type="number" disabled style="width:100%"
+                       placeholder="{{ __('client.chain_discount_locked_ph') }}">
+                <div style="font-size:11px;color:var(--orange,#B86E00);margin-top:5px">
+                    ⚠️ {{ __('client.chain_discount_locked_hint', [
+                        'pct' => rtrim(rtrim(number_format((float) $gct->discount * 100, 2), '0'), '.'),
+                    ]) }}
+                </div>
+            @else
+                {{-- ⚠️ `step="0.01"` مش `0.5` — ٢٦٫٦٧٪ كان بيترفض من
+                     المتصفح نفسه قبل ما يوصل للسيرفر، والفاليديشن
+                     هناك `numeric` وبيقبله عادي. --}}
+                <input type="number" name="apply_discount" step="0.01" min="0" max="100"
+                       style="width:100%" value="" placeholder="{{ __('client.chain_apply_discount_ph') }}">
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                    {{ __('client.chain_apply_discount_hint', ['count' => $g->clients()->count()]) }}
+                </div>
+            @endif
         </div>
 
         {{-- ═════ شروط الدفع على كل الفروع ═════ --}}

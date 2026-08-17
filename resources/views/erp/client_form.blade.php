@@ -735,7 +735,16 @@
                 {{ __('client.has_contract') }}
             </label>
 
-            @if ($ct === null && $src?->group?->contract)
+            {{-- ⚠️ **العقد السارٍ مش أي عقد** (إصلاح ١٧/٨). الشرط كان
+     `$src?->group?->contract` الخام — فالسلسلة اللي عقدها **منتهي أو
+     موقوف** كانت لسه بتقول للمستخدم «الفرع ده متغطي بعقد السلسلة»،
+     وهو فعلياً بلا أي خصم عقد (`liveContract()` بترجّع `null`).
+     يعني اللافتة كانت بتمنعه يعمل عقد للفرع بحجة تغطية مش موجودة. --}}
+@php
+    $gc = $src?->group?->contract;
+    $gcLive = $gc !== null && $gc->active && ! $gc->isExpired();
+@endphp
+@if ($ct === null && $gcLive)
                 <div class="alert warn" style="margin-bottom:12px">
                     <span>⛓</span>
                     <span>{{ __('client.contract_from_chain_note', ['chain' => $src->group->displayName()]) }}</span>
