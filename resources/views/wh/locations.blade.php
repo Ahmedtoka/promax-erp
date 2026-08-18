@@ -335,9 +335,9 @@
                             <div style="display:flex;gap:10px;align-items:center">
                                 @if ($p?->imageSrc())
                                     <img src="{{ $p->imageSrc() }}"
-                                         style="width:48px;height:48px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                         style="width:96px;height:96px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                                 @else
-                                    <div style="width:48px;height:48px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
+                                    <div style="width:96px;height:96px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                 @endif
                                 <div>
                                     <b style="font-size:12.5px">{{ $p?->displayName() ?? '—' }}</b>

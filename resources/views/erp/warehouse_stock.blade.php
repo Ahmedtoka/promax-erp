@@ -82,10 +82,10 @@
                             {{-- كبيرة + بلاسهولدر واضح للي لسه ملوش صورة --}}
                             @if ($p->imageSrc())
                                 <img src="{{ $p->imageSrc() }}" alt="" loading="lazy"
-                                     style="width:72px;height:72px;object-fit:contain;border-radius:10px;
+                                     style="width:130px;height:130px;object-fit:contain;border-radius:10px;
                                             border:1px solid var(--border);background:#fff">
                             @else
-                                <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);
+                                <div style="width:130px;height:130px;border-radius:10px;border:1px dashed var(--border);
                                             display:flex;flex-direction:column;align-items:center;justify-content:center;
                                             gap:2px;color:var(--muted)">
                                     <span style="font-size:18px">📦</span>

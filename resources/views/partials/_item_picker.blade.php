@@ -111,8 +111,8 @@
                 '<input type="checkbox" ' + (sel.has(p.id) ? 'checked ' : '') +
                 'style="pointer-events:none;width:17px;height:17px;flex-shrink:0">' +
                 (p.image
-                    ? '<img src="' + esc(p.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">'
-                    : '<span style="width:52px;height:52px;border:1px dashed var(--border);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)">📦</span>') +
+                    ? '<img src="' + esc(p.image) + '" style="width:96px;height:96px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff">'
+                    : '<span style="width:96px;height:96px;border:1px dashed var(--border);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)">📦</span>') +
                 '<span style="flex:1;min-width:0"><b style="font-size:12.5px">' + esc(p.name) + '</b>' +
                 '<span style="display:block;font-size:10.5px;color:var(--muted)">' + esc(p.code) + '</span></span>' +
                 (sub ? '<span style="font-size:11px;font-weight:800;color:var(--muted);flex-shrink:0">' + esc(sub) + '</span>' : '') +

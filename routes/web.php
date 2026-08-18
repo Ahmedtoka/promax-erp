@@ -795,6 +795,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         Route::get('/invoices', [OpsController::class, 'invoices'])->name('invoices');
         Route::get('/invoices/{invoice}', [OpsController::class, 'invoice'])->name('invoice');
+        // تحويل فاتورة لعميل تاني (١٨/٨/٢٠٢٦) — مندوب نزّل الفاتورة
+        // على فرع غلط من نفس السلسلة. أدمن بس: بتنقل قيود فلوس.
+        Route::post('/invoices/{invoice}/reassign', [OpsController::class, 'reassignInvoice'])
+            ->middleware('role:admin')->name('invoices.reassign');
 
         Route::get('/tracking', [OpsController::class, 'tracking'])->name('tracking');
 

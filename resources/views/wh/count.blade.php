@@ -121,7 +121,7 @@
                                 {{-- صورة الصنف — اللي بيعد يتأكد إنه بيعد الحاجة الصح --}}
                                 @if ($it->product->imageSrc())
                                     <img src="{{ $it->product->imageSrc() }}" alt=""
-                                         style="width:56px;height:56px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                         style="width:110px;height:110px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                                 @endif
                                 <div>
                                     <b>{{ $it->product->displayName() }}</b>

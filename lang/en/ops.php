@@ -361,6 +361,16 @@ return [
     'terms_applied' => 'Terms copied from the similar client - channel, chain, price list and rate. Review and approve.',
     'chain_discount_note' => 'The chain contract governs the discount - custom discount left at zero',
 
+    // === Reassign invoice to another client (Aug 18, 2026) ===
+    'reassign_invoice' => 'Move to another client',
+    'reassign_go' => 'Move',
+    'reassign_hint' => 'The invoice with its ledger entries and collection will be fully removed from ":name" and recorded on the client you pick - both balances recalculate instantly. The rep stays unchanged.',
+    'reassign_confirm' => 'Move invoice :number? Ledger entries and balances change immediately.',
+    'reassign_same' => 'Same client - pick a different one.',
+    'reassign_eta_locked' => 'This invoice was exported to the tax authority - it cannot be moved. Handle it with an official credit note/return.',
+    'reassign_has_returns' => 'This invoice has a linked return - unlink or review the return first.',
+    'invoice_reassigned' => 'Invoice :number moved from ":from" to ":to" - ledgers and balances updated.',
+
     // ═══ Location column & filter on approvals (Aug 18, 2026) ═══
     'loc_col' => 'Location',
     'loc_with' => 'With location',

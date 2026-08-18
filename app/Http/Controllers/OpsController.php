@@ -3339,7 +3339,86 @@ class OpsController extends Controller
             'inv' => $invoice,
             'taxRateLabel' => $rates->count() === 1 ? \App\Services\Tax::label($rates->first()) : '',
             'companyTaxId' => \App\Models\Setting::read('company_tax_id'),
+            // مودال «تحويل لعميل تاني» — للأدمن بس. فروع نفس السلسلة
+            // الأول (دي الحالة الشائعة: مندوب نزّل على الفرع الغلط)
+            // وبعدين باقي العملاء الشغالين.
+            'reassignClients' => request()->user()->role === 'admin'
+                ? Client::where('status', 'active')
+                    ->where('id', '!=', $invoice->client_id)
+                    ->with('group')
+                    ->orderByRaw('CASE WHEN group_id '.($invoice->client->group_id ? '= '.(int) $invoice->client->group_id : 'IS NULL').' THEN 0 ELSE 1 END')
+                    ->orderBy('name')
+                    ->get(['id', 'code', 'name', 'name_en', 'group_id'])
+                : collect(),
         ]);
+    }
+
+    /**
+     * ═══ تحويل فاتورة لعميل تاني (١٨ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «المندوب عمل فاتورة غلط نزلها على فرع تاني من نفس
+     * السلسلة — أدوس عليها وأحولها، تسمع عند الفرع الصح وتتشال بكل
+     * تفاصيلها من القديم، والمندوب يشوف مبيعاته صح».
+     *
+     * اللي بيتنقل (جوه ترانزاكشن واحدة — عقيدة الأرقام):
+     *   • الفاتورة نفسها + بنودها (`invoice_items.client_id`)
+     *   • قيود كشف الحساب المربوطة بيها (sale/collection/consignment
+     *     عبر `source_type/source_id`) — الدين والتحصيل بيمشوا معاها
+     *   • `recalculate()` للعميلين — الأرصدة تتظبط فوراً
+     *   • الزيارة بتتفك (`visit_id = null`) — الزيارة حصلت عند
+     *     العميل القديم فعلاً، وسيبها مربوطة كان هيخلّي الفاتورة
+     *     تبان في تفاصيل زيارته رغم إنها «اتشالت بكل تفاصيلها»
+     *
+     * المندوب مابيتغيرش (`user_id`) — مبيعاته هي هي، بس على الفرع الصح.
+     *
+     * ⚠️ حارسين قاطعين:
+     *   • فاتورة متصدّرة للضرائب (exported/submitted) ماتتحولش —
+     *     المستند الرسمي طلع باسم عميل، نفس قاعدة الـreprice.
+     *   • فاتورة عليها مرتجع مربوط ماتتحولش — المرتجع بيشاور عليها
+     *     وتحويلها لوحدها بيكسر السلسلة. شيل الربط الأول.
+     */
+    public function reassignInvoice(Request $request, Invoice $invoice)
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+        ]);
+
+        $to = Client::findOrFail((int) $data['client_id']);
+        $from = $invoice->client;
+
+        if ($to->id === $from->id) {
+            return back()->withErrors(['client_id' => __('ops.reassign_same')]);
+        }
+
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['client_id' => __('ops.reassign_eta_locked')]);
+        }
+
+        if (\App\Models\ClientReturn::where('invoice_id', $invoice->id)->exists()) {
+            return back()->withErrors(['client_id' => __('ops.reassign_has_returns')]);
+        }
+
+        DB::transaction(function () use ($invoice, $to, $from) {
+            $invoice->update(['client_id' => $to->id, 'visit_id' => null]);
+
+            DB::table('invoice_items')
+                ->where('invoice_id', $invoice->id)
+                ->update(['client_id' => $to->id]);
+
+            Transaction::where('source_type', Invoice::class)
+                ->where('source_id', $invoice->id)
+                ->update(['client_id' => $to->id]);
+
+            // ⚠️ جوه نفس الترانزاكشن — عقيدة الأرقام
+            $from->recalculate();
+            $to->recalculate();
+        });
+
+        return back()->with('ok', __('ops.invoice_reassigned', [
+            'number' => $invoice->number,
+            'from' => $from->displayName(),
+            'to' => $to->displayName(),
+        ]));
     }
 
     /** تسجيل تحصيل نقدي من عميل */

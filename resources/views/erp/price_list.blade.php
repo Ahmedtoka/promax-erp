@@ -218,7 +218,7 @@
                                 <img src="{{ $p->imageSrc() }}" loading="lazy"
                                      alt="{{ $p->displayName() }}"
                                      data-zoom="{{ $p->displayName() }}"
-                                     style="width:56px;height:56px;object-fit:contain;border-radius:6px;
+                                     style="width:110px;height:110px;object-fit:contain;border-radius:6px;
                                             border:1px solid var(--border);background:#fff">
                             @else
                                 <span style="color:var(--muted);font-size:18px">📦</span>

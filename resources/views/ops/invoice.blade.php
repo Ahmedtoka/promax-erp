@@ -42,6 +42,10 @@
 
 @section('actions')
     <a class="btn" href="{{ route('ops.invoices') }}">← {{ __('ops.all_invoices') }}</a>
+    @if (auth()->user()?->role === 'admin' && $reassignClients->isNotEmpty())
+        {{-- المندوب نزّل الفاتورة على فرع غلط؟ — تحويل كامل بقيودها --}}
+        <button class="btn" type="button" onclick="openDlg('dlgReassign')">🔁 {{ __('ops.reassign_invoice') }}</button>
+    @endif
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
 @endsection
 
@@ -218,6 +222,39 @@
 </div>
 @php $rowStartDoc += $pageItemsDoc->count(); @endphp
 @endforeach
+
+{{-- ═══ مودال «تحويل لعميل تاني» (١٨ أغسطس ٢٠٢٦) — أدمن بس ═══
+     فروع نفس السلسلة في أول القايمة (الحالة الشائعة). الديالوج
+     المقفول مش بيتطبع أصلاً — مفيش أثر على مستند A4. --}}
+@if (auth()->user()?->role === 'admin' && $reassignClients->isNotEmpty())
+<dialog id="dlgReassign">
+    <form class="dlg" method="POST" action="{{ route('ops.invoices.reassign', $inv) }}"
+          style="max-width:480px"
+          onsubmit="return confirm(@js(__('ops.reassign_confirm', ['number' => $inv->number])))">
+        @csrf
+        <h4>🔁 {{ __('ops.reassign_invoice') }} — {{ $inv->number }}</h4>
+
+        <div class="alert warn" style="margin:10px 0">
+            <span>⚠️</span><span>{{ __('ops.reassign_hint', ['name' => $inv->client->displayName()]) }}</span>
+        </div>
+
+        <div>
+            <label class="f">{{ __('client.client') }}</label>
+            <select name="client_id" required style="width:100%">
+                <option value="">—</option>
+                @foreach ($reassignClients as $rc)
+                    <option value="{{ $rc->id }}">{{ $rc->fullName() }} ({{ $rc->code }})</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgReassign')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">🔁 {{ __('ops.reassign_go') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
 
 @endsection
 

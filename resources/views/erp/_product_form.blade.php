@@ -59,7 +59,7 @@
                 @unless ($isNew)
                     @if ($p->imageSrc())
                         <img src="{{ $p->imageSrc() }}" alt=""
-                             style="width:84px;height:84px;object-fit:contain;border-radius:var(--r-sm);
+                             style="width:150px;height:150px;object-fit:contain;border-radius:var(--r-sm);
                                     border:1px solid var(--border);background:#fff;padding:4px">
                     @endif
                 @endunless

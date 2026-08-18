@@ -137,9 +137,9 @@
                                     <div style="display:flex;gap:10px;align-items:center">
                                         @if ($b->product?->imageSrc())
                                             <img src="{{ $b->product->imageSrc() }}"
-                                                 style="width:56px;height:56px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                                 style="width:110px;height:110px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                                         @else
-                                            <div style="width:56px;height:56px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
+                                            <div style="width:110px;height:110px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                         @endif
                                         <div>
                                             <b>{{ $b->product?->displayName() ?? __('stock.product_hash', ['id' => $b->product_id]) }}</b>

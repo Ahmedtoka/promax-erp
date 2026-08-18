@@ -44,7 +44,7 @@
         <div style="flex:0 0 190px">
             @if ($p->imageSrc())
                 <img src="{{ $p->imageSrc() }}" alt="{{ $p->displayName() }}"
-                     style="width:190px;height:190px;object-fit:contain;border-radius:var(--r);
+                     style="width:260px;height:260px;object-fit:contain;border-radius:var(--r);
                             border:1px solid var(--border);background:#fff;padding:8px">
                 @unless ($p->imageIsOurs())
                     <div style="font-size:10.5px;color:var(--muted);margin-top:6px;text-align:center">
@@ -52,7 +52,7 @@
                     </div>
                 @endunless
             @else
-                <div style="width:190px;height:190px;border-radius:var(--r);border:1px dashed var(--border);
+                <div style="width:260px;height:260px;border-radius:var(--r);border:1px dashed var(--border);
                             background:var(--paper);display:flex;align-items:center;justify-content:center;
                             color:var(--muted);font-size:12px;text-align:center;padding:12px">
                     {{ __('stock.image_none') }}
