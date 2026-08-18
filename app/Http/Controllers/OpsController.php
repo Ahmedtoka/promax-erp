@@ -3019,6 +3019,13 @@ class OpsController extends Controller
         // من كارت العميل بعدين).
         $data = $request->validate([
             'decision' => ['required', 'in:approved,review,rejected'],
+            // ═══ الاسم النهائي بيتكتب وقت الاعتماد (١٨ أغسطس ٢٠٢٦) ═══
+            // عقيدة التسمية: فرع سلسلة = اسم السلسلة + المنطقة
+            // («كاريبو - التجمع الخامس») · مستقل = اسمه + المنطقة.
+            // المودال بيركّبهم أوتوماتيك والمعتمِد بيصحّح — فاللي
+            // بيوصل هنا هو الاسم الصح، واسم المندوب الخام مجرد فولباك.
+            'name' => ['nullable', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
             'zone_id' => ['nullable', 'exists:zones,id'],
             'governorate' => ['nullable', 'string', 'max:60'],
             'address' => ['nullable', 'string', 'max:190'],
@@ -3049,8 +3056,11 @@ class OpsController extends Controller
         // ⚠️ **مش قبل الترانزاكشن بمسافة** — لازم يكون آخر حاجة قبل
         // ما نكتب. وبيتخطّى لو المعتمِد علّم «متأكد إنه مختلف».
         if ($data['decision'] === 'approved' && empty($data['confirm_duplicate'])) {
+            // ⚠️ الفحص على الاسم **النهائي** اللي هيتكتب فعلاً — مش اسم
+            // الطلب الخام. المعتمِد ممكن يكون ركّب اسم مطابق لعميل موجود.
             $dupes = \App\Support\Dupes::matches([
-                'name' => $clientRequest->name,
+                'name' => filled($data['name'] ?? null) ? $data['name'] : $clientRequest->name,
+                'name_en' => $data['name_en'] ?? null,
                 'phone' => $clientRequest->phone,
                 'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id,
                 'group_id' => $data['group_id'] ?? null,
@@ -3091,9 +3101,19 @@ class OpsController extends Controller
                 // بيحكم — فمابنقترحش عقد فردي (دوكترين promax-clients).
                 $wantsContract = ! empty($data['has_contract']) && empty($data['group_id']);
 
+                // ⚠️ **العمودين مع بعض** (دوكترين listRowFor): الـid هو
+                // اللي بيحكم، بس العمود النصي لازم يتزامن معاه — نفس
+                // اللي بيعمله الإعداد الجماعي وختم السلسلة والاستيراد.
+                $priceList = ! empty($data['price_list_id'])
+                    ? PriceList::find((int) $data['price_list_id'])
+                    : null;
+
                 $client = Client::create([
                     'code' => Client::nextCode(),
-                    'name' => $clientRequest->name,
+                    // الاسم المركّب من المودال (سلسلة/اسم + منطقة) —
+                    // واسم الطلب الخام فولباك لو الخانة اتبعتت فاضية.
+                    'name' => filled($data['name'] ?? null) ? trim($data['name']) : $clientRequest->name,
+                    'name_en' => filled($data['name_en'] ?? null) ? trim($data['name_en']) : null,
                     'phone' => $clientRequest->phone,
                     // العنوان الإنجليزي والعربي والنقطة من الفورم
                     // (المدير راجعها/كشفها) وإلا من الطلب نفسه.
@@ -3109,7 +3129,8 @@ class OpsController extends Controller
                     // القناة مش كده.
                     'channel_id' => $data['channel_id'] ?? $rep?->channel_id,
                     'sub_channel' => $data['sub_channel'] ?? null,
-                    'price_list_id' => $data['price_list_id'] ?? null,
+                    'price_list_id' => $priceList?->id,
+                    ...($priceList !== null ? ['price_list' => $priceList->code] : []),
                     'group_id' => $data['group_id'] ?? null,
                     // ⚠️ المدير بييجي من تسكين المندوب مش من الفاعل —
                     // الأدمن بيعتمد لمناديب مديرين مختلفين.

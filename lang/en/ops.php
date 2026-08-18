@@ -356,6 +356,13 @@ return [
     'dup_similar_to' => 'Similar to:',
     'dup_blocked' => 'A similar client is already registered: :names - if it really is a different place, tick "different client" and continue the approval.',
 
+    // ═══ Pull terms from the similar client + name composer (Aug 18, 2026) ═══
+    'pull_terms' => 'Copy their terms',
+    'terms_applied' => 'Terms copied from the similar client - channel, chain, price list and rate. Review and approve.',
+    'chain_discount_note' => 'The chain contract governs the discount - custom discount left at zero',
+    'compose_name' => 'Compose name',
+    'name_compose_hint' => 'Chain branch: chain name + zone. Independent: name + zone.',
+
     // ═══ Visits board (Aug 15, 2026) ═══
     'vb_hint' => 'What actually happened in the field - every visit with what came out of it',
     'vb_from' => 'From',

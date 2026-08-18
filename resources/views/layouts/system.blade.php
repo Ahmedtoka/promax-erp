@@ -1729,6 +1729,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function addOpt(o) {
+      // ⚠️⚠️ **الأوبشن المخفي مايتنسخش** (إصلاح ١٧/٨). فلترة
+      // «المحافظة ← مناطقها» (`filterZones` في مودال اعتماد العميل
+      // وفورم العميل) بتخبّي الأوبشنز بـ`hidden` على السيلكت
+      // الأصلي — والبانل هنا كانت بتنسخ **الكل** وتتجاهلها، فتختار
+      // «القاهرة» وتلاقي مناطق إسكندرية قدامك. القايمة بتتبني مع
+      // كل فتح، فالفلترة بتتلقط تلقائياً.
+      if (o.hidden) return;
       var d = document.createElement('div');
       d.className = 'ssel-opt' + (o.disabled ? ' dis' : '')
         + (o.index === sel.selectedIndex ? ' on' : '');
@@ -1762,6 +1769,15 @@ document.addEventListener('DOMContentLoaded', function () {
           addOpt(ch);
         }
       });
+      // ⚠️ رأس المجموعة اللي كل أولادها اتخبّوا بالفلترة بيتشال —
+      // من غيرها «الإسكندرية» تفضل عنوان فاضي تحت «القاهرة» المختارة
+      var kids = Array.prototype.slice.call(list.children);
+      kids.forEach(function (k, i) {
+        if (k.dataset.grp !== '1') return;
+        var nxt = kids[i + 1];
+        if (!nxt || nxt.dataset.grp === '1') list.removeChild(k);
+      });
+
       noneRow = document.createElement('div');
       noneRow.className = 'ssel-none';
       noneRow.textContent = NONE_TXT;

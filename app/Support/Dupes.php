@@ -297,6 +297,47 @@ final class Dupes
         $visible = $viewer === null
             || ($c->visibleBy($viewer) && $viewer->canSeeBranch($c->branch_id));
 
+        // ═══ شروط التعامل بتاعة الشبيه (١٨ أغسطس ٢٠٢٦) ═══
+        //
+        // ⚠️ **ليه هنا مش في الكنترولر؟** شاشة اعتماد الطلبات بتعبّي
+        // شروط العميل الجديد من الشبيه بزرار واحد (قناة/قسم/سلسلة/
+        // قايمة/نسبة) — والشبيه بييجي من هنا. لو الكنترولر جاب الشروط
+        // لوحده كان هيبقى فيه مصدرين ممكن يختلفوا.
+        //
+        // ⚠️ النسبة من `effectiveDiscount()` — **الرقم الفعلي** اللي
+        // الشبيه بيتحاسب بيه (عقد سارٍ يغلب الخصم الخاص)، مش عمود خام.
+        // ولو مصدرها عقد **السلسلة**، الفرع الجديد هيرثه أوتوماتيك
+        // بمجرد اختيار نفس السلسلة — فبنعلّم `chain_covered` عشان
+        // الواجهة تسيب الخصم الخاص صفر بدل ما تكرّر النسبة (خصم خاص
+        // فوق عقد السلسلة = العقد بيتغلب حسب الترتيب المقدّس).
+        //
+        // ⚠️ للمرئي بس — صف الفريق التاني بيتعرض بكوده وبلا شروط،
+        // نفس منطق حجب الاسم فوق.
+        //
+        // ⚠️ **وللمعتمِدين بس** (`canDecideOps`): حارس التكرار في
+        // الأبلكيشن بينده نفس الدالة بمندوب كـviewer — المندوب مش
+        // محتاج نسب خصم في الرد، وحساب `liveContract()` لكل مرشح
+        // كان هيضيف كويريز عقود على مسار الموبايل ببلاش.
+        // (`$viewer === null` = مسار داخلي/استيراد — الشروط بتتحسب
+        // ومحدش بيعرضها، مقبول.)
+        $terms = null;
+
+        if ($visible && ($viewer === null || $viewer->canDecideOps())) {
+            $lc = $c->liveContract();
+            $chainCovered = $lc !== null
+                && $c->group?->contract !== null
+                && $lc->is($c->group->contract);
+
+            $terms = [
+                'channel_id' => $c->channel_id,
+                'sub_channel' => $c->sub_channel,
+                'group_id' => $c->group_id,
+                'price_list_id' => $c->price_list_id,
+                'discount' => round($c->effectiveDiscount() * 100, 2),
+                'chain_covered' => $chainCovered,
+            ];
+        }
+
         return [
             'id' => $visible ? $c->id : null,
             'code' => $c->code,
@@ -316,6 +357,7 @@ final class Dupes
             'score' => $score,
             'visible' => $visible,
             'url' => $visible ? route('erp.clients.show', $c->id) : null,
+            'terms' => $terms,
         ];
     }
 

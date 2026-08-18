@@ -543,13 +543,33 @@ public function zone(): BelongsTo
 
     // ---------- Helpers ----------
 
-    /** كود عميل جديد مش متكرر */
+    /**
+     * كود عميل جديد مش متكرر.
+     *
+     * ⚠️⚠️ **انفجر على اللايف ١٧/٨** («Duplicate CL-4» وقت اعتماد
+     * طلب عميل). النسخة القديمة كانت بتقرا **آخر صف بالـid** وتطلّع
+     * أرقامه — وبعد استيراد سلاسل بأكواد بادئات مختلفة (BSM-28،
+     * FLM-03، BAP-02…) آخر عميل بقى كوده «FLM-03» فطلع الرقم 3+1=4
+     * واصطدم بـCL-4 الموجود من زمان.
+     *
+     * نفس فخ «آخر صف مش أكبر رقم» اللي اتصلح في 15 موديل
+     * بـ`HasDocumentNumber` — بس هنا البادئات متعددة، فبنقرا أكبر
+     * رقم من أكواد **CL- بس**، وبنلف على أي فجوة محجوزة.
+     */
     public static function nextCode(): string
     {
-        $last = static::query()->orderByDesc('id')->value('code');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
+        $n = (int) static::query()
+            ->where('code', 'like', 'CL-%')
+            ->selectRaw("MAX(CAST(SUBSTRING_INDEX(code, '-', -1) AS UNSIGNED)) as n")
+            ->value('n');
 
-        return 'CL-'.$n;
+        $n = $n > 0 ? $n : 1000;
+
+        do {
+            $code = 'CL-'.(++$n);
+        } while (static::where('code', $code)->exists());
+
+        return $code;
     }
 
     public function governorateLabel(): string

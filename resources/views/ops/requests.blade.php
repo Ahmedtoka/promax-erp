@@ -50,6 +50,9 @@
                             'by' => $d['by_label'],
                             'conf' => $d['confidence_label'],
                             'sure' => $d['confidence'] === 'sure',
+                            // شروط التعامل بتاعته — زرار «هات شروطه»
+                            // بيعبّيها في الفورم. null لصف الفريق التاني.
+                            'terms' => $d['terms'] ?? null,
                         ], $dupes[$r->id] ?? []),
                     ],
                     JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
@@ -130,6 +133,25 @@
 
         {{-- ═══ حقول الاعتماد — بتبان لـ«اعتماد» بس ═══ --}}
         <div id="approveFields">
+            {{-- ═══ الاسم النهائي باللغتين (١٨ أغسطس ٢٠٢٦) ═══
+                 بيتركّب أوتوماتيك: سلسلة + منطقة، أو اسم الطلب + منطقة —
+                 والمعتمِد بيصحّح بإيده. أول ما يكتب حرف بنبطّل تركيب
+                 على الخانة دي عشان مانمسحش تصحيحه. --}}
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('client.client_name') }}</label>
+                    <input type="text" name="name" id="dName" maxlength="190" style="width:100%">
+                </div>
+                <div>
+                    <label class="f">{{ __('client.name_en') }}</label>
+                    <input type="text" name="name_en" id="dNameEn" dir="ltr" maxlength="190" style="width:100%">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin:-4px 0 8px">
+                <button type="button" class="btn sm" onclick="composeNames(true)">🧩 {{ __('ops.compose_name') }}</button>
+                <span style="font-size:11px;color:var(--muted)">{{ __('ops.name_compose_hint') }}</span>
+            </div>
+
             {{-- النقطة اللي المندوب لقّطها + زرار كشف العنوان منها --}}
             <div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:12px 0;background:var(--card2)">
                 <div style="font-size:12px;font-weight:800;color:var(--royal-blue);margin-bottom:8px">{{ __('ops.captured_location') }}</div>
@@ -243,6 +265,8 @@
                     <span>⚠️</span>
                     <div style="flex:1">
                         <div id="dDupeList" style="font-size:11.5px"></div>
+                        {{-- فيدباك زرار «هات شروطه» --}}
+                        <div id="dTermsMsg" style="font-size:11.5px;color:var(--green);font-weight:800;margin-top:6px;display:none"></div>
                         <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px;font-weight:800;cursor:pointer">
                             <input type="checkbox" name="confirm_duplicate" value="1" id="dDupeConfirm">
                             {{ __('client.dup_confirm_label') }}
@@ -277,17 +301,45 @@
         'fGov' => __('geo.governorate'),
         'fZone' => __('geo.zone'),
         'dupSimilar' => __('ops.dup_similar_to'),
+        'pullTerms' => __('ops.pull_terms'),
+        'termsApplied' => __('ops.terms_applied'),
+        'chainDiscountNote' => __('ops.chain_discount_note'),
+        // ═══ أسماء المناطق والسلاسل باللغتين — لتركيبة الاسم ═══
+        //
+        // عقيدة التسمية (١٨ أغسطس ٢٠٢٦): فرع سلسلة = اسم السلسلة +
+        // المنطقة («كاريبو - التجمع الخامس») · مستقل = اسمه + المنطقة.
+        // التركيب في المتصفح عشان يتحدّث لايف مع كل تغيير سلسلة/منطقة.
+        'zoneNames' => $zones->mapWithKeys(fn ($z) => [$z->id => [
+            'ar' => $z->name,
+            'en' => $z->name_en ?: $z->name,
+        ]])->all(),
+        'groupNames' => $groups->mapWithKeys(fn ($g) => [$g->id => [
+            'ar' => $g->name,
+            'en' => $g->name_en ?: $g->name,
+        ]])->all(),
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 @endphp
 <script>
 const DEC = {!! $decideData !!};
 // النقطة الملتقطة للطلب المفتوح حالياً
 let CUR = { lat: null, lng: null };
+// اسم الطلب الخام — أساس التركيبة لما مافيش سلسلة
+let BASE_NAME = { ar: '', en: '' };
+// المعتمِد كتب بإيده؟ — التركيب الأوتوماتيك مايلمسش الخانة دي تاني
+let NAME_DIRTY = { ar: false, en: false };
+// تشابهات الطلب المفتوح — زرار «هات شروطه» بيقرا منها
+let CUR_DUPES = [];
 
 function decide(r) {
     document.getElementById('dTitle').textContent = DEC.titleTpl.replace('#N#', r.name);
     document.getElementById('formDecide').action = DEC.decideBase + '/' + r.id + '/decide';
     document.getElementById('dDecision').value = 'approved';
+
+    BASE_NAME = { ar: r.name || '', en: '' };
+    NAME_DIRTY = { ar: false, en: false };
+    document.getElementById('dName').value = BASE_NAME.ar;
+    document.getElementById('dNameEn').value = '';
+    document.getElementById('dTermsMsg').style.display = 'none';
 
     document.getElementById('dAddr').value = r.address || '';
     document.getElementById('dAddrAr').value = r.address_ar || '';
@@ -299,14 +351,85 @@ function decide(r) {
     document.querySelector('#formDecide input[name="discount"]').value = '0';
     document.getElementById('dGeoMsg').textContent = '';
 
-    renderRequestDupes(r.dupes || []);
+    CUR_DUPES = r.dupes || [];
+    renderRequestDupes(CUR_DUPES);
 
     CUR = { lat: r.lat != null ? r.lat : null, lng: r.lng != null ? r.lng : null };
     updateCaptured();
     syncSubChannel();
     filterZones();
     toggleFields();
+    // تركيبة أولية لو الطلب جاي بمنطقة — «اسم الطلب - المنطقة»
+    composeNames(false);
     openDlg('dlgDecide');
+}
+
+// ═══ تركيبة الاسم (١٨ أغسطس ٢٠٢٦) ═══
+//
+// فرع سلسلة: اسم السلسلة + المنطقة («كاريبو - التجمع الخامس»)
+// مستقل: اسم الطلب + المنطقة («سوبر ماركت النور - مدينة نصر»)
+//
+// ⚠️ لو الاسم الأساسي **فيه المنطقة أصلاً** (المندوب كتب «كاريبو
+// التجمع الخامس») مابنكرّرهاش — «كاريبو التجمع الخامس - التجمع
+// الخامس» اسم عبيط.
+// ⚠️ `force=true` (زرار 🧩) بيدهس اللي مكتوب. غير كده بنحترم أي
+// خانة المعتمِد كتب فيها بإيده (NAME_DIRTY).
+function composeNames(force) {
+    const zoneSel = document.getElementById('dZone');
+    const groupSel = document.querySelector('#formDecide select[name="group_id"]');
+    const z = DEC.zoneNames[zoneSel.value] || null;
+    const g = DEC.groupNames[groupSel.value] || null;
+
+    const mk = function (base, chain, zone) {
+        const head = (chain || base || '').trim();
+        if (!head) return '';
+        return zone && !head.includes(zone.trim()) ? head + ' - ' + zone.trim() : head;
+    };
+
+    const ar = mk(BASE_NAME.ar, g && g.ar, z && z.ar);
+    const en = mk(BASE_NAME.en, g && g.en, z && z.en);
+
+    if (ar && (force || !NAME_DIRTY.ar)) {
+        document.getElementById('dName').value = ar;
+        if (force) NAME_DIRTY.ar = false;
+    }
+    if (en && (force || !NAME_DIRTY.en)) {
+        document.getElementById('dNameEn').value = en;
+        if (force) NAME_DIRTY.en = false;
+    }
+}
+
+// ═══ «هات شروطه» — نسخ شروط التعامل من الشبيه ═══
+//
+// قناة/قسم/سلسلة/قايمة/نسبة بضغطة — بدل ما المعتمِد يفتح كارت
+// الشبيه في تاب تاني وينقل بإيده. النسبة لو مصدرها عقد السلسلة
+// بنسيب الخصم الخاص صفر: الفرع الجديد هيرث العقد بمجرد اختيار
+// السلسلة، وتكرار النسبة كخصم خاص بيتغلب على العقد بعد ما يخلص.
+function applyDupeTerms(i) {
+    const t = (CUR_DUPES[i] || {}).terms;
+    if (!t) return;
+
+    const f = document.getElementById('formDecide');
+    // ⚠️ كل قيمة برمجية لازم يتبعها `change` — عشان الدروب داون
+    // المحسّن يحدّث العنوان الظاهر، وعشان onchange (قسم الكي أكاونت
+    // وفلترة المناطق) يشتغل. نفس درس زرار كشف العنوان.
+    const set = function (el, v) {
+        el.value = v == null ? '' : v;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    set(document.getElementById('dChannel'), t.channel_id);
+    set(f.querySelector('select[name="sub_channel"]'), t.sub_channel);
+    set(f.querySelector('select[name="group_id"]'), t.group_id);
+    set(f.querySelector('select[name="price_list_id"]'), t.price_list_id);
+    f.querySelector('input[name="discount"]').value = t.chain_covered ? 0 : (t.discount || 0);
+
+    // السلسلة اتغيرت ⇒ الاسم المركّب اتغير
+    composeNames(false);
+
+    const msg = document.getElementById('dTermsMsg');
+    msg.textContent = '✔ ' + DEC.termsApplied + (t.chain_covered ? ' · ' + DEC.chainDiscountNote : '');
+    msg.style.display = '';
 }
 
 function toggleFields() {
@@ -328,11 +451,30 @@ function renderRequestDupes(list) {
 
     if (!list.length) { box.style.display = 'none'; return; }
 
-    list.forEach(function (d) {
+    list.forEach(function (d, i) {
         const line = document.createElement('div');
         line.style.color = d.sure ? 'var(--red)' : 'var(--orange)';
         line.style.fontWeight = '700';
-        line.textContent = '⚠️ ' + DEC.dupSimilar + ' ' + d.name + ' (' + d.code + ') · ' + d.by + ' · ' + d.conf;
+        line.style.display = 'flex';
+        line.style.alignItems = 'center';
+        line.style.gap = '8px';
+        line.style.flexWrap = 'wrap';
+        line.style.margin = '2px 0';
+
+        const txt = document.createElement('span');
+        txt.textContent = '⚠️ ' + DEC.dupSimilar + ' ' + d.name + ' (' + d.code + ') · ' + d.by + ' · ' + d.conf;
+        line.appendChild(txt);
+
+        // «هات شروطه» — للشبيه المرئي بس (صف الفريق التاني terms=null)
+        if (d.terms) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn sm';
+            btn.textContent = '💠 ' + DEC.pullTerms;
+            btn.onclick = function () { applyDupeTerms(i); };
+            line.appendChild(btn);
+        }
+
         out.appendChild(line);
     });
 
@@ -403,17 +545,36 @@ async function detectFromLocation() {
         if (j.ar) document.getElementById('dAddrAr').value = j.ar;
         if (j.en) document.getElementById('dAddr').value = j.en;
 
+        // ⚠️ **لازم نبعت `change` بإيدنا بعد أي قيمة برمجية.** الدروب
+        // داون المحسّن في system.blade بيحدّث العنوان الظاهر لما يسمع
+        // `change` أو لما الديالوج يتفتح — والكشف بيحصل **بعد** الفتح،
+        // فمن غير الحدث القيمة بتتكتب في الـselect المخفي والزرار
+        // الظاهر يفضل فاضي، والمالك شايف إن «مافيش حاجة اتعبّت»
+        // (بلاغ ١٨/٨/٢٠٢٦). الحدث كمان بيشغّل onchange=filterZones()
+        // بتاعت المحافظة فمنطقة الاقتراح بتبقى ظاهرة قبل ما نختارها.
         const gov = document.getElementById('dGov');
-        if (j.governorate && !gov.value) gov.value = j.governorate;
-        // نعيد الفلترة بعد المحافظة عشان منطقة الاقتراح تبقى ظاهرة
-        filterZones();
+        const govFilled = !!(j.governorate && !gov.value);
+        if (govFilled) {
+            gov.value = j.governorate;
+            gov.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+            // نعيد الفلترة برضه عشان منطقة الاقتراح تبقى ظاهرة
+            filterZones();
+        }
         const zone = document.getElementById('dZone');
-        if (j.zone_id && !zone.value) zone.value = j.zone_id;
+        const zoneFilled = !!(j.zone_id && !zone.value);
+        if (zoneFilled) {
+            zone.value = j.zone_id;
+            zone.dispatchEvent(new Event('change', { bubbles: true }));
+        }
 
+        // ⚠️ الرسالة بتقول اللي **اتعبّى فعلاً** — مش اللي السيرفر
+        // رجّعه. لو المحافظة كانت متختارة بإيد المراجع مابنلمسهاش،
+        // فمايصحش نقول «✔ المحافظة» وهي ماتغيرتش.
         const filled = [];
         if (j.en || j.ar) filled.push(DEC.fAddr);
-        if (j.governorate) filled.push(DEC.fGov);
-        if (j.zone_id) filled.push(DEC.fZone);
+        if (govFilled) filled.push(DEC.fGov);
+        if (zoneFilled) filled.push(DEC.fZone);
         msg.textContent = filled.length ? '✔ ' + filled.join(' · ') : DEC.fail;
     } catch (e) {
         msg.textContent = DEC.fail;
@@ -421,5 +582,23 @@ async function detectFromLocation() {
         btn.disabled = false;
     }
 }
+
+// ═══ ربط أحداث تركيبة الاسم ═══
+//
+// ⚠️ المودال بيترندر للمدير بس (@if $manager) — الحارس الأولاني
+// بيمنع null على شاشة اللي بيتفرج.
+(function () {
+    const nAr = document.getElementById('dName');
+    if (!nAr) return;
+
+    nAr.addEventListener('input', function () { NAME_DIRTY.ar = true; });
+    document.getElementById('dNameEn').addEventListener('input', function () { NAME_DIRTY.en = true; });
+
+    // تغيير المنطقة أو السلسلة (يدوي أو من «هات شروطه» أو من كشف
+    // العنوان — كلهم بيبعتوا change) ⇒ الاسم المركّب يتحدّث
+    document.getElementById('dZone').addEventListener('change', function () { composeNames(false); });
+    document.querySelector('#formDecide select[name="group_id"]')
+        .addEventListener('change', function () { composeNames(false); });
+})();
 </script>
 @endsection
