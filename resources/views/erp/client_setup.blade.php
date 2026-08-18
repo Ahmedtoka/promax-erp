@@ -62,8 +62,11 @@
 
 {{-- تخضير الصف المتراجع + ستايل لابل «الساري» --}}
 <style>
-tr.su-done{background:#eefaf1}
-tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e50)}
+/* ⚠️ الأخضر على tbody tr.su-done — أعلى تخصيصاً من ستربة الجدول
+   العامة (tbody tr:nth-child(even)) اللي كانت بتغطي عليه فالمتراجع
+   كان بيطلع لون ولون بالتبادل (بلاغ ١٨/٨/٢٠٢٦). */
+tbody tr.su-done, tbody tr.su-done:nth-child(even){background:#e4f7ea}
+tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e50)}
 .su-now{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}
 .su-now b{color:var(--royal-blue);font-weight:800}
 </style>

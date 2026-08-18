@@ -239,6 +239,85 @@ class ClientActivationController extends Controller
     }
 
     /**
+     * ═══ مسح نهائي — للعميل «البِكر» بس (١٨ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «عندي عملاء نزلوا غلط ومحصلش عليهم أي أكشن عاوز
+     * أمسحهم». المسح مسموح **بس** لما مفيش ولا صف واحد في أي جدول
+     * حركة — قيود، فواتير، أوامر توريد، مرتجعات، زيارات، رفوف،
+     * طلبات بضاعة، هدايا، تتبع. أي حركة = المسح مرفوض برسالة بتقول
+     * فيه إيه بالظبط، والبديل الإيقاف (`deactivate` فوق).
+     *
+     * ⚠️ **الفحص بالجداول مش بالـbalance** — عميل عليه فاتورة
+     * ومرتجع بنفس القيمة رصيده صفر، ومسحه بيضيّع تاريخ حقيقي.
+     *
+     * ⚠️ اللي بيتمسح معاه بالـFK: عقده (cascade — إعداد مش حركة)،
+     * وطلب اعتماده لو كان جاي من الأبلكيشن (cascade على
+     * `client_requests`). خطط الزيارات والليدز والتارجيتات
+     * `nullOnDelete` فبتفضل بس من غير عميل.
+     */
+    public function destroy(Request $request, Client $client)
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+
+        $tables = [
+            'transactions' => __('client.del_transactions'),
+            'invoices' => __('client.del_invoices'),
+            'purchase_orders' => __('client.del_pos'),
+            'returns' => __('client.del_returns'),
+            'visits' => __('client.del_visits'),
+            'merch_visits' => __('client.del_merch'),
+            'replenishment_requests' => __('client.del_repl'),
+            'shelf_refills' => __('client.del_refills'),
+            'gift_handouts' => __('client.del_gifts'),
+            'track_events' => __('client.del_track'),
+            // بضاعة أمانة على رفه = حركة حقيقية
+            'custody_items' => __('client.del_custody'),
+        ];
+
+        $found = [];
+
+        foreach ($tables as $table => $label) {
+            // ⚠️ محروس بـhasTable/hasColumn — جداول زي gift_handouts
+            // اتضافت في مايجريشنز لاحقة، والسيرفر بيترفع بإيد.
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)
+                || ! \Illuminate\Support\Facades\Schema::hasColumn($table, 'client_id')) {
+                continue;
+            }
+
+            $n = DB::table($table)->where('client_id', $client->id)->count();
+
+            if ($n > 0) {
+                $found[] = $label.' ('.$n.')';
+            }
+        }
+
+        if ($found !== []) {
+            return back()->withErrors([
+                'status' => __('client.cannot_delete_active', [
+                    'name' => $client->displayName(),
+                    'things' => implode(' · ', $found),
+                ]),
+            ]);
+        }
+
+        $name = $client->displayName();
+
+        DB::transaction(function () use ($client) {
+            // صور ومستندات العميل الغلط مالهاش لازمة تفضل على الديسك
+            foreach ([$client->photo_path, $client->docs_path] as $path) {
+                if ($path) {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                }
+            }
+
+            $client->delete();
+        });
+
+        return redirect()->route('erp.clients')
+            ->with('ok', __('client.deleted_forever', ['name' => $name]));
+    }
+
+    /**
      * قوايم الأسعار المتاحة.
      *
      * ⚠️ مؤقتة لحد ما جدول `price_lists` ينزل — بترجّع الاتنين

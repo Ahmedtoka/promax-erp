@@ -89,6 +89,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,branch_manager')->name('clients.activate');
         Route::post('/clients/activate', [\App\Http\Controllers\ClientActivationController::class, 'activate'])
             ->middleware('role:admin,manager')->name('clients.activate.do');
+        // ═══ مسح نهائي — للعميل «البِكر» بس (١٨ أغسطس ٢٠٢٦) ═══
+        // طلب المالك: «عملاء نزلوا غلط ومحصلش عليهم أي أكشن». الحارس
+        // جوه الكنترولر بيرفض أي عميل عليه حركة واحدة — الإيقاف هو
+        // الطريق الوحيد ساعتها. أدمن بس.
+        Route::delete('/clients/{client}', [\App\Http\Controllers\ClientActivationController::class, 'destroy'])
+            ->middleware('role:admin')->name('clients.destroy');
         Route::post('/clients/{client}/deactivate', [\App\Http\Controllers\ClientActivationController::class, 'deactivate'])
             ->middleware('role:admin,manager')->name('clients.deactivate');
 

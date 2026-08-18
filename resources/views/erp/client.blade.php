@@ -46,6 +46,16 @@
              «فرع بنفس شروط السلسلة» (١٢/٨) — نفس الاستنساخ بالظبط --}}
         <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ $c->group_id ? __('client.new_branch_like_chain') : __('client.clone_client') }}</a>
     @endif
+    @if (auth()->user()?->role === 'admin')
+        {{-- مسح نهائي — للعميل اللي نزل غلط ومحصلش عليه أي حركة.
+             السيرفر بيرفض لو فيه أي نشاط ويقول فيه إيه بالظبط. --}}
+        <form method="POST" action="{{ route('erp.clients.destroy', $c) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('client.delete_confirm', ['name' => $c->displayName()])))">
+            @csrf
+            @method('DELETE')
+            <button class="btn sm" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('client.delete_client') }}</button>
+        </form>
+    @endif
     @if ($money)
         <button class="btn" onclick="openDlg('dlgOpening')">{{ __('client.opening_balance') }}</button>
         <button class="btn green" onclick="openDlg('dlgCollect')">+ {{ __('enums.transaction.collection') }}</button>

@@ -243,6 +243,23 @@ return [
     'ff_by_division' => 'حسب الديفيجن',
     'tax_inclusive' => 'شامل؟',
 
+    // ═══ المسح النهائي للعميل البِكر (١٨ أغسطس ٢٠٢٦) ═══
+    'delete_client' => 'مسح نهائي',
+    'delete_confirm' => 'هتمسح «:name» نهائياً — مفيش رجوع. المسح بينفع بس لو مفيش عليه أي حركة. متأكد؟',
+    'deleted_forever' => '«:name» اتمسح نهائياً.',
+    'cannot_delete_active' => 'مينفعش مسح «:name» — عليه حركات فعلية: :things. البديل: إيقافه من شاشة تفعيل العملاء.',
+    'del_transactions' => 'قيود',
+    'del_invoices' => 'فواتير',
+    'del_pos' => 'أوامر توريد',
+    'del_returns' => 'مرتجعات',
+    'del_visits' => 'زيارات',
+    'del_merch' => 'زيارات رفوف',
+    'del_repl' => 'طلبات بضاعة',
+    'del_refills' => 'ريفيل رفوف',
+    'del_gifts' => 'هدايا',
+    'del_track' => 'أحداث تتبع',
+    'del_custody' => 'بضاعة أمانة',
+
     // ═══ المراجعة ولابل «الساري» في شاشة الإعداد (١٨ أغسطس ٢٠٢٦) ═══
     'setup_reviewed' => 'اتراجعت',
     'setup_progress' => 'اتراجع :done من :total',

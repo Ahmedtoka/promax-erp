@@ -241,6 +241,23 @@ return [
     'ff_by_division' => 'By division',
     'tax_inclusive' => 'Incl.?',
 
+    // === Hard-delete for untouched clients (Aug 18, 2026) ===
+    'delete_client' => 'Delete forever',
+    'delete_confirm' => 'This permanently deletes ":name" - no undo. Deletion only works if the client has no activity at all. Sure?',
+    'deleted_forever' => '":name" was permanently deleted.',
+    'cannot_delete_active' => 'Cannot delete ":name" - it has real activity: :things. Deactivate it from the client activation screen instead.',
+    'del_transactions' => 'ledger entries',
+    'del_invoices' => 'invoices',
+    'del_pos' => 'purchase orders',
+    'del_returns' => 'returns',
+    'del_visits' => 'visits',
+    'del_merch' => 'merch visits',
+    'del_repl' => 'goods requests',
+    'del_refills' => 'shelf refills',
+    'del_gifts' => 'gift handouts',
+    'del_track' => 'tracking events',
+    'del_custody' => 'consignment stock',
+
     // === Review flag & "live now" labels on the setup screens (Aug 18, 2026) ===
     'setup_reviewed' => 'Reviewed',
     'setup_progress' => 'Reviewed :done of :total',
