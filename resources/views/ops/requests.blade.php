@@ -10,11 +10,24 @@
 @section('content')
 
 <div class="card" style="padding:10px 12px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.requests') }}">{{ __('common.all') }}</a>
+    {{-- ⚠️ كل مجموعة فلاتر بتحافظ على التانية (status ⇆ loc) —
+         غير كده الدوسة على «بلوكيشن» كانت بتطيّر فلتر الحالة. --}}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['loc' => $filters['loc'] ?? null])) }}">{{ __('common.all') }}</a>
         @foreach (array_keys(\App\Models\ClientRequest::STATUSES) as $k)
-            <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}" href="{{ route('ops.requests', ['status' => $k]) }}">{{ __('enums.request_status.'.$k) }}</a>
+            <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['status' => $k, 'loc' => $filters['loc'] ?? null])) }}">{{ __('enums.request_status.'.$k) }}</a>
         @endforeach
+
+        <span style="width:1px;align-self:stretch;background:var(--border);margin:0 4px"></span>
+
+        <a class="btn {{ ($filters['loc'] ?? '') === 'with' ? 'gold' : '' }}"
+           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'with' ? null : 'with'])) }}">
+            📍 {{ __('ops.loc_with') }} <b>({{ $withPoint }})</b>
+        </a>
+        <a class="btn {{ ($filters['loc'] ?? '') === 'without' ? 'gold' : '' }}"
+           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'without' ? null : 'without'])) }}">
+            ❌ {{ __('ops.loc_without') }} <b>({{ $withoutPoint }})</b>
+        </a>
     </div>
 </div>
 
@@ -25,6 +38,7 @@
             <tr>
                 <th>{{ __('ops.request') }}</th><th>{{ __('ops.place') }}</th><th>{{ __('ops.submitted_by') }}</th>
                 <th>{{ __('team.zone') }}</th><th>{{ __('common.address') }}</th>
+                <th data-nosum>{{ __('ops.loc_col') }}</th>
                 <th>{{ __('common.phone') }}</th><th>{{ __('ops.photo') }}</th><th>{{ __('ops.documents') }}</th>
                 <th>{{ __('common.status') }}</th>@if ($manager)<th>{{ __('ops.decision') }}</th>@endif
             </tr>
@@ -80,6 +94,13 @@
                     <td>{{ $r->rep->displayName() }}</td>
                     <td style="color:var(--muted)">{{ $r->zone?->displayName() ?? '—' }}</td>
                     <td style="white-space:normal;max-width:220px;color:var(--muted);font-size:11.5px">{{ $r->address }}</td>
+                    <td>
+                        @if ($r->hasPoint())
+                            <a class="badge b-green" href="{{ $r->mapUrl() }}" target="_blank" rel="noopener" style="text-decoration:none">📍 {{ __('ops.loc_captured') }}</a>
+                        @else
+                            <span class="badge b-red">{{ __('ops.loc_missing') }}</span>
+                        @endif
+                    </td>
                     <td class="num">{{ $r->phone }}</td>
                     <td>
                         @if ($r->hasPhoto())
@@ -101,13 +122,15 @@
                             @if ($r->isOpen())
                                 <button class="btn sm gold" onclick='decide({!! $rJson !!})'>{{ __('ops.decision') }}</button>
                             @else
-                                <span style="color:var(--muted);font-size:11px">{{ $r->decided_at?->format('m-d h:i A') }}</span>
+                                {{-- مين قرّر + امتى — «مين اللي وافق؟» (١٨ أغسطس ٢٠٢٦) --}}
+                                <b style="font-size:11.5px">{{ $r->decider?->displayName() ?? '—' }}</b>
+                                <br><span style="color:var(--muted);font-size:11px">{{ $r->decided_at?->format('m-d h:i A') }}</span>
                             @endif
                         </td>
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_requests') }}</td></tr>
+                <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_requests') }}</td></tr>
             @endforelse
         </table>
     </div>
@@ -133,10 +156,11 @@
 
         {{-- ═══ حقول الاعتماد — بتبان لـ«اعتماد» بس ═══ --}}
         <div id="approveFields">
-            {{-- ═══ الاسم النهائي باللغتين (١٨ أغسطس ٢٠٢٦) ═══
-                 بيتركّب أوتوماتيك: سلسلة + منطقة، أو اسم الطلب + منطقة —
-                 والمعتمِد بيصحّح بإيده. أول ما يكتب حرف بنبطّل تركيب
-                 على الخانة دي عشان مانمسحش تصحيحه. --}}
+            {{-- ═══ الاسم باللغتين (١٨ أغسطس ٢٠٢٦) ═══
+                 خام زي ما المندوب كتبه — للتصحيح اليدوي بس. التركيبة
+                 (سلسلة/اسم + منطقة) بتحصل في السيرفر لحظة الاعتماد،
+                 قرار المالك: «الاسم ينزل زي ما هو، ولما نوافق تكون
+                 بياناته صح فساعتها اعمل التركيبة». --}}
             <div class="frow">
                 <div>
                     <label class="f">{{ __('client.client_name') }}</label>
@@ -146,10 +170,6 @@
                     <label class="f">{{ __('client.name_en') }}</label>
                     <input type="text" name="name_en" id="dNameEn" dir="ltr" maxlength="190" style="width:100%">
                 </div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;margin:-4px 0 8px">
-                <button type="button" class="btn sm" onclick="composeNames(true)">🧩 {{ __('ops.compose_name') }}</button>
-                <span style="font-size:11px;color:var(--muted)">{{ __('ops.name_compose_hint') }}</span>
             </div>
 
             {{-- النقطة اللي المندوب لقّطها + زرار كشف العنوان منها --}}
@@ -304,29 +324,14 @@
         'pullTerms' => __('ops.pull_terms'),
         'termsApplied' => __('ops.terms_applied'),
         'chainDiscountNote' => __('ops.chain_discount_note'),
-        // ═══ أسماء المناطق والسلاسل باللغتين — لتركيبة الاسم ═══
-        //
-        // عقيدة التسمية (١٨ أغسطس ٢٠٢٦): فرع سلسلة = اسم السلسلة +
-        // المنطقة («كاريبو - التجمع الخامس») · مستقل = اسمه + المنطقة.
-        // التركيب في المتصفح عشان يتحدّث لايف مع كل تغيير سلسلة/منطقة.
-        'zoneNames' => $zones->mapWithKeys(fn ($z) => [$z->id => [
-            'ar' => $z->name,
-            'en' => $z->name_en ?: $z->name,
-        ]])->all(),
-        'groupNames' => $groups->mapWithKeys(fn ($g) => [$g->id => [
-            'ar' => $g->name,
-            'en' => $g->name_en ?: $g->name,
-        ]])->all(),
+        // ⚠️ تركيبة الاسم (سلسلة/اسم + منطقة) بتحصل في **السيرفر**
+        // لحظة الاعتماد — مفيش تركيب في المتصفح (قرار المالك ١٨/٨).
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 @endphp
 <script>
 const DEC = {!! $decideData !!};
 // النقطة الملتقطة للطلب المفتوح حالياً
 let CUR = { lat: null, lng: null };
-// اسم الطلب الخام — أساس التركيبة لما مافيش سلسلة
-let BASE_NAME = { ar: '', en: '' };
-// المعتمِد كتب بإيده؟ — التركيب الأوتوماتيك مايلمسش الخانة دي تاني
-let NAME_DIRTY = { ar: false, en: false };
 // تشابهات الطلب المفتوح — زرار «هات شروطه» بيقرا منها
 let CUR_DUPES = [];
 
@@ -335,9 +340,9 @@ function decide(r) {
     document.getElementById('formDecide').action = DEC.decideBase + '/' + r.id + '/decide';
     document.getElementById('dDecision').value = 'approved';
 
-    BASE_NAME = { ar: r.name || '', en: '' };
-    NAME_DIRTY = { ar: false, en: false };
-    document.getElementById('dName').value = BASE_NAME.ar;
+    // الاسم خام زي ما المندوب كتبه — التركيبة بتحصل في السيرفر
+    // لحظة الاعتماد (سلسلة/اسم + منطقة)
+    document.getElementById('dName').value = r.name || '';
     document.getElementById('dNameEn').value = '';
     document.getElementById('dTermsMsg').style.display = 'none';
 
@@ -359,44 +364,7 @@ function decide(r) {
     syncSubChannel();
     filterZones();
     toggleFields();
-    // تركيبة أولية لو الطلب جاي بمنطقة — «اسم الطلب - المنطقة»
-    composeNames(false);
     openDlg('dlgDecide');
-}
-
-// ═══ تركيبة الاسم (١٨ أغسطس ٢٠٢٦) ═══
-//
-// فرع سلسلة: اسم السلسلة + المنطقة («كاريبو - التجمع الخامس»)
-// مستقل: اسم الطلب + المنطقة («سوبر ماركت النور - مدينة نصر»)
-//
-// ⚠️ لو الاسم الأساسي **فيه المنطقة أصلاً** (المندوب كتب «كاريبو
-// التجمع الخامس») مابنكرّرهاش — «كاريبو التجمع الخامس - التجمع
-// الخامس» اسم عبيط.
-// ⚠️ `force=true` (زرار 🧩) بيدهس اللي مكتوب. غير كده بنحترم أي
-// خانة المعتمِد كتب فيها بإيده (NAME_DIRTY).
-function composeNames(force) {
-    const zoneSel = document.getElementById('dZone');
-    const groupSel = document.querySelector('#formDecide select[name="group_id"]');
-    const z = DEC.zoneNames[zoneSel.value] || null;
-    const g = DEC.groupNames[groupSel.value] || null;
-
-    const mk = function (base, chain, zone) {
-        const head = (chain || base || '').trim();
-        if (!head) return '';
-        return zone && !head.includes(zone.trim()) ? head + ' - ' + zone.trim() : head;
-    };
-
-    const ar = mk(BASE_NAME.ar, g && g.ar, z && z.ar);
-    const en = mk(BASE_NAME.en, g && g.en, z && z.en);
-
-    if (ar && (force || !NAME_DIRTY.ar)) {
-        document.getElementById('dName').value = ar;
-        if (force) NAME_DIRTY.ar = false;
-    }
-    if (en && (force || !NAME_DIRTY.en)) {
-        document.getElementById('dNameEn').value = en;
-        if (force) NAME_DIRTY.en = false;
-    }
 }
 
 // ═══ «هات شروطه» — نسخ شروط التعامل من الشبيه ═══
@@ -423,9 +391,6 @@ function applyDupeTerms(i) {
     set(f.querySelector('select[name="group_id"]'), t.group_id);
     set(f.querySelector('select[name="price_list_id"]'), t.price_list_id);
     f.querySelector('input[name="discount"]').value = t.chain_covered ? 0 : (t.discount || 0);
-
-    // السلسلة اتغيرت ⇒ الاسم المركّب اتغير
-    composeNames(false);
 
     const msg = document.getElementById('dTermsMsg');
     msg.textContent = '✔ ' + DEC.termsApplied + (t.chain_covered ? ' · ' + DEC.chainDiscountNote : '');
@@ -583,25 +548,8 @@ async function detectFromLocation() {
     }
 }
 
-// ═══ ربط أحداث تركيبة الاسم ═══
-//
-// ⚠️ المودال بيترندر للمعتمِدين بس (شرط manager في البليد) —
-// الحارس الأولاني بيمنع null على شاشة اللي بيتفرج.
 // ⚠️⚠️ ممنوع كتابة اسم أي دايركتيف بليد في الكومنتات هنا — بليد
 // بيكومبايلها حتى جوه كومنتات الجافاسكربت وبيرمي ParseError
 // (حصلت فعلاً ١٨/٨/٢٠٢٦).
-(function () {
-    const nAr = document.getElementById('dName');
-    if (!nAr) return;
-
-    nAr.addEventListener('input', function () { NAME_DIRTY.ar = true; });
-    document.getElementById('dNameEn').addEventListener('input', function () { NAME_DIRTY.en = true; });
-
-    // تغيير المنطقة أو السلسلة (يدوي أو من «هات شروطه» أو من كشف
-    // العنوان — كلهم بيبعتوا change) ⇒ الاسم المركّب يتحدّث
-    document.getElementById('dZone').addEventListener('change', function () { composeNames(false); });
-    document.querySelector('#formDecide select[name="group_id"]')
-        .addEventListener('change', function () { composeNames(false); });
-})();
 </script>
 @endsection

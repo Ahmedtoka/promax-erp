@@ -521,7 +521,15 @@ select.ssel-native{display:none!important}
 .ssel-none{padding:10px;text-align:center;color:var(--muted);font-size:12px}
 @media print{.ssel-panel{display:none!important}}
 .pag{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;font-size:12.5px}
-.pag a,.pag span{padding:6px 11px;border-radius:9px;border:1px solid var(--border);background:#fff}
+/* ⚠️ قالب لارافيل simple-default بيرندر <nav><ul><li> — من غير التصفير
+   ده اللينكات كانت بتظهر نقط ليستة مرصوصة عمودي (بلاغ ١٨/٨/٢٠٢٦).
+   التصفير هنا بيصلّح كل صفحات السيستم مرة واحدة. */
+.pag nav{display:flex;flex:1}
+.pag ul{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0;padding:0;flex:1;justify-content:space-between}
+.pag li{list-style:none}
+.pag a,.pag span{display:inline-block;padding:6px 14px;border-radius:9px;border:1px solid var(--border);background:#fff;font-weight:700}
+.pag a:hover{border-color:var(--royal-blue);color:var(--royal-blue)}
+.pag .disabled span{opacity:.45}
 .pag .on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff;font-weight:800}
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:#CFCFD8;border-radius:8px}

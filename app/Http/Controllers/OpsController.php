@@ -2962,7 +2962,9 @@ class OpsController extends Controller
         // ⚠️ الفلتر **للمدير بس** مش لكل حد. `whereIn(created_by, ...)`
         // على الأدمن كان هيخفي أي طلب `created_by` بتاعه null — وده
         // بيخبّي طلبات بدل ما يحميها.
-        $q = ClientRequest::with(['rep', 'zone', 'client'])
+        // `decider` — عمود «مين وافق» (١٨ أغسطس ٢٠٢٦): القرار كان
+        // بيتسجل بتاريخه بس ومحدش يعرف مين اللي داس اعتماد.
+        $q = ClientRequest::with(['rep', 'zone', 'client', 'decider'])
             ->when(
                 $request->user()?->role === 'manager',
                 fn ($w) => $w->whereIn('created_by',
@@ -2971,6 +2973,24 @@ class OpsController extends Controller
 
         if ($status = $request->string('status')->value()) {
             $q->where('status', $status);
+        }
+
+        // ═══ فلتر اللوكيشن (١٨ أغسطس ٢٠٢٦) ═══
+        //
+        // «مين معاه نقطة مسحوبة ومين لأ» — الطلب اللي من غير نقطة
+        // بيتعمد بعنوان مكتوب بس، والعميل بيطلع من غير لوكيشن مؤكد.
+        // العدادين بيتحسبوا **قبل** فلتر اللوكيشن (وبعد السكوب
+        // والحالة) عشان الزرارين يفضلوا شايفين الصورة الكاملة وانت
+        // واقف جوه أي فلتر منهم.
+        $withPoint = (clone $q)->whereNotNull('lat')->whereNotNull('lng')->count();
+        $withoutPoint = (clone $q)->where(
+            fn ($w) => $w->whereNull('lat')->orWhereNull('lng'),
+        )->count();
+
+        if ($loc = $request->string('loc')->value()) {
+            $loc === 'with'
+                ? $q->whereNotNull('lat')->whereNotNull('lng')
+                : $q->where(fn ($w) => $w->whereNull('lat')->orWhereNull('lng'));
         }
 
         $requests = $q->latest()->paginate(30)->withQueryString();
@@ -3001,7 +3021,9 @@ class OpsController extends Controller
             'requests' => $requests,
             'dupes' => $dupes,
             'zones' => Zone::orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
-            'filters' => $request->only('status'),
+            'filters' => $request->only('status', 'loc'),
+            'withPoint' => $withPoint,
+            'withoutPoint' => $withoutPoint,
             // ═══ داتا فورم الاعتماد الغني (١١ أغسطس ٢٠٢٦) ═══
             // نفس مصادر `ErpController::clientFormData` عشان العميل
             // المعتمد يطلع متسق مع اللي بيتعمل من شاشة العميل.
@@ -3055,12 +3077,56 @@ class OpsController extends Controller
         //
         // ⚠️ **مش قبل الترانزاكشن بمسافة** — لازم يكون آخر حاجة قبل
         // ما نكتب. وبيتخطّى لو المعتمِد علّم «متأكد إنه مختلف».
+        // ═══ تركيبة الاسم وقت الاعتماد (١٨ أغسطس ٢٠٢٦) ═══
+        //
+        // عقيدة التسمية: فرع سلسلة = اسم السلسلة + المنطقة
+        // («كاريبو - التجمع الخامس») · مستقل = اسمه + المنطقة.
+        //
+        // ⚠️ **التركيب في السيرفر مش في المودال — قرار المالك.**
+        // اسم المندوب بينزل خام زي ما هو، ولحظة الاعتماد البيانات
+        // (سلسلة/منطقة) بتكون اتراجعت وبقت صح — فدي لحظة التركيب.
+        // المودال فيه خانتي الاسم للتصحيح اليدوي بس، من غير أي تركيب.
+        //
+        // ⚠️ لو المعتمِد **كتب اسم مختلف عن اسم الطلب**، احنا بنحترمه
+        // كرأس التركيبة بدل اسم السلسلة — هو شايف حاجة احنا مش شايفينها.
+        // ولو الرأس فيه اسم المنطقة أصلاً مابنكرّرهوش.
+        $finalName = (string) $clientRequest->name;
+        $finalNameEn = null;
+
+        if ($data['decision'] === 'approved') {
+            $group = ! empty($data['group_id']) ? ClientGroup::find((int) $data['group_id']) : null;
+            $zoneId = $data['zone_id'] ?? $clientRequest->zone_id ?? $clientRequest->rep?->zone_id;
+            $zone = $zoneId ? Zone::find((int) $zoneId) : null;
+
+            $withZone = static function (string $head, ?string $zoneName): string {
+                $head = trim($head);
+                $zoneName = trim((string) $zoneName);
+
+                return $zoneName !== '' && ! str_contains($head, $zoneName)
+                    ? $head.' - '.$zoneName
+                    : $head;
+            };
+
+            $typedAr = trim((string) ($data['name'] ?? ''));
+            $untouched = $typedAr === '' || $typedAr === trim((string) $clientRequest->name);
+            $headAr = $untouched && $group !== null
+                ? (string) $group->name
+                : ($typedAr !== '' ? $typedAr : (string) $clientRequest->name);
+            $finalName = $withZone($headAr, $zone?->name);
+
+            $typedEn = trim((string) ($data['name_en'] ?? ''));
+            $headEn = $typedEn !== '' ? $typedEn : (string) ($group?->name_en ?? '');
+            // ⚠️ مفيش رأس إنجليزي = مفيش اسم إنجليزي — مش هنلزق اسم
+            // منطقة إنجليزي على اسم مش موجود.
+            $finalNameEn = $headEn !== '' ? $withZone($headEn, $zone?->name_en) : null;
+        }
+
         if ($data['decision'] === 'approved' && empty($data['confirm_duplicate'])) {
-            // ⚠️ الفحص على الاسم **النهائي** اللي هيتكتب فعلاً — مش اسم
-            // الطلب الخام. المعتمِد ممكن يكون ركّب اسم مطابق لعميل موجود.
+            // ⚠️ الفحص على الاسم **النهائي المركّب** اللي هيتكتب فعلاً —
+            // مش اسم الطلب الخام.
             $dupes = \App\Support\Dupes::matches([
-                'name' => filled($data['name'] ?? null) ? $data['name'] : $clientRequest->name,
-                'name_en' => $data['name_en'] ?? null,
+                'name' => $finalName,
+                'name_en' => $finalNameEn,
                 'phone' => $clientRequest->phone,
                 'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id,
                 'group_id' => $data['group_id'] ?? null,
@@ -3077,7 +3143,7 @@ class OpsController extends Controller
             }
         }
 
-        DB::transaction(function () use ($data, $clientRequest, $request) {
+        DB::transaction(function () use ($data, $clientRequest, $request, $finalName, $finalNameEn) {
             $clientRequest->status = $data['decision'];
             $clientRequest->decided_by = $request->user()->id;
             $clientRequest->decided_at = now();
@@ -3110,10 +3176,9 @@ class OpsController extends Controller
 
                 $client = Client::create([
                     'code' => Client::nextCode(),
-                    // الاسم المركّب من المودال (سلسلة/اسم + منطقة) —
-                    // واسم الطلب الخام فولباك لو الخانة اتبعتت فاضية.
-                    'name' => filled($data['name'] ?? null) ? trim($data['name']) : $clientRequest->name,
-                    'name_en' => filled($data['name_en'] ?? null) ? trim($data['name_en']) : null,
+                    // الاسم النهائي المركّب فوق (سلسلة/اسم + منطقة)
+                    'name' => $finalName,
+                    'name_en' => $finalNameEn,
                     'phone' => $clientRequest->phone,
                     // العنوان الإنجليزي والعربي والنقطة من الفورم
                     // (المدير راجعها/كشفها) وإلا من الطلب نفسه.
