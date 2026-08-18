@@ -241,6 +241,11 @@ return [
     'ff_by_division' => 'By division',
     'tax_inclusive' => 'Incl.?',
 
+    // === Quick geo-assign on the activation screen (Aug 18, 2026) ===
+    'set_geo' => 'Set governorate & zone',
+    'geo_saved' => '":name" is placed - go ahead and activate it.',
+    'geo_zone_hint' => 'Zone is required - activation refuses clients without one. An empty governorate is taken from the zone.',
+
     // === Copy terms from a sibling branch (Aug 18, 2026) ===
     'copy_from_sibling' => 'Copy from a sibling branch',
     'copy_from_sibling_go' => 'Copy',

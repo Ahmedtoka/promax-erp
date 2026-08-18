@@ -89,6 +89,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,branch_manager')->name('clients.activate');
         Route::post('/clients/activate', [\App\Http\Controllers\ClientActivationController::class, 'activate'])
             ->middleware('role:admin,manager')->name('clients.activate.do');
+        // تسكين محافظة/منطقة من شاشة التفعيل مباشرة (١٨/٨/٢٠٢٦) —
+        // عشان العميل الناقص جغرافيته يتكمّل ويتفعّل من غير ما تفتح
+        // ويزارد التعديل الكامل لكل فرع.
+        Route::post('/clients/{client}/geo', [\App\Http\Controllers\ClientActivationController::class, 'saveGeo'])
+            ->middleware('role:admin,manager,branch_manager')->name('clients.geo');
         // ═══ مسح نهائي — للعميل «البِكر» بس (١٨ أغسطس ٢٠٢٦) ═══
         // طلب المالك: «عملاء نزلوا غلط ومحصلش عليهم أي أكشن». الحارس
         // جوه الكنترولر بيرفض أي عميل عليه حركة واحدة — الإيقاف هو

@@ -231,7 +231,12 @@
                         </td>
                         <td><span class="badge b-purple">{{ $c->group?->displayName() ?? '—' }}</span></td>
                         <td style="font-size:11.5px">{{ $c->governorateLabel() ?: '—' }}</td>
-                        <td style="font-size:11.5px">{{ $c->zone?->displayName() ?? '—' }}</td>
+                        <td style="font-size:11.5px">
+                            {{ $c->zone?->displayName() ?? '—' }}
+                            {{-- تسكين سريع من غير ويزارد التعديل (١٨/٨) --}}
+                            <button class="btn sm" type="button" style="margin-inline-start:4px"
+                                    onclick='openGeo({{ $c->id }}, @js($c->displayName()), @js($c->governorate ?? ''), {{ $c->zone_id ?? 'null' }})'>📍</button>
+                        </td>
                         <td style="font-size:11px;color:var(--muted);max-width:280px">
                             {{ Str::limit($c->address ?? '', 60) ?: ($c->location_url ? '🗺️' : '—') }}
                         </td>
@@ -290,6 +295,42 @@
     @include('partials._pagination', ['p' => $clients])
 </div>
 
+{{-- ═══ مودال التسكين السريع (١٨ أغسطس ٢٠٢٦) ═══
+     طلب المالك: «أسكن محافظة وزون وأعمل Save وأقدر أفعّل العميل».
+     مودال واحد لكل الصفوف — مش دروب داون مناطق في كل صف: ٥٠ صف ×
+     ٣٦٢ منطقة كانوا هيتقلوا الصفحة ببلاش. --}}
+<dialog id="dlgGeo">
+    <form class="dlg" method="POST" id="geoForm" style="max-width:440px">
+        @csrf
+        <h4 id="geoTitle">📍 {{ __('client.set_geo') }}</h4>
+
+        <div><label class="f">{{ __('geo.governorate') }}</label>
+            <select name="governorate" id="gGov" style="width:100%" onchange="geoFilterZones()">
+                <option value="">{{ __('geo.pick_governorate') }}</option>
+                @foreach (Governorates::keys() as $k)
+                    <option value="{{ $k }}">{{ Governorates::label($k) }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div style="margin-top:10px"><label class="f">{{ __('client.zone') }} <b class="req-star">*</b></label>
+            {{-- سيلكت مسطّح بـdata-gov — نفس نمط فورم العميل ومودال الموافقات --}}
+            <select name="zone_id" id="gZone" style="width:100%" required>
+                <option value="">{{ __('geo.pick_zone') }}</option>
+                @foreach ($zones as $z)
+                    <option value="{{ $z->id }}" data-gov="{{ $z->governorate }}">{{ $z->displayName() }}</option>
+                @endforeach
+            </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('client.geo_zone_hint') }}</div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgGeo')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">💾 {{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+
 @endsection
 
 @section('scripts')
@@ -322,5 +363,39 @@ function syncCount() {
 }
 
 syncCount();
+
+// ═══ مودال التسكين السريع ═══
+//
+// ⚠️ كل قيمة برمجية وراها dispatch لـchange — الدروب داون المحسّن
+// بيحدّث المعروض من الحدث ده، وفلترة المناطق مربوطة بـonchange
+// المحافظة. نفس درس كشف العنوان في الموافقات (١٨/٨).
+const GEO_BASE = @json(url('erp/clients'));
+const GEO_TITLE = @json(__('client.set_geo'));
+
+function geoFilterZones() {
+    const gov = document.getElementById('gGov').value;
+    const sel = document.getElementById('gZone');
+
+    [...sel.options].forEach(opt => {
+        if (!opt.value) return;
+        opt.hidden = !(!gov || !opt.dataset.gov || opt.dataset.gov === gov || opt.selected);
+    });
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '';
+}
+
+function openGeo(id, name, gov, zoneId) {
+    document.getElementById('geoForm').action = GEO_BASE + '/' + id + '/geo';
+    document.getElementById('geoTitle').textContent = '📍 ' + GEO_TITLE + ' — ' + name;
+
+    const g = document.getElementById('gGov');
+    g.value = gov || '';
+    g.dispatchEvent(new Event('change', { bubbles: true }));   // فلترة + تحديث المعروض
+
+    const z = document.getElementById('gZone');
+    z.value = zoneId || '';
+    z.dispatchEvent(new Event('change', { bubbles: true }));
+
+    openDlg('dlgGeo');
+}
 </script>
 @endsection

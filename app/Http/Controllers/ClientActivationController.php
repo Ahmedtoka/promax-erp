@@ -150,6 +150,42 @@ class ClientActivationController extends Controller
     }
 
     /**
+     * تسكين محافظة/منطقة من شاشة التفعيل (١٨ أغسطس ٢٠٢٦).
+     *
+     * طلب المالك: «أسكن محافظة وزون وأعمل Save وأقدر أفعّل العميل».
+     * التفعيل بيرفض العميل من غير منطقة — والطريق الوحيد كان ويزارد
+     * التعديل الكامل بتلات خطواته لكل فرع. المودال هنا بيكتب
+     * الاتنين بس ويرجّعك للقايمة تكمّل.
+     *
+     * ⚠️ المحافظة بتتاخد من المنطقة المختارة لو اتبعتت فاضية —
+     * العمودين لازم يفضلوا متسقين (نفس درس zone-govs).
+     */
+    public function saveGeo(Request $request, Client $client)
+    {
+        // نفس سكوب الشاشة — عملاءه + غير المسكّنين المش مفعّلين
+        abort_unless(
+            $this->activationScope($request->user(), Client::whereKey($client->id))->exists(),
+            403,
+        );
+
+        $data = $request->validate([
+            'governorate' => ['nullable', 'string', 'max:60'],
+            'zone_id' => ['required', 'exists:zones,id'],
+        ]);
+
+        $zone = Zone::find((int) $data['zone_id']);
+
+        $client->update([
+            'zone_id' => $zone->id,
+            'governorate' => filled($data['governorate'] ?? null)
+                ? $data['governorate']
+                : $zone->governorate,
+        ]);
+
+        return back()->with('ok', __('client.geo_saved', ['name' => $client->displayName()]));
+    }
+
+    /**
      * ═══ سكوب شاشة التفعيل (١٨ أغسطس ٢٠٢٦) ═══
      *
      * طلب المالك: «عاوز المدير يظهرله العملاء المش متفعلة وتظهرله
