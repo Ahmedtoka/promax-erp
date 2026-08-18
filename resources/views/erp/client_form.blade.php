@@ -246,6 +246,26 @@
             </div>
         </div>
 
+        {{-- ═══ «انقل من فرع زيه» (طلب المالك ١٨/٨/٢٠٢٦) ═══
+             للتعديل بس ولعضو سلسلة ليها فروع تانية. بيملا الفورم
+             بشروط الفرع المظبوط **من غير حفظ** — المالك يعدّل الاسم
+             ويدوس حفظ حفظة واحدة. الهوية (اسم/منطقة/عنوان/محافظة/
+             تليفون/لوكيشن/رقم ضريبي) مابتتلمسش. --}}
+        @if ($editing && $siblings->isNotEmpty())
+            <div class="alert info" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <span>⤵</span>
+                <b style="font-size:12.5px">{{ __('client.copy_from_sibling') }}</b>
+                <select id="sibSel" style="min-width:220px;flex:1">
+                    <option value="">—</option>
+                    @foreach ($siblings as $sib)
+                        <option value="{{ $sib->id }}">{{ $sib->displayName() }}</option>
+                    @endforeach
+                </select>
+                <button class="btn sm gold" type="button" onclick="copyFromSibling()">⤵ {{ __('client.copy_from_sibling_go') }}</button>
+                <span id="sibMsg" style="font-size:11.5px;color:var(--green);font-weight:800"></span>
+            </div>
+        @endif
+
         <div class="alert info" style="margin-bottom:14px">
             <span>🔤</span><span>{{ __('client.name_en_first_hint') }}</span>
         </div>
@@ -1126,6 +1146,31 @@
 
 @section('scripts')
 @php
+    // ═══ داتا «انقل من فرع زيه» — الشروط التجارية بس، الهوية لأ ═══
+    // النسب بتتحول من كسر لنسبة مئوية زي ما الفورم بيعرضها.
+    $sibJson = json_encode(
+        $siblings->mapWithKeys(fn ($s) => [$s->id => [
+            'channel_id' => $s->channel_id,
+            'sub_channel' => $s->sub_channel,
+            'division' => $s->division,
+            'branch_id' => $s->branch_id,
+            'manager_id' => $s->manager_id,
+            'payment_terms' => $s->payment_terms,
+            'payment_days' => $s->payment_days,
+            'payment_days_from' => $s->payment_days_from,
+            'price_list_id' => $s->price_list_id,
+            'discount' => round((float) $s->discount * 100, 2),
+            'category' => $s->category,
+            'taxable' => (bool) $s->taxable,
+            'tax_rate' => round((float) $s->tax_rate * 100, 2),
+            'tax_cycle' => $s->tax_cycle,
+            'eta_type' => $s->eta_type,
+        ]])->all(),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
+    );
+    $sibDone = json_encode(__('client.copied_from_sibling'),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+
     // ⚠️ ممنوع دايركتيف الـjson بمصفوفة جوه البليد — بيكسّر الـparser.
     //    `json_encode` العادية هي الطريقة الوحيدة الآمنة هنا.
     $formStrings = json_encode([
@@ -2044,6 +2089,57 @@ function initDupeCheck() {
             dupeTimer = setTimeout(runDupeCheck, 700);
         });
     });
+}
+
+// ═══ «انقل من فرع زيه» (١٨ أغسطس ٢٠٢٦) ═══
+//
+// بيملا الفورم بشروط الفرع المختار **من غير حفظ** — المالك يراجع
+// ويعدّل الاسم ويدوس حفظ. الهوية مابتتلمسش: اسم/منطقة/عنوان/محافظة/
+// تليفون/لوكيشن/رقم ضريبي — دول بتوع الفرع نفسه.
+//
+// ⚠️ كل قيمة برمجية وراها dispatch لـchange — عشان الدروب داون
+// المحسّن يحدّث المعروض، وعشان onchange بتوع القناة (قسم الكي
+// أكاونت) والدفع (خانات الأجل) والضريبة (خانات النسبة) يشتغلوا.
+// نفس درس زرار كشف العنوان في الموافقات.
+const SIBS = {!! $sibJson !!};
+const SIB_DONE = {!! $sibDone !!};
+
+function copyFromSibling() {
+    const sel = document.getElementById('sibSel');
+    const d = SIBS[sel.value];
+    if (!d) return;
+
+    const f = document.getElementById('clientForm');
+    const set = function (name, v) {
+        const el = f.querySelector('[name="' + name + '"]:not([type=hidden])');
+        if (!el) return;
+        el.value = v == null ? '' : v;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    set('channel_id', d.channel_id);      // change → syncSubChannel
+    set('sub_channel', d.sub_channel);    // بعد القناة — قبلها بيتمسح
+    set('division', d.division);
+    set('branch_id', d.branch_id);
+    set('manager_id', d.manager_id);
+    set('payment_terms', d.payment_terms); // change → togglePayDays
+    set('payment_days', d.payment_days);
+    set('payment_days_from', d.payment_days_from);
+    set('price_list_id', d.price_list_id);
+    set('discount', d.discount);
+    set('category', d.category);
+
+    const tax = document.getElementById('taxable');
+    if (tax) {
+        tax.checked = !!d.taxable;
+        tax.dispatchEvent(new Event('change', { bubbles: true })); // toggleTax
+    }
+    set('tax_rate', d.tax_rate);
+    set('tax_cycle', d.tax_cycle);
+    set('eta_type', d.eta_type);
+
+    document.getElementById('sibMsg').textContent =
+        '✔ ' + SIB_DONE.replace('#N#', sel.selectedOptions[0].textContent.trim());
 }
 </script>
 @endsection

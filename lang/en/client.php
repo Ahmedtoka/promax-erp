@@ -241,6 +241,11 @@ return [
     'ff_by_division' => 'By division',
     'tax_inclusive' => 'Incl.?',
 
+    // === Copy terms from a sibling branch (Aug 18, 2026) ===
+    'copy_from_sibling' => 'Copy from a sibling branch',
+    'copy_from_sibling_go' => 'Copy',
+    'copied_from_sibling' => 'Copied "#N#" terms - review, fix the name, then save. Name, zone and address were left untouched.',
+
     // === Hard-delete for untouched clients (Aug 18, 2026) ===
     'delete_client' => 'Delete forever',
     'delete_confirm' => 'This permanently deletes ":name" - no undo. Deletion only works if the client has no activity at all. Sure?',

@@ -554,6 +554,25 @@ class ErpController extends Controller
             // ⚠️ الافتراضي `false` — الفيو بيستخدمه من غير `??`،
             // وأي مسار بينسى يبعته كان هيرمي «Undefined variable».
             'editing' => false,
+            // ═══ «انقل من فرع زيه» (طلب المالك ١٨/٨/٢٠٢٦) ═══
+            //
+            // فروع نفس السلسلة بشروطهم التجارية — الفيو بيعرض دروب
+            // داون يملا الفورم من الفرع المظبوط، والمالك يعدّل الاسم
+            // ويحفظ حفظة واحدة. **الهوية مش بتتنقل**: اسم/منطقة/عنوان/
+            // محافظة/تليفون/لوكيشن/رقم ضريبي بتوع الفرع نفسه.
+            // ⚠️ visibleTo — نفس دوكترين أي عرض عملاء.
+            'siblings' => $src && $src->group_id
+                ? Client::visibleTo(Client::query(), $request->user())
+                    ->where('group_id', $src->group_id)
+                    ->where('id', '!=', $src->id)
+                    ->where('status', '!=', 'rejected')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'name_en', 'channel_id', 'sub_channel',
+                        'division', 'branch_id', 'manager_id', 'payment_terms',
+                        'payment_days', 'payment_days_from', 'price_list_id',
+                        'discount', 'category', 'taxable', 'tax_rate', 'tax_cycle',
+                        'eta_type'])
+                : collect(),
             'presets' => ContractIntake::currentPresets($contract),
             'governorates' => Governorates::options(),
             'branches' => \App\Models\Branch::scope(
