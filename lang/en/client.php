@@ -244,7 +244,7 @@ return [
     // === Quick geo-assign on the activation screen (Aug 18, 2026) ===
     'set_geo' => 'Set governorate & zone',
     'geo_saved' => '":name" is placed - go ahead and activate it.',
-    'geo_zone_hint' => 'Zone is required - activation refuses clients without one. An empty governorate is taken from the zone.',
+    'geo_nothing' => 'Pick a governorate or a zone first - an empty save means nothing.',
 
     // === Copy terms from a sibling branch (Aug 18, 2026) ===
     'copy_from_sibling' => 'Copy from a sibling branch',

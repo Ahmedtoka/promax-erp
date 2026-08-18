@@ -170,17 +170,23 @@ class ClientActivationController extends Controller
 
         $data = $request->validate([
             'governorate' => ['nullable', 'string', 'max:60'],
-            'zone_id' => ['required', 'exists:zones,id'],
+            'zone_id' => ['nullable', 'exists:zones,id'],
         ]);
 
-        $zone = Zone::find((int) $data['zone_id']);
+        // على الأقل حاجة واحدة — سيف فاضي مالوش معنى
+        if (blank($data['governorate'] ?? null) && blank($data['zone_id'] ?? null)) {
+            return back()->withErrors(['zone_id' => __('client.geo_nothing')]);
+        }
 
-        $client->update([
-            'zone_id' => $zone->id,
+        $zone = ! empty($data['zone_id']) ? Zone::find((int) $data['zone_id']) : null;
+
+        $client->update(array_filter([
+            'zone_id' => $zone?->id,
+            // المحافظة المبعوتة، وإلا محافظة المنطقة — العمودين متسقين
             'governorate' => filled($data['governorate'] ?? null)
                 ? $data['governorate']
-                : $zone->governorate,
-        ]);
+                : $zone?->governorate,
+        ], fn ($v) => $v !== null));
 
         return back()->with('ok', __('client.geo_saved', ['name' => $client->displayName()]));
     }

@@ -204,6 +204,7 @@
                         <th>{!! $sortLink('status', __('common.status')) !!}</th>
                     @endif
                     <th>{{ __('client.missing') }}</th>
+                    <th style="width:50px">💾</th>
                 </tr>
                 @forelse ($clients as $c)
                     @php
@@ -230,12 +231,33 @@
                             @endif
                         </td>
                         <td><span class="badge b-purple">{{ $c->group?->displayName() ?? '—' }}</span></td>
-                        <td style="font-size:11.5px">{{ $c->governorateLabel() ?: '—' }}</td>
-                        <td style="font-size:11.5px">
-                            {{ $c->zone?->displayName() ?? '—' }}
-                            {{-- تسكين سريع من غير ويزارد التعديل (١٨/٨) --}}
-                            <button class="btn sm" type="button" style="margin-inline-start:4px"
-                                    onclick='openGeo({{ $c->id }}, @js($c->displayName()), @js($c->governorate ?? ''), {{ $c->zone_id ?? 'null' }})'>📍</button>
+                        {{-- ═══ تسكين إنلاين (طلب المالك ١٨/٨ مساءً) ═══
+                             «عمودين جداد: محافظة أدوس عليها أختار قاهرة،
+                             يظهرلي مناطق القاهرة في العمود التاني،
+                             وأيقونة Save في الآخر». الخانات مربوطة
+                             بفورم الصف (geo-{id}) المعرّف بره فورم
+                             التفعيل — فورم جوه فورم غلط HTML.
+                             ⚠️ سيلكت المناطق **فاضي في السيرفر** غير
+                             من منطقته الحالية — ٥٠ صف × ٣٦٢ منطقة
+                             كانوا هيتقلوا الصفحة. بيتملى بالجافاسكربت
+                             من ZONES أول ما تختار محافظة. --}}
+                        <td style="min-width:130px">
+                            <select name="governorate" form="geo-{{ $c->id }}" class="gvSel"
+                                    data-id="{{ $c->id }}" onchange="rowGov({{ $c->id }})" style="width:100%">
+                                <option value="">—</option>
+                                @foreach (Governorates::keys() as $k)
+                                    <option value="{{ $k }}" @selected(($c->governorate ?? '') === $k)>{{ Governorates::label($k) }}</option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td style="min-width:150px">
+                            <select name="zone_id" form="geo-{{ $c->id }}" id="zn-{{ $c->id }}"
+                                    data-gov="{{ $c->governorate ?? '' }}" style="width:100%">
+                                <option value="">—</option>
+                                @if ($c->zone)
+                                    <option value="{{ $c->zone_id }}" selected>{{ $c->zone->displayName() }}</option>
+                                @endif
+                            </select>
                         </td>
                         <td style="font-size:11px;color:var(--muted);max-width:280px">
                             {{ Str::limit($c->address ?? '', 60) ?: ($c->location_url ? '🗺️' : '—') }}
@@ -268,9 +290,14 @@
                                 </span>
                             @endif
                         </td>
+                        <td>
+                            {{-- سيف المحافظة/المنطقة بتوع الصف --}}
+                            <button class="btn sm" type="submit" form="geo-{{ $c->id }}"
+                                    title="{{ __('common.save') }}">💾</button>
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ $showingActive ? 10 : 9 }}" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="{{ $showingActive ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('client.no_waiting') }}
                     </td></tr>
                 @endforelse
@@ -292,44 +319,17 @@
         @endforeach
     @endif
 
+    {{-- ⚠️ **فورمات التسكين بره فورم التفعيل** — نفس حيلة فورمات
+         الإيقاف بالظبط: فورم جوه فورم غلط HTML، فكل خانات الصف
+         مربوطة بفورمها بخاصية `form`. --}}
+    @foreach ($clients as $c)
+        <form id="geo-{{ $c->id }}" method="POST" action="{{ route('erp.clients.geo', $c) }}">
+            @csrf
+        </form>
+    @endforeach
+
     @include('partials._pagination', ['p' => $clients])
 </div>
-
-{{-- ═══ مودال التسكين السريع (١٨ أغسطس ٢٠٢٦) ═══
-     طلب المالك: «أسكن محافظة وزون وأعمل Save وأقدر أفعّل العميل».
-     مودال واحد لكل الصفوف — مش دروب داون مناطق في كل صف: ٥٠ صف ×
-     ٣٦٢ منطقة كانوا هيتقلوا الصفحة ببلاش. --}}
-<dialog id="dlgGeo">
-    <form class="dlg" method="POST" id="geoForm" style="max-width:440px">
-        @csrf
-        <h4 id="geoTitle">📍 {{ __('client.set_geo') }}</h4>
-
-        <div><label class="f">{{ __('geo.governorate') }}</label>
-            <select name="governorate" id="gGov" style="width:100%" onchange="geoFilterZones()">
-                <option value="">{{ __('geo.pick_governorate') }}</option>
-                @foreach (Governorates::keys() as $k)
-                    <option value="{{ $k }}">{{ Governorates::label($k) }}</option>
-                @endforeach
-            </select>
-        </div>
-
-        <div style="margin-top:10px"><label class="f">{{ __('client.zone') }} <b class="req-star">*</b></label>
-            {{-- سيلكت مسطّح بـdata-gov — نفس نمط فورم العميل ومودال الموافقات --}}
-            <select name="zone_id" id="gZone" style="width:100%" required>
-                <option value="">{{ __('geo.pick_zone') }}</option>
-                @foreach ($zones as $z)
-                    <option value="{{ $z->id }}" data-gov="{{ $z->governorate }}">{{ $z->displayName() }}</option>
-                @endforeach
-            </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('client.geo_zone_hint') }}</div>
-        </div>
-
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-            <button class="btn" type="button" onclick="closeDlg('dlgGeo')">{{ __('common.cancel') }}</button>
-            <button class="btn gold" type="submit">💾 {{ __('common.save') }}</button>
-        </div>
-    </form>
-</dialog>
 
 @endsection
 
@@ -364,38 +364,46 @@ function syncCount() {
 
 syncCount();
 
-// ═══ مودال التسكين السريع ═══
+// ═══ التسكين الإنلاين (١٨ أغسطس ٢٠٢٦ مساءً) ═══
 //
-// ⚠️ كل قيمة برمجية وراها dispatch لـchange — الدروب داون المحسّن
-// بيحدّث المعروض من الحدث ده، وفلترة المناطق مربوطة بـonchange
-// المحافظة. نفس درس كشف العنوان في الموافقات (١٨/٨).
-const GEO_BASE = @json(url('erp/clients'));
-const GEO_TITLE = @json(__('client.set_geo'));
+// «أدوس على المحافظة أختار قاهرة → مناطق القاهرة تظهر في العمود
+// التاني → 💾». سيلكت المناطق بييجي من السيرفر فاضي (غير من منطقة
+// الصف الحالية) — القايمة الكاملة هنا مرة واحدة، وبنملى سيلكت الصف
+// وقت الاختيار. ٥٠ صف × ٣٦٢ منطقة في الـHTML كانوا هيتقلوا الصفحة.
+//
+// ⚠️ بعد إعادة الملء بنبعت change — الدروب داون المحسّن بيحدّث
+// المعروض منها (نفس درس كشف العنوان في الموافقات).
+const ZONES = {!! json_encode(
+    $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->displayName(), 'gov' => $z->governorate])->values(),
+    JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
+) !!};
 
-function geoFilterZones() {
-    const gov = document.getElementById('gGov').value;
-    const sel = document.getElementById('gZone');
+function fillZones(sel, gov, keep) {
+    const current = keep ? sel.value : '';
+    sel.innerHTML = '';
+    sel.appendChild(new Option('—', ''));
 
-    [...sel.options].forEach(opt => {
-        if (!opt.value) return;
-        opt.hidden = !(!gov || !opt.dataset.gov || opt.dataset.gov === gov || opt.selected);
+    ZONES.forEach(z => {
+        if (gov && z.gov && z.gov !== gov) return;
+        const o = new Option(z.name, z.id);
+        if (String(z.id) === String(current)) o.selected = true;
+        sel.appendChild(o);
     });
-    if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '';
+
+    if (keep && sel.value !== String(current)) sel.value = '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function openGeo(id, name, gov, zoneId) {
-    document.getElementById('geoForm').action = GEO_BASE + '/' + id + '/geo';
-    document.getElementById('geoTitle').textContent = '📍 ' + GEO_TITLE + ' — ' + name;
-
-    const g = document.getElementById('gGov');
-    g.value = gov || '';
-    g.dispatchEvent(new Event('change', { bubbles: true }));   // فلترة + تحديث المعروض
-
-    const z = document.getElementById('gZone');
-    z.value = zoneId || '';
-    z.dispatchEvent(new Event('change', { bubbles: true }));
-
-    openDlg('dlgGeo');
+function rowGov(id) {
+    const gov = document.querySelector('.gvSel[data-id="' + id + '"]').value;
+    // المنطقة الحالية بتفضل مختارة لو تبع نفس المحافظة
+    fillZones(document.getElementById('zn-' + id), gov, true);
 }
+
+// الصفوف اللي ليها محافظة أصلاً — نملى مناطقها من البداية عشان
+// تغيير المنطقة من غير لمس المحافظة يشتغل برضه
+document.querySelectorAll('select[id^="zn-"]').forEach(sel => {
+    if (sel.dataset.gov) fillZones(sel, sel.dataset.gov, true);
+});
 </script>
 @endsection
