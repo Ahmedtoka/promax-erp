@@ -17,13 +17,14 @@ class ClientGroup extends Model
 
     protected $fillable = [
         'code', 'name', 'name_en', 'channel_id', 'sub_channel',
-        'notes', 'active',
+        'notes', 'active', 'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'reviewed_at' => 'datetime',
         ];
     }
 

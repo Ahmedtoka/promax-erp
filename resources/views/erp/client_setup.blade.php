@@ -16,6 +16,29 @@
     use App\Support\Divisions;
     $isChains = $mode === 'chains';
     $lists = $lists;
+
+    // ═══ لابلز «الساري دلوقتي» (طلب المالك ١٨/٨/٢٠٢٦) ═══
+    // القيمة `false` من liveSummary معناها الفروع مختلفة → «مختلط».
+    $MIX = __('client.mixed_values');
+    $fmtPct = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.').'%';
+    $liveDiv = fn ($l) => $l['division'] === false ? $MIX : ($l['division'] ? Divisions::label($l['division']) : '—');
+    $liveFf = fn ($l) => $l['ff'] === false ? $MIX : ($l['ff'] ? __('client.ff_'.$l['ff']) : '—');
+    $liveList = fn ($l) => $l['list'] === false ? $MIX : ($l['list'] ?? '—');
+    $liveDisc = function ($l) use ($MIX, $fmtPct) {
+        if ($l['disc'] === false) {
+            [$lo, $hi] = $l['disc_range'];
+            return $fmtPct($lo).' – '.$fmtPct($hi);
+        }
+        $txt = $l['disc'] !== null ? $fmtPct($l['disc']) : '—';
+        if ($l['disc_src'] && $l['disc_src'] !== false && (float) ($l['disc'] ?? 0) > 0) {
+            $txt .= ' · '.__('client.'.$l['disc_src']);
+        }
+        return $txt;
+    };
+    $liveInc = fn ($l) => $l['inclusive'] === false ? $MIX
+        : ($l['inclusive'] === null ? '—' : ($l['inclusive'] ? __('client.tax_inclusive') : __('client.tax_added')));
+
+    $reviewedCount = $rows->filter(fn ($r) => $isChains ? $r->reviewed_at : $r->setup_reviewed_at)->count();
 @endphp
 
 @section('title', $isChains ? __('client.setup_chains') : __('client.setup_clients'))
@@ -37,9 +60,25 @@
       action="{{ $isChains ? route('erp.setup.chains.save') : route('erp.setup.clients.save') }}">
 @csrf
 
+{{-- تخضير الصف المتراجع + ستايل لابل «الساري» --}}
+<style>
+tr.su-done{background:#eefaf1}
+tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e50)}
+.su-now{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+.su-now b{color:var(--royal-blue);font-weight:800}
+</style>
+
 <div class="card">
     <h3>{{ $isChains ? '🔗 '.__('client.setup_chains') : '👥 '.__('client.setup_clients') }}
-        <span class="side">{{ $rows->count() }}</span></h3>
+        <span class="side">{{ $rows->count() }}</span>
+        {{-- عداد التقدم — الهدف إن كله يبقى أخضر --}}
+        <span class="badge {{ $reviewedCount === $rows->count() && $rows->count() ? 'b-green' : 'b-orange' }}"
+              style="margin-inline-start:8px">
+            ✓ {{ __('client.setup_progress', ['done' => $reviewedCount, 'total' => $rows->count()]) }}
+        </span>
+        <button class="btn sm" type="button" id="pendBtn" onclick="togglePending()"
+                style="margin-inline-start:6px">👀 {{ __('client.setup_only_pending') }}</button>
+    </h3>
 
     {{-- ═══ شريط «طبّق على الكل» ═══ --}}
     <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;
@@ -103,6 +142,7 @@
                 <th style="min-width:150px" data-nosum>{{ __('client.price_list') }}</th>
                 <th style="width:90px" data-nosum>{{ __('client.discount') }} %</th>
                 <th style="width:80px" data-nosum>{{ __('client.tax_inclusive') }}</th>
+                <th style="width:80px" data-nosum>✓ {{ __('client.setup_reviewed') }}</th>
                 <th style="width:70px"></th>
             </tr>
             </thead>
@@ -112,8 +152,10 @@
                     // صف السلسلة بيتعبى من أول فرع كتمثيل — الحفظ بيوحّد
                     $c = $isChains ? $r->clients()->first() : $r;
                     $rid = $r->id;
+                    $lv = $live[$rid] ?? null;
+                    $done = (bool) ($isChains ? $r->reviewed_at : $r->setup_reviewed_at);
                 @endphp
-                <tr>
+                <tr class="{{ $done ? 'su-done' : '' }}" data-done="{{ $done ? 1 : 0 }}">
                     <td><input type="checkbox" class="su-sel" onchange="syncSel()"></td>
                     <td>
                         @if ($isChains)
@@ -133,6 +175,7 @@
                                 <option value="{{ $k }}" @selected(($c?->division) === $k)>{{ $lbl }}</option>
                             @endforeach
                         </select>
+                        @if ($lv)<div class="su-now">{{ __('client.setup_live_now') }} <b>{{ $liveDiv($lv) }}</b></div>@endif
                     </td>
                     <td>
                         <select name="rows[{{ $rid }}][fulfillment_mode]" class="su-ff" style="width:100%">
@@ -142,6 +185,7 @@
                                     {{ __('client.ff_'.$f) }}</option>
                             @endforeach
                         </select>
+                        @if ($lv)<div class="su-now">{{ __('client.setup_live_now') }} <b>{{ $liveFf($lv) }}</b></div>@endif
                     </td>
                     <td>
                         <select name="rows[{{ $rid }}][price_list_id]" class="su-pl" style="width:100%">
@@ -151,17 +195,33 @@
                                     {{ $pl->displayName() }}</option>
                             @endforeach
                         </select>
+                        {{-- ⚠️ اللابل من Pricing::listRowFor — نفس اللي
+                             الأبلكيشن بيسعّر بيه، مش العمود الخام --}}
+                        @if ($lv)<div class="su-now">{{ __('client.setup_live_now') }} <b>{{ $liveList($lv) }}</b></div>@endif
                     </td>
                     <td>
                         <input type="number" name="rows[{{ $rid }}][discount]" class="su-disc"
                                step="0.01" min="0" max="100" dir="ltr"
                                style="width:100%;text-align:center"
                                value="{{ $c && (float) $c->discount > 0 ? rtrim(rtrim(number_format((float) $c->discount * 100, 2, '.', ''), '0'), '.') : '' }}">
+                        {{-- النسبة الفعلية من effectiveDiscount + مصدرها --}}
+                        @if ($lv)<div class="su-now">{{ __('client.setup_live_now') }} <b>{{ $liveDisc($lv) }}</b></div>@endif
                     </td>
                     <td style="text-align:center">
                         <input type="hidden" name="rows[{{ $rid }}][inclusive]" value="0">
                         <input type="checkbox" name="rows[{{ $rid }}][inclusive]" value="1"
                                class="su-inc" @checked($c && ! $c->taxable)>
+                        @if ($lv)<div class="su-now">{{ $liveInc($lv) }}</div>@endif
+                    </td>
+                    <td style="text-align:center">
+                        {{-- علامة «اتراجعت» — بتتحفظ مع الصف/الكل --}}
+                        <input type="hidden" name="rows[{{ $rid }}][reviewed]" value="0">
+                        <input type="checkbox" name="rows[{{ $rid }}][reviewed]" value="1"
+                               class="su-rev" @checked($done)
+                               onchange="this.closest('tr').classList.toggle('su-done', this.checked)">
+                        @if ($done)
+                            <div class="su-now">{{ ($isChains ? $r->reviewed_at : $r->setup_reviewed_at)->format('m-d') }}</div>
+                        @endif
                     </td>
                     <td>
                         {{-- زرار الصف — نفس الفورم مع only=id --}}
@@ -169,7 +229,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">
                     {{ __('client.all_assigned') }}</td></tr>
             @endforelse
             </tbody>
@@ -253,5 +313,23 @@ function syncSel() {
 }
 
 syncSel();
+
+/**
+ * «اللي لسه بس» — يخفي الصفوف المتراجعة عشان المالك يكمّل على
+ * الباقي بس. فلترة عرض محلية، مش بتغيّر التعليم ولا الحفظ.
+ * ⚠️ بنستخدم dataset.done اللي جاي من السيرفر + حالة التشيك بوكس
+ * الحالية (لو علّم لسه ومحفظش، برضه يعتبر خلص).
+ */
+let PEND_ONLY = false;
+
+function togglePending() {
+    PEND_ONLY = !PEND_ONLY;
+    document.getElementById('pendBtn').classList.toggle('gold', PEND_ONLY);
+
+    document.querySelectorAll('tr[data-done]').forEach(tr => {
+        const done = tr.querySelector('.su-rev')?.checked;
+        tr.style.display = PEND_ONLY && done ? 'none' : '';
+    });
+}
 </script>
 @endsection

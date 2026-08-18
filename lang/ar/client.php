@@ -242,6 +242,14 @@ return [
     'unassigned_note' => 'فيه :count عميل من غير قسم — مش داخلين في أي رقم فوق. اعرضهم',
     'ff_by_division' => 'حسب الديفيجن',
     'tax_inclusive' => 'شامل؟',
+
+    // ═══ المراجعة ولابل «الساري» في شاشة الإعداد (١٨ أغسطس ٢٠٢٦) ═══
+    'setup_reviewed' => 'اتراجعت',
+    'setup_progress' => 'اتراجع :done من :total',
+    'setup_only_pending' => 'اللي لسه بس',
+    'setup_live_now' => 'الساري:',
+    'mixed_values' => 'مختلط',
+    'tax_added' => '+ضريبة',
     'branch_countable' => ':count فرع',
     'chain_apply_division' => 'الديفيجن على كل الفروع',
     'chain_division_applied' => 'قسم «:division» اتطبّق على :count فرع.',

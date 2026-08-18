@@ -240,6 +240,14 @@ return [
     'unassigned_note' => ':count clients have no division - excluded from every figure above. View them',
     'ff_by_division' => 'By division',
     'tax_inclusive' => 'Incl.?',
+
+    // === Review flag & "live now" labels on the setup screens (Aug 18, 2026) ===
+    'setup_reviewed' => 'Reviewed',
+    'setup_progress' => 'Reviewed :done of :total',
+    'setup_only_pending' => 'Pending only',
+    'setup_live_now' => 'Live:',
+    'mixed_values' => 'Mixed',
+    'tax_added' => '+VAT',
     'branch_countable' => ':count branches',
     'chain_apply_division' => 'Division for all branches',
     'chain_division_applied' => '":division" applied to :count branches.',

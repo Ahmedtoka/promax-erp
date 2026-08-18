@@ -33,10 +33,36 @@ class ClientSetupController extends Controller
     /** صفحة السلاسل — صف لكل سلسلة */
     public function chains()
     {
+        $rows = ClientGroup::withCount('clients')
+            ->with('contract')
+            ->where('active', true)->orderBy('name')->get();
+
+        // ═══ «الساري دلوقتي» تحت كل خانة (طلب المالك ١٨/٨/٢٠٢٦) ═══
+        //
+        // «عاوز أشوف إيه المسمع دلوقتي في السلسلة علشان لما أعمل
+        // Apply يبقى باين إيه المسمع في الأبلكيشن». الأرقام من نفس
+        // المحركات اللي الأبلكيشن بيقرا منها — `effectiveDiscount`
+        // و`Pricing::listRowFor` — مش من الأعمدة الخام، عشان اللابل
+        // يقول الحقيقة اللي المندوب شايفها فعلاً.
+        //
+        // ⚠️ eager للعلاقات اللي المحركات بتنادبها — من غيرها الصفحة
+        // بتضرب مئات الكويريز على العقود.
+        $branches = Client::with(['contract', 'group.contract', 'priceListRow'])
+            ->whereIn('group_id', $rows->pluck('id'))
+            ->where('status', '!=', 'rejected')
+            ->get()
+            ->groupBy('group_id');
+
+        $live = [];
+
+        foreach ($rows as $g) {
+            $live[$g->id] = $this->liveSummary($branches[$g->id] ?? collect());
+        }
+
         return view('erp.client_setup', [
             'mode' => 'chains',
-            'rows' => ClientGroup::withCount('clients')
-                ->where('active', true)->orderBy('name')->get(),
+            'rows' => $rows,
+            'live' => $live,
             'lists' => PriceList::where('active', true)->orderBy('id')->get(),
         ]);
     }
@@ -44,8 +70,10 @@ class ClientSetupController extends Controller
     /** صفحة العملاء الفرادى — صف لكل عميل */
     public function clients(Request $request)
     {
+        // ⚠️ `contract` و`group.contract` eager — لابلز «الساري» بتنادي
+        // `effectiveDiscount` و`listRowFor` لكل صف.
         $q = Client::visibleTo(Client::query())
-            ->with(['group', 'zone', 'priceListRow'])
+            ->with(['group.contract', 'zone', 'priceListRow', 'contract'])
             ->where('status', '!=', 'rejected');
 
         // ⚠️ فلتر «بدون قسم» — ده اللي المالك هيشتغل عليه أساساً
@@ -53,11 +81,54 @@ class ClientSetupController extends Controller
             $q->whereNull('division');
         }
 
+        $rows = $q->orderBy('name')->get();
+
+        $live = [];
+
+        foreach ($rows as $c) {
+            $live[$c->id] = $this->liveSummary(collect([$c]));
+        }
+
         return view('erp.client_setup', [
             'mode' => 'clients',
-            'rows' => $q->orderBy('name')->get(),
+            'rows' => $rows,
+            'live' => $live,
             'lists' => PriceList::where('active', true)->orderBy('id')->get(),
         ]);
+    }
+
+    /**
+     * ملخص «الساري دلوقتي» لمجموعة عملاء (فروع سلسلة أو عميل واحد).
+     *
+     * القيم من محركات التسعير نفسها — القيمة الواحدة بتتعرض زي ما
+     * هي، والمختلف بيتعرض «مختلط» عشان المالك يعرف إن السلسلة لسه
+     * مش موحّدة ويراجعها.
+     */
+    private function liveSummary($set): array
+    {
+        if ($set->isEmpty()) {
+            return ['division' => null, 'ff' => null, 'list' => null,
+                'disc' => null, 'disc_src' => null, 'inclusive' => null, 'mixed' => []];
+        }
+
+        $one = fn ($vals) => $vals->unique()->count() === 1 ? $vals->first() : false;
+
+        $divisions = $set->map(fn ($c) => $c->division);
+        $ffs = $set->map(fn ($c) => $c->fulfillment());
+        $lists = $set->map(fn ($c) => \App\Services\Pricing::listRowFor($c)?->displayName() ?? '—');
+        $discs = $set->map(fn ($c) => round($c->effectiveDiscount() * 100, 2));
+        $incs = $set->map(fn ($c) => ! $c->taxable);
+        $srcs = $set->map(fn ($c) => $c->discountSourceKey());
+
+        return [
+            'division' => $one($divisions),
+            'ff' => $one($ffs),
+            'list' => $one($lists),
+            'disc' => $one($discs),
+            'disc_range' => [$discs->min(), $discs->max()],
+            'disc_src' => $one($srcs),
+            'inclusive' => $one($incs),
+        ];
     }
 
     /**
@@ -120,6 +191,17 @@ class ClientSetupController extends Controller
                     }
                 }
 
+                // علامة المراجعة — بتتكتب وبتتشال من نفس الخانة.
+                // التاريخ بيتجدد مع كل حفظة والعلامة شغالة، عشان
+                // «آخر مراجعة» تفضل صادقة.
+                // ⚠️ محروسة بـhasColumn — الملفات بتترفع بإيد قبل
+                // المايجريشن أحياناً، ومن غير الحارس أول حفظة بترمي
+                // «Unknown column reviewed_at».
+                if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'reviewed_at')) {
+                    $group->reviewed_at = ! empty($data['reviewed']) ? now() : null;
+                    $group->save();
+                }
+
                 $saved++;
             }
         });
@@ -161,6 +243,12 @@ class ClientSetupController extends Controller
                     $own->update($stamp);
                 }
 
+                // ⚠️ نفس حارس hasColumn بتاع السلاسل فوق
+                if (\Illuminate\Support\Facades\Schema::hasColumn('clients', 'setup_reviewed_at')) {
+                    $client->setup_reviewed_at = ! empty($data['reviewed']) ? now() : null;
+                    $client->save();
+                }
+
                 $saved++;
             }
         });
@@ -184,6 +272,8 @@ class ClientSetupController extends Controller
             'rows.*.price_list_id' => ['nullable', 'exists:price_lists,id'],
             'rows.*.discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'rows.*.inclusive' => ['nullable', 'boolean'],
+            // علامة «اتراجعت» — تتبع تقدم المالك في ضبط السيستم
+            'rows.*.reviewed' => ['nullable', 'boolean'],
         ])['rows'];
     }
 
