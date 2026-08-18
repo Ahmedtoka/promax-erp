@@ -27,8 +27,10 @@ class ClientActivationController extends Controller
 {
     public function index(Request $request)
     {
-        // ⚠️ سكوب التشانل مانجر (2026-08-05): بيراجع ويفعّل عملاءه بس
-        $q = Client::visibleTo(Client::query()->with(['group', 'zone', 'rep']));
+        // ⚠️ سكوب الشاشة دي أوسع من `visibleTo` عن قصد (١٨/٨/٢٠٢٦):
+        // عملاءه + **غير المسكّنين** المش مفعّلين. شوف activationScope.
+        $q = $this->activationScope($request->user(),
+            Client::query()->with(['group', 'zone', 'rep']));
 
         // ⚠️ **`status` مش `active`.** الجدول مافيهوش عمود `active` —
         // الحالة enum في `status`. الافتراضي «المستني» لأن ده شغل
@@ -119,12 +121,19 @@ class ClientActivationController extends Controller
                 'clients as off_count' => fn ($w) => $w->where('status', '!=', 'active'),
             ])->orderBy('name')->get(),
             'zones' => Zone::where('active', true)->orderBy('name')->get(),
-            'reps' => User::whereIn('role', ['sales_agent', 'promoter'])
-                ->where('active', true)->orderBy('name')->get(),
+            // ⚠️ المدير بيوزّع على **فريقه** بس (١٨/٨) — نفس حارس
+            // activate() تحت، عشان الدروب داون مايعرضش اسم يترفض.
+            'reps' => User::fieldVisibleTo(
+                User::whereIn('role', ['sales_agent', 'promoter'])->where('active', true),
+                $request->user(),
+            )->orderBy('name')->get(),
             // ⚠️ **من غير الأدمنز** (قرار المالك 2026-08-05) — الدروب داون
             // للتشانل مانجرز اللي بيتوزّع عليهم العملاء، والأدمن مش موظف
             // توزيع. وده نفس مصدر شاشة «عملاء المديرين» والسكوبينج.
+            // ⚠️ والمدير بيشوف **نفسه بس** (١٨/٨) — مايوزّعش على غيره.
             'managers' => User::where('role', 'manager')
+                ->when($request->user()->role === 'manager',
+                    fn ($w) => $w->whereKey($request->user()->id))
                 ->where('active', true)->orderBy('name')->get(),
             'lists' => $this->priceLists(),
             // ⚠️ `array_merge` مش `+` — المعامل `+` بيسيب قيمة الشمال،
@@ -133,9 +142,36 @@ class ClientActivationController extends Controller
                 $request->only(['q', 'group', 'gov', 'incomplete', 'sort', 'dir']),
                 ['status' => $status],
             ),
-            'waiting' => Client::visibleTo(Client::where('status', '!=', 'active'))->count(),
-            'live' => Client::visibleTo(Client::where('status', 'active'))->count(),
+            'waiting' => $this->activationScope($request->user(),
+                Client::where('status', '!=', 'active'))->count(),
+            'live' => $this->activationScope($request->user(),
+                Client::where('status', 'active'))->count(),
         ]);
+    }
+
+    /**
+     * ═══ سكوب شاشة التفعيل (١٨ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «عاوز المدير يظهرله العملاء المش متفعلة وتظهرله
+     * صفحة تفعيل العملاء». المشكلة كانت إن `visibleTo` بتحصر المدير
+     * في `manager_id` بتاعه — والعملاء المستوردين لسه **من غير مدير
+     * خالص**، فالشاشة بتطلعله فاضية.
+     *
+     * المدير هنا بيشوف: عملاءه + **غير المسكّنين** (مفيش مدير) اللي
+     * لسه مش مفعّلين — دول ملك حد، والتفعيل هو بالظبط لحظة التوزيع.
+     * عملاء مدير تاني (manager_id متسجل) مخفيين زي ما هم — دوكترين
+     * فصل القنوات ماتكسرتش.
+     */
+    private function activationScope(?User $user, $query)
+    {
+        if ($user?->role !== 'manager') {
+            return Client::visibleTo($query, $user);
+        }
+
+        return $query->where(fn ($w) => $w
+            ->where('manager_id', $user->id)
+            ->orWhere(fn ($x) => $x->whereNull('manager_id')
+                ->where('status', '!=', 'active')));
     }
 
     /**
@@ -162,8 +198,28 @@ class ClientActivationController extends Controller
         // المستني بيتفعّل بالقيم المختارة، والشغّال أصلاً بتتطبّق عليه
         // القيم بس — منطقة/مندوب/تشانل مانجر/قايمة — من غير ما نلمس
         // حالته ولا تاريخ أول نشاطه.
-        // ⚠️ وسكوب التشانل مانجر — مايوزّعش عميل مش بتاعه حتى لو بعت الـid
-        $rows = Client::visibleTo(Client::whereIn('id', $data['ids']))->get(['id', 'status', 'zone_id']);
+        // ⚠️ وسكوب التشانل مانجر — مايوزّعش عميل مش بتاعه حتى لو بعت
+        // الـid. نفس سكوب الشاشة (عملاءه + غير المسكّنين المش مفعّلين).
+        $rows = $this->activationScope($request->user(),
+            Client::whereIn('id', $data['ids']))->get(['id', 'status', 'zone_id']);
+
+        // ═══ المدير بيسكّن على نفسه وبس (١٨/٨) ═══
+        //
+        // ⚠️ من غير ده كان بيقدر يبعت `manager_id` بتاع زميله في
+        // الريكوست ويرمي عملاء على فريق تاني — أو أخطر: يفعّل عميل
+        // غير مسكّن ويسيبه يتيم برضه. تفعيلة المدير = العميل بيدخل
+        // بوله هو، والمندوب المختار لازم يكون من فريقه.
+        if ($request->user()->role === 'manager') {
+            $data['manager_id'] = $request->user()->id;
+
+            if (! empty($data['rep_id'])) {
+                $rep = User::find((int) $data['rep_id']);
+                abort_unless(
+                    $rep !== null && User::fieldVisibleTo(User::whereKey($rep->id), $request->user())->exists(),
+                    403,
+                );
+            }
+        }
         $toActivate = $rows->where('status', '!=', 'active')->pluck('id');
         $activeOnes = $rows->where('status', 'active')->pluck('id');
 
