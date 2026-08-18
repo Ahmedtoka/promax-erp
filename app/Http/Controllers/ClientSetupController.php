@@ -89,6 +89,37 @@ class ClientSetupController extends Controller
 
                 $branches += Client::visibleTo($group->clients(), $request->user())
                     ->update($this->payload($data));
+
+                // ═══ الختم على العقود كمان (قرار المالك ١٨/٨/٢٠٢٦) ═══
+                //
+                // «الشاشة دي تسمع في كل السيستم — والعقد ريفرنس».
+                // المالك حط صفر هنا ولقى صفحة السلسلة والفروع لسه
+                // شايفين خصم العقد: التحديث كان بيكتب على العميل بس
+                // والعقد بيغلبه في `effectiveDiscount`. الحفظ بقى بيختم
+                // **عقد السلسلة وعقود الفروع الشخصية السارية** بنفس
+                // النسبة والقايمة — «كل الفروع تاخد نفس البيانات
+                // بالظبط» تعني حتى اللي ليهم عقود خاصة.
+                //
+                // ⚠️ العقود المنتهية/الموقوفة مابتتلمسش — دي تاريخ.
+                $stamp = $this->contractStamp($data);
+
+                if ($stamp !== []) {
+                    $ct = $group->contract;
+                    if ($ct !== null && $ct->active && ! $ct->isExpired()) {
+                        $ct->update($stamp);
+                    }
+
+                    $branchClients = Client::visibleTo($group->clients(), $request->user())
+                        ->with('contract')->get();
+
+                    foreach ($branchClients as $bc) {
+                        $own = $bc->contract;
+                        if ($own !== null && $own->active && ! $own->isExpired()) {
+                            $own->update($stamp);
+                        }
+                    }
+                }
+
                 $saved++;
             }
         });
@@ -119,6 +150,17 @@ class ClientSetupController extends Controller
                 }
 
                 $client->update($this->payload($data));
+
+                // نفس ختم صفحة السلاسل — بس على عقد العميل **الشخصي**
+                // بس. عقد السلسلة مابيتلمسش من صف عميل واحد: تعديله
+                // كان هيغيّر إخواته كلهم في صمت.
+                $stamp = $this->contractStamp($data);
+                $own = $client->contract;
+
+                if ($stamp !== [] && $own !== null && $own->active && ! $own->isExpired()) {
+                    $own->update($stamp);
+                }
+
                 $saved++;
             }
         });
@@ -174,5 +216,35 @@ class ClientSetupController extends Controller
         }
 
         return $out;
+    }
+
+    /**
+     * اللي بيتختم على العقود السارية وقت الحفظ — النسبة والقايمة.
+     *
+     * ⚠️ **الصفر بيتختم زي أي رقم** — دي أصل الحكاية: المالك كتب صفر
+     * وشاف العقد لسه بـ30%. الخانة الفاضية برضه بتتكتب صفر على
+     * العميل (نفس منطق `payload`)، فالعقد ياخد صفر معاها — الصف
+     * بيتطبق «بالظبط» زي ما هو معروض.
+     *
+     * ⚠️ العقد بيتخزن الخصم كسر (0.30) زي العميل بالظبط.
+     */
+    private function contractStamp(array $data): array
+    {
+        $stamp = [
+            'discount' => isset($data['discount']) && $data['discount'] !== null
+                ? round((float) $data['discount'], 2) / 100
+                : 0,
+        ];
+
+        if (! empty($data['price_list_id'])) {
+            $list = PriceList::find((int) $data['price_list_id']);
+
+            if ($list !== null) {
+                $stamp['price_list_id'] = $list->id;
+                $stamp['price_list'] = $list->code;
+            }
+        }
+
+        return $stamp;
     }
 }

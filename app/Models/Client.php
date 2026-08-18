@@ -380,17 +380,30 @@ public function zone(): BelongsTo
      */
     public function liveContract(): ?Contract
     {
-        $live = fn (?Contract $c) => $c !== null && $c->active && ! $c->isExpired();
+        return $this->ownLiveContract() ?? $this->chainLiveContract();
+    }
 
-        $this->loadMissing(['contract', 'group.contract']);
+    /** عقده الشخصي السارٍ — من غير عقد السلسلة */
+    public function ownLiveContract(): ?Contract
+    {
+        $this->loadMissing('contract');
 
-        if ($live($this->contract)) {
-            return $this->contract;
-        }
+        return self::contractIsLive($this->contract) ? $this->contract : null;
+    }
 
-        $fromGroup = $this->group?->contract;
+    /** عقد سلسلته السارٍ — من غير عقده الشخصي */
+    public function chainLiveContract(): ?Contract
+    {
+        $this->loadMissing('group.contract');
 
-        return $live($fromGroup) ? $fromGroup : null;
+        $ct = $this->group?->contract;
+
+        return self::contractIsLive($ct) ? $ct : null;
+    }
+
+    private static function contractIsLive(?Contract $c): bool
+    {
+        return $c !== null && $c->active && ! $c->isExpired();
     }
 
     /**
@@ -690,27 +703,39 @@ public function zone(): BelongsTo
      */
     public function effectiveDiscount(): float
     {
-        // 1. العقد — اتفاق مكتوب فبيغلب على أي حاجة، بشرط يكون سارٍ ومش منتهي.
-        // ⚠️ خصم الفاتورة بس. الخصومات الدورية بتتسوّى بعدين ومالهاش دعوة بالفاتورة.
-        $contract = $this->liveContract();
-        if ($contract && (float) $contract->discount > 0) {
-            return (float) $contract->discount;
+        // ═══ الترتيب الجديد (قرار المالك ١٨ أغسطس ٢٠٢٦) ═══
+        //
+        // «شاشة الإعداد تسمع في كل السيستم» — الترتيب القديم كان
+        // العقد (بتاعه أو بتاع سلسلته) يغلب خصم العميل، فالمالك
+        // بيكتب نسبة لفرع واحد من شاشة الإعداد وعقد السلسلة بيدهسها
+        // في صمت. الترتيب بقى:
+        //
+        //   1. عقد الفرع **الشخصي** السارٍ — اتفاق مكتوب باسمه بيغلب
+        //   2. خصم العميل نفسه (اللي شاشة الإعداد بتكتبه)
+        //   3. عقد **السلسلة** السارٍ — الافتراضي للفروع اللي مالهاش رقم خاص
+        //   4. صفر — سعر القائمة كامل
+        //
+        // ⚠️ «عقد الفرع يكسب» (قرار ١٧/٨) لسه محفوظ — اللي اتغير إن
+        // خصم العميل بقى **بين** عقده الشخصي وعقد السلسلة بدل ما كان
+        // تحت الاتنين. وشاشة الإعداد بتختم العقود الشخصية والسلسلة
+        // معاً وقت الحفظ، فبعد أي حفظة الطبقات كلها متطابقة أصلاً.
+        //
+        // ⚠️ خصم الفاتورة بس — الخصومات الدورية بتتسوّى بعدين
+        // ومالهاش دعوة بالفاتورة.
+        $own = $this->ownLiveContract();
+        if ($own && (float) $own->discount > 0) {
+            return (float) $own->discount;
         }
 
-        // 2. خصم خاص متحدد على العميل نفسه
         if ((float) $this->discount > 0) {
             return (float) $this->discount;
         }
 
-        // ⚠️ **مفيش خطوة للسلسلة.** قرار 2026-08-01: السلسلة مكان
-        // بنجمع فيه الفروع تحت اسم واحد عشان نشوف إجمالياتها — مش
-        // كيان تجاري ليه شروطه. كل فرع بيتفاوض لوحده وليه عقده وخصمه،
-        // وخصم على مستوى السلسلة كان بيتجاهل اتفاق الفرع.
-        //
-        // خصومات السلاسل القديمة اتنقلت على فروعها في مايجريشن
-        // `000028_drop_group_discount` قبل ما العمود يتشال.
+        $chain = $this->chainLiveContract();
+        if ($chain && (float) $chain->discount > 0) {
+            return (float) $chain->discount;
+        }
 
-        // 3. مفيش خصم — سعر القائمة كامل
         return 0.0;
     }
 
@@ -782,12 +807,19 @@ public function zone(): BelongsTo
     /** المفتاح الخام — للمقارنات في الكود بدل ما نقارن نص مترجم */
     public function discountSourceKey(): string
     {
-        $contract = $this->liveContract();
-        if ($contract && (float) $contract->discount > 0) {
+        // ⚠️ **نفس ترتيب `effectiveDiscount()` بالحرف** (١٨/٨/٢٠٢٦):
+        // عقده الشخصي ← خصمه الخاص ← عقد السلسلة. لو اختلفوا، الشاشة
+        // بتقول «عقد» والرقم جاي من الخصم الخاص.
+        $own = $this->ownLiveContract();
+        if ($own && (float) $own->discount > 0) {
             return 'contract';
         }
         if ((float) $this->discount > 0) {
             return 'custom_discount';
+        }
+        $chain = $this->chainLiveContract();
+        if ($chain && (float) $chain->discount > 0) {
+            return 'contract';
         }
 
         // ⚠️ **مفيش `chain_discount` ولا `channel_discount`.** الاتنين

@@ -46,14 +46,48 @@ class Pricing
      */
     public static function listRowFor(Client $client): ?PriceList
     {
-        $contract = $client->liveContract();
-
+        // ═══ الترتيب الجديد (قرار المالك ١٨ أغسطس ٢٠٢٦) ═══
+        //
+        // «شاشة الإعداد تسمع في كل السيستم» — نفس منطق ترتيب الخصم
+        // في `Client::effectiveDiscount` بالظبط:
+        //
+        //   1. قايمة عقد الفرع **الشخصي** السارٍ
+        //   2. قايمة العميل **المختارة بالـid** (اللي شاشة الإعداد بتكتبها)
+        //   3. قايمة عقد **السلسلة** السارٍ
+        //   4. العمود النصي القديم للعميل
+        //   5. الافتراضية
+        //
+        // ⚠️ **ليه الـid قبل عقد السلسلة والنص بعده؟** كل العملاء
+        // عندهم `price_list` نصي بديفولت `new` — لو النص اتقدّم على
+        // عقد السلسلة، عقد السلسلة كان بيبقى ميت لأي عميل ماختارش
+        // قايمة أبداً. الـid بالعكس: مايتكتبش غير باختيار حقيقي
+        // (شاشة الإعداد/فورم العميل)، فهو اللي يستاهل يغلب.
+        //
         // ⚠️ **لازم تكون مفعّلة.** قايمة موقوفة معناها إن أسعارها
         // مش معتمدة — والبيع بيها بيطلّع فاتورة بسعر محدش أقرّه.
-        $fromContract = $contract?->priceListRow;
+        $ownContract = $client->ownLiveContract();
 
-        if ($fromContract && $fromContract->active) {
-            return $fromContract;
+        $fromOwn = $ownContract?->priceListRow;
+        if ($fromOwn && $fromOwn->active) {
+            return $fromOwn;
+        }
+        if ($ownContract && ($row = PriceList::byCode($ownContract->price_list)) !== null) {
+            return $row;
+        }
+
+        $ownList = $client->priceListRow;
+        if ($ownList && $ownList->active) {
+            return $ownList;
+        }
+
+        $chainContract = $client->chainLiveContract();
+
+        $fromChain = $chainContract?->priceListRow;
+        if ($fromChain && $fromChain->active) {
+            return $fromChain;
+        }
+        if ($chainContract && ($row = PriceList::byCode($chainContract->price_list)) !== null) {
+            return $row;
         }
 
         // ⚠️ **العمود النصي القديم لازم يتحترم قبل الافتراضية**
@@ -64,16 +98,6 @@ class Pricing
         // تحويل ليد، موافقة طلب عميل، والاستيراد بيكتبوا العمود
         // النصي من غير الـid. الاحتياطي اللي في `listFor` كان ميت
         // لأن `default()` عمرها ماترجّع `null` بعد مايجريشن 000060.
-        if ($contract && ($row = PriceList::byCode($contract->price_list)) !== null) {
-            return $row;
-        }
-
-        $own = $client->priceListRow;
-
-        if ($own && $own->active) {
-            return $own;
-        }
-
         if (($row = PriceList::byCode($client->price_list)) !== null) {
             return $row;
         }

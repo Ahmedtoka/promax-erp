@@ -219,9 +219,10 @@ class ErpController extends Controller
 
         // ═══ الخصم ومصدره ═══
         //
-        // ⚠️ **نفس ترتيب `Client::effectiveDiscount()` بالحرف**: العقد
-        // السارٍ الأول وبعده الخصم الخاص. لو الفلتر حكم بترتيب تاني،
-        // الشاشة بتوري عميل في نتيجة «بدون خصم» والعمود جنبه بيقول 50%.
+        // ⚠️ **نفس ترتيب `Client::effectiveDiscount()` بالحرف**
+        // (ترتيب ١٨/٨/٢٠٢٦): عقده الشخصي ← خصمه الخاص ← عقد السلسلة.
+        // لو الفلتر حكم بترتيب تاني، الشاشة بتوري عميل في نتيجة
+        // «بدون خصم» والعمود جنبه بيقول 50%.
         $contractDisc = fn ($c) => $liveContract($c)->where('discount', '>', 0);
         $noContractDisc = fn ($q) => $q->whereDoesntHave('contract', $contractDisc)
             ->whereDoesntHave('group.contract', $contractDisc);
@@ -235,8 +236,10 @@ class ErpController extends Controller
             $noContractDisc($q)->where(fn ($w) => $w
                 ->whereNull('discount')->orWhere('discount', '<=', 0));
         } elseif ($discFilter === 'custom') {
-            // خصم خاص فقط = مكتوب على العميل ومفيش عقد سارٍ بيغطيه
-            $noContractDisc($q)->where('discount', '>', 0);
+            // خصم خاص فقط = مكتوب على العميل ومفيش **عقد شخصي** سارٍ
+            // بيغطيه. عقد السلسلة مش شرط — خصم العميل بقى بيغلبه.
+            $q->whereDoesntHave('contract', $contractDisc)
+                ->where('discount', '>', 0);
         }
 
         // ═══ مدير القناة (١٥ أغسطس ٢٠٢٦) ═══

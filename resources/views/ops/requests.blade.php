@@ -185,17 +185,8 @@
                 <div id="dNoPoint" style="font-size:11.5px;color:var(--muted);margin-top:6px;display:none">{{ __('ops.no_location_captured') }}</div>
             </div>
 
-            <div class="frow">
-                <div>
-                    <label class="f">{{ __('geo.address_en') }}</label>
-                    <input type="text" name="address" id="dAddr" dir="ltr" maxlength="190" style="width:100%">
-                </div>
-                <div>
-                    <label class="f">{{ __('geo.address_ar') }}</label>
-                    <input type="text" name="address_ar" id="dAddrAr" maxlength="190" style="width:100%">
-                </div>
-            </div>
-
+            {{-- ⚠️ الترتيب: محافظة ← منطقة ← عنوان — نفس ترتيب فورم
+                 العميل بالظبط (طلب المالك ١٨/٨/٢٠٢٦). --}}
             <div class="frow">
                 <div>
                     <label class="f">{{ __('geo.governorate') }}</label>
@@ -216,6 +207,17 @@
                             <option value="{{ $z->id }}" data-gov="{{ $z->governorate }}">{{ $z->displayName() }}</option>
                         @endforeach
                     </select>
+                </div>
+            </div>
+
+            <div class="frow">
+                <div>
+                    <label class="f">{{ __('geo.address_en') }}</label>
+                    <input type="text" name="address" id="dAddr" dir="ltr" maxlength="190" style="width:100%">
+                </div>
+                <div>
+                    <label class="f">{{ __('geo.address_ar') }}</label>
+                    <input type="text" name="address_ar" id="dAddrAr" maxlength="190" style="width:100%">
                 </div>
             </div>
 
