@@ -3,25 +3,25 @@
 namespace App\Console\Commands;
 
 use App\Models\Product;
-use App\Models\Warehouse;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * ═══════════════════════════════════════════════════════════════
- * الإنرجي بار الأربعة  ·  ١٨ أغسطس ٢٠٢٦
+ * صور الإنرجي بار  ·  ١٨ أغسطس ٢٠٢٦ (نسخة مصححة)
  * ═══════════════════════════════════════════════════════════════
  *
- * أمر مرة واحدة: بيعرّف الأربع فليفرز الجداد بصورهم اللي المالك
- * رافعها في `public/img/Energybar/` — وبيسيبهم **درافت** (active=0)
- * عشان دوكترين الدرافت: الصنف مايظهرش في بيع ولا تسعير ولا API غير
- * لما يتسعّر ويتفعّل بإيد المالك من شاشة المنتجات.
+ * ⚠️ **النسخة الأولانية كانت غلط** — عرّفت EB-01..04 كأصناف جداد،
+ * والمالك كان معرّف الأربعة خلاص بباركودهم («برو ماكس انيرجى بار
+ * شوكولاتة 55 غرام»...). النسخة دي بتصلّح الاتنين:
  *
- * ⚠️ **idempotent** — بيدوّر بالكود، فتشغيله مرتين مش هيكرّر. ولو
- * كود واقع مستخدم لصنف تاني بيتخطّاه برسالة بدل ما يكتب فوقه.
+ *   ١. بتمسح الدوبليكيتات EB-01..04 — بس لو لسه درافت من غير أي
+ *      حركة (وهي كده أكيد: الدرافت مايتباعش أصلاً بحكم Sellable).
+ *   ٢. بتربط صور `public/img/Energybar/` بأصناف المالك الحقيقية
+ *      بالكود بتاعها.
  *
- * ⚠️ صف رصيد بصفر في كل مخزن مفعّل — نفس اللي شاشة إضافة الصنف
- * بتعمله بالحرف. من غيره الصنف مايبانش في شاشات المخازن.
+ * idempotent — تشغيله تاني مش هيضر.
  *
  * التشغيل:  php artisan promax:energy-bars
  */
@@ -29,68 +29,78 @@ class SeedEnergyBars extends Command
 {
     protected $signature = 'promax:energy-bars';
 
-    protected $description = 'تعريف أصناف الإنرجي بار الأربعة بصورهم (درافت لحد ما تتسعّر)';
+    protected $description = 'مسح دوبليكيتات EB-01..04 وربط صور الإنرجي بار بأصناف المالك الحقيقية';
 
-    private const BARS = [
-        ['code' => 'EB-01', 'flavor' => 'شوكولاتة', 'flavor_en' => 'Chocolate', 'img' => 'Chocolate.png'],
-        ['code' => 'EB-02', 'flavor' => 'جوز هند', 'flavor_en' => 'Coconut', 'img' => 'Coconut.png'],
-        ['code' => 'EB-03', 'flavor' => 'بلح', 'flavor_en' => 'Dates', 'img' => 'Dates.png'],
-        ['code' => 'EB-04', 'flavor' => 'فواكه', 'flavor_en' => 'Fruits', 'img' => 'Fruits.png'],
+    /** كود الصنف الحقيقي عند المالك → ملف الصورة */
+    private const LINKS = [
+        '6224003852471' => 'Chocolate.png',   // شوكولاتة 55 جم
+        '6224003852488' => 'Coconut.png',     // جوز الهند 55 جم
+        '6224003852495' => 'Dates.png',       // بلح 55 جم
+        '6224003852501' => 'Fruits.png',      // فواكه 55 جم
     ];
 
     public function handle(): int
     {
-        $warehouseIds = Warehouse::where('active', true)->pluck('id');
+        // ═══ ١. مسح الدوبليكيتات اللي النسخة الأولانية عملتها ═══
+        foreach (['EB-01', 'EB-02', 'EB-03', 'EB-04'] as $code) {
+            $dupe = Product::where('code', $code)->first();
 
-        foreach (self::BARS as $bar) {
-            $existing = Product::where('code', $bar['code'])->first();
+            if ($dupe === null) {
+                continue;
+            }
 
-            if ($existing !== null) {
-                $this->warn("⏭ {$bar['code']} موجود خلاص ({$existing->name}) — اتخطّى.");
+            // ⚠️ حزام أمان: لو حد فعّله أو اتباع بيه (مستحيل نظرياً —
+            // درافت) مانمسحوش في صمت.
+            $used = DB::table('invoice_items')->where('product_id', $dupe->id)->exists()
+                || DB::table('custody_items')->where('product_id', $dupe->id)->exists();
+
+            if ($dupe->active || $used) {
+                $this->warn("⚠️ {$code} عليه حركة أو متفعّل — ماتمسحش. راجعه بإيدك.");
 
                 continue;
             }
 
-            // الصورة موجودة فعلاً على الديسك؟ — نحذّر بدل ما نربط 404
-            $imgRel = 'img/Energybar/'.$bar['img'];
+            DB::transaction(function () use ($dupe) {
+                $dupe->stocks()->delete();
 
-            if (! is_file(public_path($imgRel))) {
-                $this->warn("⚠️ الصورة {$imgRel} مش موجودة على السيرفر — الصنف هيتعمل من غيرها.");
-                $imgRel = null;
-            }
-
-            DB::transaction(function () use ($bar, $imgRel, $warehouseIds) {
-                $product = Product::create([
-                    'code' => $bar['code'],
-                    'name' => 'بروماكس إنرجي بار '.$bar['flavor'],
-                    'name_en' => 'PROMAX Energy Bar '.$bar['flavor_en'],
-                    'family' => 'energy_bar',
-                    'unit' => 'علبة',
-                    'unit_en' => 'Pack',
-                    'shelf_life_months' => Product::SHELF_LIFE['energy_bar'],
-                    // ⚠️ **درافت عن قصد** — من غير سعر. يتسعّر من شاشة
-                    // التسعير وبعدين يتفعّل من شاشة المنتجات، ولحد
-                    // ساعتها مش هيظهر في أي منتقي ولا في الأبلكيشن.
-                    'active' => false,
-                    'taxable' => true,
-                    // ⚠️ `image_url` مش `image_path` — الصور في `public/img`
-                    // مش في storage، وimageSrc() بتقرا العمود ده مباشرة.
-                    'image_url' => $imgRel ? '/'.$imgRel : null,
-                ]);
-
-                foreach ($warehouseIds as $warehouseId) {
-                    $product->stocks()->firstOrCreate(
-                        ['warehouse_id' => $warehouseId],
-                        ['qty' => 0, 'hold_qty' => 0, 'good_qty' => 0],
-                    );
+                if (Schema::hasTable('price_list_items')) {
+                    DB::table('price_list_items')->where('product_id', $dupe->id)->delete();
                 }
+
+                $dupe->delete();
             });
 
-            $this->info("✔ {$bar['code']} — بروماكس إنرجي بار {$bar['flavor']} اتعرّف (درافت).");
+            $this->info("🗑 {$code} (الدوبليكيت) اتمسح.");
+        }
+
+        // ═══ ٢. ربط الصور بالأصناف الحقيقية ═══
+        foreach (self::LINKS as $code => $img) {
+            $product = Product::where('code', $code)->first();
+
+            if ($product === null) {
+                $this->warn("⚠️ مفيش صنف بكود {$code} — اتخطّى.");
+
+                continue;
+            }
+
+            $rel = 'img/Energybar/'.$img;
+
+            if (! is_file(public_path($rel))) {
+                $this->warn("⚠️ الصورة {$rel} مش مرفوعة على السيرفر — {$code} اتخطّى.");
+
+                continue;
+            }
+
+            // ⚠️ `image_url` — imageSrc() بتقدّم `image_path` (المرفوع
+            // من الشاشة) عليها، فلو المالك رفع صورة أحدث من الفورم
+            // بعدين هي اللي هتكسب. ده المطلوب.
+            $product->update(['image_url' => '/'.$rel]);
+
+            $this->info("🖼 {$product->name} ← {$img}");
         }
 
         $this->line('');
-        $this->line('الخطوة الجاية: سعّرهم من شاشة التسعير، وبعدين فعّلهم من شاشة المنتجات (⏸ درافت → اكتيف).');
+        $this->line('افتح شاشة المخزون والتسعير — الصور المفروض ظاهرة. لو مش باينة اعمل ريفريش بـ Ctrl+F5.');
 
         return self::SUCCESS;
     }
