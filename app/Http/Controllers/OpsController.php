@@ -3484,6 +3484,87 @@ class OpsController extends Controller
         ]));
     }
 
+    /**
+     * ═══ مسح فاتورة غلط (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * مش «حذف صف» — عكس كامل للمستند جوه ترانزاكشن واحدة:
+     *   • البضاعة بترجع لعهدة المندوب المفتوحة (بننقص `sold` من
+     *     نفس بنود العهدة بالباتش) — معادلة العهدة بتتقفل صح.
+     *   • قيود كشف الحساب المربوطة (sale/collection/consignment)
+     *     بتتمسح، و`recalculate()` بيظبط الرصيد فوراً.
+     *
+     * ⚠️ الحراس القاطعين:
+     *   • متصدّرة للضرائب → ممنوع. المستند الرسمي طلع — التصحيح
+     *     بإشعار خصم/مرتجع مش بالمسح.
+     *   • عليها مرتجع مربوط → امسح المرتجع الأول (فيه زراره).
+     *   • عهدة البياع اتقفلت/اتصفّت → ممنوع. المحضر اتوقع على
+     *     أرقام فيها البيعة دي — المسح كان هيخلي التصفية تكدب.
+     *     التصحيح ساعتها بمرتجع، مش بمسح.
+     */
+    public function destroyInvoice(Request $request, Invoice $invoice)
+    {
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['delete' => __('ops.del_inv_eta_locked')]);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
+            && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
+            return back()->withErrors(['delete' => __('ops.del_inv_has_returns')]);
+        }
+
+        $client = $invoice->client;
+        $seller = $invoice->user;
+        $custody = $seller?->currentCustody();
+
+        try {
+            DB::transaction(function () use ($invoice, $client, $custody) {
+                // ═══ رد البضاعة للعهدة — سطر بسطر بالباتش ═══
+                foreach ($invoice->items()->lockForUpdate()->get() as $it) {
+                    if ($custody === null) {
+                        throw new \App\Exceptions\Rejected(__('ops.del_inv_no_custody'));
+                    }
+
+                    // نفس الصف اللي البيعة خصمت منه: نفس الباتش الأول،
+                    // وإلا أي صف لنفس الصنف عليه sold يكفي (بنود ممكن
+                    // تكون اتلمّت بعد تحويلات).
+                    $row = \App\Models\CustodyItem::where('custody_id', $custody->id)
+                        ->where('product_id', $it->product_id)
+                        ->when($it->batch_id !== null, fn ($w) => $w->where('batch_id', $it->batch_id))
+                        ->where('sold', '>=', (int) $it->qty)
+                        ->lockForUpdate()
+                        ->first()
+                        ?? \App\Models\CustodyItem::where('custody_id', $custody->id)
+                            ->where('product_id', $it->product_id)
+                            ->where('sold', '>=', (int) $it->qty)
+                            ->lockForUpdate()
+                            ->first();
+
+                    if ($row === null) {
+                        // العهدة اللي اتباعت منها اتقفلت واتصفّت —
+                        // أو البنود اتلخبطت. مفيش مسح أعمى.
+                        throw new \App\Exceptions\Rejected(__('ops.del_inv_no_custody'));
+                    }
+
+                    $row->decrement('sold', (int) $it->qty);
+                }
+
+                Transaction::where('source_type', Invoice::class)
+                    ->where('source_id', $invoice->id)
+                    ->delete();
+
+                $invoice->items()->delete();
+                $invoice->delete();
+
+                $client->recalculate();
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
+
+        return redirect()->route('ops.invoices')
+            ->with('ok', __('ops.invoice_deleted', ['number' => $invoice->number]));
+    }
+
     /** تسجيل تحصيل نقدي من عميل */
     public function collect(Request $request, Client $client)
     {

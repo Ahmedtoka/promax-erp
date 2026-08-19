@@ -381,6 +381,19 @@ return [
     'redate_eta_locked' => 'This invoice was exported to the tax authority with its date - it cannot be changed.',
     'invoice_redated' => 'Invoice :number moved from :old to :new - ledger entries moved with it.',
 
+    // === Delete wrong invoice/return (Aug 19, 2026) ===
+    'del_invoice' => 'Delete invoice',
+    'del_inv_confirm' => 'Permanently delete invoice :number - ledger entries are removed and goods go back to the rep custody. No undo. Sure?',
+    'del_inv_eta_locked' => 'This invoice was exported to the tax authority - it cannot be deleted. Correct it with an official credit note/return.',
+    'del_inv_has_returns' => 'This invoice has a linked return - delete the return first, then the invoice.',
+    'del_inv_no_custody' => "The invoice goods are not in an open custody for the seller - the custody was closed or settled. Correct with a return, not a delete.",
+    'invoice_deleted' => 'Invoice :number deleted - ledger entries removed and goods returned to custody.',
+    'del_return' => 'Delete return',
+    'del_ret_confirm' => 'Permanently delete return :number - ledger entries are removed and returned goods are pulled back out of custody. No undo. Sure?',
+    'del_ret_custody_closed' => "This return's custody was closed and settled - the signed settlement includes it. It cannot be deleted.",
+    'del_ret_moved' => 'The returned goods have since moved out of custody - quantities are insufficient to reverse. Review the custody first.',
+    'return_deleted' => 'Return :number deleted - ledger entries removed and goods pulled from custody.',
+
     // ═══ Location column & filter on approvals (Aug 18, 2026) ═══
     'loc_col' => 'Location',
     'loc_with' => 'With location',

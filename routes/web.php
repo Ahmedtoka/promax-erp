@@ -788,6 +788,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ⚠️ **بعد `/returns/new`** — لو قبله كان `new` هيتفسّر كـid
         Route::get('/returns/{return}', [\App\Http\Controllers\ReturnController::class, 'show'])
             ->name('returns.show');
+        // مسح مرتجع غلط (١٩/٨/٢٠٢٦) — أدمن بس: بيعكس القيود ويسحب
+        // البضاعة الراجعة من العهدة تاني.
+        Route::delete('/returns/{return}', [\App\Http\Controllers\ReturnController::class, 'destroy'])
+            ->middleware('role:admin')->name('returns.destroy');
 
         Route::get('/requests', [OpsController::class, 'requests'])->name('requests');
         Route::post('/requests/{clientRequest}/decide', [OpsController::class, 'decideRequest'])
@@ -803,6 +807,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // متراكمة فبتنزل كلها بتاريخ واحد. أدمن بس: بيحرك قيود فلوس.
         Route::post('/invoices/{invoice}/redate', [OpsController::class, 'redateInvoice'])
             ->middleware('role:admin')->name('invoices.redate');
+        // مسح فاتورة غلط (١٩/٨/٢٠٢٦) — أدمن بس: بيعكس القيود ويرد
+        // البضاعة لعهدة المندوب. الحراس جوه الكنترولر.
+        Route::delete('/invoices/{invoice}', [OpsController::class, 'destroyInvoice'])
+            ->middleware('role:admin')->name('invoices.destroy');
 
         Route::get('/tracking', [OpsController::class, 'tracking'])->name('tracking');
 

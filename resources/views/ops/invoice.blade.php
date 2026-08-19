@@ -49,6 +49,13 @@
     @if (auth()->user()?->role === 'admin')
         {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
         <button class="btn" type="button" onclick="openDlg('dlgRedate')">🗓 {{ __('ops.redate_invoice') }}</button>
+        {{-- فاتورة غلط بالكامل؟ — مسح بيعكس القيود ويرد البضاعة للعهدة --}}
+        <form method="POST" action="{{ route('ops.invoices.destroy', $inv) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.del_inv_confirm', ['number' => $inv->number])))">
+            @csrf
+            @method('DELETE')
+            <button class="btn" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('ops.del_invoice') }}</button>
+        </form>
     @endif
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
 @endsection

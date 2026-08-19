@@ -4,6 +4,19 @@
 
 @php $fmt = fn ($n) => number_format((float) $n, 2); @endphp
 
+@section('actions')
+    <a class="btn" href="{{ route('ops.returns') }}">← {{ __('field.returns') }}</a>
+    @if (auth()->user()?->role === 'admin')
+        {{-- مرتجع غلط بالكامل؟ — مسح بيعكس القيود ويسحب البضاعة من العهدة --}}
+        <form method="POST" action="{{ route('ops.returns.destroy', $r) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.del_ret_confirm', ['number' => $r->number])))">
+            @csrf
+            @method('DELETE')
+            <button class="btn" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('ops.del_return') }}</button>
+        </form>
+    @endif
+@endsection
+
 @section('content')
 
 <div class="card">

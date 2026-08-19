@@ -20,7 +20,18 @@ class GroupController extends Controller
         $q = ClientGroup::query()->with('channel')->withCount('clients');
 
         if ($s = $request->string('q')->trim()->value()) {
-            $q->where('name', 'like', "%$s%");
+            // ═══ بحث ثنائي اللغة + بالفروع (١٩ أغسطس ٢٠٢٦) ═══
+            //
+            // كان بيدوّر في الاسم العربي بس — تكتب «Circle K» أو اسم
+            // فرع مايطلعش حاجة. بقى: اسم السلسلة بالعربي والإنجليزي
+            // وكودها، **وجوّه فروعها** بنفس بحث العملاء الموحّد
+            // (عربي/إنجليزي/كود/تليفون) — تكتب اسم الفرع بأي لغة
+            // تلاقي سلسلته.
+            $q->where(fn ($w) => $w
+                ->where('name', 'like', "%$s%")
+                ->orWhere('name_en', 'like', "%$s%")
+                ->orWhere('code', 'like', "%$s%")
+                ->orWhereHas('clients', fn ($c) => Client::search($c, $s)));
         }
         if ($ch = $request->integer('channel')) {
             $q->where('channel_id', $ch);

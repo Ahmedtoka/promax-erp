@@ -165,4 +165,92 @@ class ReturnController extends Controller
 
         return view('ops.return_doc', ['r' => $return]);
     }
+
+    /**
+     * ═══ مسح مرتجع غلط (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * عكس كامل جوه ترانزاكشن واحدة:
+     *   • البضاعة اللي دخلت العهدة بالمرتجع بتتسحب منها تاني —
+     *     السليم من `returned_in` والتالف من `damaged_in`، من نفس
+     *     صف العهدة اللي `intoCustody` كتب فيه بالحرف.
+     *   • قيدا الكشف (return + refund لو كاش) بيتمسحوا،
+     *     و`recalculate()` بيظبط الرصيد.
+     *
+     * ⚠️ الحراس:
+     *   • عهدة المرتجع اتقفلت/اتصفّت → ممنوع — المحضر اتوقع على
+     *     أرقام فيها المرتجع ده.
+     *   • البضاعة الراجعة اتصرفت من العهدة بعد كده (الأرقام مش
+     *     مكفية للسحب) → ممنوع — مفيش مسح بيطلّع عهدة بالسالب.
+     *   • مرتجع الويب (من غير عهدة خالص) بيتعكس قيوده بس.
+     */
+    public function destroy(Request $request, ClientReturn $return)
+    {
+        $client = $return->client;
+        $custody = $return->custody_id !== null
+            ? \App\Models\Custody::find($return->custody_id)
+            : null;
+
+        // ⚠️ «مقفولة» = `status === 'closed'` بالحرف — المفتوحة ممكن
+        // تكون null (نفس منطق `currentCustody()` في User).
+        if ($custody !== null && (string) $custody->status === 'closed') {
+            return back()->withErrors(['delete' => __('ops.del_ret_custody_closed')]);
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($return, $client, $custody) {
+                if ($custody !== null) {
+                    // نفس مفتاح الصف اللي intoCustody كتب فيه بالحرف
+                    $byProduct = [];
+
+                    foreach ($return->items as $it) {
+                        $key = (int) $it->product_id;
+                        $byProduct[$key][$it->condition] = ($byProduct[$key][$it->condition] ?? 0) + (int) $it->qty;
+                    }
+
+                    foreach ($byProduct as $productId => $cond) {
+                        $row = \App\Models\CustodyItem::where([
+                            'custody_id' => $custody->id,
+                            'product_id' => $productId,
+                            'batch_id' => null,
+                            'source' => 'custody',
+                            'source_ref_id' => 0,
+                        ])->lockForUpdate()->first();
+
+                        $good = (int) ($cond[ClientReturn::CONDITION_GOOD] ?? 0);
+                        $dmg = (int) ($cond[ClientReturn::CONDITION_DAMAGED] ?? 0);
+
+                        if ($row === null
+                            || (int) $row->returned_in < $good
+                            || (int) $row->damaged_in < $dmg) {
+                            // البضاعة الراجعة اتحركت بعد كده — مفيش
+                            // مسح بيطلّع عهدة بالسالب في صمت.
+                            throw new Rejected(__('ops.del_ret_moved'));
+                        }
+
+                        if ($good > 0) {
+                            $row->decrement('returned_in', $good);
+                        }
+
+                        if ($dmg > 0) {
+                            $row->decrement('damaged_in', $dmg);
+                        }
+                    }
+                }
+
+                \App\Models\Transaction::where('source_type', ClientReturn::class)
+                    ->where('source_id', $return->id)
+                    ->delete();
+
+                $return->items()->delete();
+                $return->delete();
+
+                $client->recalculate();
+            });
+        } catch (Rejected $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
+
+        return redirect()->route('ops.returns')
+            ->with('ok', __('ops.return_deleted', ['number' => $return->number]));
+    }
 }
