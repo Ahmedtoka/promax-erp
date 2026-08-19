@@ -3394,7 +3394,12 @@ class OpsController extends Controller
             return back()->withErrors(['client_id' => __('ops.reassign_eta_locked')]);
         }
 
-        if (\App\Models\ClientReturn::where('invoice_id', $invoice->id)->exists()) {
+        // ⚠️ الربط بالفاتورة على **بنود** المرتجع (`return_items.invoice_id`)
+        // مش على رأس المستند — الاستعلام على `returns` مباشرة رمى
+        // «Unknown column invoice_id» على اللايف (بلاغ ١٨/٨ مساءً).
+        // ومحروس بـhasColumn عشان دوكترين الرفع اليدوي.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
+            && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
             return back()->withErrors(['client_id' => __('ops.reassign_has_returns')]);
         }
 
