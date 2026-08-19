@@ -3431,6 +3431,59 @@ class OpsController extends Controller
         ]));
     }
 
+    /**
+     * ═══ تعديل تاريخ الفاتورة (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: بيسجل فواتير ٣ أيام متراكمة لمندوب فبتنزل كلها
+     * بتاريخ يوم واحد — عاوز يظبط تواريخها عشان السيستم يمشي زي
+     * يومية المناديب الحقيقية.
+     *
+     * اللي بيتحرك مع التاريخ (جوه ترانزاكشن واحدة — عقيدة الأرقام):
+     *   • `invoices.created_at` — كل التقارير والتارجيتات بتقرا منه.
+     *     **بنحافظ على الساعة الأصلية** وبنغير اليوم بس — عشان ترتيب
+     *     فواتير نفس اليوم مايتقلبش.
+     *   • قيود الكشف المربوطة (sale/collection/consignment عبر
+     *     source) — عمود `date` بتاعها. من غير كده كشف الحساب
+     *     وأعمار الديون كانوا هيقولوا حاجة والفاتورة تقول حاجة تانية.
+     *   • `recalculate()` للعميل — تواريخ أول/آخر نشاط بتتظبط.
+     *
+     * ⚠️ فاتورة متصدّرة للضرائب (exported/submitted) ماتتعدلش —
+     * المستند الرسمي طلع بتاريخه، نفس قاعدة التحويل والـreprice.
+     */
+    public function redateInvoice(Request $request, Invoice $invoice)
+    {
+        $data = $request->validate([
+            'date' => ['required', 'date', 'before_or_equal:today'],
+        ]);
+
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['date' => __('ops.redate_eta_locked')]);
+        }
+
+        $old = $invoice->created_at->format('Y-m-d');
+        // اليوم الجديد بساعة الفاتورة الأصلية
+        $new = \Illuminate\Support\Carbon::parse($data['date'])
+            ->setTimeFrom($invoice->created_at);
+
+        DB::transaction(function () use ($invoice, $new) {
+            // ⚠️ فخ موثّق: `created_at` في create/update بيتتجاهل —
+            // forceFill هو الطريق.
+            $invoice->forceFill(['created_at' => $new])->save();
+
+            Transaction::where('source_type', Invoice::class)
+                ->where('source_id', $invoice->id)
+                ->update(['date' => $new->toDateString()]);
+
+            $invoice->client->recalculate();
+        });
+
+        return back()->with('ok', __('ops.invoice_redated', [
+            'number' => $invoice->number,
+            'old' => $old,
+            'new' => $new->toDateString(),
+        ]));
+    }
+
     /** تسجيل تحصيل نقدي من عميل */
     public function collect(Request $request, Client $client)
     {

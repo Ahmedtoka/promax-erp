@@ -46,6 +46,10 @@
         {{-- المندوب نزّل الفاتورة على فرع غلط؟ — تحويل كامل بقيودها --}}
         <button class="btn" type="button" onclick="openDlg('dlgReassign')">🔁 {{ __('ops.reassign_invoice') }}</button>
     @endif
+    @if (auth()->user()?->role === 'admin')
+        {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
+        <button class="btn" type="button" onclick="openDlg('dlgRedate')">🗓 {{ __('ops.redate_invoice') }}</button>
+    @endif
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
 @endsection
 
@@ -251,6 +255,35 @@
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
             <button class="btn" type="button" onclick="closeDlg('dlgReassign')">{{ __('common.cancel') }}</button>
             <button class="btn gold" type="submit">🔁 {{ __('ops.reassign_go') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
+{{-- ═══ مودال «تعديل تاريخ الفاتورة» (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══ --}}
+@if (auth()->user()?->role === 'admin')
+<dialog id="dlgRedate">
+    <form class="dlg" method="POST" action="{{ route('ops.invoices.redate', $inv) }}"
+          style="max-width:420px"
+          onsubmit="return confirm(@js(__('ops.redate_confirm', ['number' => $inv->number])))">
+        @csrf
+        <h4>🗓 {{ __('ops.redate_invoice') }} — {{ $inv->number }}</h4>
+
+        <div class="alert warn" style="margin:10px 0">
+            <span>⚠️</span><span>{{ __('ops.redate_hint') }}</span>
+        </div>
+
+        <div>
+            <label class="f">{{ __('ops.redate_current') }}</label>
+            <div style="font-weight:800;margin-bottom:10px">{{ $inv->created_at->format('Y-m-d') }}</div>
+            <label class="f">{{ __('ops.redate_new') }}</label>
+            <input type="date" name="date" required max="{{ now()->toDateString() }}"
+                   value="{{ $inv->created_at->toDateString() }}" style="width:100%">
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgRedate')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">🗓 {{ __('ops.redate_go') }}</button>
         </div>
     </form>
 </dialog>

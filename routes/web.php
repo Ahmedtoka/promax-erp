@@ -799,6 +799,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // على فرع غلط من نفس السلسلة. أدمن بس: بتنقل قيود فلوس.
         Route::post('/invoices/{invoice}/reassign', [OpsController::class, 'reassignInvoice'])
             ->middleware('role:admin')->name('invoices.reassign');
+        // تعديل تاريخ الفاتورة (١٩/٨/٢٠٢٦) — المالك بيسجل فواتير أيام
+        // متراكمة فبتنزل كلها بتاريخ واحد. أدمن بس: بيحرك قيود فلوس.
+        Route::post('/invoices/{invoice}/redate', [OpsController::class, 'redateInvoice'])
+            ->middleware('role:admin')->name('invoices.redate');
 
         Route::get('/tracking', [OpsController::class, 'tracking'])->name('tracking');
 

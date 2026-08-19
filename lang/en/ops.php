@@ -371,6 +371,16 @@ return [
     'reassign_has_returns' => 'This invoice has a linked return - unlink or review the return first.',
     'invoice_reassigned' => 'Invoice :number moved from ":from" to ":to" - ledgers and balances updated.',
 
+    // === Redate invoice (Aug 19, 2026) ===
+    'redate_invoice' => 'Change invoice date',
+    'redate_go' => 'Change date',
+    'redate_current' => 'Current date',
+    'redate_new' => 'New date',
+    'redate_hint' => 'The invoice and its ledger entries move to the new day - reports, targets and daily logs will count it there. No future dates.',
+    'redate_confirm' => 'Change the date of invoice :number? Ledger entries and reports move to the new date.',
+    'redate_eta_locked' => 'This invoice was exported to the tax authority with its date - it cannot be changed.',
+    'invoice_redated' => 'Invoice :number moved from :old to :new - ledger entries moved with it.',
+
     // ═══ Location column & filter on approvals (Aug 18, 2026) ═══
     'loc_col' => 'Location',
     'loc_with' => 'With location',
