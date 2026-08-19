@@ -270,6 +270,9 @@ return [
 
     // === Review flag & "live now" labels on the setup screens (Aug 18, 2026) ===
     'setup_reviewed' => 'Reviewed',
+    'setup_show_pending' => 'Still pending',
+    'setup_show_chain' => 'Chain branches',
+    'setup_show_solo' => 'Standalone',
     'setup_progress' => 'Reviewed :done of :total',
     'setup_only_pending' => 'Pending only',
     'setup_live_now' => 'Live:',

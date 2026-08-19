@@ -83,6 +83,26 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
                 style="margin-inline-start:6px">👀 {{ __('client.setup_only_pending') }}</button>
     </h3>
 
+    {{-- ═══ فلاتر «مين محتاج شغل» — صفحة العملاء بس (١٩/٨/٢٠٢٦) ═══
+         الافتراضي «اللي لسه»: مش متراجع ومش فرع لسلسلة متراجعة —
+         ختم السلسلة طبّق على فروعها فعلاً فمفيش داعي يزحموا الشاشة. --}}
+    @if (! $isChains && $showCounts !== null)
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            @foreach ([
+                'pending' => '⏳ '.__('client.setup_show_pending'),
+                'in_chain' => '🔗 '.__('client.setup_show_chain'),
+                'solo' => '🧍 '.__('client.setup_show_solo'),
+                'reviewed' => '✅ '.__('client.setup_reviewed'),
+                'all' => __('common.all'),
+            ] as $k => $lbl)
+                <a class="btn {{ $show === $k ? 'gold' : '' }}"
+                   href="{{ route('erp.setup.clients', array_filter(['show' => $k, 'unassigned' => request()->boolean('unassigned') ? 1 : null])) }}">
+                    {{ $lbl }} <b>({{ number_format($showCounts[$k]) }})</b>
+                </a>
+            @endforeach
+        </div>
+    @endif
+
     {{-- ═══ شريط «طبّق على الكل» ═══ --}}
     <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;
                 background:var(--card2);display:flex;gap:8px;flex-wrap:wrap;align-items:end">

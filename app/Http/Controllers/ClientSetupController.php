@@ -64,6 +64,9 @@ class ClientSetupController extends Controller
             'rows' => $rows,
             'live' => $live,
             'lists' => PriceList::where('active', true)->orderBy('id')->get(),
+            // فلاتر «مين محتاج شغل» بتاعة صفحة العملاء بس
+            'show' => null,
+            'showCounts' => null,
         ]);
     }
 
@@ -81,6 +84,46 @@ class ClientSetupController extends Controller
             $q->whereNull('division');
         }
 
+        // ═══ فلتر «مين محتاج شغل» (طلب المالك ١٩/٨/٢٠٢٦) ═══
+        //
+        // «الصفحة ميكونش فيها غير اللي مش متراجع عليهم — واللي اتعمل
+        // في السلسلة متطبق على كل فروعها». الافتراضي `pending`:
+        // العميل اللي ماتراجعش بنفسه **ومش** فرع لسلسلة متراجعة —
+        // لأن ختم السلسلة كتب على فروعها فعلاً وقت الحفظ، فمراجعتهم
+        // فرد فرد شغل مكرر. الفلاتر التانية للرجوع والمراجعة.
+        //
+        // ⚠️ محروس بـhasColumn — لو الكود وصل قبل مايجريشن المراجعة
+        // بنعرض الكل بدل ما نضرب.
+        $show = $request->string('show')->value() ?: 'pending';
+        $hasFlags = \Illuminate\Support\Facades\Schema::hasColumn('clients', 'setup_reviewed_at')
+            && \Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'reviewed_at');
+
+        // عدادات الأزرار — من نفس النطاق قبل فلتر العرض
+        $counts = null;
+
+        if ($hasFlags) {
+            $base = fn () => (clone $q);
+            $pendingScope = fn ($w) => $w->whereNull('setup_reviewed_at')
+                ->where(fn ($x) => $x->whereNull('group_id')
+                    ->orWhereHas('group', fn ($g) => $g->whereNull('reviewed_at')));
+
+            $counts = [
+                'pending' => $pendingScope($base())->count(),
+                'in_chain' => $base()->whereNotNull('group_id')->count(),
+                'solo' => $base()->whereNull('group_id')->count(),
+                'reviewed' => $base()->whereNotNull('setup_reviewed_at')->count(),
+                'all' => $base()->count(),
+            ];
+
+            match ($show) {
+                'in_chain' => $q->whereNotNull('group_id'),
+                'solo' => $q->whereNull('group_id'),
+                'reviewed' => $q->whereNotNull('setup_reviewed_at'),
+                'all' => null,
+                default => $pendingScope($q),
+            };
+        }
+
         $rows = $q->orderBy('name')->get();
 
         $live = [];
@@ -94,6 +137,8 @@ class ClientSetupController extends Controller
             'rows' => $rows,
             'live' => $live,
             'lists' => PriceList::where('active', true)->orderBy('id')->get(),
+            'show' => $show,
+            'showCounts' => $counts,
         ]);
     }
 

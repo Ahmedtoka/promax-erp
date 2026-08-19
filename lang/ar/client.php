@@ -272,6 +272,9 @@ return [
 
     // ═══ المراجعة ولابل «الساري» في شاشة الإعداد (١٨ أغسطس ٢٠٢٦) ═══
     'setup_reviewed' => 'اتراجعت',
+    'setup_show_pending' => 'اللي لسه',
+    'setup_show_chain' => 'فروع سلاسل',
+    'setup_show_solo' => 'مستقلين',
     'setup_progress' => 'اتراجع :done من :total',
     'setup_only_pending' => 'اللي لسه بس',
     'setup_live_now' => 'الساري:',
