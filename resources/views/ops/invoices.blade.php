@@ -65,7 +65,12 @@
             <tbody>
             @forelse ($invoices as $inv)
                 <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                    <td><b>{{ $inv->number }}</b></td>
+                    <td><b>{{ $inv->number }}</b>
+                        {{-- سيريال الورقية المختومة — لو متسجل --}}
+                        @if ($inv->paper_ref)
+                            <div style="font-size:10.5px;color:var(--muted)" dir="ltr">🧾 {{ $inv->paper_ref }}</div>
+                        @endif
+                    </td>
                     {{-- الاسم المركّب بعقيدتنا: السلسلة — الفرع --}}
                     <td style="white-space:normal;max-width:240px"><b>{{ $inv->client->fullName() }}</b></td>
                     <td><span class="badge b-purple">{{ $inv->client->channel?->displayName() ?? '—' }}</span></td>

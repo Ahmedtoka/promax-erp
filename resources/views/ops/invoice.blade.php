@@ -47,6 +47,8 @@
         <button class="btn" type="button" onclick="openDlg('dlgReassign')">🔁 {{ __('ops.reassign_invoice') }}</button>
     @endif
     @if (auth()->user()?->role === 'admin')
+        {{-- سيريال الفاتورة الورقية المختومة — إضافة/تعديل للقديم --}}
+        <button class="btn" type="button" onclick="openDlg('dlgPaper')">🧾 {{ __('ops.set_paper_ref') }}</button>
         {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
         <button class="btn" type="button" onclick="openDlg('dlgRedate')">🗓 {{ __('ops.redate_invoice') }}</button>
         {{-- فاتورة غلط بالكامل؟ — مسح بيعكس القيود ويرد البضاعة للعهدة --}}
@@ -84,6 +86,10 @@
 
         <div class="doc-id">
             <div class="doc-no">{{ $inv->number }}</div>
+            {{-- سيريال الفاتورة الورقية المختومة — للمطابقة الدفترية --}}
+            @if ($inv->paper_ref)
+                <div class="doc-date">{{ __('ops.paper_ref') }}: <b dir="ltr">{{ $inv->paper_ref }}</b></div>
+            @endif
             <div class="doc-date">{{ __('doc.date') }}:
                 <b>{{ $inv->created_at?->format('Y-m-d') ?? '—' }}</b></div>
             <div class="doc-date">{{ __('doc.time') }}:
@@ -262,6 +268,28 @@
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
             <button class="btn" type="button" onclick="closeDlg('dlgReassign')">{{ __('common.cancel') }}</button>
             <button class="btn gold" type="submit">🔁 {{ __('ops.reassign_go') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
+{{-- ═══ مودال «سيريال الفاتورة الورقية» (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══ --}}
+@if (auth()->user()?->role === 'admin')
+<dialog id="dlgPaper">
+    <form class="dlg" method="POST" action="{{ route('ops.invoices.paper', $inv) }}" style="max-width:400px">
+        @csrf
+        <h4>🧾 {{ __('ops.set_paper_ref') }} — {{ $inv->number }}</h4>
+
+        <div style="margin-top:10px">
+            <label class="f">{{ __('ops.paper_ref') }}</label>
+            <input type="text" name="paper_ref" maxlength="30" dir="ltr"
+                   value="{{ $inv->paper_ref }}" placeholder="65221" style="width:100%">
+            <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('ops.paper_ref_hint') }}</div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgPaper')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">💾 {{ __('common.save') }}</button>
         </div>
     </form>
 </dialog>

@@ -3522,6 +3522,29 @@ class OpsController extends Controller
     }
 
     /**
+     * سيريال الفاتورة الورقية (١٩ أغسطس ٢٠٢٦) — أدمن بس.
+     *
+     * المندوب كتب فاتورة ورقية مختومة بإيده في الشارع — سيريالها
+     * بيتسجل هنا على الفواتير القديمة (الجديدة بتيجي من الأبلكيشن
+     * وقت البيع). ميتاداتا للمطابقة الدفترية — مش رقم مالي، فمفيش
+     * قيود بتتلمس ومسموح تعديله في أي وقت.
+     */
+    public function setPaperRef(Request $request, Invoice $invoice)
+    {
+        $data = $request->validate([
+            'paper_ref' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('invoices', 'paper_ref')) {
+            return back()->withErrors(['paper_ref' => 'migrate أولاً — عمود paper_ref لسه مااتضافش.']);
+        }
+
+        $invoice->update(['paper_ref' => filled($data['paper_ref'] ?? null) ? trim($data['paper_ref']) : null]);
+
+        return back()->with('ok', __('ops.paper_saved', ['number' => $invoice->number]));
+    }
+
+    /**
      * ═══ مسح فاتورة غلط (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══
      *
      * مش «حذف صف» — عكس كامل للمستند جوه ترانزاكشن واحدة:

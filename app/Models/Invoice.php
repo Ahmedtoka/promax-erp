@@ -15,7 +15,7 @@ class Invoice extends Model
     use HasDocumentNumber, HasFactory;
 
     protected $fillable = [
-        'number', 'client_id', 'user_id', 'visit_id', 'payment', 'price_list',
+        'number', 'paper_ref', 'client_id', 'user_id', 'visit_id', 'payment', 'price_list',
         'subtotal', 'discount_pct', 'discount_source', 'discount', 'total',
         'tax_total', 'grand_total', 'eta_status', 'eta_uuid', 'eta_submitted_at',
         'cost_total', 'lat', 'lng',

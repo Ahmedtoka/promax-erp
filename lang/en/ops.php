@@ -381,6 +381,12 @@ return [
     'redate_eta_locked' => 'This invoice was exported to the tax authority with its date - it cannot be changed.',
     'invoice_redated' => 'Invoice :number moved from :old to :new - ledger entries moved with it.',
 
+    // === Paper invoice serial (Aug 19, 2026) ===
+    'paper_ref' => 'Paper Serial',
+    'set_paper_ref' => 'Paper invoice serial',
+    'paper_ref_hint' => "The stamped paper-book invoice number handwritten by the rep - for matching the book against the system. Leave empty if none.",
+    'paper_saved' => 'Paper serial saved on invoice :number.',
+
     // === Invoices page summary & totals (Aug 19, 2026) ===
     'inv_count' => 'Invoices',
     'inv_net' => 'Net After Discount',

@@ -811,6 +811,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // البضاعة لعهدة المندوب. الحراس جوه الكنترولر.
         Route::delete('/invoices/{invoice}', [OpsController::class, 'destroyInvoice'])
             ->middleware('role:admin')->name('invoices.destroy');
+        // سيريال الفاتورة الورقية للفواتير القديمة (١٩/٨/٢٠٢٦) —
+        // أدمن بس، ميتاداتا للمطابقة مش رقم مالي.
+        Route::post('/invoices/{invoice}/paper', [OpsController::class, 'setPaperRef'])
+            ->middleware('role:admin')->name('invoices.paper');
 
         Route::get('/tracking', [OpsController::class, 'tracking'])->name('tracking');
 

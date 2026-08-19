@@ -1676,6 +1676,9 @@ class FieldApiController extends Controller
             'payment' => ['nullable', 'in:cash,credit'],
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
+            // سيريال الفاتورة الورقية المختومة اللي المندوب كتبها
+            // بإيده (١٩/٨/٢٠٢٦) — للمطابقة بين الدفتر والسيستم
+            'paper_ref' => ['nullable', 'string', 'max:30'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1'],
@@ -1813,6 +1816,9 @@ class FieldApiController extends Controller
 
                 $invoice = Invoice::create([
                     'number' => Invoice::nextNumber(),
+                    // ⚠️ محروس بـhasColumn — الكود ممكن يوصل قبل المايجريشن
+                    ...(\Illuminate\Support\Facades\Schema::hasColumn('invoices', 'paper_ref')
+                        ? ['paper_ref' => $data['paper_ref'] ?? null] : []),
                     'client_id' => $client->id,
                     'user_id' => $user->id,
                     'visit_id' => $data['visit_id'] ?? null,
