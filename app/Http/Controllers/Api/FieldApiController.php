@@ -188,6 +188,10 @@ class FieldApiController extends Controller
                 ->latest()->take(20)->get()->map(fn ($r) => [
                     'id' => $r->id, 'number' => $r->number, 'name' => $r->name,
                     'status' => $r->status, 'status_label' => $r->statusLabel(),
+                    // ⚠️ العميل اللي اتولد من الاعتماد (١٩/٨) — الطلب
+                    // المتوافق عليه بقى كليك أبل في الأبلكيشن: يوديك
+                    // على العميل تبيع له على طول.
+                    'client_id' => $r->client_id,
                     'time' => $r->created_at->toIso8601String(),
                 ]),
         ]);
@@ -270,6 +274,13 @@ class FieldApiController extends Controller
                 // معناه إنه بيحصّل ناقص قيمة الضريبة في كل بيعة.
                 'taxable' => (bool) ($i->product->taxable ?? true),
                 'tax_rate' => round((float) ($i->product->tax_rate ?? 0), 4),
+                // ═══ تقسيمة الباتشات (١٩/٨) ═══ الصف الواحد في
+                // custody_items = باتش واحد أصلاً — بنبعت هويته عشان
+                // شاشة العهدة تعرض «معايا إيه من أنهي تشغيلة وصلاحيتها
+                // إمتى» لما المندوب يدوس على الصنف.
+                'batch' => $i->batchLabel(),
+                'expires' => $i->batch?->expires_on?->toDateString(),
+                'days_left' => $i->batch?->daysLeft(),
             ])->values(),
         ];
     }
