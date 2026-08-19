@@ -3406,9 +3406,14 @@ class OpsController extends Controller
         DB::transaction(function () use ($invoice, $to, $from) {
             $invoice->update(['client_id' => $to->id, 'visit_id' => null]);
 
-            DB::table('invoice_items')
-                ->where('invoice_id', $invoice->id)
-                ->update(['client_id' => $to->id]);
+            // ⚠️ `invoice_items` مافيهاش `client_id` على اللايف — البنود
+            // بتعرف عميلها من الفاتورة نفسها (بلاغ ١٨/٨ مساءً). الحارس
+            // بيسيب التحديث يشتغل بس لو العمود اتضاف يوم من الأيام.
+            if (\Illuminate\Support\Facades\Schema::hasColumn('invoice_items', 'client_id')) {
+                DB::table('invoice_items')
+                    ->where('invoice_id', $invoice->id)
+                    ->update(['client_id' => $to->id]);
+            }
 
             Transaction::where('source_type', Invoice::class)
                 ->where('source_id', $invoice->id)
