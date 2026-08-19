@@ -381,6 +381,16 @@ return [
     'redate_eta_locked' => 'This invoice was exported to the tax authority with its date - it cannot be changed.',
     'invoice_redated' => 'Invoice :number moved from :old to :new - ledger entries moved with it.',
 
+    // === Invoices page summary & totals (Aug 19, 2026) ===
+    'inv_count' => 'Invoices',
+    'inv_net' => 'Net After Discount',
+    'inv_grand' => 'Amount Due',
+    'cash' => 'Cash',
+    'credit' => 'Credit',
+    'before_discount_hint' => 'At list price, before any discount',
+    'net_hint' => 'Pre-tax - the sales-report figure',
+    'filter_scope_note' => 'Total of :n invoices - entire filter result',
+
     // === Delete wrong invoice/return (Aug 19, 2026) ===
     'del_invoice' => 'Delete invoice',
     'del_inv_confirm' => 'Permanently delete invoice :number - ledger entries are removed and goods go back to the rep custody. No undo. Sure?',

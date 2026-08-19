@@ -3133,13 +3133,31 @@ class OpsController extends Controller
             ], $clientRequest->client_id, $request->user());
 
             if ($dupes !== []) {
-                return back()->withInput()->withErrors([
-                    'decision' => __('ops.dup_blocked', [
-                        'names' => collect($dupes)->take(3)
-                            ->map(fn ($d) => $d['name'].' ('.$d['code'].')')
-                            ->implode(' · '),
-                    ]),
-                ]);
+                // ⚠️ **الارتداد لازم يرجّع المودال مفتوح بالتشابهات**
+                // (بلاغ ١٩/٨): الاسم المركّب بيطلّع تشابه ماكانش باين
+                // وقت تحميل الصفحة — فصندوق «ده عميل مختلف» كان مخفي
+                // والمعتمِد بيدوس اعتماد والصفحة تريلود في صمت من غير
+                // تشيك بوكس ولا سبب. بنفلش التشابهات + رقم الطلب،
+                // والجافاسكربت بيرجع يفتح القرار بيهم وباختياراته.
+                return back()->withInput()
+                    ->with('dupeBounce', [
+                        'request_id' => $clientRequest->id,
+                        'dupes' => array_map(fn ($d) => [
+                            'name' => $d['name'],
+                            'code' => $d['code'],
+                            'by' => $d['by_label'],
+                            'conf' => $d['confidence_label'],
+                            'sure' => $d['confidence'] === 'sure',
+                            'terms' => $d['terms'] ?? null,
+                        ], $dupes),
+                    ])
+                    ->withErrors([
+                        'decision' => __('ops.dup_blocked', [
+                            'names' => collect($dupes)->take(3)
+                                ->map(fn ($d) => $d['name'].' ('.$d['code'].')')
+                                ->implode(' · '),
+                        ]),
+                    ]);
             }
         }
 
@@ -3310,11 +3328,30 @@ class OpsController extends Controller
             $q->whereDate('created_at', '<=', $to);
         }
 
+        // ═══ سامري + إجماليات (١٩ أغسطس ٢٠٢٦) ═══
+        //
+        // كل الأرقام من **نفس الكويري المفلترة** — مش من صفوف الصفحة
+        // المعروضة. الفوتر والكروت بيقولوا نتيجة الفلتر كله، والباجينيشن
+        // مجرد عرض. عقيدة الأرقام التلاتة: قبل الخصم ← الصافي ← المستحق.
+        $stats = (clone $q)->selectRaw("
+            COUNT(*) as n,
+            COALESCE(SUM(subtotal), 0) as subtotal,
+            COALESCE(SUM(discount), 0) as discount,
+            COALESCE(SUM(total), 0) as total,
+            COALESCE(SUM(tax_total), 0) as tax,
+            COALESCE(SUM(grand_total), 0) as grand,
+            COALESCE(SUM(payment = 'cash'), 0) as cash_n,
+            COALESCE(SUM(payment <> 'cash'), 0) as credit_n
+        ")->first();
+
         return view('ops.invoices', [
-            'invoices' => $q->latest()->paginate(40)->withQueryString(),
+            // `client.group` و`client.channel` — الاسم المركّب (سلسلة —
+            // فرع) وبادج القناة لكل صف من غير N+1
+            'invoices' => $q->with(['client.group', 'client.channel'])
+                ->latest()->paginate(40)->withQueryString(),
             'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
             'filters' => $request->only(['user', 'from', 'to']),
-            'sum' => (clone $q)->sum('total'),
+            'stats' => $stats,
         ]);
     }
 

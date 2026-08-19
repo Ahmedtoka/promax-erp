@@ -6,6 +6,35 @@
 
 @section('content')
 
+{{-- ═══ السامري — نتيجة الفلتر كله مش الصفحة (١٩ أغسطس ٢٠٢٦) ═══ --}}
+<div class="kpis">
+    <div class="kpi">
+        <div class="lbl">{{ __('ops.inv_count') }}</div>
+        <div class="val mid">{{ $fmt($stats->n) }}</div>
+        <div class="sub2">💵 {{ $fmt($stats->cash_n) }} {{ __('ops.cash') }} · 🕐 {{ $fmt($stats->credit_n) }} {{ __('ops.credit') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('common.subtotal') }}</div>
+        <div class="val">{{ $fmt($stats->subtotal) }}</div>
+        <div class="sub2">{{ __('ops.before_discount_hint') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('common.discount') }}</div>
+        <div class="val mid">{{ $fmt($stats->discount) }}</div>
+        <div class="sub2">{{ $stats->subtotal > 0 ? number_format($stats->discount / $stats->subtotal * 100, 1) : 0 }}%</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('ops.inv_net') }}</div>
+        <div class="val pos">{{ $fmt($stats->total) }}</div>
+        <div class="sub2">{{ __('ops.net_hint') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('ops.inv_grand') }}</div>
+        <div class="val pos">{{ $fmt($stats->grand) }}</div>
+        <div class="sub2">{{ __('tax.tax') }}: {{ $fmt($stats->tax) }}</div>
+    </div>
+</div>
+
 <div class="card">
     <form class="searchbar" method="GET">
         <select name="user">
@@ -18,30 +47,56 @@
         <input type="date" name="to" value="{{ $filters['to'] ?? '' }}">
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.invoices') }}">{{ __('common.clear') }}</a>
-        <span class="badge b-green">{{ __('common.total') }}: {{ $fmt($sum) }} {{ __('common.currency') }}</span>
     </form>
 
     <div class="tablewrap">
         <table>
+            <thead>
             <tr>
-                <th>{{ __('ops.invoice') }}</th><th>{{ __('client.client') }}</th><th>{{ __('ops.rep') }}</th>
-                <th>{{ __('ops.payment') }}</th><th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th>
-                <th>{{ __('common.total') }}</th><th>{{ __('common.date') }}</th>
+                <th>{{ __('ops.invoice') }}</th><th>{{ __('client.client') }}</th>
+                <th data-nosum>{{ __('client.channel') }}</th>
+                <th>{{ __('ops.rep') }}</th>
+                <th data-nosum>{{ __('ops.payment') }}</th>
+                <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th>
+                <th>{{ __('common.total') }}</th><th>{{ __('ops.inv_grand') }}</th>
+                <th>{{ __('common.date') }}</th>
             </tr>
+            </thead>
+            <tbody>
             @forelse ($invoices as $inv)
                 <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
                     <td><b>{{ $inv->number }}</b></td>
-                    <td>{{ $inv->client->displayName() }}</td>
+                    {{-- الاسم المركّب بعقيدتنا: السلسلة — الفرع --}}
+                    <td style="white-space:normal;max-width:240px"><b>{{ $inv->client->fullName() }}</b></td>
+                    <td><span class="badge b-purple">{{ $inv->client->channel?->displayName() ?? '—' }}</span></td>
                     <td style="color:var(--muted)">{{ $inv->user->displayName() }}</td>
                     <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                     <td class="num">{{ $fmt($inv->subtotal) }}</td>
                     <td class="num mid">{{ $fmt($inv->discount) }}</td>
                     <td class="num pos"><b>{{ $fmt($inv->total) }}</b></td>
+                    <td class="num pos"><b>{{ $fmt($inv->grand_total) }}</b></td>
                     <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_invoices_found') }}</td></tr>
+                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_invoices_found') }}</td></tr>
             @endforelse
+            </tbody>
+            {{-- ⚠️ الإجماليات من الكويري المفلترة كلها — مش جمع صفوف
+                 الصفحة دي. صفحة ٢ بتوري نفس الأرقام، وده المقصود. --}}
+            @if ($stats->n > 0)
+                <tfoot>
+                <tr style="background:var(--card2);font-weight:900">
+                    <td>Σ</td>
+                    <td>{{ __('ops.filter_scope_note', ['n' => $fmt($stats->n)]) }}</td>
+                    <td>—</td><td>—</td><td>—</td>
+                    <td class="num">{{ $fmt($stats->subtotal) }}</td>
+                    <td class="num mid">{{ $fmt($stats->discount) }}</td>
+                    <td class="num pos">{{ $fmt($stats->total) }}</td>
+                    <td class="num pos">{{ $fmt($stats->grand) }}</td>
+                    <td>—</td>
+                </tr>
+                </tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $invoices->links('pagination::simple-default') }}</div>

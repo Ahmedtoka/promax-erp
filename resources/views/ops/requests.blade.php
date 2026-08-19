@@ -9,6 +9,17 @@
 
 @section('content')
 
+{{-- ⚠️ رسالة رفض الاعتماد كانت بتضيع — الفورم جوه ديالوج بيتقفل مع
+     الريلود، فالرفض كان بيحصل «في صمت» (بلاغ ١٩/٨). البانر هنا +
+     الجافاسكربت تحت بيرجّع يفتح القرار لوحده. --}}
+@if ($errors->any())
+    <div class="alert" style="margin-bottom:12px;flex-direction:column;align-items:stretch;gap:4px">
+        @foreach ($errors->all() as $msg)
+            <div class="errline" style="margin:0">{{ $msg }}</div>
+        @endforeach
+    </div>
+@endif
+
 <div class="card" style="padding:10px 12px">
     {{-- ⚠️ كل مجموعة فلاتر بتحافظ على التانية (status ⇆ loc) —
          غير كده الدوسة على «بلوكيشن» كانت بتطيّر فلتر الحالة. --}}
@@ -120,7 +131,7 @@
                     @if ($manager)
                         <td>
                             @if ($r->isOpen())
-                                <button class="btn sm gold" onclick='decide({!! $rJson !!})'>{{ __('ops.decision') }}</button>
+                                <button class="btn sm gold" data-req="{{ $r->id }}" onclick='decide({!! $rJson !!})'>{{ __('ops.decision') }}</button>
                             @else
                                 {{-- مين قرّر + امتى — «مين اللي وافق؟» (١٨ أغسطس ٢٠٢٦) --}}
                                 <b style="font-size:11.5px">{{ $r->decider?->displayName() ?? '—' }}</b>
@@ -553,5 +564,55 @@ async function detectFromLocation() {
 // ⚠️⚠️ ممنوع كتابة اسم أي دايركتيف بليد في الكومنتات هنا — بليد
 // بيكومبايلها حتى جوه كومنتات الجافاسكربت وبيرمي ParseError
 // (حصلت فعلاً ١٨/٨/٢٠٢٦).
+
+// ═══ ارتداد حارس التكرار (١٩ أغسطس ٢٠٢٦) ═══
+//
+// الاعتماد اترفض عشان الاسم المركّب شابه عميل موجود؟ بنرجّع نفتح
+// القرار لوحدنا: نضغط زرار الصف (بيملا المودال بداتا الطلب)، نرجّع
+// اختيارات المعتمِد اللي كانت متكتبة (old input)، ونعرض التشابهات
+// المفلشة من السيرفر — ومعاها تشيك بوكس «ده عميل مختلف» وزراير
+// «هات شروطه». من غير ده كان بيدوس اعتماد والصفحة تريلود في صمت.
+const BOUNCE = {!! json_encode(session('dupeBounce'), JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?: 'null' !!};
+const OLD_IN = {!! json_encode([
+    'name' => old('name'), 'name_en' => old('name_en'),
+    'governorate' => old('governorate'), 'zone_id' => old('zone_id'),
+    'channel_id' => old('channel_id'), 'sub_channel' => old('sub_channel'),
+    'price_list_id' => old('price_list_id'), 'group_id' => old('group_id'),
+    'discount' => old('discount'), 'note' => old('note'),
+], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+
+if (BOUNCE && BOUNCE.request_id) {
+    const btn = document.querySelector('button[data-req="' + BOUNCE.request_id + '"]');
+
+    if (btn) {
+        btn.click();   // بيملا المودال ويفتحه بداتا الطلب
+
+        // نرجّع اختيارات المعتمِد — المحافظة قبل المنطقة عشان الفلترة
+        const f = document.getElementById('formDecide');
+        const put = function (name, v) {
+            if (v == null || v === '') return;
+            const el = f.querySelector('[name="' + name + '"]:not([type=hidden])');
+            if (!el) return;
+            el.value = v;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        put('name', OLD_IN.name);
+        put('name_en', OLD_IN.name_en);
+        put('governorate', OLD_IN.governorate);
+        put('zone_id', OLD_IN.zone_id);
+        put('channel_id', OLD_IN.channel_id);
+        put('sub_channel', OLD_IN.sub_channel);
+        put('price_list_id', OLD_IN.price_list_id);
+        put('group_id', OLD_IN.group_id);
+        put('discount', OLD_IN.discount);
+        put('note', OLD_IN.note);
+
+        // التشابهات اللي السيرفر لقاها بالاسم المركّب — بصندوقها
+        // والتشيك بوكس وزراير «هات شروطه»
+        CUR_DUPES = BOUNCE.dupes || [];
+        renderRequestDupes(CUR_DUPES);
+    }
+}
 </script>
 @endsection
