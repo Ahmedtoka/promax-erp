@@ -243,7 +243,7 @@
                     <label class="f">{{ __('geo.zone') }}</label>
                     {{-- ⚠️ سيلكت مسطّح بـ`data-gov` عشان الفلترة في المتصفح
                          (نفس نمط client_form) مش البارشال المجمّع. --}}
-                    <select name="zone_id" id="dZone" style="width:100%">
+                    <select name="zone_id" id="dZone" style="width:100%" onchange="syncGovFromZone()">
                         <option value="">{{ __('geo.pick_zone') }}</option>
                         @foreach ($zones as $z)
                             <option value="{{ $z->id }}" data-gov="{{ $z->governorate }}">{{ $z->displayName() }}</option>
@@ -397,6 +397,8 @@ function decide(r) {
     document.getElementById('dAddrAr').value = r.address_ar || '';
     document.getElementById('dGov').value = '';
     document.getElementById('dZone').value = r.zone || '';
+    // المنطقة جاية من الطلب؟ — املا المحافظة منها فوراً
+    syncGovFromZone();
     document.getElementById('dChannel').value = r.channel || '';
     document.querySelector('#formDecide select[name="price_list_id"]').value = '';
     document.querySelector('#formDecide select[name="group_id"]').value = '';
@@ -432,6 +434,8 @@ function revise(r) {
     document.getElementById('dAddrAr').value = c.address_ar || '';
     document.getElementById('dGov').value = c.gov || '';
     document.getElementById('dZone').value = c.zone_id || '';
+    // عميل من غير محافظة مخزنة — هاتها من منطقته
+    if (!c.gov) syncGovFromZone();
     document.getElementById('dChannel').value = c.channel_id || '';
     document.querySelector('#formDecide select[name="price_list_id"]').value = c.price_list_id || '';
     document.querySelector('#formDecide select[name="group_id"]').value = c.group_id || '';
@@ -565,6 +569,24 @@ function updateCaptured() {
         btn.disabled = true;
         noPt.style.display = '';
     }
+}
+
+/* ═══ المحافظة بترث من المنطقة (بلاغ ٢٠/٨) ═══
+   الطلب بقى بييجي من الأبلكيشن متسكّن بمنطقة، والمودال كان بيسيب
+   المحافظة «— اختر —» فاضية رغم إن المنطقة نفسها عارفة محافظتها
+   (`data-gov`). المنطقة هي مصدر الحقيقة — نفس قاعدة saveGeo
+   والاعتماد في السيرفر بالحرف. */
+function syncGovFromZone() {
+    const zone = document.getElementById('dZone');
+    const opt = zone.selectedOptions[0];
+    if (!opt || !opt.value || !opt.dataset.gov) return;
+
+    const gov = document.getElementById('dGov');
+    if (gov.value === opt.dataset.gov) return;
+
+    gov.value = opt.dataset.gov;
+    // الحدث بيحدّث الزرار المحسّن وبيشغّل filterZones
+    gov.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // فلترة المناطق بالمحافظة — نفس نمط client_form
