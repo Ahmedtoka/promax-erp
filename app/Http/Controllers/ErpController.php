@@ -1955,6 +1955,93 @@ class ErpController extends Controller
     }
 
     /**
+     * ═══ مسح صنف نزل غلط (٢١ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * نفس عقيدة مسح العميل «البِكر»: أي حركة حقيقية بتمنع المسح
+     * والرسالة بتقول فيه إيه بالظبط.
+     *
+     * ⚠️ **الجداول بتتجاب ديناميكياً من السكيما** — كل جدول فيه
+     * `product_id` بيحمي نفسه لوحده، حتى الجداول اللي هتتضاف
+     * في المستقبل. مفيش قايمة مكتوبة بالإيد تنسى جدول.
+     *
+     * المسموح ينضّف مع الصنف (مش حركة):
+     *   • أسعار القوايم (`price_list_items`) — إعداد كتالوج.
+     *   • الباتشات **الفاضية بس** (استيراد ماتحركش) — أي باتش
+     *     استلم أو صرف بيمنع المسح.
+     *   • صورة الصنف من التخزين.
+     */
+    public function destroyProduct(Request $request, Product $product)
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+
+        $tables = collect(DB::select(
+            "SELECT DISTINCT TABLE_NAME AS t FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'product_id'"
+        ))->pluck('t');
+
+        // اللي بينضّف مش بيمنع
+        $cleanable = ['price_list_items'];
+
+        $labels = [
+            'invoice_items' => __('stock.del_invoices'),
+            'return_items' => __('stock.del_returns'),
+            'custody_items' => __('stock.del_custody'),
+            'gift_handouts' => __('stock.del_gifts'),
+            'batches' => __('stock.del_batches'),
+        ];
+
+        $found = [];
+
+        foreach ($tables as $t) {
+            if (in_array($t, $cleanable, true)) {
+                continue;
+            }
+
+            $q = DB::table($t)->where('product_id', $product->id);
+
+            // الباتش الفاضي (اتولد مع الاستيراد وماتحركش) مش حركة
+            if ($t === 'batches') {
+                $q->where(fn ($w) => $w->where('qty_received', '>', 0)
+                    ->orWhere('qty_issued', '>', 0));
+            }
+
+            $n = $q->count();
+
+            if ($n > 0) {
+                $found[] = ($labels[$t] ?? $t).' ('.$n.')';
+            }
+        }
+
+        if ($found !== []) {
+            return back()->withErrors([
+                'product' => __('stock.cannot_delete_product', [
+                    'name' => $product->displayName(),
+                    'things' => implode(' · ', $found),
+                ]),
+            ]);
+        }
+
+        $name = $product->displayName();
+
+        DB::transaction(function () use ($product) {
+            foreach (['price_list_items', 'batches'] as $t) {
+                if (\Illuminate\Support\Facades\Schema::hasTable($t)) {
+                    DB::table($t)->where('product_id', $product->id)->delete();
+                }
+            }
+
+            if ($product->image_path) {
+                \App\Services\ProductImage::forget($product->image_path);
+            }
+
+            $product->delete();
+        });
+
+        return redirect(route('erp.stock'))
+            ->with('ok', __('stock.product_deleted', ['name' => $name]));
+    }
+
+    /**
      * المخزن اللي الرصيد بيتكتب عليه.
      *
      * ⚠️ **بترجّع `null` لو مفيش مخازن خالص** بدل ما تخترع واحد.

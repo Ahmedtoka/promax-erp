@@ -444,6 +444,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('products.store');
         Route::put('/stock/{product}', [ErpController::class, 'updateProduct'])
             ->middleware('role:admin,manager')->name('products.update');
+        // مسح نهائي — للصنف اللي نزل غلط ومحصلش عليه أي حركة (أدمن بس)
+        Route::delete('/stock/{product}', [ErpController::class, 'destroyProduct'])
+            ->middleware('role:admin')->name('products.destroy');
 
         // ═════ العائلات والصلاحية (2026-08-06) — العائلة بتحكم مدة
         // الانتهاء، والحفظ بيعيد حساب انتهاء كل الباتشات ═════

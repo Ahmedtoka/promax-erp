@@ -31,6 +31,16 @@
     @if ($manager)
         <button class="btn gold" onclick="openDlg('dlgEditP')">{{ __('stock.edit_product') }}</button>
     @endif
+    @if (auth()->user()?->role === 'admin')
+        {{-- مسح نهائي — للصنف اللي نزل غلط ومحصلش عليه أي حركة.
+             السيرفر بيرفض لو فيه أي حركة ويقول فيه إيه بالظبط. --}}
+        <form method="POST" action="{{ route('erp.products.destroy', $p) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('stock.del_product_confirm', ['name' => $p->displayName()])))">
+            @csrf
+            @method('DELETE')
+            <button class="btn sm" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('stock.delete_product') }}</button>
+        </form>
+    @endif
 @endsection
 
 @section('content')

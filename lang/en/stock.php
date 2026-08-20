@@ -587,4 +587,13 @@ return [
     'pick_po_synced' => 'The linked sales order :number was synced to the new quantities.',
     'van_no_custody' => '🚐 This rep has nothing available to transfer - his custody is closed or fully consumed',
     'van_no_match' => '📦 Nothing matches this destination - goods return to their own batch warehouse, try another one',
+    'delete_product' => 'Delete product',
+    'del_product_confirm' => 'Permanently delete ":name"? Its price-list rows, empty batches and image will be removed too.',
+    'product_deleted' => 'Product ":name" permanently deleted.',
+    'cannot_delete_product' => 'Cannot delete ":name" - it has real activity: :things. Alternative: deactivate it from the edit screen.',
+    'del_invoices' => 'invoices',
+    'del_returns' => 'returns',
+    'del_custody' => 'custody rows',
+    'del_gifts' => 'gifts',
+    'del_batches' => 'batches with movement',
 ];
