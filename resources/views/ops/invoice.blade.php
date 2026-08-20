@@ -51,6 +51,12 @@
         <button class="btn" type="button" onclick="openDlg('dlgPaper')">🧾 {{ __('ops.set_paper_ref') }}</button>
         {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
         <button class="btn" type="button" onclick="openDlg('dlgRedate')">🗓 {{ __('ops.redate_invoice') }}</button>
+        {{-- إعادة تسعير بحساب العميل الحالي — بنود وقيود وإجماليات --}}
+        <form method="POST" action="{{ route('ops.invoices.reprice', $inv) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.reprice_confirm', ['number' => $inv->number])))">
+            @csrf
+            <button class="btn" type="submit">🏷 {{ __('ops.reprice_invoice') }}</button>
+        </form>
         {{-- تحويل كاش ↔ آجل — بيظبط قيد التحصيل المربوط ويعيد الحساب --}}
         <form method="POST" action="{{ route('ops.invoices.payment', $inv) }}" style="display:inline"
               onsubmit="return confirm(@js(__('ops.pay_toggle_confirm', [

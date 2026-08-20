@@ -3630,6 +3630,127 @@ class OpsController extends Controller
     }
 
     /**
+     * ═══ إعادة تسعير فاتورة بحساب العميل الحالي (٢٠ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: «عدّلت نسبة الخصم والتسعير بتاع العميل وكنت عامل
+     * فاتورة — زرار يروح يشوف طريقة حساب العميل الموجودة حالياً
+     * ويطبّقها ويعدّل القيود كلها والفاتورة الأساسية».
+     *
+     * كل سطر بيتسعّر تاني من `Pricing::quote` — **نفس مسار البيع
+     * بالحرف**: قايمة العميل الحالية (عقده الساري → قايمته → عقد
+     * سلسلته)، خصمه الفعّال، والضريبة سطر بسطر على الصافي بعد الخصم.
+     * الإجماليات التلاتة (صافي/ضريبة/شامل) من `Tax::totals` زي
+     * الفاتورة الجديدة بالظبط، وقيد البيع (وقيد التحصيل لو كاش)
+     * بيتظبطوا بالشامل الجديد و`recalculate()` جوه نفس الترانزاكشن.
+     *
+     * ⚠️ الحراس القاطعين:
+     *   • متصدّرة للضرائب → ممنوع — المستند الرسمي طلع بأرقامه.
+     *   • فاتورة أمانة → مالهاش مديونية ولا معنى لإعادة تسعيرها هنا.
+     *   • عليها مرتجع مربوط → المرتجع اتحسب بالأسعار القديمة —
+     *     يتشال/يتظبط الأول (نفس حارس المسح).
+     *   • صنف سعره صفر في القايمة الحالية → مرفوضة كلها — نفس
+     *     عقيدة «سعر القايمة صفر = بيع مرفوض» بتاعة الأبلكيشن.
+     *
+     * ⚠️ **التكلفة التاريخية ماتتلمسش** — `unit_cost` و`cost_total`
+     * لقطة يوم البيع؛ إعادة التسعير بتغيّر البيع مش التكلفة.
+     */
+    public function repriceInvoice(Request $request, Invoice $invoice)
+    {
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['reprice' => __('ops.reprice_eta_locked')]);
+        }
+
+        if (Transaction::where('source_type', Invoice::class)
+            ->where('source_id', $invoice->id)
+            ->where('kind', 'consignment')->exists()) {
+            return back()->withErrors(['reprice' => __('ops.reprice_consignment_blocked')]);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
+            && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
+            return back()->withErrors(['reprice' => __('ops.reprice_has_return')]);
+        }
+
+        $invoice->load(['items.product', 'items.batch', 'client']);
+        $client = $invoice->client;
+        $oldGrand = (float) $invoice->grand_total;
+
+        DB::transaction(function () use ($invoice, $client) {
+            $subtotal = 0;
+            $rows = [];
+
+            foreach ($invoice->items as $item) {
+                $quote = \App\Services\Pricing::quote(
+                    $client, $item->product, $item->batch, (int) $item->qty,
+                );
+
+                if ($quote['list_price'] <= 0) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'reprice' => __('ops.reprice_not_priced', [
+                            'product' => $item->product->displayName(),
+                        ]),
+                    ]);
+                }
+
+                $taxRate = \App\Services\Tax::rate($client, $item->product);
+                $lineTax = \App\Services\Tax::on($quote['line_total'], $client, $item->product);
+
+                // ⚠️ التكلفة زي ما هي — لقطة يوم البيع
+                $item->update([
+                    'list_price' => $quote['list_price'],
+                    'price' => $quote['unit_price'],
+                    'total' => $quote['line_total'],
+                    'tax_rate' => $taxRate,
+                    'tax' => $lineTax,
+                ]);
+
+                $rows[] = ['total' => $quote['line_total'], 'tax' => $lineTax];
+                $subtotal += round($quote['list_price'] * $item->qty, 2);
+            }
+
+            // الإجماليات التلاتة من نفس مصدر الفاتورة الجديدة
+            $sums = \App\Services\Tax::totals($rows);
+            $net = $sums['net'];
+            $taxTotal = $sums['tax'];
+            $grandTotal = $sums['grand'];
+
+            $invoice->update([
+                'price_list' => $client->priceList(),
+                'subtotal' => $subtotal,
+                'discount_pct' => $client->effectiveDiscount(),
+                'discount_source' => $client->discountSourceKey(),
+                'discount' => round($subtotal - $net, 2),
+                'total' => $net,
+                'tax_total' => $taxTotal,
+                'grand_total' => $grandTotal,
+                // الحارس فوق ضمن إنها مش متصدّرة — بنظبط الجاهزية بس
+                'eta_status' => $taxTotal > 0 ? 'ready' : 'none',
+            ]);
+
+            // قيد البيع (مدين بالشامل) — وقيد التحصيل المربوط لو كاش
+            Transaction::where('source_type', Invoice::class)
+                ->where('source_id', $invoice->id)
+                ->where('kind', 'sale')
+                ->update(['debit' => $grandTotal, 'tax' => $taxTotal]);
+
+            Transaction::where('source_type', Invoice::class)
+                ->where('source_id', $invoice->id)
+                ->where('kind', 'collection')
+                ->update(['credit' => $grandTotal, 'tax' => $taxTotal]);
+
+            $client->recalculate();
+        });
+
+        $invoice->refresh();
+
+        return back()->with('ok', __('ops.repriced', [
+            'number' => $invoice->number,
+            'old' => number_format($oldGrand, 2),
+            'new' => number_format((float) $invoice->grand_total, 2),
+        ]));
+    }
+
+    /**
      * سيريال الفاتورة الورقية (١٩ أغسطس ٢٠٢٦) — أدمن بس.
      *
      * المندوب كتب فاتورة ورقية مختومة بإيده في الشارع — سيريالها

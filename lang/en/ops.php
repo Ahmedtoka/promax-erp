@@ -357,6 +357,13 @@ return [
     'dup_blocked' => 'A similar client is already registered: :names - if it really is a different place, tick "different client" and continue the approval.',
 
     // ═══ Pull terms from the similar client + name composer (Aug 18, 2026) ═══
+    'reprice_invoice' => 'Reprice at current client terms',
+    'reprice_confirm' => 'Reprice invoice :number using the client\'s current price list and discount? Lines, totals and ledger entries will all be updated and the balance recalculated.',
+    'repriced' => 'Invoice :number repriced - grand total was :old, now :new. Entries and balance adjusted.',
+    'reprice_eta_locked' => 'Invoice was exported to the tax authority with its figures - it cannot be repriced. Correct via an official debit/credit note.',
+    'reprice_consignment_blocked' => 'This is a consignment invoice - no receivable exists; repricing does not apply here.',
+    'reprice_has_return' => 'A linked return was valued at the old prices - remove/adjust the return first, then reprice.',
+    'reprice_not_priced' => 'Product ":product" has no price on the client\'s current list - price it first. Nothing was changed.',
     'pay_to_credit' => 'Switch to credit',
     'pay_to_cash' => 'Switch to cash',
     'pay_toggle_confirm' => 'Switch invoice :number to :to? Its linked collection entry will be adjusted and the client balance recalculated.',
