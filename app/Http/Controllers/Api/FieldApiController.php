@@ -1370,6 +1370,38 @@ class FieldApiController extends Controller
     }
 
     /**
+     * POST /api/geo/suggest { lat, lng }
+     *
+     * زي `geocodeClient` بالحرف بس **من غير عميل** — لشاشة تسجيل
+     * العميل الجديد (٢٠/٨): المندوب واقف قدام المحل، بيسحب النقطة،
+     * والعنوان العربي والمحافظة والمنطقة بيتعبّوا قبل ما الطلب
+     * يتبعت أصلاً — فالمدير وقت الاعتماد يدوب يظبط التسعير ويعتمد.
+     *
+     * ⚠️ نفس فلسفة `geocodeClient`: 200 حتى لو العنوان مالقيناهوش
+     * (`matched: false`)، والقوايم بترجع دايماً حتى مع نقطة مرفوضة.
+     */
+    public function geoSuggest(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        [$lat, $lng] = $this->egyptPoint($data);
+
+        $lists = [
+            'governorates' => \App\Support\GeoSuggest::governorateOptions(),
+            'zones' => \App\Support\GeoSuggest::zoneOptions(),
+        ];
+
+        if ($lat === null) {
+            return response()->json(['message' => __('geo.bad_point')] + $lists, 422);
+        }
+
+        return response()->json(\App\Support\GeoSuggest::forPoint($lat, $lng) + $lists);
+    }
+
+    /**
      * POST /api/clients/{client}/location
      * { lat, lng, address?, address_ar?, governorate?, zone_id? }
      *
@@ -2480,6 +2512,11 @@ class FieldApiController extends Controller
             'name' => ['required', 'string', 'max:190'],
             'phone' => ['nullable', 'string', 'max:30'],
             'address' => ['nullable', 'string', 'max:190'],
+            // ═══ الفلو الجديد (٢٠/٨): العنوان العربي والمنطقة من
+            // الأبلكيشن — المندوب سحب النقطة والاقتراح عبّاهم قبل
+            // الإرسال. المنطقة دي بتنزل في فورم الاعتماد جاهزة.
+            'address_ar' => ['nullable', 'string', 'max:190'],
+            'zone_id' => ['nullable', 'exists:zones,id'],
             // ⚠️ النقطة اللي المندوب لقّطها وهو واقف عند المحل — المدير
             // بيكشف منها العنوان في فورم الاعتماد. اختيارية: الطلب
             // بيتسجّل حتى لو الـGPS مقفول.
@@ -2563,7 +2600,9 @@ class FieldApiController extends Controller
                 'name' => $data['name'],
                 'phone' => $data['phone'] ?? null,
                 'address' => $data['address'] ?? null,
-                'zone_id' => $user->zone_id,
+                'address_ar' => $data['address_ar'] ?? null,
+                // منطقة المندوب اللي اختارها في الشاشة — وإلا منطقته هو
+                'zone_id' => $data['zone_id'] ?? $user->zone_id,
                 'lat' => $data['lat'] ?? null,
                 'lng' => $data['lng'] ?? null,
                 'has_docs' => $hasDocs || $docsPath !== null,
