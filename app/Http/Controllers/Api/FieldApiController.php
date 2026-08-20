@@ -214,6 +214,10 @@ class FieldApiController extends Controller
             'exists' => true,
             'id' => $custody->id,
             'date' => $custody->date->toDateString(),
+            // ═══ ميتا هيدر «عهدتي» (٢٠/٨) ═══ العربية ووقت التحميل —
+            // الهيدر الجديد بيقول «عربية X · محمّلة الساعة كذا»
+            'vehicle' => $custody->vehicle?->plate,
+            'loaded_at' => $custody->created_at?->toIso8601String(),
             'status' => $custody->status,
             'remaining_units' => $custody->remainingUnits(),
             'remaining_value' => round($custody->remainingValue($mode), 2),
@@ -285,6 +289,8 @@ class FieldApiController extends Controller
                 // وبترتب المنتجات كل عيلة ورا بعضها
                 'family' => (string) ($i->product->family ?? ''),
                 'family_label' => $i->product->familyLabel(),
+                // هدايا وعينات الصنف (٢٠/٨) — كارت «أرقام النهاردة»
+                'gifted' => (int) ($i->gift_given ?? 0),
             ])->values(),
         ];
     }
