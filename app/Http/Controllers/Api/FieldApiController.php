@@ -1408,6 +1408,99 @@ class FieldApiController extends Controller
     }
 
     /**
+     * ═══ حركة صنف في عهدة المندوب (٢٠ أغسطس ٢٠٢٦) ═══
+     *
+     * GET /api/custody/products/{product}/movements?from=&to=
+     *
+     * شاشة تفاصيل الصنف الجديدة: «تحميل من المخزن +204 · بيع
+     * INV-8841 −72 · مرتجع +6 · هدية −2» — والمندوب يقدر يرجّع
+     * بالتاريخ من/إلى يشوف كل تحركات الصنف عنده.
+     *
+     * ⚠️ الأحداث من مصادرها الفعلية مش من عداد مجمّع: التحميل من
+     * صفوف العهدة، البيع من بنود الفواتير، المرتجع من بنود
+     * المرتجعات، والهدايا من سجلها — نفس الأرقام اللي الليدجر
+     * والداشبورد بيحسبوا منها (عقيدة الأرقام).
+     */
+    public function custodyProductMovements(Request $request, Product $product): JsonResponse
+    {
+        $user = $request->user();
+
+        $from = $request->date('from') ?? today();
+        $to = $request->date('to') ?? today();
+        // من بعد إلى؟ — نقلبهم بدل ما نرجّع فاضي محيّر
+        if ($from->gt($to)) {
+            [$from, $to] = [$to, $from];
+        }
+        $toEnd = $to->copy()->endOfDay();
+
+        $events = collect();
+
+        // ═══ تحميل من المخزن — صفوف عهدة المندوب للصنف ═══
+        CustodyItem::whereHas('custody', fn ($q) => $q->where('user_id', $user->id))
+            ->where('product_id', $product->id)
+            ->where('assigned', '>', 0)
+            ->whereBetween('created_at', [$from, $toEnd])
+            ->get()
+            ->each(fn ($i) => $events->push([
+                'kind' => 'load',
+                'qty' => (int) $i->assigned,
+                'label' => __('field.mv_load'),
+                'ref' => $i->batchLabel(),
+                'at' => $i->created_at->toIso8601String(),
+            ]));
+
+        // ═══ بيع — بنود فواتير المندوب ═══
+        InvoiceItem::where('product_id', $product->id)
+            ->whereHas('invoice', fn ($q) => $q->where('user_id', $user->id)
+                ->whereBetween('created_at', [$from, $toEnd]))
+            ->with('invoice.client')
+            ->get()
+            ->each(fn ($it) => $events->push([
+                'kind' => 'sale',
+                'qty' => -1 * (int) $it->qty,
+                'label' => (string) $it->invoice?->client?->displayName(),
+                'ref' => (string) $it->invoice?->number,
+                'at' => $it->invoice?->created_at?->toIso8601String(),
+            ]));
+
+        // ═══ مرتجع من عملاء — بنود مرتجعات المندوب ═══
+        \App\Models\ReturnItem::where('product_id', $product->id)
+            ->whereHas('return', fn ($q) => $q->where('user_id', $user->id)
+                ->whereBetween('created_at', [$from, $toEnd]))
+            ->with('return.client')
+            ->get()
+            ->each(fn ($it) => $events->push([
+                'kind' => 'return',
+                'qty' => (int) $it->qty,
+                'label' => (string) $it->return?->client?->displayName(),
+                'ref' => (string) $it->return?->number,
+                'at' => $it->return?->created_at?->toIso8601String(),
+            ]));
+
+        // ═══ هدايا وعينات ═══
+        \App\Models\GiftHandout::where('product_id', $product->id)
+            ->where('user_id', $user->id)
+            ->whereBetween('created_at', [$from, $toEnd])
+            ->with('client')
+            ->get()
+            ->each(fn ($g) => $events->push([
+                'kind' => 'gift',
+                'qty' => -1 * (int) $g->qty,
+                'label' => (string) ($g->client?->displayName() ?? __('field.mv_gift')),
+                'ref' => (string) ($g->reason ?? ''),
+                'at' => $g->created_at->toIso8601String(),
+            ]));
+
+        return response()->json([
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'events' => $events
+                ->filter(fn ($e) => $e['at'] !== null)
+                ->sortByDesc('at')->values()->all(),
+        ]);
+    }
+
+    /**
      * POST /api/clients/{client}/location
      * { lat, lng, address?, address_ar?, governorate?, zone_id? }
      *

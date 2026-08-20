@@ -134,6 +134,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::get('/geo/options', [FieldApiController::class, 'geoOptions']);
         // اقتراح عنوان/محافظة/منطقة من نقطة — لشاشة تسجيل عميل جديد
         Route::post('/geo/suggest', [FieldApiController::class, 'geoSuggest']);
+        // حركة صنف في عهدة المندوب — شاشة تفاصيل الصنف (من/إلى)
+        Route::get('/custody/products/{product}/movements', [FieldApiController::class, 'custodyProductMovements']);
 
         // أوامر التوريد — والمدير بيسلّم بنفسه (١١/٨)
         Route::post('/pos/{purchaseOrder}/arrive', [FieldApiController::class, 'arrive']);

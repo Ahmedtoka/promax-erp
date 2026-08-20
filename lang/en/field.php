@@ -303,4 +303,6 @@ return [
 
     // ═══ Duplicate guard on the new-client request (Aug 15, 2026) ═══
     'dup_client_found' => ':count client(s) are already registered with this name or phone - review them before you continue.',
+    'mv_load' => 'Loaded from warehouse',
+    'mv_gift' => 'Gift / sample',
 ];
