@@ -131,7 +131,7 @@
     }
 
     // ⚠️ الخطأ في مرحلة 1 له أولوية — بنبدأ من أول مرحلة فيها خطأ
-    $step1 = ['name', 'name_en', 'phone', 'governorate', 'zone_id', 'address',
+    $step1 = ['name', 'name_en', 'phone', 'governorate', 'zone_id', 'address', 'address_ar',
               'location_url', 'channel_id', 'sub_channel', 'branch_id',
               'group_id', 'manager_id', 'lat', 'lng', 'contacts',
               // ⚠️ شروط الدفع اتنقلت لخطوة ١ — لو فضلت في قايمة خطوة ٢
@@ -273,6 +273,8 @@
         {{-- ⚠️ العربي الأول — نفس ترتيب مودال الاعتماد بالحرف
              (طلب المالك ٢٠/٨). الإنجليزي لسه أساس الكود والتصدير
              للمصلحة، بس مكانه التاني مش الأول. --}}
+        {{-- ═══ الصف الأول: الاسمان + السلسلة (طلب المالك ٢٠/٨) ═══
+             نفس فلو مودال الاعتماد: الهوية والانتماء في نظرة واحدة --}}
         <div class="frow">
             <div>
                 <label class="f">{{ __('client.name_ar_field') }} {!! $star !!}</label>
@@ -296,55 +298,45 @@
                 {!! $err('name_en') !!}
                 {!! $hint('name_en') !!}
             </div>
+            <div>
+                <label class="f">{{ __('client.chain') }}</label>
+                <div style="display:flex;gap:6px">
+                    <select name="group_id" id="groupSel" style="flex:1;min-width:0" class="{{ trim($bad('group_id')) }}">
+                        <option value="">— {{ __('client.independent') }} —</option>
+                        @foreach ($groups as $grp)
+                            <option value="{{ $grp->id }}" @selected((int) $v('group_id') === $grp->id)>{{ $grp->displayName() }}</option>
+                        @endforeach
+                    </select>
+                    <button type="button" class="btn sm" onclick="openGroupBox()"
+                            title="{{ __('client.new_chain') }}">+</button>
+                </div>
+                {!! $err('group_id') !!}
+                {!! $hint('group_id') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.chain_hint') }}</div>
+            </div>
         </div>
 
+        {{-- ═════ سلسلة جديدة — جوه نفس الصفحة ═════ --}}
+        <div id="groupBox" style="display:none;border:1px dashed var(--royal-blue);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:var(--card2)">
+            <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin-bottom:4px">{{ __('client.new_chain') }}</div>
+            {{-- ⚠️ الخصم والقناة مش هنا عن قصد — السلسلة اللي بتتعمل من
+                 هنا وعاء بيجمّع الفروع بس. شروطها التجارية بتتظبط من
+                 شاشة السلاسل، وإلا مستعجل بيحط رقم عشوائي وبيتطبق على
+                 كل الفروع. --}}
+            <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.new_chain_hint') }}</div>
+            <div class="frow" style="margin-bottom:8px">
+                <div><label class="f">{{ __('client.chain_name') }}</label><input type="text" id="ngName" maxlength="190" style="width:100%"></div>
+                <div><label class="f">{{ __('common.name_en') }}</label><input type="text" id="ngNameEn" dir="ltr" maxlength="190" style="width:100%"></div>
+            </div>
+            <div id="ngMsg" style="font-size:11.5px;margin-bottom:8px"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button type="button" class="btn sm" onclick="closeGroupBox()">{{ __('common.cancel') }}</button>
+                <button type="button" class="btn sm gold" id="ngSave" onclick="saveGroup()">{{ __('common.save') }}</button>
+            </div>
+        </div>
+
+        {{-- التليفون + المحافظة + المنطقة في صف واحد (٢٠/٨) --}}
         <div class="frow">
-            <div>
-                <label class="f">{{ __('client.channel') }} {!! $star !!}</label>
-                <select name="channel_id" style="width:100%" id="channelSel" data-req
-                        class="{{ trim($bad('channel_id')) }}" onchange="syncSubChannel()">
-                    {{-- ⚠️ الاختيار الفاضي أول القايمة عن قصد. لو أول
-                         قناة كانت مختارة سلفاً، اللي بيدخل الداتا بيعدّي
-                         عليها من غير ما يقرا — والعميل بيدخل قناة غلط. --}}
-                    <option value="">— {{ __('client.pick_channel') }} —</option>
-                    @foreach ($channels as $ch)
-                        <option value="{{ $ch->id }}" data-code="{{ $ch->code }}"
-                                @selected((int) $v('channel_id') === $ch->id)>
-                            {{ $ch->displayName() }}
-                        </option>
-                    @endforeach
-                </select>
-                {!! $err('channel_id') !!}
-                {!! $hint('channel_id') !!}
-            </div>
-            {{-- ⚠️ بتبدأ **مخفية** والـJS بيظهرها للكي أكاونت بس. لو
-                 بدأت ظاهرة، بتبان وميضة على كل عميل أونلاين أو كاش فان
-                 قبل ما السكربت يشتغل. --}}
-            <div id="subChannelBox" style="display:none">
-                <label class="f">{{ __('client.key_account_segment') }}</label>
-                <select name="sub_channel" style="width:100%" class="{{ trim($bad('sub_channel')) }}">
-                    <option value="">— {{ __('client.pick_segment') }} —</option>
-                    @foreach (array_keys(Channel::SUB_CHANNELS) as $k)
-                        <option value="{{ $k }}" @selected($v('sub_channel') === $k)>{{ __('enums.sub_channel.'.$k) }}</option>
-                    @endforeach
-                </select>
-                {!! $err('sub_channel') !!}
-                {!! $hint('sub_channel') !!}
-            </div>
-            {{-- ═══ الديفيجن التجاري (١٧/٨) ═══
-                 ⚠️ طريقة التعامل بتتكتب جنب كل قسم في القايمة —
-                 اللي بيسكّن لازم يعرف إن اختياره بيحدد إزاي البضاعة
-                 هتوصل، مش مجرد تصنيف تقارير. --}}
-            <div>
-                <label class="f">{{ __('client.division') }}</label>
-                <select name="division" style="width:100%">
-                    <option value="">— {{ __('client.no_division') }} —</option>
-                    @foreach (\App\Support\Divisions::options() as $k => $lbl)
-                        <option value="{{ $k }}" @selected($v('division') === $k)>
-                            {{ $lbl }} · {{ \App\Support\Divisions::fulfillmentLabel($k) }}</option>
-                    @endforeach
-                </select>
-            </div>
             <div>
                 <label class="f">{{ __('common.phone') }}</label>
                 <input type="text" name="phone" maxlength="30" dir="ltr" placeholder="01000000000"
@@ -353,9 +345,6 @@
                 {!! $err('phone') !!}
                 {!! $hint('phone') !!}
             </div>
-        </div>
-
-        <div class="frow">
             <div>
                 <label class="f">{{ __('geo.governorate') }}</label>
                 <select name="governorate" id="govSel" style="width:100%"
@@ -418,12 +407,10 @@
             </div>
         </div>
 
-        {{-- ⚠️ **خانة واحدة بالإنجليزي.** العنوان نص حر بيتكتب مرة
-             لعميل واحد — مش داتا أساسية بتتعرّف مرة وبتتكرر في كل
-             الشاشات زي القناة والمحافظة. عمودين هنا معناهم إن اللي
-             بيدخل الداتا بيكتب نفس العنوان مرتين على 300 عميل. --}}
+        {{-- العنوان باللغتين جنب بعض (٢٠/٨) — العربي بقى بييجي
+             جاهز من طلب الأبلكيشن ومن زرار الاكتشاف --}}
         <div class="frow">
-            <div style="grid-column:1/-1">
+            <div>
                 <label class="f">{{ __('common.address') }} <span style="color:var(--muted);font-weight:400">· EN</span></label>
                 <input type="text" name="address" dir="ltr" maxlength="190" value="{{ $own('address') }}"
                        class="{{ trim($bad('address')) }}"
@@ -431,10 +418,20 @@
                 {!! $err('address') !!}
                 {!! $hint('address') !!}
             </div>
+            <div>
+                <label class="f">{{ __('geo.address_ar') }}</label>
+                <input type="text" name="address_ar" maxlength="190" value="{{ $own('address_ar') }}"
+                       class="{{ trim($bad('address_ar')) }}" style="width:100%">
+                {!! $err('address_ar') !!}
+                {!! $hint('address_ar') !!}
+            </div>
         </div>
 
-        <div class="frow">
-            <div style="grid-column:1/-1">
+        {{-- اللينك + الإحداثيات + زرار اكتشف في صف واحد (٢٠/٨) —
+             الإحداثيات بقت ظاهرة: هي اللي الخريطة والتوزيع
+             شغّالين عليها فعلاً، مش اللينك --}}
+        <div class="frow keep">
+            <div style="grid-column:span 2">
                 <label class="f">{{ __('geo.location_url') }}</label>
                 <div style="display:flex;gap:6px">
                     <input type="url" name="location_url" id="locUrl" maxlength="500" dir="ltr"
@@ -447,44 +444,66 @@
                 {!! $err('location_url') !!}
                 {!! $hint('location_url') !!}
                 <div id="locMsg" style="font-size:11.5px;font-weight:700;margin-top:6px"></div>
-
-                {{-- ⚠️ الإحداثيات بتتحفظ في حقول مخفية. الرابط ممكن يتغيّر
-                     أو يبوظ، بس `lat/lng` هي اللي الخريطة وتوزيع المناطق
-                     بيشتغلوا عليها — فبتتخزن كأرقام مش كنص جوه لينك. --}}
-                <input type="hidden" name="lat" id="latField" value="{{ old('lat', $src?->lat) }}">
-                <input type="hidden" name="lng" id="lngField" value="{{ old('lng', $src?->lng) }}">
+            </div>
+            <div>
+                <label class="f">{{ __('geo.lat') }}</label>
+                <input type="number" step="any" min="-90" max="90" name="lat" id="latField" dir="ltr"
+                       style="width:100%" value="{{ old('lat', $src?->lat) }}">
+            </div>
+            <div>
+                <label class="f">{{ __('geo.lng') }}</label>
+                <input type="number" step="any" min="-180" max="180" name="lng" id="lngField" dir="ltr"
+                       style="width:100%" value="{{ old('lng', $src?->lng) }}">
             </div>
         </div>
 
-        {{-- التبعية الإدارية — بتتنسخ من المصدر --}}
-        <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.affiliation') }}</div>
+        {{-- الديفيجن + القناة + المدير المسؤول + الفرع (٢٠/٨) --}}
         <div class="frow">
+            {{-- ═══ الديفيجن التجاري (١٧/٨) ═══
+                 ⚠️ طريقة التعامل بتتكتب جنب كل قسم في القايمة —
+                 اللي بيسكّن لازم يعرف إن اختياره بيحدد إزاي البضاعة
+                 هتوصل، مش مجرد تصنيف تقارير. --}}
             <div>
-                <label class="f">{{ __('branch.branch') }}</label>
-                <select name="branch_id" style="width:100%" class="{{ trim($bad('branch_id')) }}">
-                    <option value="">{{ __('branch.central') }}</option>
-                    @foreach ($branches as $br)
-                        <option value="{{ $br->id }}" @selected((int) $v('branch_id') === $br->id)>{{ $br->displayName() }}</option>
+                <label class="f">{{ __('client.division') }}</label>
+                <select name="division" style="width:100%">
+                    <option value="">— {{ __('client.no_division') }} —</option>
+                    @foreach (\App\Support\Divisions::options() as $k => $lbl)
+                        <option value="{{ $k }}" @selected($v('division') === $k)>
+                            {{ $lbl }} · {{ \App\Support\Divisions::fulfillmentLabel($k) }}</option>
                     @endforeach
                 </select>
-                {!! $err('branch_id') !!}
-                {!! $hint('branch_id') !!}
             </div>
             <div>
-                <label class="f">{{ __('client.chain') }}</label>
-                <div style="display:flex;gap:6px">
-                    <select name="group_id" id="groupSel" style="flex:1;min-width:0" class="{{ trim($bad('group_id')) }}">
-                        <option value="">— {{ __('client.independent') }} —</option>
-                        @foreach ($groups as $grp)
-                            <option value="{{ $grp->id }}" @selected((int) $v('group_id') === $grp->id)>{{ $grp->displayName() }}</option>
-                        @endforeach
-                    </select>
-                    <button type="button" class="btn sm" onclick="openGroupBox()"
-                            title="{{ __('client.new_chain') }}">+</button>
-                </div>
-                {!! $err('group_id') !!}
-                {!! $hint('group_id') !!}
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.chain_hint') }}</div>
+                <label class="f">{{ __('client.channel') }} {!! $star !!}</label>
+                <select name="channel_id" style="width:100%" id="channelSel" data-req
+                        class="{{ trim($bad('channel_id')) }}" onchange="syncSubChannel()">
+                    {{-- ⚠️ الاختيار الفاضي أول القايمة عن قصد. لو أول
+                         قناة كانت مختارة سلفاً، اللي بيدخل الداتا بيعدّي
+                         عليها من غير ما يقرا — والعميل بيدخل قناة غلط. --}}
+                    <option value="">— {{ __('client.pick_channel') }} —</option>
+                    @foreach ($channels as $ch)
+                        <option value="{{ $ch->id }}" data-code="{{ $ch->code }}"
+                                @selected((int) $v('channel_id') === $ch->id)>
+                            {{ $ch->displayName() }}
+                        </option>
+                    @endforeach
+                </select>
+                {!! $err('channel_id') !!}
+                {!! $hint('channel_id') !!}
+            </div>
+            {{-- ⚠️ بتبدأ **مخفية** والـJS بيظهرها للكي أكاونت بس. لو
+                 بدأت ظاهرة، بتبان وميضة على كل عميل أونلاين أو كاش فان
+                 قبل ما السكربت يشتغل. --}}
+            <div id="subChannelBox" style="display:none">
+                <label class="f">{{ __('client.key_account_segment') }}</label>
+                <select name="sub_channel" style="width:100%" class="{{ trim($bad('sub_channel')) }}">
+                    <option value="">— {{ __('client.pick_segment') }} —</option>
+                    @foreach (array_keys(Channel::SUB_CHANNELS) as $k)
+                        <option value="{{ $k }}" @selected($v('sub_channel') === $k)>{{ __('enums.sub_channel.'.$k) }}</option>
+                    @endforeach
+                </select>
+                {!! $err('sub_channel') !!}
+                {!! $hint('sub_channel') !!}
             </div>
             <div>
                 {{-- ⚠️ **المدير مش المندوب.** المندوب بيتخصص من شاشة توزيع
@@ -501,27 +520,21 @@
                 {!! $hint('manager_id') !!}
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.account_manager_hint') }}</div>
             </div>
-        </div>
-
-        {{-- ═════ سلسلة جديدة — جوه نفس الصفحة ═════ --}}
-        <div id="groupBox" style="display:none;border:1px dashed var(--royal-blue);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:var(--card2)">
-            <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin-bottom:4px">{{ __('client.new_chain') }}</div>
-            {{-- ⚠️ الخصم والقناة مش هنا عن قصد — السلسلة اللي بتتعمل من
-                 هنا وعاء بيجمّع الفروع بس. شروطها التجارية بتتظبط من
-                 شاشة السلاسل، وإلا مستعجل بيحط رقم عشوائي وبيتطبق على
-                 كل الفروع. --}}
-            <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.new_chain_hint') }}</div>
-            <div class="frow" style="margin-bottom:8px">
-                <div><label class="f">{{ __('client.chain_name') }}</label><input type="text" id="ngName" maxlength="190" style="width:100%"></div>
-                <div><label class="f">{{ __('common.name_en') }}</label><input type="text" id="ngNameEn" dir="ltr" maxlength="190" style="width:100%"></div>
-            </div>
-            <div id="ngMsg" style="font-size:11.5px;margin-bottom:8px"></div>
-            <div style="display:flex;gap:8px;justify-content:flex-end">
-                <button type="button" class="btn sm" onclick="closeGroupBox()">{{ __('common.cancel') }}</button>
-                <button type="button" class="btn sm gold" id="ngSave" onclick="saveGroup()">{{ __('common.save') }}</button>
+            <div>
+                <label class="f">{{ __('branch.branch') }}</label>
+                <select name="branch_id" style="width:100%" class="{{ trim($bad('branch_id')) }}">
+                    <option value="">{{ __('branch.central') }}</option>
+                    @foreach ($branches as $br)
+                        <option value="{{ $br->id }}" @selected((int) $v('branch_id') === $br->id)>{{ $br->displayName() }}</option>
+                    @endforeach
+                </select>
+                {!! $err('branch_id') !!}
+                {!! $hint('branch_id') !!}
             </div>
         </div>
 
+        {{-- ═══ خط فاصل كبير — من هنا طريقة الحساب (٢٠/٨) ═══ --}}
+        <div style="height:3px;background:linear-gradient(135deg,#12399B,#602D90);border-radius:2px;margin:24px 0 4px"></div>
         {{-- ═════ شروط الدفع ═════ --}}
         {{-- ═════ التسعير — بيتحفظ سواء فيه عقد أو مفيش ═════ --}}
         {{-- ⚠️ **بره بلوك العقد — دلوقتي بجد.** التعليق ده كان موجود
@@ -617,26 +630,67 @@
 
         <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.pay_section') }}</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.pay_section_hint') }}</div>
+
+        {{-- ═══ كاش/آجل تشيك بوكسيس (طلب المالك ٢٠/٨) ═══
+             «حسب القناة» اتشالت — الافتراضي دايماً آجل. الاتنين
+             متعلّمين = both والمندوب بيختار في كل فاتورة. الحقل
+             المخفي هو اللي بيتبعت — نفس قيم PAY_TERMS بالحرف. --}}
+        @php
+            $curTerms = old('payment_terms', $src?->payment_terms);
+            $payCash = in_array($curTerms, ['cash', 'both'], true);
+            $payCredit = $curTerms === null || $curTerms === ''
+                || in_array($curTerms, ['credit', 'both'], true);
+        @endphp
         <div class="frow">
             <div>
-                {{-- ⚠️ **قرار إدارة مش قرار مندوب.** الأبلكيشن بياخد
-                     كاش/آجل من هنا ومابيسألش المندوب — إلا لو المدير
-                     اختار «الاتنين»، وساعتها بس بيظهر سويتش في شاشة
-                     البيع. الافتراضي حسب القناة: كاش فان وجملة كاش،
-                     كي أكاونت وأونلاين آجل. و`danger` كاش إجباري مهما
-                     اتكتب هنا. --}}
                 <label class="f">{{ __('client.pay_method') }}</label>
-                <select name="payment_terms" id="payTerms" style="width:100%"
-                        onchange="togglePayDays()" class="{{ trim($bad('payment_terms')) }}">
-                    <option value="" @selected($v('payment_terms') === null || $v('payment_terms') === '')>{{ __('client.terms_by_channel') }}</option>
-                    @foreach (\App\Models\Client::PAY_TERMS as $pt)
-                        <option value="{{ $pt }}" @selected($v('payment_terms') === $pt)>{{ __('client.terms_'.$pt) }}</option>
-                    @endforeach
-                </select>
+                <input type="hidden" name="payment_terms" id="payTerms"
+                       value="{{ $payCash && $payCredit ? 'both' : ($payCash ? 'cash' : 'credit') }}">
+                <div style="display:flex;gap:18px;padding:9px 2px;flex-wrap:wrap">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;cursor:pointer">
+                        <input type="checkbox" id="ptCash" @checked($payCash) onchange="syncPayTerms()">
+                        {{ __('client.terms_cash') }}
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;cursor:pointer">
+                        <input type="checkbox" id="ptCredit" @checked($payCredit) onchange="syncPayTerms()">
+                        {{ __('client.terms_credit') }}
+                    </label>
+                </div>
                 {!! $err('payment_terms') !!}
                 {!! $hint('payment_terms') !!}
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.pay_method_hint') }}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ __('client.pay_method_hint') }}</div>
             </div>
+            {{-- ═══ شروط المرتجع جنب شروط الدفع (٢٠/٨) ═══
+                 الافتراضي: خصم من حسابه + تبديل + رصيد المرة الجاية
+                 — بيتطبق لما مفيش اختيار مخزّن. --}}
+            @php
+                $curPolicies = old('return_policies', $src?->return_policies ?? []);
+                $curPolicies = is_array($curPolicies) ? $curPolicies : [];
+                if ($curPolicies === []) {
+                    $curPolicies = [
+                        \App\Models\Client::RETURN_ACCOUNT,
+                        \App\Models\Client::RETURN_EXCHANGE,
+                        \App\Models\Client::RETURN_CREDIT_NEXT,
+                    ];
+                }
+            @endphp
+            <div>
+                <label class="f">{{ __('client.return_policies') }}</label>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;padding:9px 2px">
+                    @foreach (\App\Models\Client::RETURN_POLICIES as $rp)
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer">
+                            <input type="checkbox" name="return_policies[]" value="{{ $rp }}"
+                                   @checked(in_array($rp, $curPolicies, true))>
+                            {{ __('field.return_policy_'.$rp) }}
+                        </label>
+                    @endforeach
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ __('client.return_policies_hint') }}</div>
+            </div>
+        </div>
+
+        {{-- مدة السداد + نعد من — تحت شروط الدفع (٢٠/٨) --}}
+        <div class="frow">
             <div class="payDaysBox">
                 <label class="f">{{ __('client.pay_days') }}</label>
                 <input type="number" min="0" max="365" name="payment_days" style="width:100%"
@@ -667,38 +721,7 @@
                 {!! $hint('payment_days_from') !!}
             </div>
         </div>
-        {{-- ═══ سياسة المرتجع (قرار المالك ٨ أغسطس ٢٠٢٦) ═══
-             ⚠️ **بتتعرّف على العميل مش على المندوب.** المندوب بيشوف
-             المسموح هنا **بس** ويختار قبل ما يعمل المرتجع — من غير
-             كده كل مندوب بيتصرف حسب علاقته بالعميل.
-             ⚠️ ومصفوفة مش اختيار واحد: عميل ممكن ياخد كاش فوري أو
-             تبديل حسب الموقف. --}}
-        @php
-            $curPolicies = old('return_policies', $src?->return_policies ?? []);
-            $curPolicies = is_array($curPolicies) ? $curPolicies : [];
-        @endphp
-        <div class="frow">
-            <div style="flex:2">
-                <label class="f">{{ __('client.return_policies') }}</label>
-                <div style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 2px">
-                    @foreach (\App\Models\Client::RETURN_POLICIES as $rp)
-                        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px">
-                            <input type="checkbox" name="return_policies[]" value="{{ $rp }}"
-                                   @checked(in_array($rp, $curPolicies, true))>
-                            {{ __('field.return_policy_'.$rp) }}
-                        </label>
-                    @endforeach
-                </div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px">
-                    {{ __('client.return_policies_hint') }}</div>
-            </div>
-        </div>
 
-        {{-- ⚠️ **العقد يغلب الخانتين دول.** العقد ورقة موقّعة والخانة
-             إعداد داخلي — فلو العميل ليه عقد سارٍ فيه مدة سداد، المدة
-             دي هي اللي بتمشي و`Client::paymentDays()` بترجّعها. --}}
-        {{-- ⚠️ `liveContract()` مش `->contract` — العقد ممكن ييجي من
-             السلسلة، و`->contract` بترجّع عقد الفرع لوحده. --}}
         @php $payCt = $src?->liveContract(); @endphp
         @if ($payCt !== null && $payCt->paymentDays() !== null)
             <div class="alert info" style="margin-top:10px">
@@ -805,11 +828,21 @@
                 </div>
             @endif
         @else
-            <input type="hidden" name="has_contract" value="1">
+            {{-- ═══ سويتش «عميل بعقد؟» في الإنشاء كمان (٢٠/٨) ═══
+                 الافتراضي مقفول: أغلب عملاء الكاش فان والجملة من غير
+                 عقد، وفتح البلوك بالعافية كان بيجبر ٣ خانات عقد على
+                 كل عميل جديد. --}}
+            <input type="hidden" name="has_contract" value="0">
+            <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:800;margin-bottom:12px;cursor:pointer">
+                <input type="checkbox" name="has_contract" value="1" id="hasContract"
+                       @checked(old('has_contract', 0))
+                       onchange="toggleContract()">
+                {{ __('client.has_contract') }}
+            </label>
         @endif
 
 
-        <div id="contractBox" @style(['display:none' => $editing && $ct === null])>
+        <div id="contractBox" @style(['display:none' => ! old('has_contract', $ct !== null)])>
             @php
     // ⚠️ **الأنواع القديمة بتبان بس لو العقد ده نوعه واحد
                 // منها.** الـ22 عقد الحقيقيين فيهم `supply_agreement`
@@ -824,12 +857,36 @@
                 }
             @endphp
 
-            {{-- ═════ نوع التعاقد وخصمه — أول حاجة تتحدد ═════ --}}
-            {{-- ⚠️ **الترتيب مقصود.** النوع بيحدد طبيعة العلاقة، وخصم
-                 الفاتورة هو الرقم الوحيد اللي بينزل على سعر البيع فعلاً —
-                 فالاتنين جنب بعض في أول صف. لما كان الخصم تحت في نص
-                 الصفحة، كان بيتنسى ويتحفظ عقد بخصم صفر. --}}
-            <div class="frow">
+            {{-- ═══ خصم الفاتورة اتشال من الواجهة (قرار المالك ٢٠/٨) ═══
+                 الخصم بيتظبط من قسم التسعير في خطوة ١. القيمة الحالية
+                 لعقد قديم بتتبعت زي ما هي — عشان الحفظ مايمسحش خصم
+                 عقد موجود في صمت. المقفول بيبعت on=0 زي ما كان
+                 (السيرفر مابيلمسوش)، وقاعدة required_if بتاخد قيمة
+                 دايماً من الحقل المخفي. --}}
+            @php
+                $invDiscCur = $presetVal('invoice_discount');
+                $invDiscOn = ! $locked('invoice_discount')
+                    && $invDiscCur !== '' && (float) $invDiscCur > 0;
+            @endphp
+            <input type="hidden" name="clause[invoice_discount][on]" value="{{ $invDiscOn ? 1 : 0 }}">
+            <input type="hidden" name="clause[invoice_discount][value]"
+                   value="{{ $invDiscCur !== '' ? $invDiscCur : 0 }}">
+
+            {{-- ═════ مدة التعاقد وتواريخه ═════ --}}
+            {{-- ⚠️ **التلاتة في صف واحد.** لما كانت المدة لوحدها في صف
+                 والتواريخ في صف تحتها، الصف الأول كان بيطلع خانة واحدة
+                 مفرودة على عرض الصفحة كله — شكلها غلط، والعين مابتربطش
+                 المدة بالتواريخ اللي هي بتحسبها.
+
+                 ⚠️ الإخفاء بقى **على الخانة** مش على الصف: «تعامل
+                 بالطلب» بيخبّي التاريخين والمدة تفضل، و«مفتوح المدة»
+                 بيخبّي النهاية بس. لو خبّينا الصف كله كنا هنخبّي المدة
+                 نفسها اللي المستخدم لسه مختارها.
+
+                 ⚠️ `keep` بيمنع الجريد إنه يطوي الأعمدة المخبّية —
+                 من غيرها الدروب داون بتتمدد على الشاشة كلها قبل
+                 الاختيار وبترجع طبيعية بعده. --}}
+            <div class="frow keep">
                 <div>
                     <label class="f">{{ __('client.contract_type') }} {!! $star !!}</label>
                     {{-- ⚠️ **مفيش نوع مختار سلفاً.** لما كان «اتفاق» هو
@@ -848,55 +905,6 @@
                     {!! $err('contract_type') !!}
                     {!! $hint('contract_type') !!}
                 </div>
-                {{-- ⚠️ **خصم الفاتورة حقل أساسي مش تشيك بوكس.** هو البند
-                     الوحيد اللي بينزل على سعر البيع فعلاً، وكل عقد تقريباً
-                     فيه واحد. لما كان جوه التشيك بوكسيس مع البنود النادرة،
-                     كان بيتنسى ويتحفظ عقد بخصم صفر. --}}
-                <div>
-                    <label class="f">{{ __('client.preset_invoice_discount') }} % {!! $star !!}</label>
-                    {{-- المقفول بيبعت `on=0` عشان السيرفر مايحاولش
-                         يكتب فوق البند المكتوب بإيد. --}}
-                    <input type="hidden" name="clause[invoice_discount][on]" value="{{ $locked('invoice_discount') ? 0 : 1 }}">
-                    {{-- ⚠️ **المقفول لازم يبعت قيمة برضه.** قاعدة
-                         `clause.invoice_discount.value` معلّقة على
-                         `required_if:has_contract,1` مش على `on` — والبند
-                         المقفول معناه إن فيه عقد، يعني `has_contract=1`.
-                         الخانة `disabled` مابتتبعتش، فالتحقق كان بيرفض
-                         الحفظ **كل مرة** برسالة تحت خانة رمادية. القيمة
-                         دي مابتتكتبش: `syncClauses()` بتعمل `continue`
-                         على المقفول قبل ما تقرا أي حاجة. --}}
-                    @if ($locked('invoice_discount'))
-                        <input type="hidden" name="clause[invoice_discount][value]" value="0">
-                    @endif
-                    <input type="number" step="0.5" min="0" max="100" style="width:100%"
-                           @if (! $locked('invoice_discount')) data-req-contract @endif
-                           class="{{ trim($bad('clause.invoice_discount.value')) }}"
-                           @disabled($locked('invoice_discount')) @if ($locked('invoice_discount')) data-keep-disabled="1" @endif
-                           name="clause[invoice_discount][value]"
-                           value="{{ $presetVal('invoice_discount') !== '' ? $presetVal('invoice_discount') : '' }}">
-                    {!! $err('clause.invoice_discount.value') !!}
-                    {!! $hint('cl_invoice_discount_value') !!}
-                    <div style="font-size:11px;color:var(--muted);margin-top:5px">
-                        {{ $locked('invoice_discount') ? '🔒 '.__('client.clause_locked_hint') : __('client.invoice_discount_hint') }}
-                    </div>
-                </div>
-            </div>
-
-            {{-- ═════ مدة التعاقد وتواريخه ═════ --}}
-            {{-- ⚠️ **التلاتة في صف واحد.** لما كانت المدة لوحدها في صف
-                 والتواريخ في صف تحتها، الصف الأول كان بيطلع خانة واحدة
-                 مفرودة على عرض الصفحة كله — شكلها غلط، والعين مابتربطش
-                 المدة بالتواريخ اللي هي بتحسبها.
-
-                 ⚠️ الإخفاء بقى **على الخانة** مش على الصف: «تعامل
-                 بالطلب» بيخبّي التاريخين والمدة تفضل، و«مفتوح المدة»
-                 بيخبّي النهاية بس. لو خبّينا الصف كله كنا هنخبّي المدة
-                 نفسها اللي المستخدم لسه مختارها.
-
-                 ⚠️ `keep` بيمنع الجريد إنه يطوي الأعمدة المخبّية —
-                 من غيرها الدروب داون بتتمدد على الشاشة كلها قبل
-                 الاختيار وبترجع طبيعية بعده. --}}
-            <div class="frow keep">
                 <div>
                     <label class="f">{{ __('client.duration') }} {!! $star !!}</label>
                     <select name="contract_duration" id="durationSel" style="width:100%" data-req-contract
@@ -1035,18 +1043,6 @@
                 </div>
             </div>
 
-            {{-- ═════ ملف العقد ═════ --}}
-            {{-- ⚠️ **لوحده في صف.** رفع الملف بياخد مساحة وبيحتاج
-                 انتباه — حطّه جنب حقل تاني بيخلّي حد يعدّي عليه. --}}
-            <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.contract_file') }}</div>
-            <div class="frow">
-                <div style="grid-column:1/-1">
-                    <label class="f">{{ __('client.contract_file') }}</label>
-                    <input type="file" name="contract_file" accept=".pdf,.jpg,.jpeg,.png" style="width:100%">
-                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.contract_file_hint') }}</div>
-                </div>
-            </div>
-
             {{-- ═════ بنود العقد والملاحظات ═════ --}}
             {{-- ⚠️ **عمودين جنب بعض.** البنود الحرة والملاحظات الاتنين
                  نص حر بيتكتب مرة لعقد واحد — قراهم مع بعض أسهل من
@@ -1073,6 +1069,18 @@
                     <textarea name="contract_note" dir="ltr" rows="2" style="width:100%">{{ old('contract_note', $ct?->note) }}</textarea>
                 </div>
             </div>
+            {{-- ═════ ملف العقد ═════ --}}
+            {{-- ⚠️ **لوحده في صف.** رفع الملف بياخد مساحة وبيحتاج
+                 انتباه — حطّه جنب حقل تاني بيخلّي حد يعدّي عليه. --}}
+            <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.contract_file') }}</div>
+            <div class="frow">
+                <div style="grid-column:1/-1">
+                    <label class="f">{{ __('client.contract_file') }}</label>
+                    <input type="file" name="contract_file" accept=".pdf,.jpg,.jpeg,.png" style="width:100%">
+                    <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.contract_file_hint') }}</div>
+                </div>
+            </div>
+
         </div>
 
         <div class="formbar">
@@ -1598,6 +1606,22 @@ function toggleContract() {
  * هيمسح قيمة موجودة على عميل اتحوّل من آجل لكاش **مؤقتاً** وهو
  * بيعدّل حاجة تانية خالص.
  */
+/* ═══ كاش/آجل تشيك بوكسيس (٢٠/٨) ═══
+   الحقل المخفي payTerms هو اللي بيتبعت. مفيش «ولا واحد» — لو
+   المستخدم شال الاتنين بنرجّع الآجل: هو الافتراضي بقرار المالك. */
+function syncPayTerms() {
+    const cash = document.getElementById('ptCash');
+    const credit = document.getElementById('ptCredit');
+    if (!cash || !credit) return;
+
+    if (!cash.checked && !credit.checked) credit.checked = true;
+
+    document.getElementById('payTerms').value =
+        cash.checked && credit.checked ? 'both' : (cash.checked ? 'cash' : 'credit');
+
+    togglePayDays();
+}
+
 function togglePayDays() {
     const el = document.getElementById('payTerms');
     if (!el) return;
@@ -2142,7 +2166,15 @@ function copyFromSibling() {
     set('division', d.division);
     set('branch_id', d.branch_id);
     set('manager_id', d.manager_id);
-    set('payment_terms', d.payment_terms); // change → togglePayDays
+    // كاش/آجل بقت تشيك بوكسيس (٢٠/٨) — بنظبطهم من القيمة ونزامن
+    (function () {
+        const v = d.payment_terms || 'credit';
+        const cash = document.getElementById('ptCash');
+        const credit = document.getElementById('ptCredit');
+        if (cash) cash.checked = (v === 'cash' || v === 'both');
+        if (credit) credit.checked = (v !== 'cash');
+        syncPayTerms();
+    })();
     set('payment_days', d.payment_days);
     set('payment_days_from', d.payment_days_from);
     set('price_list_id', d.price_list_id);

@@ -873,6 +873,8 @@ class ErpController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'governorate' => ['nullable', Governorates::rule()],
             'address' => ['nullable', 'string', 'max:190'],
+            // العنوان العربي — بقى في الفورم جنب الإنجليزي (٢٠/٨)
+            'address_ar' => ['nullable', 'string', 'max:190'],
             // ⚠️ `url` مش كفاية — بيقبل `javascript:` في بعض النسخ.
             // الحقل ده بيتحط في `href` في كارت العميل.
             'location_url' => ['nullable', 'string', 'max:500', 'regex:#^https?://#i'],
