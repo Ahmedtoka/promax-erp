@@ -357,6 +357,13 @@ return [
     'dup_blocked' => 'A similar client is already registered: :names - if it really is a different place, tick "different client" and continue the approval.',
 
     // ═══ Pull terms from the similar client + name composer (Aug 18, 2026) ═══
+    'pay_to_credit' => 'Switch to credit',
+    'pay_to_cash' => 'Switch to cash',
+    'pay_toggle_confirm' => 'Switch invoice :number to :to? Its linked collection entry will be adjusted and the client balance recalculated.',
+    'pay_toggled' => 'Invoice :number is now :type - entries and balance adjusted.',
+    'pay_eta_locked' => 'Invoice was exported to the tax authority - payment type cannot change.',
+    'pay_consignment_blocked' => 'This is a consignment invoice - no receivable exists, so cash/credit does not apply.',
+    'zone_required_approve' => 'Pick a zone before approving - a client without a zone never appears to the rep in the app.',
     'pull_terms' => 'Copy their terms',
     'terms_applied' => 'Terms copied from the similar client - channel, chain, price list and rate. Review and approve.',
     'chain_discount_note' => 'The chain contract governs the discount - custom discount left at zero',

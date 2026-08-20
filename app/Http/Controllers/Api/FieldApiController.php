@@ -281,6 +281,10 @@ class FieldApiController extends Controller
                 'batch' => $i->batchLabel(),
                 'expires' => $i->batch?->expires_on?->toDateString(),
                 'days_left' => $i->batch?->daysLeft(),
+                // العائلة (١٩/٨) — شاشة العهدة بقت بتجمع بالفاملي
+                // وبترتب المنتجات كل عيلة ورا بعضها
+                'family' => (string) ($i->product->family ?? ''),
+                'family_label' => $i->product->familyLabel(),
             ])->values(),
         ];
     }

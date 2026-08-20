@@ -807,6 +807,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // متراكمة فبتنزل كلها بتاريخ واحد. أدمن بس: بيحرك قيود فلوس.
         Route::post('/invoices/{invoice}/redate', [OpsController::class, 'redateInvoice'])
             ->middleware('role:admin')->name('invoices.redate');
+        // تحويل كاش ↔ آجل — بيمسح/بينشئ قيد التحصيل المربوط ويعيد الحساب
+        Route::post('/invoices/{invoice}/payment', [OpsController::class, 'toggleInvoicePayment'])
+            ->middleware('role:admin')->name('invoices.payment');
         // مسح فاتورة غلط (١٩/٨/٢٠٢٦) — أدمن بس: بيعكس القيود ويرد
         // البضاعة لعهدة المندوب. الحراس جوه الكنترولر.
         Route::delete('/invoices/{invoice}', [OpsController::class, 'destroyInvoice'])

@@ -3092,6 +3092,7 @@ class OpsController extends Controller
         // ولو الرأس فيه اسم المنطقة أصلاً مابنكرّرهوش.
         $finalName = (string) $clientRequest->name;
         $finalNameEn = null;
+        $zone = null;
 
         if ($data['decision'] === 'approved') {
             $group = ! empty($data['group_id']) ? ClientGroup::find((int) $data['group_id']) : null;
@@ -3119,6 +3120,24 @@ class OpsController extends Controller
             // ⚠️ مفيش رأس إنجليزي = مفيش اسم إنجليزي — مش هنلزق اسم
             // منطقة إنجليزي على اسم مش موجود.
             $finalNameEn = $headEn !== '' ? $withZone($headEn, $zone?->name_en) : null;
+
+            // ═══ ممنوع اعتماد من غير منطقة (بلاغ ٢٠/٨/٢٠٢٦) ═══
+            //
+            // ⚠️ **عميل من غير `zone_id` عميل غير مرئي.** شاشة مناطق
+            // الأبلكيشن بتتبني من زون العميل — الاعتماد كان بيعدّي
+            // والعميل بيتولد سليم في كل حاجة إلا المنطقة، فالمندوب
+            // مايشوفهوش خالص والمالك بيضطر يدخل يحطها بإيده من شاشة
+            // التفعيل. الرفض هنا أرحم من عميل تايه: المودال بيرجع
+            // يتفتح بكل اختياراته (نفس آلية ارتداد التكرار) ومعاه
+            // الرسالة.
+            if ($zone === null) {
+                return back()->withInput()
+                    ->with('dupeBounce', [
+                        'request_id' => $clientRequest->id,
+                        'dupes' => [],
+                    ])
+                    ->withErrors(['zone_id' => __('ops.zone_required_approve')]);
+            }
         }
 
         if ($data['decision'] === 'approved' && empty($data['confirm_duplicate'])) {
@@ -3161,7 +3180,7 @@ class OpsController extends Controller
             }
         }
 
-        DB::transaction(function () use ($data, $clientRequest, $request, $finalName, $finalNameEn) {
+        DB::transaction(function () use ($data, $clientRequest, $request, $finalName, $finalNameEn, $zone) {
             $clientRequest->status = $data['decision'];
             $clientRequest->decided_by = $request->user()->id;
             $clientRequest->decided_at = now();
@@ -3204,8 +3223,14 @@ class OpsController extends Controller
                     'address_ar' => $data['address_ar'] ?? $clientRequest->address_ar,
                     'lat' => $clientRequest->lat,
                     'lng' => $clientRequest->lng,
-                    'governorate' => $data['governorate'] ?? null,
-                    'zone_id' => $data['zone_id'] ?? $clientRequest->zone_id ?? $rep?->zone_id,
+                    // ⚠️ المحافظة بترث من المنطقة لو الفورم ماباعتهاش —
+                    // نفس قاعدة `saveGeo` بالحرف: العمودين متسقين دايماً.
+                    'governorate' => filled($data['governorate'] ?? null)
+                        ? $data['governorate']
+                        : $zone?->governorate,
+                    // ⚠️ **نفس الزون اللي اتركّب بيه الاسم** — مش إعادة
+                    // اشتقاق. الحارس فوق ضمن إنها مش null وقت الاعتماد.
+                    'zone_id' => $zone?->id,
                     'rep_id' => $rep?->id,
                     // القناة من الفورم وإلا قناة المندوب. `sub_channel`
                     // للكي أكاونت بس — `Client::booted()` بيصفّيها لو
@@ -3518,6 +3543,89 @@ class OpsController extends Controller
             'number' => $invoice->number,
             'old' => $old,
             'new' => $new->toDateString(),
+        ]));
+    }
+
+    /**
+     * ═══ تحويل فاتورة كاش ↔ آجل (٢٠ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: «عاوز أخليها من كاش لآجل علشان نظبط السيستم
+     * مانوال لحد ما يبقى كل حاجة سليمة».
+     *
+     * العقيدة (نفس أمر `promax:client-credit` بالحرف):
+     *   • كاش = قيد بيع مدين + قيد تحصيل دائن مربوط بالفاتورة
+     *     (`source_type=Invoice`) — الرصيد صفر لأن الفلوس اتقبضت.
+     *   • آجل = قيد البيع بس — المديونية مفتوحة لحد التحصيل.
+     *
+     * فالتحويل لآجل = مسح قيد التحصيل المربوط، والتحويل لكاش =
+     * إنشاؤه بتاريخ يوم الفاتورة نفسه (عشان لو اتعمل redate بعدها
+     * القيدين بيتحركوا مع بعض). و`recalculate()` جوه نفس الترانزاكشن.
+     *
+     * ⚠️ الحراس:
+     *   • متصدّرة للضرائب → ممنوع (زي باقي أدوات الفاتورة).
+     *   • فاتورة أمانة (قيدها `consignment`) → مفيش مديونية أصلاً
+     *     فمفيش معنى للكاش/الآجل — مرفوضة.
+     *   • تحصيل ميداني منفصل (`source_type=Visit`) مابيتلمسش —
+     *     ده فلوس اتقبضت فعلاً وليها صورة إثبات.
+     */
+    public function toggleInvoicePayment(Request $request, Invoice $invoice)
+    {
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['payment' => __('ops.pay_eta_locked')]);
+        }
+
+        $isConsignment = Transaction::where('source_type', Invoice::class)
+            ->where('source_id', $invoice->id)
+            ->where('kind', 'consignment')
+            ->exists();
+
+        if ($isConsignment) {
+            return back()->withErrors(['payment' => __('ops.pay_consignment_blocked')]);
+        }
+
+        $to = $invoice->payment === 'cash' ? 'credit' : 'cash';
+
+        DB::transaction(function () use ($invoice, $to) {
+            if ($to === 'credit') {
+                // قيد التحصيل **المربوط بالفاتورة دي بس**
+                Transaction::where('source_type', Invoice::class)
+                    ->where('source_id', $invoice->id)
+                    ->where('kind', 'collection')
+                    ->delete();
+            } else {
+                // ⚠️ حارس التكرار — لو فيه قيد تحصيل مربوط أصلاً
+                // (دوسة مكررة/داتا قديمة) مانضيفش تاني فوقه.
+                $exists = Transaction::where('source_type', Invoice::class)
+                    ->where('source_id', $invoice->id)
+                    ->where('kind', 'collection')
+                    ->exists();
+
+                if (! $exists) {
+                    // نفس أعمدة قيد الكاش وقت البيع في الـAPI بالحرف —
+                    // الإجمالي شامل الضريبة عشان الرصيد يرجع صفر بالظبط
+                    Transaction::create([
+                        'client_id' => $invoice->client_id,
+                        'date' => $invoice->created_at->toDateString(),
+                        'memo' => __('flash.memo_cash_with_invoice', ['number' => $invoice->number]),
+                        'debit' => 0,
+                        'credit' => $invoice->grand_total,
+                        'tax' => $invoice->tax_total,
+                        'kind' => 'collection',
+                        'source_type' => Invoice::class,
+                        'source_id' => $invoice->id,
+                    ]);
+                }
+            }
+
+            $invoice->update(['payment' => $to]);
+
+            // أشهر باج في رَنبوك الأرقام: تعديل قيود من غير إعادة حساب
+            $invoice->client->recalculate();
+        });
+
+        return back()->with('ok', __('ops.pay_toggled', [
+            'number' => $invoice->number,
+            'type' => __('enums.payment.'.$to),
         ]));
     }
 

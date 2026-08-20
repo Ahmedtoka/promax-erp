@@ -51,6 +51,17 @@
         <button class="btn" type="button" onclick="openDlg('dlgPaper')">🧾 {{ __('ops.set_paper_ref') }}</button>
         {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
         <button class="btn" type="button" onclick="openDlg('dlgRedate')">🗓 {{ __('ops.redate_invoice') }}</button>
+        {{-- تحويل كاش ↔ آجل — بيظبط قيد التحصيل المربوط ويعيد الحساب --}}
+        <form method="POST" action="{{ route('ops.invoices.payment', $inv) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.pay_toggle_confirm', [
+                  'number' => $inv->number,
+                  'to' => $inv->payment === 'cash' ? __('enums.payment.credit') : __('enums.payment.cash'),
+              ])))">
+            @csrf
+            <button class="btn" type="submit">
+                💱 {{ $inv->payment === 'cash' ? __('ops.pay_to_credit') : __('ops.pay_to_cash') }}
+            </button>
+        </form>
         {{-- فاتورة غلط بالكامل؟ — مسح بيعكس القيود ويرد البضاعة للعهدة --}}
         <form method="POST" action="{{ route('ops.invoices.destroy', $inv) }}" style="display:inline"
               onsubmit="return confirm(@js(__('ops.del_inv_confirm', ['number' => $inv->number])))">

@@ -337,6 +337,7 @@
         'pullTerms' => __('ops.pull_terms'),
         'termsApplied' => __('ops.terms_applied'),
         'chainDiscountNote' => __('ops.chain_discount_note'),
+        'zoneRequired' => __('ops.zone_required_approve'),
         // ⚠️ تركيبة الاسم (سلسلة/اسم + منطقة) بتحصل في **السيرفر**
         // لحظة الاعتماد — مفيش تركيب في المتصفح (قرار المالك ١٨/٨).
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
@@ -414,6 +415,21 @@ function toggleFields() {
     const approved = document.getElementById('dDecision').value === 'approved';
     document.getElementById('approveFields').style.display = approved ? '' : 'none';
 }
+
+/* ═══ حارس المنطقة قبل الإرسال (بلاغ ٢٠/٨/٢٠٢٦) ═══
+   اعتماد من غير منطقة = عميل غير مرئي في الأبلكيشن — شاشة مناطق
+   المندوب بتتبني من زون العميل. السيرفر بيرفض برضه (الحارس الحقيقي)،
+   بس هنا بنقولها فوراً من غير ريلود. */
+document.getElementById('formDecide').addEventListener('submit', function (e) {
+    const approved = document.getElementById('dDecision').value === 'approved';
+    if (!approved) return;
+    if (document.getElementById('dZone').value) return;
+    e.preventDefault();
+    const msg = document.getElementById('dGeoMsg');
+    msg.textContent = '⚠️ ' + DEC.zoneRequired;
+    msg.style.color = 'var(--red, #B00020)';
+    document.getElementById('dZone').scrollIntoView({ block: 'center' });
+});
 
 /* ⚠️ **التشيك بوكس بيتفك مع كل فتحة للمودال.** المودال واحد لكل
    الطلبات — لو فضل متعلّم من طلب فات، الطلب اللي بعده كان بيعدّي
@@ -531,18 +547,24 @@ async function detectFromLocation() {
         // (بلاغ ١٨/٨/٢٠٢٦). الحدث كمان بيشغّل onchange=filterZones()
         // بتاعت المحافظة فمنطقة الاقتراح بتبقى ظاهرة قبل ما نختارها.
         const gov = document.getElementById('dGov');
-        const govFilled = !!(j.governorate && !gov.value);
+        let govFilled = !!(j.governorate && !gov.value);
         if (govFilled) {
             gov.value = j.governorate;
+            // ⚠️ لو القيمة الراجعة مش من مفاتيح القايمة، السيلكت بيرفضها
+            // **في صمت** ويفضل فاضي — وكنا بنقول «✔ المحافظة» على حاجة
+            // ماتكتبتش، والعميل يتولد ناقص (بلاغ ٢٠/٨/٢٠٢٦)
+            govFilled = gov.value === String(j.governorate);
             gov.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
             // نعيد الفلترة برضه عشان منطقة الاقتراح تبقى ظاهرة
             filterZones();
         }
         const zone = document.getElementById('dZone');
-        const zoneFilled = !!(j.zone_id && !zone.value);
+        let zoneFilled = !!(j.zone_id && !zone.value);
         if (zoneFilled) {
             zone.value = j.zone_id;
+            // نفس حارس المحافظة — الصدق مع اللي اتكتب فعلاً
+            zoneFilled = zone.value === String(j.zone_id);
             zone.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
