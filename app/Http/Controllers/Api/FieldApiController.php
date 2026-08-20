@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AppNotification;
 use App\Models\Client;
 use App\Models\ClientRequest;
+// ⚠️ كانت ناقصة — إندبوينت حركة الصنف رمى «Class CustodyItem not
+// found» على الستيدجينج (بلاغ ٢١/٨)
+use App\Models\CustodyItem;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Product;
@@ -510,6 +513,8 @@ class FieldApiController extends Controller
             ->latest()->get()->map(fn ($po) => [
                 'id' => $po->id,
                 'number' => $po->number,
+                // (٢١/٨) كارت الأمر بيفتح شاشة العميل للتشيك إن العادي
+                'client_id' => $po->client_id,
                 'client' => $po->client->fullName(),
                 'source' => $po->sourceLabel(),
                 // ⚠️ علم ثابت — الأبلكيشن كان بيقارن `source` (نص حر
