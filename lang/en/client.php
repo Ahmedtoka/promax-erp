@@ -275,6 +275,7 @@ return [
     'setup_show_solo' => 'Standalone',
     'setup_progress' => 'Reviewed :done of :total',
     'setup_only_pending' => 'Pending only',
+    'disc_source_label' => 'Discount source',
     'setup_live_now' => 'Live:',
     'mixed_values' => 'Mixed',
     'tax_added' => '+VAT',

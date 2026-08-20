@@ -108,7 +108,9 @@
      * والمستخدم بيشوف صفحة سليمة ومش فاهم ليه الحفظ مانفعش.
      */
     $stepFields = [
-        2 => ['price_list_id', 'discount', 'has_contract', 'contract_type',
+        // ⚠️ القايمة والخصم والتصنيف اتنقلوا لخطوة ١ (٢٠/٨) — قسم
+        // «طريقة الحساب» بقى كله في أول خطوة زي مودال الاعتماد
+        2 => ['has_contract', 'contract_type',
               'contract_payment_days', 'contract_payment_days_from',
               'contract_starts_at', 'contract_ends_at', 'contract_note',
               'contract_clauses', 'contract_file', 'clause'],
@@ -134,7 +136,9 @@
               'group_id', 'manager_id', 'lat', 'lng', 'contacts',
               // ⚠️ شروط الدفع اتنقلت لخطوة ١ — لو فضلت في قايمة خطوة ٢
               // الفورم كان هيفتح على خطوة العقد وخطأ الفاليديشن في خطوة ١
-              'payment_terms', 'payment_days', 'payment_days_from'];
+              'payment_terms', 'payment_days', 'payment_days_from',
+              // ⚠️ التسعير والتصنيف اتنقلوا لخطوة ١ كمان (٢٠/٨)
+              'price_list_id', 'discount', 'category'];
 
     foreach ($step1 as $f) {
         if ($errors->has($f) || $errors->hasAny([$f.'.*'])) {
@@ -266,32 +270,31 @@
             </div>
         @endif
 
-        <div class="alert info" style="margin-bottom:14px">
-            <span>🔤</span><span>{{ __('client.name_en_first_hint') }}</span>
-        </div>
-
+        {{-- ⚠️ العربي الأول — نفس ترتيب مودال الاعتماد بالحرف
+             (طلب المالك ٢٠/٨). الإنجليزي لسه أساس الكود والتصدير
+             للمصلحة، بس مكانه التاني مش الأول. --}}
         <div class="frow">
+            <div>
+                <label class="f">{{ __('client.name_ar_field') }} {!! $star !!}</label>
+                <input type="text" name="name" maxlength="190" data-req autofocus
+                       class="{{ trim($bad('name')) }}"
+                       value="{{ $own('name') }}" style="width:100%"
+                       placeholder="{{ __('client.name_ar_ph') }}">
+                {!! $err('name') !!}
+                {!! $hint('name') !!}
+            </div>
             <div>
                 <label class="f">{{ __('client.name_en_field') }} {!! $star !!}</label>
                 {{-- ⚠️ **الـplaceholder بيقول «اكتب إيه» مش بيدي مثال.**
                      المثال (زي «Circle K — Maadi Degla») كان بيتقري كأنه
                      قيمة مكتوبة فعلاً، وفيه ناس بتسيب الخانة فاكرة إنها
                      مليانة — وبعدين الحفظ بيترفض وهم مش فاهمين ليه. --}}
-                <input type="text" name="name_en" maxlength="190" dir="ltr" autofocus data-req
+                <input type="text" name="name_en" maxlength="190" dir="ltr" data-req
                        value="{{ $own('name_en') }}" style="width:100%"
                        class="{{ trim($bad('name_en')) }}"
                        placeholder="{{ __('client.name_en_ph') }}">
                 {!! $err('name_en') !!}
                 {!! $hint('name_en') !!}
-            </div>
-            <div>
-                <label class="f">{{ __('client.name_ar_field') }} {!! $star !!}</label>
-                <input type="text" name="name" maxlength="190" data-req
-                       class="{{ trim($bad('name')) }}"
-                       value="{{ $own('name') }}" style="width:100%"
-                       placeholder="{{ __('client.name_ar_ph') }}">
-                {!! $err('name') !!}
-                {!! $hint('name') !!}
             </div>
         </div>
 
@@ -520,6 +523,98 @@
         </div>
 
         {{-- ═════ شروط الدفع ═════ --}}
+        {{-- ═════ التسعير — بيتحفظ سواء فيه عقد أو مفيش ═════ --}}
+        {{-- ⚠️ **بره بلوك العقد — دلوقتي بجد.** التعليق ده كان موجود
+             والحقول كانت **جوه** البلوك فعلاً؛ ماكانش بيبان لأن البلوك
+             ماكانش بيتقفل أبداً. أول ما التشيك بوكس رجع في التعديل،
+             `toggleContract()` بقت تعطّل كل حاجة جوه البلوك — يعني عميل
+             من غير عقد بيتبعت من غير `price_list` ولا `discount`،
+             والاتنين `required`، فبياخد 422 على خانتين مش شايفهم أصلاً
+             ومفيش طريقة يوصلهم. --}}
+        <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('ops.pricing') }}</div>
+        {{-- ⚠️ **التصنيف مش هنا.** هو نتيجة سلوك مش مدخل: بيدفع في
+             مواعيده ولا لأ، بيكبر ولا لأ. تحديده وقت التعريف تخمين
+             بيتحوّل لحقيقة في الشاشة — عميل يتعلّم «تحصيل فوري» من
+             يومه الأول ويتقفل عليه الآجل من غير سبب. العميل الجديد
+             بيبدأ `grow` وبيتظبط من كارته بعد أول تعاملات. --}}
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.price_list') }} {!! $star !!}</label>
+                {{-- ⚠️ **القوايم من الداتابيز مش متبتّتة** (2026-08-07).
+                     كانت «قديم/جديد» مكتوبين في الفيو، فأي قايمة جديدة
+                     بتتعمل من شاشة التسعير ماكانش فيه طريقة يتسكّن
+                     عليها عميل. والقيمة بقت `price_list_id` لأن ده
+                     اللي الفاتورة بتتحاسب منه فعلاً.
+
+                     ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
+                     الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
+                     غير ما يقرا — والعميل اللي المفروض على القائمة
+                     القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
+                <select name="price_list_id" style="width:100%" data-req class="{{ trim($bad('price_list_id')) }}">
+                    <option value="">— {{ __('client.pick_price_list') }} —</option>
+                    @foreach ($priceLists as $pl)
+                        <option value="{{ $pl->id }}" @selected((int) $v('price_list_id') === $pl->id)>
+                            {{ $pl->displayName() }}@unless ($pl->active) — {{ __('common.inactive') }}@endunless
+                        </option>
+                    @endforeach
+                </select>
+                {!! $err('price_list_id') !!}
+                {!! $hint('price_list_id') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
+            </div>
+            <div>
+                <label class="f">{{ __('client.custom_discount') }} % {!! $star !!}</label>
+                <input type="number" step="0.5" min="0" max="100" name="discount" data-req style="width:100%"
+                       class="{{ trim($bad('discount')) }}"
+                       value="{{ old('discount', $src ? round((float) $src->discount * 100, 2) : 0) }}">
+                {!! $err('discount') !!}
+                {!! $hint('discount') !!}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
+            </div>
+            {{-- ⚠️ **شروط الدفع اتنقلت لخطوة ١** (2026-08-08). كانت هنا
+                 في خطوة «التعاقد»، وعميل الكاش فان مابيوصلش للخطوة دي
+                 أصلاً — فالمدير التجاري كان بيدوّر على الخانة ومايلاقيهاش
+                 ويفتكرها مش موجودة. كاش/آجل قرار تجاري أساسي زي القناة
+                 والتصنيف، مش بند من بنود العقد. --}}
+            {{-- ⚠️ **في التعديل بس.** التصنيف نتيجة سلوك مش مدخل،
+                 فمالوش لازمة وقت التعريف (الشرح فوق). بس المودال
+                 القديم كان **المكان الوحيد في السيستم كله** اللي
+                 بيظبطه — وبشيله فضل كل عميل على `grow` للأبد، يعني
+                 `danger` و`credit` و`internal` بقوا كود ميّت. --}}
+            @if ($editing)
+                <div>
+                    <label class="f">{{ __('client.category') }}</label>
+                    <select name="category" style="width:100%" class="{{ trim($bad('category')) }}">
+                        {{-- ⚠️ المفتاح هو القيمة — `CATEGORIES` شكلها
+                             `key => [label, css]`، والـforeach من غير
+                             `$k =>` كان بيحط الأراي كله في `value`. --}}
+                        @foreach (array_keys(Client::CATEGORIES) as $ck)
+                            <option value="{{ $ck }}" @selected($v('category') === $ck)>{{ __('enums.category.'.$ck) }}</option>
+                        @endforeach
+                    </select>
+                    {!! $err('category') !!}
+                    {!! $hint('category') !!}
+                </div>
+            @endif
+        </div>
+
+        {{-- ═══ «الساري دلوقتي» (٢٠/٨) — نفس منطق شاشات الإعداد ═══
+             اللي هيتحاسب بيه العميل فعلاً بالترتيب المقدس: عقده
+             الساري ← خصمه الخاص ← عقد سلسلته. عشان اللي بيعدّل يشوف
+             نتيجة اختياراته قبل ما يحفظ. --}}
+        @if ($editing)
+            @php
+                $liveRow = \App\Services\Pricing::listRowFor($src);
+                $liveDiscNow = $src->effectiveDiscount();
+            @endphp
+            <div style="font-size:11.5px;font-weight:700;color:var(--royal-blue);background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin:-2px 0 14px">
+                ⚡ {{ __('client.setup_live_now') }}
+                {{ __('client.price_list') }}: <b>{{ $liveRow?->displayName() ?? '—' }}</b>
+                · {{ __('client.custom_discount') }}: <b>{{ rtrim(rtrim(number_format($liveDiscNow * 100, 2), '0'), '.') }}%</b>
+                · {{ __('client.disc_source_label') }}: <b>{{ __('client.'.$src->discountSourceKey()) }}</b>
+            </div>
+        @endif
+
         <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('client.pay_section') }}</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:9px">{{ __('client.pay_section_hint') }}</div>
         <div class="frow">
@@ -661,81 +756,6 @@
     {{-- ══════════════════ 2. العقد ══════════════════ --}}
     <div class="card step-pane" data-pane="2" style="display:none">
         <h3>{{ __('client.step_contract') }}</h3>
-
-        {{-- ═════ التسعير — بيتحفظ سواء فيه عقد أو مفيش ═════ --}}
-        {{-- ⚠️ **بره بلوك العقد — دلوقتي بجد.** التعليق ده كان موجود
-             والحقول كانت **جوه** البلوك فعلاً؛ ماكانش بيبان لأن البلوك
-             ماكانش بيتقفل أبداً. أول ما التشيك بوكس رجع في التعديل،
-             `toggleContract()` بقت تعطّل كل حاجة جوه البلوك — يعني عميل
-             من غير عقد بيتبعت من غير `price_list` ولا `discount`،
-             والاتنين `required`، فبياخد 422 على خانتين مش شايفهم أصلاً
-             ومفيش طريقة يوصلهم. --}}
-        <div style="font-size:12px;font-weight:900;color:var(--royal-blue);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">{{ __('ops.pricing') }}</div>
-        {{-- ⚠️ **التصنيف مش هنا.** هو نتيجة سلوك مش مدخل: بيدفع في
-             مواعيده ولا لأ، بيكبر ولا لأ. تحديده وقت التعريف تخمين
-             بيتحوّل لحقيقة في الشاشة — عميل يتعلّم «تحصيل فوري» من
-             يومه الأول ويتقفل عليه الآجل من غير سبب. العميل الجديد
-             بيبدأ `grow` وبيتظبط من كارته بعد أول تعاملات. --}}
-        <div class="frow">
-            <div>
-                <label class="f">{{ __('client.price_list') }} {!! $star !!}</label>
-                {{-- ⚠️ **القوايم من الداتابيز مش متبتّتة** (2026-08-07).
-                     كانت «قديم/جديد» مكتوبين في الفيو، فأي قايمة جديدة
-                     بتتعمل من شاشة التسعير ماكانش فيه طريقة يتسكّن
-                     عليها عميل. والقيمة بقت `price_list_id` لأن ده
-                     اللي الفاتورة بتتحاسب منه فعلاً.
-
-                     ⚠️ **مفيش قائمة مختارة سلفاً.** «الجديدة» كانت
-                     الافتراضي، فاللي بيدخل الداتا بيعدّي عليها من
-                     غير ما يقرا — والعميل اللي المفروض على القائمة
-                     القديمة بياخد أسعار الجديدة وبيرفض الفاتورة. --}}
-                <select name="price_list_id" style="width:100%" data-req class="{{ trim($bad('price_list_id')) }}">
-                    <option value="">— {{ __('client.pick_price_list') }} —</option>
-                    @foreach ($priceLists as $pl)
-                        <option value="{{ $pl->id }}" @selected((int) $v('price_list_id') === $pl->id)>
-                            {{ $pl->displayName() }}@unless ($pl->active) — {{ __('common.inactive') }}@endunless
-                        </option>
-                    @endforeach
-                </select>
-                {!! $err('price_list_id') !!}
-                {!! $hint('price_list_id') !!}
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.price_list_hint') }}</div>
-            </div>
-            <div>
-                <label class="f">{{ __('client.custom_discount') }} % {!! $star !!}</label>
-                <input type="number" step="0.5" min="0" max="100" name="discount" data-req style="width:100%"
-                       class="{{ trim($bad('discount')) }}"
-                       value="{{ old('discount', $src ? round((float) $src->discount * 100, 2) : 0) }}">
-                {!! $err('discount') !!}
-                {!! $hint('discount') !!}
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">{{ __('client.custom_discount_hint') }}</div>
-            </div>
-            {{-- ⚠️ **شروط الدفع اتنقلت لخطوة ١** (2026-08-08). كانت هنا
-                 في خطوة «التعاقد»، وعميل الكاش فان مابيوصلش للخطوة دي
-                 أصلاً — فالمدير التجاري كان بيدوّر على الخانة ومايلاقيهاش
-                 ويفتكرها مش موجودة. كاش/آجل قرار تجاري أساسي زي القناة
-                 والتصنيف، مش بند من بنود العقد. --}}
-            {{-- ⚠️ **في التعديل بس.** التصنيف نتيجة سلوك مش مدخل،
-                 فمالوش لازمة وقت التعريف (الشرح فوق). بس المودال
-                 القديم كان **المكان الوحيد في السيستم كله** اللي
-                 بيظبطه — وبشيله فضل كل عميل على `grow` للأبد، يعني
-                 `danger` و`credit` و`internal` بقوا كود ميّت. --}}
-            @if ($editing)
-                <div>
-                    <label class="f">{{ __('client.category') }}</label>
-                    <select name="category" style="width:100%" class="{{ trim($bad('category')) }}">
-                        {{-- ⚠️ المفتاح هو القيمة — `CATEGORIES` شكلها
-                             `key => [label, css]`، والـforeach من غير
-                             `$k =>` كان بيحط الأراي كله في `value`. --}}
-                        @foreach (array_keys(Client::CATEGORIES) as $ck)
-                            <option value="{{ $ck }}" @selected($v('category') === $ck)>{{ __('enums.category.'.$ck) }}</option>
-                        @endforeach
-                    </select>
-                    {!! $err('category') !!}
-                    {!! $hint('category') !!}
-                </div>
-            @endif
-        </div>
 
         {{-- ⚠️ **مفيش تشيك بوكس «العميل ده له عقد» تاني.**
              القايمة نفسها بقت بتقول: «اتفاق تجاري بدون عقد» نوع،

@@ -277,6 +277,7 @@ return [
     'setup_show_solo' => 'مستقلين',
     'setup_progress' => 'اتراجع :done من :total',
     'setup_only_pending' => 'اللي لسه بس',
+    'disc_source_label' => 'مصدر الخصم',
     'setup_live_now' => 'الساري:',
     'mixed_values' => 'مختلط',
     'tax_added' => '+ضريبة',
