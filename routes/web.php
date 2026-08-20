@@ -796,6 +796,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/requests', [OpsController::class, 'requests'])->name('requests');
         Route::post('/requests/{clientRequest}/decide', [OpsController::class, 'decideRequest'])
             ->middleware('role:admin,manager')->name('requests.decide');
+        // مراجعة القرار — تعديل بيانات العميل المعتمد من نفس المودال
+        Route::post('/requests/{clientRequest}/revise', [OpsController::class, 'reviseDecision'])
+            ->middleware('role:admin,manager')->name('requests.revise');
+        // مسح طلب نزل غلط — المعتمد اللي عميله موجود محمي
+        Route::delete('/requests/{clientRequest}', [OpsController::class, 'destroyRequest'])
+            ->middleware('role:admin')->name('requests.destroy');
 
         Route::get('/invoices', [OpsController::class, 'invoices'])->name('invoices');
         Route::get('/invoices/{invoice}', [OpsController::class, 'invoice'])->name('invoice');

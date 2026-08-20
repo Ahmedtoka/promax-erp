@@ -79,6 +79,22 @@
                             // بيعبّيها في الفورم. null لصف الفريق التاني.
                             'terms' => $d['terms'] ?? null,
                         ], $dupes[$r->id] ?? []),
+                        // ═══ مراجعة القرار (٢٠/٨) — بيانات العميل الحالية ═══
+                        // المودال بيتفتح متعبّي بالوضع القايم فعلاً مش
+                        // بالطلب الخام — والخصم كنسبة مئوية زي الفورم.
+                        'client' => $r->client === null ? null : [
+                            'name' => $r->client->name,
+                            'name_en' => $r->client->name_en,
+                            'gov' => $r->client->governorate,
+                            'zone_id' => $r->client->zone_id,
+                            'address' => $r->client->address,
+                            'address_ar' => $r->client->address_ar,
+                            'channel_id' => $r->client->channel_id,
+                            'sub_channel' => $r->client->sub_channel,
+                            'price_list_id' => $r->client->price_list_id,
+                            'group_id' => $r->client->group_id,
+                            'discount' => round(((float) $r->client->discount) * 100, 2),
+                        ],
                     ],
                     JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP
                 ); @endphp
@@ -136,6 +152,20 @@
                                 {{-- مين قرّر + امتى — «مين اللي وافق؟» (١٨ أغسطس ٢٠٢٦) --}}
                                 <b style="font-size:11.5px">{{ $r->decider?->displayName() ?? '—' }}</b>
                                 <br><span style="color:var(--muted);font-size:11px">{{ $r->decided_at?->format('m-d h:i A') }}</span>
+                                @if ($r->status === 'approved' && $r->client)
+                                    {{-- مراجعة القرار — نفس المودال ببيانات العميل الحالية --}}
+                                    <br><button class="btn sm" style="margin-top:4px" data-req-rev="{{ $r->id }}"
+                                            onclick='revise({!! $rJson !!})'>🔎 {{ __('ops.revise_decision') }}</button>
+                                @endif
+                            @endif
+                            @if (auth()->user()?->role === 'admin')
+                                {{-- مسح طلب نزل غلط — المعتمد اللي عميله موجود السيرفر بيحميه --}}
+                                <form method="POST" action="{{ route('ops.requests.destroy', $r) }}" style="display:inline"
+                                      onsubmit="return confirm(@js(__('ops.req_del_confirm', ['number' => $r->number])))">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="btn sm" type="submit" style="color:var(--red);border-color:var(--red);margin-top:4px">🗑</button>
+                                </form>
                             @endif
                         </td>
                     @endif
@@ -155,7 +185,8 @@
         @csrf
         <h4 id="dTitle">{{ __('ops.decide_on', ['name' => __('ops.request')]) }}</h4>
 
-        <div class="frow">
+        {{-- في وضع «مراجعة القرار» الصف ده بيتخبى — القرار واخد خلاص --}}
+        <div class="frow" id="decisionRow">
             <div><label class="f">{{ __('ops.decision') }}</label>
                 <select name="decision" id="dDecision" style="width:100%" onchange="toggleFields()">
                     <option value="approved">{{ __('ops.approve_and_add') }}</option>
@@ -323,7 +354,7 @@
 
 @section('scripts')
 @php
-    // ⚠️ ممنوع دايركتيف @json بمصفوفة — بيكسّر بارسر بليد. json_encode في @php.
+    // ⚠️ ممنوع دايركتيف json بمصفوفة — بيكسّر بارسر بليد. json_encode في بلوك php.
     $decideData = json_encode([
         'suggest' => route('erp.client_locations.suggest'),
         'decideBase' => url('ops/requests'),
@@ -338,6 +369,7 @@
         'termsApplied' => __('ops.terms_applied'),
         'chainDiscountNote' => __('ops.chain_discount_note'),
         'zoneRequired' => __('ops.zone_required_approve'),
+        'reviseTitle' => __('ops.revise_on', ['name' => '#N#']),
         // ⚠️ تركيبة الاسم (سلسلة/اسم + منطقة) بتحصل في **السيرفر**
         // لحظة الاعتماد — مفيش تركيب في المتصفح (قرار المالك ١٨/٨).
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
@@ -352,6 +384,7 @@ let CUR_DUPES = [];
 function decide(r) {
     document.getElementById('dTitle').textContent = DEC.titleTpl.replace('#N#', r.name);
     document.getElementById('formDecide').action = DEC.decideBase + '/' + r.id + '/decide';
+    document.getElementById('decisionRow').style.display = '';
     document.getElementById('dDecision').value = 'approved';
 
     // الاسم خام زي ما المندوب كتبه — التركيبة بتحصل في السيرفر
@@ -376,6 +409,47 @@ function decide(r) {
     CUR = { lat: r.lat != null ? r.lat : null, lng: r.lng != null ? r.lng : null };
     updateCaptured();
     syncSubChannel();
+    filterZones();
+    toggleFields();
+    openDlg('dlgDecide');
+}
+
+/* ═══ مراجعة القرار (٢٠/٨) ═══
+   نفس المودال — بس متعبّي **ببيانات العميل الحالية** مش الطلب،
+   وبيبعت على راوت المراجعة اللي بيكتب على العميل نفسه. صف القرار
+   بيتخبى: القرار واخد خلاص، احنا بنظبط البيانات بس. */
+function revise(r) {
+    const c = r.client || {};
+    document.getElementById('dTitle').textContent = DEC.reviseTitle.replace('#N#', c.name || r.name);
+    document.getElementById('formDecide').action = DEC.decideBase + '/' + r.id + '/revise';
+    document.getElementById('decisionRow').style.display = 'none';
+    document.getElementById('dDecision').value = 'approved';
+
+    document.getElementById('dName').value = c.name || '';
+    document.getElementById('dNameEn').value = c.name_en || '';
+    document.getElementById('dTermsMsg').style.display = 'none';
+    document.getElementById('dAddr').value = c.address || '';
+    document.getElementById('dAddrAr').value = c.address_ar || '';
+    document.getElementById('dGov').value = c.gov || '';
+    document.getElementById('dZone').value = c.zone_id || '';
+    document.getElementById('dChannel').value = c.channel_id || '';
+    document.querySelector('#formDecide select[name="price_list_id"]').value = c.price_list_id || '';
+    document.querySelector('#formDecide select[name="group_id"]').value = c.group_id || '';
+    document.querySelector('#formDecide input[name="discount"]').value = c.discount != null ? c.discount : '0';
+    document.getElementById('dGeoMsg').textContent = '';
+
+    CUR_DUPES = [];
+    renderRequestDupes([]);
+
+    CUR = { lat: r.lat != null ? r.lat : null, lng: r.lng != null ? r.lng : null };
+    updateCaptured();
+    syncSubChannel();
+    // القسم بعد ما صندوق الكي أكاونت يبان — وإلا كان بيتصفّر
+    const sub = document.querySelector('#formDecide select[name="sub_channel"]');
+    if (sub && c.sub_channel) {
+        sub.value = c.sub_channel;
+        sub.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     filterZones();
     toggleFields();
     openDlg('dlgDecide');
@@ -604,7 +678,10 @@ const OLD_IN = {!! json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
 
 if (BOUNCE && BOUNCE.request_id) {
-    const btn = document.querySelector('button[data-req="' + BOUNCE.request_id + '"]');
+    // ارتداد المراجعة بيرجع يفتح مودال المراجعة مش الاعتماد
+    const btn = document.querySelector(BOUNCE.revise
+        ? 'button[data-req-rev="' + BOUNCE.request_id + '"]'
+        : 'button[data-req="' + BOUNCE.request_id + '"]');
 
     if (btn) {
         btn.click();   // بيملا المودال ويفتحه بداتا الطلب

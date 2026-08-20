@@ -3291,6 +3291,169 @@ class OpsController extends Controller
         return back()->with('ok', __('flash.decision_recorded'));
     }
 
+    /**
+     * ═══ مسح طلب عميل نزل غلط (٢٠ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * ⚠️ الطلب المعتمد اللي عميله لسه موجود مايتمسحش — هو أثر
+     * المراجعة الوحيد (مين فتح الحساب وبأنهي أوراق). امسح العميل
+     * الأول (من كارته) والطلب يتمسح بعده عادي.
+     */
+    public function destroyRequest(Request $request, ClientRequest $clientRequest)
+    {
+        if ($clientRequest->status === 'approved'
+            && $clientRequest->client_id !== null
+            && $clientRequest->client !== null) {
+            return back()->withErrors(['request' => __('ops.req_del_has_client')]);
+        }
+
+        // صورة المحل والأوراق — ملفات مرفوعة بتتشال مع الطلب
+        foreach ([$clientRequest->photo_path, $clientRequest->docs_path] as $path) {
+            if ($path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+            }
+        }
+
+        $number = $clientRequest->number;
+        $clientRequest->delete();
+
+        return back()->with('ok', __('ops.req_deleted', ['number' => $number]));
+    }
+
+    /**
+     * ═══ مراجعة القرار (٢٠ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «زرار مراجعة القرار أشوف فيه زي القرار بالظبط —
+     * والبيانات الأساسية كلها لازم تسمع صح الصح لو دوست تاني».
+     *
+     * نفس مودال الاعتماد بيتفتح متعبّي **ببيانات العميل الحالية**
+     * (مش الطلب)، وأي تعديل بيتكتب على العميل نفسه: الاسم باللغتين
+     * بعقيدة التركيبة، المحافظة والمنطقة والعنوان، القناة والقسم
+     * والسلسلة، والقايمة والخصم بنفس أعمدة الاعتماد بالحرف
+     * (`price_list_id` + العمود النصي متزامنين، والخصم بيقلب
+     * `uses_channel_discount`) — فطريقة الحساب بتتسكّل فوراً.
+     *
+     * ⚠️ لو المنطقة اتغيّرت، لاحقة المنطقة القديمة بتتشال من الاسم
+     * الأول وبعدين الجديدة بتتركّب — من غير كده كان هيطلع
+     * «كاريبو - المعادي - مدينتي».
+     */
+    public function reviseDecision(Request $request, ClientRequest $clientRequest)
+    {
+        Scope::assertRep($request->user(), $clientRequest->rep);
+
+        $client = $clientRequest->status === 'approved' ? $clientRequest->client : null;
+
+        if ($client === null) {
+            return back()->withErrors(['request' => __('ops.revise_no_client')]);
+        }
+
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:190'],
+            'name_en' => ['nullable', 'string', 'max:190'],
+            // ⚠️ المنطقة إجبارية — عميل من غير زون غير مرئي للمندوب
+            'zone_id' => ['required', 'exists:zones,id'],
+            'governorate' => ['nullable', 'string', 'max:60'],
+            'address' => ['nullable', 'string', 'max:190'],
+            'address_ar' => ['nullable', 'string', 'max:190'],
+            'channel_id' => ['nullable', 'exists:channels,id'],
+            'sub_channel' => ['nullable', 'in:'.implode(',', array_keys(Channel::SUB_CHANNELS))],
+            'price_list_id' => ['nullable', 'exists:price_lists,id'],
+            'group_id' => ['nullable', 'exists:client_groups,id'],
+            'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'confirm_duplicate' => ['nullable', 'boolean'],
+        ]);
+
+        $zone = Zone::find((int) $data['zone_id']);
+        $oldZone = $client->zone;
+
+        // شيل لاحقة المنطقة القديمة قبل تركيب الجديدة
+        $stripZone = static function (string $name, ?string $zoneName): string {
+            $zoneName = trim((string) $zoneName);
+
+            return $zoneName !== '' && str_ends_with($name, ' - '.$zoneName)
+                ? trim(substr($name, 0, -strlen(' - '.$zoneName)))
+                : $name;
+        };
+        $withZone = static function (string $head, ?string $zoneName): string {
+            $head = trim($head);
+            $zoneName = trim((string) $zoneName);
+
+            return $zoneName !== '' && ! str_contains($head, $zoneName)
+                ? $head.' - '.$zoneName
+                : $head;
+        };
+
+        $headAr = trim((string) ($data['name'] ?? '')) ?: (string) $client->name;
+        $finalName = $withZone($stripZone($headAr, $oldZone?->name), $zone?->name);
+
+        $headEn = trim((string) ($data['name_en'] ?? '')) ?: (string) ($client->name_en ?? '');
+        $finalNameEn = $headEn !== ''
+            ? $withZone($stripZone($headEn, $oldZone?->name_en), $zone?->name_en)
+            : null;
+
+        if (empty($data['confirm_duplicate'])) {
+            $dupes = \App\Support\Dupes::matches([
+                'name' => $finalName,
+                'name_en' => $finalNameEn,
+                'phone' => $client->phone,
+                'zone_id' => $zone?->id,
+                'group_id' => $data['group_id'] ?? null,
+            ], $client->id, $request->user());
+
+            if ($dupes !== []) {
+                return back()->withInput()
+                    ->with('dupeBounce', [
+                        'request_id' => $clientRequest->id,
+                        // ⚠️ الفلاج ده بيخلي الجافاسكربت يرجع يفتح
+                        // مودال **المراجعة** مش الاعتماد
+                        'revise' => true,
+                        'dupes' => array_map(fn ($d) => [
+                            'name' => $d['name'],
+                            'code' => $d['code'],
+                            'by' => $d['by_label'],
+                            'conf' => $d['confidence_label'],
+                            'sure' => $d['confidence'] === 'sure',
+                            'terms' => $d['terms'] ?? null,
+                        ], $dupes),
+                    ])
+                    ->withErrors([
+                        'request' => __('ops.dup_blocked', [
+                            'names' => collect($dupes)->take(3)
+                                ->map(fn ($d) => $d['name'].' ('.$d['code'].')')
+                                ->implode(' · '),
+                        ]),
+                    ]);
+            }
+        }
+
+        $discount = (float) ($data['discount'] ?? 0);
+        $priceList = ! empty($data['price_list_id'])
+            ? PriceList::find((int) $data['price_list_id'])
+            : null;
+
+        DB::transaction(function () use ($data, $client, $zone, $finalName, $finalNameEn, $discount, $priceList) {
+            $client->update([
+                'name' => $finalName,
+                'name_en' => $finalNameEn,
+                'zone_id' => $zone?->id,
+                'governorate' => filled($data['governorate'] ?? null)
+                    ? $data['governorate']
+                    : $zone?->governorate,
+                'address' => $data['address'] ?? $client->address,
+                'address_ar' => $data['address_ar'] ?? $client->address_ar,
+                'channel_id' => $data['channel_id'] ?? $client->channel_id,
+                'sub_channel' => $data['sub_channel'] ?? null,
+                'group_id' => $data['group_id'] ?? null,
+                // ⚠️ العمودين مع بعض — نفس دوكترين الاعتماد بالحرف
+                'price_list_id' => $priceList?->id,
+                ...($priceList !== null ? ['price_list' => $priceList->code] : []),
+                'discount' => $discount / 100,
+                'uses_channel_discount' => $discount <= 0,
+            ]);
+        });
+
+        return back()->with('ok', __('ops.revised', ['name' => $client->displayName()]));
+    }
+
     // ================= التراكينج =================
 
     public function tracking(Request $request)

@@ -357,6 +357,13 @@ return [
     'dup_blocked' => 'A similar client is already registered: :names - if it really is a different place, tick "different client" and continue the approval.',
 
     // ═══ Pull terms from the similar client + name composer (Aug 18, 2026) ═══
+    'revise_decision' => 'Revise decision',
+    'revise_on' => 'Revise decision - :name',
+    'revised' => ':name updated from decision review - name, zone, price list and discount all applied.',
+    'revise_no_client' => 'This request is not approved or its client was deleted - nothing to revise.',
+    'req_del_confirm' => 'Delete request :number permanently? Its uploaded photo and documents will be removed too.',
+    'req_deleted' => 'Request :number deleted.',
+    'req_del_has_client' => 'Request is approved and its client exists - it is the only audit trail. Delete the client first, then the request.',
     'reprice_invoice' => 'Reprice at current client terms',
     'reprice_confirm' => 'Reprice invoice :number using the client\'s current price list and discount? Lines, totals and ledger entries will all be updated and the balance recalculated.',
     'repriced' => 'Invoice :number repriced - grand total was :old, now :new. Entries and balance adjusted.',
