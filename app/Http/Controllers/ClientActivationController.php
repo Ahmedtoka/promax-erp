@@ -353,6 +353,60 @@ class ClientActivationController extends Controller
      * `client_requests`). خطط الزيارات والليدز والتارجيتات
      * `nullOnDelete` فبتفضل بس من غير عميل.
      */
+    /**
+     * ═══ مسح الزيارات القديمة (٢٠ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: مسح فواتير عميل غلط وبعدها مسح العميل — حارس
+     * المسح بيقف على «زيارات (1)». الزرار ده بينضّف الزيارات
+     * **الفاضية بس**: اللي مالهاش فاتورة ولا مرتجع ولا قيد تحصيل
+     * ولا هدية ولا طلب بضاعة مربوط بيها.
+     *
+     * ⚠️ **الزيارة اللي عليها فلوس أو مستند مابتتمسحش أبداً** —
+     * قيد التحصيل الميداني له صورة إثبات ومرساته الزيارة
+     * (`source_type=Visit`)؛ مسح الزيارة يسيب الفلوس معلّقة في
+     * الهوا. بنقول كام اتمسح وكام اتساب وليه.
+     */
+    public function purgeVisits(Request $request, Client $client)
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+
+        $has = fn (string $table, int $visitId) => \Illuminate\Support\Facades\Schema::hasTable($table)
+            && \Illuminate\Support\Facades\Schema::hasColumn($table, 'visit_id')
+            && DB::table($table)->where('visit_id', $visitId)->exists();
+
+        $deleted = 0;
+        $kept = 0;
+
+        DB::transaction(function () use ($client, $has, &$deleted, &$kept) {
+            $visits = \App\Models\Visit::where('client_id', $client->id)->get();
+
+            foreach ($visits as $v) {
+                $hasMoney = \App\Models\Transaction::where('source_type', \App\Models\Visit::class)
+                    ->where('source_id', $v->id)->exists();
+
+                if ($hasMoney
+                    || $has('invoices', $v->id)
+                    || $has('returns', $v->id)
+                    || $has('gift_handouts', $v->id)
+                    || $has('replenishment_requests', $v->id)) {
+                    $kept++;
+
+                    continue;
+                }
+
+                // صور الرف المربوطة بتتمسح بالكاسكيد — زيارة فاضية
+                // آثارها التشغيلية بتروح معاها
+                $v->delete();
+                $deleted++;
+            }
+        });
+
+        return back()->with('ok', __('client.visits_purged', [
+            'deleted' => $deleted,
+            'kept' => $kept,
+        ]));
+    }
+
     public function destroy(Request $request, Client $client)
     {
         abort_unless($request->user()->role === 'admin', 403);

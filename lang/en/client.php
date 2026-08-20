@@ -252,6 +252,9 @@ return [
     'copied_from_sibling' => 'Copied "#N#" terms - review, fix the name, then save. Name, zone and address were left untouched.',
 
     // === Hard-delete for untouched clients (Aug 18, 2026) ===
+    'purge_visits' => 'Purge empty visits',
+    'purge_visits_confirm' => 'Purge :name\'s empty visits? Visits with an invoice, return, collection, gift or goods request will not be touched.',
+    'visits_purged' => ':deleted empty visits deleted - :kept kept because they carry real activity.',
     'delete_client' => 'Delete forever',
     'delete_confirm' => 'This permanently deletes ":name" - no undo. Deletion only works if the client has no activity at all. Sure?',
     'deleted_forever' => '":name" was permanently deleted.',

@@ -47,6 +47,13 @@
         <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ $c->group_id ? __('client.new_branch_like_chain') : __('client.clone_client') }}</a>
     @endif
     @if (auth()->user()?->role === 'admin')
+        {{-- تنضيف الزيارات الفاضية — اللي بتقف في وش مسح العميل.
+             اللي عليها فلوس أو مستند بتتساب زي ما هي. --}}
+        <form method="POST" action="{{ route('erp.clients.visits.purge', $c) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('client.purge_visits_confirm', ['name' => $c->displayName()])))">
+            @csrf
+            <button class="btn sm" type="submit">🧹 {{ __('client.purge_visits') }}</button>
+        </form>
         {{-- مسح نهائي — للعميل اللي نزل غلط ومحصلش عليه أي حركة.
              السيرفر بيرفض لو فيه أي نشاط ويقول فيه إيه بالظبط. --}}
         <form method="POST" action="{{ route('erp.clients.destroy', $c) }}" style="display:inline"

@@ -98,6 +98,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // طلب المالك: «عملاء نزلوا غلط ومحصلش عليهم أي أكشن». الحارس
         // جوه الكنترولر بيرفض أي عميل عليه حركة واحدة — الإيقاف هو
         // الطريق الوحيد ساعتها. أدمن بس.
+        // مسح الزيارات الفاضية — اللي مالهاش فاتورة/مرتجع/تحصيل/هدية
+        Route::post('/clients/{client}/visits/purge', [\App\Http\Controllers\ClientActivationController::class, 'purgeVisits'])
+            ->middleware('role:admin')->name('clients.visits.purge');
         Route::delete('/clients/{client}', [\App\Http\Controllers\ClientActivationController::class, 'destroy'])
             ->middleware('role:admin')->name('clients.destroy');
         Route::post('/clients/{client}/deactivate', [\App\Http\Controllers\ClientActivationController::class, 'deactivate'])
