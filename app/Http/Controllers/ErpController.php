@@ -1979,8 +1979,12 @@ class ErpController extends Controller
              WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'product_id'"
         ))->pluck('t');
 
-        // اللي بينضّف مش بيمنع
-        $cleanable = ['price_list_items'];
+        // اللي بينضّف مش بيمنع.
+        // ⚠️ `stocks` اتضافت (بلاغ ٢١/٨): صفوف الأرصدة بتتولد مع
+        // الاستيراد لكل مخزن — مش حركة. أي كمية دخلت بطريق حقيقي
+        // (استلام مورد / جرد / تجهيز) سايبة أثر في جدول تاني لسه
+        // بيمنع المسح عادي، فمفيش رصيد حقيقي بيضيع في صمت.
+        $cleanable = ['price_list_items', 'stocks'];
 
         $labels = [
             'invoice_items' => __('stock.del_invoices'),
@@ -2024,7 +2028,7 @@ class ErpController extends Controller
         $name = $product->displayName();
 
         DB::transaction(function () use ($product) {
-            foreach (['price_list_items', 'batches'] as $t) {
+            foreach (['price_list_items', 'stocks', 'batches'] as $t) {
                 if (\Illuminate\Support\Facades\Schema::hasTable($t)) {
                     DB::table($t)->where('product_id', $product->id)->delete();
                 }
