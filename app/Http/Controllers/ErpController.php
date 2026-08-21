@@ -1984,7 +1984,11 @@ class ErpController extends Controller
         // الاستيراد لكل مخزن — مش حركة. أي كمية دخلت بطريق حقيقي
         // (استلام مورد / جرد / تجهيز) سايبة أثر في جدول تاني لسه
         // بيمنع المسح عادي، فمفيش رصيد حقيقي بيضيع في صمت.
-        $cleanable = ['price_list_items', 'stocks'];
+        // ⚠️ `replenishment_items` كمان (بلاغ ٢١/٨): بند طلب بضاعة/
+        // ريفيل مجرد **طلب** — البضاعة الفعلية بتتحرك عبر أوامر
+        // التجهيز والعهدة والفواتير ودول لسه بيمنعوا المسح عادي.
+        // بنمسح بند الصنف الغلط من الطلب، مش الطلب كله.
+        $cleanable = ['price_list_items', 'stocks', 'replenishment_items'];
 
         $labels = [
             'invoice_items' => __('stock.del_invoices'),
@@ -2028,7 +2032,7 @@ class ErpController extends Controller
         $name = $product->displayName();
 
         DB::transaction(function () use ($product) {
-            foreach (['price_list_items', 'stocks', 'batches'] as $t) {
+            foreach (['price_list_items', 'stocks', 'replenishment_items', 'batches'] as $t) {
                 if (\Illuminate\Support\Facades\Schema::hasTable($t)) {
                     DB::table($t)->where('product_id', $product->id)->delete();
                 }
