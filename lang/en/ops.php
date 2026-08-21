@@ -662,4 +662,22 @@ return [
     'rc_s_none' => 'No settlements.',
 
     'rc_team' => 'His team',
+
+    // ═══ Cancel a sales order (Aug 21, 2026) ═══
+    'po_cancel_btn' => 'Cancel order',
+    'po_cancel_title' => 'Cancel Sales Order :number',
+    'po_cancel_reason' => 'Cancellation reason (required)',
+    'po_cancel_reason_ph' => 'Branch refused delivery / order created by mistake / ...',
+    'po_cancel_q' => 'The goods went out with the rep — after cancelling, what should happen to them?',
+    'po_cancel_wh_btn' => 'Return them to the warehouse now (transfer document)',
+    'po_cancel_wh_confirm' => 'A rep-to-warehouse transfer will be created with this order\'s goods, restocked to their batches, and the order cancelled. Sure?',
+    'po_cancel_cu_btn' => 'Keep them in the rep\'s van stock to sell',
+    'po_cancel_cu_confirm' => 'The order will be cancelled and the goods stay in the rep\'s van stock to sell normally, returning at settlement. Sure?',
+    'po_cancel_confirm' => 'The order and its pick order will be cancelled, and any gathered quantities return to the shelf. Sure?',
+    'po_cancel_in_wh' => 'The goods are still inside the warehouse — cancelling voids the pick order and returns any gathered quantities to the shelf automatically.',
+    'po_cancel_final' => 'This order is already delivered or cancelled — nothing to cancel.',
+    'po_cancel_no_rep' => 'The order has no assigned rep — no van stock to return from.',
+    'po_cancel_no_custody' => 'The rep has no open van stock right now — close it via settlement instead of cancel-with-return.',
+    'po_cancel_nothing_left' => 'Nothing from this order is left in the rep\'s van stock — it was sold or transferred. Review his movement, or cancel with \"keep in van stock\".',
+    'po_cancel_transfer_reason' => 'Returning goods of cancelled Sales Order :number',
 ];

@@ -2631,6 +2631,133 @@ class OpsController extends Controller
         return redirect()->route('ops.po.approvals')->with('ok', __('flash.po_updated'));
     }
 
+    /**
+     * ═══ إلغاء أمر توريد (طلب المالك ٢١/٨) ═══
+     *
+     * الحالة الأصلية: أمر اتجهز وخرج مع المندوب وماعرفش يسلّمه
+     * ورجّع البضاعة — المالك عاوز يلغي الأمر ويقرر مصير البضاعة:
+     *
+     * 1. `warehouse` — ترجع المخزن **دلوقتي** بمستند تحويل
+     *    «مندوب ← مخزن» رسمي (`StockTransfer::sendFromCustody`):
+     *    بيرجّع للرف بباتشاتها، بيزوّد `returned` على بنود العهدة،
+     *    وبيسيب ورقة ممضية — نفس مسار التحويل الميداني بالظبط.
+     * 2. `custody` — تفضل في عهدة المندوب يبيع منها عادي، وترجع
+     *    مع التصفية زي أي بضاعة.
+     *
+     * ⚠️ **بنود الأمر معروفة بالمليم في العهدة** — الاستلام بيوسمها
+     * `source = purchase_order` + `source_ref_id` (قرار ١٤/٨)، فإحنا
+     * بنرجّع بضاعة **الأمر ده نفسه**، مش أي بضاعة شبهها.
+     * ⚠️ لو التجهيز لسه ماتسلمش للمندوب: البضاعة جوه المخزن أصلاً —
+     * إلغاء التجهيز بيرجّع الملموم للرف والسؤال مالوش معنى.
+     */
+    public function cancelPo(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $data = $request->validate([
+            'mode' => ['required', 'in:custody,warehouse'],
+            // السبب إجباري — نفس عقيدة إلغاء التسليم والتحويل الميداني
+            'reason' => ['required', 'string', 'min:3', 'max:300'],
+        ]);
+
+        if (in_array($purchaseOrder->status, ['delivered', 'cancelled'], true)) {
+            return back()->withErrors(['mode' => __('ops.po_cancel_final')]);
+        }
+
+        $pick = $purchaseOrder->pickOrder;
+        $handed = $pick !== null && $pick->status === 'handed';
+
+        try {
+            // ═══ لسه ماخرجش مع المندوب — إلغاء التجهيز كفاية ═══
+            if (! $handed) {
+                DB::transaction(function () use ($purchaseOrder, $pick, $data) {
+                    if ($pick !== null
+                        && ! in_array($pick->status, ['cancelled', 'handed'], true)) {
+                        if ($err = $pick->cancel()) {
+                            throw new \App\Exceptions\Rejected($err);
+                        }
+                    }
+
+                    $purchaseOrder->update([
+                        'status' => 'cancelled',
+                        'abort_reason' => $data['reason'],
+                    ]);
+                });
+
+                return back()->with('ok', __('flash.po_cancelled'));
+            }
+
+            // ═══ البضاعة برا مع المندوب ═══
+            $rep = $purchaseOrder->courier;
+
+            if ($rep === null) {
+                return back()->withErrors(['mode' => __('ops.po_cancel_no_rep')]);
+            }
+
+            if ($data['mode'] === 'warehouse') {
+                $custody = $rep->currentCustody();
+
+                if ($custody === null || $custody->status === 'closed') {
+                    return back()->withErrors(['mode' => __('ops.po_cancel_no_custody')]);
+                }
+
+                // بنود عهدة **الأمر ده** — بالوسم اللي اتعمل عشان كده
+                $items = \App\Models\CustodyItem::where('custody_id', $custody->id)
+                    ->where('source', 'purchase_order')
+                    ->where('source_ref_id', $purchaseOrder->id)
+                    ->get()
+                    ->filter(fn ($i) => $i->remaining() > 0)
+                    ->values();
+
+                if ($items->isEmpty()) {
+                    // المندوب باعها/حوّلها خلاص — مفيش حاجة ترجع،
+                    // والصح ساعتها «سيبها عهدة» أو مراجعة حركته
+                    return back()->withErrors(['mode' => __('ops.po_cancel_nothing_left')]);
+                }
+
+                $lines = $items->map(fn ($i) => [
+                    'custody_item_id' => $i->id,
+                    'qty' => $i->remaining(),
+                ])->all();
+
+                $result = \App\Models\StockTransfer::sendFromCustody(
+                    $request->user(),
+                    $rep,
+                    'rep_wh',
+                    $purchaseOrder->warehouse,
+                    null,
+                    $lines,
+                    __('ops.po_cancel_transfer_reason', ['number' => $purchaseOrder->number]),
+                    $data['reason'],
+                );
+
+                if (($result['error'] ?? null) !== null) {
+                    return back()->withErrors(['mode' => $result['error']]);
+                }
+            }
+
+            $purchaseOrder->update([
+                'status' => 'cancelled',
+                'abort_reason' => $data['reason'],
+            ]);
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['mode' => $e->getMessage()]);
+        }
+
+        // المندوب يعرف مصير البضاعة اللي في عربيته فوراً
+        AppNotification::send(
+            $rep,
+            fn () => __('field.notif_po_cancelled_title', ['number' => $purchaseOrder->number]),
+            fn () => $data['mode'] === 'warehouse'
+                ? __('field.notif_po_cancelled_wh', ['client' => $purchaseOrder->client?->displayName() ?? '—'])
+                : __('field.notif_po_cancelled_custody', ['client' => $purchaseOrder->client?->displayName() ?? '—']),
+            good: false,
+            link: AppNotification::poLink($purchaseOrder->id),
+        );
+
+        return back()->with('ok', $data['mode'] === 'warehouse'
+            ? __('flash.po_cancelled_wh')
+            : __('flash.po_cancelled_custody'));
+    }
+
     /** شاشة «تسليم PO للمندوب»: سلسلة ← فرع ← مندوب ← معاد ← أصناف بالوحدات */
     /**
      * المتاح للتجهيز لكل (مخزن، صنف) — **نفس مصدر الحجز بالظبط**

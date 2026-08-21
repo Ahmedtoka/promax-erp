@@ -62,6 +62,12 @@
             ✏️ {{ __('ops.po_edit') }}
         </a>
     @endif
+    {{-- ═══ إلغاء الأمر (٢١/٨) — للأوامر اللي لسه ماتسلمتش ═══ --}}
+    @if (! in_array($po->status, ['delivered', 'cancelled'], true))
+        <button type="button" class="btn red" onclick="openDlg('dlgCancelPo')">
+            🚫 {{ __('ops.po_cancel_btn') }}
+        </button>
+    @endif
 @endsection
 
 @section('content')
@@ -231,5 +237,53 @@
         @endif
     </div>
 </div>
+
+{{-- ═══ ديالوج إلغاء الأمر (٢١/٨) ═══
+     البضاعة خرجت مع المندوب؟ سؤال المصير: ترجع المخزن دلوقتي
+     (مستند تحويل مندوب←مخزن ببنود الأمر الموسومة) ولا تفضل في
+     عهدته يبيع منها وترجع مع التصفية. لسه جوه المخزن؟ إلغاء
+     التجهيز بيرجّع الملموم للرف لوحده — مفيش سؤال. --}}
+@if (! in_array($po->status, ['delivered', 'cancelled'], true))
+    @php
+        $poHanded = $po->pickOrder !== null && $po->pickOrder->status === 'handed';
+    @endphp
+    <dialog id="dlgCancelPo">
+        <form class="dlg" method="POST" action="{{ route('ops.pos.cancel', $po) }}">
+            @csrf
+            <h4>🚫 {{ __('ops.po_cancel_title', ['number' => $po->number]) }}</h4>
+
+            <div style="margin-top:10px">
+                <label class="f">{{ __('ops.po_cancel_reason') }}</label>
+                <textarea name="reason" required minlength="3" maxlength="300" rows="2"
+                          style="width:100%" placeholder="{{ __('ops.po_cancel_reason_ph') }}"></textarea>
+            </div>
+
+            @if ($poHanded)
+                <div class="alert info" style="margin-top:10px">{{ __('ops.po_cancel_q') }}</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                    <button class="btn" type="submit" name="mode" value="warehouse"
+                            onclick="return confirm(@js(__('ops.po_cancel_wh_confirm')))">
+                        🏭 {{ __('ops.po_cancel_wh_btn') }}
+                    </button>
+                    <button class="btn" type="submit" name="mode" value="custody"
+                            onclick="return confirm(@js(__('ops.po_cancel_cu_confirm')))">
+                        🚐 {{ __('ops.po_cancel_cu_btn') }}
+                    </button>
+                </div>
+            @else
+                <div class="alert info" style="margin-top:10px">{{ __('ops.po_cancel_in_wh') }}</div>
+                <button class="btn red" type="submit" name="mode" value="custody"
+                        style="width:100%;margin-top:10px"
+                        onclick="return confirm(@js(__('ops.po_cancel_confirm')))">
+                    🚫 {{ __('ops.po_cancel_btn') }}
+                </button>
+            @endif
+
+            <div style="display:flex;justify-content:flex-end;margin-top:12px">
+                <button class="btn" type="button" onclick="closeDlg('dlgCancelPo')">{{ __('common.cancel') }}</button>
+            </div>
+        </form>
+    </dialog>
+@endif
 
 @endsection

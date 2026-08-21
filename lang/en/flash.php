@@ -88,4 +88,9 @@ return [
     // ═══ Custody correction + replenishment edit (Aug 12, 2026) ═══
     'custody_adjusted' => 'Van stock corrected and warehouse stock adjusted with it - the rep was notified.',
     'replenishment_updated' => 'The request was updated and the requester was notified.',
+
+    // Sales order cancellation (Aug 21)
+    'po_cancelled' => 'Order cancelled and its pick voided — gathered goods returned to the shelf.',
+    'po_cancelled_wh' => 'Order cancelled and a transfer document created — goods returned to the warehouse by batch.',
+    'po_cancelled_custody' => 'Order cancelled — goods stay in the rep\'s van stock to sell.',
 ];

@@ -305,4 +305,9 @@ return [
     'dup_client_found' => ':count client(s) are already registered with this name or phone - review them before you continue.',
     'mv_load' => 'Loaded from warehouse',
     'mv_gift' => 'Gift / sample',
+
+    // Sales-order cancellation notice (Aug 21)
+    'notif_po_cancelled_title' => 'Sales Order :number was cancelled',
+    'notif_po_cancelled_wh' => 'The :client order was cancelled — its goods were returned from your van to the warehouse with a transfer document.',
+    'notif_po_cancelled_custody' => 'The :client order was cancelled — its goods stay in your van stock, sell them normally.',
 ];

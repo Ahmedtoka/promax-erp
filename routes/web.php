@@ -737,6 +737,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // العرض لكل اللي شايف اللوحة (سكوب المدير جوه الكنترولر)،
         // والتعديل نفسه فاضل على راوتاته (`ops.po.edit` بشرط poEditable)
         Route::get('/pos/{purchaseOrder}', [OpsController::class, 'showPo'])->name('pos.show');
+        // إلغاء أمر توريد (٢١/٨) — بضاعته ترجع المخزن بمستند تحويل
+        // أو تفضل عهدة المندوب يبيع منها. سبب إجباري.
+        Route::post('/pos/{purchaseOrder}/cancel', [OpsController::class, 'cancelPo'])
+            ->name('pos.cancel');
 
         // ═══ أوامر توريد الكي أكاونت (2026-08-04) ═══
         // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن
