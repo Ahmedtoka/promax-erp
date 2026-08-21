@@ -395,7 +395,9 @@ class Access
 
         // ═══ ٦. التقارير — كلها في مكان واحد ═══
         'nav.group_reports' => [
-            ['erp.reports', '📑', 'nav.reports', 'erp.reports', null],
+            // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
+            // (الأعمار وسيركل كيه...) لينكات جواه
+            ['erp.reports.hub', '📑', 'nav.reports', 'erp.reports*', null],
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],

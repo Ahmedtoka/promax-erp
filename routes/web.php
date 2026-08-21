@@ -459,6 +459,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         Route::get('/reports', [ErpController::class, 'reports'])->name('reports');
 
+        // ═══ مركز التقارير الجديد (٢١/٨) — ١٤ تقرير + الكوتيشن ═══
+        // الأسماء تحت بادئة `erp.reports.` عشان صلاحيات Access
+        // الموجودة (`erp.reports`) تغطيها من غير أي تعديل.
+        Route::get('/reports/hub', [\App\Http\Controllers\ReportController::class, 'index'])
+            ->name('reports.hub');
+        Route::get('/reports/view/{key}', [\App\Http\Controllers\ReportController::class, 'show'])
+            ->name('reports.show');
+        Route::get('/reports/quotation', [\App\Http\Controllers\ReportController::class, 'quotation'])
+            ->name('reports.quotation');
+        Route::post('/reports/quotation', [\App\Http\Controllers\ReportController::class, 'quotationPrint'])
+            ->name('reports.quotation.print');
+
         // ═════ إدارة المخازن — التعريف والأرصدة اليدوية =════
         // ⚠️ **منفصل عن `wh.` عن قصد.** `wh.` شغل يومي (استلام،
         // ترصيف، تحويل، جرد) وأمين المخزن بيدخله. ده تعريف مخازن
