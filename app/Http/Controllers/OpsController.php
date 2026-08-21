@@ -2665,10 +2665,17 @@ class OpsController extends Controller
         $pick = $purchaseOrder->pickOrder;
         $handed = $pick !== null && $pick->status === 'handed';
 
+        // ═══ تدقيق الإلغاء (بلاغ المالك بعد أول إلغاء): مين وإمتى ═══
+        // ⚠️ محروسة بـhasColumn — الملف ممكن يترفع قبل ما المايجريشن
+        // تتشغل على اللايف، ومايصحّش الإلغاء كله يقع عشان عمود تدقيق.
+        $audit = \Illuminate\Support\Facades\Schema::hasColumn('purchase_orders', 'cancelled_by')
+            ? ['cancelled_by' => $request->user()->id, 'cancelled_at' => now()]
+            : [];
+
         try {
             // ═══ لسه ماخرجش مع المندوب — إلغاء التجهيز كفاية ═══
             if (! $handed) {
-                DB::transaction(function () use ($purchaseOrder, $pick, $data) {
+                DB::transaction(function () use ($purchaseOrder, $pick, $data, $audit) {
                     if ($pick !== null
                         && ! in_array($pick->status, ['cancelled', 'handed'], true)) {
                         if ($err = $pick->cancel()) {
@@ -2679,7 +2686,7 @@ class OpsController extends Controller
                     $purchaseOrder->update([
                         'status' => 'cancelled',
                         'abort_reason' => $data['reason'],
-                    ]);
+                    ] + $audit);
                 });
 
                 return back()->with('ok', __('flash.po_cancelled'));
@@ -2732,12 +2739,27 @@ class OpsController extends Controller
                 if (($result['error'] ?? null) !== null) {
                     return back()->withErrors(['mode' => $result['error']]);
                 }
+
+                // ═══ حدث على تايم لاين المندوب (بلاغ المالك ٢١/٨) ═══
+                // «مفيش ريكورد عن المندوب بيقول إن البضاعة اتسلمت
+                // المخزن» — التحويل الميداني العادي بيسجّل حدث،
+                // والمسار ده لازم يسجّل زيه.
+                $trf = $result['transfer'] ?? null;
+
+                TrackEvent::log(
+                    $rep,
+                    'po_cancel',
+                    __('field.event_po_cancel_wh', [
+                        'number' => $purchaseOrder->number,
+                    ]),
+                    ($trf?->number ?? '').' · '.$data['reason'],
+                );
             }
 
             $purchaseOrder->update([
                 'status' => 'cancelled',
                 'abort_reason' => $data['reason'],
-            ]);
+            ] + $audit);
         } catch (\App\Exceptions\Rejected $e) {
             return back()->withErrors(['mode' => $e->getMessage()]);
         }

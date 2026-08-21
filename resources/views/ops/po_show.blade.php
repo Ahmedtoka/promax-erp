@@ -48,6 +48,20 @@
 
     $timeline[] = [__('ops.po_tl_arrived'), $po->arrived_at?->format('m-d h:i A') ?? '—', $po->arrived_at !== null];
     $timeline[] = [__('ops.po_tl_delivered'), $po->delivered_at?->format('m-d h:i A') ?? '—', $po->status === 'delivered'];
+
+    // ═══ الإلغاء في خط السير (بلاغ المالك ٢١/٨) — مين والسبب وإمتى ═══
+    // الأوامر اللي اتلغت قبل المايجريشن مالهاش فاعل/وقت — بيبان السبب بس.
+    if ($po->status === 'cancelled') {
+        $timeline[] = [
+            __('ops.po_tl_cancelled'),
+            implode(' · ', array_filter([
+                $po->cancelledBy?->name,
+                $po->cancelled_at?->format('m-d h:i A'),
+                $po->abort_reason,
+            ])) ?: '—',
+            true,
+        ];
+    }
 @endphp
 
 @section('actions')

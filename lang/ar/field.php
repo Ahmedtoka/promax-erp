@@ -309,4 +309,5 @@ return [
     'notif_po_cancelled_title' => 'أمر التوريد :number اتلغى',
     'notif_po_cancelled_wh' => 'أمر :client اتلغى — بضاعته اترجعت للمخزن بمستند تحويل من عربيتك.',
     'notif_po_cancelled_custody' => 'أمر :client اتلغى — بضاعته فضلت في عهدتك، بيعها عادي.',
+    'event_po_cancel_wh' => 'بضاعة أمر التوريد :number رجعت المخزن (الأمر اتلغى)',
 ];

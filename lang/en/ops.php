@@ -680,4 +680,5 @@ return [
     'po_cancel_no_custody' => 'The rep has no open van stock right now — close it via settlement instead of cancel-with-return.',
     'po_cancel_nothing_left' => 'Nothing from this order is left in the rep\'s van stock — it was sold or transferred. Review his movement, or cancel with \"keep in van stock\".',
     'po_cancel_transfer_reason' => 'Returning goods of cancelled Sales Order :number',
+    'po_tl_cancelled' => 'Cancellation',
 ];

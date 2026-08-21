@@ -310,4 +310,5 @@ return [
     'notif_po_cancelled_title' => 'Sales Order :number was cancelled',
     'notif_po_cancelled_wh' => 'The :client order was cancelled — its goods were returned from your van to the warehouse with a transfer document.',
     'notif_po_cancelled_custody' => 'The :client order was cancelled — its goods stay in your van stock, sell them normally.',
+    'event_po_cancel_wh' => 'Goods of Sales Order :number returned to the warehouse (order cancelled)',
 ];

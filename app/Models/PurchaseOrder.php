@@ -42,6 +42,8 @@ class PurchaseOrder extends Model
         // بتاع الرفع الجماعي؛ ده صورة أمر الشراء الحقيقي بتاع
         // السلسلة اللي المندوب بيفتحها عند العميل.
         'image_path', 'prep_started_at',
+        // تدقيق الإلغاء (٢١/٨) — مين لغى وإمتى
+        'cancelled_by', 'cancelled_at',
     ];
 
     /**
@@ -88,7 +90,15 @@ class PurchaseOrder extends Model
             'approved_at' => 'datetime',
             'was_edited' => 'boolean',
             'edited_at' => 'datetime',
+            // تدقيق الإلغاء (٢١/٨)
+            'cancelled_at' => 'datetime',
         ];
+    }
+
+    /** اللي لغى الأمر — لخط سير الأمر (٢١/٨) */
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     /**
