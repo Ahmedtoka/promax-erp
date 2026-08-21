@@ -88,6 +88,8 @@ class ManualDocController extends Controller
         $giftLeft = [];
 
         if ($custody !== null) {
+            $custody->loadMissing('items.product');
+
             foreach ($custody->items as $i) {
                 $remaining[$i->product_id] = ($remaining[$i->product_id] ?? 0) + $i->remaining();
                 $giftLeft[$i->product_id] = ($giftLeft[$i->product_id] ?? 0) + $i->giftLeft();
@@ -96,26 +98,46 @@ class ManualDocController extends Controller
 
         $disc = $client->effectiveDiscount();
 
+        $row = function ($p) use ($client, $disc, $remaining, $giftLeft) {
+            $list = \App\Services\Pricing::listPriceFor($client, $p);
+
+            return [
+                'id' => $p->id,
+                'code' => $p->code,
+                'name' => $p->displayName(),
+                'unit' => $p->unitLabel(),
+                'image' => $p->imageSrc(),
+                // للعرض بس — الحفظ بيسعّر من Pricing::quote بالحرف
+                'price' => round($list * (1 - $disc), 2),
+                'list_price' => $list,
+                'have' => (int) ($remaining[$p->id] ?? 0),
+                'gift_left' => (int) ($giftLeft[$p->id] ?? 0),
+            ];
+        };
+
+        // ⚠️ **البيع والهدية من عهدة المندوب بس** (بلاغ المالك ٢١/٨) —
+        // «مش عاوز غير المنتجات اللي في عهدته». المرتجع كتالوج العميل
+        // كله زي الأبلكيشن: العميل بيرجّع بضاعة عنده هو مش في العربية.
+        $custodyProducts = collect($remaining)
+            ->filter(fn ($q) => $q > 0)
+            ->keys()
+            ->merge(collect($giftLeft)->filter(fn ($q) => $q > 0)->keys())
+            ->unique()
+            ->values();
+
         $products = \App\Models\Product::sellable()
+            ->whereIn('id', $custodyProducts)
             ->orderBy('name')
             ->get()
-            ->map(function ($p) use ($client, $disc, $remaining, $giftLeft) {
-                $list = \App\Services\Pricing::listPriceFor($client, $p);
+            ->map($row)
+            ->filter(fn ($r) => $r['list_price'] > 0)
+            ->values();
 
-                return [
-                    'id' => $p->id,
-                    'code' => $p->code,
-                    'name' => $p->displayName(),
-                    'unit' => $p->unitLabel(),
-                    // للعرض بس — الحفظ بيسعّر من Pricing::quote بالحرف
-                    'price' => round($list * (1 - $disc), 2),
-                    'list_price' => $list,
-                    'have' => (int) ($remaining[$p->id] ?? 0),
-                    'gift_left' => (int) ($giftLeft[$p->id] ?? 0),
-                ];
-            })
-            // نفس قاعدة كتالوج البيع: الغير متسعّر مايظهرش أصلاً
-            ->filter(fn ($row) => $row['list_price'] > 0)
+        $retProducts = \App\Models\Product::sellable()
+            ->orderBy('name')
+            ->get()
+            ->map($row)
+            ->filter(fn ($r) => $r['list_price'] > 0)
             ->values();
 
         return response()->json([
@@ -128,6 +150,7 @@ class ManualDocController extends Controller
                 'label' => __('field.return_policy_'.$p),
             ], $client->returnPolicies()),
             'products' => $products,
+            'ret_products' => $retProducts,
         ]);
     }
 
@@ -261,9 +284,11 @@ class ManualDocController extends Controller
                     'cost_total' => round($costTotal, 2),
                 ]);
 
-                // ⚠️ **بتاريخ الورقية** — ده جوهر الشاشة
-                $invoice->created_at = $date;
-                $invoice->save();
+                // ⚠️ **بتاريخ الورقية — على مستوى الداتابيز مباشرة**
+                // (بلاغ ٢١/٨: التاريخ ماكانش بيتسجل). تعديل الموديل
+                // بعد الإنشاء ممكن يتداس عليه — الكويري المباشرة
+                // مفيش حاجة تعكسها.
+                Invoice::whereKey($invoice->id)->update(['created_at' => $date]);
 
                 foreach ($rows as $r) {
                     InvoiceItem::create($r + ['invoice_id' => $invoice->id]);
@@ -290,8 +315,7 @@ class ManualDocController extends Controller
                     'source_type' => Invoice::class,
                     'source_id' => $invoice->id,
                 ]);
-                $tx->created_at = $date;
-                $tx->save();
+                Transaction::whereKey($tx->id)->update(['created_at' => $date]);
 
                 if ($payment === 'cash' && ! $consigned) {
                     $tx2 = Transaction::create([
@@ -305,8 +329,7 @@ class ManualDocController extends Controller
                         'source_type' => Invoice::class,
                         'source_id' => $invoice->id,
                     ]);
-                    $tx2->created_at = $date;
-                    $tx2->save();
+                    Transaction::whereKey($tx2->id)->update(['created_at' => $date]);
                 }
 
                 $client->recalculate();
@@ -333,10 +356,14 @@ class ManualDocController extends Controller
             ]),
         );
 
-        return back()->with('ok', __('flash.md_invoice_done', [
-            'number' => $invoice->number,
-            'amount' => number_format((float) $invoice->grand_total, 2),
-        ]));
+        // ⚠️ **تحويل على صفحة الفاتورة نفسها** (بلاغ ٢١/٨: «قالي
+        // اتعمل ومظهرتش») — بدل رسالة والمستخدم يدوّر في الليستة
+        // على فاتورة بتاريخ قديم مدفونة صفحات ورا.
+        return redirect()->route('ops.invoice', $invoice)
+            ->with('ok', __('flash.md_invoice_done', [
+                'number' => $invoice->number,
+                'amount' => number_format((float) $invoice->grand_total, 2),
+            ]));
     }
 
     /** POST /ops/manual/return */
@@ -373,19 +400,17 @@ class ManualDocController extends Controller
                 source: 'erp',
             );
 
-            // بتاريخ الورقية — المستند وقيوده
+            // بتاريخ الورقية — المستند وقيوده، بكويري مباشرة (نفس
+            // إصلاح تأريخ الفاتورة ٢١/٨)
             DB::transaction(function () use ($doc, $date) {
-                $doc->created_at = $date;
-                $doc->save();
+                ClientReturn::whereKey($doc->id)->update(['created_at' => $date]);
 
                 Transaction::where('source_type', ClientReturn::class)
                     ->where('source_id', $doc->id)
-                    ->get()
-                    ->each(function ($t) use ($date) {
-                        $t->date = $date->toDateString();
-                        $t->created_at = $date;
-                        $t->save();
-                    });
+                    ->update([
+                        'date' => $date->toDateString(),
+                        'created_at' => $date,
+                    ]);
             });
         } catch (Rejected $e) {
             return back()->withErrors(['items' => $e->getMessage()])->withInput();
@@ -461,8 +486,7 @@ class ManualDocController extends Controller
                     ])),
                 ]);
 
-                $handout->created_at = $date;
-                $handout->save();
+                GiftHandout::whereKey($handout->id)->update(['created_at' => $date]);
             }
             });
         } catch (Rejected $e) {

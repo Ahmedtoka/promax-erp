@@ -716,4 +716,7 @@ return [
     'md_save_gift' => 'Save gift',
     'md_note' => 'Note',
     'md_discount_now' => 'Client live discount: :n% — pricing follows his terms automatically',
+    'md_client_search' => 'Search the client by name and pick from the list…',
+    'md_add_btn' => 'Add',
+    'md_no_custody_items' => 'No items available — sales and gifts come from the rep van stock only',
 ];
