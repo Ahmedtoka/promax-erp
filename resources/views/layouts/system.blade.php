@@ -542,6 +542,49 @@ select.ssel-native{display:none!important}
 .sidebar{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent}
 @media print{.sidebar{display:none}.card,.kpi{box-shadow:none}}
 </style>
+{{-- ═══ طي السايد منيو لأيقونات (طلب المالك ٢١/٨) ═══
+     الحالة بتتقري قبل الرسم عشان مفيش فلاش، والكونتينر بيتوسع
+     لوحده (فليكس). في وضع الأيقونات أي دوسة على مجموعة بتفتح
+     المنيو الأول وبعدين المجموعة نفسها. --}}
+<script>
+  if (localStorage.getItem('pmxNavMini') === '1') {
+    document.documentElement.classList.add('nav-mini');
+  }
+
+  function pmxNavToggle() {
+    var mini = document.documentElement.classList.toggle('nav-mini');
+    localStorage.setItem('pmxNavMini', mini ? '1' : '0');
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!document.documentElement.classList.contains('nav-mini')) return;
+    if (e.target.closest && e.target.closest('.sidebar summary')) pmxNavToggle();
+  });
+</script>
+<style>
+.nav-toggle{
+  align-self:flex-end;flex-shrink:0;
+  width:30px;height:30px;border-radius:50%;
+  background:rgba(255,255,255,.14);border:none;cursor:pointer;
+  color:#fff;font-size:14px;line-height:1;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:2px;transition:background .15s;
+}
+.nav-toggle:hover{background:rgba(255,255,255,.28)}
+html.nav-mini .nav-toggle{align-self:center}
+html.nav-mini .sidebar{width:64px;padding:14px 7px}
+html.nav-mini .logo{padding:4px 0 10px;display:flex;justify-content:center}
+html.nav-mini .logo .brandmark,
+html.nav-mini .logo .sub{display:none}
+html.nav-mini .logo::after{content:'⚡';font-size:20px;color:var(--brand-yellow)}
+html.nav-mini .navgrp-acc>summary{justify-content:center;padding:11px 0}
+html.nav-mini .navgrp-acc>summary .gt,
+html.nav-mini .navgrp-acc>summary .cnt,
+html.nav-mini .navgrp-acc>summary::after{display:none}
+html.nav-mini .navgrp-acc>summary .gi{width:auto;font-size:17px}
+html.nav-mini .navbody{display:none}
+html.nav-mini .side-user{display:none}
+</style>
 </head>
 <body>
 @php
@@ -598,6 +641,9 @@ select.ssel-native{display:none!important}
 <div class="wrap">
 
   <aside class="sidebar">
+    {{-- زرار طي المنيو لأيقونات (٢١/٨) — الحالة في localStorage --}}
+    <button type="button" class="nav-toggle" onclick="pmxNavToggle()">☰</button>
+
     {{-- ⚠️ **مش `erp.overview` ثابتة.** أمين المخزن مالوش دعوة بيها،
          واللوجو موجود في كل صفحة — يعني كان أكتر عنصر بيتدَاس عليه
          بيوديه على 403. --}}
@@ -640,7 +686,8 @@ select.ssel-native{display:none!important}
             {{-- ⚠️ **الأيقونة من `Access::GROUP_ICONS`** — جنب الاسم
                  مش بدله. الاسم لوحده بيتقري، والأيقونة بتخلّي العين
                  تلاقي المجموعة من غير ما تقرا. --}}
-            <summary class="{{ $groupActive ? 'on' : '' }}">
+            {{-- `title` للتولتيب في وضع الأيقونات (٢١/٨) --}}
+            <summary class="{{ $groupActive ? 'on' : '' }}" title="{{ __($group) }}">
                 <span class="gi">{{ \App\Support\Access::GROUP_ICONS[$group] ?? '•' }}</span>
                 <span class="gt">{{ __($group) }}</span>
                 @if ($groupCount > 0)

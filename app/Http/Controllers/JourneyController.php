@@ -63,6 +63,8 @@ class JourneyController extends Controller
                 'available' => collect(), 'weekdays' => JourneyPlan::WEEKDAYS,
                 'frequencies' => JourneyPlan::FREQUENCIES, 'today' => today()->dayOfWeek,
                 'wipeCount' => $wipeCount,
+                'weekStart' => today()->startOfWeek(Carbon::SUNDAY),
+                'board' => ['pool' => [], 'plans' => []],
             ]);
         }
 
@@ -78,7 +80,8 @@ class JourneyController extends Controller
         $planned = collect($week)->flatten()->pluck('client_id')->unique();
 
         $available = Client::visibleTo(
-            Client::with(['zone', 'group'])->where('status', 'active')
+            // ⚠️ `channel` للبورد (٢١/٨) — شيبس الفلترة بالقناة في السايدبار
+            Client::with(['zone', 'group', 'channel'])->where('status', 'active')
                 ->where(function ($q) use ($rep) {
                     // المدير الميداني (١١/٨): محطات خطته من عملاءه
                     // المتسكّنين له (`manager_id`) — نفس مرساة الزيارة.
@@ -105,11 +108,69 @@ class JourneyController extends Controller
             ->orderBy('name')
             ->get();
 
+        // ═══ ملاح الأسبوع (بورد ٢١/٨) — تواريخ فوق أعمدة الأيام ═══
+        //
+        // الخطة نمط أسبوعي؛ الأسبوع المختار **للعرض والسياق** (تواريخ
+        // الأعمدة + شهر النبضة الافتراضي) مش لتخزين تواريخ.
+        try {
+            $weekStart = $request->filled('week')
+                ? Carbon::parse((string) $request->input('week'))
+                    ->startOfWeek(Carbon::SUNDAY)
+                : today()->startOfWeek(Carbon::SUNDAY);
+        } catch (\Throwable) {
+            $weekStart = today()->startOfWeek(Carbon::SUNDAY);
+        }
+
+        // ═══ داتا البورد (الدراج أند دروب ٢١/٨) — جاهزة للجافاسكربت ═══
+        //
+        // ⚠️ آخر زيارة بكويري مجمّع واحد للبول كله — مش كويري لكل عميل
+        $weekPlans = collect($week)->flatten();
+
+        \Illuminate\Database\Eloquent\Collection::make(
+            $weekPlans->pluck('client')->filter()->unique('id')->values()
+        )->loadMissing(['zone', 'channel', 'group']);
+
+        $poolIds = $available->pluck('id')
+            ->merge($weekPlans->pluck('client_id'))->unique()->values();
+
+        $lastVisitAt = $poolIds->isEmpty()
+            ? collect()
+            : Visit::whereIn('client_id', $poolIds)
+                ->whereNotNull('checked_in_at')
+                ->selectRaw('client_id, MAX(checked_in_at) as t')
+                ->groupBy('client_id')
+                ->pluck('t', 'client_id');
+
+        $clientRow = fn (Client $c) => [
+            'id' => $c->id,
+            'name' => $c->fullName(),
+            'zone' => $c->zone?->displayName(),
+            'channel' => $c->channel?->displayName(),
+            'balance' => (float) $c->balance,
+            // كتلة بحث عابرة اللغات — نفس فكرة الأبلكيشن
+            'q' => mb_strtolower(trim($c->fullName().' '.$c->name_en.' '
+                .($c->group?->name_en ?? '').' '.($c->zone?->displayName() ?? ''))),
+            'last_days' => ($t = $lastVisitAt->get($c->id)) !== null
+                ? Carbon::parse($t)->diffInDays(now()) : null,
+        ];
+
+        $board = [
+            'pool' => $available->map($clientRow)->values()->all(),
+            'plans' => $weekPlans->map(fn (JourneyPlan $p) => [
+                'id' => $p->id,
+                'weekday' => (int) $p->weekday,
+                'sort' => (int) $p->sort,
+                'every_weeks' => (int) $p->every_weeks,
+                'time' => $p->visitTimeLabel(),
+                'client' => $p->client !== null ? $clientRow($p->client) : null,
+            ])->filter(fn ($r) => $r['client'] !== null)->values()->all(),
+        ];
+
         // ═══ عرض الشهر — النمط الأسبوعي مفرود على تواريخ حقيقية ═══
         // (طلب المالك 2026-08-03): «عاوز الخطة بالشهر وقدامي بالتواريخ».
         // الخطة نمط، فكل يوم في الشهر بنسأل dueOn() — والتردد (كل
         // أسبوعين/شهري) بيبان صح على التقويم بدل ما يفضل رقم مخفي.
-        $month = (string) $request->input('month', today()->format('Y-m'));
+        $month = (string) $request->input('month', $weekStart->format('Y-m'));
 
         try {
             $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
@@ -157,6 +218,8 @@ class JourneyController extends Controller
             'monthStart' => $monthStart,
             'calendar' => $calendar,
             'wipeCount' => $wipeCount,
+            'weekStart' => $weekStart,
+            'board' => $board,
         ]);
     }
 
@@ -305,6 +368,181 @@ class JourneyController extends Controller
         });
 
         return back()->with('ok', __('journey.reordered'));
+    }
+
+    /**
+     * ═══ حفظ بورد الدراج أند دروب دفعة واحدة (٢١/٨) ═══
+     *
+     * الشاشة الجديدة بتتحرّك كلها في المتصفح (سحب من السايدبار، نقل
+     * بين الأيام، إعادة ترتيب، شيل) و«احفظ ونشّط الخطة» بيبعت الصورة
+     * النهائية هنا — معاملة واحدة بتسوّي الفرق: صف ليه `id` → تحديث
+     * يومه وترتيبه · من غير `id` → إنشاء · خطة نشطة مش في الصورة → مسح.
+     *
+     * ⚠️ **التسوية بمعرّف الخطة مش بالعميل** — العميل ممكن يكون له
+     * خطتين في يومين (زيارة مرتين في الأسبوع) والاتنين لازم يعيشوا.
+     * ⚠️ الخطط الموجودة بتحتفظ بترددها ووقتها (`every_weeks` /
+     * `starts_on` / `visit_at`) — البورد بيغيّر اليوم والترتيب بس.
+     * ⚠️ **الموقوفة (`active = false`) مابتتلمسش** — البورد مابيعرضهاش
+     * فمالوش حق يمسحها.
+     * ⚠️ نفس حراس `store` بالحرف على أي عميل **جديد**.
+     */
+    public function sync(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'rows' => ['present', 'array'],
+            'rows.*.id' => ['nullable', 'integer', 'exists:journey_plans,id'],
+            'rows.*.client_id' => ['required', 'integer', 'exists:clients,id'],
+            'rows.*.weekday' => ['required', 'integer', 'between:0,6'],
+            'rows.*.sort' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $rep = User::with('zones')->findOrFail($data['user_id']);
+
+        Scope::assertRep($request->user(), $rep);
+
+        $rows = collect($data['rows']);
+        $existing = JourneyPlan::where('user_id', $rep->id)
+            ->where('active', true)->get()->keyBy('id');
+
+        // ⚠️ أي `id` جاي في البوست لازم يكون من خطط المندوب ده نفسه —
+        // `exists:` بتتأكد من الوجود بس، وبوست معدّل كان يحرّك خطة
+        // مندوب تاني.
+        abort_if(
+            $rows->pluck('id')->filter()
+                ->contains(fn ($id) => ! $existing->has((int) $id)),
+            422,
+        );
+
+        // الحراس على العملاء الجداد بس — الموجودين اتفحصوا يوم ما اتضافوا
+        $newIds = $rows->whereNull('id')->pluck('client_id')->unique();
+
+        foreach (Client::whereIn('id', $newIds)->get() as $c) {
+            Scope::assertClient($request->user(), $c);
+            Scope::assertSameTeam($rep, $c);
+            Scope::assertInZone($rep, $c);
+        }
+
+        $added = 0;
+        $removed = 0;
+
+        DB::transaction(function () use ($rows, $existing, $rep, &$added, &$removed) {
+            // اللي اتشال من البورد — النشط بس
+            $keepIds = $rows->pluck('id')->filter()->map(fn ($v) => (int) $v);
+
+            $removed = JourneyPlan::where('user_id', $rep->id)
+                ->where('active', true)
+                ->whereNotIn('id', $keepIds)
+                ->delete();
+
+            foreach ($rows as $r) {
+                if (! empty($r['id'])) {
+                    $existing->get((int) $r['id'])?->update([
+                        'weekday' => (int) $r['weekday'],
+                        'sort' => (int) $r['sort'],
+                    ]);
+
+                    continue;
+                }
+
+                // ⚠️ `firstOrCreate` — اليونيك (مندوب×عميل×يوم) ممكن
+                // يتصادم لو نفس العميل اتسحب مرتين لنفس اليوم
+                $plan = JourneyPlan::firstOrCreate(
+                    [
+                        'user_id' => $rep->id,
+                        'client_id' => (int) $r['client_id'],
+                        'weekday' => (int) $r['weekday'],
+                    ],
+                    [
+                        'every_weeks' => 1,
+                        'sort' => (int) $r['sort'],
+                        'active' => true,
+                    ],
+                );
+
+                if ($plan->wasRecentlyCreated) {
+                    $added++;
+                }
+            }
+        });
+
+        return back()->with('ok', __('journey.board_saved', [
+            'total' => $rows->count(),
+            'added' => $added,
+            'removed' => $removed,
+        ]));
+    }
+
+    /**
+     * ═══ انسخ الخطة من مندوب تاني (٢١/٨) ═══
+     *
+     * بينسخ النمط الأسبوعي كله (اليوم والترتيب والتردد) — والعميل
+     * اللي مش من فريق/زون المستقبِل **بيتتخطى** مش بيوقّع العملية:
+     * الهدف بداية سريعة مش نقل ملكية عملاء.
+     */
+    public function copyFrom(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'from_id' => ['required', 'different:user_id', 'exists:users,id'],
+        ]);
+
+        $rep = User::with('zones')->findOrFail($data['user_id']);
+        $from = User::findOrFail($data['from_id']);
+
+        Scope::assertRep($request->user(), $rep);
+        Scope::assertRep($request->user(), $from);
+
+        $added = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($rep, $from, &$added, &$skipped) {
+            $sorts = [];
+
+            foreach (JourneyPlan::with('client')
+                ->where('user_id', $from->id)->where('active', true)
+                ->orderBy('weekday')->orderBy('sort')->get() as $p) {
+                $c = $p->client;
+
+                if ($c === null) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                try {
+                    Scope::assertSameTeam($rep, $c);
+                    Scope::assertInZone($rep, $c);
+                } catch (\Throwable) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $sorts[$p->weekday] ??= (int) JourneyPlan::where('user_id', $rep->id)
+                    ->where('weekday', $p->weekday)->max('sort');
+
+                $plan = JourneyPlan::firstOrCreate(
+                    [
+                        'user_id' => $rep->id,
+                        'client_id' => $p->client_id,
+                        'weekday' => $p->weekday,
+                    ],
+                    [
+                        'every_weeks' => $p->every_weeks,
+                        'sort' => ++$sorts[$p->weekday],
+                        'active' => true,
+                    ],
+                );
+
+                $plan->wasRecentlyCreated ? $added++ : $skipped++;
+            }
+        });
+
+        return back()->with('ok', __('journey.copied', [
+            'added' => $added,
+            'skipped' => $skipped,
+        ]));
     }
 
     // ═══════════════════════ تخصيص المناطق والعملاء ═══════════════════════

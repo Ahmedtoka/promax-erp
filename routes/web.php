@@ -902,6 +902,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('journeys.destroy');
             Route::post('/journeys/reorder', [\App\Http\Controllers\JourneyController::class, 'reorder'])
                 ->name('journeys.reorder');
+            // ═══ بورد الدراج أند دروب (٢١/٨) ═══
+            // `sync` بيحفظ صورة البورد كلها دفعة واحدة، و`copy`
+            // بينسخ نمط مندوب تاني — نفس رولز باقي راوتات الخطط.
+            Route::post('/journeys/sync', [\App\Http\Controllers\JourneyController::class, 'sync'])
+                ->name('journeys.sync');
+            Route::post('/journeys/copy', [\App\Http\Controllers\JourneyController::class, 'copyFrom'])
+                ->name('journeys.copy');
 
             Route::post('/assignments', [\App\Http\Controllers\JourneyController::class, 'assign'])
                 ->name('assignments.assign');

@@ -210,6 +210,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // توكن ميداني كان يقرا تاريخ **أي** عميل في الشركة.
         Route::get('/clients/{client}/history', [FieldApiController::class, 'clientHistory']);
 
+        // كارت العميل — أرقام شاشة التشيك إن (موك أب ٢١/٨). قراءة،
+        // والمندوب بيراجعها **قبل** التشيك إن فبره حارس الحضور،
+        // و`guardClient` جوّه الميثود زي التاريخ بالظبط.
+        Route::get('/clients/{client}/card', [FieldApiController::class, 'clientCard']);
+
         // ⚠️ **النوع محصور في الراوت** — من غير `whereIn` أي نص
         // بيوصل للميثود ويعدّي على `match`، والراوت بيبقى مفتوح
         // لقيم مالهاش معنى.

@@ -432,6 +432,9 @@ class FieldApiController extends Controller
 
                 return [
                     'id' => $c->id,
+                    // كود العميل — هيدر شاشة التشيك إن «جملة · كود CL-1043»
+                    // (موك أب ٢١/٨). إضافي، النسخ القديمة بتتجاهله.
+                    'code' => $c->code,
                     'name' => $c->fullName(),
                     'chain' => $chain,
                     'branch' => $c->displayName(),
@@ -587,6 +590,40 @@ class FieldApiController extends Controller
             ->groupBy('client_id')
             ->pluck('t', 'client_id');
 
+        // ═══ أرقام المحطة المتزارة (موك أب خط السير ٢١/٨) ═══
+        //
+        // «8:50 ص · 22 دقيقة · 3,120 · حصّل 1,000 · مرتجع 6» — كل
+        // رقم من مصدره الأصلي (فواتير الزيارة، تحصيلات الزيارة، بنود
+        // مرتجعاتها) **بكويري مجمّع واحد لكل نوع** مش لكل محطة.
+        $visitIds = $rows->pluck('visit')->filter()->pluck('id')->values();
+
+        $visitSales = $visitIds->isEmpty() ? collect()
+            : Invoice::whereIn('visit_id', $visitIds)
+                ->selectRaw('visit_id, SUM(grand_total) as t')
+                ->groupBy('visit_id')->pluck('t', 'visit_id');
+
+        // التحصيل الميداني بيتقيّد بمصدر الزيارة — نفس الربط اللي
+        // بيستخدمه مسح الزيارات الفاضية في الداشبورد
+        $visitCollected = $visitIds->isEmpty() ? collect()
+            : \App\Models\Transaction::where('kind', 'collection')
+                ->where('source_type', Visit::class)
+                ->whereIn('source_id', $visitIds)
+                ->selectRaw('source_id, SUM(credit) as t')
+                ->groupBy('source_id')->pluck('t', 'source_id');
+
+        // ⚠️ جدول المرتجعات اسمه `returns` (موديل ClientReturn)
+        $visitReturnQty = $visitIds->isEmpty() ? collect()
+            : DB::table('return_items')
+                ->join('returns', 'returns.id', '=', 'return_items.return_id')
+                ->whereIn('returns.visit_id', $visitIds)
+                ->selectRaw('returns.visit_id as vid, SUM(return_items.qty) as q')
+                ->groupBy('returns.visit_id')->pluck('q', 'vid');
+
+        // متوسط فاتورة كل عميل — شيب «متوسّط 4,100» على كارت الجاي
+        $avgInvoice = Invoice::whereIn('client_id', $rows->pluck('client')->pluck('id'))
+            ->selectRaw('client_id, AVG(grand_total) as a')
+            ->groupBy('client_id')->pluck('a', 'client_id');
+
         $done = $rows->where('status', 'done')->count();
         $planned = $rows->count();
 
@@ -634,6 +671,13 @@ class FieldApiController extends Controller
                 // المتفق عليه جاهز للعرض `h:i A`، و`null` للخطط اللي
                 // مالهاش وقت. الأبلكيشن القديم بيتجاهله والجديد بيوريه.
                 'visit_at' => $r['plan']->visitTimeLabel() ?: null,
+                // ═══ إضافي (موك أب ٢١/٨) — أرقام المحطة المتزارة ═══
+                'checked_in_at' => $r['visit']?->checked_in_at?->toIso8601String(),
+                'checked_out_at' => $r['visit']?->checked_out_at?->toIso8601String(),
+                'visit_sales' => (float) ($visitSales->get($r['visit']?->id) ?? 0),
+                'visit_collected' => (float) ($visitCollected->get($r['visit']?->id) ?? 0),
+                'visit_return_qty' => (int) ($visitReturnQty->get($r['visit']?->id) ?? 0),
+                'avg_invoice' => (float) ($avgInvoice->get($r['client']->id) ?? 0),
             ])->values()->all(),
         ];
     }
@@ -655,6 +699,14 @@ class FieldApiController extends Controller
             'visits' => Visit::where('user_id', $user->id)->whereDate('created_at', today())->count(),
             'visits_done' => Visit::where('user_id', $user->id)->whereDate('created_at', today())
                 ->whereNotNull('checked_out_at')->count(),
+            // ⚠️ إضافي (٢١/٨) — «متوسّط زيارتك :n دقيقة» في هيدر
+            // الزيارة المفتوحة. آخر ٣٠ يوم عشان الرقم يعكس إيقاعه
+            // الحالي مش تاريخه كله، والأبلكيشن القديم بيتجاهله عادي.
+            'avg_visit_min' => (int) round((float) (Visit::where('user_id', $user->id)
+                ->whereNotNull('checked_out_at')
+                ->where('checked_in_at', '>=', now()->subDays(30))
+                ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, checked_in_at, checked_out_at)) as m')
+                ->value('m') ?? 0)),
             'pos_delivered' => PurchaseOrder::where('assigned_to', $user->id)
                 ->where('status', 'delivered')->whereDate('delivered_at', today())->count(),
             'pos_value' => (float) PurchaseOrder::where('assigned_to', $user->id)
@@ -1163,6 +1215,96 @@ class FieldApiController extends Controller
                 'last_at' => $this->lastAt(clone $photos),
             ],
         ]]);
+    }
+
+    /**
+     * GET /api/clients/{client}/card
+     *
+     * أرقام شاشة التشيك إن (موك أب ٢١/٨): مبيعات الشهر وفواتيره،
+     * مرتجعاته ونسبتها، تحصيله وآخره، الباقي عليه وأيام تأخيره،
+     * وملخص آخر زيارة مقفولة (فاتورتها وتحصيلها).
+     *
+     * ⚠️ **كله من مصادره الأصلية** (عقيدة الأرقام): الفواتير
+     * بـ`grand_total`، التحصيل قيد دائن نوعه `collection`، والرصيد
+     * من عدّاد العميل اللي بيتحدّث بـ`recalculate()`.
+     */
+    public function clientCard(Request $request, Client $client): JsonResponse
+    {
+        if ($err = $this->guardClient($request->user(), $client)) {
+            return $err;
+        }
+
+        $from = now()->startOfMonth();
+
+        $monthSales = Invoice::where('client_id', $client->id)
+            ->where('created_at', '>=', $from);
+        $salesTotal = (float) (clone $monthSales)->sum('grand_total');
+        $salesCount = (clone $monthSales)->count();
+
+        $returnsTotal = (float) \App\Models\ClientReturn::where('client_id', $client->id)
+            ->where('created_at', '>=', $from)->sum('grand_total');
+
+        $collections = Transaction::where('client_id', $client->id)
+            ->where('kind', 'collection');
+        $collTotal = (float) (clone $collections)
+            ->where('created_at', '>=', $from)->sum('credit');
+        $lastCollAt = (clone $collections)->max('created_at');
+
+        // ═══ «متأخر :n يوم» — أقدم فاتورة لسه مش متغطية (FIFO) ═══
+        //
+        // الرصيد بيغطي الأقدم الأول: بنجمع كل الدائن، وبنمشي على
+        // القيود المدينة بالترتيب — أول قيد بيعدّي مجموع الدائن هو
+        // أقدم دين مكشوف، وأيام التأخير من معاده + مهلة السداد.
+        $overdueDays = 0;
+        if ((float) $client->balance > 0.009) {
+            $credits = (float) Transaction::where('client_id', $client->id)->sum('credit');
+            $run = 0.0;
+
+            $oldest = null;
+            foreach (Transaction::where('client_id', $client->id)
+                ->where('debit', '>', 0)
+                ->orderBy('date')->orderBy('id')
+                ->get(['debit', 'date']) as $t) {
+                $run += (float) $t->debit;
+
+                if ($run > $credits + 0.009) {
+                    $oldest = $t->date;
+                    break;
+                }
+            }
+
+            if ($oldest !== null) {
+                $dueAt = \Illuminate\Support\Carbon::parse($oldest)
+                    ->addDays((int) ($client->paymentDays() ?? 0));
+                $overdueDays = (int) max(0, $dueAt->diffInDays(now(), false));
+            }
+        }
+
+        // ═══ آخر زيارة مقفولة — فاتورتها وتحصيلها ═══
+        $lv = Visit::where('client_id', $client->id)
+            ->whereNotNull('checked_out_at')
+            ->latest('checked_in_at')->first();
+
+        return response()->json([
+            'month_sales' => $salesTotal,
+            'month_invoices' => $salesCount,
+            'month_returns' => $returnsTotal,
+            'returns_pct' => $salesTotal > 0
+                ? round($returnsTotal / $salesTotal * 100, 1) : 0.0,
+            'month_collections' => $collTotal,
+            'last_collection_days' => $lastCollAt !== null
+                ? (int) \Illuminate\Support\Carbon::parse($lastCollAt)->diffInDays(now())
+                : null,
+            'balance' => (float) $client->balance,
+            'overdue_days' => $overdueDays,
+            'last_visit_at' => $lv?->checked_in_at?->toIso8601String(),
+            'last_visit_sales' => $lv !== null
+                ? (float) Invoice::where('visit_id', $lv->id)->sum('grand_total') : 0.0,
+            'last_visit_collected' => $lv !== null
+                ? (float) Transaction::where('kind', 'collection')
+                    ->where('source_type', Visit::class)
+                    ->where('source_id', $lv->id)->sum('credit') : 0.0,
+        ]);
     }
 
     private function lastAt($query): ?string
