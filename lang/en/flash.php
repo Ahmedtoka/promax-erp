@@ -93,4 +93,9 @@ return [
     'po_cancelled' => 'Order cancelled and its pick voided — gathered goods returned to the shelf.',
     'po_cancelled_wh' => 'Order cancelled and a transfer document created — goods returned to the warehouse by batch.',
     'po_cancelled_custody' => 'Order cancelled — goods stay in the rep\'s van stock to sell.',
+
+    // Manual document (Aug 21)
+    'md_invoice_done' => 'Invoice :number saved for :amount — deducted from the rep\'s van stock and posted to the client.',
+    'md_return_done' => 'Return :number saved — back into the rep\'s van stock and credited to the client.',
+    'md_gift_done' => 'Gift saved and deducted from the rep\'s gift balance.',
 ];

@@ -298,6 +298,8 @@ class Access
             ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],
             // البورد المدموج (١٢/٨): عهدة + مبيعات + حضور + حركة في صف واحد
             ['ops.rep_board', '📊', 'nav.rep_board', 'ops.rep_board', null],
+            // المستند اليدوي (٢١/٨) — فاتورة/مرتجع/هدية باسم المندوب
+            ['ops.manual', '✍️', 'nav.manual_doc', 'ops.manual*', null],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
         ],

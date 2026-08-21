@@ -914,6 +914,20 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/journeys/copy', [\App\Http\Controllers\JourneyController::class, 'copyFrom'])
                 ->name('journeys.copy');
 
+            // ═══ المستند اليدوي (٢١/٨) — فاتورة/مرتجع/هدية باسم المندوب ═══
+            // بتاريخ الورقية وبسيريالها، وبتخصم من عهدة المندوب وتتقيد
+            // على العميل بنفس عقيدة فلو الأبلكيشن بالحرف.
+            Route::get('/manual', [\App\Http\Controllers\ManualDocController::class, 'index'])
+                ->name('manual');
+            Route::get('/manual/data', [\App\Http\Controllers\ManualDocController::class, 'data'])
+                ->name('manual.data');
+            Route::post('/manual/invoice', [\App\Http\Controllers\ManualDocController::class, 'storeInvoice'])
+                ->name('manual.invoice');
+            Route::post('/manual/return', [\App\Http\Controllers\ManualDocController::class, 'storeReturn'])
+                ->name('manual.return');
+            Route::post('/manual/gift', [\App\Http\Controllers\ManualDocController::class, 'storeGift'])
+                ->name('manual.gift');
+
             Route::post('/assignments', [\App\Http\Controllers\JourneyController::class, 'assign'])
                 ->name('assignments.assign');
             Route::delete('/assignments/{client}', [\App\Http\Controllers\JourneyController::class, 'unassign'])

@@ -310,4 +310,12 @@ return [
     'notif_po_cancelled_wh' => 'أمر :client اتلغى — بضاعته اترجعت للمخزن بمستند تحويل من عربيتك.',
     'notif_po_cancelled_custody' => 'أمر :client اتلغى — بضاعته فضلت في عهدتك، بيعها عادي.',
     'event_po_cancel_wh' => 'بضاعة أمر التوريد :number رجعت المخزن (الأمر اتلغى)',
+
+    // إشعارات المستند اليدوي (٢١/٨)
+    'notif_manual_invoice_title' => 'فاتورة :number اتسجلت عليك من المكتب',
+    'notif_manual_invoice_body' => 'لعميل :client بإجمالي :amount بتاريخ :date — اتخصمت من عهدتك.',
+    'notif_manual_return_title' => 'مرتجع :number اتسجل عليك من المكتب',
+    'notif_manual_return_body' => 'من عميل :client بتاريخ :date — البضاعة رجعت لعهدتك.',
+    'notif_manual_gift_title' => 'هدية اتسجلت عليك من المكتب',
+    'notif_manual_gift_body' => 'لعميل :client بتاريخ :date — اتخصمت من رصيد هداياك.',
 ];

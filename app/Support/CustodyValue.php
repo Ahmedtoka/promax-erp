@@ -37,24 +37,48 @@ class CustodyValue
     /** @var array<int, array<int, float>> [list_id][product_id] => price — من البنود المحمّلة */
     protected static array $priceMaps = [];
 
-    /** القوايم المفعّلة بترتيب ثابت — كل الشاشات بتعرضها بنفس الترتيب */
+    /**
+     * قوايم **عرض القيمة** في الجداول والسامريهات.
+     *
+     * ⚠️ **قايمة واحدة بس — الافتراضية (سعر المستهلك)** (قرار المالك
+     * ٢١/٨): كانت بترجع كل القوايم المفعّلة، فكل جدول وسامري فيه
+     * عمود/شريحة لكل قايمة — ومع ١٠+ تسعيرات الشاشات بازت شكلاً.
+     * كل الشاشات بتلف على الدالة دي، فتضييقها هنا بينضّف: كارت
+     * الشارع في عهد المناديب، كروت المناديب، جداول يوم المندوب
+     * وتفاصيلها وفوتراتها، تفصيلة الباتشات، والتصفية.
+     *
+     * ⚠️ القوايم نفسها **لسه شغالة بالكامل** في التسعير والبيع
+     * والعقود — ده عرض القيمة الاسترشادية بس.
+     */
     public static function lists(): Collection
     {
-        return self::$lists ??= PriceList::with('items')
-            ->where('active', true)
-            ->orderBy('id')
+        if (self::$lists !== null) {
+            return self::$lists;
+        }
+
+        $default = PriceList::default();
+
+        return self::$lists = PriceList::with('items')
+            ->whereKey($default?->id ?? 0)
             ->get();
     }
 
     /**
      * قايمة المندوب بقاعدة السيستم — السواق بالقديمة والسيلز بالجديدة.
      * نفس قاعدة كل الشاشات (`isDriver() ? 'old' : 'new'`) في مكان واحد.
+     *
+     * ⚠️ بقت مستقلة عن `lists()` (٢١/٨) — لما lists() اتضيّقت
+     * للافتراضية بس، قايمة السواق القديمة كانت هتختفي من هنا
+     * وتسقط للافتراضية في صمت. دي بتجيب قايمتها بنفسها.
      */
     public static function listForRep(?User $rep): ?PriceList
     {
         $code = $rep?->isDriver() ? Pricing::LIST_OLD : Pricing::LIST_NEW;
 
-        return self::lists()->firstWhere('code', $code) ?? PriceList::default();
+        return PriceList::with('items')
+            ->where('active', true)
+            ->where('code', $code)
+            ->first() ?? PriceList::default();
     }
 
     /**

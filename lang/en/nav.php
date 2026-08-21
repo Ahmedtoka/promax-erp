@@ -96,4 +96,5 @@ return [
     'shortcuts' => 'Shortcuts',
     'shortcuts_hint' => 'Tap ☆ to pin it to the header',
     'pin' => 'Pin to header',
+    'manual_doc' => 'Manual document',
 ];

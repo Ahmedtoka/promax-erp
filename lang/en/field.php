@@ -311,4 +311,12 @@ return [
     'notif_po_cancelled_wh' => 'The :client order was cancelled — its goods were returned from your van to the warehouse with a transfer document.',
     'notif_po_cancelled_custody' => 'The :client order was cancelled — its goods stay in your van stock, sell them normally.',
     'event_po_cancel_wh' => 'Goods of Sales Order :number returned to the warehouse (order cancelled)',
+
+    // Manual document notices (Aug 21)
+    'notif_manual_invoice_title' => 'Invoice :number was recorded for you from the office',
+    'notif_manual_invoice_body' => 'For :client totalling :amount dated :date — deducted from your van stock.',
+    'notif_manual_return_title' => 'Return :number was recorded for you from the office',
+    'notif_manual_return_body' => 'From :client dated :date — the goods are back in your van stock.',
+    'notif_manual_gift_title' => 'A gift was recorded for you from the office',
+    'notif_manual_gift_body' => 'For :client dated :date — deducted from your gift balance.',
 ];
