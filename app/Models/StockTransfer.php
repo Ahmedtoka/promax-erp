@@ -402,11 +402,21 @@ class StockTransfer extends Model
     {
         $this->loadMissing(['toWarehouse', 'fromWarehouse']);
 
+        // ⚠️ `orWhere('id', ...)` مش `orWhereKey` (إصلاح ٢١/٨) —
+        // النسخة دي من لارافيل مافيهاش `orWhereKey` أصلاً، وكانت
+        // بترمي 500 أول ما الإشعار يتنادى. والشرط بيتضاف بس لما
+        // يكون فيه مسؤول فعلاً — `orWhere('id', null)` مايجيبش حد.
+        $mgrId = $this->toWarehouse?->manager_id;
+
         $targets = User::query()
             ->where('active', true)
-            ->where(fn ($q) => $q
-                ->where('warehouse_id', $this->to_warehouse_id)
-                ->orWhereKey($this->toWarehouse?->manager_id))
+            ->where(function ($q) use ($mgrId) {
+                $q->where('warehouse_id', $this->to_warehouse_id);
+
+                if ($mgrId !== null) {
+                    $q->orWhere('id', $mgrId);
+                }
+            })
             ->get();
 
         foreach ($targets as $user) {
@@ -724,11 +734,19 @@ class StockTransfer extends Model
         }
 
         // أمين المخزن المستقبِل والمسؤول عنه — نفس قاعدة `notifyDestination`
+        // ⚠️ نفس إصلاح `orWhereKey` (٢١/٨) — الميثود مش موجودة في
+        // النسخة دي وكانت بترمي 500 عند أول تحويل ميداني للمخزن.
+        $mgrId = $this->toWarehouse?->manager_id;
+
         $targets = User::query()
             ->where('active', true)
-            ->where(fn ($q) => $q
-                ->where('warehouse_id', $this->to_warehouse_id)
-                ->orWhereKey($this->toWarehouse?->manager_id))
+            ->where(function ($q) use ($mgrId) {
+                $q->where('warehouse_id', $this->to_warehouse_id);
+
+                if ($mgrId !== null) {
+                    $q->orWhere('id', $mgrId);
+                }
+            })
             ->get();
 
         foreach ($targets as $user) {
