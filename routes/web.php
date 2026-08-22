@@ -836,6 +836,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('requests.destroy');
 
         Route::get('/invoices', [OpsController::class, 'invoices'])->name('invoices');
+        // إعادة ترقيم الفواتير بالتاريخ (٢٢/٨) — أدمن بس. ⚠️ المسار
+        // الثابت قبل البارامتري {invoice}
+        Route::post('/invoices/renumber', [OpsController::class, 'renumberInvoices'])
+            ->middleware('role:admin')->name('invoices.renumber');
         Route::get('/invoices/{invoice}', [OpsController::class, 'invoice'])->name('invoice');
         // تحويل فاتورة لعميل تاني (١٨/٨/٢٠٢٦) — مندوب نزّل الفاتورة
         // على فرع غلط من نفس السلسلة. أدمن بس: بتنقل قيود فلوس.

@@ -3718,6 +3718,89 @@ class OpsController extends Controller
         ]);
     }
 
+    /**
+     * ═══ إعادة ترقيم الفواتير بالتاريخ (٢٢ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: المستند اليدوي بينزّل فواتير بتواريخ قديمة بأرقام
+     * جديدة — فاتورة ١٥ أغسطس رقمها INV-1088 وفاتورة ٢٠ أغسطس رقمها
+     * INV-1055. الزرار بيعيد ترقيم **كل** الفواتير حسب `created_at`
+     * من INV-1001 — فالأرقام تمشي مع الزمن زي دفتر ورقي، وفاتورة
+     * بكرة تاخد الرقم التالي صح (nextNumber بيقرا الـMAX).
+     *
+     * الميكانيكا (ترانزاكشن واحدة):
+     *   ١. تصوير الأرقام القديمة (id ← number)
+     *   ٢. أرقام مؤقتة TMP-id للكل — عشان الـunique index مايصطدمش
+     *      أثناء التبديل (فاتورتين بيتبادلوا أرقام = صدام حتمي)
+     *   ٣. ترقيم نهائي بترتيب created_at ثم id
+     *   ٤. قيود الليدجر المربوطة بتتصحح — البيان فيه رقم الفاتورة
+     *      («فاتورة INV-1055») وكشف الحساب لازم يفضل مطابق
+     *
+     * ⚠️ حارس قاطع: أي فاتورة اتصدّرت للضرائب = العملية كلها مرفوضة —
+     * الرقم اللي راح لمصلحة الضرائب مستند رسمي مايتغيرش.
+     *
+     * ⚠️ ملحوظة موثّقة: سيريالات الورقية (`paper_ref`) مالهاش دعوة —
+     * دي أرقام الدفتر المختوم بإيد المندوب وبتفضل زي ما هي.
+     */
+    public function renumberInvoices(Request $request)
+    {
+        if (Invoice::whereIn('eta_status', ['exported', 'submitted'])->exists()) {
+            return back()->withErrors(['renumber' => __('ops.renumber_eta_locked')]);
+        }
+
+        $count = 0;
+        $first = '';
+        $last = '';
+
+        DB::transaction(function () use (&$count, &$first, &$last) {
+            // ١. الأرقام القديمة قبل ما نلمسها
+            $olds = DB::table('invoices')->pluck('number', 'id');
+
+            // ٢. أرقام مؤقتة — بتفك الـunique أثناء التبديل
+            DB::table('invoices')->update(['number' => DB::raw("CONCAT('TMP-', id)")]);
+
+            // ٣. الترقيم الزمني — created_at ثم id (فواتير نفس اللحظة
+            //    بتترتب بترتيب دخولها الفعلي)
+            $seq = 1001;
+            $ids = DB::table('invoices')
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->pluck('id');
+
+            foreach ($ids as $id) {
+                $new = 'INV-'.$seq;
+                $old = (string) $olds->get($id);
+
+                DB::table('invoices')->where('id', $id)->update(['number' => $new]);
+
+                // ٤. بيانات القيود المربوطة — الرقم جوه النص
+                if ($old !== '' && $old !== $new) {
+                    // تعقيم: أرقام المستندات حروف وأرقام وشرطة بس
+                    $safeOld = preg_replace('/[^A-Za-z0-9\-]/', '', $old);
+                    $safeNew = preg_replace('/[^A-Za-z0-9\-]/', '', $new);
+
+                    Transaction::where('source_type', Invoice::class)
+                        ->where('source_id', $id)
+                        ->update(['memo' => DB::raw("REPLACE(memo, '$safeOld', '$safeNew')")]);
+
+                    $count++;
+                }
+
+                if ($first === '') {
+                    $first = $new;
+                }
+                $last = $new;
+
+                $seq++;
+            }
+        });
+
+        return back()->with('ok', __('ops.renumber_done', [
+            'count' => number_format($count),
+            'first' => $first,
+            'last' => $last,
+        ]));
+    }
+
     public function invoice(Invoice $invoice)
     {
         abort_unless(

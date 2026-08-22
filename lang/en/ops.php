@@ -745,4 +745,10 @@ return [
     'paper_col' => 'Paper serial',
     'paper_filter_ph' => 'Paper serial or invoice number…',
     'paper_missing' => 'No serial',
+
+    // Chronological invoice renumbering (Aug 22)
+    'renumber_btn' => 'Renumber by date',
+    'renumber_confirm' => 'All invoices will be renumbered from INV-1001 by their date - oldest gets the smallest, and tomorrow\'s invoice continues from the last number automatically. Ledger memos update to the new numbers; paper serials are untouched. Atomic, nothing gets lost. Continue?',
+    'renumber_eta_locked' => 'Some invoices were submitted to the tax authority - their numbers are official documents and cannot be renumbered.',
+    'renumber_done' => 'Renumbered by date: :count invoices changed - from :first to :last. Future invoices continue after the last number automatically.',
 ];

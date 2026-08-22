@@ -2,6 +2,19 @@
 
 @section('title', __('ops.invoices'))
 
+@section('actions')
+    @if (auth()->user()?->role === 'admin')
+        {{-- إعادة الترقيم بالتاريخ (٢٢/٨): الفواتير المتأخرة بالمستند
+             اليدوي بتاخد أرقام قدام تاريخها — الزرار بيرتّب INV-1001
+             فما فوق حسب created_at، والقيود بتتصحح معاها --}}
+        <form method="POST" action="{{ route('ops.invoices.renumber') }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.renumber_confirm')))">
+            @csrf
+            <button class="btn" type="submit">🔢 {{ __('ops.renumber_btn') }}</button>
+        </form>
+    @endif
+@endsection
+
 @php $fmt = fn ($n) => number_format((float) $n); @endphp
 
 @section('content')
