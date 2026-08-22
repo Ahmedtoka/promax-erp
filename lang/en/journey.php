@@ -355,4 +355,11 @@ return [
     'pulse_visits_n' => ':n visits',
     'pulse_missed_n' => ':n missed',
     'pulse_missed_lg' => 'Past day with misses',
+
+    // Assignments summary (Aug 22)
+    'k_visible' => 'Shown by filter',
+    'k_visible_hint' => 'Max 500 shown - narrow with search and filters',
+    'k_his_clients' => 'His primary clients in current view',
+    'k_zones_hint' => 'Zones assigned to the selected rep',
+    'row_click_hint' => 'Click any row to select it - names open the client card',
 ];

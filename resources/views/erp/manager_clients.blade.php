@@ -300,3 +300,12 @@
 @endif
 
 @endsection
+
+@section('scripts')
+<style>
+/* شغل الحديد (٢٢/٨): هيدرات الجداول ثابتة مع التمرير في كل
+   جداول الصفحة — صفحة التسكين فيها ٤ جداول طويلة */
+.tablewrap thead th{position:sticky;top:0;z-index:3;background:var(--royal-blue);color:#fff}
+.tablewrap tbody tr:hover td{background:var(--blue-050)}
+</style>
+@endsection

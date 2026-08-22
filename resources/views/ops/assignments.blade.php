@@ -14,16 +14,36 @@
 
 @section('content')
 
+{{-- ═══ سامري فوق (٢٢/٨ — «شغل من حديد») — الأرقام اللي بتحسم
+     القرار قبل ما تنزل للجداول، وكل بوكس بيوديك لمكانه --}}
+<div class="kpis">
+    <a class="kpi dash-link" href="{{ route('ops.assignments') }}">
+        <div class="lbl">👥 {{ __('journey.k_visible') }}</div>
+        <div class="val">{{ $fmt($clients->count()) }}</div>
+        <div class="sub2">{{ __('journey.k_visible_hint') }}</div>
+    </a>
+    <a class="kpi dash-link" href="{{ route('ops.assignments', ['only' => 'orphans']) }}"
+       @if ($orphanTotal > 0) style="border-color:var(--orange)" @endif>
+        <div class="lbl">⚠️ {{ __('journey.no_rep') }}</div>
+        <div class="val {{ $orphanTotal > 0 ? 'mid' : 'pos' }}">{{ $fmt($orphanTotal) }}</div>
+        <div class="sub2">{{ $orphanTotal > 0 ? __('journey.orphans_hint') : __('journey.no_orphans') }}</div>
+    </a>
+    @if ($rep !== null)
+        <a class="kpi dash-link" href="{{ route('ops.assignments', ['rep' => $rep->id, 'only' => 'mine']) }}">
+            <div class="lbl">🧑‍💼 {{ $rep->displayName() }}</div>
+            <div class="val pos">{{ $fmt($clients->where('rep_id', $rep->id)->count()) }}</div>
+            <div class="sub2">{{ __('journey.k_his_clients') }}</div>
+        </a>
+        <div class="kpi">
+            <div class="lbl">📍 {{ __('journey.my_zones') }}</div>
+            <div class="val">{{ $fmt(count($myZoneIds)) }}</div>
+            <div class="sub2">{{ __('journey.k_zones_hint') }}</div>
+        </div>
+    @endif
+</div>
+
 <div class="card">
     <h3>👥 {{ __('journey.assignments') }} <span class="side">{{ __('journey.assignments_sub') }}</span></h3>
-
-    @if ($orphanTotal > 0)
-        <div class="alert warn">
-            {{ __('journey.orphans_hint') }} — <b>{{ $fmt($orphanTotal) }}</b>
-        </div>
-    @else
-        <div class="alert good">{{ __('journey.no_orphans') }}</div>
-    @endif
 
     @if ($rep === null)
         <div class="alert warn">{{ __('journey.no_reps') }}</div>
@@ -208,27 +228,36 @@
         <input type="hidden" name="user_id" value="{{ $rep->id }}">
     </form>
 
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:9px;flex-wrap:wrap">
+    {{-- شريط النقل الجماعي — لاصق فوق الجدول، والزرار بعدّاد حي
+         وبيتقفل لما مفيش تحديد (٢٢/٨) --}}
+    <div class="asg-bulkbar">
         <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:7px">
             <input type="checkbox" onchange="toggleAll(this)"> {{ __('journey.select_all') }}
         </label>
-        <button class="btn gold" form="bulkForm" type="submit">
+        <button class="btn gold" form="bulkForm" type="submit" id="bulkBtn" disabled>
             {{ __('journey.move_selected', ['rep' => $rep->displayName()]) }}
+            <span class="badge b-gold" id="pickCount">0</span>
         </button>
+        <span class="s" style="color:var(--muted)">{{ __('journey.row_click_hint') }}</span>
     </div>
 
-    <div class="tablewrap" style="max-height:540px;overflow-y:auto">
+    <div class="tablewrap asg-wrap" style="max-height:540px;overflow-y:auto">
         <table>
+            <thead>
             <tr>
                 <th style="width:34px"></th>
-                <th>{{ __('common.name') }}</th>
+                <th style="text-align:start">{{ __('common.name') }}</th>
                 <th>{{ __('client.zone') }}</th>
                 <th>{{ __('journey.current_rep') }}</th>
                 <th></th>
             </tr>
+            </thead>
+            <tbody>
             @forelse ($clients as $c)
-                <tr @class(['orphan-row' => $c->rep_id === null])>
-                    <td><input type="checkbox" class="pick" form="bulkForm" name="client_ids[]" value="{{ $c->id }}"></td>
+                <tr @class(['orphan-row' => $c->rep_id === null, 'asg-row' => true])
+                    onclick="rowPick(event, this)">
+                    <td><input type="checkbox" class="pick" form="bulkForm" name="client_ids[]" value="{{ $c->id }}"
+                               onchange="pickChanged()"></td>
                     {{-- الاسم الكامل: السلسلة الأول وبعدين الفرع — زي صفحة العملاء --}}
                     <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a></td>
                     <td class="s">{{ $c->zone?->displayName() ?: '—' }}</td>
@@ -267,6 +296,7 @@
                     {{ __('journey.no_clients') }}
                 </td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 </div>
@@ -344,6 +374,23 @@
 <style>
     tr.orphan-row td { background: rgba(234, 140, 28, .08); }
 
+    /* ═══ شغل الحديد (٢٢/٨) ═══ */
+    .dash-link{display:block;text-decoration:none;color:inherit;transition:box-shadow .12s,border-color .12s}
+    .dash-link:hover{border-color:var(--royal-blue);box-shadow:0 4px 14px rgba(18,57,155,.12)}
+    /* هيدر الجدول ثابت مع التمرير */
+    .asg-wrap thead th{position:sticky;top:0;z-index:3;background:var(--royal-blue);color:#fff}
+    /* الصف كله قابل للتعليم */
+    .asg-row{cursor:pointer}
+    .asg-row:hover td{background:var(--blue-050)}
+    .asg-row td a{position:relative;z-index:1}
+    /* شريط النقل لاصق فوق الجدول */
+    .asg-bulkbar{
+      display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+      position:sticky;top:0;z-index:4;background:var(--card);
+      padding:8px 0;margin-bottom:6px;border-bottom:1px solid var(--border);
+    }
+    #bulkBtn[disabled]{opacity:.45;cursor:not-allowed}
+
     /* ═══ كروت بول الفريق ═══ */
     .pool-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
     .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
@@ -389,6 +436,26 @@
     // اختار/شيل كل العملاء في القايمة للنقل الجماعي
     function toggleAll(box) {
         document.querySelectorAll('.pick').forEach(el => { el.checked = box.checked; });
+        pickChanged();
+    }
+
+    // ═══ عدّاد التحديد الحي (٢٢/٨) — الزرار مقفول من غير تحديد ═══
+    function pickChanged() {
+        const n = document.querySelectorAll('.pick:checked').length;
+        const btn = document.getElementById('bulkBtn');
+        const cnt = document.getElementById('pickCount');
+        if (cnt) cnt.textContent = n;
+        if (btn) btn.disabled = n === 0;
+    }
+
+    // الضغط في أي مكان في الصف بيعلّمه — إلا اللينكات والأزرار
+    // والفورمات (تخصيص/شيل) عشان مايتعارضوش
+    function rowPick(ev, tr) {
+        if (ev.target.closest('a, button, form, input[type=checkbox]')) return;
+        const box = tr.querySelector('.pick');
+        if (!box) return;
+        box.checked = !box.checked;
+        pickChanged();
     }
 
     // تشيك بوكس المحافظة بيعلّم/يشيل كل مناطقها
