@@ -45,6 +45,9 @@
         </select>
         <input type="date" name="from" value="{{ $filters['from'] ?? '' }}">
         <input type="date" name="to" value="{{ $filters['to'] ?? '' }}">
+        {{-- فلتر السيريال الورقي (٢٢/٨) — بيمسك رقم الفاتورة كمان --}}
+        <input type="search" name="paper" value="{{ $filters['paper'] ?? '' }}"
+               placeholder="🧾 {{ __('ops.paper_filter_ph') }}" dir="ltr" style="width:170px">
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.invoices') }}">{{ __('common.clear') }}</a>
     </form>
@@ -53,7 +56,9 @@
         <table>
             <thead>
             <tr>
-                <th>{{ __('ops.invoice') }}</th><th>{{ __('client.client') }}</th>
+                <th>{{ __('ops.invoice') }}</th>
+                <th data-nosum>🧾 {{ __('ops.paper_col') }}</th>
+                <th>{{ __('client.client') }}</th>
                 <th data-nosum>{{ __('client.channel') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th data-nosum>{{ __('ops.payment') }}</th>
@@ -65,10 +70,13 @@
             <tbody>
             @forelse ($invoices as $inv)
                 <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                    <td><b>{{ $inv->number }}</b>
-                        {{-- سيريال الورقية المختومة — لو متسجل --}}
+                    <td><b>{{ $inv->number }}</b></td>
+                    {{-- سيريال الورقية المختومة — عمود مستقل (٢٢/٨) --}}
+                    <td class="num" dir="ltr">
                         @if ($inv->paper_ref)
-                            <div style="font-size:10.5px;color:var(--muted)" dir="ltr">🧾 {{ $inv->paper_ref }}</div>
+                            <b>{{ $inv->paper_ref }}</b>
+                        @else
+                            <span class="badge b-orange" style="font-size:9.5px">{{ __('ops.paper_missing') }}</span>
                         @endif
                     </td>
                     {{-- الاسم المركّب بعقيدتنا: السلسلة — الفرع --}}
@@ -83,7 +91,7 @@
                     <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_invoices_found') }}</td></tr>
+                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_invoices_found') }}</td></tr>
             @endforelse
             </tbody>
             {{-- ⚠️ الإجماليات من الكويري المفلترة كلها — مش جمع صفوف
@@ -92,6 +100,7 @@
                 <tfoot>
                 <tr style="background:var(--card2);font-weight:900">
                     <td>Σ</td>
+                    <td>—</td>
                     <td>{{ __('ops.filter_scope_note', ['n' => $fmt($stats->n)]) }}</td>
                     <td>—</td><td>—</td><td>—</td>
                     <td class="num">{{ $fmt($stats->subtotal) }}</td>

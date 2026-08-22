@@ -3684,6 +3684,13 @@ class OpsController extends Controller
             $q->whereDate('created_at', '<=', $to);
         }
 
+        // فلتر السيريال الورقي (٢٢/٨ — طلب المالك): بيمسك سيريال
+        // الورقية أو رقم الفاتورة — عشان المطابقة مع الدفتر المختوم
+        if ($paper = $request->string('paper')->trim()->value()) {
+            $q->where(fn ($w) => $w->where('paper_ref', 'like', "%$paper%")
+                ->orWhere('number', 'like', "%$paper%"));
+        }
+
         // ═══ سامري + إجماليات (١٩ أغسطس ٢٠٢٦) ═══
         //
         // كل الأرقام من **نفس الكويري المفلترة** — مش من صفوف الصفحة
@@ -3706,7 +3713,7 @@ class OpsController extends Controller
             'invoices' => $q->with(['client.group', 'client.channel'])
                 ->latest()->paginate(40)->withQueryString(),
             'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
-            'filters' => $request->only(['user', 'from', 'to']),
+            'filters' => $request->only(['user', 'from', 'to', 'paper']),
             'stats' => $stats,
         ]);
     }

@@ -742,4 +742,7 @@ return [
     'edit_inv_notif_title' => 'Your invoice :number was edited',
     'edit_inv_notif_body' => ':by edited the invoice lines - reason: :reason. Your custody was adjusted accordingly.',
     'edit_inv_done' => 'Invoice :number lines updated - grand total was :old, now :new. Custody, entries and balance adjusted.',
+    'paper_col' => 'Paper serial',
+    'paper_filter_ph' => 'Paper serial or invoice number…',
+    'paper_missing' => 'No serial',
 ];

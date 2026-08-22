@@ -742,4 +742,7 @@ return [
     'edit_inv_notif_title' => 'فاتورتك :number اتعدلت',
     'edit_inv_notif_body' => ':by عدّل بنود الفاتورة — السبب: :reason. عهدتك اتظبطت على التعديل.',
     'edit_inv_done' => 'بنود الفاتورة :number اتعدلت — الشامل كان :old وبقى :new، والعهدة والقيود والرصيد اتظبطوا.',
+    'paper_col' => 'سيريال الورقية',
+    'paper_filter_ph' => 'سيريال ورقية أو رقم فاتورة…',
+    'paper_missing' => 'من غير سيريال',
 ];
