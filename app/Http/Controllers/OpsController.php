@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\ClientGroup;
 use App\Models\ClientRequest;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\PriceList;
 use App\Models\PickOrder;
 use App\Models\Product;
@@ -3742,7 +3743,44 @@ class OpsController extends Controller
                     ->orderBy('name')
                     ->get(['id', 'code', 'name', 'name_en', 'group_id'])
                 : collect(),
+            // مودال «تعديل البنود» (٢٢/٨) — أصناف عهدة المندوب المفتوحة
+            // المتاح فيها إضافة، للأدمن بس. null = مفيش عهدة مفتوحة
+            // فالزرار بيتخفي (التعديل محتاج مسرح العملية موجود).
+            'editItemsAdd' => $this->editItemsPayload($invoice),
         ]);
+    }
+
+    /** أصناف عهدة المندوب المفتوحة — لمودال تعديل بنود الفاتورة */
+    private function editItemsPayload(Invoice $invoice): ?array
+    {
+        if (request()->user()->role !== 'admin') {
+            return null;
+        }
+
+        $custody = $invoice->user?->currentCustody();
+
+        if ($custody === null || $custody->status === 'closed') {
+            return null;
+        }
+
+        $custody->loadMissing('items.product');
+
+        $remaining = [];
+        foreach ($custody->items as $i) {
+            $remaining[$i->product_id] = ($remaining[$i->product_id] ?? 0) + $i->remaining();
+        }
+
+        $names = Product::whereIn('id', array_keys($remaining))->get()->keyBy('id');
+
+        return collect($remaining)
+            ->filter(fn ($q) => $q > 0)
+            ->map(fn ($q, $pid) => [
+                'id' => (int) $pid,
+                'name' => $names->get($pid)?->displayName() ?? '#'.$pid,
+                'have' => (int) $q,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -4079,6 +4117,316 @@ class OpsController extends Controller
             'number' => $invoice->number,
             'old' => number_format($oldGrand, 2),
             'new' => number_format((float) $invoice->grand_total, 2),
+        ]));
+    }
+
+    /**
+     * ═══ تعديل بنود الفاتورة (٢٢ أغسطس ٢٠٢٦) — أدمن بس ═══
+     *
+     * طلب المالك: «أشيل منتج أضيف منتج أغيّر كمية — والقيود تتعدل
+     * والبضاعة ترجع أو تتشال من المندوب، كل حاجة تسمع في مكانها».
+     *
+     * العقيدة (كله جوه ترانزاكشن واحدة):
+     *   • **تقليل/حذف** = البضاعة بترجع لعهدة المندوب: `sold` بينقص
+     *     على نفس بند العهدة (نفس الصنف ونفس الباتش) — عكس
+     *     `deductWithBatches` بالحرف.
+     *   • **زيادة/إضافة** = خصم جديد من العهدة المفتوحة بالـFEFO
+     *     (نفس مسار البيع: lockForUpdate جوه الترانزاكشن).
+     *   • **الأسعار**: الصنف الموجود بيحتفظ بسعره المطبوع (سنابشوت
+     *     الورقة) — والصنف الجديد بيتسعّر بـPricing::quote بتسعيرة
+     *     العميل الحالية، وصفر القايمة = رفض.
+     *   • **القيود**: قيد البيع debit والتحصيل الكاش المربوط credit
+     *     بيتظبطوا على الإجمالي الجديد + recalculate().
+     *
+     * ⚠️ حُرّاس قاطعون (نفس عيلة الـreprice):
+     *   • متصدّرة للضرائب / أمانة / عليها مرتجع مربوط = ممنوع.
+     *   • عهدة المندوب المفتوحة هي مسرح العملية — لو مفيش عهدة
+     *     مفتوحة أو بند العهدة المطابق مش موجود، بنرفض بدل ما نفسد
+     *     تصفية قديمة. البديل وقتها: مستند مرتجع أو فاتورة جديدة.
+     */
+    public function editInvoiceItems(Request $request, Invoice $invoice)
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:200'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.qty' => ['required', 'integer', 'min:0', 'max:999999'],
+        ]);
+
+        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
+            return back()->withErrors(['edit_items' => __('ops.redate_eta_locked')]);
+        }
+
+        if (Transaction::where('source_type', Invoice::class)
+            ->where('source_id', $invoice->id)
+            ->where('kind', 'consignment')->exists()) {
+            return back()->withErrors(['edit_items' => __('ops.reprice_consignment_blocked')]);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
+            && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
+            return back()->withErrors(['edit_items' => __('ops.reprice_has_return')]);
+        }
+
+        $invoice->load(['items.product', 'items.batch', 'client', 'user']);
+        $client = $invoice->client;
+        $rep = $invoice->user;
+
+        // الأهداف بالصنف — والفورم بيبعت كل الأصناف (الحذف = صفر)
+        $target = [];
+        foreach ($data['items'] as $i) {
+            $target[(int) $i['product_id']] = ($target[(int) $i['product_id']] ?? 0) + (int) $i['qty'];
+        }
+
+        $current = [];
+        foreach ($invoice->items as $it) {
+            $current[$it->product_id] = ($current[$it->product_id] ?? 0) + (int) $it->qty;
+        }
+
+        // مفيش تغيير فعلي؟
+        $dirty = false;
+        foreach ($target as $pid => $q) {
+            if (($current[$pid] ?? 0) !== $q) {
+                $dirty = true;
+                break;
+            }
+        }
+        foreach ($current as $pid => $q) {
+            if (! array_key_exists($pid, $target)) {
+                $dirty = true;   // صنف اتشال من الفورم خالص = حذف
+                $target[$pid] = 0;
+            }
+        }
+
+        if (! $dirty) {
+            return back()->withErrors(['edit_items' => __('ops.edit_inv_no_change')]);
+        }
+
+        $custody = $rep?->currentCustody();
+
+        if ($custody === null || $custody->status === 'closed') {
+            return back()->withErrors(['edit_items' => __('ops.edit_inv_custody_closed')]);
+        }
+
+        $oldGrand = (float) $invoice->grand_total;
+        $changes = [];
+
+        try {
+            DB::transaction(function () use ($invoice, $client, $custody, $target, $current, &$changes) {
+                // ═══ ١. التقليل والحذف — البضاعة بترجع للعهدة ═══
+                foreach ($target as $pid => $want) {
+                    $have = $current[$pid] ?? 0;
+
+                    if ($want >= $have) {
+                        continue;
+                    }
+
+                    $give = $have - $want;   // اللي راجع للعهدة
+                    $changes[] = ($invoice->items->firstWhere('product_id', $pid)?->product?->displayName() ?? '#'.$pid)
+                        .': '.$have.' ← '.$want;
+
+                    // الأحدث الأول — نفضّي البنود اللي اتضافت آخراً
+                    foreach ($invoice->items->where('product_id', $pid)->sortByDesc('id') as $line) {
+                        if ($give <= 0) {
+                            break;
+                        }
+
+                        $r = min((int) $line->qty, $give);
+
+                        // بند العهدة المطابق: نفس الصنف ونفس الباتش جوه
+                        // العهدة المفتوحة — lockForUpdate زي البيع بالظبط
+                        $cItem = \App\Models\CustodyItem::where('custody_id', $custody->id)
+                            ->where('product_id', $pid)
+                            ->when($line->batch_id !== null,
+                                fn ($q) => $q->where('batch_id', $line->batch_id),
+                                fn ($q) => $q->whereNull('batch_id'))
+                            ->where('sold', '>=', $r)
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($cItem === null) {
+                            // ⚠️ مفيش بند مطابق في العهدة المفتوحة —
+                            // الفاتورة اتخصمت من عهدة تانية (يوم قديم).
+                            // نرفض بدل ما نرجّع بضاعة لمكان غلط.
+                            throw new \App\Exceptions\Rejected(__('ops.edit_inv_no_custody_line', [
+                                'product' => $line->product?->displayName() ?? '#'.$pid,
+                            ]));
+                        }
+
+                        $cItem->decrement('sold', $r);
+
+                        if ($r >= (int) $line->qty) {
+                            $line->delete();
+                        } else {
+                            $newQty = (int) $line->qty - $r;
+                            $line->update([
+                                'qty' => $newQty,
+                                'total' => round((float) $line->price * $newQty, 2),
+                                'tax' => round((float) $line->price * $newQty * (float) $line->tax_rate, 2),
+                            ]);
+                        }
+
+                        $give -= $r;
+                    }
+                }
+
+                // ═══ ٢. الزيادة والإضافة — خصم جديد من العهدة ═══
+                $need = [];
+                foreach ($target as $pid => $want) {
+                    if ($want > ($current[$pid] ?? 0)) {
+                        $need[$pid] = $want - ($current[$pid] ?? 0);
+                    }
+                }
+
+                if ($need !== []) {
+                    $deduction = $custody->deductWithBatches($need);
+
+                    if ($deduction['error']) {
+                        throw new \App\Exceptions\Rejected($deduction['error']);
+                    }
+
+                    foreach ($deduction['lines'] as $dl) {
+                        /** @var \App\Models\CustodyItem $cItem */
+                        $cItem = $dl['item'];
+                        $q = (int) $dl['qty'];
+
+                        // سنابشوت السعر: من بند موجود لنفس الصنف —
+                        // وإلا تسعيرة العميل الحالية بالحرف (زي البيع)
+                        $existing = $invoice->items->firstWhere('product_id', $cItem->product_id);
+
+                        if ($existing !== null) {
+                            $price = (float) $existing->price;
+                            $listPrice = (float) $existing->list_price;
+                            $taxRate = (float) $existing->tax_rate;
+                        } else {
+                            $quote = \App\Services\Pricing::quote($client, $cItem->product, $cItem->batch, $q);
+
+                            if ($quote['list_price'] <= 0) {
+                                throw new \App\Exceptions\Rejected(__('api.product_not_priced', [
+                                    'product' => $cItem->product->displayName(),
+                                ]));
+                            }
+
+                            $price = (float) $quote['unit_price'];
+                            $listPrice = (float) $quote['list_price'];
+                            $taxRate = (float) \App\Services\Tax::rate($client, $cItem->product);
+                        }
+
+                        // نفس الصنف ونفس الباتش موجود؟ — نزوّد عليه
+                        $sameLine = $invoice->items->first(fn ($l) => $l->product_id === $cItem->product_id
+                            && (int) $l->batch_id === (int) $cItem->batch_id);
+
+                        if ($sameLine !== null) {
+                            $newQty = (int) $sameLine->qty + $q;
+                            $sameLine->update([
+                                'qty' => $newQty,
+                                'total' => round((float) $sameLine->price * $newQty, 2),
+                                'tax' => round((float) $sameLine->price * $newQty * (float) $sameLine->tax_rate, 2),
+                            ]);
+                        } else {
+                            InvoiceItem::create([
+                                'invoice_id' => $invoice->id,
+                                'product_id' => $cItem->product_id,
+                                'batch_id' => $cItem->batch_id,
+                                'qty' => $q,
+                                'list_price' => $listPrice,
+                                'price' => $price,
+                                'unit_cost' => \App\Services\Pricing::costFor($cItem->product, $cItem->batch),
+                                'total' => round($price * $q, 2),
+                                'tax_rate' => $taxRate,
+                                'tax' => round($price * $q * $taxRate, 2),
+                            ]);
+                        }
+                    }
+
+                    foreach ($need as $pid => $q) {
+                        $changes[] = (Product::find($pid)?->displayName() ?? '#'.$pid)
+                            .': '.($current[$pid] ?? 0).' ← '.$target[$pid];
+                    }
+                }
+
+                // ═══ ٣. الإجماليات والقيود — من البنود النهائية ═══
+                $invoice->refresh();
+                $invoice->load('items');
+
+                $subtotal = 0.0;
+                $net = 0.0;
+                $taxTotal = 0.0;
+                $costTotal = 0.0;
+
+                foreach ($invoice->items as $l) {
+                    $subtotal += round((float) $l->list_price * (int) $l->qty, 2);
+                    $net += (float) $l->total;
+                    $taxTotal += (float) $l->tax;
+                    $costTotal += round((float) $l->unit_cost * (int) $l->qty, 2);
+                }
+
+                if ($invoice->items->isEmpty()) {
+                    // فاتورة من غير أي بند = مسحها هو الصح — بس ده
+                    // قرار تاني (زرار المسح موجود). هنا بنرفض.
+                    throw new \App\Exceptions\Rejected(__('ops.edit_inv_would_empty'));
+                }
+
+                $net = round($net, 2);
+                $taxTotal = round($taxTotal, 2);
+                $grand = round($net + $taxTotal, 2);
+
+                $invoice->update([
+                    'subtotal' => round($subtotal, 2),
+                    'discount' => round($subtotal - $net, 2),
+                    'total' => $net,
+                    'tax_total' => $taxTotal,
+                    'grand_total' => $grand,
+                    'cost_total' => round($costTotal, 2),
+                    'eta_status' => $taxTotal > 0 ? 'ready' : 'none',
+                ]);
+
+                Transaction::where('source_type', Invoice::class)
+                    ->where('source_id', $invoice->id)
+                    ->where('kind', 'sale')
+                    ->update(['debit' => $grand, 'tax' => $taxTotal]);
+
+                Transaction::where('source_type', Invoice::class)
+                    ->where('source_id', $invoice->id)
+                    ->where('kind', 'collection')
+                    ->update(['credit' => $grand, 'tax' => $taxTotal]);
+
+                $client->recalculate();
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['edit_items' => $e->getMessage()]);
+        }
+
+        // الحدث على تايم لاين المندوب + إشعاره — بره الترانزاكشن عمداً
+        $shown = array_slice($changes, 0, 4);
+
+        if (count($changes) > 4) {
+            $shown[] = __('field.custody_adjust_more', ['n' => count($changes) - 4]);
+        }
+
+        if ($rep !== null) {
+            TrackEvent::log(
+                $rep,
+                'sale',
+                __('ops.edit_inv_event', ['number' => $invoice->number]),
+                $data['reason'].' — '.implode(' · ', $shown),
+            );
+
+            AppNotification::send(
+                $rep,
+                fn () => __('ops.edit_inv_notif_title', ['number' => $invoice->number]),
+                fn () => __('ops.edit_inv_notif_body', [
+                    'by' => $request->user()->displayName(),
+                    'reason' => $data['reason'],
+                ]),
+                false,
+            );
+        }
+
+        return back()->with('ok', __('ops.edit_inv_done', [
+            'number' => $invoice->number,
+            'old' => number_format($oldGrand, 2),
+            'new' => number_format((float) $invoice->fresh()->grand_total, 2),
         ]));
     }
 

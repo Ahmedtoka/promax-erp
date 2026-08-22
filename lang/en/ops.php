@@ -725,4 +725,21 @@ return [
     'pricelist_mismatch' => 'This invoice was priced with the ":billed" list but the client is currently on ":current" - review it, and if wrong use the "Reprice" button above.',
     'md_more_hint' => 'Keep typing to narrow the results',
     'md_fam_hint' => 'Add a whole family - one box of each:',
+
+    // Invoice line editing (Aug 22)
+    'edit_inv_btn' => 'Edit lines',
+    'edit_inv_hint' => 'Decreases and removals return goods to the rep custody; increases and additions deduct from it - entries and client balance adjust automatically.',
+    'edit_inv_add' => 'Add a product from rep custody',
+    'edit_inv_reason' => 'Reason',
+    'edit_inv_reason_ph' => 'e.g. client returned two items on delivery',
+    'edit_inv_removed' => 'Will be removed',
+    'edit_inv_confirm' => 'Save line changes for invoice :number? Custody, entries and client balance will adjust to the new figures.',
+    'edit_inv_no_change' => 'No quantity changes.',
+    'edit_inv_custody_closed' => 'The rep has no open custody - goods have nowhere to return to or deduct from. Use a return document or a new invoice.',
+    'edit_inv_no_custody_line' => '":product" has no matching line in the rep open custody - this invoice was deducted from another day custody. Use a return document instead.',
+    'edit_inv_would_empty' => 'This edit removes all lines - to void the whole invoice use the delete button.',
+    'edit_inv_event' => 'Admin edit on invoice :number',
+    'edit_inv_notif_title' => 'Your invoice :number was edited',
+    'edit_inv_notif_body' => ':by edited the invoice lines - reason: :reason. Your custody was adjusted accordingly.',
+    'edit_inv_done' => 'Invoice :number lines updated - grand total was :old, now :new. Custody, entries and balance adjusted.',
 ];

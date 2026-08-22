@@ -843,6 +843,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('invoices.reassign');
         // تعديل تاريخ الفاتورة (١٩/٨/٢٠٢٦) — المالك بيسجل فواتير أيام
         // متراكمة فبتنزل كلها بتاريخ واحد. أدمن بس: بيحرك قيود فلوس.
+        // تعديل بنود الفاتورة (٢٢/٨) — أدمن بس: كمية/حذف/إضافة بعكس
+        // العهدة وتظبيط القيود
+        Route::post('/invoices/{invoice}/items', [OpsController::class, 'editInvoiceItems'])
+            ->middleware('role:admin')->name('invoices.items');
         Route::post('/invoices/{invoice}/redate', [OpsController::class, 'redateInvoice'])
             ->middleware('role:admin')->name('invoices.redate');
         // تحويل كاش ↔ آجل — بيمسح/بينشئ قيد التحصيل المربوط ويعيد الحساب

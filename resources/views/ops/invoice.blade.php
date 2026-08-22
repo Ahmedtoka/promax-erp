@@ -57,6 +57,11 @@
             @csrf
             <button class="btn" type="submit">🏷 {{ __('ops.reprice_invoice') }}</button>
         </form>
+        {{-- تعديل البنود (٢٢/٨): كمية/حذف/إضافة — بعكس العهدة وتظبيط
+             القيود. بيظهر بس لو للمندوب عهدة مفتوحة (مسرح العملية) --}}
+        @if (($editItemsAdd ?? null) !== null)
+            <button class="btn" type="button" onclick="openDlg('dlgEditItems')">🧾 {{ __('ops.edit_inv_btn') }}</button>
+        @endif
         {{-- تحويل كاش ↔ آجل — بيظبط قيد التحصيل المربوط ويعيد الحساب --}}
         <form method="POST" action="{{ route('ops.invoices.payment', $inv) }}" style="display:inline"
               onsubmit="return confirm(@js(__('ops.pay_toggle_confirm', [
@@ -367,9 +372,149 @@
 </dialog>
 @endif
 
+{{-- ═══ مودال «تعديل البنود» (٢٢ أغسطس ٢٠٢٦) — أدمن بس ═══
+     كمية/حذف/إضافة — البضاعة بترجع أو بتتخصم من عهدة المندوب
+     والقيود بتتظبط. الداتا من editItemsPayload (عهدة مفتوحة بس). --}}
+@if (($editItemsAdd ?? null) !== null)
+<dialog id="dlgEditItems">
+    <form class="dlg" method="POST" action="{{ route('ops.invoices.items', $inv) }}"
+          style="max-width:560px" id="eiForm"
+          onsubmit="return eiSubmit(this)">
+        @csrf
+        <h4>🧾 {{ __('ops.edit_inv_btn') }} — {{ $inv->number }}</h4>
+
+        <div class="alert warn" style="margin:10px 0">
+            <span>⚠️</span><span>{{ __('ops.edit_inv_hint') }}</span>
+        </div>
+
+        <div id="eiRows" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto"></div>
+
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">
+            <div style="flex:1">
+                <label class="f">{{ __('ops.edit_inv_add') }}</label>
+                <select id="eiAddSel" style="width:100%"></select>
+            </div>
+            <button class="btn" type="button" onclick="eiAdd()">＋ {{ __('ops.md_add_btn') }}</button>
+        </div>
+
+        <div style="margin-top:10px">
+            <label class="f">{{ __('ops.edit_inv_reason') }} *</label>
+            <input type="text" name="reason" required maxlength="200" style="width:100%"
+                   placeholder="{{ __('ops.edit_inv_reason_ph') }}">
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgEditItems')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">💾 {{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
 @endsection
 
 @section('scripts')
 @include('partials._doc_style')
 @include('ops._po_doc_style')
+
+{{-- ═══ جافاسكربت مودال تعديل البنود (٢٢/٨) — أدمن + عهدة مفتوحة ═══ --}}
+@if (($editItemsAdd ?? null) !== null)
+@php
+    $eiFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
+    // بنود الفاتورة الحالية متجمعة بالصنف — دي نقطة البداية في المودال
+    $eiCurrent = $inv->items->groupBy('product_id')->map(fn ($g) => [
+        'id' => (int) $g->first()->product_id,
+        'name' => $g->first()->product?->displayName() ?? '#'.$g->first()->product_id,
+        'qty' => (int) $g->sum('qty'),
+    ])->values();
+@endphp
+<script>
+    const EI_ROWS = {!! json_encode($eiCurrent, $eiFlags) !!};
+    const EI_ADD = {!! json_encode($editItemsAdd, $eiFlags) !!};
+    const EI_T = {
+        have: @js(__('ops.md_have')),
+        removed: @js(__('ops.edit_inv_removed')),
+        confirm: @js(__('ops.edit_inv_confirm', ['number' => $inv->number])),
+    };
+
+    function eiEsc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function eiRender() {
+        const holder = document.getElementById('eiRows');
+
+        holder.innerHTML = EI_ROWS.map(function (r, i) {
+            // الكمية صفر = هيتشال — الصف بيتعلم بالأحمر بس بيفضل
+            // ظاهر عشان الأدمن شايف اللي هيحصل قبل الحفظ
+            const gone = r.qty < 1;
+
+            return '<div style="display:flex;align-items:center;gap:9px;border:1px solid ' +
+                (gone ? 'var(--red)' : 'var(--border)') + ';border-radius:10px;padding:7px 10px' +
+                (gone ? ';background:#FDF2F2' : '') + '">' +
+                '<b style="flex:1;font-size:12.5px' + (gone ? ';text-decoration:line-through' : '') + '">' +
+                eiEsc(r.name) + '</b>' +
+                (gone ? '<span class="s" style="color:var(--red);font-weight:800">' + eiEsc(EI_T.removed) + '</span>' : '') +
+                '<input type="number" min="0" max="999999" value="' + r.qty + '" ' +
+                'style="width:90px;text-align:center" onchange="eiQty(' + i + ', this.value)">' +
+                '<button type="button" class="btn sm" style="color:var(--red)" onclick="eiQty(' + i + ', 0)">✕</button>' +
+                '</div>';
+        }).join('');
+
+        // منتقي الإضافة — أصناف العهدة اللي مش في الفاتورة أصلاً
+        const inRows = EI_ROWS.filter(r => r.qty > 0).map(r => r.id);
+        const sel = document.getElementById('eiAddSel');
+        sel.innerHTML = EI_ADD
+            .filter(p => !inRows.includes(p.id))
+            .map(p => '<option value="' + p.id + '">' + eiEsc(p.name) + ' — ' +
+                eiEsc(EI_T.have) + ': ' + p.have + '</option>')
+            .join('');
+    }
+
+    function eiQty(i, v) {
+        EI_ROWS[i].qty = Math.max(0, parseInt(v || '0', 10));
+        eiRender();
+    }
+
+    function eiAdd() {
+        const sel = document.getElementById('eiAddSel');
+        const pid = parseInt(sel.value || '0', 10);
+        if (!pid) return;
+
+        const p = EI_ADD.find(x => x.id === pid);
+        const ex = EI_ROWS.find(r => r.id === pid);
+
+        if (ex) {
+            ex.qty = Math.max(1, ex.qty);
+        } else {
+            EI_ROWS.push({id: p.id, name: p.name, qty: 1});
+        }
+
+        eiRender();
+    }
+
+    function eiSubmit(form) {
+        if (!confirm(EI_T.confirm)) return false;
+
+        form.querySelectorAll('.ei-h').forEach(e => e.remove());
+
+        EI_ROWS.forEach(function (r, i) {
+            [['product_id', r.id], ['qty', r.qty]].forEach(function (kv) {
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.className = 'ei-h';
+                inp.name = 'items[' + i + '][' + kv[0] + ']';
+                inp.value = kv[1];
+                form.appendChild(inp);
+            });
+        });
+
+        return true;
+    }
+
+    eiRender();
+</script>
+@endif
 @endsection
