@@ -318,4 +318,5 @@ return [
     'notif_manual_return_body' => 'من عميل :client بتاريخ :date — البضاعة رجعت لعهدتك.',
     'notif_manual_gift_title' => 'هدية اتسجلت عليك من المكتب',
     'notif_manual_gift_body' => 'لعميل :client بتاريخ :date — اتخصمت من رصيد هداياك.',
+    'custody_adjust_more' => '+:n تغيير تاني',
 ];

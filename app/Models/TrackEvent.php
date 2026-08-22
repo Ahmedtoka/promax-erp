@@ -118,11 +118,19 @@ class TrackEvent extends Model
         ?float $lat = null,
         ?float $lng = null,
     ): self {
+        // ⚠️ **القص إجباري** (بلاغ ٢٢/٨): تعديل عهدة بأصناف كتير ركّب
+        // subtitle أطول من عمود VARCHAR(255) فرمى 1406 على اللايف —
+        // والأمَرّ إن التعديل نفسه كان لسه مكمّل، فالمستخدم شاف 500
+        // وهو فاكر إن حاجة ماتحفظتش. الحدث وصف مش مستند — قصّه أهون
+        // ألف مرة من ما يرمي الشاشة كلها. القص هنا مركزي عشان يغطي
+        // كل نداءات log الحالية والجاية مرة واحدة.
         return static::create([
             'user_id' => $user->id,
             'type' => $type,
-            'title' => $title,
-            'subtitle' => $subtitle,
+            'title' => \Illuminate\Support\Str::limit($title, 190, '…'),
+            'subtitle' => $subtitle === null
+                ? null
+                : \Illuminate\Support\Str::limit($subtitle, 250, '…'),
             'lat' => $lat,
             'lng' => $lng,
             'happened_at' => now(),

@@ -319,4 +319,5 @@ return [
     'notif_manual_return_body' => 'From :client dated :date — the goods are back in your van stock.',
     'notif_manual_gift_title' => 'A gift was recorded for you from the office',
     'notif_manual_gift_body' => 'For :client dated :date — deducted from your gift balance.',
+    'custody_adjust_more' => '+:n more changes',
 ];

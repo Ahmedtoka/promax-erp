@@ -1583,11 +1583,20 @@ class OpsController extends Controller
         }
 
         // الحدث على تايم لاين المندوب — النوع في TYPES و enums.track
+        // ⚠️ أول ٤ تغييرات بس + «+N» (بلاغ ٢٢/٨): سرد كل الأصناف عدّى
+        // حد عمود subtitle ورمى 1406 على اللايف بعد ما التعديل كان
+        // اتحفظ فعلاً. الـlog نفسها بتقص كمان — ده دفاع مزدوج.
+        $shown = array_slice($changes, 0, 4);
+
+        if (count($changes) > 4) {
+            $shown[] = __('field.custody_adjust_more', ['n' => count($changes) - 4]);
+        }
+
         TrackEvent::log(
             $user,
             'custody_adjust',
             __('field.event_custody_adjust'),
-            $data['reason'].' — '.implode(' · ', $changes),
+            $data['reason'].' — '.implode(' · ', $shown),
         );
 
         AppNotification::send(
