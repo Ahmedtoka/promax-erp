@@ -406,12 +406,19 @@ class StockTransfer extends Model
         // النسخة دي من لارافيل مافيهاش `orWhereKey` أصلاً، وكانت
         // بترمي 500 أول ما الإشعار يتنادى. والشرط بيتضاف بس لما
         // يكون فيه مسؤول فعلاً — `orWhere('id', null)` مايجيبش حد.
+        //
+        // ⚠️ **أمناء المخازن بس مش أي حد على المخزن** (بلاغ المالك
+        // ٢٢/٨): المناديب كلهم `warehouse_id` بتاعهم = مخزن تموينهم،
+        // فكل تحويل وارد كان بيرن عند كل المناديب — «بيجيلنا رسايل
+        // رجوع بضاعة من مندوب تاني». الإشعار ده شغل المخزن: أمينه
+        // ومسؤوله وبس.
         $mgrId = $this->toWarehouse?->manager_id;
 
         $targets = User::query()
             ->where('active', true)
             ->where(function ($q) use ($mgrId) {
-                $q->where('warehouse_id', $this->to_warehouse_id);
+                $q->where(fn ($w) => $w->where('warehouse_id', $this->to_warehouse_id)
+                    ->where('role', 'warehouse_keeper'));
 
                 if ($mgrId !== null) {
                     $q->orWhere('id', $mgrId);
@@ -736,12 +743,17 @@ class StockTransfer extends Model
         // أمين المخزن المستقبِل والمسؤول عنه — نفس قاعدة `notifyDestination`
         // ⚠️ نفس إصلاح `orWhereKey` (٢١/٨) — الميثود مش موجودة في
         // النسخة دي وكانت بترمي 500 عند أول تحويل ميداني للمخزن.
+        //
+        // ⚠️ **أمناء المخازن بس** (بلاغ المالك ٢٢/٨) — نفس تصليح
+        // `notifyDestination` بالحرف: المناديب على نفس المخزن كانوا
+        // بياخدوا إشعار رجوع بضاعة أي زميل.
         $mgrId = $this->toWarehouse?->manager_id;
 
         $targets = User::query()
             ->where('active', true)
             ->where(function ($q) use ($mgrId) {
-                $q->where('warehouse_id', $this->to_warehouse_id);
+                $q->where(fn ($w) => $w->where('warehouse_id', $this->to_warehouse_id)
+                    ->where('role', 'warehouse_keeper'));
 
                 if ($mgrId !== null) {
                     $q->orWhere('id', $mgrId);

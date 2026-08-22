@@ -341,6 +341,23 @@ class ReplenishmentRequest extends Model
     /** مديرو القناة اللي المفروض يشوفوا الطلب ده */
     public function managers()
     {
+        // ═══ عقيدة النوتفيكيشن (بلاغ المالك ٢٢/٨) ═══
+        // «صاحب الشغل ومديره فقط لا غير.» كانت بتبعت لكل مديري قناة
+        // العميل — فمدير تاني بيشارك نفس القناة كان بيستلم طلبات
+        // بضاعة فريق مش بتاعه. بقت: الأدمنز + **مدير صاحب الطلب
+        // نفسه** (`requested_by → manager_id`).
+        //
+        // فولباك مقصود: طالب من غير مدير متسكّن → مديري قناة العميل
+        // (زي الأول) — أحسن ما الطلب يضيع في الصمت ومحدش يوافق عليه.
+        $mgrId = $this->requester?->manager_id;
+
+        if ($mgrId !== null) {
+            return User::query()
+                ->where('active', true)
+                ->where(fn ($q) => $q->where('role', 'admin')->orWhere('id', $mgrId))
+                ->get();
+        }
+
         $channelId = $this->client?->channel_id;
 
         return User::query()
