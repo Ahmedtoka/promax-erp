@@ -724,4 +724,5 @@ return [
     'priced_with' => 'This invoice was priced with the ":list" list - matching the client\'s current pricing.',
     'pricelist_mismatch' => 'This invoice was priced with the ":billed" list but the client is currently on ":current" - review it, and if wrong use the "Reprice" button above.',
     'md_more_hint' => 'Keep typing to narrow the results',
+    'md_fam_hint' => 'Add a whole family - one box of each:',
 ];

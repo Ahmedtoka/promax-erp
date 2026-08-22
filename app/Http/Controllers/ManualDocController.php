@@ -112,6 +112,11 @@ class ManualDocController extends Controller
                 'list_price' => $list,
                 'have' => (int) ($remaining[$p->id] ?? 0),
                 'gift_left' => (int) ($giftLeft[$p->id] ?? 0),
+                // للإضافة بالعائلة (٢٢/٨): زرار العائلة بينزّل كل
+                // أصنافها، كل صنف بعلبة كاملة (box_units — وإلا 12)
+                'family' => (string) ($p->family ?? ''),
+                'family_label' => $p->familyLabel(),
+                'box' => (int) ($p->box_units ?: 12),
             ];
         };
 

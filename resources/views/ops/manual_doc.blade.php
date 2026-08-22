@@ -71,6 +71,10 @@
             <div id="mdPayFixed" class="s" style="align-self:center;color:var(--muted)"></div>
         </div>
 
+        {{-- عائلات المنتجات (٢٢/٨ — طلب المالك): ضغطة على العائلة
+             بتنزّل كل أصنافها مرة واحدة، كل صنف بعلبة كاملة --}}
+        <div class="md-fams" data-fams="inv"></div>
+
         {{-- البحث فوق — والمختار بينزل تحتيه في الجدول (طلب المالك) --}}
         <div class="md-pickwrap">
             <input type="search" class="md-psearch" data-tab="inv" style="width:100%"
@@ -97,6 +101,7 @@
                 <input type="text" name="note" maxlength="400" style="width:100%">
             </div>
         </div>
+        <div class="md-fams" data-fams="ret"></div>
         <div class="md-pickwrap">
             <input type="search" class="md-psearch" data-tab="ret" style="width:100%"
                    placeholder="{{ __('ops.md_add_item') }}"
@@ -118,6 +123,7 @@
                 <input type="text" name="note" maxlength="250" style="width:100%">
             </div>
         </div>
+        <div class="md-fams" data-fams="gift"></div>
         <div class="md-pickwrap">
             <input type="search" class="md-psearch" data-tab="gift" style="width:100%"
                    placeholder="{{ __('ops.md_add_item') }}"
@@ -143,6 +149,7 @@
     ])->values();
 
     $jsT = [
+        'famHint' => __('ops.md_fam_hint'),
         'more' => __('ops.md_more_hint'),
         'have' => __('ops.md_have'),
         'giftLeft' => __('ops.md_gift_left'),
@@ -273,6 +280,7 @@
 
         card.style.display = '';
         renderProds();
+        renderFams();
         renderRows();
     }
 
@@ -331,6 +339,52 @@
     document.querySelectorAll('.md-psearch').forEach(function (i) {
         i.addEventListener('input', renderProds);
     });
+
+    // ═══ الإضافة بالعائلة (٢٢/٨ — طلب المالك) ═══
+    // ضغطة على «برو ماكس بروتين» تنزّل الـ6 أصناف مرة واحدة، كل صنف
+    // بكمية علبة كاملة (box_units) — ومقفولة على المتاح في العهدة.
+    function renderFams() {
+        document.querySelectorAll('.md-fams').forEach(function (holder) {
+            const tab = holder.dataset.fams;
+            const fams = {};
+
+            sourceFor(tab).forEach(function (p) {
+                if (p.family) fams[p.family] = p.family_label || p.family;
+            });
+
+            const keys = Object.keys(fams);
+            holder.innerHTML = keys.length
+                ? '<span class="s" style="color:var(--muted)">' + esc(T.famHint) + '</span>'
+                    + keys.map(function (f) {
+                        return '<button type="button" class="md-fam" data-fam="' + esc(f) + '">📦 '
+                            + esc(fams[f]) + '</button>';
+                    }).join('')
+                : '';
+
+            holder.querySelectorAll('.md-fam').forEach(function (b) {
+                b.onclick = function () { addFamily(tab, b.dataset.fam); };
+            });
+        });
+    }
+
+    function addFamily(tab, fam) {
+        sourceFor(tab).filter(p => p.family === fam).forEach(function (p) {
+            // علبة كاملة — ومقصوصة على المتاح (بيع: عهدته · هدية: رصيده)
+            let qty = p.box > 1 ? p.box : 12;
+            if (tab === 'inv') qty = Math.min(qty, p.have);
+            if (tab === 'gift') qty = Math.min(qty, p.gift_left);
+            if (qty < 1) return;
+
+            const ex = rows[tab].find(r => r.id === p.id);
+            if (ex) {
+                ex.qty = qty;
+            } else {
+                rows[tab].push({id: p.id, name: p.name, image: p.image, price: p.price,
+                    have: p.have, gift_left: p.gift_left, qty: qty, cond: 'good'});
+            }
+        });
+        renderRows();
+    }
 
     function addRow(tab, pid) {
         const p = sourceFor(tab).find(x => x.id === pid);
@@ -441,6 +495,14 @@
   cursor:pointer;font-size:13px}
 .md-picked .x:hover{color:var(--red)}
 .md-pickwrap{margin-top:6px}
+/* زراير العائلات (٢٢/٨) — ضغطة تنزّل العائلة كلها */
+.md-fams{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 2px}
+.md-fam{
+  border:1px solid var(--royal-blue);color:var(--royal-blue);background:var(--blue-050);
+  border-radius:999px;padding:5px 12px;font-family:inherit;font-size:12px;font-weight:800;
+  cursor:pointer;transition:background .12s;
+}
+.md-fam:hover{background:var(--royal-blue);color:#fff}
 .md-prods{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto;margin-top:7px}
 .md-prod{display:flex;gap:10px;align-items:center;
   border:1px solid var(--border);background:var(--card);border-radius:10px;
