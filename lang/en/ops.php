@@ -719,4 +719,8 @@ return [
     'md_client_search' => 'Search the client by name and pick from the list…',
     'md_add_btn' => 'Add',
     'md_no_custody_items' => 'No items available — sales and gifts come from the rep van stock only',
+
+    // Invoice price-list guard (Aug 22 - INV-1065 report)
+    'priced_with' => 'This invoice was priced with the ":list" list - matching the client\'s current pricing.',
+    'pricelist_mismatch' => 'This invoice was priced with the ":billed" list but the client is currently on ":current" - review it, and if wrong use the "Reprice" button above.',
 ];

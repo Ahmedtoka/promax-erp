@@ -81,6 +81,32 @@
 
 @section('content')
 
+{{-- ═══ حارس التسعيرة (٢٢/٨) — بلاغ INV-1065 ═══
+     الفاتورة بتتسعّر لحظة البيع وبتخزّن اسم القايمة عليها. لو
+     القايمة دي مش هي تسعيرة العميل **الحالية**، ده انحراف لازم
+     يصرّخ مش يستخبى — بانر أحمر + الحل جنبه (زرار 🏷 فوق). --}}
+<style>@media print{[data-noprint]{display:none !important}}</style>
+@php
+    $curListRow = \App\Services\Pricing::listRowFor($inv->client);
+    $curListCode = $curListRow?->code ?? 'new';
+    $listMismatch = (string) ($inv->price_list ?? 'new') !== (string) $curListCode;
+@endphp
+@if ($listMismatch)
+    <div class="alert" style="border:1.5px solid var(--red);background:#FDF2F2;color:var(--red);font-weight:800"
+         data-noprint>
+        <span>🚨</span>
+        <span>{{ __('ops.pricelist_mismatch', [
+            'billed' => \App\Services\Pricing::listLabel($inv->price_list ?? 'new'),
+            'current' => \App\Services\Pricing::listLabel($curListCode),
+        ]) }}</span>
+    </div>
+@else
+    <div class="alert" style="border:1px solid var(--border);color:var(--muted);font-size:12px" data-noprint>
+        <span>🏷</span>
+        <span>{{ __('ops.priced_with', ['list' => \App\Services\Pricing::listLabel($inv->price_list ?? 'new')]) }}</span>
+    </div>
+@endif
+
 @foreach ($pagesDoc as $pageItemsDoc)
 @php $isLastDoc = $loop->last; @endphp
 <div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}">

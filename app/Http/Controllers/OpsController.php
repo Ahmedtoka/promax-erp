@@ -3203,7 +3203,11 @@ class OpsController extends Controller
             'address_ar' => ['nullable', 'string', 'max:190'],
             'channel_id' => ['nullable', 'exists:channels,id'],
             'sub_channel' => ['nullable', 'in:'.implode(',', array_keys(Channel::SUB_CHANNELS))],
-            'price_list_id' => ['nullable', 'exists:price_lists,id'],
+            // ⚠️ **إجبارية عند الاعتماد** (٢٢/٨ — بلاغ INV-1065): عميل
+            // اتولد من غير قايمة كان بياخد سعر المستهلك الافتراضي في
+            // صمت، وأول فاتورة بتطلع بأسعار محدش اتفق عليها. المعتمِد
+            // لازم يختار القايمة بإيده — مفيش ديفولت في الفلوس.
+            'price_list_id' => ['required_if:decision,approved', 'nullable', 'exists:price_lists,id'],
             'group_id' => ['nullable', 'exists:client_groups,id'],
             'has_contract' => ['nullable', 'boolean'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -3862,6 +3866,8 @@ class OpsController extends Controller
             'new' => $new->toDateString(),
         ]));
     }
+
+    // (إعادة التسعير موجودة تحت — `repriceInvoice` الأصلية بحُرّاسها)
 
     /**
      * ═══ تحويل فاتورة كاش ↔ آجل (٢٠ أغسطس ٢٠٢٦) — أدمن بس ═══
