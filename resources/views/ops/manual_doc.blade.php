@@ -143,6 +143,7 @@
     ])->values();
 
     $jsT = [
+        'more' => __('ops.md_more_hint'),
         'have' => __('ops.md_have'),
         'giftLeft' => __('ops.md_gift_left'),
         'qty' => __('ops.md_qty'),
@@ -190,11 +191,17 @@
             return;
         }
 
-        const hits = CLIENTS.filter(c => c.q.includes(q)).slice(0, 15);
-        cList.innerHTML = hits.map(function (c) {
+        // ⚠️ السقف كان 15 وساكت (بلاغ ٢٢/٨: «كاريبو 27 وطالع 15 بس») —
+        // بقى 60 + سطر بيقول لو فيه أكتر عشان الناقص مايبقاش خفي
+        const all = CLIENTS.filter(c => c.q.includes(q));
+        const hits = all.slice(0, 60);
+        cList.innerHTML = (hits.map(function (c) {
             return '<button type="button" class="md-prod" onclick="pickClient(' + c.id + ')">' +
                 '<b>' + esc(c.name) + '</b></button>';
-        }).join('') || '<div class="s" style="padding:8px">—</div>';
+        }).join('') || '<div class="s" style="padding:8px">—</div>')
+            + (all.length > 60
+                ? '<div class="s" style="padding:8px;color:var(--muted)">+' + (all.length - 60) + ' — ' + esc(T.more) + '</div>'
+                : '');
         cList.style.display = '';
     });
 
