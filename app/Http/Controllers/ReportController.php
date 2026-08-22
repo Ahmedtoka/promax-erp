@@ -954,10 +954,11 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($request);
 
-        $q = \App\Models\Quotation::visibleTo(
-            \App\Models\Quotation::with(['creator', 'items']),
-            $request->user()
-        )
+        // ⚠️ السكوب بينداه على الكويري نفسها — لارافيل بتحقن الـbuilder
+        // أول حجة لوحدها (إصلاح ٢٢/٨: النداء الستاتيك كان بيبعت
+        // builder مكان الـuser ويرمي TypeError)
+        $q = \App\Models\Quotation::with(['creator', 'items'])
+            ->visibleTo($request->user())
             ->whereBetween('created_at', [$a, $b])
             // فلتر «مين طلّعه» — للأدمن بس، غيره مقفول على نفسه أصلاً
             ->when($request->user()?->isAdmin() && $request->filled('creator_id'),
@@ -977,7 +978,8 @@ class ReportController extends Controller
             'kCount' => number_format($all->count()),
             'kValue' => $this->m($all->sum('grand')),
             'kMonth' => number_format(
-                \App\Models\Quotation::visibleTo(\App\Models\Quotation::query(), $request->user())
+                \App\Models\Quotation::query()
+                    ->visibleTo($request->user())
                     ->where('created_at', '>=', today()->startOfMonth())->count()
             ),
             // فلتر المُصدِر — اللي عملوا عروض فعلاً (أدمن ومديرين)
