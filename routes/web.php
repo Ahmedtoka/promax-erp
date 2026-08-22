@@ -50,6 +50,27 @@ Route::middleware(['auth', 'screen'])->group(function () {
         return back();
     })->name('notifications.read');
 
+    // ═══ توست الإشعارات (٢٢/٨) — بولينج خفيف للجديد بس ═══
+    // بيرجّع اللي id بتاعه أكبر من آخر واحد الشاشة شافته — فالبولينج
+    // كل ٢٥ ثانية بيرجّع فاضي في ٩٩٪ من المرات وثقله صفر.
+    Route::get('/notifications/latest', function () {
+        $after = (int) request('after', 0);
+
+        return response()->json(
+            auth()->user()->appNotifications()
+                ->where('id', '>', $after)
+                ->latest('id')->take(5)
+                ->get()
+                ->map(fn ($n) => [
+                    'id' => $n->id,
+                    'title' => $n->title,
+                    'body' => $n->body,
+                    'good' => (bool) $n->is_good,
+                    'url' => route('notifications.go', $n),
+                ])
+        );
+    })->name('notifications.latest');
+
     Route::get('/notifications/{note}/go', function (\App\Models\AppNotification $note) {
         abort_unless((int) $note->user_id === (int) auth()->id(), 403);
         $note->update(['read_at' => now()]);
@@ -732,12 +753,6 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('vans');
 
         // ═══ الموعود مقابل المتاح (١٥ أغسطس ٢٠٢٦) ═══
-        // المناديب اللي اتوعدوا بأكتر من اللي في عربياتهم — الفجوة
-        // اللي اتعملت قبل ما الحجز (`Custody::committedFor`) يتضاف.
-        // ⚠️ نفس رولز بورد العربيات: أدمن ومدير، والمدير بيشوف فريقه
-        // من `fieldVisibleTo` جوه الكنترولر مش من الراوت.
-        Route::get('/commitments', [OpsController::class, 'commitments'])
-            ->middleware('role:admin,manager')->name('commitments');
 
         // ═══ مبيعات المناديب — بورد فلوس كل مندوب (١٢ أغسطس ٢٠٢٦) ═══
         // ⚠️ شاشة فلوس: نفس رولز «تحصيلات الميدان» (`erp.collections`) —

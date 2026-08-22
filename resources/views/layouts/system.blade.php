@@ -1953,5 +1953,86 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 @yield('scripts')
+
+{{-- ═══ توست الإشعارات (٢٢/٨ — طلب المالك) ═══
+     بوب أب صغير على الشمال بيظهر fade-in ويختفي fade-out لوحده.
+     نفس صفوف الجرس (بولينج خفيف: الجديد بس بعد آخر id اتشاف) —
+     والضغط عليه بيعلّم مقروء وبيوديك لصفحة الإشعار. --}}
+@auth
+<div id="pmxToasts" aria-live="polite"></div>
+<style>
+#pmxToasts{
+  position:fixed;bottom:18px;left:18px;right:auto;z-index:9999;
+  display:flex;flex-direction:column-reverse;gap:8px;max-width:330px;
+}
+.pmx-toast{
+  display:flex;gap:9px;align-items:flex-start;cursor:pointer;
+  background:var(--card);border:1px solid var(--border);border-radius:13px;
+  padding:11px 13px;box-shadow:0 8px 26px rgba(18,57,155,.16);
+  border-inline-start:4px solid var(--royal-blue);
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease, transform .35s ease;
+}
+.pmx-toast.bad{border-inline-start-color:var(--red)}
+.pmx-toast.show{opacity:1;transform:translateY(0)}
+.pmx-toast b{font-size:12.5px;display:block;color:var(--ink)}
+.pmx-toast p{margin:2px 0 0;font-size:11.5px;color:var(--muted);line-height:1.6}
+.pmx-toast .ic{font-size:16px;line-height:1.4}
+@media print{#pmxToasts{display:none}}
+</style>
+<script>
+(function () {
+    const KEY = 'pmxToastLast';
+    const holder = document.getElementById('pmxToasts');
+    // أول زيارة: مانغرقش المستخدم بالقديم — نبدأ من دلوقتي
+    let last = parseInt(localStorage.getItem(KEY) || '0', 10);
+    let first = last === 0;
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function toast(n) {
+        const el = document.createElement('div');
+        el.className = 'pmx-toast' + (n.good ? '' : ' bad');
+        el.innerHTML = '<span class="ic">' + (n.good ? '🔔' : '⚠️') + '</span>' +
+            '<span><b>' + esc(n.title) + '</b>' +
+            (n.body ? '<p>' + esc(n.body) + '</p>' : '') + '</span>';
+        el.onclick = function () { location.href = n.url; };
+        holder.appendChild(el);
+
+        // fade in → استنى ٦ ثواني → fade out → شيل من الـDOM
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+        setTimeout(function () {
+            el.classList.remove('show');
+            setTimeout(() => el.remove(), 400);
+        }, 6000);
+    }
+
+    async function poll() {
+        try {
+            const r = await fetch(@js(route('notifications.latest')) + '?after=' + last,
+                {headers: {Accept: 'application/json'}});
+            if (!r.ok) return;
+
+            const items = await r.json();
+            if (!items.length) return;
+
+            last = Math.max(last, ...items.map(i => i.id));
+            localStorage.setItem(KEY, String(last));
+
+            // أول تحميل بنزامن العدّاد بس من غير عرض — القديم مش «جديد»
+            if (!first) items.reverse().forEach(toast);
+            first = false;
+        } catch (_) { /* شبكة — نحاول الدورة الجاية */ }
+    }
+
+    poll();
+    setInterval(poll, 25000);
+})();
+</script>
+@endauth
 </body>
 </html>

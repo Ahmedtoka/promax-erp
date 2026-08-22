@@ -53,78 +53,178 @@ class ErpController extends Controller
         return back()->with('ok', __('flash.demo_loaded'));
     }
 
-    public function overview()
+    /**
+     * ═══ الداشبورد الرئيسية (إعادة بناء ٢٢ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «بالعين أقدر أشوف حال الشركة كاملة» — تشارتات
+     * ودواير، فلاتر (فترة + مدير + مندوب) على كل الأرقام، وكل رقم
+     * **لينكابل** بيوديك للتقرير أو الصفحة بتاعته بنفس الفلاتر.
+     *
+     * ⚠️ عقيدة الأرقام زي ما هي: مبيعات = `grand_total` من الفواتير،
+     * التحصيل = قيود `collection` الدائنة، والمديونية سنابشوت حالي
+     * (مش بتتفلتر بالفترة — الرصيد رصيد).
+     */
+    public function overview(Request $request)
     {
-        // ⚠️ سكوب التشانل مانجر (2026-08-05): كل أرقام العملاء في
-        // الشاشة من عملائه المسكّنين له بس. أرقام البضاعة (قيمة
-        // المخزون وتوزيع العائلات الاحتياطي) شركة مش عملاء فبتفضل.
         $u = auth()->user();
-        $clientIds = $u?->role === 'manager'
-            ? Client::visibleTo(Client::query(), $u)->select('id')
-            : null;
-        $only = fn ($q, string $col = 'client_id') => $clientIds === null
-            ? $q
-            : $q->whereIn($col, $clientIds);
 
-        // ملاحظة: `returns` كلمة محجوزة في MySQL — لازم backticks
-        $totals = Client::visibleTo(Client::query())->selectRaw('
-            SUM(`purchases`) as purchases,
-            SUM(`collections`) as collections,
-            SUM(`returns`) as total_returns,
-            SUM(`rebates`) as rebates,
-            SUM(`settlements`) as settlements,
-            SUM(`balance`) as balance,
-            COUNT(*) as n_clients
-        ')->first();
+        // ═══ الفلاتر ═══
+        try {
+            $from = $request->filled('from') ? \Illuminate\Support\Carbon::parse($request->input('from')) : today()->startOfMonth();
+        } catch (\Throwable) {
+            $from = today()->startOfMonth();
+        }
+        try {
+            $to = $request->filled('to') ? \Illuminate\Support\Carbon::parse($request->input('to')) : today();
+        } catch (\Throwable) {
+            $to = today();
+        }
+        [$a, $b] = [$from->copy()->startOfDay(), $to->copy()->endOfDay()];
 
-        $byFamily = $only(DB::table('invoice_items')
-            ->join('products', 'products.id', '=', 'invoice_items.product_id')
-            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id'), 'invoices.client_id')
-            ->selectRaw('products.family, SUM(invoice_items.total) as amt')
-            ->groupBy('products.family')
-            ->pluck('amt', 'family')
-            ->all();
+        // المدير: الأدمن بيختاره من الفلتر — والتشانل مانجر هو نفسه دايماً
+        $mgrId = $u?->role === 'manager' ? $u->id : ($request->integer('manager_id') ?: null);
+        $repId = $request->integer('user_id') ?: null;
 
-        // لو لسه مفيش فواتير في السيستم، نعرض توزيع المخزون بدلها
-        if (empty($byFamily)) {
-            $byFamily = DB::table('stocks')
-                ->join('products', 'products.id', '=', 'stocks.product_id')
-                ->selectRaw('products.family, SUM(stocks.qty * products.price_new) as amt')
-                ->groupBy('products.family')
-                ->pluck('amt', 'family')
-                ->all();
+        // المناديب المعنيين: مندوب محدد ← هو بس · مدير ← فريقه كله
+        $repIds = null;
+        if ($repId) {
+            $repIds = [$repId];
+        } elseif ($mgrId) {
+            $repIds = User::whereIn('role', User::FIELD_WORK_ROLES)
+                ->where('manager_id', $mgrId)->pluck('id')->push($mgrId)->all();
         }
 
-        $monthly = $only(Transaction::query())
-            ->selectRaw("DATE_FORMAT(date, '%Y-%m') as m,
-                         SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) as sales,
-                         SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) as coll")
-            ->groupBy('m')->orderBy('m')->get();
+        $invQ = fn () => Invoice::whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds));
+
+        // ═══ KPIs الفترة ═══
+        $inv = $invQ()->selectRaw("COUNT(*) n, COALESCE(SUM(grand_total),0) g,
+            COALESCE(SUM(total),0) net, COALESCE(SUM(tax_total),0) tax,
+            COALESCE(SUM(CASE WHEN payment='cash' THEN grand_total ELSE 0 END),0) cash_g")->first();
+
+        // التحصيل — قيود collection، ولو مفلتر بمندوب/مدير بنمسك القيود
+        // اللي مصدرها فواتيره (كاش مع فاتورة) أو زياراته (تحصيل ميداني)
+        $coll = Transaction::where('kind', 'collection')
+            ->whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->where(fn ($w) => $w
+                ->where(fn ($x) => $x->where('source_type', Invoice::class)
+                    ->whereIn('source_id', Invoice::whereIn('user_id', $repIds)->select('id')))
+                ->orWhere(fn ($x) => $x->where('source_type', \App\Models\Visit::class)
+                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))))
+            ->sum('credit');
+
+        $rets = \App\Models\ClientReturn::whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))
+            ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g')->first();
+
+        $visitsN = \App\Models\Visit::whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))->count();
+
+        $giftsQ = \App\Models\GiftHandout::whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))->sum('qty');
+
+        $newClientsN = Client::visibleTo(Client::whereBetween('created_at', [$a, $b]))
+            ->when($mgrId, fn ($q) => $q->where('manager_id', $mgrId))->count();
+
+        // المديونية سنابشوت — مش بتتفلتر بالفترة
+        $debt = Client::visibleTo(Client::where('balance', '>', 0))
+            ->when($mgrId, fn ($q) => $q->where('manager_id', $mgrId))
+            ->selectRaw('COALESCE(SUM(balance),0) g, COUNT(*) n')->first();
+
+        // ═══ السلسلة الزمنية: مبيعات مقابل تحصيل ═══
+        // الفترة ≤ ٣٥ يوم = باليوم، أطول = بالشهر
+        $daily = $a->diffInDays($b) <= 35;
+        $fmt = $daily ? '%Y-%m-%d' : '%Y-%m';
+
+        $salesSeries = $invQ()->selectRaw("DATE_FORMAT(created_at, '$fmt') k, SUM(grand_total) v")
+            ->groupBy('k')->pluck('v', 'k');
+        $collSeries = Transaction::where('kind', 'collection')
+            ->whereBetween('created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->where(fn ($w) => $w
+                ->where(fn ($x) => $x->where('source_type', Invoice::class)
+                    ->whereIn('source_id', Invoice::whereIn('user_id', $repIds)->select('id')))
+                ->orWhere(fn ($x) => $x->where('source_type', \App\Models\Visit::class)
+                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))))
+            ->selectRaw("DATE_FORMAT(created_at, '$fmt') k, SUM(credit) v")
+            ->groupBy('k')->pluck('v', 'k');
+
+        $series = [];
+        $cursor = $a->copy();
+        while ($cursor <= $b) {
+            $k = $cursor->format($daily ? 'Y-m-d' : 'Y-m');
+            $series[$k] = [
+                'sales' => (float) ($salesSeries[$k] ?? 0),
+                'coll' => (float) ($collSeries[$k] ?? 0),
+            ];
+            $daily ? $cursor->addDay() : $cursor->addMonthNoOverflow()->startOfMonth();
+        }
+
+        // ═══ الدواير والتوزيعات ═══
+        $byChannel = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->join('channels', 'channels.id', '=', 'clients.channel_id')
+            ->selectRaw('channels.id cid, channels.name cname, SUM(invoices.grand_total) v')
+            ->groupBy('cid', 'cname')->orderByDesc('v')->get();
+
+        $byFamily = DB::table('invoice_items')
+            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
+            ->join('products', 'products.id', '=', 'invoice_items.product_id')
+            ->whereBetween('invoices.created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds))
+            ->selectRaw('products.family, SUM(invoice_items.total) v')
+            ->groupBy('products.family')->orderByDesc('v')->get();
 
         $catCounts = Client::visibleTo(Client::query())
+            ->when($mgrId, fn ($q) => $q->where('manager_id', $mgrId))
             ->selectRaw('category, COUNT(*) as n')
             ->groupBy('category')->pluck('n', 'category')->all();
 
+        // ═══ أفضل المناديب والعملاء في الفترة ═══
+        $topReps = $invQ()->selectRaw('user_id, COUNT(*) n, SUM(grand_total) v')
+            ->groupBy('user_id')->orderByDesc('v')->take(8)->get()
+            ->map(function ($r) {
+                $r->rep = User::find($r->user_id);
+
+                return $r;
+            });
+
+        $topClients = $invQ()->selectRaw('client_id, COUNT(*) n, SUM(grand_total) v')
+            ->groupBy('client_id')->orderByDesc('v')->take(10)->get();
+        $topClientRows = Client::with(['group', 'channel'])
+            ->whereIn('id', $topClients->pluck('client_id'))->get()->keyBy('id');
+
         return view('erp.overview', [
-            'totals' => $totals,
+            'from' => $a->toDateString(),
+            'to' => $to->toDateString(),
+            'mgrId' => $mgrId,
+            'repId' => $repId,
+            'managers' => $u?->role === 'manager' ? collect()
+                : User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)->where('active', true)->orderBy('name')->get(),
+            'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))
+                ->where('active', true)
+                ->when($mgrId, fn ($q) => $q->where(fn ($w) => $w->where('manager_id', $mgrId)->orWhere('id', $mgrId)))
+                ->orderBy('name')->get(),
+
+            'inv' => $inv,
+            'coll' => (float) $coll,
+            'rets' => $rets,
+            'visitsN' => $visitsN,
+            'giftsQ' => (int) $giftsQ,
+            'newClientsN' => $newClientsN,
+            'debt' => $debt,
+            'series' => $series,
+            'daily' => $daily,
+            'byChannel' => $byChannel,
             'byFamily' => $byFamily,
-            'monthly' => $monthly,
             'catCounts' => $catCounts,
             'aging' => $this->agingTotals(),
-            // ⚠️ `group` و`zone` eager — `fullName()` بتقرا السلسلة لكل
-            // صف، ومن غيرها 15 صف = 15 كويري زيادة.
-            'top' => Client::visibleTo(Client::with(['group', 'zone']))->orderByDesc('purchases')->take(15)->get(),
+            'topReps' => $topReps,
+            'topClients' => $topClients,
+            'topClientRows' => $topClientRows,
             'stockValue' => Stock::join('products', 'products.id', '=', 'stocks.product_id')
                 ->sum(DB::raw('stocks.qty * products.price_new')),
-            'todayInvoices' => $only(Invoice::whereDate('created_at', today()))->sum('total'),
-            'todayPos' => $only(PurchaseOrder::whereDate('delivered_at', today()))->sum('total'),
             'openRequests' => \App\Models\ClientRequest::whereIn('status', ['pending', 'review'])->count(),
-            // خريطة الانتشار (2026-08-05): كل زون ليه إحداثيات من المرجع
-            // الجغرافي + عدد عملائه الشغّالين — والعدّ متسكوب للمدير برضه
-            'mapZones' => Zone::whereNotNull('lat')->whereNotNull('lng')
-                ->where('active', true)
-                ->withCount(['clients as active_clients' => fn ($q) => Client::visibleTo($q)->where('status', 'active')])
-                ->get(['id', 'code', 'name', 'name_en', 'governorate', 'lat', 'lng']),
+            'openPos' => PurchaseOrder::whereIn('status', ['pending', 'arrived'])
+                ->when($repIds, fn ($q) => $q->whereIn('assigned_to', $repIds))->count(),
         ]);
     }
 

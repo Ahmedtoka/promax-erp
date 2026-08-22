@@ -272,6 +272,9 @@ class Access
             // العائلات والصلاحية (2026-08-06) — بتحكم مدة انتهاء منتجاتها
             ['erp.families', '🧬', 'nav.families', 'erp.families*', null],
             ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
+            // عروض الأسعار (نقل ٢٢/٨ بطلب المالك) — مكانها الطبيعي مع
+            // المنتجات والتسعير: العرض بيتبني من الكتالوج والأسعار
+            ['erp.reports.quotations', '📄', 'nav.quotations', 'erp.reports.quotation*', null],
         ],
 
         // ═══ ٢. المخزن — بترتيب دخول البضاعة ═══
@@ -290,16 +293,13 @@ class Access
         'nav.group_custody' => [
             // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
             ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
-            // الموعود مقابل المتاح (١٥/٨) — تشخيص عجز العربيات قبل ما
-            // المندوب يقف قدام العميل. جنب بورد العهد لأنه نفس السؤال.
-            ['ops.commitments', '🚨', 'nav.commitments', 'ops.commitments', null],
+            // «الموعود مقابل المتاح» اتشالت (قرار المالك ٢٢/٨) — فلو
+            // الريفيل الجديد بيرفع أمر تجهيز فوراً فمفيش «وعود» معلقة
             // بورد فلوس المناديب (١٢/٨) — كاش/آجل/تحصيلات لكل مندوب.
             // المحاسب شايفه من `ops.sales` في خريطته — مش من بادئة `ops.`
             ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],
             // البورد المدموج (١٢/٨): عهدة + مبيعات + حضور + حركة في صف واحد
             ['ops.rep_board', '📊', 'nav.rep_board', 'ops.rep_board', null],
-            // المستند اليدوي (٢١/٨) — فاتورة/مرتجع/هدية باسم المندوب
-            ['ops.manual', '✍️', 'nav.manual_doc', 'ops.manual*', null],
             ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
             ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
         ],
@@ -379,6 +379,9 @@ class Access
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══
         'nav.group_money' => [
             ['ops.invoices', '🧾', 'nav.invoices', 'ops.invoice*', null],
+            // المستند اليدوي (نقل ٢٢/٨ بطلب المالك) — مكانه الطبيعي مع
+            // الحسابات: بيعمل فواتير ومرتجعات وقيود، مش شغل عهدة
+            ['ops.manual', '✍️', 'nav.manual_doc', 'ops.manual*', null],
             // ⚠️ **المرتجعات لازم يكون ليها مدخل** — اتلسعنا قبل كده
             // من شاشة اتبنت من غير أي زرار يوصّلها (`warehouse_visit`).
             // مكانها جنب الفواتير لأنها نفس الدفتر بالظبط، بالعكس.
@@ -398,8 +401,7 @@ class Access
             // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
             // (الأعمار وسيركل كيه...) لينكات جواه
             ['erp.reports.hub', '📑', 'nav.reports', 'erp.reports*', null],
-            // عروض الأسعار — تاب مستقل في المنيو (طلب المالك ٢١/٨)
-            ['erp.reports.quotations', '📄', 'nav.quotations', 'erp.reports.quotation*', null],
+            // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
