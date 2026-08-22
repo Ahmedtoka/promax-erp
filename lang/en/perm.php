@@ -88,4 +88,30 @@ return [
     // ═══ Custody correction (Aug 12, 2026) ═══
     'act_custody_adjust' => 'Correct a rep van stock (moves warehouse shelves)',
 
+
+    // Client visibility checker (Aug 21)
+    'viz_title' => ':n of this manager clients **will not show to reps**',
+    'viz_sub' => 'The app lists clients under active zones — these are the missing links',
+    'viz_reason' => 'Reason',
+    'viz_status' => 'Client suspended or pending activation',
+    'viz_nozone' => 'Client has no zone',
+    'viz_zoneoff' => 'Client zone is inactive',
+    'viz_noteam' => 'Manager has no field team',
+    'viz_fix_zone' => 'Activate zone',
+    'viz_fix_client' => 'Fix client',
+    'viz_fix_team' => 'Assign a rep below',
+    'client' => 'Client',
+
+    // "See as rep" (Aug 21)
+    'sa_title' => 'How many clients will the rep see in the app?',
+    'sa_sub' => 'We run the exact same app query — this number is the truth',
+    'sa_zones' => ':n zones',
+    'sa_unlinked' => 'Not assigned to this manager — shared pool closed',
+    'sa_fix' => 'A rep flagged in red is not assigned to this manager on the team screen, so he only sees his own clients. Assign him from the field team below.',
+
+    // Retroactive coverage repair (Aug 21)
+    'cov_btn' => 'Repair all rep coverage',
+    'cov_hint' => 'Activates client zones and links them to their reps and manager teams — additive only, nothing removed',
+    'cov_confirm' => 'We will walk every active client with a zone, activate the zone if inactive and link it to his rep and manager team. Nothing gets unlinked or moved. Continue?',
+    'cov_done' => 'Coverage fixed: :clients clients · :zones zones activated · :links new zone links for reps.',
 ];

@@ -3,7 +3,8 @@
 @section('title', __('rpt.quotation').' '.$number)
 
 @section('actions')
-    <a class="btn" href="{{ route('erp.reports.quotation') }}">← {{ __('rpt.quotation') }}</a>
+    <a class="btn" href="{{ route('erp.reports.quotations') }}">← {{ __('rpt.qts_title') }}</a>
+    <a class="btn" href="{{ route('erp.reports.quotation') }}">➕ {{ __('rpt.qts_new') }}</a>
     {{-- المتصفح بيطبع → «حفظ PDF» — نفس مسار كل مستندات A4 في السيستم --}}
     <button class="btn gold" type="button" onclick="window.print()">🖨️ {{ __('rpt.qt_pdf') }}</button>
 @endsection

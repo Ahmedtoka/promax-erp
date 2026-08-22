@@ -3,7 +3,7 @@
 @section('title', __('rpt.quotation'))
 
 @section('actions')
-    <a class="btn" href="{{ route('erp.reports.hub') }}">← {{ __('rpt.hub_title') }}</a>
+    <a class="btn" href="{{ route('erp.reports.quotations') }}">← {{ __('rpt.qts_title') }}</a>
 @endsection
 
 @section('content')

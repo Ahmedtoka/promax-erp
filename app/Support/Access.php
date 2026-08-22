@@ -398,6 +398,8 @@ class Access
             // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
             // (الأعمار وسيركل كيه...) لينكات جواه
             ['erp.reports.hub', '📑', 'nav.reports', 'erp.reports*', null],
+            // عروض الأسعار — تاب مستقل في المنيو (طلب المالك ٢١/٨)
+            ['erp.reports.quotations', '📄', 'nav.quotations', 'erp.reports.quotation*', null],
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],

@@ -306,6 +306,13 @@ class ClientActivationController extends Controller
             if ($activeOnes->isNotEmpty() && $payload !== []) {
                 Client::whereIn('id', $activeOnes)->update($payload);
             }
+
+            // ═══ التفعيل بيجرّ التغطية وراه (٢١/٨) ═══
+            // العميل اللي اتفعّل واتسكّن لازم منطقته تبقى شغّالة
+            // ومتعلّمة لمندوبه ولفريق مديره — وإلا بيفضل مخفي.
+            \App\Services\Coverage::syncMany(
+                Client::whereIn('id', $toActivate->merge($activeOnes))->get()
+            );
         });
 
         $msg = collect([

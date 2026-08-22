@@ -737,6 +737,10 @@ class ErpController extends Controller
         DB::transaction(function () use ($data, $request, $client) {
             $client->update($this->clientFields($data));
             $this->syncContract($client, $data, $request);
+
+            // التعديل بيجرّ التغطية وراه (٢١/٨) — غيّرت منطقته أو
+            // مندوبه؟ المنطقة بتتفعّل وبتتعلّم للفريق أوتوماتيك
+            \App\Services\Coverage::sync($client->fresh());
         });
 
         // ⚠️ **`back()` كان بيرجّع للويزارد نفسه.** المستخدم بيحفظ
@@ -1025,6 +1029,11 @@ class ErpController extends Controller
             ]);
 
             $this->syncContract($client, $data, $request);
+
+            // ═══ الإضافة بتجرّ التغطية وراها (٢١/٨) ═══
+            // «ضيفت عميل لمندوب فالمنطقة تنزل أوتوماتيك» — طلب المالك
+            // بالنص. مفيش خطوة تعليم مناطق يدوية بعد كده.
+            \App\Services\Coverage::sync($client);
 
             return $client;
         });

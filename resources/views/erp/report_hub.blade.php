@@ -3,7 +3,7 @@
 @section('title', __('rpt.hub_title'))
 
 @section('actions')
-    <a class="btn gold" href="{{ route('erp.reports.quotation') }}">📄 {{ __('rpt.quotation') }}</a>
+    <a class="btn gold" href="{{ route('erp.reports.quotations') }}">📄 {{ __('rpt.qts_title') }}</a>
 @endsection
 
 @section('content')
@@ -20,10 +20,10 @@
             </a>
         @endforeach
 
-        {{-- الكوتيشن — مش تقرير بس مكانه هنا (طلب المالك) --}}
-        <a class="rpt-card rpt-gold" href="{{ route('erp.reports.quotation') }}">
+        {{-- عروض الأسعار — الكارت بيفتح السجل، والإضافة من جواه --}}
+        <a class="rpt-card rpt-gold" href="{{ route('erp.reports.quotations') }}">
             <span class="ic">📄</span>
-            <b>{{ __('rpt.quotation') }}</b>
+            <b>{{ __('rpt.qts_title') }}</b>
             <span class="s">{{ __('rpt.quotation_sub') }}</span>
         </a>
     </div>

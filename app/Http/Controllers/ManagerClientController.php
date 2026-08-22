@@ -70,6 +70,61 @@ class ManagerClientController extends Controller
             ->orderBy('role')->orderBy('name')
             ->get();
 
+        // ═══ فاحص الظهور (٢١/٨) — «العميل عند المدير بس مش طالع للمندوب» ═══
+        //
+        // بلاغ المالك: عملاء متسكّنين للمدير ومتفعّلين، ومع ذلك المندوب
+        // مش شايفهم كلهم. الأبلكيشن بيعرض العملاء **مجمّعين تحت مناطق
+        // نشطة** (`zonesPayload`)، فأي حلقة ناقصة في السلسلة بتخفي
+        // العميل في صمت. الفاحص ده بيقول السبب بالحرف بدل التخمين:
+        //
+        //   ١. العميل موقوف/مستني تفعيل   → `status != active`
+        //   ٢. العميل من غير زون          → `zone_id = null`
+        //   ٣. زون العميل موقوف           → `zones.active = false`
+        //   ٤. المدير مالوش فريق ميداني   → مفيش حد يشوفهم أصلاً
+        $blockers = [];
+
+        if ($manager !== null) {
+            $hasField = $myTeam->whereIn('role', User::FIELD_WORK_ROLES)->isNotEmpty();
+
+            foreach ($mine as $c) {
+                $why = null;
+
+                if ($c->status !== 'active') {
+                    $why = 'status';
+                } elseif ($c->zone_id === null) {
+                    $why = 'nozone';
+                } elseif ($c->zone !== null && ! $c->zone->active) {
+                    $why = 'zoneoff';
+                } elseif (! $hasField) {
+                    $why = 'noteam';
+                }
+
+                if ($why !== null) {
+                    $blockers[] = ['client' => $c, 'why' => $why];
+                }
+            }
+        }
+
+        // ═══ «شوف زي المندوب» (٢١/٨) — الحقيقة مش التخمين ═══
+        //
+        // بيشغّل **نفس كويري الأبلكيشن بالحرف** (`zonesPayload`) لكل
+        // مندوب في الفريق ويقول: هيشوف كام عميل فعلاً في الأبلكيشن.
+        // لو الرقم أقل من عملاء المدير، يبقى البول المشترك مكسور —
+        // وأول شرط بيتكسر هو `users.manager_id` للمندوب نفسه.
+        $seeAs = [];
+
+        foreach ($myTeam->whereIn('role', User::FIELD_WORK_ROLES) as $member) {
+            $payload = \App\Http\Controllers\Api\FieldApiController::zonesPayload($member);
+
+            $seeAs[] = [
+                'user' => $member,
+                'clients' => collect($payload)->sum(fn ($z) => count($z['clients'] ?? [])),
+                'zones' => count($payload),
+                // ⚠️ الشرط اللي بيفتح البول — من غيره بيشوف عملاءه بس
+                'linked' => (int) $member->manager_id === (int) $manager?->id,
+            ];
+        }
+
         return view('erp.manager_clients', [
             'managers' => $managers,
             'manager' => $manager,
@@ -77,6 +132,8 @@ class ManagerClientController extends Controller
             'pool' => $pool,
             'myTeam' => $myTeam,
             'teamPool' => $teamPool,
+            'blockers' => $blockers,
+            'seeAs' => $seeAs,
             'channels' => \App\Models\Channel::orderBy('id')->get(['id', 'name', 'name_en']),
         ]);
     }
@@ -101,6 +158,17 @@ class ManagerClientController extends Controller
             $count = User::whereIn('id', $data['user_ids'])
                 ->whereIn('role', User::FIELD_ROLES)
                 ->update(['manager_id' => $manager->id]);
+
+            // ═══ ضم مندوب للفريق بيفتح له بول المدير كله (٢١/٨) ═══
+            // ⚠️ **دي أهم نقطة في البلاغ**: المندوب بقى يشوف عملاء
+            // المدير بالبول، بس مناطقهم لسه مش متعلّمة عليه — فالشاشة
+            // بتفضل فاضية. بنعلّمها كلها دلوقتي.
+            \App\Services\Coverage::syncMany(
+                Client::where('manager_id', $manager->id)
+                    ->where('status', 'active')
+                    ->whereNotNull('zone_id')
+                    ->get()
+            );
         });
 
         return back()->with('ok', __('perm.team_assigned', ['count' => $count, 'name' => $manager->name]));
@@ -132,9 +200,39 @@ class ManagerClientController extends Controller
         DB::transaction(function () use ($data, $manager, &$count) {
             $count = Client::whereIn('id', $data['client_ids'])
                 ->update(['manager_id' => $manager->id]);
+
+            // ═══ تسكين المدير بيجرّ التغطية وراه (٢١/٨) ═══
+            // العميل بقى في بول الفريق — يبقى منطقته لازم تكون
+            // متعلّمة لكل مناديب المدير، وإلا مش هتبان في شاشتهم.
+            \App\Services\Coverage::syncMany(
+                Client::whereIn('id', $data['client_ids'])->get()
+            );
         });
 
         return back()->with('ok', __('perm.clients_assigned', ['count' => $count, 'name' => $manager->name]));
+    }
+
+    /**
+     * ═══ إصلاح التغطية بأثر رجعي (٢١/٨) ═══
+     *
+     * زرار «صلّح التغطية كلها»: بيلف على كل عميل شغّال له منطقة،
+     * بيفعّل منطقته لو موقوفة وبيعلّمها لمندوبه ولفريق مديره — بيصلّح
+     * كل التسكينات القديمة اللي اتعملت قبل ما الفلو يتقفل.
+     *
+     * ⚠️ آمن تماماً: **إضافة بس** — مافيش أي تعليم بيتشال ولا عميل
+     * بيتحرّك من مندوب لمندوب.
+     */
+    public function repairCoverage(Request $request)
+    {
+        abort_unless($request->user()?->isAdmin() ?? false, 403);
+
+        $r = \App\Services\Coverage::repairAll();
+
+        return back()->with('ok', __('perm.cov_done', [
+            'clients' => number_format($r['clients']),
+            'zones' => number_format($r['zones']),
+            'links' => number_format($r['links']),
+        ]));
     }
 
     public function unassign(Client $client)

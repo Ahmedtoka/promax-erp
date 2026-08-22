@@ -785,6 +785,14 @@ class JourneyController extends Controller
             if ($syncZones) {
                 $rep->zones()->sync($data['zone_ids'] ?? []);
             }
+
+            // ═══ التسكين بيجرّ التغطية وراه (٢١/٨) ═══
+            // بلاغ المالك: «العميل عند المدير ومش ظاهر لمناديبه».
+            // مناطق العملاء بتتفعّل وبتتعلّم للمندوب ولفريق مديره
+            // أوتوماتيك — مفيش خطوة يدوية تُنسى بعد كده.
+            \App\Services\Coverage::syncMany(
+                Client::whereIn('id', $data['client_ids'] ?? [])->get()
+            );
         });
 
         return back()->with('ok', __('journey.assigned', ['count' => $clients]));

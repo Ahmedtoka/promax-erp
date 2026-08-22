@@ -272,6 +272,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('perms.save');
         Route::get('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'index'])
             ->middleware('role:admin')->name('managers.clients');
+        // إصلاح التغطية بأثر رجعي (٢١/٨) — تفعيل المناطق وتعليمها
+        // لمناديب أصحابها. إضافة بس، مافيش أي مسح.
+        Route::post('/managers/clients/repair-coverage', [\App\Http\Controllers\ManagerClientController::class, 'repairCoverage'])
+            ->middleware('role:admin')->name('managers.clients.repair');
         Route::post('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'assign'])
             ->middleware('role:admin')->name('managers.assign');
         Route::delete('/manager-clients/{client}', [\App\Http\Controllers\ManagerClientController::class, 'unassign'])
@@ -466,10 +470,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->name('reports.hub');
         Route::get('/reports/view/{key}', [\App\Http\Controllers\ReportController::class, 'show'])
             ->name('reports.show');
-        Route::get('/reports/quotation', [\App\Http\Controllers\ReportController::class, 'quotation'])
+        // ═══ عروض الأسعار (٢١/٨) — سجل + إنشاء + إعادة طباعة ═══
+        // ⚠️ المسار الثابت `/quotations/new` قبل البارامتري {quotation}
+        Route::get('/reports/quotations', [\App\Http\Controllers\ReportController::class, 'quotationsIndex'])
+            ->name('reports.quotations');
+        Route::get('/reports/quotations/new', [\App\Http\Controllers\ReportController::class, 'quotation'])
             ->name('reports.quotation');
-        Route::post('/reports/quotation', [\App\Http\Controllers\ReportController::class, 'quotationPrint'])
+        Route::post('/reports/quotations', [\App\Http\Controllers\ReportController::class, 'quotationStore'])
             ->name('reports.quotation.print');
+        Route::get('/reports/quotations/{quotation}', [\App\Http\Controllers\ReportController::class, 'quotationShow'])
+            ->name('reports.quotations.show');
 
         // ═════ إدارة المخازن — التعريف والأرصدة اليدوية =════
         // ⚠️ **منفصل عن `wh.` عن قصد.** `wh.` شغل يومي (استلام،

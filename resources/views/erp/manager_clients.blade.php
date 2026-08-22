@@ -35,6 +35,101 @@
     @endif
 </div>
 
+{{-- ═══ «شوف زي المندوب» (٢١/٨) ═══
+     بيشغّل نفس كويري الأبلكيشن لكل مندوب ويقول هيشوف كام عميل
+     فعلاً — الرقم ده هو الحقيقة، مش التسكين على الورق. --}}
+@if ($manager !== null && count($seeAs ?? []) > 0)
+    <div class="card">
+        <h3>📱 {{ __('perm.sa_title') }} <span class="side">{{ __('perm.sa_sub') }}</span></h3>
+        <div class="kpis" style="margin:0">
+            @foreach ($seeAs as $s)
+                <div class="kpi" style="{{ $s['clients'] < $mine->count() ? 'border-color:var(--red)' : '' }}">
+                    <div class="lbl">{{ $s['user']->displayName() }}</div>
+                    <div class="val {{ $s['clients'] < $mine->count() ? 'neg' : 'pos' }}">
+                        {{ number_format($s['clients']) }}
+                        <span style="font-size:12px;color:var(--muted)">/ {{ $mine->count() }}</span>
+                    </div>
+                    <div class="sub2">
+                        {{ __('perm.sa_zones', ['n' => $s['zones']]) }}
+                        @if (! $s['linked'])
+                            <br><span class="badge b-red" style="font-size:9.5px">⚠️ {{ __('perm.sa_unlinked') }}</span>
+                        @endif
+                    </div>
+                </div>
+            @endforeach
+        </div>
+        @php $broken = collect($seeAs)->firstWhere('linked', false); @endphp
+        @if ($broken)
+            <div class="alert warn" style="margin-top:10px">
+                <span>⚠️</span><span>{{ __('perm.sa_fix') }}</span>
+            </div>
+        @endif
+
+        {{-- ═══ إصلاح التغطية بأثر رجعي — للتسكينات القديمة ═══ --}}
+        <form method="POST" action="{{ route('erp.managers.clients.repair') }}"
+              style="margin-top:10px" onsubmit="return confirm(@js(__('perm.cov_confirm')))">
+            @csrf
+            <button class="btn gold" type="submit">🔧 {{ __('perm.cov_btn') }}</button>
+            <span class="s" style="margin-inline-start:8px;color:var(--muted)">{{ __('perm.cov_hint') }}</span>
+        </form>
+    </div>
+@endif
+
+{{-- ═══ فاحص الظهور (٢١/٨) ═══
+     «العميل عند المدير وشغّال ومع ذلك المندوب مش شايفه» — الفاحص
+     بيقول السبب بالحرف بدل ما نفضل نخمّن. --}}
+@if ($manager !== null && count($blockers ?? []) > 0)
+    @php
+        $vizReasons = [
+            'status' => __('perm.viz_status'),
+            'nozone' => __('perm.viz_nozone'),
+            'zoneoff' => __('perm.viz_zoneoff'),
+            'noteam' => __('perm.viz_noteam'),
+        ];
+    @endphp
+    <div class="card" style="border:1.5px solid var(--red)">
+        <h3 style="color:var(--red)">🚫 {{ __('perm.viz_title', ['n' => count($blockers)]) }}
+            <span class="side">{{ __('perm.viz_sub') }}</span>
+        </h3>
+        <div class="tablewrap" style="max-height:320px;overflow:auto">
+            <table>
+                <thead>
+                <tr>
+                    <th>{{ __('common.code') }}</th>
+                    <th style="text-align:start">{{ __('perm.client') }}</th>
+                    <th>{{ __('nav.zones') }}</th>
+                    <th style="text-align:start">{{ __('perm.viz_reason') }}</th>
+                    <th class="act"></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach ($blockers as $b)
+                    <tr>
+                        <td class="num" dir="ltr">{{ $b['client']->code }}</td>
+                        <td style="text-align:start"><b>{{ $b['client']->fullName() }}</b></td>
+                        <td>{{ $b['client']->zone?->displayName() ?? '—' }}</td>
+                        <td style="text-align:start;color:var(--red);font-weight:800">
+                            {{ $vizReasons[$b['why']] ?? $b['why'] }}
+                        </td>
+                        <td class="act">
+                            {{-- الحل في مكانه: الزون الموقوف من شاشة المناطق،
+                                 والباقي من كارت العميل --}}
+                            @if ($b['why'] === 'zoneoff')
+                                <a class="btn sm" href="{{ route('erp.zones') }}">🗺️ {{ __('perm.viz_fix_zone') }}</a>
+                            @elseif ($b['why'] === 'noteam')
+                                <span class="s">{{ __('perm.viz_fix_team') }}</span>
+                            @else
+                                <a class="btn sm" href="{{ route('erp.clients.show', $b['client']) }}">✏️ {{ __('perm.viz_fix_client') }}</a>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endif
+
 @if ($manager !== null)
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">
 

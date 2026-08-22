@@ -140,4 +140,17 @@ return [
     'qt_footer' => 'Prices are valid until :date and subject to review afterwards. This quotation is not an invoice nor a supply commitment until written confirmation.',
     'qt_sign_company' => 'For the company',
     'qt_sign_client' => 'For the client',
+
+    // ═══ Quotations log (Aug 21) ═══
+    'qts_title' => 'Quotations',
+    'qts_new' => 'New quotation',
+    'qts_creator' => 'Created by',
+    'qts_search_ph' => 'Quotation number or client name…',
+    'qts_count' => 'Quotations',
+    'qts_value' => 'Total value',
+    'qts_month' => 'This month',
+    'qts_items' => 'Items',
+    'qts_expired' => 'Expired',
+    'qts_active' => 'Valid',
+    'qts_open' => 'Open',
 ];

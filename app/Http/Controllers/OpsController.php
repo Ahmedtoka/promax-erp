@@ -3411,6 +3411,11 @@ class OpsController extends Controller
                 ]);
                 $clientRequest->client_id = $client->id;
 
+                // ═══ الاعتماد بيجرّ التغطية وراه (٢١/٨) ═══
+                // «العميل الجديد اتوافق عليه ومش نازل للمندوب» — منطقته
+                // بتتفعّل وبتتعلّم ليه ولفريق مديره أوتوماتيك.
+                \App\Services\Coverage::sync($client);
+
                 AppNotification::send(
                     $clientRequest->rep,
                     fn () => __('field.notif_client_approved_title', ['name' => $clientRequest->name]),

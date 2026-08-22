@@ -610,9 +610,11 @@ class ReportController extends Controller
             ->groupBy('user_id')->get()->keyBy('user_id');
 
         // التحصيل الميداني — قيوده مصدرها الزيارة، والزيارة ليها مندوب
+        // ⚠️ `transactions.created_at` مؤهّلة — الجوين مع visits خلّى
+        // العمود ambiguous ورمى 500 (بلاغ ٢١/٨)
         $fieldColl = Transaction::where('kind', 'collection')
             ->where('source_type', Visit::class)
-            ->whereBetween('created_at', [$a, $b])
+            ->whereBetween('transactions.created_at', [$a, $b])
             ->join('visits', 'visits.id', '=', 'transactions.source_id')
             ->selectRaw('visits.user_id uid, SUM(transactions.credit) g')
             ->groupBy('visits.user_id')->pluck('g', 'uid');
@@ -741,7 +743,8 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $q = GiftHandout::with(['client.group', 'user', 'product'])
+        // ⚠️ علاقة المندوب على الهدايا اسمها `rep` مش `user` (٢١/٨)
+        $q = GiftHandout::with(['client.group', 'rep', 'product'])
             ->whereBetween('created_at', [$a, $b])
             ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')));
 
@@ -761,7 +764,7 @@ class ReportController extends Controller
             ],
             'rows' => $rows->map(fn ($g) => [
                 $g->created_at->format('Y-m-d'),
-                $g->user?->displayName() ?? '—',
+                $g->rep?->displayName() ?? '—',
                 $g->client?->fullName() ?? '—',
                 $g->product?->displayName() ?? '—',
                 $this->f0($g->qty),
@@ -942,12 +945,54 @@ class ReportController extends Controller
     }
 
     /**
-     * صفحة الكوتيشن المطبوعة — A4 بالهوية، والمتصفح بيطلعها PDF.
+     * ═══ سجل عروض الأسعار (٢١/٨) — «أشوف كل العروض اللي طلعت» ═══
      *
-     * ⚠️ **مستند عرض مش قيد** — مفيش أي كتابة على العميل ولا المخزون.
-     * الأسعار اللي المالك كتبها بتتطبع زي ما هي: الكوتيشن تفاوض.
+     * ⚠️ **السكوب**: الأدمن الكل + فلتر بمين طلّعه، وغير الأدمن
+     * عروضه هو بس — `Quotation::visibleTo`.
      */
-    public function quotationPrint(Request $request)
+    public function quotationsIndex(Request $request)
+    {
+        [$a, $b] = $this->range($request);
+
+        $q = \App\Models\Quotation::visibleTo(
+            \App\Models\Quotation::with(['creator', 'items']),
+            $request->user()
+        )
+            ->whereBetween('created_at', [$a, $b])
+            // فلتر «مين طلّعه» — للأدمن بس، غيره مقفول على نفسه أصلاً
+            ->when($request->user()?->isAdmin() && $request->filled('creator_id'),
+                fn ($w) => $w->where('created_by', $request->integer('creator_id')));
+
+        if ($request->filled('q')) {
+            $s = '%'.$request->string('q')->trim().'%';
+            $q->where(fn ($w) => $w->where('number', 'like', $s)
+                ->orWhere('client_name', 'like', $s));
+        }
+
+        $all = (clone $q)->get(['id', 'grand', 'created_by']);
+        $rows = $q->latest()->take(self::MAX_ROWS)->get();
+
+        return view('erp.quotations', [
+            'rows' => $rows,
+            'kCount' => number_format($all->count()),
+            'kValue' => $this->m($all->sum('grand')),
+            'kMonth' => number_format(
+                \App\Models\Quotation::visibleTo(\App\Models\Quotation::query(), $request->user())
+                    ->where('created_at', '>=', today()->startOfMonth())->count()
+            ),
+            // فلتر المُصدِر — اللي عملوا عروض فعلاً (أدمن ومديرين)
+            'creators' => $request->user()?->isAdmin()
+                ? User::whereIn('id', \App\Models\Quotation::query()->select('created_by'))
+                    ->orderBy('name')->get(['id', 'name', 'name_en'])
+                : collect(),
+        ]);
+    }
+
+    /**
+     * حفظ العرض وفتح صفحته للطباعة — بقى مستند بسجل (٢١/٨) بدل
+     * ورقة stateless بتضيع أول ما التاب يتقفل.
+     */
+    public function quotationStore(Request $request)
     {
         $data = $request->validate([
             'client_name' => ['required', 'string', 'max:190'],
@@ -973,20 +1018,62 @@ class ReportController extends Controller
         $net = round($subtotal - $discount, 2);
         $tax = round($net * ((float) ($data['tax_pct'] ?? 0)) / 100, 2);
 
+        $quotation = DB::transaction(function () use ($request, $data, $lines, $subtotal, $discount, $net, $tax) {
+            $quotation = \App\Models\Quotation::create([
+                'number' => \App\Models\Quotation::nextNumber(),
+                'client_name' => $data['client_name'],
+                'created_by' => $request->user()?->id,
+                'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 14)),
+                'discount_pct' => (float) ($data['discount_pct'] ?? 0),
+                'tax_pct' => (float) ($data['tax_pct'] ?? 0),
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'net' => $net,
+                'tax' => $tax,
+                'grand' => round($net + $tax, 2),
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            foreach ($lines as $l) {
+                \App\Models\QuotationItem::create($l + ['quotation_id' => $quotation->id]);
+            }
+
+            return $quotation;
+        });
+
+        return redirect()->route('erp.reports.quotations.show', $quotation);
+    }
+
+    /** صفحة العرض A4 — بتتعاد طباعتها في أي وقت من السجل */
+    public function quotationShow(Request $request, \App\Models\Quotation $quotation)
+    {
+        // نفس سكوب الليستة — مدير مايفتحش عرض غيره بالـid
+        abort_unless(
+            ($request->user()?->isAdmin() ?? false)
+                || $quotation->created_by === $request->user()?->id,
+            403,
+        );
+
         return view('erp.quotation_print', [
             'co' => \App\Models\Setting::docHeader(),
-            'number' => 'QT-'.now()->format('ymd-Hi'),
-            'clientName' => $data['client_name'],
-            'validUntil' => today()->addDays((int) ($data['valid_days'] ?? 14)),
-            'notes' => $data['notes'] ?? null,
-            'lines' => $lines,
-            'subtotal' => $subtotal,
-            'discountPct' => (float) ($data['discount_pct'] ?? 0),
-            'discount' => $discount,
-            'net' => $net,
-            'taxPct' => (float) ($data['tax_pct'] ?? 0),
-            'tax' => $tax,
-            'grand' => round($net + $tax, 2),
+            'quotation' => $quotation,
+            'number' => $quotation->number,
+            'clientName' => $quotation->client_name,
+            'validUntil' => $quotation->valid_until,
+            'notes' => $quotation->notes,
+            'lines' => $quotation->items->map(fn ($i) => [
+                'name' => $i->name,
+                'qty' => (int) $i->qty,
+                'price' => (float) $i->price,
+                'total' => (float) $i->total,
+            ]),
+            'subtotal' => (float) $quotation->subtotal,
+            'discountPct' => (float) $quotation->discount_pct,
+            'discount' => (float) $quotation->discount,
+            'net' => (float) $quotation->net,
+            'taxPct' => (float) $quotation->tax_pct,
+            'tax' => (float) $quotation->tax,
+            'grand' => (float) $quotation->grand,
         ]);
     }
 }
