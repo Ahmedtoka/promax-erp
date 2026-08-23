@@ -922,9 +922,18 @@ class ReportController extends Controller
 
     public function quotation(Request $request)
     {
-        // ⚠️ **كل القوايم النشطة مش الافتراضية بس (٢٣/٨)** — الفورم
-        // فيه دروب داون قوايم والافتراضية متعلّمة أوتوماتيك، وتغيير
-        // القايمة بيعيد تسعير الصفوف في المتصفح من prices المحمّلة.
+        return view('erp.quotation_form', $this->quotationFormData($request));
+    }
+
+    /**
+     * داتا فورم الكوتيشن — مشتركة بين الإنشاء والتعديل (٢٣/٨).
+     *
+     * ⚠️ **كل القوايم النشطة مش الافتراضية بس** — الفورم فيه دروب
+     * داون قوايم والافتراضية متعلّمة أوتوماتيك، وتغيير القايمة بيعيد
+     * تسعير الصفوف في المتصفح من prices المحمّلة.
+     */
+    private function quotationFormData(Request $request): array
+    {
         $lists = PriceList::where('active', true)->orderBy('id')->get();
         $default = PriceList::default();
 
@@ -949,14 +958,14 @@ class ReportController extends Controller
             ->filter(fn ($p) => collect($p['prices'])->contains(fn ($v) => $v > 0))
             ->values();
 
-        return view('erp.quotation_form', [
+        return [
             'products' => $products,
             'lists' => $lists,
             'defaultListId' => $default?->id,
             'clients' => Client::visibleTo(Client::query()->where('status', 'active'), $request->user())
                 ->with('group')->orderBy('name')->get(['id', 'name', 'name_en', 'group_id']),
             'taxPct' => 0.0,   // قرار المالك ٢٣/٨: الضريبة صفر وهو بيكتبها لو فيه
-        ]);
+        ];
     }
 
     /**
@@ -1011,24 +1020,55 @@ class ReportController extends Controller
      */
     public function quotationStore(Request $request)
     {
-        $data = $request->validate([
-            'client_name' => ['required', 'string', 'max:190'],
-            'price_list_id' => ['nullable', 'exists:price_lists,id'],
-            'valid_days' => ['nullable', 'integer', 'min:1', 'max:365'],
-            'discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'tax_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.id' => ['nullable', 'integer', 'exists:products,id'],
-            'items.*.name' => ['required', 'string', 'max:190'],
-            'items.*.qty' => ['required', 'integer', 'min:1', 'max:99999'],
-            'items.*.price' => ['required', 'numeric', 'min:0'],
-        ]);
+        $data = $request->validate($this->quotationRules());
 
-        // ⚠️ **لقطة الوحدات بتتجمّد هنا (٢٣/٨)** — سعر القطعة من الفورم
-        // (قابل للتفاوض)، والعلبة/الكرتونة = السعر × المعامل الحالي
-        // للصنف. بتتخزن JSON على البند فالورقة ماتتغيرش لو المعاملات
-        // اتعدلت بعدين.
+        [$lines, $subtotal, $discount, $net, $tax] = $this->quotationPayload($data);
+
+        $quotation = DB::transaction(function () use ($request, $data, $lines, $subtotal, $discount, $net, $tax) {
+            $list = isset($data['price_list_id'])
+                ? PriceList::find((int) $data['price_list_id'])
+                : null;
+
+            $quotation = \App\Models\Quotation::create([
+                'number' => \App\Models\Quotation::nextNumber(),
+                'client_name' => $data['client_name'],
+                'price_list_id' => $list?->id,
+                // ⚠️ مفيش displayName على PriceList — الاسم مباشرة
+                'price_list_name' => $list?->name,
+                'created_by' => $request->user()?->id,
+                'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 30)),
+                'discount_pct' => (float) ($data['discount_pct'] ?? 0),
+                'tax_pct' => (float) ($data['tax_pct'] ?? 0),
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'net' => $net,
+                'tax' => $tax,
+                'grand' => round($net + $tax, 2),
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            foreach ($lines as $l) {
+                \App\Models\QuotationItem::create($l + ['quotation_id' => $quotation->id]);
+            }
+
+            return $quotation;
+        });
+
+        return redirect()->route('erp.reports.quotations.show', $quotation);
+    }
+
+    /**
+     * الشيرد بين إنشاء العرض وتعديله — البنود المجمّدة والتجميعة.
+     *
+     * ⚠️ **لقطة الوحدات بتتجمّد هنا (٢٣/٨)** — سعر القطعة من الفورم
+     * (قابل للتفاوض)، والعلبة/الكرتونة = السعر × المعامل الحالي
+     * للصنف. بتتخزن JSON على البند فالورقة ماتتغيرش لو المعاملات
+     * اتعدلت بعدين.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: float, 2: float, 3: float, 4: float}
+     */
+    private function quotationPayload(array $data): array
+    {
         $productIds = collect($data['items'])->pluck('id')->filter()->unique();
         $productMap = \App\Models\Product::whereIn('id', $productIds)->get()->keyBy('id');
 
@@ -1062,18 +1102,81 @@ class ReportController extends Controller
         $net = round($subtotal - $discount, 2);
         $tax = round($net * ((float) ($data['tax_pct'] ?? 0)) / 100, 2);
 
-        $quotation = DB::transaction(function () use ($request, $data, $lines, $subtotal, $discount, $net, $tax) {
+        return [$lines, $subtotal, $discount, $net, $tax];
+    }
+
+    /** قواعد فاليديشن العرض — واحدة للإنشاء والتعديل */
+    private function quotationRules(): array
+    {
+        return [
+            'client_name' => ['required', 'string', 'max:190'],
+            'price_list_id' => ['nullable', 'exists:price_lists,id'],
+            'valid_days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.id' => ['nullable', 'integer', 'exists:products,id'],
+            'items.*.name' => ['required', 'string', 'max:190'],
+            'items.*.qty' => ['required', 'integer', 'min:1', 'max:99999'],
+            'items.*.price' => ['required', 'numeric', 'min:0'],
+        ];
+    }
+
+    /**
+     * ═══ تعديل عرض محفوظ (٢٣/٨) — نفس الفورم متملي ═══
+     *
+     * نفس سكوب العرض: اللي يشوف العرض يعدّله (أدمن الكل، المدير
+     * عروضه وعروض فريقه). الحفظ بيحدّث نفس الرقم مش بيطلّع جديد.
+     */
+    public function quotationEdit(Request $request, \App\Models\Quotation $quotation)
+    {
+        abort_unless(
+            \App\Models\Quotation::query()->visibleTo($request->user())
+                ->whereKey($quotation->id)->exists(),
+            403,
+        );
+
+        $quotation->load('items');
+
+        // الأيام المتبقية — عرض منتهي بيرجع 30 من جديد بدل رقم سالب
+        $daysLeft = (int) today()->diffInDays($quotation->valid_until, false);
+
+        return view('erp.quotation_form', $this->quotationFormData($request) + [
+            'edit' => $quotation,
+            'editDays' => $daysLeft > 0 ? $daysLeft : 30,
+            'editRows' => $quotation->items->map(fn ($i) => [
+                'id' => $i->product_id,
+                'code' => (string) $i->code,
+                'name' => $i->name,
+                'qty' => (int) $i->qty,
+                'price' => (float) $i->price,
+            ])->values(),
+        ]);
+    }
+
+    /** حفظ التعديل — بيعيد بناء البنود واللقطات على نفس الرقم */
+    public function quotationUpdate(Request $request, \App\Models\Quotation $quotation)
+    {
+        abort_unless(
+            \App\Models\Quotation::query()->visibleTo($request->user())
+                ->whereKey($quotation->id)->exists(),
+            403,
+        );
+
+        $data = $request->validate($this->quotationRules());
+
+        [$lines, $subtotal, $discount, $net, $tax] = $this->quotationPayload($data);
+
+        DB::transaction(function () use ($quotation, $data, $lines, $subtotal, $discount, $net, $tax) {
             $list = isset($data['price_list_id'])
                 ? PriceList::find((int) $data['price_list_id'])
                 : null;
 
-            $quotation = \App\Models\Quotation::create([
-                'number' => \App\Models\Quotation::nextNumber(),
+            $quotation->update([
                 'client_name' => $data['client_name'],
                 'price_list_id' => $list?->id,
-                // ⚠️ مفيش displayName على PriceList — الاسم مباشرة
                 'price_list_name' => $list?->name,
-                'created_by' => $request->user()?->id,
                 'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 30)),
                 'discount_pct' => (float) ($data['discount_pct'] ?? 0),
                 'tax_pct' => (float) ($data['tax_pct'] ?? 0),
@@ -1085,11 +1188,12 @@ class ReportController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
 
+            // البنود بتتبني من الأول — أبسط وأضمن من مطابقة صف بصف
+            $quotation->items()->delete();
+
             foreach ($lines as $l) {
                 \App\Models\QuotationItem::create($l + ['quotation_id' => $quotation->id]);
             }
-
-            return $quotation;
         });
 
         return redirect()->route('erp.reports.quotations.show', $quotation);

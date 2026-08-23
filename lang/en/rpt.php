@@ -133,6 +133,8 @@ return [
     'qt_notes_ph' => 'Payment terms, delivery schedule, minimum order…',
     'qt_price' => 'Unit price',
     'qt_make' => 'Generate quotation',
+    'qt_edit' => 'Edit quotation',
+    'qt_save_edit' => 'Save changes',
     'qt_pdf' => 'Print / Save PDF',
     'qt_doc_title' => 'QUOTATION',
     'qt_to' => 'Presented to',

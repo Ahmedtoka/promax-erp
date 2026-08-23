@@ -11,19 +11,32 @@
        خصم خاص % (صفر) + ضريبة % (صفر والمالك بيكتبها لو فيه).
 --}}
 
-@section('title', __('rpt.quotation'))
+@php
+    // ═══ وضع التعديل (٢٣/٨): نفس الفورم متملي بعرض محفوظ ═══
+    $edit = $edit ?? null;
+    $editRows = $editRows ?? collect();
+    $editDays = $editDays ?? 30;
+@endphp
+
+@section('title', $edit ? __('rpt.qt_edit').' '.$edit->number : __('rpt.quotation'))
 
 @section('actions')
     <a class="btn" href="{{ route('erp.reports.quotations') }}">← {{ __('rpt.qts_title') }}</a>
+    @if ($edit)
+        <a class="btn" href="{{ route('erp.reports.quotations.show', $edit) }}">🖨️ {{ __('rpt.qts_open') }}</a>
+    @endif
 @endsection
 
 @section('content')
 
 <div class="card">
-    <h3>📄 {{ __('rpt.quotation') }} <span class="side">{{ __('rpt.quotation_hint') }}</span></h3>
+    <h3>📄 {{ $edit ? __('rpt.qt_edit').' '.$edit->number : __('rpt.quotation') }}
+        <span class="side">{{ __('rpt.quotation_hint') }}</span></h3>
 
-    {{-- ⚠️ الفورم بيتبعت POST وبيفتح صفحة العرض المحفوظ --}}
-    <form method="POST" action="{{ route('erp.reports.quotation.print') }}"
+    {{-- ⚠️ الفورم بيتبعت POST وبيفتح صفحة العرض المحفوظ —
+         وفي التعديل بيحدّث نفس الرقم مش بيطلّع عرض جديد --}}
+    <form method="POST"
+          action="{{ $edit ? route('erp.reports.quotations.update', $edit) : route('erp.reports.quotation.print') }}"
           onsubmit="return qtSubmit(this)">
         @csrf
 
@@ -33,7 +46,7 @@
                 <label class="f">{{ __('rpt.qt_client') }} <b class="req-star">*</b></label>
                 <input type="text" name="client_name" id="qtClient" required maxlength="190"
                        style="width:100%" placeholder="{{ __('rpt.qt_client_ph') }}"
-                       list="qtClientsDl">
+                       value="{{ $edit?->client_name }}" list="qtClientsDl">
                 {{-- اختيار من العملاء المسجلين بيملى الاسم بس — الكوتيشن
                      ممكن يروح لعميل محتمل مش متسجل أصلاً --}}
                 <datalist id="qtClientsDl">
@@ -49,7 +62,7 @@
                      النتايج جوه السيلكت والليستة تطلع فاضية (٢٣/٨). --}}
                 <select name="price_list_id" id="qtPriceList" style="width:100%" onchange="qtListChanged()">
                     @foreach ($lists as $l)
-                        <option value="{{ $l->id }}" @selected($l->id === $defaultListId)>
+                        <option value="{{ $l->id }}" @selected($l->id === ($edit?->price_list_id ?? $defaultListId))>
                             {{ $l->name }}@if($l->is_default) ★ @endif
                         </option>
                     @endforeach
@@ -95,18 +108,20 @@
         <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-top:14px">
             <div>
                 <label class="f">📅 {{ __('rpt.qt_valid') }}</label>
-                <input type="number" name="valid_days" id="qtDays" value="30" min="1" max="365"
+                <input type="number" name="valid_days" id="qtDays" value="{{ $editDays }}" min="1" max="365"
                        style="width:110px" oninput="qtTotals()">
                 <div class="side" style="font-size:10.5px" id="qtUntil"></div>
             </div>
             <div>
                 <label class="f">🏷️ {{ __('rpt.qt_disc') }} %</label>
-                <input type="number" name="discount_pct" id="qtDisc" value="0" min="0" max="100"
+                <input type="number" name="discount_pct" id="qtDisc" min="0" max="100"
+                       value="{{ $edit !== null ? rtrim(rtrim(number_format((float) $edit->discount_pct, 2, '.', ''), '0'), '.') : 0 }}"
                        step="0.5" style="width:100px" oninput="qtTotals()">
             </div>
             <div>
                 <label class="f">🧾 {{ __('rpt.qt_tax') }} %</label>
-                <input type="number" name="tax_pct" id="qtTax" value="{{ $taxPct }}" min="0" max="100"
+                <input type="number" name="tax_pct" id="qtTax" min="0" max="100"
+                       value="{{ $edit !== null ? rtrim(rtrim(number_format((float) $edit->tax_pct, 2, '.', ''), '0'), '.') : $taxPct }}"
                        step="0.5" style="width:100px" oninput="qtTotals()">
             </div>
             {{-- التجميعة اللحظية --}}
@@ -118,11 +133,11 @@
         <div style="margin-top:12px">
             <label class="f">{{ __('rpt.qt_notes') }}</label>
             <textarea name="notes" rows="2" maxlength="1000" style="width:100%"
-                      placeholder="{{ __('rpt.qt_notes_ph') }}"></textarea>
+                      placeholder="{{ __('rpt.qt_notes_ph') }}">{{ $edit?->notes }}</textarea>
         </div>
 
         <button class="btn gold" type="submit" style="margin-top:14px" id="qtBtn" disabled>
-            🖨️ {{ __('rpt.qt_make') }}</button>
+            {{ $edit ? '💾 '.__('rpt.qt_save_edit') : '🖨️ '.__('rpt.qt_make') }}</button>
     </form>
 </div>
 
@@ -143,6 +158,13 @@ const T = {
     box: @json(__('stock.unit_box')),
     kase: @json(__('stock.unit_case')),
 };
+
+{{-- بنود العرض المفتوح للتعديل — بتتزرع تحت بعد تعريف الدوال --}}
+@php
+    $editRowsJson = json_encode($editRows,
+        JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+@endphp
+const EDIT_ROWS = {!! $editRowsJson !!};
 
 let rows = [];
 
@@ -259,6 +281,23 @@ function qtSubmit(form) {
     return true;
 }
 
-qtTotals();
+{{-- وضع التعديل: البنود المحفوظة بتنزل الجدول بأسعارها المجمّدة.
+     touched=true عشان تغيير القايمة مايدوسش على أسعار متفاوَض عليها.
+     صنف اتشال من الكتالوج بينزل من غير صورة ومن غير id (بيتحفظ نص). --}}
+EDIT_ROWS.forEach(function (r) {
+    const p = CATALOG.find(x => x.id === r.id);
+    rows.push({
+        id: p ? r.id : null,
+        code: r.code || (p ? p.code : ''),
+        name: r.name,
+        image: p ? p.image : null,
+        units: p ? (p.units || {piece: 1}) : {piece: 1},
+        qty: r.qty,
+        price: r.price,
+        touched: true,
+    });
+});
+
+if (rows.length) { qtRender(); } else { qtTotals(); }
 </script>
 @endsection

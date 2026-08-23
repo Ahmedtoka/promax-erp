@@ -514,6 +514,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->name('reports.quotation');
         Route::post('/reports/quotations', [\App\Http\Controllers\ReportController::class, 'quotationStore'])
             ->name('reports.quotation.print');
+        // ⚠️ تعديل العرض المحفوظ (٢٣/٨) — نفس الفورم متملي، والحفظ
+        // بيحدّث نفس الرقم QT- مش بيطلّع عرض جديد
+        Route::get('/reports/quotations/{quotation}/edit', [\App\Http\Controllers\ReportController::class, 'quotationEdit'])
+            ->name('reports.quotations.edit');
+        Route::post('/reports/quotations/{quotation}', [\App\Http\Controllers\ReportController::class, 'quotationUpdate'])
+            ->name('reports.quotations.update');
         Route::get('/reports/quotations/{quotation}', [\App\Http\Controllers\ReportController::class, 'quotationShow'])
             ->name('reports.quotations.show');
 

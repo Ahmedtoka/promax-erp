@@ -89,6 +89,7 @@
                     </td>
                     <td class="act">
                         <a class="btn sm" href="{{ route('erp.reports.quotations.show', $qt) }}">🖨️ {{ __('rpt.qts_open') }}</a>
+                        <a class="btn sm" href="{{ route('erp.reports.quotations.edit', $qt) }}">✏️ {{ __('rpt.qt_edit') }}</a>
                     </td>
                 </tr>
             @empty
