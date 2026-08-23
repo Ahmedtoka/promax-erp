@@ -196,6 +196,55 @@ class ErpController extends Controller
         $topClientRows = Client::with(['group', 'channel'])
             ->whereIn('id', $topClients->pluck('client_id'))->get()->keyBy('id');
 
+        // ═══ V2 (٢٣/٨ — «تطوير خبير») ═══
+
+        // التوريدات: أوامر اتسلمت فعلاً في الفترة — عدد وفلوس
+        $posDelivered = PurchaseOrder::where('status', 'delivered')
+            ->whereBetween('delivered_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('assigned_to', $repIds))
+            ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g')->first();
+
+        // العهدة في الشارع دلوقتي: العربيات المفتوحة + الوحدات + قيمتها
+        // بسعر المستهلك (price_new متزامن مع القايمة الافتراضية)
+        $street = DB::table('custody_items')
+            ->join('custodies', 'custodies.id', '=', 'custody_items.custody_id')
+            ->join('products', 'products.id', '=', 'custody_items.product_id')
+            ->where('custodies.status', '!=', 'closed')
+            ->when($repIds, fn ($q) => $q->whereIn('custodies.user_id', $repIds))
+            ->selectRaw('COUNT(DISTINCT custodies.id) vans,
+                COALESCE(SUM(custody_items.assigned + custody_items.gift_assigned
+                    - custody_items.sold - custody_items.returned
+                    - custody_items.transferred_out - custody_items.gift_given), 0) units,
+                COALESCE(SUM((custody_items.assigned + custody_items.gift_assigned
+                    - custody_items.sold - custody_items.returned
+                    - custody_items.transferred_out - custody_items.gift_given)
+                    * products.price_new), 0) val')
+            ->first();
+
+        // فليفار بار المنتجات: أفضل الأصناف بالقطع وبالفلوس
+        $topProducts = DB::table('invoice_items')
+            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
+            ->join('products', 'products.id', '=', 'invoice_items.product_id')
+            ->whereBetween('invoices.created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds))
+            ->selectRaw('products.name pname, products.name_en pname_en,
+                SUM(invoice_items.qty) q, SUM(invoice_items.total) v')
+            ->groupBy('products.id', 'pname', 'pname_en')
+            ->orderByDesc('v')->take(8)->get();
+
+        // المناطق والمحافظات — مبيعات الفترة جغرافياً
+        $byZone = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->join('zones', 'zones.id', '=', 'clients.zone_id')
+            ->selectRaw('zones.id zid, zones.name zname, zones.name_en zname_en,
+                COUNT(DISTINCT invoices.client_id) nc, SUM(invoices.grand_total) v')
+            ->groupBy('zid', 'zname', 'zname_en')->orderByDesc('v')->take(10)->get();
+
+        $byGov = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->whereNotNull('clients.governorate')
+            ->selectRaw('clients.governorate gov, COUNT(DISTINCT invoices.client_id) nc,
+                SUM(invoices.grand_total) v')
+            ->groupBy('gov')->orderByDesc('v')->take(10)->get();
+
         return view('erp.overview', [
             'from' => $a->toDateString(),
             'to' => $to->toDateString(),
@@ -229,6 +278,11 @@ class ErpController extends Controller
             'openRequests' => \App\Models\ClientRequest::whereIn('status', ['pending', 'review'])->count(),
             'openPos' => PurchaseOrder::whereIn('status', ['pending', 'arrived'])
                 ->when($repIds, fn ($q) => $q->whereIn('assigned_to', $repIds))->count(),
+            'posDelivered' => $posDelivered,
+            'street' => $street,
+            'topProducts' => $topProducts,
+            'byZone' => $byZone,
+            'byGov' => $byGov,
         ]);
     }
 
