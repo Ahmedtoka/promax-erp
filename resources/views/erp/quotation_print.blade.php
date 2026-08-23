@@ -72,46 +72,67 @@
             </div>
         </div>
 
-        {{-- ═══ كروت الأصناف — صورة كبيرة + كود + اسم + أسعار الوحدات ═══ --}}
-        <div class="qi-grid">
-            @foreach ($lines as $l)
-                <div class="qi-card">
-                    <div class="qi-imgwrap">
+        {{-- ═══ جدول الأصناف الرسمي (قرار المالك ٢٣/٨: ليست في جدول
+             مش كروت — عرض رسمي ومحافظ على A4) — صورة صغيرة + كود +
+             اسم + أعمدة أسعار الوحدات المجمّدة وقت الإصدار ═══ --}}
+        @php
+            // فيه ولا صنف له علبة/كرتونة؟ — العمود مايظهرش فاضي للكل
+            $unitPrice = function ($l, $key) {
+                foreach ((array) ($l['units'] ?? []) as $u) {
+                    if (($u['key'] ?? '') === $key) {
+                        return $u;
+                    }
+                }
+
+                return null;
+            };
+            $hasBox = $lines->contains(fn ($l) => $unitPrice($l, 'box') !== null);
+            $hasCase = $lines->contains(fn ($l) => $unitPrice($l, 'case') !== null);
+        @endphp
+        <table class="qi-table">
+            <thead>
+            <tr>
+                <th style="width:26px">#</th>
+                <th style="width:56px"></th>
+                <th style="width:70px">{{ __('common.code') }}</th>
+                <th style="text-align:start">{{ __('rpt.c_product') }}</th>
+                <th>{{ __('stock.unit_piece') }}</th>
+                @if ($hasBox)<th>{{ __('stock.unit_box') }}</th>@endif
+                @if ($hasCase)<th>{{ __('stock.unit_case') }}</th>@endif
+                <th>{{ __('rpt.k_qty') }}</th>
+                <th>{{ __('common.total') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach ($lines as $i => $l)
+                <tr>
+                    <td>{{ $i + 1 }}</td>
+                    <td>
                         @if ($l['image'] ?? null)
-                            <img src="{{ $l['image'] }}" alt="" class="qi-img">
+                            <img src="{{ $l['image'] }}" alt="" class="qi-thumb">
                         @else
-                            <div class="qi-noimg">📦</div>
+                            <span class="qi-nothumb">📦</span>
                         @endif
-                    </div>
-                    @if ($l['code'] ?? null)
-                        <div class="qi-code" dir="ltr">{{ $l['code'] }}</div>
+                    </td>
+                    <td dir="ltr" style="font-weight:700">{{ $l['code'] ?? '—' }}</td>
+                    <td style="text-align:start;font-weight:800">{{ $l['name'] }}</td>
+                    <td dir="ltr" style="font-weight:700">{{ number_format($l['price'], 2) }}</td>
+                    @if ($hasBox)
+                        @php $ub = $unitPrice($l, 'box'); @endphp
+                        <td dir="ltr">@if ($ub)<b>{{ number_format($ub['price'], 2) }}</b>
+                            <span class="qi-fac">×{{ $ub['factor'] }}</span>@else — @endif</td>
                     @endif
-                    <div class="qi-name">{{ $l['name'] }}</div>
-
-                    {{-- أسعار الوحدات المجمّدة وقت الإصدار --}}
-                    <div class="qi-units">
-                        @if (is_array($l['units'] ?? null) && count($l['units']))
-                            @foreach ($l['units'] as $u)
-                                <div class="qi-unit">
-                                    <span>{{ __('stock.unit_'.$u['key']) }}@if (($u['factor'] ?? 1) > 1) ({{ $u['factor'] }})@endif</span>
-                                    <b dir="ltr">{{ number_format($u['price'], 2) }}</b>
-                                </div>
-                            @endforeach
-                        @else
-                            <div class="qi-unit">
-                                <span>{{ __('stock.unit_piece') }}</span>
-                                <b dir="ltr">{{ number_format($l['price'], 2) }}</b>
-                            </div>
-                        @endif
-                    </div>
-
-                    <div class="qi-foot">
-                        <span>{{ number_format($l['qty']) }} × {{ number_format($l['price'], 2) }}</span>
-                        <b dir="ltr">{{ number_format($l['total'], 2) }}</b>
-                    </div>
-                </div>
+                    @if ($hasCase)
+                        @php $uc = $unitPrice($l, 'case'); @endphp
+                        <td dir="ltr">@if ($uc)<b>{{ number_format($uc['price'], 2) }}</b>
+                            <span class="qi-fac">×{{ $uc['factor'] }}</span>@else — @endif</td>
+                    @endif
+                    <td dir="ltr">{{ number_format($l['qty']) }}</td>
+                    <td dir="ltr" style="font-weight:800">{{ number_format($l['total'], 2) }}</td>
+                </tr>
             @endforeach
-        </div>
+            </tbody>
+        </table>
 
         {{-- ═══ التجميعة + ختم الخصم ═══ --}}
         <div style="display:flex;justify-content:flex-end;margin-top:16px;position:relative">
@@ -194,25 +215,18 @@
 
 @section('scripts')
 <style>
-/* ═══ كروت الأصناف — عمودين على A4 ═══ */
-.qi-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.qi-card{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;
-  page-break-inside:avoid;break-inside:avoid;display:flex;flex-direction:column}
-/* الصورة الكبيرة — طلب المالك ~300px */
-.qi-imgwrap{background:#fff;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;height:300px;padding:12px}
-.qi-img{max-width:100%;max-height:100%;object-fit:contain}
-.qi-noimg{font-size:56px;color:var(--muted)}
-.qi-code{margin:10px 14px 0;display:inline-block;align-self:flex-start;
-  background:var(--blue-050,#E8F1FF);color:var(--royal-blue,#12399B);
-  font-weight:800;font-size:11px;border-radius:999px;padding:2px 11px}
-.qi-name{font-size:14.5px;font-weight:900;margin:6px 14px 0}
-.qi-units{margin:8px 14px;display:flex;flex-direction:column;gap:3px}
-.qi-unit{display:flex;justify-content:space-between;font-size:12px;
-  border-bottom:1px dashed var(--border);padding:3px 0}
-.qi-unit b{color:var(--royal-blue,#12399B)}
-.qi-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
-  background:var(--card2,#F1F1F4);padding:8px 14px;font-size:12px;font-weight:800}
+/* ═══ جدول الأصناف الرسمي — مضبوط على A4 ═══ */
+.qi-table{width:100%;border-collapse:collapse;font-size:11.5px;
+  font-variant-numeric:tabular-nums}
+.qi-table thead tr{background:var(--royal-blue,#12399B);color:#fff}
+.qi-table th{padding:7px 8px;text-align:center;font-size:11px;white-space:nowrap}
+.qi-table td{padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)}
+.qi-table tbody tr{page-break-inside:avoid;break-inside:avoid}
+.qi-table tbody tr:nth-child(even){background:var(--card2,#F7F7FA)}
+.qi-thumb{width:48px;height:48px;object-fit:contain;border-radius:7px;
+  border:1px solid var(--border);background:#fff;display:block;margin:0 auto}
+.qi-nothumb{font-size:20px;color:var(--muted)}
+.qi-fac{font-size:9.5px;color:var(--muted);font-weight:700}
 /* ═══ ختم الخصم المايل ═══ */
 .qi-stamp{position:absolute;inset-inline-start:8%;top:6px;transform:rotate(-10deg);
   border:3px solid var(--red,#DC2626);color:var(--red,#DC2626);border-radius:10px;
@@ -223,9 +237,9 @@
     .sidebar, .topbar, .btn { display:none !important; }
     .main{padding:0 !important}
     #qtDoc{border:none;box-shadow:none;max-width:100%}
-    .qi-grid{gap:10px}
-    .qi-imgwrap{height:260px}
-    .qi-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .qi-table thead tr, .qi-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .qi-table{font-size:10.5px}
+    .qi-thumb{width:42px;height:42px}
 }
 </style>
 @endsection
