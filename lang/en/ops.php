@@ -34,10 +34,12 @@ return [
 
     // ═══ Key-account POs — accounting approval (2026-08-04) ═══
     'po_handout' => 'New sales order for a rep',
-    'po_handout_hint' => 'Chain, branch, rep, delivery time and items - then accounting approval',
+    'po_handout_hint' => 'Chain and branch (or a direct client with no chain), rep, delivery time and items - then accounting approval',
     'po_approvals' => 'Sales Order Approvals',
     'po_approvals_hint' => 'Decide based on the branch balance - approval sends the pick order to the warehouse immediately',
-    'branch_client' => 'Branch',
+    'branch_client' => 'Branch / Client',
+    'po_solo_client' => 'Direct client - no chain',
+    'po_search_client' => 'Search by name...',
     'due_at' => 'Delivery time',
     'source_ph' => 'Chain PO number, for example',
     'send_to_accounting' => 'Send to accounting',

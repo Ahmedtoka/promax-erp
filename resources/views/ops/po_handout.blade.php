@@ -106,6 +106,12 @@
             </div>
             <div>
                 <label class="f">{{ __('ops.branch_client') }} <b class="req-star">*</b></label>
+                {{-- ⚠️ بحث فوق السيلكت (٢٣/٨) — أوبشن «عميل مباشر» فتح
+                     القايمة لكل عملاء القناة، ومن غير بحث كانت هتبقى
+                     سكرول لا نهائي. البحث بيفلتر الأوبشنز نفسها. --}}
+                <input type="text" id="poBranchSearch" autocomplete="off"
+                       placeholder="🔍 {{ __('ops.po_search_client') }}"
+                       style="width:100%;margin-bottom:5px" oninput="poFilterBranches()">
                 <select name="client_id" id="poBranch" required style="width:100%" onchange="poShowBalance()">
                     <option value="">—</option>
                 </select>
@@ -248,13 +254,16 @@ const UNIT_LABELS = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-/** القناة اتغيرت — سيلكت السلاسل بيتبني من سلاسل القناة دي بس */
+/** القناة اتغيرت — سيلكت السلاسل بيتبني من سلاسل القناة دي بس.
+ *  أوبشن «عميل مباشر» ثابت فوق (٢٣/٨) — أمر توريد لعميل عادي
+ *  من غير سلسلة: بيفلتر الفروع على اللي مالهومش group خالص. */
 function poFilterChains() {
     const ch = Number(document.getElementById('poChannel').value || 0);
     const sel = document.getElementById('poChain');
     const current = sel.value;
 
-    sel.innerHTML = '<option value="">—</option>';
+    sel.innerHTML = '<option value="">—</option>'
+        + '<option value="solo">🧍 ' + esc(@json(__('ops.po_solo_client'))) + '</option>';
     CHAINS.filter(g => !ch || (g.channels || []).includes(ch)).forEach(g => {
         const opt = document.createElement('option');
         opt.value = g.id;
@@ -266,20 +275,26 @@ function poFilterChains() {
     poFilterBranches();
 }
 
-/** الفروع بتتفلتر بالقناة والسلسلة المختارين */
+/** الفروع بتتفلتر بالقناة والسلسلة المختارين + البحث بالاسم.
+ *  «solo» = العملاء المباشرين بس (من غير سلسلة). */
 function poFilterBranches() {
     const ch = Number(document.getElementById('poChannel').value || 0);
-    const chain = Number(document.getElementById('poChain').value || 0);
+    const chainVal = document.getElementById('poChain').value;
+    const chain = chainVal === 'solo' ? -1 : Number(chainVal || 0);
+    const s = (document.getElementById('poBranchSearch')?.value || '').trim().toLowerCase();
     const sel = document.getElementById('poBranch');
     const current = sel.value;
 
     sel.innerHTML = '<option value="">—</option>';
-    BRANCHES.filter(b => (!ch || b.channel === ch) && (!chain || b.group === chain)).forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b.id;
-        opt.textContent = b.name;
-        sel.appendChild(opt);
-    });
+    BRANCHES.filter(b => (!ch || b.channel === ch)
+            && (chain === -1 ? !b.group : (!chain || b.group === chain))
+            && (!s || String(b.name || '').toLowerCase().includes(s)))
+        .forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.id;
+            opt.textContent = b.name;
+            sel.appendChild(opt);
+        });
 
     sel.value = current;
     poShowBalance();
@@ -429,8 +444,9 @@ if (oldBranchRow) {
 }
 poFilterChains();
 
-if (oldBranchRow && oldBranchRow.group) { document.getElementById('poChain').value = String(oldBranchRow.group); poFilterBranches(); }
-else if (EDIT_CHAIN && !OLD_ROWS.length) { document.getElementById('poChain').value = String(EDIT_CHAIN); poFilterBranches(); }
+// عميل من غير سلسلة (group=0) → وضع «عميل مباشر» بدل ما الاسترجاع يضيع
+if (oldBranchRow) { document.getElementById('poChain').value = oldBranchRow.group ? String(oldBranchRow.group) : 'solo'; poFilterBranches(); }
+else if (EDIT_BRANCH && !OLD_ROWS.length) { document.getElementById('poChain').value = EDIT_CHAIN ? String(EDIT_CHAIN) : 'solo'; poFilterBranches(); }
 
 if (OLD_BRANCH) { document.getElementById('poBranch').value = String(OLD_BRANCH); poShowBalance(); }
 else if (EDIT_BRANCH) { document.getElementById('poBranch').value = String(EDIT_BRANCH); poShowBalance(); }
