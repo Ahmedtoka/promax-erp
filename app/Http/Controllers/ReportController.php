@@ -1038,7 +1038,9 @@ class ReportController extends Controller
                 'created_by' => $request->user()?->id,
                 'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 30)),
                 'discount_pct' => (float) ($data['discount_pct'] ?? 0),
+                'extra_pct' => (float) ($data['extra_pct'] ?? 0),
                 'tax_pct' => (float) ($data['tax_pct'] ?? 0),
+                'tax_inclusive' => $request->boolean('tax_inclusive'),
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'net' => $net,
@@ -1098,8 +1100,13 @@ class ReportController extends Controller
         });
 
         $subtotal = round($lines->sum('total'), 2);
-        $discount = round($subtotal * ((float) ($data['discount_pct'] ?? 0)) / 100, 2);
-        $net = round($subtotal - $discount, 2);
+
+        // ⚠️ الخصمين تسلسليين (٢٣/٨): الإضافي بيتحسب على المتبقي بعد
+        // العادي — 10% + 5% = 14.5% مش 15%. ده المتعارف عليه تجارياً.
+        $d1 = (float) ($data['discount_pct'] ?? 0);
+        $d2 = (float) ($data['extra_pct'] ?? 0);
+        $net = round($subtotal * (1 - $d1 / 100) * (1 - $d2 / 100), 2);
+        $discount = round($subtotal - $net, 2);
         $tax = round($net * ((float) ($data['tax_pct'] ?? 0)) / 100, 2);
 
         return [$lines, $subtotal, $discount, $net, $tax];
@@ -1113,7 +1120,9 @@ class ReportController extends Controller
             'price_list_id' => ['nullable', 'exists:price_lists,id'],
             'valid_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'extra_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_inclusive' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['nullable', 'integer', 'exists:products,id'],
@@ -1179,7 +1188,9 @@ class ReportController extends Controller
                 'price_list_name' => $list?->name,
                 'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 30)),
                 'discount_pct' => (float) ($data['discount_pct'] ?? 0),
+                'extra_pct' => (float) ($data['extra_pct'] ?? 0),
                 'tax_pct' => (float) ($data['tax_pct'] ?? 0),
+                'tax_inclusive' => request()->boolean('tax_inclusive'),
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'net' => $net,
@@ -1232,6 +1243,8 @@ class ReportController extends Controller
             ]),
             'subtotal' => (float) $quotation->subtotal,
             'discountPct' => (float) $quotation->discount_pct,
+            'extraPct' => (float) ($quotation->extra_pct ?? 0),
+            'taxInclusive' => (bool) ($quotation->tax_inclusive ?? true),
             'discount' => (float) $quotation->discount,
             'net' => (float) $quotation->net,
             'taxPct' => (float) $quotation->tax_pct,

@@ -119,10 +119,26 @@
                        step="0.5" style="width:100px" oninput="qtTotals()">
             </div>
             <div>
+                <label class="f">➕ {{ __('rpt.qt_extra_disc') }} %</label>
+                <input type="number" name="extra_pct" id="qtExtra" min="0" max="100"
+                       value="{{ $edit !== null ? rtrim(rtrim(number_format((float) ($edit->extra_pct ?? 0), 2, '.', ''), '0'), '.') : 0 }}"
+                       step="0.5" style="width:100px" oninput="qtTotals()">
+            </div>
+            <div>
                 <label class="f">🧾 {{ __('rpt.qt_tax') }} %</label>
                 <input type="number" name="tax_pct" id="qtTax" min="0" max="100"
                        value="{{ $edit !== null ? rtrim(rtrim(number_format((float) $edit->tax_pct, 2, '.', ''), '0'), '.') : $taxPct }}"
                        step="0.5" style="width:100px" oninput="qtTotals()">
+            </div>
+            <div>
+                {{-- متعلّم = «الأسعار شاملة الضريبة» على الورقة، مش
+                     متعلّم = «غير شاملة» — الجملة موجودة في الحالتين --}}
+                <label class="f" style="display:flex;align-items:center;gap:7px;cursor:pointer">
+                    <input type="checkbox" name="tax_inclusive" value="1"
+                           style="width:17px;height:17px"
+                           @checked($edit === null || ($edit->tax_inclusive ?? true))>
+                    {{ __('rpt.qt_inclusive_label') }}
+                </label>
             </div>
             {{-- التجميعة اللحظية --}}
             <div id="qtSum" style="margin-inline-start:auto;text-align:end;font-size:12.5px;
@@ -241,13 +257,16 @@ function qtRender() {
 function qtTotals() {
     const sub = rows.reduce((t, r) => t + r.qty * r.price, 0);
     const dPct = Math.min(100, Math.max(0, parseFloat(document.getElementById('qtDisc').value || '0')));
+    const ePct = Math.min(100, Math.max(0, parseFloat(document.getElementById('qtExtra').value || '0')));
     const tPct = Math.min(100, Math.max(0, parseFloat(document.getElementById('qtTax').value || '0')));
-    const disc = sub * dPct / 100;
-    const net = sub - disc;
+    {{-- الخصمين تسلسليين — الإضافي على المتبقي بعد العادي --}}
+    const net = sub * (1 - dPct / 100) * (1 - ePct / 100);
+    const disc = sub - net;
     const tax = net * tPct / 100;
 
     let html = '<div>' + esc(T.sub) + ': <b dir="ltr">' + fmt(sub) + '</b></div>';
-    if (disc > 0) html += '<div style="color:var(--red,#DC2626)">' + esc(T.disc) + ' ' + dPct + '%: <b dir="ltr">-' + fmt(disc) + '</b></div>';
+    if (disc > 0) html += '<div style="color:var(--red,#DC2626)">' + esc(T.disc) + ' ' + dPct + '%' +
+        (ePct > 0 ? ' + ' + ePct + '%' : '') + ': <b dir="ltr">-' + fmt(disc) + '</b></div>';
     if (tax > 0) html += '<div>' + esc(T.tax) + ' ' + tPct + '%: <b dir="ltr">+' + fmt(tax) + '</b></div>';
     html += '<div style="border-top:2px solid var(--royal-blue,#12399B);margin-top:5px;padding-top:5px;' +
         'font-weight:900;font-size:14px;color:var(--royal-blue,#12399B)">' + esc(T.grand) + ': <b dir="ltr">' + fmt(net + tax) + '</b></div>';

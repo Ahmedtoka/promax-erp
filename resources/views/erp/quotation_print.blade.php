@@ -39,13 +39,12 @@
                 <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
                     ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
                      alt="PROMAX" class="doc-logo">
+                {{-- التليفون والإيميل اتشالوا من فوق (٢٣/٨) — مكانهم
+                     الفوتر تحت مع العنوان --}}
                 <div>
                     <div style="font-size:15px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
                     @if ($co['tax_id'])
                         <div style="font-size:10.5px;color:var(--muted)">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
-                    @endif
-                    @if ($co['phone'])
-                        <div style="font-size:10.5px;color:var(--muted)">{{ $co['phone'] }}@if ($co['email']) · {{ $co['email'] }}@endif</div>
                     @endif
                 </div>
             </div>
@@ -71,12 +70,11 @@
                 <div style="font-size:10.5px;color:var(--muted)">{{ __('rpt.qt_to') }}</div>
                 <div style="font-size:15px;font-weight:900">{{ $clientName }}</div>
             </div>
-            @if ($priceListName ?? null)
-                <div style="text-align:center">
-                    <div style="font-size:10.5px;color:var(--muted)">{{ __('rpt.qt_list') }}</div>
-                    <div style="font-size:13px;font-weight:800">{{ $priceListName }}</div>
-                </div>
-            @endif
+            {{-- ⚠️ اسم القايمة الداخلي («سعر المستهلك») مالوش مكان قدام
+                 العميل (٢٣/٨) — الكلمة العامة «قائمة الأسعار» بس --}}
+            <div style="text-align:center;align-self:center">
+                <div style="font-size:15px;font-weight:900;letter-spacing:.5px">{{ __('rpt.qt_list_title') }}</div>
+            </div>
             <div style="text-align:end">
                 <div style="font-size:10.5px;color:var(--muted)">{{ __('rpt.qt_valid_until') }}</div>
                 <div style="font-size:13.5px;font-weight:800">{{ $validUntil->format('Y-m-d') }}</div>
@@ -100,25 +98,36 @@
             $hasBox = $lines->contains(fn ($l) => $unitPrice($l, 'box') !== null);
             $hasCase = $lines->contains(fn ($l) => $unitPrice($l, 'case') !== null);
 
-            // ⚠️ الخصم بيبان على مستوى السعر نفسه (قرار المالك ٢٣/٨):
-            // السعر الأصلي بخط خفيف وسعر الخصم تحته — مش رقم في التجميعة بس
-            $dp = $discount > 0 ? (1 - $discountPct / 100) : 1;
+            // ⚠️ السعر المعروض = **بعد الخصمين على طول** (قرار المالك
+            // ٢٣/٨ الأخير: من غير شطب قبل/بعد) — الخصمين تسلسليين.
+            $dp = (1 - ($discountPct ?? 0) / 100) * (1 - ($extraPct ?? 0) / 100);
 
-            // خلية سعر: عادية، أو مشطوبة وتحتها سعر الخصم
-            $priceCell = function (?float $v, ?int $factor = null) use ($discount, $dp) {
+            // خلية سعر: السعر النهائي + «12 قطعة» جمب العلبة/الكرتونة
+            $pieceWord = __('stock.unit_piece');
+            $priceCell = function (?float $v, ?int $factor = null) use ($dp, $pieceWord) {
                 if ($v === null) {
                     return '—';
                 }
 
                 $fac = $factor && $factor > 1
-                    ? ' <span class="qi-fac">×'.$factor.'</span>' : '';
+                    ? ' <span class="qi-fac">'.$factor.' '.e($pieceWord).'</span>' : '';
 
-                if ($discount <= 0) {
-                    return '<b>'.number_format($v, 2).'</b>'.$fac;
+                return '<b>'.number_format($v * $dp, 2).'</b>'.$fac;
+            };
+
+            // ⚠️ الوزن بيتفصل من آخر الاسم لعموده (٢٣/٨) — «بروتين بار
+            // 70 جم» ← الاسم «بروتين بار» والوزن «70 جم». الأسماء
+            // المجمّدة ماتتغيرش في الداتابيز — فصل عرض بس.
+            $splitWeight = function (string $name): array {
+                if (preg_match('/^(.*?)[\s\-·،]*(\d+(?:[.,]\d+)?\s*(?:جم|جرام|كجم|كيلو ?جرام|كيلو|مل|لتر|g|gm|gr|kg|ml|l))\s*\.?$/iu', trim($name), $m)) {
+                    $base = trim($m[1], " \t-·،");
+
+                    if ($base !== '') {
+                        return [$base, $m[2]];
+                    }
                 }
 
-                return '<s class="qi-old">'.number_format($v, 2).'</s>'
-                    .'<span class="qi-newp">'.number_format($v * $dp, 2).'</span>'.$fac;
+                return [$name, null];
             };
         @endphp
         {{-- ⚠️ من غير كمية ولا إجمالي (قرار المالك ٢٣/٨) — ده عرض
@@ -130,6 +139,7 @@
                 <th style="width:56px"></th>
                 <th style="width:80px">{{ __('common.code') }}</th>
                 <th style="text-align:start">{{ __('rpt.c_product') }}</th>
+                <th style="width:70px">{{ __('rpt.qt_weight') }}</th>
                 <th style="width:110px">{{ __('stock.unit_piece') }}</th>
                 @if ($hasBox)<th style="width:110px">{{ __('stock.unit_box') }}</th>@endif
                 @if ($hasCase)<th style="width:110px">{{ __('stock.unit_case') }}</th>@endif
@@ -146,8 +156,10 @@
                             <span class="qi-nothumb">📦</span>
                         @endif
                     </td>
+                    @php [$qiName, $qiWeight] = $splitWeight((string) $l['name']); @endphp
                     <td dir="ltr" style="font-weight:700">{{ $l['code'] ?? '—' }}</td>
-                    <td style="text-align:start;font-weight:800">{{ $l['name'] }}</td>
+                    <td style="text-align:start;font-weight:800">{{ $qiName }}</td>
+                    <td style="font-weight:700;white-space:nowrap">{{ $qiWeight ?? '—' }}</td>
                     <td dir="ltr">{!! $priceCell((float) $l['price']) !!}</td>
                     @if ($hasBox)
                         @php $ub = $unitPrice($l, 'box'); @endphp
@@ -162,41 +174,20 @@
             </tbody>
         </table>
 
-        {{-- ═══ التجميعة + ختم الخصم ═══ --}}
-        <div style="display:flex;justify-content:flex-end;margin-top:16px;position:relative">
-            @if ($discount > 0)
-                {{-- الختم المايل — بيبان لما يكون فيه خصم خاص بس --}}
-                <div class="qi-stamp">
-                    {{ __('rpt.qt_disc_stamp', ['p' => rtrim(rtrim(number_format($discountPct, 1), '0'), '.')]) }}
-                </div>
+        {{-- ═══ بدل الإجماليات (قرار المالك ٢٣/٨): تاجين للخصمين +
+             جملة «شاملة/غير شاملة الضريبة» — الأسعار في الجدول
+             أصلاً بعد الخصم، فمفيش حسابات مكررة تحت ═══ --}}
+        @php $fmtPct = fn ($p) => rtrim(rtrim(number_format((float) $p, 1), '0'), '.'); @endphp
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+            @if (($discountPct ?? 0) > 0)
+                <span class="qi-tag">🏷️ {{ __('rpt.qt_tag_disc', ['p' => $fmtPct($discountPct)]) }}</span>
             @endif
-            <table style="min-width:290px;font-size:12.5px;border-collapse:collapse">
-                <tr>
-                    <td style="padding:4px 10px;color:var(--muted)">{{ __('rpt.qt_subtotal') }}</td>
-                    <td style="padding:4px 10px;text-align:end;font-weight:700" dir="ltr">{{ number_format($subtotal, 2) }}</td>
-                </tr>
-                @if ($discount > 0)
-                    <tr>
-                        <td style="padding:4px 10px;color:var(--muted)">{{ __('rpt.qt_disc') }} ({{ rtrim(rtrim(number_format($discountPct, 1), '0'), '.') }}%)</td>
-                        <td style="padding:4px 10px;text-align:end;font-weight:700;color:var(--red,#DC2626)" dir="ltr">-{{ number_format($discount, 2) }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 10px;color:var(--muted)">{{ __('rpt.qt_net') }}</td>
-                        <td style="padding:4px 10px;text-align:end;font-weight:700" dir="ltr">{{ number_format($net, 2) }}</td>
-                    </tr>
-                @endif
-                @if ($tax > 0)
-                    <tr>
-                        <td style="padding:4px 10px;color:var(--muted)">{{ __('rpt.qt_tax') }} ({{ rtrim(rtrim(number_format($taxPct, 1), '0'), '.') }}%)</td>
-                        <td style="padding:4px 10px;text-align:end;font-weight:700" dir="ltr">{{ number_format($tax, 2) }}</td>
-                    </tr>
-                @endif
-                <tr style="border-top:2px solid var(--royal-blue,#12399B)">
-                    <td style="padding:8px 10px;font-weight:900">{{ __('rpt.qt_grand') }}</td>
-                    <td style="padding:8px 10px;text-align:end;font-weight:900;font-size:16px;color:var(--royal-blue,#12399B)" dir="ltr">
-                        {{ number_format($grand, 2) }} {{ __('common.currency') }}</td>
-                </tr>
-            </table>
+            @if (($extraPct ?? 0) > 0)
+                <span class="qi-tag qi-tag2">➕ {{ __('rpt.qt_tag_extra', ['p' => $fmtPct($extraPct)]) }}</span>
+            @endif
+            <span style="margin-inline-start:auto;font-size:12.5px;font-weight:900">
+                {{ ($taxInclusive ?? true) ? __('rpt.qt_incl') : __('rpt.qt_excl') }}
+            </span>
         </div>
 
         @if ($notes)
@@ -231,10 +222,14 @@
             {{ __('rpt.qt_footer', ['date' => $validUntil->format('Y-m-d')]) }}
         </div>
 
-        {{-- التوقيع — بيبان في الطباعة --}}
-        <div class="doc-sign" style="display:flex;justify-content:space-between;margin-top:30px;font-size:12px">
-            <div>{{ __('rpt.qt_sign_company') }}: ____________________</div>
-            <div>{{ __('rpt.qt_sign_client') }}: ____________________</div>
+        {{-- ═══ فوتر الشركة (بدل توقيعات عن الشركة/العميل — ٢٣/٨):
+             العنوان والتليفون والإيميل اللي اتشالوا من فوق ═══ --}}
+        <div style="margin-top:24px;border-top:2px solid var(--royal-blue,#12399B);padding-top:10px;
+                    display:flex;gap:8px 26px;flex-wrap:wrap;justify-content:center;
+                    font-size:11px;font-weight:700;color:var(--ink,#0A0A0F)">
+            @if ($co['address'])<span>📍 {{ $co['address'] }}</span>@endif
+            @if ($co['phone'])<span dir="ltr">📞 {{ $co['phone'] }}</span>@endif
+            @if ($co['email'])<span dir="ltr">✉️ {{ $co['email'] }}</span>@endif
         </div>
     </div>
 </div>
@@ -251,27 +246,26 @@
 .qi-table td{padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)}
 .qi-table tbody tr{page-break-inside:avoid;break-inside:avoid}
 .qi-table tbody tr:nth-child(even){background:var(--card2,#F7F7FA)}
-.qi-thumb{width:48px;height:48px;object-fit:contain;border-radius:7px;
+.qi-thumb{width:66px;height:66px;object-fit:contain;border-radius:8px;
   border:1px solid var(--border);background:#fff;display:block;margin:0 auto}
-.qi-nothumb{font-size:20px;color:var(--muted)}
-.qi-fac{font-size:9.5px;color:var(--muted);font-weight:700}
-/* الخصم على مستوى السعر: الأصلي مشطوب خفيف وسعر الخصم تحته */
-.qi-old{display:block;color:var(--muted);font-size:10px;font-weight:600;
-  text-decoration:line-through;text-decoration-thickness:1px;opacity:.75}
-.qi-newp{display:block;font-weight:900;color:var(--royal-blue,#12399B);font-size:12.5px}
-/* ═══ ختم الخصم المايل ═══ */
-.qi-stamp{position:absolute;inset-inline-start:8%;top:6px;transform:rotate(-10deg);
-  border:3px solid var(--red,#DC2626);color:var(--red,#DC2626);border-radius:10px;
-  padding:7px 20px;font-size:17px;font-weight:900;letter-spacing:.5px;opacity:.85;
-  background:rgba(220,38,38,.045);pointer-events:none;white-space:nowrap}
+.qi-nothumb{font-size:24px;color:var(--muted)}
+.qi-fac{font-size:9.5px;color:var(--muted);font-weight:700;white-space:nowrap}
+/* اللوجو فوق صغير — كان بياكل الترويسة */
+.qt-head .doc-logo{height:36px}
+/* ═══ تاجات الخصم — بدل جدول الإجماليات والختم ═══ */
+.qi-tag{display:inline-block;border:2px solid var(--red,#DC2626);color:var(--red,#DC2626);
+  background:rgba(220,38,38,.05);border-radius:999px;padding:5px 16px;
+  font-size:13px;font-weight:900;white-space:nowrap}
+.qi-tag2{border-color:var(--royal-blue,#12399B);color:var(--royal-blue,#12399B);
+  background:var(--blue-050,#E8F1FF)}
 
 @media print{
     .sidebar, .topbar, .btn { display:none !important; }
     .main{padding:0 !important}
     #qtDoc{border:none;box-shadow:none;max-width:100%}
-    .qi-table thead tr, .qi-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .qi-table thead tr, .qi-tag, .qi-tag2{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .qi-table{font-size:10.5px}
-    .qi-thumb{width:42px;height:42px}
+    .qi-thumb{width:58px;height:58px}
 }
 </style>
 @endsection

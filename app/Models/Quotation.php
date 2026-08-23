@@ -20,7 +20,8 @@ class Quotation extends Model
     protected $fillable = [
         'number', 'client_name', 'client_id', 'price_list_id', 'price_list_name',
         'created_by', 'valid_until',
-        'discount_pct', 'tax_pct', 'subtotal', 'discount', 'net', 'tax',
+        'discount_pct', 'extra_pct', 'tax_pct', 'tax_inclusive',
+        'subtotal', 'discount', 'net', 'tax',
         'grand', 'notes',
     ];
 
@@ -29,7 +30,9 @@ class Quotation extends Model
         return [
             'valid_until' => 'date',
             'discount_pct' => 'float',
+            'extra_pct' => 'float',
             'tax_pct' => 'float',
+            'tax_inclusive' => 'boolean',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
             'net' => 'decimal:2',
