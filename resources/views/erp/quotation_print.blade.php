@@ -34,19 +34,17 @@
          والوقت وكود العرض شمال — وخط التدرج الرسمي رفيع تحتها ═══ --}}
     <div class="doc-head qt-head" style="background:#fff;color:var(--ink,#0A0A0F);padding:20px 26px;position:relative;z-index:1">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:14px">
-                {{-- اللوجو الأزرق — الأبيض مايبانش على خلفية بيضا --}}
+            {{-- اللوجو صغير وبيانات الشركة **تحته** (٢٣/٨ الجولة التالتة).
+                 التليفون والإيميل في الفوتر تحت مش هنا. --}}
+            <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
                 <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
                     ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
                      alt="PROMAX" class="doc-logo">
-                {{-- التليفون والإيميل اتشالوا من فوق (٢٣/٨) — مكانهم
-                     الفوتر تحت مع العنوان --}}
-                <div>
-                    <div style="font-size:15px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
-                    @if ($co['tax_id'])
-                        <div style="font-size:10.5px;color:var(--muted)">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
-                    @endif
-                </div>
+                <div style="font-size:12px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
+                @if ($co['tax_id'])
+                    <div style="font-size:9.5px;color:var(--muted);margin-top:-3px">
+                        {{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
+                @endif
             </div>
             <div style="text-align:center;flex:1">
                 <div style="font-size:30px;font-weight:900;letter-spacing:.5px">{{ __('rpt.qt_doc_title') }}</div>
@@ -102,7 +100,9 @@
             // ٢٣/٨ الأخير: من غير شطب قبل/بعد) — الخصمين تسلسليين.
             $dp = (1 - ($discountPct ?? 0) / 100) * (1 - ($extraPct ?? 0) / 100);
 
-            // خلية سعر: السعر النهائي + «12 قطعة» جمب العلبة/الكرتونة
+            // خلية سعر: السعر النهائي و«12 قطعة» **سطر تحته** —
+            // dir=rtl على السطر عشان الترتيب العربي يطلع «12 قطعة»
+            // مش «قطعة 12» (خلية السعر نفسها ltr للأرقام)
             $pieceWord = __('stock.unit_piece');
             $priceCell = function (?float $v, ?int $factor = null) use ($dp, $pieceWord) {
                 if ($v === null) {
@@ -110,20 +110,22 @@
                 }
 
                 $fac = $factor && $factor > 1
-                    ? ' <span class="qi-fac">'.$factor.' '.e($pieceWord).'</span>' : '';
+                    ? '<span class="qi-fac" dir="rtl">'.$factor.' '.e($pieceWord).'</span>' : '';
 
                 return '<b>'.number_format($v * $dp, 2).'</b>'.$fac;
             };
 
-            // ⚠️ الوزن بيتفصل من آخر الاسم لعموده (٢٣/٨) — «بروتين بار
-            // 70 جم» ← الاسم «بروتين بار» والوزن «70 جم». الأسماء
-            // المجمّدة ماتتغيرش في الداتابيز — فصل عرض بس.
+            // ⚠️ السبليت عند **أول رقم** (قرار المالك ٢٣/٨): «برو ماكس
+            // بروتين بار قهوة 70 غرام» ← الاسم قبل أول رقم، ومن أول
+            // الرقم للآخر عمود الوزن. الأسماء المجمّدة ماتتغيرش —
+            // فصل عرض بس، ولو الاسم بادئ برقم بيفضل زي ما هو.
             $splitWeight = function (string $name): array {
-                if (preg_match('/^(.*?)[\s\-·،]*(\d+(?:[.,]\d+)?\s*(?:جم|جرام|كجم|كيلو ?جرام|كيلو|مل|لتر|g|gm|gr|kg|ml|l))\s*\.?$/iu', trim($name), $m)) {
+                if (preg_match('/^([^0-9٠-٩]+?)[\s\-·،]*([0-9٠-٩].*)$/u', trim($name), $m)) {
                     $base = trim($m[1], " \t-·،");
+                    $weight = trim($m[2]);
 
-                    if ($base !== '') {
-                        return [$base, $m[2]];
+                    if ($base !== '' && $weight !== '') {
+                        return [$base, $weight];
                     }
                 }
 
@@ -249,9 +251,11 @@
 .qi-thumb{width:66px;height:66px;object-fit:contain;border-radius:8px;
   border:1px solid var(--border);background:#fff;display:block;margin:0 auto}
 .qi-nothumb{font-size:24px;color:var(--muted)}
-.qi-fac{font-size:9.5px;color:var(--muted);font-weight:700;white-space:nowrap}
+/* «12 قطعة» سطر تحت السعر — dir=rtl جواه بيظبط الترتيب العربي */
+.qi-fac{display:block;font-size:9.5px;color:var(--muted);font-weight:700;
+  white-space:nowrap;margin-top:1px}
 /* اللوجو فوق صغير — كان بياكل الترويسة */
-.qt-head .doc-logo{height:36px}
+.qt-head .doc-logo{height:24px}
 /* ═══ تاجات الخصم — بدل جدول الإجماليات والختم ═══ */
 .qi-tag{display:inline-block;border:2px solid var(--red,#DC2626);color:var(--red,#DC2626);
   background:rgba(220,38,38,.05);border-radius:999px;padding:5px 16px;
