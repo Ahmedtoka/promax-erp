@@ -98,4 +98,5 @@ return [
     'pin' => 'Pin to header',
     'manual_doc' => 'Manual document',
     'quotations' => 'Quotations',
+    'kpi' => 'Commission & KPI',
 ];

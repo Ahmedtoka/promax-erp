@@ -43,7 +43,7 @@ class Access
             'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
-            'erp.batches', 'erp.reports', 'erp.team', 'erp.zones',
+            'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices', 'erp.govs', 'erp.families',
             // الحوافز: التارجتات ولوحة الأداء — شغل مدير القناة (2026-08-06)
@@ -400,6 +400,8 @@ class Access
         'nav.group_reports' => [
             // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
             // (الأعمار وسيركل كيه...) لينكات جواه
+            // العمولات والـKPI (٢٣/٨) — حاسبة الشهر + إعدادات النسب
+            ['erp.kpi', '🎯', 'nav.kpi', 'erp.kpi*', null],
             ['erp.reports.hub', '📑', 'nav.reports', 'erp.reports*', null],
             // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],

@@ -29,7 +29,8 @@
             <div class="s" style="opacity:.85">{{ __('dash.filters_hint') }}</div>
         </div>
         <div class="s" style="opacity:.85;white-space:nowrap">
-            📅 {{ $from }} ← {{ $to }}
+            {{-- dir=ltr — تواريخ لاتينية جوه سطر RTL بتتعكس من غيرها --}}
+            📅 <span dir="ltr">{{ $from }} → {{ $to }}</span>
         </div>
     </div>
     <form method="GET" class="dash-filters">
@@ -158,7 +159,7 @@
         <h3>📈 {{ __('dash.chart_flow') }}
             <span class="side">{{ $daily ? __('dash.by_day') : __('dash.by_month') }}</span></h3>
         @php $maxV = max(1, collect($series)->flatMap(fn ($s) => [$s['sales'], $s['coll']])->max()); @endphp
-        <div class="dash-bars">
+        <div class="dash-bars {{ count($series) > 16 ? 'dense' : '' }}">
             @foreach ($series as $k => $s)
                 <a class="dash-bcol" href="{{ $rpt('sales_docs', $daily ? ['from' => $k, 'to' => $k] : []) }}"
                    title="{{ $k }} — {{ __('dash.k_sales') }}: {{ $fmt($s['sales']) }} · {{ __('dash.k_coll') }}: {{ $fmt($s['coll']) }}">
@@ -421,7 +422,11 @@
 .dash-head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;position:relative}
 .dash-filters{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;position:relative}
 .df{display:flex;flex-direction:column;gap:4px}
-.df.grow{flex:1;min-width:160px}
+/* ⚠️ البوزيشنز (٢٣/٨): السيلكت كان بياخد نص الشاشة والزراير بتطير
+   لسطر لوحدها — مقاسات منضبطة: التواريخ ثابتة، السيلكتات مرنة بحد
+   أقصى، والزراير مزنوقة في آخر الصف بـmargin أوتوماتيك */
+.df input[type=date]{width:150px}
+.df.grow{flex:1 1 190px;min-width:170px;max-width:300px}
 .df label{font-size:10.5px;font-weight:700;opacity:.85}
 .df input,.df select{
   border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);
@@ -429,7 +434,7 @@
 }
 .df select option{color:var(--ink)}
 .df input:focus,.df select:focus{outline:none;border-color:#FFF927;background:rgba(255,255,255,.22)}
-.dfbtns{flex-direction:row;gap:8px}
+.dfbtns{flex-direction:row;gap:8px;margin-inline-start:auto}
 .dash-btn{
   display:inline-flex;align-items:center;gap:6px;border-radius:9px;padding:8px 16px;
   font-size:12.5px;font-weight:800;text-decoration:none;cursor:pointer;font-family:inherit;
@@ -439,16 +444,27 @@
 .dash-btn:hover{background:rgba(255,255,255,.15)}
 .dash-btn.main:hover{background:#fff}
 
-/* كروت KPI — صاعقة خلفية + أيقونة دايرة + أرقام كبيرة + فواصل */
-.dash-kpis .kpi{position:relative;overflow:hidden}
+/* كروت KPI — صاعقة خلفية + أيقونة + أرقام كبيرة + فواصل
+   ⚠️ البوزيشنز (٢٣/٨): الكروت flex عمودي بارتفاع متساوي، والشرح
+   مزنوق تحت بـmargin-top:auto — كان بيتقص عند حافة الكارت */
+.dash-kpis{align-items:stretch}
+.dash-kpis .kpi{
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;gap:6px;min-height:148px;
+}
 .dash-kpis .bolt-mark{position:absolute;inset-inline-end:-18px;bottom:-22px;width:110px;opacity:.05;transform:rotate(-9deg);pointer-events:none;color:#12399B}
 .kic{
-  display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;
+  display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;flex-shrink:0;
   background:linear-gradient(135deg,rgba(18,57,155,.12),rgba(96,45,144,.12));font-size:14px;
 }
 .dash-kpis .lbl{display:flex;align-items:center;gap:7px;font-weight:800}
-.dash-kpis .val.big{font-size:26px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
-.dash-kpis .sub2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.dash-kpis .val.big{font-size:25px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.15}
+.dash-kpis .sub2{
+  display:flex;align-items:center;column-gap:8px;row-gap:4px;flex-wrap:wrap;
+  font-variant-numeric:tabular-nums;
+}
+.dash-kpis .sub2 span{white-space:nowrap}
+.dash-kpis .dash-hint{margin-top:auto;position:relative}
 /* الفاصل الشيك بين الأرقام الصغيرة */
 .ksep{display:inline-block;width:1px;height:12px;background:var(--border);flex-shrink:0;vertical-align:middle;margin:0 2px}
 
@@ -466,7 +482,9 @@
 .dash-bcol .b{width:38%;min-height:2px;border-radius:4px 4px 0 0}
 .dash-bcol .b.sales{background:linear-gradient(180deg,#2470E3,#12399B)}
 .dash-bcol .b.coll{background:linear-gradient(180deg,#22C55E,#16A34A)}
-.dash-bcol i{position:absolute;bottom:-16px;font-size:9px;color:var(--muted);font-style:normal}
+.dash-bcol i{position:absolute;bottom:-16px;font-size:8.5px;color:var(--muted);font-style:normal;left:50%;transform:translateX(-50%)}
+/* فترة طويلة = أعمدة كتير — نخفي لِيبل يوم ورا يوم عشان مايتراكبوش */
+.dash-bars.dense .dash-bcol:nth-child(even) i{display:none}
 .dash-legend{display:flex;gap:16px;margin-top:24px;font-size:11px;color:var(--muted)}
 .dash-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:4px}
 
@@ -477,20 +495,24 @@
 .dash-donut .hole{position:absolute;inset:22%;background:var(--card);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .dash-donut .hole b{font-size:13px;font-variant-numeric:tabular-nums}
 .dash-donut .hole i{font-style:normal;font-size:9.5px;color:var(--muted)}
-.dash-dlegend{flex:1;min-width:150px;display:flex;flex-direction:column;gap:5px}
+/* ⚠️ البوزيشنز (٢٣/٨): max-width — النسب كانت بتطير لآخر الكارت
+   بعيد عن أساميها لأن الليجيند كان واخد العرض الفاضي كله */
+.dash-dlegend{flex:1;min-width:150px;max-width:230px;display:flex;flex-direction:column;gap:5px}
 .dash-dlegend a{display:flex;align-items:center;gap:7px;font-size:11.5px;text-decoration:none;color:var(--ink);padding:3px 6px;border-radius:7px}
 .dash-dlegend a:hover{background:var(--blue-050)}
 .dash-dlegend i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.dash-dlegend span{flex:1}
-.dash-dlegend b{font-size:11px;font-variant-numeric:tabular-nums}
+.dash-dlegend span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-dlegend b{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* البارات الأفقية */
 .dash-hbars{display:flex;flex-direction:column;gap:7px}
 .dash-hrow{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--ink);padding:3px 5px;border-radius:8px}
 .dash-hrow:hover{background:var(--blue-050)}
 .dash-hrow .nm{width:120px;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dash-hrow .tr{flex:1;height:14px;background:var(--card2);border-radius:7px;overflow:hidden}
-.dash-hrow .fill{display:block;height:100%;background:linear-gradient(90deg,var(--royal-blue),#602D90);border-radius:7px}
+/* ⚠️ flex + justify start (٢٣/٨) — الفيلات كانت بترسي على جهات
+   مختلفة في RTL؛ كده كلها بتبدأ من بداية السطر دايماً */
+.dash-hrow .tr{flex:1;height:14px;background:var(--card2);border-radius:7px;overflow:hidden;display:flex;justify-content:flex-start}
+.dash-hrow .fill{display:block;height:100%;background:linear-gradient(90deg,var(--royal-blue),#602D90);border-radius:7px;flex-shrink:0}
 .dash-hrow .fill.alt{background:linear-gradient(90deg,#602D90,#D74297)}
 .dash-hrow b{font-size:11.5px;font-variant-numeric:tabular-nums}
 .fnums{display:flex;align-items:center;gap:5px;min-width:150px;justify-content:flex-end;font-size:11px}
@@ -505,9 +527,9 @@
   background:linear-gradient(135deg,#12399B,#602D90);color:#fff;font-size:11px;font-weight:900;
 }
 .dash-frow .nm{width:210px;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dash-frow .tr{flex:1;height:18px;background:var(--card2);border-radius:9px;overflow:hidden}
-.dash-frow .fill{display:block;height:100%;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
-.dash-frow .fnums{min-width:190px}
+.dash-frow .tr{flex:1;height:18px;background:var(--card2);border-radius:9px;overflow:hidden;display:flex;justify-content:flex-start}
+.dash-frow .fill{display:block;height:100%;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);flex-shrink:0}
+.dash-frow .fnums{min-width:180px;flex-shrink:0}
 
 /* شريط الأعمار المكدس */
 .dash-stack{display:flex;height:26px;border-radius:9px;overflow:hidden;text-decoration:none}

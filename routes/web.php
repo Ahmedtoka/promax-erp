@@ -487,6 +487,17 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ═══ مركز التقارير الجديد (٢١/٨) — ١٤ تقرير + الكوتيشن ═══
         // الأسماء تحت بادئة `erp.reports.` عشان صلاحيات Access
         // الموجودة (`erp.reports`) تغطيها من غير أي تعديل.
+        // ═══ العمولات والـKPI (٢٣/٨) — الحاسبة للأدمن والمدير (قناته)،
+        // والإعدادات أدمن بس ═══
+        Route::get('/kpi', [\App\Http\Controllers\KpiController::class, 'index'])
+            ->middleware('role:admin,manager')->name('kpi');
+        Route::post('/kpi/inputs', [\App\Http\Controllers\KpiController::class, 'saveInputs'])
+            ->middleware('role:admin,manager')->name('kpi.inputs');
+        Route::get('/kpi/setup', [\App\Http\Controllers\KpiController::class, 'setup'])
+            ->middleware('role:admin')->name('kpi.setup');
+        Route::post('/kpi/setup', [\App\Http\Controllers\KpiController::class, 'saveSetup'])
+            ->middleware('role:admin')->name('kpi.setup.save');
+
         Route::get('/reports/hub', [\App\Http\Controllers\ReportController::class, 'index'])
             ->name('reports.hub');
         Route::get('/reports/view/{key}', [\App\Http\Controllers\ReportController::class, 'show'])
