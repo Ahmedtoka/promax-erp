@@ -44,7 +44,10 @@
             </div>
             <div style="flex:1;min-width:200px">
                 <label class="f">💲 {{ __('rpt.qt_list') }}</label>
-                <select name="price_list_id" id="qtList" style="width:100%" onchange="qtListChanged()">
+                {{-- ⚠️ الـid مش «qtList» — ده محجوز لحاوية نتايج المنتقي
+                     المشترك (qt + List). التصادم كان بيخلي المنتقي يرندر
+                     النتايج جوه السيلكت والليستة تطلع فاضية (٢٣/٨). --}}
+                <select name="price_list_id" id="qtPriceList" style="width:100%" onchange="qtListChanged()">
                     @foreach ($lists as $l)
                         <option value="{{ $l->id }}" @selected($l->id === $defaultListId)>
                             {{ $l->name }}@if($l->is_default) ★ @endif
@@ -147,7 +150,7 @@ const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits: 2});
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
     ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-function qtListId() { return Number(document.getElementById('qtList').value || 0); }
+function qtListId() { return Number(document.getElementById('qtPriceList').value || 0); }
 function qtPriceOf(p) { return Number((p.prices || {})[qtListId()] || 0); }
 
 {{-- هوكات المنتقي: الأصناف المتسعّرة بالقايمة المختارة بس --}}
