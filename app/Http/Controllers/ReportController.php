@@ -922,25 +922,40 @@ class ReportController extends Controller
 
     public function quotation(Request $request)
     {
+        // ⚠️ **كل القوايم النشطة مش الافتراضية بس (٢٣/٨)** — الفورم
+        // فيه دروب داون قوايم والافتراضية متعلّمة أوتوماتيك، وتغيير
+        // القايمة بيعيد تسعير الصفوف في المتصفح من prices المحمّلة.
+        $lists = PriceList::where('active', true)->orderBy('id')->get();
         $default = PriceList::default();
 
-        $products = \App\Models\Product::sellable()->orderBy('name')->get()
+        // الأسعار من items المحمّلة — من غير كويري لكل صنف×قايمة
+        $lists->load('items');
+
+        $products = \App\Models\Product::sellable()->orderBy('code')->get()
             ->map(fn ($p) => [
                 'id' => $p->id,
-                'code' => $p->code,
+                'code' => (string) $p->code,
                 'name' => $p->displayName(),
-                'unit' => $p->unitLabel(),
+                'name_ar' => (string) $p->name,
+                'name_en' => (string) $p->name_en,
                 'image' => $p->imageSrc(),
-                'price' => \App\Services\Pricing::listPrice($p, $default),
+                'units' => $p->unitFactors(),
+                'prices' => $lists->mapWithKeys(
+                    fn ($l) => [$l->id => \App\Services\Pricing::listPrice($p, $l)]
+                ),
             ])
-            ->filter(fn ($p) => $p['price'] > 0)
+            // صنف مالوش سعر في **أي** قايمة مالوش مكان في عرض سعر —
+            // والفلترة بالقايمة المختارة بتحصل في هوك المنتقي
+            ->filter(fn ($p) => collect($p['prices'])->contains(fn ($v) => $v > 0))
             ->values();
 
         return view('erp.quotation_form', [
             'products' => $products,
+            'lists' => $lists,
+            'defaultListId' => $default?->id,
             'clients' => Client::visibleTo(Client::query()->where('status', 'active'), $request->user())
                 ->with('group')->orderBy('name')->get(['id', 'name', 'name_en', 'group_id']),
-            'taxPct' => round(\App\Services\Tax::enabled() ? 14.0 : 0.0, 1),
+            'taxPct' => 0.0,   // قرار المالك ٢٣/٨: الضريبة صفر وهو بيكتبها لو فيه
         ]);
     }
 
@@ -998,22 +1013,49 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'client_name' => ['required', 'string', 'max:190'],
+            'price_list_id' => ['nullable', 'exists:price_lists,id'],
             'valid_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
+            'items.*.id' => ['nullable', 'integer', 'exists:products,id'],
             'items.*.name' => ['required', 'string', 'max:190'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:99999'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $lines = collect($data['items'])->map(fn ($i) => [
-            'name' => $i['name'],
-            'qty' => (int) $i['qty'],
-            'price' => round((float) $i['price'], 2),
-            'total' => round((int) $i['qty'] * (float) $i['price'], 2),
-        ]);
+        // ⚠️ **لقطة الوحدات بتتجمّد هنا (٢٣/٨)** — سعر القطعة من الفورم
+        // (قابل للتفاوض)، والعلبة/الكرتونة = السعر × المعامل الحالي
+        // للصنف. بتتخزن JSON على البند فالورقة ماتتغيرش لو المعاملات
+        // اتعدلت بعدين.
+        $productIds = collect($data['items'])->pluck('id')->filter()->unique();
+        $productMap = \App\Models\Product::whereIn('id', $productIds)->get()->keyBy('id');
+
+        $lines = collect($data['items'])->map(function ($i) use ($productMap) {
+            $p = isset($i['id']) ? $productMap->get((int) $i['id']) : null;
+            $price = round((float) $i['price'], 2);
+
+            $units = null;
+
+            if ($p !== null) {
+                $units = collect($p->unitFactors())->map(fn ($factor, $key) => [
+                    'key' => $key,
+                    'factor' => (int) $factor,
+                    'price' => round($price * (int) $factor, 2),
+                ])->values()->all();
+            }
+
+            return [
+                'product_id' => $p?->id,
+                'code' => $p?->code,
+                'name' => $i['name'],
+                'qty' => (int) $i['qty'],
+                'price' => $price,
+                'total' => round((int) $i['qty'] * $price, 2),
+                'units' => $units,
+            ];
+        });
 
         $subtotal = round($lines->sum('total'), 2);
         $discount = round($subtotal * ((float) ($data['discount_pct'] ?? 0)) / 100, 2);
@@ -1021,11 +1063,18 @@ class ReportController extends Controller
         $tax = round($net * ((float) ($data['tax_pct'] ?? 0)) / 100, 2);
 
         $quotation = DB::transaction(function () use ($request, $data, $lines, $subtotal, $discount, $net, $tax) {
+            $list = isset($data['price_list_id'])
+                ? PriceList::find((int) $data['price_list_id'])
+                : null;
+
             $quotation = \App\Models\Quotation::create([
                 'number' => \App\Models\Quotation::nextNumber(),
                 'client_name' => $data['client_name'],
+                'price_list_id' => $list?->id,
+                // ⚠️ مفيش displayName على PriceList — الاسم مباشرة
+                'price_list_name' => $list?->name,
                 'created_by' => $request->user()?->id,
-                'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 14)),
+                'valid_until' => today()->addDays((int) ($data['valid_days'] ?? 30)),
                 'discount_pct' => (float) ($data['discount_pct'] ?? 0),
                 'tax_pct' => (float) ($data['tax_pct'] ?? 0),
                 'subtotal' => $subtotal,
@@ -1057,15 +1106,22 @@ class ReportController extends Controller
             403,
         );
 
+        // الصورة لايف من الصنف (مرساة product_id) — الباقي كله مجمّد
+        $quotation->load('items.product');
+
         return view('erp.quotation_print', [
             'co' => \App\Models\Setting::docHeader(),
             'quotation' => $quotation,
             'number' => $quotation->number,
             'clientName' => $quotation->client_name,
+            'priceListName' => $quotation->price_list_name,
             'validUntil' => $quotation->valid_until,
             'notes' => $quotation->notes,
             'lines' => $quotation->items->map(fn ($i) => [
                 'name' => $i->name,
+                'code' => $i->code,
+                'image' => $i->product?->imageSrc(),
+                'units' => $i->units,
                 'qty' => (int) $i->qty,
                 'price' => (float) $i->price,
                 'total' => (float) $i->total,

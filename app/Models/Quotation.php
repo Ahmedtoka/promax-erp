@@ -18,7 +18,8 @@ class Quotation extends Model
     use HasDocumentNumber;
 
     protected $fillable = [
-        'number', 'client_name', 'client_id', 'created_by', 'valid_until',
+        'number', 'client_name', 'client_id', 'price_list_id', 'price_list_name',
+        'created_by', 'valid_until',
         'discount_pct', 'tax_pct', 'subtotal', 'discount', 'net', 'tax',
         'grand', 'notes',
     ];

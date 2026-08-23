@@ -1,5 +1,16 @@
 @extends('layouts.system')
 
+{{--
+    فورم الكوتيشن (إعادة بناء ٢٣ أغسطس ٢٠٢٦ — ترتيب المالك):
+
+    ١. اسم العميل وجمبه دروب داون قايمة الأسعار (الافتراضية متعلّمة
+       أوتوماتيك) — تغيير القايمة بيعيد تسعير الصفوف النازلة.
+    ٢. الأصناف مخفية ورا خانة البحث — المنتقي المشترك بالتشيك بوكس
+       (نفس نمط تسليم العهدة): علّم علّم علّم ← «إضافة» ← تنزل جدول.
+    ٣. تحت الجدول جمب التوتال: العرض ساري (٣٠ يوم أوتوماتيك) +
+       خصم خاص % (صفر) + ضريبة % (صفر والمالك بيكتبها لو فيه).
+--}}
+
 @section('title', __('rpt.quotation'))
 
 @section('actions')
@@ -11,15 +22,15 @@
 <div class="card">
     <h3>📄 {{ __('rpt.quotation') }} <span class="side">{{ __('rpt.quotation_hint') }}</span></h3>
 
-    {{-- ⚠️ الفورم بيتبعت POST ويفتح صفحة الطباعة في تاب جديد —
-         عشان الفورم يفضل قدامه لو حب يعدّل ويطلع نسخة تانية --}}
-    <form method="POST" action="{{ route('erp.reports.quotation.print') }}" target="_blank"
+    {{-- ⚠️ الفورم بيتبعت POST وبيفتح صفحة العرض المحفوظ --}}
+    <form method="POST" action="{{ route('erp.reports.quotation.print') }}"
           onsubmit="return qtSubmit(this)">
         @csrf
 
-        <div class="searchbar" style="flex-wrap:wrap;align-items:flex-end">
-            <div style="flex:1;min-width:240px">
-                <label class="f">{{ __('rpt.qt_client') }} *</label>
+        {{-- ═══ ١) العميل + قايمة الأسعار ═══ --}}
+        <div class="frow">
+            <div style="flex:2;min-width:240px">
+                <label class="f">{{ __('rpt.qt_client') }} <b class="req-star">*</b></label>
                 <input type="text" name="client_name" id="qtClient" required maxlength="190"
                        style="width:100%" placeholder="{{ __('rpt.qt_client_ph') }}"
                        list="qtClientsDl">
@@ -31,168 +42,220 @@
                     @endforeach
                 </datalist>
             </div>
-            <div>
-                <label class="f">{{ __('rpt.qt_valid') }}</label>
-                <input type="number" name="valid_days" value="14" min="1" max="365" style="width:90px">
-            </div>
-            <div>
-                <label class="f">{{ __('rpt.qt_disc') }} %</label>
-                <input type="number" name="discount_pct" value="0" min="0" max="100" step="0.5" style="width:90px">
-            </div>
-            <div>
-                <label class="f">{{ __('rpt.qt_tax') }} %</label>
-                <input type="number" name="tax_pct" value="{{ $taxPct }}" min="0" max="100" step="0.5" style="width:90px">
+            <div style="flex:1;min-width:200px">
+                <label class="f">💲 {{ __('rpt.qt_list') }}</label>
+                <select name="price_list_id" id="qtList" style="width:100%" onchange="qtListChanged()">
+                    @foreach ($lists as $l)
+                        <option value="{{ $l->id }}" @selected($l->id === $defaultListId)>
+                            {{ $l->name }}@if($l->is_default) ★ @endif
+                        </option>
+                    @endforeach
+                </select>
+                <div class="side" style="font-size:10.5px;margin-top:4px">{{ __('rpt.qt_list_hint') }}</div>
             </div>
         </div>
 
-        <div style="margin-top:10px">
+        {{-- ═══ ٢) الأصناف — بحث بس وكل حاجة مخفية وراه ═══ --}}
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+            <label class="f">{{ __('ops.md_items') }}</label>
+            @include('partials._item_picker', [
+                'id' => 'qt',
+                'catalog' => $products,
+                'onPick' => 'addRow',
+                'filter' => 'qtPickable',
+                'sub' => 'qtPickSub',
+            ])
+        </div>
+
+        {{-- الجدول — نفس نمط تسليم العهدة --}}
+        <div class="tablewrap" style="margin-top:12px;max-height:52vh;overflow-y:auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{{ __('stock.item') }}</th>
+                        <th class="num" style="width:110px">{{ __('common.qty') }}</th>
+                        <th class="num" style="width:130px">{{ __('rpt.qt_price') }}</th>
+                        <th class="num">{{ __('common.total') }}</th>
+                        <th style="width:40px"></th>
+                    </tr>
+                </thead>
+                <tbody id="qtBody">
+                    <tr id="qtEmpty">
+                        <td colspan="5" style="text-align:center;color:var(--muted);padding:26px">
+                            {{ __('field.no_selected_hint') }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {{-- ═══ ٣) السريان والخصم والضريبة — جمب التوتال ═══ --}}
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-top:14px">
+            <div>
+                <label class="f">📅 {{ __('rpt.qt_valid') }}</label>
+                <input type="number" name="valid_days" id="qtDays" value="30" min="1" max="365"
+                       style="width:110px" oninput="qtTotals()">
+                <div class="side" style="font-size:10.5px" id="qtUntil"></div>
+            </div>
+            <div>
+                <label class="f">🏷️ {{ __('rpt.qt_disc') }} %</label>
+                <input type="number" name="discount_pct" id="qtDisc" value="0" min="0" max="100"
+                       step="0.5" style="width:100px" oninput="qtTotals()">
+            </div>
+            <div>
+                <label class="f">🧾 {{ __('rpt.qt_tax') }} %</label>
+                <input type="number" name="tax_pct" id="qtTax" value="{{ $taxPct }}" min="0" max="100"
+                       step="0.5" style="width:100px" oninput="qtTotals()">
+            </div>
+            {{-- التجميعة اللحظية --}}
+            <div id="qtSum" style="margin-inline-start:auto;text-align:end;font-size:12.5px;
+                                   border:1px solid var(--border);border-radius:12px;padding:10px 16px;min-width:230px">
+            </div>
+        </div>
+
+        <div style="margin-top:12px">
             <label class="f">{{ __('rpt.qt_notes') }}</label>
             <textarea name="notes" rows="2" maxlength="1000" style="width:100%"
                       placeholder="{{ __('rpt.qt_notes_ph') }}"></textarea>
         </div>
 
-        {{-- ═══ الأصناف: بحث فوق والمختار بينزل تحتيه ═══ --}}
-        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-            <label class="f">{{ __('ops.md_items') }}</label>
-            <input type="search" id="qtSearch" style="width:100%"
-                   placeholder="{{ __('ops.md_add_item') }}"
-                   onkeydown="if (event.key === 'Enter') event.preventDefault()">
-            <div id="qtProds" class="md-prods"></div>
-        </div>
-
-        <div id="qtRows" class="md-items"></div>
-        <div id="qtEst" class="md-est"></div>
-
-        <button class="btn gold" type="submit" style="margin-top:14px">🖨️ {{ __('rpt.qt_make') }}</button>
+        <button class="btn gold" type="submit" style="margin-top:14px" id="qtBtn" disabled>
+            🖨️ {{ __('rpt.qt_make') }}</button>
     </form>
 </div>
 
 @endsection
 
 @section('scripts')
-@php
-    $jsFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
-@endphp
 <script>
-    const PRODUCTS = {!! json_encode($products, $jsFlags) !!};
-    const T = {
-        add: @js(__('ops.md_add_btn')),
-        qty: @js(__('ops.md_qty')),
-        price: @js(__('rpt.qt_price')),
-        est: @js(__('ops.md_est_total')),
-        noItems: @js(__('ops.md_no_items')),
-    };
+{{-- الكتالوج من المنتقي المشترك — أسعار كل القوايم محمّلة معاه --}}
+const CATALOG = window.PICKER_QT;
+const T = {
+    est: @json(__('ops.md_est_total')),
+    noItems: @json(__('ops.md_no_items')),
+    sub: @json(__('rpt.qt_subtotal')),
+    disc: @json(__('rpt.qt_disc')),
+    tax: @json(__('rpt.qt_tax')),
+    grand: @json(__('rpt.qt_grand')),
+    until: @json(__('rpt.qt_valid_until')),
+    box: @json(__('stock.unit_box')),
+    kase: @json(__('stock.unit_case')),
+};
 
-    let rows = [];
+let rows = [];
 
-    function fmt(n) {
-        return Number(n).toLocaleString('en-US', {maximumFractionDigits: 2});
+const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits: 2});
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+function qtListId() { return Number(document.getElementById('qtList').value || 0); }
+function qtPriceOf(p) { return Number((p.prices || {})[qtListId()] || 0); }
+
+{{-- هوكات المنتقي: الأصناف المتسعّرة بالقايمة المختارة بس --}}
+function qtPickable(p) { return qtPriceOf(p) > 0; }
+function qtPickSub(p) { return fmt(qtPriceOf(p)); }
+
+function addRow(id) {
+    const p = CATALOG.find(x => x.id === id);
+    if (!p) return;
+
+    const ex = rows.find(r => r.id === id);
+    if (ex) { ex.qty++; qtRender(); return; }
+
+    rows.push({id: p.id, code: p.code, name: p.name, image: p.image,
+               units: p.units || {piece: 1}, qty: 1, price: qtPriceOf(p), touched: false});
+    qtRender();
+}
+
+function delRow(i) { rows.splice(i, 1); qtRender(); }
+function setQty(i, v) { rows[i].qty = Math.max(1, parseInt(v || '1', 10)); qtRender(); }
+function setPrice(i, v) { rows[i].price = Math.max(0, parseFloat(v || '0')); rows[i].touched = true; qtRender(); }
+
+{{-- تغيير القايمة بيعيد تسعير الصفوف اللي ماتلمستش بالإيد --}}
+function qtListChanged() {
+    rows.forEach(function (r) {
+        if (r.touched) return;
+        const p = CATALOG.find(x => x.id === r.id);
+        if (p) r.price = qtPriceOf(p);
+    });
+    qtRender();
+    if (typeof qtPickerSearch === 'function'
+        && document.getElementById('qtResults')?.style.display === 'block') {
+        qtPickerSearch();
     }
+}
 
-    function esc(s) {
-        const d = document.createElement('div');
-        d.textContent = s == null ? '' : String(s);
-        return d.innerHTML;
-    }
+function qtRender() {
+    const body = document.getElementById('qtBody');
+    document.getElementById('qtEmpty')?.remove();
 
-    function renderProds() {
-        const q = document.getElementById('qtSearch').value.trim().toLowerCase();
-        const holder = document.getElementById('qtProds');
+    body.innerHTML = rows.map(function (r, i) {
+        {{-- ملحوظة العلبة/الكرتونة تحت الاسم — بيشوف سعرهم وهو بيسعّر --}}
+        let u = [];
+        if (r.units.box) u.push(T.box + ' (' + r.units.box + ') = ' + fmt(r.price * r.units.box));
+        if (r.units['case']) u.push(T.kase + ' (' + r.units['case'] + ') = ' + fmt(r.price * r.units['case']));
 
-        holder.innerHTML = PRODUCTS
-            .filter(p => !q || p.name.toLowerCase().includes(q) || String(p.code).includes(q))
-            .slice(0, 30)
-            .map(function (p) {
-                return '<button type="button" class="md-prod" onclick="addRow(' + p.id + ')">' +
-                    (p.image ? '<img src="' + esc(p.image) + '" loading="lazy" alt="">'
-                             : '<span class="md-noimg">📦</span>') +
-                    '<span class="md-pinfo"><b>' + esc(p.name) + '</b>' +
-                    '<i>' + esc(String(p.code)) + ' · ' + fmt(p.price) + '</i></span>' +
-                    '<span class="md-addbtn">＋ ' + esc(T.add) + '</span></button>';
-            }).join('');
-    }
+        return '<tr>' +
+            '<td><div style="display:flex;gap:10px;align-items:center">' +
+                (r.image
+                    ? '<img src="' + esc(r.image) + '" style="width:52px;height:52px;object-fit:contain;border-radius:9px;border:1px solid var(--border);background:#fff;flex-shrink:0">'
+                    : '<div style="width:52px;height:52px;border-radius:9px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>') +
+                '<div><b>' + esc(r.name) + '</b>' +
+                '<div style="font-size:10.5px;color:var(--muted)">' + esc(r.code) +
+                (u.length ? ' · ' + u.join(' · ') : '') + '</div></div>' +
+            '</div></td>' +
+            '<td class="num"><input type="number" min="1" max="99999" value="' + r.qty + '" style="width:100%" onchange="setQty(' + i + ', this.value)"></td>' +
+            '<td class="num"><input type="number" min="0" step="0.01" value="' + r.price + '" style="width:100%" onchange="setPrice(' + i + ', this.value)"></td>' +
+            '<td class="num"><b dir="ltr">' + fmt(r.qty * r.price) + '</b></td>' +
+            '<td class="num"><button type="button" class="btn sm" onclick="delRow(' + i + ')">✕</button></td>' +
+        '</tr>';
+    }).join('') || '<tr id="qtEmpty"><td colspan="5" style="text-align:center;color:var(--muted);padding:26px">' + esc(T.noItems) + '</td></tr>';
 
-    document.getElementById('qtSearch').addEventListener('input', renderProds);
+    qtTotals();
+}
 
-    function addRow(pid) {
-        const p = PRODUCTS.find(x => x.id === pid);
-        if (!p) return;
+function qtTotals() {
+    const sub = rows.reduce((t, r) => t + r.qty * r.price, 0);
+    const dPct = Math.min(100, Math.max(0, parseFloat(document.getElementById('qtDisc').value || '0')));
+    const tPct = Math.min(100, Math.max(0, parseFloat(document.getElementById('qtTax').value || '0')));
+    const disc = sub * dPct / 100;
+    const net = sub - disc;
+    const tax = net * tPct / 100;
 
-        const ex = rows.find(r => r.id === pid);
-        if (ex) { ex.qty++; renderRows(); return; }
+    let html = '<div>' + esc(T.sub) + ': <b dir="ltr">' + fmt(sub) + '</b></div>';
+    if (disc > 0) html += '<div style="color:var(--red,#DC2626)">' + esc(T.disc) + ' ' + dPct + '%: <b dir="ltr">-' + fmt(disc) + '</b></div>';
+    if (tax > 0) html += '<div>' + esc(T.tax) + ' ' + tPct + '%: <b dir="ltr">+' + fmt(tax) + '</b></div>';
+    html += '<div style="border-top:2px solid var(--royal-blue,#12399B);margin-top:5px;padding-top:5px;' +
+        'font-weight:900;font-size:14px;color:var(--royal-blue,#12399B)">' + esc(T.grand) + ': <b dir="ltr">' + fmt(net + tax) + '</b></div>';
+    document.getElementById('qtSum').innerHTML = html;
 
-        rows.push({id: p.id, name: p.name, image: p.image, qty: 1, price: p.price});
-        renderRows();
-    }
+    {{-- «ساري حتى» بيتحسب قدامه لايف --}}
+    const days = Math.max(1, parseInt(document.getElementById('qtDays').value || '30', 10));
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    document.getElementById('qtUntil').textContent = T.until + ': ' + d.toISOString().slice(0, 10);
 
-    function delRow(i) { rows.splice(i, 1); renderRows(); }
-    function setQty(i, v) { rows[i].qty = Math.max(1, parseInt(v || '1', 10)); renderRows(); }
-    function setPrice(i, v) { rows[i].price = Math.max(0, parseFloat(v || '0')); renderRows(); }
+    document.getElementById('qtBtn').disabled = rows.length === 0;
+}
 
-    function renderRows() {
-        const holder = document.getElementById('qtRows');
+function qtSubmit(form) {
+    if (!rows.length) { alert(T.noItems); return false; }
 
-        holder.innerHTML = rows.map(function (r, i) {
-            return '<div class="md-row">' +
-                (r.image ? '<img src="' + esc(r.image) + '" alt="">'
-                         : '<span class="md-noimg">📦</span>') +
-                '<div class="nm"><b>' + esc(r.name) + '</b></div>' +
-                '<input type="number" min="1" max="99999" value="' + r.qty + '" ' +
-                'onchange="setQty(' + i + ', this.value)" title="' + esc(T.qty) + '">' +
-                // ⚠️ السعر قابل للتعديل — الكوتيشن تفاوض مش فاتورة
-                '<input type="number" min="0" step="0.01" value="' + r.price + '" ' +
-                'onchange="setPrice(' + i + ', this.value)" title="' + esc(T.price) + '" style="width:100px">' +
-                '<b class="tot" dir="ltr">' + fmt(r.qty * r.price) + '</b>' +
-                '<button type="button" class="x" onclick="delRow(' + i + ')">✕</button></div>';
-        }).join('');
+    form.querySelectorAll('.md-h').forEach(e => e.remove());
 
-        const total = rows.reduce((t, r) => t + r.qty * r.price, 0);
-        document.getElementById('qtEst').textContent =
-            rows.length ? T.est.replaceAll(':n', fmt(total)) : '';
-    }
-
-    function qtSubmit(form) {
-        if (!rows.length) { alert(T.noItems); return false; }
-
-        form.querySelectorAll('.md-h').forEach(e => e.remove());
-
-        rows.forEach(function (r, i) {
-            ['name', 'qty', 'price'].forEach(function (k) {
-                const inp = document.createElement('input');
-                inp.type = 'hidden';
-                inp.className = 'md-h';
-                inp.name = 'items[' + i + '][' + k + ']';
-                inp.value = r[k];
-                form.appendChild(inp);
-            });
+    rows.forEach(function (r, i) {
+        [['id', r.id], ['name', r.name], ['qty', r.qty], ['price', r.price]].forEach(function (kv) {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.className = 'md-h';
+            inp.name = 'items[' + i + '][' + kv[0] + ']';
+            inp.value = kv[1];
+            form.appendChild(inp);
         });
+    });
 
-        return true;
-    }
+    return true;
+}
 
-    renderProds();
+qtTotals();
 </script>
-<style>
-.md-prods{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;margin-top:7px}
-.md-prod{display:flex;gap:10px;align-items:center;border:1px solid var(--border);
-  background:var(--card);border-radius:10px;padding:7px 10px;cursor:pointer;
-  font-family:inherit;font-size:12.5px;text-align:start}
-.md-prod:hover{background:var(--blue-050);border-color:var(--royal-blue)}
-.md-prod img,.md-row img{width:42px;height:42px;object-fit:contain;border-radius:8px;
-  background:#fff;border:1px solid var(--border);flex-shrink:0}
-.md-noimg{width:42px;height:42px;display:inline-flex;align-items:center;justify-content:center;
-  font-size:18px;border-radius:8px;background:var(--card2);border:1px solid var(--border);flex-shrink:0}
-.md-pinfo{flex:1;min-width:0;display:flex;flex-direction:column}
-.md-pinfo i{font-style:normal;font-size:10.5px;color:var(--muted)}
-.md-addbtn{color:var(--royal-blue);font-weight:800;font-size:11.5px;white-space:nowrap}
-.md-items{display:flex;flex-direction:column;gap:6px;margin-top:10px}
-.md-row{display:flex;align-items:center;gap:9px;border:1px solid var(--border);
-  border-radius:10px;padding:7px 10px;background:var(--card2)}
-.md-row .nm{flex:1;min-width:0;font-size:12.5px}
-.md-row input[type=number]{width:80px;text-align:center}
-.md-row .tot{font-size:13px;min-width:80px;text-align:end}
-.md-row .x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px}
-.md-row .x:hover{color:var(--red)}
-.md-est{margin-top:10px;font-size:12.5px;font-weight:800;color:var(--royal-blue)}
-</style>
 @endsection
