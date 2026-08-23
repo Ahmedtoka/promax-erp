@@ -7,7 +7,6 @@ use App\Models\Setting;
 use App\Services\Attendance;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -96,12 +95,15 @@ class TzFinalRepair extends Command
             ." · حد الصفوف الـUTC: {$utcEdge}");
         $this->newLine();
 
+        // كل خطوة: [الاسم، SQL التنفيذ، SQL العدّ، الباراميترز] —
+        // العدّ صريح مش مشتق بريجيكس، عشان الـJOIN مايتلخبطش.
         $stmts = [];
 
         // ═══ ١) البانشات التاريخية: at := created_at ═══
+        $w1 = '`created_at` < ? AND `auto` = 0 AND `at` <> `created_at`';
         $stmts[] = ['البانشات التاريخية (يدوي): at من created_at',
-            "UPDATE `attendance_punches` SET `at` = `created_at`
-             WHERE `created_at` < ? AND `auto` = 0 AND `at` <> `created_at`",
+            "UPDATE `attendance_punches` SET `at` = `created_at` WHERE {$w1}",
+            "SELECT COUNT(*) AS n FROM `attendance_punches` WHERE {$w1}",
             [self::CUTOFF]];
 
         // ⚠️ بانش القفل التلقائي وقته الحقيقي آخر ثانية في يوم الشيفت
@@ -110,29 +112,34 @@ class TzFinalRepair extends Command
             "UPDATE `attendance_punches` p JOIN `attendance_days` d ON d.`id` = p.`attendance_day_id`
              SET p.`at` = CONCAT(d.`date`, ' 23:59:59')
              WHERE p.`created_at` < ? AND p.`auto` = 1",
+            'SELECT COUNT(*) AS n FROM `attendance_punches` p WHERE p.`created_at` < ? AND p.`auto` = 1',
             [self::CUTOFF]];
 
         // ═══ ٢) بانشات النهارده الـUTC (من 163): +3س وat منها ═══
         // ⚠️ ترتيب الـSET مقصود — MySQL بيقيّم بالترتيب، فـat بتتحسب
         // من created_at **القديمة** قبل ما نزوّدها هي نفسها.
+        $w2 = '`id` >= ? AND `created_at` <= ?';
         $stmts[] = ['بانشات النهارده الـUTC: +3 ساعات',
-            'UPDATE `attendance_punches`
+            "UPDATE `attendance_punches`
              SET `at` = DATE_ADD(`created_at`, INTERVAL 3 HOUR),
                  `created_at` = DATE_ADD(`created_at`, INTERVAL 3 HOUR),
                  `updated_at` = DATE_ADD(`updated_at`, INTERVAL 3 HOUR)
-             WHERE `id` >= ? AND `created_at` <= ?',
+             WHERE {$w2}",
+            "SELECT COUNT(*) AS n FROM `attendance_punches` WHERE {$w2}",
             [self::FIRST_POST_PUNCH, $utcEdge]];
 
         // ═══ ٣) أعمدة الفخ التانية: القيمة الحقيقية ≈ created_at ═══
         // البعيد عن created_at بأكتر من 30 دقيقة = مداس (10:47 أو 15:55)
+        $w3 = 'ABS(TIMESTAMPDIFF(MINUTE, `happened_at`, `created_at`)) > 30';
         $stmts[] = ['track_events: happened_at المداسة من created_at',
-            'UPDATE `track_events` SET `happened_at` = `created_at`
-             WHERE ABS(TIMESTAMPDIFF(MINUTE, `happened_at`, `created_at`)) > 30',
+            "UPDATE `track_events` SET `happened_at` = `created_at` WHERE {$w3}",
+            "SELECT COUNT(*) AS n FROM `track_events` WHERE {$w3}",
             []];
 
+        $w4 = 'ABS(TIMESTAMPDIFF(MINUTE, `checked_in_at`, `created_at`)) > 30';
         $stmts[] = ['warehouse_visits: checked_in_at المداسة من created_at',
-            'UPDATE `warehouse_visits` SET `checked_in_at` = `created_at`
-             WHERE ABS(TIMESTAMPDIFF(MINUTE, `checked_in_at`, `created_at`)) > 30',
+            "UPDATE `warehouse_visits` SET `checked_in_at` = `created_at` WHERE {$w4}",
+            "SELECT COUNT(*) AS n FROM `warehouse_visits` WHERE {$w4}",
             []];
 
         // ═══ ٤) باقي صفوف النهارده الـUTC: زحزحة بالنطاق ═══
@@ -161,18 +168,23 @@ class TzFinalRepair extends Command
                 continue;
             }
 
+            // ⚠️ النطاق على قطعتين — القطعة [10:47:12 → 11:15:00]
+            // مستثناة عن قصد: فيها الـ121 قيمة اللي أمر النافذة
+            // صلّحها خلاص (زحزحتها تاني = +6 ساعات). التمن: أي صف
+            // اتسجل فعلياً بين 13:47 و14:15 بتوقيت مصر هيفضل معروض
+            // بدري 3 ساعات — أثر تجميلي محدود والشغل كان واقف ساعتها.
+            $wb = "((`{$col->c}` >= ? AND `{$col->c}` < ?) OR (`{$col->c}` > ? AND `{$col->c}` <= ?))";
+            $bind = [self::GAP_END, '2026-08-23 10:47:12', '2026-08-23 11:15:00', $utcEdge];
             $stmts[] = ["نطاق UTC: {$col->t}.{$col->c}",
-                "UPDATE `{$col->t}` SET `{$col->c}` = DATE_ADD(`{$col->c}`, INTERVAL 3 HOUR)
-                 WHERE `{$col->c}` >= ? AND `{$col->c}` <= ?",
-                [self::GAP_END, $utcEdge]];
+                "UPDATE `{$col->t}` SET `{$col->c}` = DATE_ADD(`{$col->c}`, INTERVAL 3 HOUR) WHERE {$wb}",
+                "SELECT COUNT(*) AS n FROM `{$col->t}` WHERE {$wb}",
+                $bind];
         }
 
         // ═══ التنفيذ / المعاينة ═══
         $total = 0;
 
-        foreach ($stmts as [$label, $sql, $bind]) {
-            $countSql = preg_replace('/^\s*UPDATE\s+(`\w+`(?:\s+\w+)?(?:\s+JOIN[^S]+?ON[^S]+?)?)\s+SET\s.+?\sWHERE\s/is',
-                'SELECT COUNT(*) AS n FROM $1 WHERE ', $sql);
+        foreach ($stmts as [$label, $sql, $countSql, $bind]) {
             $n = (int) DB::selectOne($countSql, $bind)->n;
 
             if ($n === 0) {
