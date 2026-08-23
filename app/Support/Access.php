@@ -572,6 +572,15 @@ class Access
             return $decision;
         }
 
+        // ═══ استثناء الرول (٢٣/٨) — بين اليوزر والكود ═══
+        // «المديرين يشوفوا عروض الأسعار» بتتقال مرة واحدة من شاشة
+        // الصلاحيات بدل ما تتكرر على كل مدير.
+        $decision = self::roleOverride($user->role, $routeName);
+
+        if ($decision !== null) {
+            return $decision;
+        }
+
         return self::roleDefault($user->role, $routeName);
     }
 
@@ -588,8 +597,43 @@ class Access
             return null;
         }
 
-        $map = $user->permMap();
+        return self::resolveMap($user->permMap(), $routeName);
+    }
 
+    /**
+     * استثناء الرول للراوت ده — نفس فكرة استثناء اليوزر بالظبط بس
+     * من جدول `role_permissions` (شاشة الصلاحيات → تاب الرولز، ٢٣/٨).
+     * `null` يعني «وراثة من الكود».
+     *
+     * ⚠️ **بيستخدمها كمان `EnsureRole`** — منح شاشة لرول من الشاشة
+     * لازم يعدّي من بوابة `role:` اللي على الراوت، زي منح اليوزر.
+     */
+    public static function roleOverride(string $role, string $routeName): ?bool
+    {
+        if ($role === 'admin') {
+            return null;
+        }
+
+        return self::resolveMap(\App\Models\RolePermission::mapFor($role), $routeName);
+    }
+
+    /** افتراضي الرول **بعد** استثناءات الرول — ده اللي اليوزر بيورثه */
+    public static function roleEffective(string $role, string $routeName): bool
+    {
+        return self::roleOverride($role, $routeName)
+            ?? self::roleDefault($role, $routeName);
+    }
+
+    /**
+     * حل خريطة استثناءات (يوزر أو رول) لراوت — المنطق الواحد المشترك.
+     *
+     * الترتيب (قرار المالك 2026-08-05): إخفاء القسم بيغلب الكل ←
+     * أطول بادئة صفحة مطابقة ← أكشن بيغطي الراوت ← منح القسم كله.
+     *
+     * @param array<string, bool> $map
+     */
+    private static function resolveMap(array $map, string $routeName): ?bool
+    {
         if ($map === []) {
             return null;
         }
@@ -685,6 +729,13 @@ class Access
 
         if (array_key_exists($key, $map)) {
             return $map[$key];
+        }
+
+        // استثناء الرول على الزرار (٢٣/٨) — بعد اليوزر وقبل الافتراضي
+        $roleMap = \App\Models\RolePermission::mapFor($user->role);
+
+        if (array_key_exists($key, $roleMap)) {
+            return $roleMap[$key];
         }
 
         $def = self::ACTIONS[$key] ?? null;

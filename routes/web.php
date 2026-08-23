@@ -289,6 +289,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ===== الصلاحيات وتسكين عملاء المديرين — أدمن بس (2026-08-05) =====
         Route::get('/permissions', [\App\Http\Controllers\PermissionController::class, 'index'])
             ->middleware('role:admin')->name('perms');
+        // ⚠️ المسار الثابت `role/{role}` قبل البارامتري `{user}` —
+        // وإلا لارافيل هتحاول تعمل route-model-binding على كلمة «role»
+        Route::post('/permissions/role/{role}', [\App\Http\Controllers\PermissionController::class, 'saveRole'])
+            ->middleware('role:admin')->name('perms.role.save');
         Route::post('/permissions/{user}', [\App\Http\Controllers\PermissionController::class, 'save'])
             ->middleware('role:admin')->name('perms.save');
         Route::get('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'index'])

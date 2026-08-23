@@ -1049,10 +1049,11 @@ class ReportController extends Controller
     /** صفحة العرض A4 — بتتعاد طباعتها في أي وقت من السجل */
     public function quotationShow(Request $request, \App\Models\Quotation $quotation)
     {
-        // نفس سكوب الليستة — مدير مايفتحش عرض غيره بالـid
+        // نفس سكوب الليستة بالحرف — من غير تكرار منطق الفريق هنا
+        // (السكوب بقى بيسمح للمدير بعروض فريقه — ٢٣/٨)
         abort_unless(
-            ($request->user()?->isAdmin() ?? false)
-                || $quotation->created_by === $request->user()?->id,
+            \App\Models\Quotation::query()->visibleTo($request->user())
+                ->whereKey($quotation->id)->exists(),
             403,
         );
 

@@ -35,6 +35,18 @@ class EnsureRole
             return $next($request);
         }
 
+        // ⚠️ **واستثناء الرول بنفس المنطق (٢٣/٨).** الأدمن لو دّى رول
+        // المديرين شاشة من تاب الرولز، بوابة `role:` على الراوت لازم
+        // تعدّيهم — والمنع الصريح للرول بيقفل حتى لو الراوت سامح.
+        if ($routeName !== null && ! $user->isAdmin()
+            && ($roleOverride = \App\Support\Access::roleOverride($user->role, $routeName)) !== null) {
+            if ($roleOverride === false) {
+                abort(403, __('common.forbidden'));
+            }
+
+            return $next($request);
+        }
+
         if ($roles && ! in_array($user->role, $roles, true) && ! $user->isAdmin()) {
             abort(403, __('common.forbidden'));
         }

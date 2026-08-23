@@ -67,6 +67,16 @@ class Quotation extends Model
             return $query;
         }
 
+        // ⚠️ **المدير بيشوف عروضه وعروض فريقه (٢٣/٨).** السكوب القديم
+        // كان `created_by = هو نفسه بس` — فالمدير كان بيفتح السجل
+        // يلاقيه فاضي (معظم العروض بيطلّعها الأدمن أو فريقه) ويبلّغ
+        // «مش شايف عروض الأسعار». نفس عقيدة الفريق في كل السيستم.
+        if (in_array($user->role, ['manager', 'branch_manager'], true)) {
+            return $query->where(fn ($q) => $q
+                ->where('created_by', $user->id)
+                ->orWhereIn('created_by', User::where('manager_id', $user->id)->select('id')));
+        }
+
         return $query->where('created_by', $user->id);
     }
 }

@@ -1,9 +1,14 @@
 @extends('layouts.system')
 
 {{--
-    شاشة الصلاحيات (2026-08-05): الأدمن بيختار يوزر وبيظبط استثناءاته
-    على تلات مستويات — قسم كامل، صفحة، زرار. «وراثة» يعني الافتراضي
-    بتاع الرول من Access::SCREENS، ومفيش صف بيتكتب في الداتابيز.
+    شاشة الصلاحيات (2026-08-05 / تاب الرولز 2026-08-23):
+
+    • تاب «الرولز»: الأدمن بيظبط رول كامل — «المديرين يشوفوا عروض
+      الأسعار» مرة واحدة وتسري على كل مدير حالي وجاي.
+    • تاب «الموظفين»: استثناء لموظف بعينه — بيغلب استثناء الرول.
+
+    «وراثة» في الرولز = افتراضي الكود، وفي الموظفين = افتراضي الرول
+    بعد استثناءاته. التلات مستويات جوه كل تاب: قسم، صفحة، زرار.
 --}}
 
 @php
@@ -40,25 +45,53 @@
         <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
     @endif
 
-    <form method="GET" class="searchbar">
-        <label class="f" style="margin:0">{{ __('perm.pick_user') }}</label>
-        <select name="user" onchange="this.form.submit()" style="min-width:260px">
-            @foreach ($users as $u2)
-                <option value="{{ $u2->id }}" @selected($user?->id === $u2->id)>
-                    {{ $u2->name }} — {{ $u2->roleLabel() }} @if($u2->code) ({{ $u2->code }}) @endif
-                </option>
-            @endforeach
-        </select>
-    </form>
+    {{-- ═══ الاختيار: رول كامل أو موظف بعينه ═══ --}}
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end">
+        <form method="GET">
+            <label class="f">👥 {{ __('perm.pick_role') }}</label>
+            <select name="role" onchange="this.form.submit()"
+                    style="min-width:240px{{ $role !== null ? ';border-color:var(--blue,#12399B);font-weight:800' : '' }}">
+                <option value="">—</option>
+                @foreach ($roles as $r)
+                    <option value="{{ $r }}" @selected($role === $r)>{{ __('enums.role.'.$r) }}</option>
+                @endforeach
+            </select>
+            <div class="side" style="font-size:10.5px;margin-top:4px">{{ __('perm.role_hint') }}</div>
+        </form>
 
-    @if ($user === null)
-        <div class="alert"><span>ℹ️</span><span>{{ __('perm.no_users') }}</span></div>
+        <form method="GET">
+            <label class="f">🧍 {{ __('perm.pick_user') }}</label>
+            <select name="user" onchange="this.form.submit()"
+                    style="min-width:260px{{ $role === null ? ';border-color:var(--blue,#12399B);font-weight:800' : '' }}">
+                @if ($role !== null)
+                    <option value="">—</option>
+                @endif
+                @foreach ($users as $u2)
+                    <option value="{{ $u2->id }}" @selected($role === null && $user?->id === $u2->id)>
+                        {{ $u2->name }} — {{ $u2->roleLabel() }} @if($u2->code) ({{ $u2->code }}) @endif
+                    </option>
+                @endforeach
+            </select>
+            <div class="side" style="font-size:10.5px;margin-top:4px">{{ __('perm.user_hint') }}</div>
+        </form>
+    </div>
+
+    @if ($role === null && $user === null)
+        <div class="alert" style="margin-top:12px"><span>ℹ️</span><span>{{ __('perm.no_users') }}</span></div>
     @endif
 </div>
 
-@if ($user !== null)
-<form method="POST" action="{{ route('erp.perms.save', $user) }}">
+@if ($role !== null || $user !== null)
+<form method="POST"
+      action="{{ $role !== null ? route('erp.perms.role.save', $role) : route('erp.perms.save', $user) }}">
     @csrf
+
+    @if ($role !== null)
+        <div class="alert" style="margin-bottom:12px">
+            <span>👥</span>
+            <span><b>{{ __('enums.role.'.$role) }}</b> — {{ __('perm.editing_role') }}</span>
+        </div>
+    @endif
 
     @foreach ($tree as $group => $g)
         <div class="card">
@@ -100,7 +133,8 @@
     @endforeach
 
     <div class="card" style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
-        <div style="font-size:12px;color:var(--muted)">{{ __('perm.save_hint') }}</div>
+        <div style="font-size:12px;color:var(--muted)">
+            {{ $role !== null ? __('perm.save_role_hint') : __('perm.save_hint') }}</div>
         <button class="btn gold" type="submit">💾 {{ __('perm.save') }}</button>
     </div>
 </form>

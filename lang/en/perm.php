@@ -4,8 +4,14 @@ return [
 
     // ---------- Permissions screen ----------
     'permissions' => 'Permissions',
-    'permissions_hint' => 'The role sets the defaults - here you set exceptions: a whole section, a page, or a button',
+    'permissions_hint' => 'Configure a whole role at once, or an exception for one employee - at three levels: section, page, button',
     'pick_user' => 'Employee',
+    'pick_role' => 'Configure a whole role',
+    'role_hint' => 'Applies to every employee with this role - current and future',
+    'user_hint' => 'An exception for one employee - overrides the role setting',
+    'editing_role' => 'You are editing the whole role - any per-employee exception still wins.',
+    'saved_role' => 'Permissions for the ":role" role saved - applied to all its employees immediately.',
+    'save_role_hint' => 'Saving records role exceptions only - "inherit" falls back to the code default.',
     'no_users' => 'No web employees other than admins yet.',
     'group_hint' => 'Hiding a section hides all of its pages regardless of their settings',
     'screen_or_action' => 'Screen / Button',
