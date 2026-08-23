@@ -94,8 +94,12 @@ class ErpController extends Controller
                 ->where('manager_id', $mgrId)->pluck('id')->push($mgrId)->all();
         }
 
-        $invQ = fn () => Invoice::whereBetween('created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds));
+        // ⚠️ **الأعمدة مؤهّلة بـ`invoices.`** (إصلاح ٢٣/٨): كويري القنوات
+        // بيعمل جوين مع clients وchannels وكلهم فيهم created_at —
+        // من غير التأهيل MySQL بترمي «ambiguous» 500. التأهيل هنا في
+        // الـclosure المشترك بيغطي كل الاستخدامات مرة واحدة.
+        $invQ = fn () => Invoice::whereBetween('invoices.created_at', [$a, $b])
+            ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds));
 
         // ═══ KPIs الفترة ═══
         $inv = $invQ()->selectRaw("COUNT(*) n, COALESCE(SUM(grand_total),0) g,
