@@ -14,7 +14,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // ═══ توقيت مصر مفروض من الكود (حادثة التايم زون ٢٣/٨/٢٠٢٦) ═══
         //
+        // ⚠️ **مش رفاهية ولا تكرار.** اللايف فضل شغال UTC رغم إن
+        // APP_TIMEZONE=Africa/Cairo في الـ.env والكاش اتمسح — لأن
+        // على السيرفر فيه config/app.php بقيمة 'UTC' مكتوبة صريحة
+        // بتغلب الـ.env (النسخة المحلية مالهاش الملف ده أصلاً).
+        // النتيجة كانت: كل ساعة معروضة غلط بـ3 ساعات، وأوامر تصليح
+        // بنت فوق بعضها. السطرين دول بيقفلوا الباب ده للأبد مهما
+        // كانت ملفات الكونفيج على أي سيرفر.
+        date_default_timezone_set('Africa/Cairo');
+        config(['app.timezone' => 'Africa/Cairo']);
     }
 
     /**
