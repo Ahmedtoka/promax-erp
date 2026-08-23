@@ -29,28 +29,38 @@
     {!! file_exists(public_path('brand/bolt-watermark.svg'))
         ? '<img src="'.asset('brand/bolt-watermark.svg').'" class="bolt-mark lg" alt="">' : '' !!}
 
-    {{-- ═══ الترويسة — اللوجو والتدرج الرسمي ═══ --}}
-    <div class="doc-head" style="background:var(--brand-gradient, linear-gradient(135deg,#12399B,#602D90));color:#fff;padding:20px 26px;position:relative;z-index:1">
+    {{-- ═══ الترويسة — أبيض عشان اللوجو والكلام أسود (قرار المالك ٢٣/٨):
+         اللوجو والشركة يمين · «عرض سعر» كبيرة في النص · التاريخ
+         والوقت وكود العرض شمال — وخط التدرج الرسمي رفيع تحتها ═══ --}}
+    <div class="doc-head qt-head" style="background:#fff;color:var(--ink,#0A0A0F);padding:20px 26px;position:relative;z-index:1">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:16px">
-                <img src="{{ asset('img/promax-logo.png') }}" alt="PROMAX" class="doc-logo">
+            <div style="display:flex;align-items:center;gap:14px">
+                {{-- اللوجو الأزرق — الأبيض مايبانش على خلفية بيضا --}}
+                <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
+                    ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
+                     alt="PROMAX" class="doc-logo">
                 <div>
-                    <div style="font-size:17px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
+                    <div style="font-size:15px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
                     @if ($co['tax_id'])
-                        <div style="font-size:10.5px;opacity:.85">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
+                        <div style="font-size:10.5px;color:var(--muted)">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
                     @endif
                     @if ($co['phone'])
-                        <div style="font-size:10.5px;opacity:.85">{{ $co['phone'] }}@if ($co['email']) · {{ $co['email'] }}@endif</div>
+                        <div style="font-size:10.5px;color:var(--muted)">{{ $co['phone'] }}@if ($co['email']) · {{ $co['email'] }}@endif</div>
                     @endif
                 </div>
             </div>
-            <div style="text-align:center">
-                <div style="font-size:12px;opacity:.85;letter-spacing:1.5px">{{ __('rpt.qt_doc_title') }}</div>
-                <div style="font-size:25px;font-weight:900" dir="ltr">{{ $number }}</div>
-                <div style="font-size:11px;opacity:.85">{{ ($quotation->created_at ?? today())->format('Y-m-d') }}</div>
+            <div style="text-align:center;flex:1">
+                <div style="font-size:30px;font-weight:900;letter-spacing:.5px">{{ __('rpt.qt_doc_title') }}</div>
+            </div>
+            <div style="text-align:end">
+                <div style="font-size:16px;font-weight:900;color:var(--royal-blue,#12399B)" dir="ltr">{{ $number }}</div>
+                <div style="font-size:11.5px;color:var(--muted)" dir="ltr">
+                    {{ ($quotation->created_at ?? now())->format('Y-m-d H:i') }}</div>
             </div>
         </div>
     </div>
+    {{-- خط البراند الرفيع — لمسة الهوية من غير ما ياكل من اللوجو --}}
+    <div style="height:4px;background:var(--brand-gradient, linear-gradient(135deg,#12399B,#602D90));position:relative;z-index:1"></div>
 
     <div style="padding:20px 26px;position:relative;z-index:1">
         {{-- ═══ لمين + القايمة + الصلاحية ═══ --}}
@@ -89,19 +99,40 @@
             };
             $hasBox = $lines->contains(fn ($l) => $unitPrice($l, 'box') !== null);
             $hasCase = $lines->contains(fn ($l) => $unitPrice($l, 'case') !== null);
+
+            // ⚠️ الخصم بيبان على مستوى السعر نفسه (قرار المالك ٢٣/٨):
+            // السعر الأصلي بخط خفيف وسعر الخصم تحته — مش رقم في التجميعة بس
+            $dp = $discount > 0 ? (1 - $discountPct / 100) : 1;
+
+            // خلية سعر: عادية، أو مشطوبة وتحتها سعر الخصم
+            $priceCell = function (?float $v, ?int $factor = null) use ($discount, $dp) {
+                if ($v === null) {
+                    return '—';
+                }
+
+                $fac = $factor && $factor > 1
+                    ? ' <span class="qi-fac">×'.$factor.'</span>' : '';
+
+                if ($discount <= 0) {
+                    return '<b>'.number_format($v, 2).'</b>'.$fac;
+                }
+
+                return '<s class="qi-old">'.number_format($v, 2).'</s>'
+                    .'<span class="qi-newp">'.number_format($v * $dp, 2).'</span>'.$fac;
+            };
         @endphp
+        {{-- ⚠️ من غير كمية ولا إجمالي (قرار المالك ٢٣/٨) — ده عرض
+             أسعار مش أوردر، والمساحة للأصناف وأسعار وحداتها --}}
         <table class="qi-table">
             <thead>
             <tr>
                 <th style="width:26px">#</th>
                 <th style="width:56px"></th>
-                <th style="width:70px">{{ __('common.code') }}</th>
+                <th style="width:80px">{{ __('common.code') }}</th>
                 <th style="text-align:start">{{ __('rpt.c_product') }}</th>
-                <th>{{ __('stock.unit_piece') }}</th>
-                @if ($hasBox)<th>{{ __('stock.unit_box') }}</th>@endif
-                @if ($hasCase)<th>{{ __('stock.unit_case') }}</th>@endif
-                <th>{{ __('rpt.k_qty') }}</th>
-                <th>{{ __('common.total') }}</th>
+                <th style="width:110px">{{ __('stock.unit_piece') }}</th>
+                @if ($hasBox)<th style="width:110px">{{ __('stock.unit_box') }}</th>@endif
+                @if ($hasCase)<th style="width:110px">{{ __('stock.unit_case') }}</th>@endif
             </tr>
             </thead>
             <tbody>
@@ -117,19 +148,15 @@
                     </td>
                     <td dir="ltr" style="font-weight:700">{{ $l['code'] ?? '—' }}</td>
                     <td style="text-align:start;font-weight:800">{{ $l['name'] }}</td>
-                    <td dir="ltr" style="font-weight:700">{{ number_format($l['price'], 2) }}</td>
+                    <td dir="ltr">{!! $priceCell((float) $l['price']) !!}</td>
                     @if ($hasBox)
                         @php $ub = $unitPrice($l, 'box'); @endphp
-                        <td dir="ltr">@if ($ub)<b>{{ number_format($ub['price'], 2) }}</b>
-                            <span class="qi-fac">×{{ $ub['factor'] }}</span>@else — @endif</td>
+                        <td dir="ltr">{!! $priceCell($ub ? (float) $ub['price'] : null, $ub['factor'] ?? null) !!}</td>
                     @endif
                     @if ($hasCase)
                         @php $uc = $unitPrice($l, 'case'); @endphp
-                        <td dir="ltr">@if ($uc)<b>{{ number_format($uc['price'], 2) }}</b>
-                            <span class="qi-fac">×{{ $uc['factor'] }}</span>@else — @endif</td>
+                        <td dir="ltr">{!! $priceCell($uc ? (float) $uc['price'] : null, $uc['factor'] ?? null) !!}</td>
                     @endif
-                    <td dir="ltr">{{ number_format($l['qty']) }}</td>
-                    <td dir="ltr" style="font-weight:800">{{ number_format($l['total'], 2) }}</td>
                 </tr>
             @endforeach
             </tbody>
@@ -228,6 +255,10 @@
   border:1px solid var(--border);background:#fff;display:block;margin:0 auto}
 .qi-nothumb{font-size:20px;color:var(--muted)}
 .qi-fac{font-size:9.5px;color:var(--muted);font-weight:700}
+/* الخصم على مستوى السعر: الأصلي مشطوب خفيف وسعر الخصم تحته */
+.qi-old{display:block;color:var(--muted);font-size:10px;font-weight:600;
+  text-decoration:line-through;text-decoration-thickness:1px;opacity:.75}
+.qi-newp{display:block;font-weight:900;color:var(--royal-blue,#12399B);font-size:12.5px}
 /* ═══ ختم الخصم المايل ═══ */
 .qi-stamp{position:absolute;inset-inline-start:8%;top:6px;transform:rotate(-10deg);
   border:3px solid var(--red,#DC2626);color:var(--red,#DC2626);border-radius:10px;
