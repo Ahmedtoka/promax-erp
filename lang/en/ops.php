@@ -394,6 +394,14 @@ return [
     'reassign_has_returns' => 'This invoice has a linked return - unlink or review the return first.',
     'invoice_reassigned' => 'Invoice :number moved from ":from" to ":to" - ledgers and balances updated.',
 
+    // ═══ Reassign sales order to another client (2026-08-24) ═══
+    'po_reassign' => 'Move to another client',
+    'po_reassign_hint' => 'The order will move from ":name" to the branch you pick - items, prices and rep stay as they are, and the free-text address resets to the new branch card. No ledger entries exist yet.',
+    'po_reassign_confirm' => 'Move order :number to another branch?',
+    'po_reassign_locked' => 'The order was delivered or cancelled - ledger entries exist, fix with a return or settlement instead.',
+    'po_reassigned' => 'Order :number moved from ":from" to ":to".',
+    'po_reassigned_evt' => 'Sales order :number reassigned',
+
     // === Redate invoice (Aug 19, 2026) ===
     'redate_invoice' => 'Change invoice date',
     'redate_go' => 'Change date',

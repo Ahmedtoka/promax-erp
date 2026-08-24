@@ -76,6 +76,13 @@
             ✏️ {{ __('ops.po_edit') }}
         </a>
     @endif
+    {{-- ═══ تحويل لعميل تاني (٢٤/٨) — قبل التسليم بس: مفيش قيود لسه ═══ --}}
+    @if (! in_array($po->status, ['delivered', 'cancelled'], true)
+        && in_array(auth()->user()?->role, ['admin', 'manager'], true))
+        <button type="button" class="btn" onclick="openDlg('dlgReassignPo')">
+            🔁 {{ __('ops.po_reassign') }}
+        </button>
+    @endif
     {{-- ═══ إلغاء الأمر (٢١/٨) — للأوامر اللي لسه ماتسلمتش ═══ --}}
     @if (! in_array($po->status, ['delivered', 'cancelled'], true))
         <button type="button" class="btn red" onclick="openDlg('dlgCancelPo')">
@@ -261,6 +268,41 @@
     @php
         $poHanded = $po->pickOrder !== null && $po->pickOrder->status === 'handed';
     @endphp
+    {{-- ═══ تحويل الأمر لعميل تاني (٢٤/٨) ═══ --}}
+    <dialog id="dlgReassignPo">
+        <form class="dlg" method="POST" action="{{ route('ops.pos.reassign', $po) }}"
+              onsubmit="return confirm(@js(__('ops.po_reassign_confirm', ['number' => $po->number])))">
+            @csrf
+            <h4>🔁 {{ __('ops.po_reassign') }} — {{ $po->number }}</h4>
+            <div style="font-size:11.5px;color:var(--muted);line-height:1.8;margin-bottom:10px">
+                {{ __('ops.po_reassign_hint', ['name' => $po->client?->displayName() ?? '—']) }}
+            </div>
+            <label class="f">{{ __('ops.branch_client') }}</label>
+            {{-- بحث بيفلتر الأوبشنز — القايمة بتبقى طويلة --}}
+            <input type="text" id="poReasSearch" autocomplete="off"
+                   placeholder="🔍 {{ __('ops.po_search_client') }}"
+                   style="width:100%;margin-bottom:6px" oninput="poReasFilter()">
+            <select name="client_id" id="poReasSel" required size="8" style="width:100%">
+                @foreach ($reassignClients as $c)
+                    <option value="{{ $c->id }}">{{ $c->fullName() }}@if($c->code) ({{ $c->code }})@endif</option>
+                @endforeach
+            </select>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+                <button class="btn" type="button" onclick="closeDlg('dlgReassignPo')">{{ __('common.cancel') }}</button>
+                <button class="btn gold" type="submit">{{ __('ops.reassign_go') }}</button>
+            </div>
+        </form>
+    </dialog>
+    <script>
+        // فلترة قايمة عملاء التحويل بالاسم/الكود — من غير إعادة تحميل
+        function poReasFilter() {
+            const q = (document.getElementById('poReasSearch').value || '').trim().toLowerCase();
+            document.querySelectorAll('#poReasSel option').forEach(function (o) {
+                o.hidden = q !== '' && !o.textContent.toLowerCase().includes(q);
+            });
+        }
+    </script>
+
     <dialog id="dlgCancelPo">
         <form class="dlg" method="POST" action="{{ route('ops.pos.cancel', $po) }}">
             @csrf

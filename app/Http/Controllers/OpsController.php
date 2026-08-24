@@ -1529,7 +1529,60 @@ class OpsController extends Controller
             // الأمر المتولّد من طلب ريفيل — لينك راجع للطلب الأصلي
             'replenishment' => \App\Models\ReplenishmentRequest::where('purchase_order_id', $purchaseOrder->id)->first(),
             'editable' => $this->poEditable($purchaseOrder),
+            // مودال «تحويل لعميل تاني» (٢٤/٨) — بسكوب المدير
+            'reassignClients' => Client::visibleTo(Client::query()->where('status', 'active'))
+                ->where('id', '!=', $purchaseOrder->client_id)
+                ->with('group')->orderBy('name')
+                ->get(['id', 'name', 'name_en', 'code', 'group_id']),
         ]);
+    }
+
+    /**
+     * ═══ تحويل أمر توريد لعميل تاني (٢٤ أغسطس ٢٠٢٦) ═══
+     *
+     * طلب المالك: «عملت الأمر غلط على فرع تاني — عاوز أغير الفرع».
+     * نفس فكرة تحويل الفاتورة بس أبسط: قبل التسليم **مفيش أي قيود**
+     * على كشف الحساب (القيد بيتسجل وقت التسليم) — فالتحويل مجرد
+     * تغيير العميل. بعد التسليم ممنوع: القيود اتسجلت على العميل
+     * القديم، والعلاج ساعتها مرتجع/تسوية مش تحويل صامت.
+     *
+     * العنوان الحر بيتفضى — كان بيوصف مكان الفرع الغلط، والفرع
+     * الجديد عنوانه من كارت العميل نفسه.
+     */
+    public function reassignPo(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+        ]);
+
+        if (in_array($purchaseOrder->status, ['delivered', 'cancelled'], true)) {
+            return back()->withErrors(['client_id' => __('ops.po_reassign_locked')]);
+        }
+
+        $to = Client::findOrFail((int) $data['client_id']);
+        $from = $purchaseOrder->client;
+
+        if ($to->id === $from?->id) {
+            return back()->withErrors(['client_id' => __('ops.reassign_same')]);
+        }
+
+        // ⚠️ سكوب المدير — مايحولش لعميل مش بتاعه حتى لو عرف الـid
+        Scope::assertClient($request->user(), $to);
+
+        $purchaseOrder->update(['client_id' => $to->id, 'address' => null]);
+
+        TrackEvent::log(
+            $request->user(),
+            'po_reassign',
+            __('ops.po_reassigned_evt', ['number' => $purchaseOrder->number]),
+            \Illuminate\Support\Str::limit(($from?->displayName() ?? '—').' ← '.$to->displayName(), 190),
+        );
+
+        return back()->with('ok', __('ops.po_reassigned', [
+            'number' => $purchaseOrder->number,
+            'from' => $from?->displayName() ?? '—',
+            'to' => $to->displayName(),
+        ]));
     }
 
     public function storePurchaseOrder(Request $request)

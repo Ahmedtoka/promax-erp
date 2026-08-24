@@ -799,6 +799,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // أو تفضل عهدة المندوب يبيع منها. سبب إجباري.
         Route::post('/pos/{purchaseOrder}/cancel', [OpsController::class, 'cancelPo'])
             ->name('pos.cancel');
+        // تحويل الأمر لعميل تاني (٢٤/٨) — قبل التسليم بس (مفيش قيود لسه)
+        Route::post('/pos/{purchaseOrder}/reassign', [OpsController::class, 'reassignPo'])
+            ->middleware('role:admin,manager')->name('pos.reassign');
 
         // ═══ أوامر توريد الكي أكاونت (2026-08-04) ═══
         // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن
