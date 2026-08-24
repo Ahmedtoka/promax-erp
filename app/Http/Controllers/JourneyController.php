@@ -547,71 +547,283 @@ class JourneyController extends Controller
 
     // ═══════════════════════ تخصيص المناطق والعملاء ═══════════════════════
 
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * تخصيص العملاء والمناطق — الويزارد (إعادة بناء ٢٤ أغسطس ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * موكاب المالك: «مندوب واحد · خطوة واحدة · مفيش حفظ من غير ما
+     * تشوف الأثر». ٤ خطوات: اختار المندوب ← حدّد مناطقه (شجرة
+     * محافظات بتشيك) ← راجع العملاء (فلاتر وتعارضات) ← الملخّص
+     * والحفظ. وجنبها: حمولة الفريق + صحة التغطية — عشان المدير
+     * والأدمن يعرفوا في أي لحظة «مين معاه إيه وإيه متغطي وإيه لأ».
+     *
+     * الداتا كلها بتتبعت JSON للمتصفح والخطوات جافاسكربت خالص —
+     * الحفظ POST واحد (assignments.apply) بيكتب rep_id + zone_user
+     * وبينده Coverage.
+     */
     public function assignments(Request $request)
     {
-        $reps = User::fieldVisibleTo(Branch::scope(User::with(['zone', 'zones'])))
-            ->whereIn('role', User::FIELD_WORK_ROLES)
-            ->where('active', true)
+        $viewer = $request->user();
+
+        // ═══ تابات المديرين — الأدمن الكل والمدير كارته هو بس ═══
+        $managers = Branch::scope(User::where('role', 'manager')->where('active', true))
+            ->when($viewer?->role === 'manager', fn ($q) => $q->whereKey($viewer->id))
             ->orderBy('name')
             ->get();
 
-        $rep = $request->filled('rep')
-            ? $reps->firstWhere('id', (int) $request->input('rep'))
-            : $reps->first();
-
-        // ⚠️ `withCount` مش `with` — عدّ عملاء كل زون بالتحميل الكامل
-        // بيجيب آلاف الصفوف عشان يعرض رقم.
-        $zones = Branch::scope(Zone::withCount(['clients' => fn ($q) => $q->where('status', 'active')]))
-            ->where('active', true)
-            ->orderBy('code')
-            ->get();
-
-        // ═══ قايمة موحّدة: كل عميل الفاعل شايفه ═══
-        // (طلب المالك ١٠/٨): «تخصيص العملاء صعب — عاوز أدوس على العميل
-        // يتحوّل للمندوب على طول». بدل كارتين (عملاء المندوب + اليتامى)
-        // بقى جدول واحد فيه **كل** العملاء ومعاهم مندوبهم الحالي وزرار
-        // تخصيص/شيل لكل صف، وبلوك تحديد جماعي بينقل المحدد لمرة واحدة.
-        //
-        // ⚠️ `visibleTo` (سكوب المدير) **مع** `Branch::scope` (سكوب الفرع)
-        // — الاتنين مطلوبين مع بعض، بالظبط زي حارس `Scope::canClient`:
-        // `visibleTo` لوحدها بتعدّي مدير فرع على عميل فرع تاني.
-        // ⚠️ `rep` محمّلة عشان عمود «المندوب الحالي» — من غيرها كويري
-        // لكل صف. و`group` عشان `fullName()` بيبدأ باسم السلسلة.
-        $only = (string) $request->input('only', '');
-
-        $clients = Branch::scope(Client::visibleTo(Client::with(['zone', 'group', 'rep', 'manager']), $request->user()))
+        $mgrCounts = Client::whereIn('manager_id', $managers->pluck('id'))
             ->where('status', 'active')
-            ->when($request->filled('zone'), fn ($q) => $q->where('zone_id', $request->input('zone')))
-            ->when($only === 'orphans', fn ($q) => $q->whereNull('rep_id'))
-            ->when($only === 'mine' && $rep, fn ($q) => $q->where('rep_id', $rep->id))
-            // ⚠️ البحث في السيرفر مش المتصفح — القايمة مقصوصة على 500،
-            // والعميل بعد الحد مش هيظهر بأي فلترة في المتصفح.
-            ->when($request->filled('q'), function ($q) use ($request) {
-                $s = $request->string('q')->trim()->value();
-                // البحث باسم السلسلة كمان — الاسم المعروض بيبدأ بيها
-                $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
-                    ->orWhere('name_en', 'like', "%$s%")
-                    ->orWhere('code', 'like', "%$s%")
-                    ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")));
-            })
-            // ⚠️ اليتامى الأول — دول اللي بيضيعوا، والمالك عايزهم فوق.
-            // `rep_id IS NULL` بترجع 1 لليتيم فالـDESC بيطلّعهم لفوق.
-            ->orderByRaw('rep_id IS NULL DESC')
+            ->selectRaw('manager_id, COUNT(*) as n')
+            ->groupBy('manager_id')
+            ->pluck('n', 'manager_id');
+
+        $manager = ($request->filled('manager')
+                ? $managers->firstWhere('id', (int) $request->input('manager'))
+                : null)
+            ?? $managers->sortByDesc(fn ($m) => (int) ($mgrCounts[$m->id] ?? 0))->first();
+
+        if ($manager === null) {
+            return view('ops.assignments', [
+                'managers' => collect(), 'mgrCounts' => collect(), 'manager' => null,
+                'team' => [], 'zoneRows' => [], 'clientRows' => [], 'repZones' => [],
+                'health' => ['orphans' => 0, 'unmarked' => 0, 'empty' => 0, 'nozone' => 0],
+                'totals' => ['team' => 0, 'clients' => 0, 'zones' => 0, 'loaded' => 0],
+            ]);
+        }
+
+        // ═══ الفريق الميداني بأعداده ═══
+        $team = User::where('manager_id', $manager->id)
+            ->whereIn('role', User::FIELD_ROLES)
+            ->where('active', true)
             ->orderBy('name')
-            ->limit(500)
             ->get();
+
+        $teamIds = $team->pluck('id');
+
+        $repClientCounts = Client::where('status', 'active')
+            ->whereIn('rep_id', $teamIds)
+            ->selectRaw('rep_id, COUNT(*) as n')
+            ->groupBy('rep_id')
+            ->pluck('n', 'rep_id');
+
+        // ⚠️ «زيارة» في الكارت = بنود خط السير النشطة — مش زيارات فعلية
+        $repVisitCounts = JourneyPlan::whereIn('user_id', $teamIds)
+            ->where('active', true)
+            ->selectRaw('user_id, COUNT(*) as n')
+            ->groupBy('user_id')
+            ->pluck('n', 'user_id');
+
+        $zoneUserRows = DB::table('zone_user')->whereIn('user_id', $teamIds)
+            ->get(['user_id', 'zone_id']);
+
+        // خريطة مناطق كل مندوب — التشيك بوكسات بتبدأ منها
+        $repZones = $zoneUserRows->groupBy('user_id')
+            ->map(fn ($g) => $g->pluck('zone_id')->map(fn ($z) => (int) $z)->values()->all())
+            ->all();
+
+        // ═══ عملاء بول المدير ═══
+        // ⚠️ السقف 900 مش صامت — الفيو بيقارن بالعدد الحقيقي وبيقول
+        // «+N مش معروضين» (فخ الـslice الصامتة — ٢٢/٨)
+        $poolTotal = (int) ($mgrCounts[$manager->id] ?? 0);
+
+        $clients = Client::where('manager_id', $manager->id)
+            ->where('status', 'active')
+            ->with(['zone', 'group', 'rep'])
+            ->orderBy('name')
+            ->limit(900)
+            ->get();
+
+        $clientRows = $clients->map(fn ($c) => [
+            'id' => $c->id,
+            'name' => $c->fullName(),
+            'en' => (string) $c->name_en,
+            'zone_id' => $c->zone_id ? (int) $c->zone_id : null,
+            'zone' => $c->zone?->displayName() ?? '',
+            'rep_id' => $c->rep_id ? (int) $c->rep_id : null,
+            'rep' => $c->rep?->name ?? '',
+        ])->values()->all();
+
+        // ═══ شجرة المناطق: مناطق البول + المتعلّمة للفريق ═══
+        $zoneIds = $clients->pluck('zone_id')->filter()
+            ->merge($zoneUserRows->pluck('zone_id'))
+            ->unique()->values();
+
+        $zones = Zone::whereIn('id', $zoneIds)->orderBy('name')->get();
+
+        $zoneClientCounts = $clients->whereNotNull('zone_id')->groupBy('zone_id');
+
+        $zoneRows = $zones->map(function (Zone $z) use ($zoneClientCounts, $zoneUserRows, $team) {
+            $in = $zoneClientCounts->get($z->id, collect());
+            $markedBy = $zoneUserRows->where('zone_id', $z->id)->pluck('user_id')
+                ->map(fn ($u) => (int) $u)->values();
+
+            return [
+                'id' => (int) $z->id,
+                'name' => $z->displayName(),
+                'gov' => Governorates::label($z->governorate),
+                'active' => (bool) $z->active,
+                'clients' => $in->count(),
+                'orphans' => $in->whereNull('rep_id')->count(),
+                'marked_by' => $markedBy->all(),
+                'marked_names' => $team->whereIn('id', $markedBy)->pluck('name')->values()->all(),
+            ];
+        })->values()->all();
+
+        // ═══ صحة التغطية — نفس قواعد فاحص الحلقات ═══
+        $health = [
+            'orphans' => $clients->whereNull('rep_id')->count(),
+            // مسؤول عن العميل بس منطقته مش متعلّمة له — اختفاء صامت
+            'unmarked' => $clients->filter(fn ($c) => $c->rep_id && $c->zone_id
+                && ! in_array((int) $c->zone_id, $repZones[$c->rep_id] ?? [], true))->count(),
+            'empty' => $team->filter(fn ($r) => (int) ($repClientCounts[$r->id] ?? 0) === 0)->count(),
+            'nozone' => $clients->whereNull('zone_id')->count(),
+        ];
 
         return view('ops.assignments', [
-            'reps' => $reps,
-            'rep' => $rep,
-            'zones' => $zones,
-            'clients' => $clients,
-            'orphanTotal' => Branch::scope(Client::visibleTo(Client::query(), $request->user()))
-                ->whereNull('rep_id')->where('status', 'active')->count(),
-            'filters' => $request->only(['zone', 'q', 'only']),
-            'pools' => $this->managerPools($request->user()),
+            'managers' => $managers,
+            'mgrCounts' => $mgrCounts,
+            'manager' => $manager,
+            'team' => $team->map(fn (User $r) => [
+                'id' => (int) $r->id,
+                'name' => $r->name,
+                'label' => $r->roleLabel(),
+                'clients' => (int) ($repClientCounts[$r->id] ?? 0),
+                'zones' => count($repZones[$r->id] ?? []),
+                'visits' => (int) ($repVisitCounts[$r->id] ?? 0),
+            ])->values()->all(),
+            'zoneRows' => $zoneRows,
+            'clientRows' => $clientRows,
+            'repZones' => $repZones,
+            'health' => $health,
+            'totals' => [
+                'team' => $team->count(),
+                'clients' => $poolTotal,
+                'zones' => count($zoneRows),
+                'loaded' => count($clientRows),
+            ],
         ]);
+    }
+
+    /**
+     * ═══ حفظ الويزارد (٢٤/٨) — POST واحد للمندوب المختار ═══
+     *
+     * • مناطق المندوب بتتساوى بالمتعلّم بالظبط (`sync`) — الشاشة دي
+     *   هي مصدر الحقيقة لتوزيع المناطق، والشيل هنا قرار صريح
+     *   بيتعرض في الملخّص قبل الحفظ.
+     * • العملاء المتعلّم عليهم بيتحوّل مسؤولهم (`rep_id`) للمندوب —
+     *   **جوه بول نفس المدير بس**، مفيش نقل بين فرق المديرين.
+     * • `Coverage::sync` لكل عميل اتنقل — التسكين بيجرّ التغطية.
+     */
+    public function applyAssignments(Request $request)
+    {
+        $data = $request->validate([
+            'rep_id' => ['required', 'exists:users,id'],
+            'zones' => ['array'],
+            'zones.*' => ['integer', 'exists:zones,id'],
+            'clients' => ['array'],
+            'clients.*' => ['integer', 'exists:clients,id'],
+        ]);
+
+        $rep = User::findOrFail((int) $data['rep_id']);
+
+        // نفس حارس التسكين القديم — الرول والنشاط والفريق
+        Scope::assertRep($request->user(), $rep);
+
+        $zoneIds = collect($data['zones'] ?? [])->map(fn ($z) => (int) $z)->unique()->values();
+        $moved = 0;
+
+        DB::transaction(function () use ($rep, $data, $zoneIds, &$moved) {
+            $rep->zones()->sync($zoneIds->all());
+
+            // المناطق المتعلّمة الموقوفة بتتفعّل — سلسلة الظهور
+            Zone::whereIn('id', $zoneIds)->where('active', false)->update(['active' => true]);
+
+            foreach (Client::whereIn('id', $data['clients'] ?? [])->get() as $c) {
+                // ⚠️ مفيش نقل بين فرق المديرين — قاعدة الموكاب نفسها
+                if ((int) $c->manager_id !== (int) $rep->manager_id) {
+                    continue;
+                }
+
+                $c->update(['rep_id' => $rep->id]);
+                \App\Services\Coverage::sync($c->fresh());
+                $moved++;
+            }
+        });
+
+        return back()->with('ok', __('assign.saved', [
+            'name' => $rep->name,
+            'clients' => $moved,
+            'zones' => $zoneIds->count(),
+        ]));
+    }
+
+    /**
+     * ═══ «رشّح مندوب لكلٍ حسب زونه» (٢٤/٨) ═══
+     *
+     * كل عميل من غير مسؤول وله منطقة: بيتسكّن على المندوب اللي
+     * منطقته متعلّمة له — ولو أكتر من واحد، الأقل حمولة. اللي
+     * منطقته مش متعلّمة لحد (أو من غير منطقة) بيتساب زي ما هو
+     * والرسالة بتقول عددهم — مفيش توزيع عشوائي.
+     */
+    public function autoAssignReps(Request $request)
+    {
+        $viewer = $request->user();
+
+        $manager = Branch::scope(User::where('role', 'manager')->where('active', true))
+            ->when($viewer?->role === 'manager', fn ($q) => $q->whereKey($viewer->id))
+            ->findOrFail((int) $request->input('manager_id'));
+
+        $team = User::where('manager_id', $manager->id)
+            ->whereIn('role', User::FIELD_ROLES)
+            ->where('active', true)
+            ->get();
+
+        $zoneMap = DB::table('zone_user')->whereIn('user_id', $team->pluck('id'))
+            ->get(['user_id', 'zone_id'])
+            ->groupBy('zone_id')
+            ->map(fn ($g) => $g->pluck('user_id')->map(fn ($u) => (int) $u)->all());
+
+        $loads = Client::where('status', 'active')
+            ->whereIn('rep_id', $team->pluck('id'))
+            ->selectRaw('rep_id, COUNT(*) as n')
+            ->groupBy('rep_id')
+            ->pluck('n', 'rep_id')
+            ->map(fn ($n) => (int) $n)
+            ->all();
+
+        $orphans = Client::where('manager_id', $manager->id)
+            ->where('status', 'active')
+            ->whereNull('rep_id')
+            ->get();
+
+        $assigned = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($orphans, $zoneMap, &$loads, &$assigned, &$skipped) {
+            foreach ($orphans as $c) {
+                $candidates = $c->zone_id ? ($zoneMap[$c->zone_id] ?? []) : [];
+
+                if ($candidates === []) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                // الأقل حمولة بياخد — التوزيع يفضل متوازن
+                $best = collect($candidates)->sortBy(fn ($id) => $loads[$id] ?? 0)->first();
+
+                $c->update(['rep_id' => $best]);
+                \App\Services\Coverage::sync($c->fresh());
+                $loads[$best] = ($loads[$best] ?? 0) + 1;
+                $assigned++;
+            }
+        });
+
+        return back()->with('ok', __('assign.auto_done', [
+            'assigned' => $assigned,
+            'skipped' => $skipped,
+        ]));
     }
 
     /**

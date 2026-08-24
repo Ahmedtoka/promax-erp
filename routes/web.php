@@ -936,6 +936,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('journeys');
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])
                 ->name('assignments');
+            // ═══ ويزارد التخصيص الجديد (٢٤/٨): حفظ واحد + الترشيح الأوتوماتيك ═══
+            Route::post('/assignments/apply', [\App\Http\Controllers\JourneyController::class, 'applyAssignments'])
+                ->name('assignments.apply');
+            Route::post('/assignments/auto', [\App\Http\Controllers\JourneyController::class, 'autoAssignReps'])
+                ->name('assignments.auto');
 
             // ═══ الخريطة الجغرافية وخط السير (١٣ أغسطس ٢٠٢٦) ═══
             // نفس رولز «تسكين العملاء» و«خطط السير» بالظبط — الشاشة

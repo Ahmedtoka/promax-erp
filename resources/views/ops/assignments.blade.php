@@ -1,519 +1,562 @@
 @extends('layouts.system')
 
-@section('title', __('journey.assignments'))
+{{--
+    تخصيص العملاء والمناطق — الويزارد (إعادة بناء ٢٤ أغسطس ٢٠٢٦
+    من موكاب المالك): مندوب واحد · خطوة واحدة · مفيش حفظ من غير
+    ما تشوف الأثر.
 
-@php
-    $fmt = fn ($n) => number_format((float) $n);
-    $myZoneIds = $rep?->zones->pluck('id')->all() ?? [];
-@endphp
+    ٤ خطوات جافاسكربت خالص على داتا محمّلة مرة واحدة:
+      ١) اختار المندوب (كروت بالحمولة الحقيقية)
+      ٢) حدّد مناطقه (شجرة محافظات بتشيك + أثر لايف)
+      ٣) راجع العملاء (فلاتر: بدون مندوب/داخل مناطقه/مسؤول عنهم/تعارض)
+      ٤) الملخّص والحفظ (قبل/بعد + اللي هيتنفّذ) ← POST واحد
+
+    وجنبها حمولة الفريق وصحة التغطية — «مين معاه إيه» في نظرة.
+--}}
+
+@section('title', __('assign.title'))
 
 @section('actions')
-    <a class="btn" href="{{ route('ops.journeys') }}">🗺️ {{ __('journey.page') }}</a>
-    <a class="btn" href="{{ route('ops.live') }}">📡 {{ __('journey.live') }}</a>
+    <a class="btn" href="{{ route('ops.journeys') }}">📘 {{ __('assign.journeys') }}</a>
+    <a class="btn" href="{{ route('ops.live') }}">🖥️ {{ __('assign.live') }}</a>
 @endsection
 
 @section('content')
 
-{{-- ═══ سامري فوق (٢٢/٨ — «شغل من حديد») — الأرقام اللي بتحسم
-     القرار قبل ما تنزل للجداول، وكل بوكس بيوديك لمكانه --}}
-<div class="kpis">
-    <a class="kpi dash-link" href="{{ route('ops.assignments') }}">
-        <div class="lbl">👥 {{ __('journey.k_visible') }}</div>
-        <div class="val">{{ $fmt($clients->count()) }}</div>
-        <div class="sub2">{{ __('journey.k_visible_hint') }}</div>
-    </a>
-    <a class="kpi dash-link" href="{{ route('ops.assignments', ['only' => 'orphans']) }}"
-       @if ($orphanTotal > 0) style="border-color:var(--orange)" @endif>
-        <div class="lbl">⚠️ {{ __('journey.no_rep') }}</div>
-        <div class="val {{ $orphanTotal > 0 ? 'mid' : 'pos' }}">{{ $fmt($orphanTotal) }}</div>
-        <div class="sub2">{{ $orphanTotal > 0 ? __('journey.orphans_hint') : __('journey.no_orphans') }}</div>
-    </a>
-    @if ($rep !== null)
-        <a class="kpi dash-link" href="{{ route('ops.assignments', ['rep' => $rep->id, 'only' => 'mine']) }}">
-            <div class="lbl">🧑‍💼 {{ $rep->displayName() }}</div>
-            <div class="val pos">{{ $fmt($clients->where('rep_id', $rep->id)->count()) }}</div>
-            <div class="sub2">{{ __('journey.k_his_clients') }}</div>
+@if ($manager === null)
+    <div class="card"><div class="alert"><span>ℹ️</span><span>{{ __('assign.no_managers') }}</span></div></div>
+@else
+
+<div style="margin-bottom:4px;color:var(--muted);font-size:11.5px">{{ __('assign.subtitle') }}</div>
+
+{{-- ═══ الشريط العلوي: تابات المديرين + إجماليات الفريق ═══ --}}
+<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+    <b style="font-size:12.5px">{{ __('assign.manager') }}</b>
+    @foreach ($managers as $m)
+        <a class="btn sm {{ $m->id === $manager->id ? 'gold' : '' }}"
+           href="{{ route('ops.assignments', ['manager' => $m->id]) }}">
+            {{ $m->name }}
+            <span class="badge {{ $m->id === $manager->id ? 'b-blue' : 'b-gray' }}"
+                  style="margin-inline-start:6px">{{ number_format((int) ($mgrCounts[$m->id] ?? 0)) }}</span>
         </a>
-        <div class="kpi">
-            <div class="lbl">📍 {{ __('journey.my_zones') }}</div>
-            <div class="val">{{ $fmt(count($myZoneIds)) }}</div>
-            <div class="sub2">{{ __('journey.k_zones_hint') }}</div>
-        </div>
-    @endif
+    @endforeach
+    <span style="margin-inline-start:auto;font-size:12px;color:var(--muted)">
+        {{ __('assign.team_now') }}
+        <b style="color:var(--ink)">{{ __('assign.n_reps', ['n' => $totals['team']]) }}</b> ·
+        <b style="color:var(--ink)">{{ __('assign.n_clients', ['n' => number_format($totals['clients'])]) }}</b> ·
+        <b style="color:var(--ink)">{{ __('assign.n_zones', ['n' => $totals['zones']]) }}</b>
+    </span>
 </div>
 
-<div class="card">
-    <h3>👥 {{ __('journey.assignments') }} <span class="side">{{ __('journey.assignments_sub') }}</span></h3>
-
-    @if ($rep === null)
-        <div class="alert warn">{{ __('journey.no_reps') }}</div>
-    @else
-        {{-- ⚠️ فورم بحث واحد GET بيحمل المندوب + الزون + الفلتر + النص.
-             تغيير أي واحدة بيبعت الفورم وبيحافظ على الباقي. --}}
-        <form method="GET" action="{{ route('ops.assignments') }}" class="searchbar">
-            <div>
-                <label class="f">{{ __('journey.rep') }}</label>
-                <select name="rep" onchange="this.form.submit()">
-                    @foreach ($reps as $r)
-                        <option value="{{ $r->id }}" @selected($rep->id === $r->id)>
-                            {{ $r->displayName() }} — {{ $r->roleLabel() }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="f">{{ __('client.zone') }}</label>
-                @include('partials._zone_select', [
-                    'zones' => $zones,
-                    'name' => 'zone',
-                    'selected' => $filters['zone'] ?? null,
-                    'placeholder' => __('common.all'),
-                    'attrs' => 'onchange="this.form.submit()"',
-                ])
-            </div>
-            <div>
-                <label class="f">{{ __('journey.filter') }}</label>
-                <select name="only" onchange="this.form.submit()">
-                    <option value="" @selected(($filters['only'] ?? '') === '')>{{ __('journey.show_all') }}</option>
-                    <option value="orphans" @selected(($filters['only'] ?? '') === 'orphans')>{{ __('journey.only_orphans') }}</option>
-                    <option value="mine" @selected(($filters['only'] ?? '') === 'mine')>{{ __('journey.only_mine') }}</option>
-                </select>
-            </div>
-            <div>
-                <label class="f">{{ __('common.search') }}</label>
-                {{-- ⚠️ سيرفر-سايد مش متصفح — القايمة مقصوصة على 500 صف،
-                     فالفلترة في المتصفح بتدوّر في المقصوص بس. --}}
-                <input type="search" name="q" value="{{ $filters['q'] ?? '' }}"
-                       placeholder="{{ __('common.search') }}…">
-            </div>
+{{-- ═══ بانر «من غير مندوب» ═══ --}}
+@if ($health['orphans'] > 0)
+    <div class="card" style="border:1.5px solid #F2C063;background:#FFF9EC;display:flex;
+                             flex-wrap:wrap;gap:12px;align-items:center">
+        <span style="font-size:22px">⚠️</span>
+        <div style="flex:1;min-width:220px">
+            <div style="font-weight:900;font-size:15px">{{ __('assign.orphans_title', ['n' => $health['orphans']]) }}</div>
+            <div style="font-size:11.5px;color:var(--muted)">{{ __('assign.orphans_sub') }}</div>
+        </div>
+        <form method="POST" action="{{ route('ops.assignments.auto') }}"
+              onsubmit="return confirm(@js(__('assign.auto_confirm')))">
+            @csrf
+            <input type="hidden" name="manager_id" value="{{ $manager->id }}">
+            <button class="btn gold" type="submit">⚡ {{ __('assign.auto_btn') }}</button>
         </form>
-    @endif
-</div>
+        <button class="btn" type="button" onclick="asgOpenOrphans()">{{ __('assign.open_list') }}</button>
+    </div>
+@endif
 
-{{-- ═══════════ بول الفريق — كارت لكل مدير (١١ أغسطس مساءً) ═══════════
-     الفصل الأساسي بقى على مستوى مدير القناة: عملاؤه بول مشترك لكل
-     مناديبه. كله معلّم بالقاعدة — مفيش حاجة تتحفظ من هنا. --}}
-<div class="card">
-    <h3>🤝 {{ __('journey.pools_title') }}</h3>
-    <div class="alert info">{{ __('journey.pools_hint') }}</div>
+@if ($totals['team'] === 0)
+    <div class="card"><div class="alert"><span>ℹ️</span><span>{{ __('assign.no_team') }}</span></div></div>
+@else
 
-    @if (empty($pools['cards']))
-        <div class="alert warn">{{ __('journey.pools_none') }}</div>
-    @else
-        {{-- سطر الجمع: مجاميع الفرق + بدون فريق = الإجمالي (١١/٨ مساءً) --}}
-        <div class="pool-sum">
-            @foreach ($pools['cards'] as $p)
-                <span class="badge b-blue">{{ $p['manager']->displayName() }} · {{ $fmt($p['client_count']) }}</span>
-                <span style="color:var(--muted)">+</span>
-            @endforeach
-            <span class="badge {{ $pools['orphans'] > 0 ? 'b-orange' : 'b-gray' }}">
-                {{ __('journey.pool_orphans') }} · {{ $fmt($pools['orphans']) }}
-            </span>
-            <span style="color:var(--muted)">=</span>
-            <span class="badge b-green"><b>{{ $fmt($pools['total']) }}</b> {{ __('journey.pool_clients') }}</span>
-        </div>
-        @if ($pools['orphans'] > 0)
-            <div class="alert warn" style="margin-top:8px">
-                {{ __('journey.pool_orphans_hint', ['count' => $fmt($pools['orphans'])]) }}
+<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+
+    {{-- ═══════════ الويزارد ═══════════ --}}
+    <div style="flex:1;min-width:600px">
+        <div class="card">
+            {{-- شريط الخطوات --}}
+            <div class="asg-steps">
+                @foreach ([1 => 'step1', 2 => 'step2', 3 => 'step3', 4 => 'step4'] as $n => $key)
+                    <button type="button" class="asg-step" id="asgTab{{ $n }}" onclick="goStep({{ $n }})">
+                        <span class="num">{{ $n }}</span>
+                        <span class="tt">
+                            <b>{{ __('assign.'.$key) }}</b>
+                            <i id="asgSub{{ $n }}"></i>
+                        </span>
+                    </button>
+                @endforeach
             </div>
-        @endif
 
-        {{-- ═══ تاب لكل مدير (طلب المالك ١١/٨ مساءً): «حاجات عمرو كلها
-             وبعدين نشوف محمد» — بوكسات بأرقام واضحة بدل الكروت الجنب بعض --}}
-        <div class="pool-tabs">
-            @foreach ($pools['cards'] as $i => $p)
-                <button type="button" class="pool-tab {{ $i === 0 ? 'on' : '' }}"
-                        onclick="poolTab({{ $i }}, this)">
-                    {{ $p['manager']->displayName() }}
-                    <span class="badge b-green">{{ $fmt($p['client_count']) }}</span>
-                    @if ($p['no_rep'] > 0)
-                        <span class="badge b-orange">{{ $fmt($p['no_rep']) }}</span>
-                    @endif
-                </button>
-            @endforeach
-        </div>
+            {{-- ═══ خطوة ١ — كروت المناديب ═══ --}}
+            <div id="asgStep1" class="asg-pane">
+                <div class="asg-hint">{{ __('assign.step1_hint') }}</div>
+                <div class="asg-grid" id="asgReps"></div>
+            </div>
 
-        @foreach ($pools['cards'] as $i => $p)
-            <div class="pool-pane" id="poolPane{{ $i }}" @if ($i !== 0) style="display:none" @endif>
-                <div class="pool-head" style="margin-bottom:10px">
-                    @include('partials._avatar', ['u' => $p['manager'], 'size' => 44, 'ring' => '#602D90'])
-                    <div>
-                        <b style="font-size:15px">{{ $p['manager']->displayName() }}</b>
-                        <div class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }} · {{ __('journey.pool_shared') }}</div>
-                    </div>
-                    <div style="margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap">
-                        <span class="badge b-blue">👥 {{ $p['reps']->count() }} {{ __('journey.pool_reps') }}</span>
-                        <span class="badge b-green">🏪 {{ $fmt($p['client_count']) }} {{ __('journey.pool_clients') }}</span>
-                        <span class="badge b-gold">📍 {{ count($p['zones']) }} {{ __('journey.pool_zones') }}</span>
+            {{-- ═══ خطوة ٢ — شجرة المناطق + الأثر ═══ --}}
+            <div id="asgStep2" class="asg-pane" style="display:none">
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">
+                    <b id="asgZoneHead" style="font-size:13px">📍</b>
+                    <span class="asg-hint" style="margin:0;flex:1">{{ __('assign.step2_hint') }}</span>
+                    <button class="btn sm" type="button" onclick="asgClearZones()">{{ __('assign.clear_all') }}</button>
+                </div>
+                <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                    <div id="asgTree" style="flex:1;min-width:320px;max-height:56vh;overflow-y:auto;
+                                             border:1px solid var(--border);border-radius:12px"></div>
+                    <div style="width:230px;flex-shrink:0">
+                        <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+                            <b style="font-size:12px">{{ __('assign.effect_title') }}</b>
+                            <div class="asg-eff"><b id="asgEffZones" style="color:var(--royal-blue,#12399B)">0</b><span>{{ __('assign.effect_zones') }}</span></div>
+                            <div class="asg-eff"><b id="asgEffClients" style="color:#602D90">0</b><span>{{ __('assign.effect_clients') }}</span></div>
+                            <div class="asg-eff"><b id="asgEffOrphans" style="color:#EA8C1C">0</b><span>{{ __('assign.effect_orphans') }}</span></div>
+                            <div class="asg-eff"><b id="asgEffOverlap">0</b><span>{{ __('assign.effect_overlap') }}</span></div>
+                            <div style="font-size:10.5px;color:var(--muted);line-height:1.7;margin-top:8px">{{ __('assign.effect_note') }}</div>
+                        </div>
+                        <button class="btn gold" type="button" style="width:100%;margin-top:10px"
+                                onclick="goStep(3)">{{ __('assign.go_review') }}</button>
                     </div>
                 </div>
-
-                {{-- بوكسات المناديب — تحت كل اسم عدد عملاءه الأساسيين --}}
-                <div class="pool-boxes">
-                    @foreach ($p['reps'] as $tr)
-                        <div class="pool-box">
-                            @include('partials._avatar', ['u' => $tr['user'], 'size' => 34])
-                            <div style="min-width:0">
-                                <b class="s" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $tr['user']->displayName() }}</b>
-                                <span class="s" style="color:var(--muted)">{{ $tr['user']->roleLabel() }}</span>
-                            </div>
-                            <div class="pool-box-n">{{ $fmt($tr['clients']) }}</div>
-                        </div>
-                    @endforeach
-
-                    {{-- المدير نفسه لو ليه عملاء أساسية (بيبيع بنفسه) --}}
-                    @if ($p['manager_own'] > 0)
-                        <div class="pool-box" style="border-color:#602D90">
-                            @include('partials._avatar', ['u' => $p['manager'], 'size' => 34])
-                            <div style="min-width:0">
-                                <b class="s" style="display:block">{{ $p['manager']->displayName() }}</b>
-                                <span class="s" style="color:var(--muted)">{{ $p['manager']->roleLabel() }}</span>
-                            </div>
-                            <div class="pool-box-n">{{ $fmt($p['manager_own']) }}</div>
-                        </div>
-                    @endif
-
-                    {{-- تاج «بدون مندوب» — نقطة بداية التسكين؛ بيوديك
-                         للقايمة تحت متفلترة عليهم --}}
-                    <a class="pool-box pool-box-warn" href="{{ route('ops.assignments', ['only' => 'orphans']) }}">
-                        <span style="font-size:22px">⚠️</span>
-                        <div>
-                            <b class="s" style="display:block">{{ __('journey.no_rep') }}</b>
-                            <span class="s" style="color:var(--muted)">{{ __('journey.no_rep_hint') }}</span>
-                        </div>
-                        <div class="pool-box-n" style="color:#B45309">{{ $fmt($p['no_rep']) }}</div>
-                    </a>
-                </div>
-
-                {{-- بوكسات المناطق بأرقامها --}}
-                @if ($p['zones'] !== [])
-                    <div class="pool-zones" style="margin-top:10px">
-                        @foreach ($p['zones'] as $pz)
-                            <span class="badge b-green">✓ {{ $pz['name'] }} · {{ $fmt($pz['count']) }}</span>
-                        @endforeach
-                    </div>
-                @endif
             </div>
-        @endforeach
 
-        <script>
-        function poolTab(i, btn) {
-            document.querySelectorAll('.pool-pane').forEach(function (p, j) {
-                p.style.display = j === i ? '' : 'none';
-            });
-            document.querySelectorAll('.pool-tab').forEach(function (t) {
-                t.classList.toggle('on', t === btn);
-            });
-        }
-        </script>
-    @endif
-</div>
+            {{-- ═══ خطوة ٣ — مراجعة العملاء ═══ --}}
+            <div id="asgStep3" class="asg-pane" style="display:none">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+                    <span id="asgChips"></span>
+                    <input type="search" id="asgQ" placeholder="🔍 {{ __('assign.search_ph') }}"
+                           style="flex:1;min-width:220px" oninput="asgRenderClients()">
+                </div>
+                <div class="tablewrap" style="max-height:52vh;overflow-y:auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:34px"></th>
+                                <th style="text-align:start">{{ __('assign.c_client') }}</th>
+                                <th>{{ __('assign.c_zone') }}</th>
+                                <th>{{ __('assign.c_resp') }}</th>
+                                <th>{{ __('assign.c_after') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="asgCliBody"></tbody>
+                    </table>
+                </div>
+                <div id="asgCap" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px">
+                    <button class="btn sm" type="button" onclick="asgMarkVisible()">{{ __('assign.mark_visible') }}</button>
+                    <span id="asgMarked" style="font-size:12px;color:var(--muted)"></span>
+                    <button class="btn gold" type="button" style="margin-inline-start:auto"
+                            onclick="goStep(4)">{{ __('assign.go_summary') }}</button>
+                </div>
+            </div>
 
-@if ($rep !== null)
-
-{{-- ═══════════ كل العملاء — المسؤول الأساسي بضغطة ═══════════ --}}
-<div class="card">
-    <h3>👥 {{ __('journey.all_clients') }} <span class="side">{{ $clients->count() }}</span></h3>
-
-    {{-- التسكين الفردي اتنزّل درجة: بيحدد المسؤول الأساسي بس --}}
-    <div class="alert info">{{ __('journey.primary_hint') }}</div>
-
-    <div class="alert">{{ __('journey.flow_hint') }}</div>
-
-    {{-- ⚠️ فورم النقل الجماعي منفصل — الشيك بوكسات في الجدول بتنتمي له
-         عبر `form="bulkForm"` عشان مايبقاش فيه فورم جوه فورم. مفيش
-         `zones_form` هنا فمناطق المندوب مابتتلمسش خالص. --}}
-    <form id="bulkForm" method="POST" action="{{ route('ops.assignments.assign') }}">
-        @csrf
-        <input type="hidden" name="user_id" value="{{ $rep->id }}">
-    </form>
-
-    {{-- شريط النقل الجماعي — لاصق فوق الجدول، والزرار بعدّاد حي
-         وبيتقفل لما مفيش تحديد (٢٢/٨) --}}
-    <div class="asg-bulkbar">
-        <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:7px">
-            <input type="checkbox" onchange="toggleAll(this)"> {{ __('journey.select_all') }}
-        </label>
-        <button class="btn gold" form="bulkForm" type="submit" id="bulkBtn" disabled>
-            {{ __('journey.move_selected', ['rep' => $rep->displayName()]) }}
-            <span class="badge b-gold" id="pickCount">0</span>
-        </button>
-        <span class="s" style="color:var(--muted)">{{ __('journey.row_click_hint') }}</span>
+            {{-- ═══ خطوة ٤ — الملخّص والحفظ ═══ --}}
+            <div id="asgStep4" class="asg-pane" style="display:none">
+                <b id="asgSumHead" style="font-size:13.5px">🧾</b>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0">
+                    <div class="asg-ba"><div class="l">{{ __('assign.before') }}</div>
+                        <div class="r"><span>{{ __('assign.sum_clients') }}</span><b id="asgB1">0</b></div>
+                        <div class="r"><span>{{ __('assign.sum_zones') }}</span><b id="asgB2">0</b></div>
+                    </div>
+                    <div style="align-self:center;font-size:20px;color:var(--muted)">←</div>
+                    <div class="asg-ba on"><div class="l">{{ __('assign.after') }}</div>
+                        <div class="r"><span>{{ __('assign.sum_clients') }}</span><b id="asgA1">0</b></div>
+                        <div class="r"><span>{{ __('assign.sum_zones') }}</span><b id="asgA2">0</b></div>
+                    </div>
+                </div>
+                <div style="border:1px solid var(--border);border-radius:12px;padding:12px 15px">
+                    <b style="font-size:12px">{{ __('assign.will_run') }}</b>
+                    <div id="asgRunList" style="font-size:12px;line-height:2.1;margin-top:6px"></div>
+                </div>
+                <form id="asgForm" method="POST" action="{{ route('ops.assignments.apply') }}"
+                      onsubmit="return asgSubmit()">
+                    @csrf
+                    <input type="hidden" name="rep_id" id="asgRepId">
+                    <div id="asgHid"></div>
+                    <button class="btn gold" type="submit" id="asgSaveBtn"
+                            style="width:100%;margin-top:14px;font-size:14px;padding:12px">
+                        💾 {{ __('assign.save') }}</button>
+                </form>
+            </div>
+        </div>
     </div>
 
-    <div class="tablewrap asg-wrap" style="max-height:540px;overflow-y:auto">
-        <table>
-            <thead>
-            <tr>
-                <th style="width:34px"></th>
-                <th style="text-align:start">{{ __('common.name') }}</th>
-                <th>{{ __('client.zone') }}</th>
-                <th>{{ __('journey.current_rep') }}</th>
-                <th></th>
-            </tr>
-            </thead>
-            <tbody>
-            @forelse ($clients as $c)
-                <tr @class(['orphan-row' => $c->rep_id === null, 'asg-row' => true])
-                    onclick="rowPick(event, this)">
-                    <td><input type="checkbox" class="pick" form="bulkForm" name="client_ids[]" value="{{ $c->id }}"
-                               onchange="pickChanged()"></td>
-                    {{-- الاسم الكامل: السلسلة الأول وبعدين الفرع — زي صفحة العملاء --}}
-                    <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a></td>
-                    <td class="s">{{ $c->zone?->displayName() ?: '—' }}</td>
-                    <td class="s">
-                        @if ($c->rep_id === null && $c->manager_id !== null)
-                            {{-- في بول فريق — كل مناديب المدير شايفينه، مفيش «مسؤول أساسي» بس --}}
-                            <span class="badge b-purple">🤝 {{ __('journey.in_pool_of', ['name' => $c->manager?->displayName() ?? '—']) }}</span>
-                        @elseif ($c->rep_id === null)
-                            <span class="badge b-orange">{{ __('journey.no_rep') }}</span>
-                        @elseif ($c->rep_id === $rep->id)
-                            <span class="badge b-green">{{ $c->rep?->displayName() }}</span>
-                        @else
-                            <span class="badge b-gray">{{ $c->rep?->displayName() }}</span>
-                        @endif
-                    </td>
-                    <td class="num">
-                        @if ($c->rep_id === $rep->id)
-                            <form method="POST" action="{{ route('ops.assignments.unassign', $c) }}">
-                                @csrf @method('DELETE')
-                                <button class="btn sm">{{ __('journey.remove_this') }}</button>
-                            </form>
-                        @else
-                            {{-- تخصيص عميل واحد للمندوب المختار — نفس إندبوينت
-                                 النقل الجماعي بعميل واحد. الحارس بيتفحص في السيرفر. --}}
-                            <form method="POST" action="{{ route('ops.assignments.assign') }}">
-                                @csrf
-                                <input type="hidden" name="user_id" value="{{ $rep->id }}">
-                                <input type="hidden" name="client_ids[]" value="{{ $c->id }}">
-                                <button class="btn sm gold">{{ __('journey.assign_to', ['rep' => $rep->displayName()]) }}</button>
-                            </form>
-                        @endif
-                    </td>
-                </tr>
-            @empty
-                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">
-                    {{ __('journey.no_clients') }}
-                </td></tr>
-            @endforelse
-            </tbody>
-        </table>
+    {{-- ═══════════ السايدبار: الحمولة والصحة ═══════════ --}}
+    <div style="width:290px;flex-shrink:0">
+        <div class="card">
+            <h3 style="font-size:13px">👥 {{ __('assign.load_title') }}</h3>
+            @php $maxLoad = max(1, collect($team)->max('clients')); @endphp
+            @foreach ($team as $r)
+                <div style="margin-top:8px">
+                    <div style="display:flex;justify-content:space-between;font-size:11.5px">
+                        <b>{{ $r['name'] }}</b>
+                        <b style="color:var(--royal-blue,#12399B)" dir="ltr">{{ $r['clients'] }}</b>
+                    </div>
+                    <div class="asg-bar"><i style="width:{{ round($r['clients'] / $maxLoad * 100) }}%"></i></div>
+                </div>
+            @endforeach
+            @php
+                $loads = collect($team)->pluck('clients');
+                $avg = $loads->isEmpty() ? 0 : (int) round($loads->avg());
+                $gap = $loads->isEmpty() ? 0 : ($loads->max() - $loads->min());
+            @endphp
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:10px">
+                <span>{{ __('assign.avg_line') }}</span><b style="color:var(--ink)">{{ $avg }}</b>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+                <span>{{ __('assign.gap_line') }}</span>
+                <b style="color:#EA8C1C">{{ __('assign.gap_clients', ['n' => $gap]) }}</b>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="font-size:13px">🩺 {{ __('assign.health_title') }}</h3>
+            @foreach ([
+                ['h_orphans', $health['orphans'], '#EA8C1C'],
+                ['h_unmarked', $health['unmarked'], $health['unmarked'] > 0 ? '#DC2626' : '#16A34A'],
+                ['h_empty', $health['empty'], '#6B6B7B'],
+                ['h_nozone', $health['nozone'], $health['nozone'] > 0 ? '#DC2626' : '#16A34A'],
+            ] as [$k, $v, $clr])
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                            border-bottom:1px solid var(--border);padding:6px 0;font-size:11.5px">
+                    <span>● {{ __('assign.'.$k) }}</span>
+                    <b style="color:{{ $clr }}" dir="ltr">{{ $v }}</b>
+                </div>
+            @endforeach
+            <div style="margin-top:10px;background:#F2ECFF;border-radius:10px;padding:9px 11px;
+                        font-size:10.5px;line-height:1.8;color:#602D90">{{ __('assign.rule') }}</div>
+        </div>
     </div>
 </div>
 
-{{-- ═══════════ مناطق المندوب (مستقلة — متتلمسش من التخصيص) ═══════════ --}}
-<div class="card">
-    <h3>📍 {{ __('journey.my_zones') }}</h3>
-
-    {{-- ⚠️ **خانة البحث بره فورم الحفظ عن قصد** — Enter جوه فورم POST
-         كان هيحفظ المناطق والمستخدم لسه بيدوّر. برّه الفورم Enter
-         مابيعملش حاجة. البحث بيطابق الاسم العربي والإنجليزي والكود،
-         وبيفتح المحافظات اللي فيها نتايج بس — ومسح الخانة بيرجّع
-         حالة الطي اللي كانت قبل البحث. --}}
-    <input type="search" id="zoneSearch" placeholder="🔍 {{ __('common.search') }}…"
-           style="width:100%;margin-bottom:9px" oninput="zoneFilter(this.value)">
-
-    <form method="POST" action="{{ route('ops.assignments.assign') }}">
-        @csrf
-        <input type="hidden" name="user_id" value="{{ $rep->id }}">
-        {{-- ⚠️ العلم ده بيقول للكنترولر «الفورم ده بيحفظ المناطق».
-             المتصفح مابيبعتش `zone_ids[]` خالص لو كلها متشالة،
-             فمن غير العلم مسح كل المناطق مابيتنفذش. --}}
-        <input type="hidden" name="zones_form" value="1">
-
-        {{-- ⚠️ **المحافظة رأس مطوي والمناطق جواها.** القايمة المسطّحة
-             كانت بتحط 49 منطقة ورا بعض واللي بيسكّن مندوب على
-             «العاشر» مش شايف إنه ساب باقي مناطق الشرقية من غير
-             حد. تشيك بوكس المحافظة بيعلّم على كل مناطقها مرة واحدة.
-
-             ⚠️ **كل المحافظات مقفولة افتراضياً** (طلب المالك ١١/٨) —
-             `<details>` بعلامة «＋»، والرأس بيقول كام منطقة وكام
-             متعلّم جواه عشان المحافظة المقفولة ماتخبّيش اختيارات. --}}
-        <div style="max-height:330px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:9px">
-            @php $byGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none'); @endphp
-            @foreach (array_merge(\App\Support\Governorates::keys(), ['_none']) as $gk)
-                @continue(! ($group = $byGov->get($gk)) || $group->isEmpty())
-                <details class="zgov"
-                         data-txt="{{ mb_strtolower(($gk === '_none' ? __('geo.no_governorate') : \App\Support\Governorates::label($gk)).' '.$gk) }}">
-                    <summary>
-                        <span class="zg-plus" aria-hidden="true"></span>
-                        {{-- ⚠️ stopPropagation — من غيرها في متصفحات الضغط على
-                             التشيك بوكس بيفتح/يقفل المحافظة مع التعليم --}}
-                        <input type="checkbox" class="govBox" data-gov="{{ $gk }}"
-                               onclick="event.stopPropagation()" onchange="toggleGov(this)">
-                        <span>{{ $gk === '_none' ? __('geo.no_governorate') : \App\Support\Governorates::label($gk) }}</span>
-                        <span class="badge b-green zg-sel" data-gov-sel="{{ $gk }}" style="display:none"></span>
-                        <span class="s zg-tot">{{ $group->count() }} {{ __('journey.zone_countable') }}</span>
-                    </summary>
-                    @foreach ($group->sortBy(fn ($z) => $z->displayName()) as $z)
-                        <label class="zrow"
-                               data-txt="{{ mb_strtolower(trim(($z->name ?? '').' '.($z->name_en ?? '').' '.($z->code ?? ''))) }}"
-                               style="display:flex;align-items:center;gap:8px;padding:5px 3px;padding-inline-start:29px;font-size:12.5px">
-                            <input type="checkbox" name="zone_ids[]" value="{{ $z->id }}"
-                                   class="zoneBox" data-gov="{{ $gk }}"
-                                   @checked(in_array($z->id, $myZoneIds, true))
-                                   onchange="syncGov('{{ $gk }}')">
-                            <span>{{ $z->displayName() }}</span>
-                            <span class="s" style="margin-inline-start:auto;color:var(--muted)">
-                                {{ $fmt($z->clients_count) }}
-                            </span>
-                        </label>
-                    @endforeach
-                </details>
-            @endforeach
-        </div>
-
-        <button class="btn gold" style="width:100%;margin-top:10px">{{ __('common.save') }}</button>
-    </form>
-</div>
+@endif
 @endif
 
 @endsection
 
 @section('scripts')
-<style>
-    tr.orphan-row td { background: rgba(234, 140, 28, .08); }
-
-    /* ═══ شغل الحديد (٢٢/٨) ═══ */
-    .dash-link{display:block;text-decoration:none;color:inherit;transition:box-shadow .12s,border-color .12s}
-    .dash-link:hover{border-color:var(--royal-blue);box-shadow:0 4px 14px rgba(18,57,155,.12)}
-    /* هيدر الجدول ثابت مع التمرير */
-    .asg-wrap thead th{position:sticky;top:0;z-index:3;background:var(--royal-blue);color:#fff}
-    /* الصف كله قابل للتعليم */
-    .asg-row{cursor:pointer}
-    .asg-row:hover td{background:var(--blue-050)}
-    .asg-row td a{position:relative;z-index:1}
-    /* شريط النقل لاصق فوق الجدول */
-    .asg-bulkbar{
-      display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-      position:sticky;top:0;z-index:4;background:var(--card);
-      padding:8px 0;margin-bottom:6px;border-bottom:1px solid var(--border);
-    }
-    #bulkBtn[disabled]{opacity:.45;cursor:not-allowed}
-
-    /* ═══ كروت بول الفريق ═══ */
-    .pool-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
-    .poolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
-    /* تابات المديرين (١١/٨ مساءً) */
-    .pool-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:10px}
-    .pool-tab{
-      display:inline-flex;align-items:center;gap:7px;cursor:pointer;
-      border:1px solid var(--border);background:var(--card);color:var(--ink);
-      padding:8px 16px;border-radius:10px;font-weight:800;font-size:13px;font-family:inherit;
-    }
-    .pool-tab.on{background:var(--royal-blue,#12399B);color:#fff;border-color:var(--royal-blue,#12399B)}
-    .pool-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
-    .pool-box{
-      display:flex;align-items:center;gap:10px;padding:10px 12px;
-      border:1px solid var(--border);border-radius:12px;background:var(--card);
-      text-decoration:none;color:inherit;
-    }
-    .pool-box-n{margin-inline-start:auto;font-weight:900;font-size:18px;color:var(--royal-blue,#12399B)}
-    .pool-box-warn{border-color:#F59E0B;background:#FFFBEB}
-    .pool-box-warn:hover{box-shadow:var(--shadow)}
-    .poolcard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}
-    .pool-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-    .pool-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
-    .pool-reps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
-    .pool-rep{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:20px;padding:2px 9px 2px 3px;font-size:12px;background:var(--card2)}
-    [dir=rtl] .pool-rep{padding:2px 3px 2px 9px}
-    .pool-zones{display:flex;gap:5px;flex-wrap:wrap;max-height:96px;overflow-y:auto}
-
-    /* ═══ محافظات مطوية — <details> بعلامة ＋/− ═══
-       نفس أسلوب أكورديون السايدبار: list-style:none + إخفاء الماركر
-       عشان المثلث الافتراضي مايبوّظش المحاذاة في العربي. */
-    .zgov{border-bottom:1px solid var(--border)}
-    .zgov:last-child{border-bottom:none}
-    .zgov>summary{display:flex;align-items:center;gap:8px;padding:6px 3px;font-size:12px;font-weight:900;color:var(--royal-blue);cursor:pointer;list-style:none;user-select:none;border-radius:7px}
-    .zgov>summary::-webkit-details-marker{display:none}
-    .zgov>summary:hover{background:var(--card2)}
-    .zg-plus{width:18px;height:18px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--border);border-radius:6px;background:var(--card);font-size:13px;line-height:1}
-    .zg-plus::before{content:'+'}
-    .zgov[open] .zg-plus::before{content:'−'}
-    .zg-tot{margin-inline-start:auto;color:var(--muted);font-weight:400}
-</style>
+@if ($manager !== null && $totals['team'] > 0)
+@php
+    $jsFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
+@endphp
 <script>
-    // اختار/شيل كل العملاء في القايمة للنقل الجماعي
-    function toggleAll(box) {
-        document.querySelectorAll('.pick').forEach(el => { el.checked = box.checked; });
-        pickChanged();
-    }
+const TEAM = {!! json_encode($team, $jsFlags) !!};
+const ZONES = {!! json_encode($zoneRows, $jsFlags) !!};
+const CLIENTS = {!! json_encode($clientRows, $jsFlags) !!};
+const REPZONES = {!! json_encode((object) $repZones, $jsFlags) !!};
+const TOTALS = {!! json_encode($totals, $jsFlags) !!};
+const MGR = @json($manager->name);
+const T = {
+    pickFirst: @json(__('assign.pick_first')),
+    cClients: @json(__('assign.c_clients')), cZones: @json(__('assign.c_zones')), cVisits: @json(__('assign.c_visits')),
+    loadEmpty: @json(__('assign.load_empty')), loadOver: @json(__('assign.load_over')), loadOk: @json(__('assign.load_ok')),
+    zoneHead: @json(__('assign.step2_head', ['name' => '__N__'])),
+    govLine: @json(__('assign.gov_line', ['z' => '__Z__', 'c' => '__C__'])),
+    withRep: @json(__('assign.with_rep', ['name' => '__N__'])),
+    fAll: @json(__('assign.f_all')), fOrphans: @json(__('assign.f_orphans')),
+    fInzones: @json(__('assign.f_inzones')), fResp: @json(__('assign.f_resp')), fConflict: @json(__('assign.f_conflict')),
+    poolOf: @json(__('assign.pool_of', ['name' => '__N__'])),
+    inZones: @json(__('assign.in_zones')), outZones: @json(__('assign.out_zones')), noZone: @json(__('assign.no_zone')),
+    noChange: @json(__('assign.no_change')), willMove: @json(__('assign.will_move', ['name' => '__N__'])),
+    markedLine: @json(__('assign.marked_line', ['n' => '__N__'])),
+    moreHidden: @json(__('assign.more_hidden', ['n' => '__N__', 'cap' => '__C__'])),
+    sumHead: @json(__('assign.sum_head', ['name' => '__N__'])),
+    runClients: @json(__('assign.run_clients', ['n' => '__N__', 'name' => '__R__'])),
+    runZones: @json(__('assign.run_zones', ['n' => '__N__'])),
+    runUnmark: @json(__('assign.run_unmark', ['n' => '__N__'])),
+    runCoverage: @json(__('assign.run_coverage')),
+    runNoCross: @json(__('assign.run_no_cross')),
+    saveConfirm: @json(__('assign.save_confirm', ['name' => '__N__'])),
+    step2Sub: @json(__('assign.step2_sub', ['n' => '__N__'])),
+    step3Sub: @json(__('assign.step3_sub', ['n' => '__N__'])),
+    step4Sub: @json(__('assign.step4_sub')),
+};
 
-    // ═══ عدّاد التحديد الحي (٢٢/٨) — الزرار مقفول من غير تحديد ═══
-    function pickChanged() {
-        const n = document.querySelectorAll('.pick:checked').length;
-        const btn = document.getElementById('bulkBtn');
-        const cnt = document.getElementById('pickCount');
-        if (cnt) cnt.textContent = n;
-        if (btn) btn.disabled = n === 0;
-    }
+const st = {step: 1, rep: null, zones: new Set(), clis: new Set(), filter: 'all', open: new Set()};
 
-    // الضغط في أي مكان في الصف بيعلّمه — إلا اللينكات والأزرار
-    // والفورمات (تخصيص/شيل) عشان مايتعارضوش
-    function rowPick(ev, tr) {
-        if (ev.target.closest('a, button, form, input[type=checkbox]')) return;
-        const box = tr.querySelector('.pick');
-        if (!box) return;
-        box.checked = !box.checked;
-        pickChanged();
-    }
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmt = n => Number(n).toLocaleString('en-US');
+const rep = () => TEAM.find(r => r.id === st.rep);
+const tpl = (s, m) => Object.entries(m).reduce((o, kv) => o.replaceAll(kv[0], kv[1]), s);
 
-    // تشيك بوكس المحافظة بيعلّم/يشيل كل مناطقها
-    function toggleGov(box) {
-        document.querySelectorAll('.zoneBox[data-gov="' + box.dataset.gov + '"]')
-            .forEach(el => { el.checked = box.checked; });
-        syncGov(box.dataset.gov);
+function goStep(n) {
+    if (n > 1 && st.rep === null) { alert(T.pickFirst); return; }
+    st.step = n;
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById('asgStep' + i).style.display = i === n ? '' : 'none';
+        const tab = document.getElementById('asgTab' + i);
+        tab.classList.toggle('on', i === n);
+        tab.classList.toggle('done', i < n && st.rep !== null);
     }
+    if (n === 4) renderSummary();
+}
 
-    // والعكس: حالة رأس المحافظة بتتبع مناطقها + بادج «✓ ن» على الرأس
-    // ⚠️ البادج هو اللي بيخلي المحافظة المقفولة تقول إن جواها متعلّم —
-    //    من غيره الطي كان هيخبّي الاختيارات واللي بيحفظ مش شايف
-    //    هو سايب إيه معلّم فين.
-    // ⚠️ style.display مش hidden — كلاس .badge بـdisplay:inline-block
-    //    بييجي بعد قاعدة [hidden] بتاعة المتصفح فبيغلبها.
-    function syncGov(gov) {
-        const boxes = [...document.querySelectorAll('.zoneBox[data-gov="' + gov + '"]')];
-        const head = document.querySelector('.govBox[data-gov="' + gov + '"]');
-        if (!head) return;
-        const on = boxes.filter(b => b.checked).length;
-        head.checked = on > 0 && on === boxes.length;
-        head.indeterminate = on > 0 && on < boxes.length;
-        const badge = document.querySelector('.zg-sel[data-gov-sel="' + gov + '"]');
-        if (badge) {
-            badge.textContent = '✓ ' + on;
-            badge.style.display = on === 0 ? 'none' : '';
+function subs() {
+    document.getElementById('asgSub1').textContent = rep() ? rep().name : '';
+    document.getElementById('asgSub2').textContent = tpl(T.step2Sub, {'__N__': st.zones.size});
+    document.getElementById('asgSub3').textContent = tpl(T.step3Sub, {'__N__': st.clis.size});
+    document.getElementById('asgSub4').textContent = T.step4Sub;
+}
+
+{{-- ═══ خطوة ١ ═══ --}}
+function renderReps() {
+    const avg = TEAM.reduce((t, r) => t + r.clients, 0) / Math.max(1, TEAM.length);
+    const mx = Math.max(1, ...TEAM.map(r => r.clients));
+
+    document.getElementById('asgReps').innerHTML = TEAM.map(function (r) {
+        const load = r.clients === 0 ? ['loadEmpty', 'var(--muted)']
+            : (r.clients > avg * 1.3 ? ['loadOver', '#EA8C1C'] : ['loadOk', '#16A34A']);
+
+        return '<div class="asg-rep' + (r.id === st.rep ? ' sel' : '') + '" onclick="pickRep(' + r.id + ')">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                '<div><b style="font-size:13px">' + esc(r.name) + '</b>' +
+                '<div style="font-size:10.5px;color:var(--muted)">' + esc(r.label) + '</div></div>' +
+                '<span class="asg-av">' + esc(r.name.slice(0, 2)) + '</span></div>' +
+            '<div class="asg-nums">' +
+                '<span><b>' + fmt(r.clients) + '</b><i>' + esc(T.cClients) + '</i></span>' +
+                '<span><b>' + fmt(r.zones) + '</b><i>' + esc(T.cZones) + '</i></span>' +
+                '<span><b>' + fmt(r.visits) + '</b><i>' + esc(T.cVisits) + '</i></span></div>' +
+            '<div class="asg-bar"><i style="width:' + Math.round(r.clients / mx * 100) + '%"></i></div>' +
+            '<div style="font-size:10.5px;font-weight:800;color:' + load[1] + ';margin-top:4px">' + esc(T[load[0]]) + '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function pickRep(id) {
+    st.rep = id;
+    st.zones = new Set(REPZONES[id] || []);
+    st.clis.clear();
+    renderReps(); renderTree(); asgRenderClients(); subs();
+    goStep(2);
+}
+
+{{-- ═══ خطوة ٢ ═══ --}}
+function govs() {
+    const map = {};
+    ZONES.forEach(z => { (map[z.gov || '—'] = map[z.gov || '—'] || []).push(z); });
+    return Object.entries(map).sort((a, b) => b[1].reduce((t, z) => t + z.clients, 0) - a[1].reduce((t, z) => t + z.clients, 0));
+}
+
+function renderTree() {
+    document.getElementById('asgZoneHead').textContent = '📍 ' + tpl(T.zoneHead, {'__N__': rep() ? rep().name : ''});
+
+    document.getElementById('asgTree').innerHTML = govs().map(function (g) {
+        const zs = g[1];
+        const sel = zs.filter(z => st.zones.has(z.id)).length;
+        const open = st.open.has(g[0]);
+        const all = sel === zs.length && zs.length > 0;
+
+        let html = '<div class="asg-gov">' +
+            '<button type="button" class="x" onclick="asgGov(' + JSON.stringify(g[0]).replaceAll('"', '&quot;') + ')">' + (open ? '−' : '+') + '</button>' +
+            '<input type="checkbox"' + (all ? ' checked' : '') + ' onchange="asgGovAll(' + JSON.stringify(g[0]).replaceAll('"', '&quot;') + ', this.checked)">' +
+            (sel > 0 && ! all ? '<span class="badge b-green">' + sel + ' ✓</span>' : '') +
+            '<b style="flex:1">' + esc(g[0]) + '</b>' +
+            '<span style="font-size:10.5px;color:var(--muted)">' + esc(tpl(T.govLine, {'__Z__': zs.length, '__C__': fmt(zs.reduce((t, z) => t + z.clients, 0))})) + '</span>' +
+        '</div>';
+
+        if (open) {
+            html += zs.map(function (z) {
+                const others = (z.marked_names || []).filter((n, i) => z.marked_by[i] !== st.rep);
+
+                return '<div class="asg-zone">' +
+                    '<input type="checkbox"' + (st.zones.has(z.id) ? ' checked' : '') + ' onchange="asgZone(' + z.id + ')">' +
+                    '<b style="flex:1">' + esc(z.name) + '</b>' +
+                    others.map(n => '<span class="badge b-gray" style="font-size:9.5px">' + esc(tpl(T.withRep, {'__N__': n})) + '</span>').join(' ') +
+                    '<b dir="ltr" style="min-width:34px;text-align:end;color:var(--royal-blue,#12399B)">' + fmt(z.clients) + '</b>' +
+                '</div>';
+            }).join('');
         }
-    }
 
-    // ═══ بحث المناطق (١١/٨) ═══
-    // بيطابق data-txt (عربي + إنجليزي + كود) على مستوى المنطقة،
-    // واسم المحافظة على مستوى الرأس (كتابة «الشرقية» بتفتحها كلها).
-    // أول حرف بحث بيحفظ حالة الطي في dataset.wasOpen، والمسح بيرجّعها.
-    function zoneFilter(raw) {
-        const q = raw.trim().toLowerCase();
-        document.querySelectorAll('.zgov').forEach(function (d) {
-            if (q === '') {
-                d.querySelectorAll('.zrow').forEach(r => { r.style.display = ''; });
-                d.style.display = '';
-                if ('wasOpen' in d.dataset) {
-                    d.open = d.dataset.wasOpen === '1';
-                    delete d.dataset.wasOpen;
-                }
-                return;
-            }
-            if (!('wasOpen' in d.dataset)) d.dataset.wasOpen = d.open ? '1' : '0';
-            const govHit = (d.dataset.txt || '').includes(q);
-            let any = false;
-            d.querySelectorAll('.zrow').forEach(function (r) {
-                const hit = govHit || (r.dataset.txt || '').includes(q);
-                r.style.display = hit ? '' : 'none';
-                if (hit) any = true;
-            });
-            d.style.display = any ? '' : 'none';
-            d.open = any;
-        });
-    }
+        return html;
+    }).join('');
 
-    document.querySelectorAll('.govBox').forEach(b => syncGov(b.dataset.gov));
+    effect();
+    subs();
+}
+
+function asgGov(name) { st.open.has(name) ? st.open.delete(name) : st.open.add(name); renderTree(); }
+function asgGovAll(name, on) {
+    ZONES.filter(z => (z.gov || '—') === name).forEach(z => { on ? st.zones.add(z.id) : st.zones.delete(z.id); });
+    renderTree(); asgRenderClients();
+}
+function asgZone(id) { st.zones.has(id) ? st.zones.delete(id) : st.zones.add(id); renderTree(); asgRenderClients(); }
+function asgClearZones() { st.zones.clear(); renderTree(); asgRenderClients(); }
+
+function effect() {
+    const inz = CLIENTS.filter(c => c.zone_id && st.zones.has(c.zone_id));
+    document.getElementById('asgEffZones').textContent = fmt(st.zones.size);
+    document.getElementById('asgEffClients').textContent = fmt(inz.length);
+    document.getElementById('asgEffOrphans').textContent = fmt(inz.filter(c => ! c.rep_id).length);
+    document.getElementById('asgEffOverlap').textContent =
+        fmt(ZONES.filter(z => st.zones.has(z.id) && (z.marked_by || []).some(u => u !== st.rep)).length);
+}
+
+{{-- ═══ خطوة ٣ ═══ --}}
+function cliFiltered() {
+    const q = (document.getElementById('asgQ').value || '').trim().toLowerCase();
+
+    return CLIENTS.filter(function (c) {
+        if (st.filter === 'orphans' && c.rep_id) return false;
+        if (st.filter === 'inzones' && ! (c.zone_id && st.zones.has(c.zone_id))) return false;
+        if (st.filter === 'resp' && c.rep_id !== st.rep) return false;
+        if (st.filter === 'conflict' && ! (c.rep_id && c.rep_id !== st.rep && c.zone_id && st.zones.has(c.zone_id))) return false;
+        if (q && ! ((c.name || '').toLowerCase().includes(q) || (c.en || '').toLowerCase().includes(q))) return false;
+        return true;
+    });
+}
+
+function asgSetFilter(f) { st.filter = f; asgRenderClients(); }
+
+function asgRenderClients() {
+    const counts = {
+        all: CLIENTS.length,
+        orphans: CLIENTS.filter(c => ! c.rep_id).length,
+        inzones: CLIENTS.filter(c => c.zone_id && st.zones.has(c.zone_id)).length,
+        resp: CLIENTS.filter(c => c.rep_id === st.rep).length,
+        conflict: CLIENTS.filter(c => c.rep_id && c.rep_id !== st.rep && c.zone_id && st.zones.has(c.zone_id)).length,
+    };
+
+    document.getElementById('asgChips').innerHTML = [
+        ['all', T.fAll], ['orphans', T.fOrphans], ['inzones', T.fInzones], ['resp', T.fResp], ['conflict', T.fConflict],
+    ].map(f => '<button type="button" class="btn sm' + (st.filter === f[0] ? ' gold' : '') + '" onclick="asgSetFilter(\'' + f[0] + '\')">' +
+        esc(f[1]) + ' <span class="badge ' + (st.filter === f[0] ? 'b-blue' : 'b-gray') + '">' + fmt(counts[f[0]]) + '</span></button>').join(' ');
+
+    const rows = cliFiltered();
+
+    document.getElementById('asgCliBody').innerHTML = rows.slice(0, 400).map(function (c) {
+        const inz = c.zone_id && st.zones.has(c.zone_id);
+        const zoneBadge = c.zone_id
+            ? '<span class="badge ' + (inz ? 'b-green' : 'b-orange') + '" style="font-size:9.5px">' + esc(inz ? T.inZones : T.outZones) + '</span>'
+            : '<span class="badge b-red" style="font-size:9.5px">' + esc(T.noZone) + '</span>';
+        const resp = c.rep_id
+            ? '<span class="badge b-gray">' + esc(c.rep) + '</span>'
+            : '<span class="badge b-gold">🪙 ' + esc(tpl(T.poolOf, {'__N__': MGR})) + '</span>';
+        const after = st.clis.has(c.id)
+            ? '<b style="color:#16A34A">' + esc(tpl(T.willMove, {'__N__': rep() ? rep().name : ''})) + '</b>'
+            : '<span style="color:var(--muted)">' + esc(T.noChange) + '</span>';
+
+        return '<tr class="clickable" onclick="asgCli(' + c.id + ')">' +
+            '<td><input type="checkbox"' + (st.clis.has(c.id) ? ' checked' : '') + ' style="pointer-events:none"></td>' +
+            '<td style="text-align:start"><b>' + esc(c.name) + '</b>' +
+                (c.en ? '<div style="font-size:10px;color:var(--muted)">' + esc(c.en) + '</div>' : '') + '</td>' +
+            '<td style="font-size:11.5px">' + esc(c.zone || '') + '<div>' + zoneBadge + '</div></td>' +
+            '<td>' + resp + '</td>' +
+            '<td style="font-size:11.5px">' + after + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:22px">—</td></tr>';
+
+    const hidden = TOTALS.clients - TOTALS.loaded;
+    document.getElementById('asgCap').textContent = hidden > 0
+        ? tpl(T.moreHidden, {'__N__': fmt(hidden), '__C__': fmt(TOTALS.loaded)}) : '';
+
+    document.getElementById('asgMarked').innerHTML =
+        esc(tpl(T.markedLine, {'__N__': st.clis.size})) + ' <b>' + esc(rep() ? rep().name : '') + '</b>';
+
+    subs();
+}
+
+function asgCli(id) { st.clis.has(id) ? st.clis.delete(id) : st.clis.add(id); asgRenderClients(); }
+function asgMarkVisible() { cliFiltered().forEach(c => st.clis.add(c.id)); asgRenderClients(); }
+function asgOpenOrphans() {
+    if (st.rep === null && TEAM.length) pickRep(TEAM[0].id);
+    st.filter = 'orphans';
+    asgRenderClients();
+    goStep(3);
+}
+
+{{-- ═══ خطوة ٤ ═══ --}}
+function renderSummary() {
+    const r = rep();
+    if (! r) return;
+
+    const moving = [...st.clis].filter(id => (CLIENTS.find(c => c.id === id) || {}).rep_id !== r.id);
+    const before = REPZONES[r.id] || [];
+    const removed = before.filter(z => ! st.zones.has(z)).length;
+    const added = [...st.zones].filter(z => ! before.includes(z)).length;
+
+    document.getElementById('asgSumHead').textContent = '🧾 ' + tpl(T.sumHead, {'__N__': r.name});
+    document.getElementById('asgB1').textContent = fmt(r.clients);
+    document.getElementById('asgB2').textContent = fmt(before.length);
+    document.getElementById('asgA1').textContent = fmt(r.clients + moving.length);
+    document.getElementById('asgA2').textContent = fmt(st.zones.size);
+
+    let list = '<div>👥 ' + esc(tpl(T.runClients, {'__N__': fmt(moving.length), '__R__': r.name})) + '</div>' +
+        '<div>📍 ' + esc(tpl(T.runZones, {'__N__': fmt(added)})) + '</div>';
+    if (removed > 0) list += '<div style="color:#DC2626">➖ ' + esc(tpl(T.runUnmark, {'__N__': fmt(removed)})) + '</div>';
+    list += '<div>🔗 ' + esc(T.runCoverage) + '</div>' +
+        '<div>🚧 ' + esc(T.runNoCross) + '</div>';
+    document.getElementById('asgRunList').innerHTML = list;
+}
+
+function asgSubmit() {
+    const r = rep();
+    if (! r) return false;
+    if (! confirm(tpl(T.saveConfirm, {'__N__': r.name}))) return false;
+
+    document.getElementById('asgRepId').value = r.id;
+    const hid = document.getElementById('asgHid');
+    hid.innerHTML = '';
+
+    [...st.zones].forEach(function (z) {
+        const i = document.createElement('input');
+        i.type = 'hidden'; i.name = 'zones[]'; i.value = z;
+        hid.appendChild(i);
+    });
+    [...st.clis].forEach(function (c) {
+        const i = document.createElement('input');
+        i.type = 'hidden'; i.name = 'clients[]'; i.value = c;
+        hid.appendChild(i);
+    });
+
+    return true;
+}
+
+renderReps();
+subs();
+goStep(1);
 </script>
+@endif
+<style>
+.asg-steps{display:flex;border-bottom:2px solid var(--border);margin-bottom:14px;flex-wrap:wrap}
+.asg-step{flex:1;min-width:130px;display:flex;gap:8px;align-items:center;background:none;border:none;
+  border-bottom:3px solid transparent;padding:9px 10px;cursor:pointer;font-family:inherit;text-align:start}
+.asg-step .num{width:24px;height:24px;border-radius:50%;background:var(--card2,#F1F1F4);color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex-shrink:0}
+.asg-step.on{border-bottom-color:var(--royal-blue,#12399B)}
+.asg-step.on .num{background:var(--royal-blue,#12399B);color:#fff}
+.asg-step.done .num{background:#16A34A;color:#fff}
+.asg-step .tt{display:flex;flex-direction:column;min-width:0}
+.asg-step .tt b{font-size:12px}
+.asg-step .tt i{font-style:normal;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asg-hint{font-size:11.5px;color:var(--muted);margin-bottom:12px;line-height:1.8}
+.asg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
+.asg-rep{border:1.5px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;background:#fff}
+.asg-rep:hover{border-color:var(--royal-blue,#12399B)}
+.asg-rep.sel{border-color:var(--royal-blue,#12399B);background:var(--blue-050,#E8F1FF)}
+.asg-av{width:34px;height:34px;border-radius:50%;background:var(--brand-gradient,linear-gradient(135deg,#12399B,#602D90));
+  color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex-shrink:0}
+.asg-nums{display:flex;gap:8px;margin-top:9px}
+.asg-nums span{flex:1;background:var(--card2,#F1F1F4);border-radius:9px;padding:5px 4px;text-align:center;
+  display:flex;flex-direction:column}
+.asg-nums b{font-size:13px}
+.asg-nums i{font-style:normal;font-size:9.5px;color:var(--muted)}
+.asg-bar{height:5px;background:var(--card2,#F1F1F4);border-radius:99px;margin-top:8px;overflow:hidden}
+.asg-bar i{display:block;height:100%;background:var(--brand-gradient,linear-gradient(135deg,#12399B,#602D90));border-radius:99px}
+.asg-gov{display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--card2,#F7F7FA);
+  border-bottom:1px solid var(--border);font-size:12px}
+.asg-gov .x{width:22px;height:22px;border:1px solid var(--border);border-radius:7px;background:#fff;
+  cursor:pointer;font-weight:900;flex-shrink:0}
+.asg-zone{display:flex;gap:8px;align-items:center;padding:7px 12px 7px 12px;padding-inline-start:32px;
+  border-bottom:1px solid var(--border);font-size:11.5px;background:#fff}
+.asg-gov input[type=checkbox],.asg-zone input[type=checkbox]{width:16px;height:16px;flex-shrink:0}
+.asg-eff{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;
+  border-bottom:1px dashed var(--border);padding:6px 0}
+.asg-eff b{font-size:15px}
+.asg-ba{flex:1;min-width:170px;border:1.5px solid var(--border);border-radius:12px;padding:10px 14px}
+.asg-ba.on{border-color:var(--royal-blue,#12399B);background:var(--blue-050,#E8F1FF)}
+.asg-ba .l{font-size:10.5px;color:var(--muted);margin-bottom:5px}
+.asg-ba .r{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}
+.asg-ba .r b{color:var(--royal-blue,#12399B)}
+</style>
 @endsection
