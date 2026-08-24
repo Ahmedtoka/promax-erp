@@ -141,12 +141,21 @@
 @php
     $jsFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
 
-    // العملاء للجافاسكربت — البحث عابر اللغات زي كل الشاشات
-    $clientRows = $clients->map(fn ($c) => [
-        'id' => $c->id,
-        'name' => $c->fullName(),
-        'q' => mb_strtolower($c->fullName().' '.$c->name_en),
-    ])->values();
+    // العملاء للجافاسكربت — البحث عابر اللغات زي كل الشاشات.
+    // ⚠️ السطر التاني (المحافظة · المنطقة · العنوان) للتأكيد إن الفرع
+    // الصح — والبحث بيلاقي فيهم كلهم (طلب المالك ٢٤/٨).
+    $clientRows = $clients->map(function ($c) {
+        // ⚠️ governorateLabel بترجع «—» للفاضي — تتشال مش تتعرض
+        $sub = collect([$c->governorateLabel(), $c->zone?->name, $c->address])
+            ->filter(fn ($v) => $v && $v !== '—')->implode(' · ');
+
+        return [
+            'id' => $c->id,
+            'name' => $c->fullName(),
+            'sub' => $sub,
+            'q' => mb_strtolower($c->fullName().' '.$c->name_en.' '.$sub),
+        ];
+    })->values();
 
     $jsT = [
         'famHint' => __('ops.md_fam_hint'),
@@ -203,8 +212,10 @@
         const all = CLIENTS.filter(c => c.q.includes(q));
         const hits = all.slice(0, 60);
         cList.innerHTML = (hits.map(function (c) {
-            return '<button type="button" class="md-prod" onclick="pickClient(' + c.id + ')">' +
-                '<b>' + esc(c.name) + '</b></button>';
+            return '<button type="button" class="md-prod" onclick="pickClient(' + c.id + ')" style="flex-direction:column;align-items:flex-start;gap:2px">' +
+                '<b>' + esc(c.name) + '</b>' +
+                (c.sub ? '<span style="font-size:10.5px;color:var(--muted);font-weight:600">📍 ' + esc(c.sub) + '</span>' : '') +
+                '</button>';
         }).join('') || '<div class="s" style="padding:8px">—</div>')
             + (all.length > 60
                 ? '<div class="s" style="padding:8px;color:var(--muted)">+' + (all.length - 60) + ' — ' + esc(T.more) + '</div>'

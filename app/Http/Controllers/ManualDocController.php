@@ -55,10 +55,13 @@ class ManualDocController extends Controller
     {
         return view('ops.manual_doc', [
             'reps' => $this->reps($request),
+            // ⚠️ المحافظة والمنطقة والعنوان معانا (٢٤/٨) — البحث بيلاقيهم
+            // والليستة بتعرضهم عشان المالك يتأكد إنه ماسك الفرع الصح
             'clients' => Client::visibleTo(Client::query()->where('status', 'active'), $request->user())
-                ->with('group')
+                ->with(['group', 'zone'])
                 ->orderBy('name')
-                ->get(['id', 'name', 'name_en', 'group_id', 'payment_terms']),
+                ->get(['id', 'name', 'name_en', 'group_id', 'payment_terms',
+                    'zone_id', 'governorate', 'address']),
         ]);
     }
 
