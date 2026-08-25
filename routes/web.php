@@ -791,6 +791,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('pos.store');
         Route::post('/pos/{purchaseOrder}/assign', [OpsController::class, 'assignPurchaseOrder'])
             ->middleware('role:admin,manager')->name('pos.assign');
+        // ═══ فحص أسعار الأوامر + التعديل الجماعي (٢٤/٨) ═══
+        // ⚠️ المسار الثابت `reprice-check` قبل البارامتري `{purchaseOrder}`
+        Route::get('/pos/reprice-check', [OpsController::class, 'repriceCheck'])
+            ->middleware('role:admin,manager')->name('pos.reprice.check');
+        Route::post('/pos/reprice-bulk', [OpsController::class, 'repriceBulk'])
+            ->middleware('role:admin,manager')->name('pos.reprice.bulk');
         // ═══ صفحة الأمر الكاملة — عرض + تعديل (١٢ أغسطس ٢٠٢٦) ═══
         // العرض لكل اللي شايف اللوحة (سكوب المدير جوه الكنترولر)،
         // والتعديل نفسه فاضل على راوتاته (`ops.po.edit` بشرط poEditable)

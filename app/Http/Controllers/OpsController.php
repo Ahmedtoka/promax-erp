@@ -1602,20 +1602,42 @@ class OpsController extends Controller
      */
     public function repricePo(Request $request, PurchaseOrder $purchaseOrder)
     {
+        $client = $purchaseOrder->client;
+
+        if ($client !== null) {
+            Scope::assertClient($request->user(), $client);
+        }
+
+        $oldGrand = (float) $purchaseOrder->grand_total;
+
+        if ($err = $this->repricePoCore($purchaseOrder)) {
+            return back()->withErrors(['reprice' => $err]);
+        }
+
+        return back()->with('ok', __('ops.po_repriced', [
+            'number' => $purchaseOrder->number,
+            'old' => number_format($oldGrand, 2),
+            'new' => number_format((float) $purchaseOrder->fresh()->grand_total, 2),
+        ]));
+    }
+
+    /**
+     * جوهر إعادة التسعير — مشترك بين الزرار الفردي والفحص الجماعي.
+     * بيرجع رسالة الخطأ أو null. السكوب مسؤولية المنادي.
+     */
+    private function repricePoCore(PurchaseOrder $purchaseOrder): ?string
+    {
         if (in_array($purchaseOrder->status, ['delivered', 'cancelled'], true)) {
-            return back()->withErrors(['reprice' => __('ops.po_reprice_locked')]);
+            return __('ops.po_reprice_locked');
         }
 
         $client = $purchaseOrder->client;
 
         if ($client === null) {
-            return back()->withErrors(['reprice' => __('ops.po_needs_rep_wh')]);
+            return __('ops.po_needs_rep_wh');
         }
 
-        Scope::assertClient($request->user(), $client);
-
         $wasApproved = $purchaseOrder->approval_status === 'approved';
-        $oldGrand = (float) $purchaseOrder->grand_total;
 
         // الكميات بالقطع زي ما هي — إعادة التسعير ماتلمسش الكميات
         $qty = $purchaseOrder->items->pluck('qty', 'product_id')
@@ -1666,14 +1688,133 @@ class OpsController extends Controller
                 }
             }
         } catch (\App\Exceptions\Rejected $e) {
-            return back()->withErrors(['reprice' => $e->getMessage()]);
+            return $e->getMessage();
         }
 
-        return back()->with('ok', __('ops.po_repriced', [
-            'number' => $purchaseOrder->number,
-            'old' => number_format($oldGrand, 2),
-            'new' => number_format((float) $purchaseOrder->fresh()->grand_total, 2),
-        ]));
+        return null;
+    }
+
+    /**
+     * الإجماليات المتوقعة لو الأمر اتسعّر بتسعيرة العميل الحالية —
+     * **قراءة بس**، نفس حسبة `fillPoItems` بالحرف من غير أي كتابة.
+     *
+     * بترجع ['grand' => float] أو ['error' => اسم صنف مش متسعّر].
+     */
+    private function expectedPoTotals(Client $client, $items): array
+    {
+        $rows = [];
+
+        foreach ($items as $item) {
+            $product = $item->product;
+
+            if ($product === null) {
+                continue;
+            }
+
+            $price = $client->priceFor($product);
+
+            if ((float) $price <= 0) {
+                return ['error' => $product->displayName()];
+            }
+
+            $lineTotal = round((int) $item->qty * $price, 2);
+            $rows[] = [
+                'total' => $lineTotal,
+                'tax' => \App\Services\Tax::on($lineTotal, $client, $product),
+            ];
+        }
+
+        $sums = \App\Services\Tax::totals($rows);
+
+        return ['grand' => (float) $sums['grand']];
+    }
+
+    /**
+     * ═══ فحص أسعار الأوامر المفتوحة (طلب المالك ٢٤/٨) ═══
+     *
+     * «زرار أدوس عليه يشوف كل الـPO اللي المفروض نغير سعرها» —
+     * بيلف على كل أمر مفتوح (مش متسلم ولا ملغي) ويقارن إجماليه
+     * المخزّن بالمتوقع من تسعيرة عميله **الحالية**. المختلف بيتعرض
+     * بالفرق، مع تشيك بوكس وتعديل جماعي.
+     *
+     * ⚠️ أوامر `price_mode` = old/new مستثناة — دي أسعار صافية متفق
+     * عليها مع السلسلة عن قصد، مش تسعيرة عميل تتحدث.
+     */
+    public function repriceCheck(Request $request)
+    {
+        $pos = PurchaseOrder::with(['client.group', 'items.product'])
+            ->whereNotIn('status', ['delivered', 'cancelled'])
+            ->whereNotIn('price_mode', ['old', 'new'])
+            ->whereHas('client', fn ($c) => Client::visibleTo($c))
+            ->latest()
+            ->limit(300)
+            ->get();
+
+        $rows = [];
+
+        foreach ($pos as $po) {
+            $expected = $this->expectedPoTotals($po->client, $po->items);
+
+            if (isset($expected['error'])) {
+                $rows[] = ['po' => $po, 'expected' => null, 'diff' => null, 'error' => $expected['error']];
+
+                continue;
+            }
+
+            $diff = round($expected['grand'] - (float) $po->grand_total, 2);
+
+            // المطابق مش بيتعرض — الشاشة للمخالف بس
+            if (abs($diff) < 0.01) {
+                continue;
+            }
+
+            $rows[] = ['po' => $po, 'expected' => $expected['grand'], 'diff' => $diff, 'error' => null];
+        }
+
+        return view('ops.po_reprice_check', [
+            'rows' => $rows,
+            'scanned' => $pos->count(),
+        ]);
+    }
+
+    /** التعديل الجماعي — المتعلّم عليهم بس، وبنفس جوهر الفردي */
+    public function repriceBulk(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:purchase_orders,id'],
+        ]);
+
+        // ⚠️ السكوب في الكويري نفسها — أمر بره نطاق المدير بيتجاهل
+        // بصمت بدل 403 توقف الدفعة كلها
+        $pos = PurchaseOrder::with(['client', 'items'])
+            ->whereIn('id', $data['ids'])
+            ->whereHas('client', fn ($c) => Client::visibleTo($c))
+            ->get();
+
+        $done = 0;
+        $failed = [];
+
+        foreach ($pos as $po) {
+            if ($err = $this->repricePoCore($po)) {
+                $failed[] = $po->number;
+
+                continue;
+            }
+
+            $done++;
+        }
+
+        $msg = __('ops.po_reprice_bulk_done', ['n' => $done]);
+
+        if ($failed !== []) {
+            $msg .= ' '.__('ops.po_reprice_bulk_failed', [
+                'n' => count($failed),
+                'list' => \Illuminate\Support\Str::limit(implode('، ', $failed), 120),
+            ]);
+        }
+
+        return redirect()->route('ops.pos.reprice.check')->with('ok', $msg);
     }
 
     public function storePurchaseOrder(Request $request)

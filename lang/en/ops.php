@@ -408,6 +408,24 @@ return [
     'po_reprice_locked' => 'The order was delivered or cancelled - entries were posted at the old price, fix with a return or settlement.',
     'po_repriced' => 'Order :number repriced: total was :old, now :new.',
 
+    // ═══ Price check + bulk reprice (2026-08-24) ═══
+    'po_check_btn' => 'Price check',
+    'po_check_title' => 'Sales orders with mismatched pricing',
+    'po_check_hint' => ':n open orders scanned - only those whose total differs from the client current pricing are shown',
+    'po_check_clean' => 'All open orders match their clients current pricing - nothing to fix.',
+    'po_check_found' => ':n mismatched orders',
+    'po_check_apply' => 'Reprice selected',
+    'po_check_selected' => ':n orders selected',
+    'po_check_confirm' => 'Reprice :n orders at their clients current pricing? Quantities stay - approved ones go back to accounting.',
+    'po_check_stored' => 'Stored total',
+    'po_check_expected' => 'At current pricing',
+    'po_check_diff' => 'Difference',
+    'po_check_back_note' => 'Back to accounting',
+    'po_check_unpriced' => 'Product ":product" is not priced on the client current list - fix the list first.',
+    'po_reprice_bulk_done' => ':n orders repriced at their clients current pricing.',
+    'po_reprice_bulk_failed' => ':n rejected: :list',
+    'po_number' => 'Order',
+
     // === Redate invoice (Aug 19, 2026) ===
     'redate_invoice' => 'Change invoice date',
     'redate_go' => 'Change date',
