@@ -402,6 +402,12 @@ return [
     'po_reassigned' => 'Order :number moved from ":from" to ":to".',
     'po_reassigned_evt' => 'Sales order :number reassigned',
 
+    // ═══ Reprice sales order (2026-08-24) ═══
+    'po_reprice' => 'Reprice at current client pricing',
+    'po_reprice_confirm' => 'Reprice order :number with the client current price list and live discount? Quantities stay as they are - an approved order goes back to accounting.',
+    'po_reprice_locked' => 'The order was delivered or cancelled - entries were posted at the old price, fix with a return or settlement.',
+    'po_repriced' => 'Order :number repriced: total was :old, now :new.',
+
     // === Redate invoice (Aug 19, 2026) ===
     'redate_invoice' => 'Change invoice date',
     'redate_go' => 'Change date',

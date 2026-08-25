@@ -1585,6 +1585,97 @@ class OpsController extends Controller
         ]));
     }
 
+    /**
+     * ═══ إعادة تسعير أمر توريد بتسعيرة العميل الحالية (٢٤/٨) ═══
+     *
+     * طلب المالك: «عملت أكتر من PO لخير زمان قبل ما أظبط خصمه —
+     * عاوز أدخل على PO PO وأعمله إعادة تسعير». نفس أداة الفاتورة:
+     * البنود بتتبني تاني **بنفس الكميات** عبر `fillPoItems` نفسها —
+     * فقايمة العميل الحالية وخصمه الساري والضريبة بيتطبقوا بنفس
+     * عقيدة الإنشاء حرفياً، والإجماليات التلاتة بتتحسب من نفس المصدر.
+     *
+     * الحدود:
+     *   • قبل التسليم بس — بعد التسليم القيود اتسجلت على السعر
+     *     القديم، والتصحيح ساعتها مرتجع/تسوية مش إعادة تسعير صامتة.
+     *   • أمر معتمد بيرجع لطابور الحسابات (دوكترين ١٠/٨) — السعر
+     *     اتغير بعد موافقتهم، وأمر التجهيز القديم بيتلغي.
+     */
+    public function repricePo(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        if (in_array($purchaseOrder->status, ['delivered', 'cancelled'], true)) {
+            return back()->withErrors(['reprice' => __('ops.po_reprice_locked')]);
+        }
+
+        $client = $purchaseOrder->client;
+
+        if ($client === null) {
+            return back()->withErrors(['reprice' => __('ops.po_needs_rep_wh')]);
+        }
+
+        Scope::assertClient($request->user(), $client);
+
+        $wasApproved = $purchaseOrder->approval_status === 'approved';
+        $oldGrand = (float) $purchaseOrder->grand_total;
+
+        // الكميات بالقطع زي ما هي — إعادة التسعير ماتلمسش الكميات
+        $qty = $purchaseOrder->items->pluck('qty', 'product_id')
+            ->map(fn ($q) => (int) $q)->all();
+
+        try {
+            DB::transaction(function () use ($purchaseOrder, $client, $qty) {
+                // بنود جديدة بالكامل — نفس قاعدة التعديل: إعادة بناء مش ترقيع
+                $purchaseOrder->items()->delete();
+                $this->fillPoItems($purchaseOrder, $client, $qty, 'channel');
+
+                $purchaseOrder->update([
+                    'price_mode' => $client->priceList(),
+                    'was_edited' => true,
+                    'edited_by' => auth()->id(),
+                    'edited_at' => now(),
+                ]);
+            });
+
+            // ═══ أمر معتمد → يرجع للحسابات — نفس فلو updatePo بالحرف ═══
+            if ($wasApproved) {
+                DB::transaction(function () use ($purchaseOrder) {
+                    $pick = $purchaseOrder->pickOrder;
+
+                    if ($pick !== null && ! in_array($pick->status, ['cancelled', 'handed'], true)) {
+                        if ($err = $pick->cancel()) {
+                            throw new \App\Exceptions\Rejected($err);
+                        }
+                    }
+
+                    $purchaseOrder->update([
+                        'approval_status' => 'pending',
+                        'approved_by' => null,
+                        'approved_at' => null,
+                        'pick_order_id' => null,
+                    ]);
+                });
+
+                foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
+                    AppNotification::send(
+                        $acc,
+                        fn () => __('field.notif_po_reapproval_title', ['number' => $purchaseOrder->number]),
+                        fn () => __('field.notif_po_reapproval_body', [
+                            'client' => $purchaseOrder->client->displayName(),
+                            'by' => auth()->user()->displayName(),
+                        ]),
+                    );
+                }
+            }
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['reprice' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('ops.po_repriced', [
+            'number' => $purchaseOrder->number,
+            'old' => number_format($oldGrand, 2),
+            'new' => number_format((float) $purchaseOrder->fresh()->grand_total, 2),
+        ]));
+    }
+
     public function storePurchaseOrder(Request $request)
     {
         $data = $request->validate([

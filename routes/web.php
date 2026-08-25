@@ -802,6 +802,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // تحويل الأمر لعميل تاني (٢٤/٨) — قبل التسليم بس (مفيش قيود لسه)
         Route::post('/pos/{purchaseOrder}/reassign', [OpsController::class, 'reassignPo'])
             ->middleware('role:admin,manager')->name('pos.reassign');
+        // إعادة تسعير الأمر بتسعيرة العميل الحالية (٢٤/٨) — زي الفاتورة
+        Route::post('/pos/{purchaseOrder}/reprice', [OpsController::class, 'repricePo'])
+            ->middleware('role:admin,manager')->name('pos.reprice');
 
         // ═══ أوامر توريد الكي أكاونت (2026-08-04) ═══
         // الإنشاء لمدير القناة، والقرار للحسابات — والاتنين للأدمن

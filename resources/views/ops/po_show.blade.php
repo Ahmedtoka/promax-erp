@@ -82,6 +82,13 @@
         <button type="button" class="btn" onclick="openDlg('dlgReassignPo')">
             🔁 {{ __('ops.po_reassign') }}
         </button>
+        {{-- إعادة التسعير (٢٤/٨) — نفس أداة الفاتورة: قايمة العميل
+             الحالية + خصمه الساري، والمعتمد بيرجع للحسابات --}}
+        <form method="POST" action="{{ route('ops.pos.reprice', $po) }}" style="display:inline"
+              onsubmit="return confirm(@js(__('ops.po_reprice_confirm', ['number' => $po->number])))">
+            @csrf
+            <button type="submit" class="btn">🏷 {{ __('ops.po_reprice') }}</button>
+        </form>
     @endif
     {{-- ═══ إلغاء الأمر (٢١/٨) — للأوامر اللي لسه ماتسلمتش ═══ --}}
     @if (! in_array($po->status, ['delivered', 'cancelled'], true))
