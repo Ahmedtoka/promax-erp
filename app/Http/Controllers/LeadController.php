@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\Rejected;
 use App\Models\Channel;
+use App\Models\Client;
 use App\Models\Lead;
 use App\Models\User;
 use App\Models\Zone;
