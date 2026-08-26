@@ -52,6 +52,10 @@ return [
     'gps' => 'أجهزة تتبع العربيات',
     'group_tasks' => 'إدارة المهام',
     'tasks' => 'المهام',
+    'group_leads' => 'العملاء المحتملين',
+    'leads_portfolio' => 'المحفظة',
+    'leads_planner' => 'جدولة الأسبوع',
+    'leads_week' => 'متابعة الأسبوع',
 
     'team' => 'الفريق',
     'language' => 'اللغة',

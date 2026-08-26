@@ -359,6 +359,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // التوزيع الجماعي «خد N من المنطقة دي» — بايبلاين ٢٦/٨
         Route::post('/leads/bulk-assign', [\App\Http\Controllers\LeadController::class, 'bulkAssign'])
             ->middleware('role:admin,manager')->name('leads.bulk');
+        // ═══ سكشن المحتملين (٢٦/٨): الجدولة الأسبوعية + المتابعة ═══
+        // ⚠️ قبل أي راوت /leads/{lead} — المسارات الثابتة الأول
+        Route::get('/leads/planner', [\App\Http\Controllers\LeadController::class, 'planner'])
+            ->middleware('role:admin,manager')->name('leads.planner');
+        Route::post('/leads/planner', [\App\Http\Controllers\LeadController::class, 'plannerSave'])
+            ->middleware('role:admin,manager')->name('leads.planner.save');
+        Route::get('/leads/week', [\App\Http\Controllers\LeadController::class, 'week'])
+            ->middleware('role:admin,manager')->name('leads.week');
+
         // تسكين المحدد بالتشيك بوكسات + تصفير كل التوزيعات (٢٦/٨)
         Route::post('/leads/bulk-set', [\App\Http\Controllers\LeadController::class, 'bulkSet'])
             ->middleware('role:admin,manager')->name('leads.bulkset');

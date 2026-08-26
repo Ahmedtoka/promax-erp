@@ -358,6 +358,187 @@ class LeadController extends Controller
     }
 
     /**
+     * ═══ جدولة الأسبوع (سكشن المحتملين ٢٦/٨) ═══
+     *
+     * «بكره روح ده وده وبعده ده» — بورد ٧ أيام (السبت للجمعة) لمندوب
+     * واحد: ليداته الغير مجدولة على الجنب، بتتوزع على الأيام بالضغط،
+     * وحفظة واحدة بتزامن الأسبوع كله (مسح وإدخال — نفس روح sync).
+     */
+    public function planner(Request $request)
+    {
+        $reps = User::whereIn('role', User::FIELD_ROLES)
+            ->where('active', true)->orderBy('name')->get(['id', 'name', 'code']);
+
+        $repId = (int) $request->query('rep', 0) ?: ($reps->first()?->id ?? 0);
+        $rep = $reps->firstWhere('id', $repId);
+
+        // بداية الأسبوع = السبت (زي خطط السير — weekday 6 في كاربون)
+        $week = $request->query('week');
+        try {
+            $start = $week ? \Illuminate\Support\Carbon::parse($week) : today();
+        } catch (\Throwable) {
+            $start = today();
+        }
+        $start = $start->copy()->startOfWeek(\Carbon\CarbonInterface::SATURDAY);
+
+        $days = collect(range(0, 6))->map(fn ($i) => $start->copy()->addDays($i));
+
+        // خطة الأسبوع المحفوظة
+        $plans = $rep === null ? collect() : \App\Models\LeadPlan::with('lead.zone')
+            ->where('user_id', $repId)
+            ->whereBetween('plan_date', [$start->toDateString(), $days->last()->toDateString()])
+            ->orderBy('plan_date')->orderBy('sort')
+            ->get();
+
+        $plannedIds = $plans->pluck('lead_id');
+
+        // ليدات المندوب المفتوحة الغير مجدولة الأسبوع ده — بالسكور
+        $pool = $rep === null ? collect() : Lead::with('zone')
+            ->where('assigned_to', $repId)
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->whereNotIn('id', $plannedIds)
+            ->orderByDesc('score')
+            ->get(['id', 'name', 'zone_id', 'score', 'category_raw', 'status']);
+
+        return view('erp.leads_planner', [
+            'reps' => $reps,
+            'repId' => $repId,
+            'start' => $start,
+            'days' => $days,
+            'plans' => $plans->groupBy(fn ($p) => $p->plan_date->toDateString()),
+            'pool' => $pool,
+        ]);
+    }
+
+    /**
+     * حفظ الأسبوع — مزامنة كاملة: خطط المندوب في النطاق بتتمسح
+     * وبتتكتب من جديد بالترتيب اللي جه من البورد. ⚠️ مسح خطط
+     * **المندوب ده في الأسبوع ده بس** — مش أي حاجة تانية.
+     */
+    public function plannerSave(Request $request)
+    {
+        $data = $request->validate([
+            'rep_id' => ['required', 'integer',
+                \Illuminate\Validation\Rule::exists('users', 'id')
+                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+            'week' => ['required', 'date'],
+            // {"2026-08-30": [12, 15], "2026-08-31": [7], ...}
+            'days' => ['required', 'string'],
+        ]);
+
+        $start = \Illuminate\Support\Carbon::parse($data['week'])
+            ->startOfWeek(\Carbon\CarbonInterface::SATURDAY);
+        $end = $start->copy()->addDays(6);
+
+        $days = json_decode($data['days'], true);
+
+        if (! is_array($days)) {
+            return back()->withErrors(['days' => __('lead.plan_bad')]);
+        }
+
+        // ليدات المندوب بس — أي id غريب في البايلود بيتفلتر في صمت
+        $ownIds = Lead::where('assigned_to', (int) $data['rep_id'])
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->pluck('id')->flip();
+
+        $saved = 0;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($days, $data, $start, $end, $ownIds, &$saved) {
+            \App\Models\LeadPlan::where('user_id', (int) $data['rep_id'])
+                ->whereBetween('plan_date', [$start->toDateString(), $end->toDateString()])
+                ->delete();
+
+            foreach ($days as $date => $ids) {
+                try {
+                    $d = \Illuminate\Support\Carbon::parse((string) $date);
+                } catch (\Throwable) {
+                    continue;
+                }
+
+                if ($d->lt($start) || $d->gt($end) || ! is_array($ids)) {
+                    continue;
+                }
+
+                foreach (array_values($ids) as $i => $leadId) {
+                    if (! $ownIds->has((int) $leadId)) {
+                        continue;
+                    }
+
+                    \App\Models\LeadPlan::create([
+                        'user_id' => (int) $data['rep_id'],
+                        'lead_id' => (int) $leadId,
+                        'plan_date' => $d->toDateString(),
+                        'sort' => $i,
+                        'created_by' => auth()->id(),
+                    ]);
+                    $saved++;
+                }
+            }
+        });
+
+        // إشعار للمندوب نفسه — أسبوعه اتجدول
+        $rep = User::find((int) $data['rep_id']);
+        if ($rep !== null && $saved > 0) {
+            \App\Models\AppNotification::send($rep,
+                fn () => '📅 '.__('lead.n_plan_title'),
+                fn () => __('lead.n_plan_body', ['n' => $saved]));
+        }
+
+        return redirect()->route('erp.leads.planner', [
+            'rep' => $data['rep_id'], 'week' => $start->toDateString(),
+        ])->with('ok', __('lead.plan_saved', ['n' => $saved]));
+    }
+
+    /**
+     * ═══ متابعة الأسبوع (سكشن المحتملين ٢٦/٨) — عين المدير ═══
+     *
+     * لكل مندوب: اتجدوله كام ← راح فعلاً كام (تأكيد البيانات في نفس
+     * اليوم = الإثبات) ← اتأكد كام إجمالاً ← فتح أكاونت كام.
+     * والفايت من غير زيارة أحمر — «الحركة جمب بحركة».
+     */
+    public function week(Request $request)
+    {
+        $week = $request->query('week');
+        try {
+            $start = $week ? \Illuminate\Support\Carbon::parse($week) : today();
+        } catch (\Throwable) {
+            $start = today();
+        }
+        $start = $start->copy()->startOfWeek(\Carbon\CarbonInterface::SATURDAY);
+        $days = collect(range(0, 6))->map(fn ($i) => $start->copy()->addDays($i));
+
+        $plans = \App\Models\LeadPlan::with(['lead', 'user:id,name,code'])
+            ->whereBetween('plan_date', [$start->toDateString(), $days->last()->toDateString()])
+            ->orderBy('plan_date')->orderBy('sort')
+            ->get()
+            ->filter(fn ($p) => $p->lead !== null && $p->user !== null);
+
+        // «راح فعلاً» = الليد اتأكد في نفس يوم خطته
+        $visited = fn ($p) => $p->lead->confirmed_at !== null
+            && $p->lead->confirmed_at->isSameDay($p->plan_date);
+
+        $rows = $plans->groupBy('user_id')->map(function ($g) use ($visited) {
+            $missed = $g->filter(fn ($p) => $p->plan_date->lt(today()) && ! $visited($p));
+
+            return [
+                'user' => $g->first()->user,
+                'planned' => $g->count(),
+                'visited' => $g->filter($visited)->count(),
+                'missed' => $missed->count(),
+                'won' => $g->filter(fn ($p) => $p->lead->status === 'won')->count(),
+                'byDay' => $g->groupBy(fn ($p) => $p->plan_date->toDateString()),
+            ];
+        })->sortByDesc(fn ($r) => $r['missed'])->values();
+
+        return view('erp.leads_week', [
+            'start' => $start,
+            'days' => $days,
+            'rows' => $rows,
+            'visitedFn' => $visited,
+        ]);
+    }
+
+    /**
      * تسكين المحدد (٢٦/٨): تشيك بوكسات في الجدول + مندوب + Apply —
      * بيسكّن العملاء المحتملين المختارين على المندوب مرة واحدة.
      * المفتوح وغير المتحوّل بس، وزوناتهم بتتفعل وتتعلّم له (زي bulk).

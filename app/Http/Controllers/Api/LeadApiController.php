@@ -36,6 +36,17 @@ class LeadApiController extends Controller
             ->orderByDesc('score')
             ->get();
 
+        // ═══ مجدولين النهارده (سكشن المحتملين ٢٦/٨) — من خطة المدير،
+        // بترتيبه: «بكره روح ده وده» بتظهر هنا يومها ═══
+        $today = \App\Models\LeadPlan::with('lead.zone')
+            ->where('user_id', $user->id)
+            ->whereDate('plan_date', today())
+            ->orderBy('sort')
+            ->get()
+            ->filter(fn ($p) => $p->lead !== null)
+            ->map(fn ($p) => $this->payload($p->lead))
+            ->values();
+
         // مجمّعة بالزون — نفس روح تاب المناطق
         $zones = $leads->groupBy('zone_id')->map(fn ($g) => [
             'zone_id' => $g->first()->zone_id,
@@ -44,6 +55,7 @@ class LeadApiController extends Controller
         ])->sortByDesc(fn ($z) => count($z['leads']))->values();
 
         return response()->json([
+            'today' => $today,
             'zones' => $zones,
             'counts' => [
                 'open' => $leads->whereIn('status', Lead::OPEN_STATUSES)->count(),

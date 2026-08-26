@@ -326,9 +326,17 @@ class Access
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
         ],
 
-        // ═══ ٦. البيع والعملاء — محتمل ← عميل ← تفعيل ← عقد ═══
+        // ═══ سكشن العملاء المحتملين (٢٦/٨ — طلب المالك): المحفظة ←
+        // الجدولة ← المتابعة. اتفصل من مجموعة العملاء لما بقى
+        // بايبلاين كامل بخطة أسبوعية وحصاد. ═══
+        'nav.group_leads' => [
+            ['erp.leads', '✨', 'nav.leads_portfolio', 'erp.leads', null],
+            ['erp.leads.planner', '📅', 'nav.leads_planner', 'erp.leads.planner', null],
+            ['erp.leads.week', '👁', 'nav.leads_week', 'erp.leads.week', null],
+        ],
+
+        // ═══ ٦. البيع والعملاء — عميل ← تفعيل ← عقد ═══
         'nav.group_clients' => [
-            ['erp.leads', '✨', 'nav.leads', 'erp.leads', null],
             ['erp.clients', '👥', 'nav.clients', 'erp.clients', null],
             // ═══ السايكل الجديدة (١٧/٨) ═══
             //

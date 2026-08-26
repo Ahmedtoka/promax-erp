@@ -52,6 +52,10 @@ return [
     'gps' => 'Van GPS Trackers',
     'group_tasks' => 'Task Management',
     'tasks' => 'Tasks',
+    'group_leads' => 'Leads',
+    'leads_portfolio' => 'Portfolio',
+    'leads_planner' => 'Week planner',
+    'leads_week' => 'Week follow-up',
 
     'team' => 'Team',
     'language' => 'Language',
