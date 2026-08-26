@@ -42,8 +42,9 @@ class LeadController extends Controller
             $q->where(function ($w) use ($branchId) {
                 // الزونز المركزية (`branch_id` فاضي) بتفضل مشتركة —
                 // نفس قاعدة `Branch::scope` بالظبط
-                $w->whereNull('zone_id')
-                    ->orWhereIn('zone_id', Zone::query()
+                // ⚠️ متأهلة بـ`leads.` — نفس درس join «متسكّن مع»
+                $w->whereNull('leads.zone_id')
+                    ->orWhereIn('leads.zone_id', Zone::query()
                         ->where(fn ($z) => $z->where('branch_id', $branchId)->orWhereNull('branch_id'))
                         ->select('id'));
             });
@@ -52,36 +53,40 @@ class LeadController extends Controller
         // ⚠️ المندوب بيشوف ليداته هو بس. من غير الفلتر ده كل مندوب
         // بيشوف قايمة الشركة كلها ويقدر ياخد ليد حد تاني.
         if ($user->isFieldUser()) {
-            $q->where('assigned_to', $user->id);
+            $q->where('leads.assigned_to', $user->id);
         }
 
-        $q->when($request->filled('status'), fn ($x) => $x->where('status', $request->input('status')))
-            ->when($request->filled('zone'), fn ($x) => $x->where('zone_id', $request->input('zone')))
-            ->when($request->filled('rep'), fn ($x) => $x->where('assigned_to', $request->input('rep')))
+        // ⚠️⚠️ **كل الأعمدة متأهلة بـ`leads.`** (إصلاح ٢٦/٨): كويري
+        // «متسكّن مع» بتعمل clone من هنا + join على `users`، و`users`
+        // فيها نفس الأسماء (zone_id/name/phone/status...) — عمود غير
+        // متأهل بيرمي 1052 «ambiguous» أول ما الفلتر يشتغل مع الـjoin.
+        $q->when($request->filled('status'), fn ($x) => $x->where('leads.status', $request->input('status')))
+            ->when($request->filled('zone'), fn ($x) => $x->where('leads.zone_id', $request->input('zone')))
+            ->when($request->filled('rep'), fn ($x) => $x->where('leads.assigned_to', $request->input('rep')))
             // ⚠️ فلتر المصدر لازم يتحقق من القايمة مش يعدّي خام —
             // `?source=<script>` كان بيرجع صفر نتايج ويتطبع في اللينك
             ->when(
                 in_array($request->input('source'), Lead::SOURCES, true),
-                fn ($x) => $x->where('source', $request->input('source')),
+                fn ($x) => $x->where('leads.source', $request->input('source')),
             )
             // فلتر القسم/النشاط (٢٦/٨) — «كل الجيمات في الدقي»
             ->when($request->filled('cat'),
-                fn ($x) => $x->where('category_raw', $request->input('cat')))
+                fn ($x) => $x->where('leads.category_raw', $request->input('cat')))
             // العملاء المحتملين بلا مندوب — للتوزيع من الصفر
             ->when($request->boolean('unassigned'),
-                fn ($x) => $x->whereNull('assigned_to')->whereIn('status', Lead::OPEN_STATUSES))
+                fn ($x) => $x->whereNull('leads.assigned_to')->whereIn('leads.status', Lead::OPEN_STATUSES))
             // فلتر الشبيهات المستنية قرار (٢٦/٨) — المفتوحة بس:
             // اللي اتقرر فيها «صح» اتقفلت وخلاص، مالهاش مكان هنا
             ->when($request->boolean('dup'),
-                fn ($x) => $x->whereNotNull('dup_client_id')->where('dup_dismissed', false)
-                    ->whereIn('status', Lead::OPEN_STATUSES))
+                fn ($x) => $x->whereNotNull('leads.dup_client_id')->where('leads.dup_dismissed', false)
+                    ->whereIn('leads.status', Lead::OPEN_STATUSES))
             ->when($request->filled('search'), function ($x) use ($request) {
                 $s = '%'.$request->input('search').'%';
                 $x->where(function ($w) use ($s) {
-                    $w->where('name', 'like', $s)
-                        ->orWhere('name_en', 'like', $s)
-                        ->orWhere('phone', 'like', $s)
-                        ->orWhere('number', 'like', $s);
+                    $w->where('leads.name', 'like', $s)
+                        ->orWhere('leads.name_en', 'like', $s)
+                        ->orWhere('leads.phone', 'like', $s)
+                        ->orWhere('leads.number', 'like', $s);
                 });
             });
 
