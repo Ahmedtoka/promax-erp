@@ -17,6 +17,17 @@ return [
     'i_assigned' => 'Tasks I assigned',
     'late' => 'Late',
 
+    // Search & filters (Aug 26 — screen polish)
+    'k_waiting' => 'Awaiting my approval',
+    'search_ph' => 'Search by task title or employee name…',
+    'all_priorities' => 'All priorities',
+    'all_statuses' => 'All statuses',
+    'showing' => 'Showing :n of :t',
+    'pick_staff' => 'Pick employee',
+    'title_ph' => 'e.g. Review August sales sheet',
+    'desc_ph' => 'Describe what is needed…',
+    'pick_files' => 'Choose files',
+
     // Form
     'f_assignee' => 'Employee',
     'f_title' => 'Task title',

@@ -1,5 +1,10 @@
-{{-- كارت مهمة في بورد «مهامي» — $t المهمة و$who الطرف المعروض (creator) --}}
-<a href="{{ route('erp.tasks.show', $t) }}" class="tk-card" style="display:block;text-decoration:none;color:inherit;
+{{-- كارت مهمة في بورد «مهامي» — $t المهمة و$who الطرف المعروض (creator).
+     data-search/pr/st = خامة الفلترة اللايف في tasks.blade --}}
+@php $tkSt = $t->isLate() ? 'late' : $t->status; @endphp
+<a href="{{ route('erp.tasks.show', $t) }}" class="tk-card"
+   data-search="{{ mb_strtolower($t->title.' '.($t->{$who}?->displayName() ?? '')) }}"
+   data-pr="{{ $t->priority }}" data-st="{{ $tkSt }}"
+   style="display:block;text-decoration:none;color:inherit;
         background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <b style="font-size:13px;flex:1;min-width:0">{{ $t->title }}</b>
