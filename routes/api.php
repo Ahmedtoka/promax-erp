@@ -234,6 +234,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::get('/leads/mine', [\App\Http\Controllers\Api\LeadApiController::class, 'mine']);
         Route::post('/leads/{lead}/confirm', [\App\Http\Controllers\Api\LeadApiController::class, 'confirm']);
         Route::post('/leads/{lead}/status', [\App\Http\Controllers\Api\LeadApiController::class, 'setStatus']);
+        // فتح أكاونت فوري بعد التأكيد — بلا موافقة (فلو الليد المطور ٢٦/٨)
+        Route::post('/leads/{lead}/open-account', [\App\Http\Controllers\Api\LeadApiController::class, 'openAccount']);
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
 
         // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) ═══

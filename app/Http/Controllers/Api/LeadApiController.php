@@ -75,18 +75,31 @@ class LeadApiController extends Controller
         $this->guard($request, $lead);
 
         $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:190'],
             'phone' => ['nullable', 'string', 'max:30'],
             'contact_name' => ['nullable', 'string', 'max:190'],
             'address' => ['nullable', 'string', 'max:190'],
+            'governorate' => ['nullable', 'string', 'max:60'],
+            'zone_id' => ['nullable', 'integer', 'exists:zones,id'],
             'note' => ['nullable', 'string', 'max:500'],
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            // صورة المكان — multipart (فلو الليد المطور ٢٦/٨)
+            'photo' => ['nullable', 'file', 'image', 'max:8192'],
         ]);
 
+        $photoPath = $request->hasFile('photo')
+            ? $request->file('photo')->store('leads/photos', 'public')
+            : null;
+
         $lead->update(array_filter([
+            'name' => $data['name'] ?? null,
             'phone' => $data['phone'] ?? null,
             'contact_name' => $data['contact_name'] ?? null,
             'address' => $data['address'] ?? null,
+            'governorate' => $data['governorate'] ?? null,
+            'zone_id' => $data['zone_id'] ?? null,
+            'photo_path' => $photoPath,
             // نقطة المندوب وهو واقف قدام المحل — أدق من نقطة الدليل
             'lat' => $data['lat'] ?? null,
             'lng' => $data['lng'] ?? null,
@@ -104,6 +117,70 @@ class LeadApiController extends Controller
             $lead->name, $data['lat'] ?? null, $data['lng'] ?? null);
 
         return response()->json(['ok' => true, 'lead' => $this->payload($lead->fresh('zone'))]);
+    }
+
+    /**
+     * ═══ فتح أكاونت فوري (فلو الليد المطور ٢٦/٨ — قرار المالك) ═══
+     *
+     * «يأكد ويفتح ويبيع على طول» — من غير موافقة المدير: التحويل
+     * بيمر بـ`Leads::convert()` (المكان الوحيد المقدس) وبعده بنكمّل
+     * اللي التحويل مش بيكتبه: المدير بالوراثة من المندوب + كاش وآجل
+     * (قرار المالك: عملاء البايبلاين كلهم كده) + صورة الميدان +
+     * `Coverage::sync` عشان يظهر في تاب المناطق فوراً.
+     *
+     * ⚠️ التأكيد شرط — مفيش فتح لعميل ماتأكدش من الميدان الأول.
+     */
+    public function openAccount(Request $request, Lead $lead): JsonResponse
+    {
+        $this->guard($request, $lead);
+
+        if ($lead->confirmed_at === null) {
+            abort(422, __('lead.open_needs_confirm'));
+        }
+
+        $user = $request->user();
+
+        try {
+            $client = \Illuminate\Support\Facades\DB::transaction(function () use ($lead, $user) {
+                $client = \App\Services\Leads::convert($lead, $user);
+
+                // اللي convert مش بيكتبه — عشان العميل مايتولدش يتيم
+                // (درس اعتماد الطلبات ٨/٨) ويبقى كاش وآجل من أول يوم
+                // ⚠️ مفيش contact_name على clients — ده عمود client_groups
+                $client->update([
+                    'manager_id' => $user->manager_id,
+                    'branch_id' => $user->branch_id,
+                    'channel_id' => $client->channel_id ?? $user->channel_id,
+                    'payment_terms' => 'both',
+                    'photo_path' => $lead->photo_path,
+                ]);
+
+                \App\Services\Coverage::sync($client);
+
+                return $client;
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            abort(422, $e->getMessage());
+        }
+
+        // إشعار لمدير المندوب بس — عرف إن اتفتح أكاونت من الميدان
+        $manager = $user->manager_id !== null
+            ? \App\Models\User::find($user->manager_id) : null;
+
+        if ($manager !== null) {
+            \App\Models\AppNotification::send($manager,
+                fn () => '🟢 '.__('lead.n_opened_title'),
+                fn () => __('lead.n_opened_body', ['name' => $client->displayName(), 'by' => $user->displayName()]));
+        }
+
+        return response()->json([
+            'ok' => true,
+            'client' => [
+                'id' => $client->id,
+                'code' => $client->code,
+                'name' => $client->displayName(),
+            ],
+        ]);
     }
 
     /** تحديث الحالة — اتكلمنا/بنتفاوض/خسرناه بسبب */

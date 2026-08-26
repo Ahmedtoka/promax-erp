@@ -126,6 +126,10 @@ return [
 
     // Mobile leads (Aug 26)
     'closed_lead' => 'This lead is already closed.',
+    'open_needs_confirm' => 'Confirm the lead details first, then open the account.',
+    'confirmed_badge' => 'Details confirmed',
+    'n_opened_title' => 'New account from the field',
+    'n_opened_body' => ':by confirmed and opened an account for ":name" - cash & credit, ready to sell.',
     'trk_confirmed' => 'Confirmed a lead',
 
     'n_bulk_title' => 'New leads for you',

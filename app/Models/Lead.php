@@ -33,6 +33,8 @@ class Lead extends Model
         'dup_client_id', 'dup_reason', 'dup_dismissed',
         // تأكيد الميدان (٢٦/٨) — النقطة الأولى في حصاد الشهر
         'confirmed_at', 'confirmed_by',
+        // صورة المكان من الميدان (فلو الليد المطور ٢٦/٨)
+        'photo_path',
     ];
 
     public const STATUSES = ['new', 'contacted', 'visited', 'negotiating', 'won', 'lost'];

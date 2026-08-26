@@ -351,6 +351,11 @@
                     </td>
                     <td>
                         <span class="badge {{ $l->statusClass() }}">{{ $l->statusLabel() }}</span>
+                        {{-- تأكيد الميدان (فلو ٢٦/٨) — «تم تأكيد بيانات العميل» --}}
+                        @if ($l->confirmed_at !== null)
+                            <br><span class="badge b-green" style="font-size:9px"
+                                title="{{ $l->confirmed_at->format('Y-m-d h:i A') }}">✓ {{ __('lead.confirmed_badge') }}</span>
+                        @endif
                         @if ($l->isConverted())
                             <br><a href="{{ route('erp.clients.show', $l->client_id) }}"
                                    style="font-size:10.5px;color:var(--royal-blue)">{{ $l->client?->code }}</a>

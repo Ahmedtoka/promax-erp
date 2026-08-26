@@ -74,6 +74,11 @@ class IncentiveApiController extends Controller
         $leads = Lead::whereNotNull('lat')->whereNotNull('lng')
             ->whereNotIn('status', ['won', 'lost'])
             ->whereNotIn('id', $decided)
+            // ⚠️ (بايبلاين ٢٦/٨) النبضة اتعملت قبل نظام التوزيع الرسمي —
+            // ليد متوزع على زميل ماينفعش ينوّر لمندوب تاني «فعّله ورايح
+            // له». الغير متوزع أو بتاعه هو بس.
+            ->where(fn ($w) => $w->whereNull('assigned_to')
+                ->orWhere('assigned_to', $user->id))
             ->whereBetween('lat', [(float) $data['lat'] - $delta, (float) $data['lat'] + $delta])
             ->whereBetween('lng', [(float) $data['lng'] - $delta, (float) $data['lng'] + $delta])
             ->get()
