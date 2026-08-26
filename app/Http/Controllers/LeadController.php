@@ -64,6 +64,12 @@ class LeadController extends Controller
                 in_array($request->input('source'), Lead::SOURCES, true),
                 fn ($x) => $x->where('source', $request->input('source')),
             )
+            // فلتر القسم/النشاط (٢٦/٨) — «كل الجيمات في الدقي»
+            ->when($request->filled('cat'),
+                fn ($x) => $x->where('category_raw', $request->input('cat')))
+            // العملاء المحتملين بلا مندوب — للتوزيع من الصفر
+            ->when($request->boolean('unassigned'),
+                fn ($x) => $x->whereNull('assigned_to')->whereIn('status', Lead::OPEN_STATUSES))
             // فلتر الشبيهات المستنية قرار (٢٦/٨) — المفتوحة بس:
             // اللي اتقرر فيها «صح» اتقفلت وخلاص، مالهاش مكان هنا
             ->when($request->boolean('dup'),
@@ -158,6 +164,25 @@ class LeadController extends Controller
             ->orderByDesc('total')
             ->get();
 
+        // ═══ الأقسام (٢٦/٨) — عدّ كل نشاط جوه نفس الفلاتر: شيبس
+        // «اتفرج بالأقسام» + دروب داون الفلتر ═══
+        $cats = (clone $q)->reorder()
+            ->whereNotNull('category_raw')
+            ->selectRaw('category_raw, COUNT(*) as n')
+            ->groupBy('category_raw')
+            ->orderByDesc('n')
+            ->get();
+
+        // ═══ مين متسكّن في كل زون (٢٦/٨) — «اتسكن مع مين» ═══
+        // كويري واحدة: زون × مندوب × عدد — بتتلم في ماب للفيو
+        $zoneReps = (clone $q)->reorder()
+            ->whereNotNull('assigned_to')
+            ->join('users', 'users.id', '=', 'leads.assigned_to')
+            ->selectRaw('leads.zone_id, users.name as rep_name, COUNT(*) as n')
+            ->groupBy('leads.zone_id', 'users.name')
+            ->get()
+            ->groupBy('zone_id');
+
         // الشبيهات المستنية قرار — عدّاد زرار الفحص (من غير فلاتر
         // الشاشة عن قصد: الرقم ده «شغل مستني» مش «نتيجة الفلتر»)
         $dupPending = Lead::whereNotNull('dup_client_id')
@@ -169,6 +194,8 @@ class LeadController extends Controller
             'leads' => $q->paginate(30)->withQueryString(),
             'mapLeads' => $mapLeads,
             'zoneRows' => $zoneRows,
+            'zoneReps' => $zoneReps,
+            'cats' => $cats,
             'dist' => $dist,
             'dupPending' => $dupPending,
             // ⚠️ **كل** الزونز والمناديب، مش النشطين بس. لو زون
@@ -188,7 +215,7 @@ class LeadController extends Controller
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
             'sort' => $sort,
-            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort']),
+            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort', 'cat', 'unassigned']),
             'canConvert' => $user->isManager(),
         ]);
     }
@@ -323,6 +350,65 @@ class LeadController extends Controller
         return back()->with('ok', __('lead.bulk_done', [
             'n' => $ids->count(), 'rep' => $rep->displayName(),
         ]));
+    }
+
+    /**
+     * تسكين المحدد (٢٦/٨): تشيك بوكسات في الجدول + مندوب + Apply —
+     * بيسكّن العملاء المحتملين المختارين على المندوب مرة واحدة.
+     * المفتوح وغير المتحوّل بس، وزوناتهم بتتفعل وتتعلّم له (زي bulk).
+     */
+    public function bulkSet(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'rep_id' => ['required', 'integer',
+                \Illuminate\Validation\Rule::exists('users', 'id')
+                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+        ]);
+
+        $rep = User::findOrFail($data['rep_id']);
+
+        $leads = Lead::whereIn('id', $data['ids'])
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->whereNull('client_id')
+            ->get(['id', 'zone_id']);
+
+        if ($leads->isEmpty()) {
+            return back()->withErrors(['ids' => __('lead.bulk_none')]);
+        }
+
+        Lead::whereIn('id', $leads->pluck('id'))->update(['assigned_to' => $rep->id]);
+
+        // زونات المختارين تتفعل وتتعلّم للمندوب — عشان تظهر له
+        $zoneIds = $leads->pluck('zone_id')->filter()->unique();
+
+        if ($zoneIds->isNotEmpty()) {
+            Zone::whereIn('id', $zoneIds)->where('active', false)->update(['active' => true]);
+            $rep->zones()->syncWithoutDetaching($zoneIds->all());
+        }
+
+        \App\Models\AppNotification::send($rep,
+            fn () => '🎯 '.__('lead.n_bulk_title'),
+            fn () => __('lead.n_bulk_body', ['n' => $leads->count(), 'zone' => '']));
+
+        return back()->with('ok', __('lead.bulk_done', [
+            'n' => $leads->count(), 'rep' => $rep->displayName(),
+        ]));
+    }
+
+    /**
+     * تصفير التوزيعات (٢٦/٨ — «خلي الكل بدون مناديب وأبدأ أوزع»):
+     * بيشيل المندوب من **المفتوحين بس** — المقفول (كسبناه/خسرناه)
+     * تاريخه بيفضل زي ما هو. أدمن بس وبتأكيد.
+     */
+    public function clearAssignments()
+    {
+        $n = Lead::whereIn('status', Lead::OPEN_STATUSES)
+            ->whereNotNull('assigned_to')
+            ->update(['assigned_to' => null]);
+
+        return back()->with('ok', __('lead.cleared_all', ['n' => number_format($n)]));
     }
 
     /**

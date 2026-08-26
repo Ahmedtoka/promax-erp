@@ -359,6 +359,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // التوزيع الجماعي «خد N من المنطقة دي» — بايبلاين ٢٦/٨
         Route::post('/leads/bulk-assign', [\App\Http\Controllers\LeadController::class, 'bulkAssign'])
             ->middleware('role:admin,manager')->name('leads.bulk');
+        // تسكين المحدد بالتشيك بوكسات + تصفير كل التوزيعات (٢٦/٨)
+        Route::post('/leads/bulk-set', [\App\Http\Controllers\LeadController::class, 'bulkSet'])
+            ->middleware('role:admin,manager')->name('leads.bulkset');
+        Route::post('/leads/clear-assign', [\App\Http\Controllers\LeadController::class, 'clearAssignments'])
+            ->middleware('role:admin')->name('leads.clearassign');
         // فحص الشبيهات ضد العملاء الحاليين + قرار المالك (٢٦/٨)
         Route::post('/leads/dup-check', [\App\Http\Controllers\LeadController::class, 'dupCheck'])
             ->middleware('role:admin,manager')->name('leads.dupcheck');

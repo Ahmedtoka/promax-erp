@@ -101,6 +101,18 @@ return [
     'n_bulk_title' => 'New leads for you',
     'n_bulk_body' => ':n leads assigned to you in :zone — good luck 💪',
 
+    // ═══ Multi-select, sections & clear assignments (Aug 26) ═══
+    'all_cats' => 'All sections',
+    'only_unassigned' => 'Unassigned only',
+    'z_with' => 'Assigned with',
+    'zrow_hint' => 'Click to filter the table by this zone',
+    'bulkset_title' => 'Assign selected to a rep',
+    'apply_all' => 'Apply to selected',
+    'select_all' => 'Select all',
+    'clear_btn' => 'Clear all assignments',
+    'clear_confirm' => 'Sure? All open leads will lose their rep so you can distribute from scratch. Closed ones (won/lost) are untouched.',
+    'cleared_all' => 'Rep removed from :n leads — start distributing.',
+
     // ═══ Duplicate check (Aug 26) — "is this already my client?" ═══
     'dup_check_btn' => 'Check against existing clients',
     'dup_pending' => 'lookalikes awaiting your call',

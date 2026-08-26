@@ -47,6 +47,14 @@
                 ⚠️ {{ $dupPending }} {{ __('lead.dup_pending') }}</a>
         @endif
     @endif
+    @if (auth()->user()->role === 'admin')
+        {{-- تصفير التوزيعات (٢٦/٨) — «خلي الكل بدون مناديب وأبدأ أوزع» --}}
+        <form method="POST" action="{{ route('erp.leads.clearassign') }}" style="display:inline"
+              onsubmit="return confirm({!! json_encode(__('lead.clear_confirm'), JSON_UNESCAPED_UNICODE) !!})">
+            @csrf
+            <button class="btn" type="submit">🧹 {{ __('lead.clear_btn') }}</button>
+        </form>
+    @endif
     <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>
 @endsection
 
@@ -81,10 +89,22 @@
                 <option value="{{ $s }}" @selected(($filters['source'] ?? '') === $s)>{{ __('lead.source_'.$s) }}</option>
             @endforeach
         </select>
+        {{-- فلتر القسم/النشاط (٢٦/٨) — «كل الجيمات في الدقي» --}}
+        <select name="cat">
+            <option value="">{{ __('lead.all_cats') }}</option>
+            @foreach ($cats as $c)
+                <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
+                    {{ $c->category_raw }} ({{ $c->n }})</option>
+            @endforeach
+        </select>
         <select name="sort">
             <option value="score" @selected($sort === 'score')>{{ __('lead.sort_score') }}</option>
             <option value="recent" @selected($sort === 'recent')>{{ __('lead.sort_recent') }}</option>
         </select>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">
+            <input type="checkbox" name="unassigned" value="1" @checked($filters['unassigned'] ?? false)>
+            {{ __('lead.only_unassigned') }}
+        </label>
         <button class="btn">{{ __('common.filter') }}</button>
     </form>
 </div>
@@ -168,6 +188,8 @@
                 <th>{{ __('lead.z_open') }}</th>
                 <th>{{ __('lead.z_unassigned') }}</th>
                 <th>{{ __('lead.z_won') }}</th>
+                {{-- متسكّن مع مين (٢٦/٨) --}}
+                <th data-nosum style="text-align:start">{{ __('lead.z_with') }}</th>
                 <th></th>
             </tr>
             </thead>
@@ -175,7 +197,11 @@
             @php $zoneById = $zones->keyBy('id'); @endphp
             @foreach ($zoneRows as $zr)
                 @php $z = $zr->zone_id !== null ? $zoneById->get($zr->zone_id) : null; @endphp
-                <tr>
+                {{-- الصف كليكابل (٢٦/٨) — بيفلتر الجدول تحت بالمنطقة دي --}}
+                <tr class="ld-zrow" @if ($z !== null)
+                        onclick="if (event.target.closest('button,form,a')) return; window.location = {{ json_encode(route('erp.leads', ['zone' => $z->id]), JSON_HEX_APOS | JSON_HEX_QUOT) }};"
+                        style="cursor:pointer" title="{{ __('lead.zrow_hint') }}"
+                    @endif>
                     <td style="text-align:start;font-weight:800">
                         {{ $z?->displayName() ?? __('lead.no_zone') }}
                         @if ($z !== null && ! $z->active)
@@ -186,6 +212,16 @@
                     <td class="num">{{ number_format($zr->open_n) }}</td>
                     <td class="num {{ $zr->unassigned > 0 ? 'mid' : '' }}"><b>{{ number_format($zr->unassigned) }}</b></td>
                     <td class="num pos">{{ number_format($zr->won_n) }}</td>
+                    {{-- متسكّن مع مين — كل مندوب وعدده --}}
+                    <td style="text-align:start">
+                        @php $zrReps = $zoneReps->get($zr->zone_id) ?? collect(); @endphp
+                        @forelse ($zrReps as $rr)
+                            <span class="badge b-blue" style="font-size:9.5px;margin:1px">
+                                {{ $rr->rep_name }} ×{{ $rr->n }}</span>
+                        @empty
+                            <span style="color:var(--muted);font-size:11px">—</span>
+                        @endforelse
+                    </td>
                     <td>
                         @if ($canConvert && $zr->unassigned > 0 && $z !== null)
                             <button class="btn sm" type="button"
@@ -202,9 +238,34 @@
 @endif
 
 <div class="card">
+    {{-- ═══ بار التسكين الجماعي (٢٦/٨): علّم على اللي عايزه + مندوب
+         + Apply — الفورم منفصل والتشيك بوكسات مربوطة بيه بـform="" ═══ --}}
+    @if ($canConvert)
+        <form method="POST" action="{{ route('erp.leads.bulkset') }}" id="ldBulkForm"
+              style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;
+                     background:var(--blue-050,#E8F1FF);border:1px solid var(--royal-blue,#12399B);
+                     border-radius:12px;padding:10px 14px">
+            @csrf
+            <b style="font-size:12.5px">🎯 {{ __('lead.bulkset_title') }}</b>
+            <span id="ldCkCount" class="badge b-blue">0</span>
+            <select name="rep_id" required style="flex:0 1 240px">
+                <option value="">— {{ __('ops.rep') }} —</option>
+                @foreach ($reps as $r)
+                    <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
+                @endforeach
+            </select>
+            <button class="btn gold" type="submit" id="ldApplyBtn" disabled>
+                ✅ {{ __('lead.apply_all') }}</button>
+        </form>
+    @endif
     <div class="tablewrap">
         <table>
             <tr>
+                @if ($canConvert)
+                    <th data-nosum style="width:32px">
+                        <input type="checkbox" id="ldCkAll" title="{{ __('lead.select_all') }}">
+                    </th>
+                @endif
                 <th>{{ __('common.code') }}</th>
                 {{-- ⚠️ `data-nosum` — القوة ترتيب مالوش وحدة، ومجموعه في فوتر الجدول مالوش معنى --}}
                 <th class="num" data-nosum title="{{ __('lead.score_hint') }}">{{ __('lead.score') }}</th>
@@ -220,6 +281,14 @@
 
             @forelse ($leads as $l)
                 <tr>
+                    @if ($canConvert)
+                        <td>
+                            @if (! $l->isConverted() && in_array($l->status, \App\Models\Lead::OPEN_STATUSES, true))
+                                <input type="checkbox" class="ld-ck" form="ldBulkForm"
+                                       name="ids[]" value="{{ $l->id }}">
+                            @endif
+                        </td>
+                    @endif
                     <td class="num s">{{ $l->number }}</td>
                     <td class="num">
                         <span class="badge {{ $l->scoreClass() }}">{{ (int) $l->score }}</span>
@@ -326,7 +395,7 @@
                 </tr>
             @empty
                 {{-- ⚠️ زوّدت عمود القوة ⇒ الـcolspan بقى 10 --}}
-                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $canConvert ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('lead.none') }}
                 </td></tr>
             @endforelse
@@ -523,6 +592,31 @@
         toggleLost();
         openDlg('dlgEditLead');
     }
+
+    /* ═══ التحديد المتعدد + Apply (٢٦/٨) ═══ */
+    (function () {
+        'use strict';
+
+        var all = document.getElementById('ldCkAll');
+        var btn = document.getElementById('ldApplyBtn');
+        var count = document.getElementById('ldCkCount');
+        if (!all || !btn) return;
+
+        function refresh() {
+            var n = document.querySelectorAll('.ld-ck:checked').length;
+            count.textContent = n;
+            btn.disabled = n === 0;
+        }
+
+        all.addEventListener('change', function () {
+            document.querySelectorAll('.ld-ck').forEach(function (c) { c.checked = all.checked; });
+            refresh();
+        });
+        document.querySelectorAll('.ld-ck').forEach(function (c) {
+            c.addEventListener('change', refresh);
+        });
+        refresh();
+    })();
 
     /* ═══ التوزيع الجماعي (٢٦/٨) ═══ */
     const BULK_MAX_WORD = @js(__('lead.bulk_available'));
