@@ -98,6 +98,10 @@ return [
     'bulk_hint' => 'Takes the highest-scored first — the zone is activated and linked to the rep automatically so it shows for him.',
     'bulk_none' => 'No leads available to assign in this zone.',
     'bulk_done' => ':n leads assigned to :rep with a notification',
+    // Mobile leads (Aug 26)
+    'closed_lead' => 'This lead is already closed.',
+    'trk_confirmed' => 'Confirmed a lead',
+
     'n_bulk_title' => 'New leads for you',
     'n_bulk_body' => ':n leads assigned to you in :zone — good luck 💪',
 

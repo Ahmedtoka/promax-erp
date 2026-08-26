@@ -31,6 +31,8 @@ class Lead extends Model
         'score', 'governorate', 'sub_channel',
         // فحص الشبيهات (٢٦/٨) — اقتراح «شبه عميل موجود» وقرار المالك
         'dup_client_id', 'dup_reason', 'dup_dismissed',
+        // تأكيد الميدان (٢٦/٨) — النقطة الأولى في حصاد الشهر
+        'confirmed_at', 'confirmed_by',
     ];
 
     public const STATUSES = ['new', 'contacted', 'visited', 'negotiating', 'won', 'lost'];
@@ -60,6 +62,7 @@ class Lead extends Model
             'expected_monthly' => 'decimal:2',
             'next_action_on' => 'date',
             'converted_at' => 'datetime',
+            'confirmed_at' => 'datetime',
             'rating' => 'decimal:2',
             'reviews_count' => 'integer',
             'score' => 'integer',
@@ -96,6 +99,28 @@ class Lead extends Model
     public function dupClient(): BelongsTo
     {
         return $this->belongsTo(Client::class, 'dup_client_id');
+    }
+
+    /**
+     * قفل الليد «كسبناه» بعد اعتماد طلب عميل مربوط بيه (بايبلاين ٢٦/٨).
+     *
+     * بيتنده من **مسارَي** الاعتماد (مودال الويب + المدير الفوري من
+     * الموبايل) — مكانه هنا عشان أي مسار اعتماد جديد يلاقيه جاهز.
+     * الليد المقفول قبل كده مايتلمسش (idempotent).
+     */
+    public static function closeWonByRequest(?int $leadId, Client $client): void
+    {
+        if ($leadId === null) {
+            return;
+        }
+
+        static::whereKey($leadId)
+            ->whereIn('status', self::OPEN_STATUSES)
+            ->update([
+                'status' => 'won',
+                'client_id' => $client->id,
+                'converted_at' => now(),
+            ]);
     }
 
     public function createdBy(): BelongsTo

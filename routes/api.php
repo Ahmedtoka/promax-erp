@@ -228,6 +228,12 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
 
         Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
+
+        // ═══ تاب العملاء المحتملين (بايبلاين ٢٦/٨) — ليدات المندوب
+        // بالمناطق + تأكيد البيانات من الميدان + تحديث الحالة ═══
+        Route::get('/leads/mine', [\App\Http\Controllers\Api\LeadApiController::class, 'mine']);
+        Route::post('/leads/{lead}/confirm', [\App\Http\Controllers\Api\LeadApiController::class, 'confirm']);
+        Route::post('/leads/{lead}/status', [\App\Http\Controllers\Api\LeadApiController::class, 'setStatus']);
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
 
         // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) ═══

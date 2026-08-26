@@ -2771,6 +2771,9 @@ class FieldApiController extends Controller
             'has_docs' => ['nullable'],
             'photo' => ['nullable', 'file', 'image', 'max:8192'],
             'docs' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:12288'],
+            // مرساة الليد (بايبلاين ٢٦/٨) — طلب جاي من تاب المحتملين:
+            // الاعتماد بيقفل الليد «كسبناه» أوتوماتيك
+            'lead_id' => ['nullable', 'integer', 'exists:leads,id'],
         ], [], [
             'name' => __('field.attr_place_name'),
             'photo' => __('field.attr_place_photo'),
@@ -2857,6 +2860,11 @@ class FieldApiController extends Controller
                 'docs_type' => $docsType,
                 'status' => 'pending',
                 'created_by' => $user->id,
+                // ⚠️ ليد حد تاني مايتربطش — المرساة لليد المندوب نفسه بس
+                'lead_id' => isset($data['lead_id'])
+                    && \App\Models\Lead::whereKey($data['lead_id'])
+                        ->where('assigned_to', $user->id)->exists()
+                    ? (int) $data['lead_id'] : null,
             ]);
 
             if (! $isManager) {
@@ -2898,6 +2906,9 @@ class FieldApiController extends Controller
             $req->decided_at = now();
             $req->client_id = $client->id;
             $req->save();
+
+            // طلب جاي من ليد (بايبلاين ٢٦/٨) → الليد بيتقفل «كسبناه»
+            \App\Models\Lead::closeWonByRequest($req->lead_id, $client);
 
             return [$req, $client];
         });

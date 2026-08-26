@@ -128,6 +128,7 @@ return [
         'wh_out' => 'Left warehouse',
         'collect' => 'Collected money',
         'shelf' => 'Shelf arrangement',
+        'lead' => 'Confirmed a lead',
         'po_abort' => 'Returned an order undelivered',
         'custody_adjust' => 'Van stock admin correction',
         'custody_transfer' => 'Van stock transfer',

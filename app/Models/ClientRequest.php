@@ -23,6 +23,8 @@ class ClientRequest extends Model
         'number', 'name', 'phone', 'address', 'address_ar', 'zone_id', 'lat', 'lng', 'has_docs',
         'photo_path', 'docs_path', 'docs_type',
         'status', 'created_by', 'decided_by', 'decided_at', 'client_id', 'decision_note',
+        // مرساة الليد (بايبلاين ٢٦/٨) — الاعتماد بيقفل الليد «كسبناه»
+        'lead_id',
     ];
 
     protected function casts(): array

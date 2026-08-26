@@ -3507,6 +3507,9 @@ class OpsController extends Controller
                 // بتتفعّل وبتتعلّم ليه ولفريق مديره أوتوماتيك.
                 \App\Services\Coverage::sync($client);
 
+                // طلب جاي من ليد (بايبلاين ٢٦/٨) → الليد بيتقفل «كسبناه»
+                \App\Models\Lead::closeWonByRequest($clientRequest->lead_id, $client);
+
                 AppNotification::send(
                     $clientRequest->rep,
                     fn () => __('field.notif_client_approved_title', ['name' => $clientRequest->name]),
