@@ -88,6 +88,19 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/demo-data', [ErpController::class, 'demoData'])
             ->middleware('role:admin')->name('demo');
 
+        // ═══ إدارة المهام (٢٦/٨) — داش بورد فقط: مفيش مناديب ولا
+        // سواقين (User::TASK_ROLES). الرؤية جوه الكنترولر: طرفَي
+        // المهمة بس والأدمن الكل. ═══
+        Route::middleware('role:admin,manager,branch_manager,accountant')->group(function () {
+            Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index'])->name('tasks');
+            Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store'])->name('tasks.store');
+            Route::get('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'show'])->name('tasks.show');
+            Route::post('/tasks/{task}/comment', [\App\Http\Controllers\TaskController::class, 'comment'])->name('tasks.comment');
+            Route::post('/tasks/{task}/submit', [\App\Http\Controllers\TaskController::class, 'submit'])->name('tasks.submit');
+            Route::post('/tasks/{task}/approve', [\App\Http\Controllers\TaskController::class, 'approve'])->name('tasks.approve');
+            Route::post('/tasks/{task}/reject', [\App\Http\Controllers\TaskController::class, 'reject'])->name('tasks.reject');
+        });
+
         Route::get('/clients', [ErpController::class, 'clients'])->name('clients');
         // ⚠️ **مدير الفرع مسموح له هنا.** الاتفاق إنه «معاه صلاحيات كل
         // حاجة تخص فرعه»، وعملاء فرعه منها. الحماية مش في الميدلوير —

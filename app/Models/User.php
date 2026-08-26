@@ -73,6 +73,12 @@ class User extends Authenticatable
      */
     public const FIELD_WORK_ROLES = ['sales_agent', 'driver', 'promoter', 'manager'];
 
+    /**
+     * رولز إدارة المهام (٢٦/٨) — داش بورد فقط: الأدمن والمديرين
+     * والمحاسب. **مفيش مناديب ولا سواقين ولا بروموترز** (قرار المالك).
+     */
+    public const TASK_ROLES = ['admin', 'manager', 'branch_manager', 'accountant'];
+
     protected $fillable = [
         'name', 'name_en', 'email', 'password', 'role', 'code', 'phone',
         'zone_id', 'channel_id', 'branch_id', 'warehouse_id', 'active', 'locale',

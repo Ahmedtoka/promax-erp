@@ -58,6 +58,8 @@ class Access
             'erp.clauses',
             // جرس الإشعارات + تحصيلات الميدان (2026-08-09)
             'notifications', 'erp.collections',
+            // إدارة المهام (٢٦/٨) — البادئة بتغطي show/comment/submit...
+            'erp.tasks',
             'wh.', 'ops.',
             // ⚠️ **قرار الموافقة على أوامر الكي أكاونت شغل الحسابات**
             // (فلو 2026-08-04). المدير بيشوف الطابور (بيتوجّه له بعد
@@ -77,6 +79,8 @@ class Access
             'erp.divisions',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             'erp.leads', 'erp.stock', 'erp.batches', 'erp.reports',
+            // إدارة المهام (٢٦/٨)
+            'erp.tasks',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
@@ -112,6 +116,8 @@ class Access
         'accountant' => [
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
+            // إدارة المهام (٢٦/٨)
+            'erp.tasks',
             // تصفية المناديب — ده شغل الحسابات الأساسي (2026-08-06)
             'erp.repclose',
             // قفل اليوم + لوحة الأداء (قراءة) — يومية الحسابات
@@ -409,6 +415,12 @@ class Access
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
             // أجهزة تتبع العربيات — iTrack (٢٦/٨)
             ['ops.gps', '🛰️', 'nav.gps', 'ops.gps', null],
+        ],
+
+        // ═══ إدارة المهام (٢٦/٨) — تاب مستقل (طلب المالك)، رولز
+        // الداش بورد بس: الرؤية من SCREENS والراوت بيمنع الباقي ═══
+        'nav.group_tasks' => [
+            ['erp.tasks', '📋', 'nav.tasks', 'erp.tasks', null],
         ],
 
         // ═══ ٧. الإعدادات ═══

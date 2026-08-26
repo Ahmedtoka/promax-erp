@@ -42,6 +42,12 @@ class AppNotification extends Model
         return 'request:'.$id;
     }
 
+    /** مهمة إدارية (٢٦/٨) — كل أطرافها ناس داش بورد فالوجهة ويب بس */
+    public static function taskLink(int $id): string
+    {
+        return 'task:'.$id;
+    }
+
     /**
      * ترجمة نفس الوجهة القصيرة لصفحة ويب — للجرس في الداش بورد
      * (٩ أغسطس ٢٠٢٦). نفس مبدأ الأبلكيشن: وجهة مش معروفة = null
@@ -64,6 +70,8 @@ class AppNotification extends Model
             // المستنية اللي العميل ده **خرج منه** لحظتها.
             'client_locations' => route('erp.client_locations', ['show' => 'from_app']),
             'custody' => route('ops.handout'),
+            // مهمة إدارية (٢٦/٨) — صفحة المهمة بشاتها
+            'task' => $id ? route('erp.tasks.show', $id) : route('erp.tasks'),
             default => null,
         };
     }

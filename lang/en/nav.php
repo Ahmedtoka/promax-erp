@@ -50,6 +50,8 @@ return [
     'merch_visits' => 'Merchandising Visits',
     'tracking' => 'Tracking',
     'gps' => 'Van GPS Trackers',
+    'group_tasks' => 'Task Management',
+    'tasks' => 'Tasks',
 
     'team' => 'Team',
     'language' => 'Language',
