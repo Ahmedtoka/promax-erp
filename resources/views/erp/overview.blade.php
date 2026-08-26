@@ -83,15 +83,16 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val pos big">{{ $fmt($salesAll) }}</div>
         <div class="lbl"><span class="kic">💰</span> {{ __('dash.k_sales') }}</div>
-        <div class="sub2">
-            <span>💵 {{ $fmt($inv->cash_g) }} {{ __('dash.eq_cash') }}</span><i class="ksep"></i>
-            <span>🕐 {{ $fmt($inv->g - $inv->cash_g) }} {{ __('dash.eq_credit') }}</span><i class="ksep"></i>
-            <span>🚚 {{ $fmt($posDelivered->g) }} {{ __('dash.eq_pos') }}</span>
+        {{-- الأرقام الفرعية في مربعات صغيرة (٢٦/٨) — أوضح من سطر متلزق --}}
+        <div class="kmini">
+            <span><b>{{ $fmt($inv->cash_g) }}</b><i>💵 {{ __('dash.eq_cash') }}</i></span>
+            <span><b>{{ $fmt($inv->g - $inv->cash_g) }}</b><i>🕐 {{ __('dash.eq_credit') }}</i></span>
+            <span><b>{{ $fmt($posDelivered->g) }}</b><i>🚚 {{ __('dash.eq_pos') }}</i></span>
         </div>
-        <div class="sub2">
-            <span>🧾 {{ $fmt($billedAll) }} {{ __('dash.billed') }}</span><i class="ksep"></i>
-            <span>📄 {{ $fmt($salesAll - $billedAll) }} {{ __('dash.unbilled') }}</span><i class="ksep"></i>
-            <span>⏳ {{ $fmt($openPos) }} {{ __('rpt.k_open') }}</span>
+        <div class="kmini">
+            <span class="on"><b>{{ $fmt($billedAll) }}</b><i>🧾 {{ __('dash.billed') }}</i></span>
+            <span><b>{{ $fmt($salesAll - $billedAll) }}</b><i>📄 {{ __('dash.unbilled') }}</i></span>
+            <span><b>{{ $fmt($openPos) }}</b><i>⏳ {{ __('rpt.k_open') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_eq_sales') }}</div>
     </a>
@@ -100,13 +101,13 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val pos big">{{ $fmt($coll) }}</div>
         <div class="lbl"><span class="kic">🤲</span> {{ __('dash.k_coll') }}</div>
-        <div class="sub2">
-            <span>💵 {{ $fmt($collSplit['invoice']) }} {{ __('dash.coll_cash') }}</span><i class="ksep"></i>
-            <span>🚪 {{ $fmt($collSplit['visit']) }} {{ __('dash.coll_field') }}</span><i class="ksep"></i>
-            <span>🚚 {{ $fmt($collSplit['po']) }} {{ __('dash.coll_pos') }}</span>
+        <div class="kmini">
+            <span><b>{{ $fmt($collSplit['invoice']) }}</b><i>💵 {{ __('dash.coll_cash') }}</i></span>
+            <span><b>{{ $fmt($collSplit['visit']) }}</b><i>🚪 {{ __('dash.coll_field') }}</i></span>
+            <span><b>{{ $fmt($collSplit['po']) }}</b><i>🚚 {{ __('dash.coll_pos') }}</i></span>
         </div>
-        <div class="sub2">
-            <span>📈 {{ $salesAll > 0 ? number_format($coll / $salesAll * 100, 1) : 0 }}% {{ __('dash.of_sales') }}</span>
+        <div class="kmini">
+            <span><b>{{ $salesAll > 0 ? number_format($coll / $salesAll * 100, 1) : 0 }}%</b><i>📈 {{ __('dash.of_sales') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_coll') }}</div>
     </a>
@@ -115,8 +116,8 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val neg big">{{ $fmt($rets->g) }}</div>
         <div class="lbl"><span class="kic">↩️</span> {{ __('dash.k_rets') }}</div>
-        <div class="sub2">
-            <span>🧾 {{ $fmt($rets->n) }} {{ __('dash.rets_n') }}</span>
+        <div class="kmini">
+            <span><b>{{ $fmt($rets->n) }}</b><i>🧾 {{ __('dash.rets_n') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_rets') }}</div>
     </a>
@@ -125,9 +126,9 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big {{ $netMove > 0 ? 'mid' : 'pos' }}">{{ $netMove > 0 ? '+' : '' }}{{ $fmt($netMove) }}</div>
         <div class="lbl"><span class="kic">🧮</span> {{ __('dash.eq_net') }}</div>
-        <div class="sub2">
-            <span>⏳ {{ __('dash.eq_debt_now') }}: <b>{{ $fmt($debt->g) }}</b></span><i class="ksep"></i>
-            <span>👥 {{ $fmt($debt->n) }} {{ __('rpt.k_clients') }}</span>
+        <div class="kmini">
+            <span class="on"><b>{{ $fmt($debt->g) }}</b><i>⏳ {{ __('dash.eq_debt_now') }}</i></span>
+            <span><b>{{ $fmt($debt->n) }}</b><i>👥 {{ __('rpt.k_clients') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_eq_net') }}</div>
     </a>
@@ -139,9 +140,9 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($street->val) }}</div>
         <div class="lbl"><span class="kic">🚐</span> {{ __('dash.k_street') }}</div>
-        <div class="sub2">
-            <span>🚐 {{ $fmt($street->vans) }} {{ __('dash.vans_open') }}</span><i class="ksep"></i>
-            <span>📦 {{ $fmt($street->units) }} {{ __('dash.units') }}</span>
+        <div class="kmini">
+            <span><b>{{ $fmt($street->vans) }}</b><i>🚐 {{ __('dash.vans_open') }}</i></span>
+            <span><b>{{ $fmt($street->units) }}</b><i>📦 {{ __('dash.units') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_street') }}</div>
     </a>
@@ -149,9 +150,9 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($visitsN) }}</div>
         <div class="lbl"><span class="kic">🚪</span> {{ __('dash.k_field') }}</div>
-        <div class="sub2">
-            <span>🎁 {{ $fmt($giftsQ) }} {{ __('rpt.k_gifts') }}</span><i class="ksep"></i>
-            <span>↩️ {{ $fmt($rets->n) }} {{ __('dash.docs') }}</span>
+        <div class="kmini">
+            <span><b>{{ $fmt($giftsQ) }}</b><i>🎁 {{ __('rpt.k_gifts') }}</i></span>
+            <span><b>{{ $fmt($rets->n) }}</b><i>↩️ {{ __('dash.docs') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_visits') }}</div>
     </a>
@@ -159,8 +160,8 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($newClientsN) }}</div>
         <div class="lbl"><span class="kic">✨</span> {{ __('rpt.new_clients') }}</div>
-        <div class="sub2">
-            <span>📋 {{ $fmt($openRequests) }} {{ __('dash.pending_req') }}</span>
+        <div class="kmini">
+            <span><b>{{ $fmt($openRequests) }}</b><i>📋 {{ __('dash.pending_req') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_new') }}</div>
     </a>
@@ -168,7 +169,9 @@
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($stockValue) }}</div>
         <div class="lbl"><span class="kic">🏭</span> {{ __('dash.k_stock') }}</div>
-        <div class="sub2"><span>{{ __('dash.h_stock_short') }}</span></div>
+        <div class="kmini">
+            <span><b>💵</b><i>{{ __('dash.h_stock_short') }}</i></span>
+        </div>
         <div class="dash-hint">{{ __('dash.h_stock') }}</div>
     </a>
 </div>
@@ -480,6 +483,15 @@
   display:flex;flex-direction:column;gap:4px;padding:14px 16px}
 .dash-eqrow .sub2{font-size:10.5px}
 .dash-eqrow .dash-hint{font-size:9.5px;margin-top:auto}
+/* بوكس المبيعات أعرض من الباقي — فيه صفين مربعات (٢٦/٨) */
+.dash-eqrow .kpi:first-child{flex:1.6;min-width:300px}
+/* ⚠️ المربعات الصغيرة جوه البوكس: الرقم فوق واسمه تحته — بدل سطر sub2 المتلزق */
+.kmini{display:flex;gap:6px;flex-wrap:wrap}
+.kmini > span{flex:1;min-width:72px;background:#F4F5FA;border:1px solid var(--border,#E5E7F0);
+    border-radius:10px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.kmini > span.on{background:#EEF1FB;border-color:#C9D2F0}
+.kmini b{font-size:14px;font-weight:900;letter-spacing:-.3px;font-variant-numeric:tabular-nums;color:var(--ink,#1B1B29)}
+.kmini i{font-style:normal;font-size:9.5px;font-weight:700;color:var(--muted);white-space:nowrap}
 .eqop{align-self:center;font-size:24px;font-weight:900;color:var(--royal-blue,#12399B);
   flex-shrink:0;padding:0 1px;opacity:.75}
 .dash-kpis .bolt-mark,.dash-eqrow .bolt-mark{position:absolute;inset-inline-end:-18px;bottom:-22px;width:110px;opacity:.05;transform:rotate(-9deg);pointer-events:none;color:#12399B}
