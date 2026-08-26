@@ -114,7 +114,12 @@ class LeadController extends Controller
         //
         // نقط الخريطة من **نفس الكويري المفلترة** — الفلتر بيسمع في
         // الخريطة والجدول مع بعض. سقف 1500 نقطة عشان الصفحة ماتتخنقش.
-        $mapLeads = (clone $q)->whereNotNull('lat')->whereNotNull('lng')
+        //
+        // ⚠️⚠️ **`reorder()` على كل نسخة مجمّعة.** البلوك ده جاي **بعد**
+        // ما الترتيب اتحط على `$q`، وتجميع بـORDER BY score من غير
+        // GROUP BY = خطأ 1140 على اللايف (ONLY_FULL_GROUP_BY) — نفس
+        // الفخ الموثق فوق في العدّادات، ووقعنا فيه تاني فعلاً (٢٦/٨).
+        $mapLeads = (clone $q)->reorder()->whereNotNull('lat')->whereNotNull('lng')
             ->orderByDesc('score')->limit(1500)
             ->get(['id', 'name', 'lat', 'lng', 'status', 'zone_id', 'assigned_to', 'score'])
             ->map(fn ($l) => [
@@ -129,14 +134,14 @@ class LeadController extends Controller
             ])->values();
 
         // متوزع على مناديب ولا لأ — أرقام المحفظة الكبيرة
-        $dist = (clone $q)->selectRaw('
+        $dist = (clone $q)->reorder()->selectRaw('
                 COUNT(*) as total,
                 COALESCE(SUM(assigned_to IS NOT NULL), 0) as assigned
             ')->first();
 
         // توزيعة المناطق: كل زون فيه كام، مفتوح كام، غير متوزع كام،
         // كسبنا كام — دي شاشة «خد ٥ من المنطقة دي»
-        $zoneRows = (clone $q)->selectRaw("
+        $zoneRows = (clone $q)->reorder()->selectRaw("
                 zone_id,
                 COUNT(*) as total,
                 COALESCE(SUM(assigned_to IS NULL AND status IN ('new','contacted','visited','negotiating')), 0) as unassigned,
