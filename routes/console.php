@@ -32,3 +32,10 @@ Schedule::command('promax:attendance-close')
 
 // تنضيف سجل حركة اليوزرات — بيكبر بسرعة (فتح الصفحات كمان)
 Schedule::command('promax:prune-activity')->weeklyOn(5, '03:00');
+
+// ═══ بولينج أجهزة تتبع العربيات — iTrack (٢٦/٨) ═══
+// كل دقيقة: آخر موقع وحالة لكل جهاز مفعّل → gps_devices. لو الحساب
+// مش متظبط في شاشة «أجهزة التتبع» الأمر بيخرج فوراً من غير أي نداء.
+Schedule::command('promax:itrack-poll')
+    ->everyMinute()
+    ->withoutOverlapping();

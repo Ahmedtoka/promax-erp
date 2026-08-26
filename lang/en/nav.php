@@ -49,6 +49,7 @@ return [
     'replenishments' => 'Goods & Replenishment Requests',
     'merch_visits' => 'Merchandising Visits',
     'tracking' => 'Tracking',
+    'gps' => 'Van GPS Trackers',
 
     'team' => 'Team',
     'language' => 'Language',

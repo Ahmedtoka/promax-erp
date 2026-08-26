@@ -63,6 +63,13 @@
                     <span class="badge b-gray" style="font-size:10px">{{ $events->where('user_id', $r->id)->count() }}</span>
                 </button>
             @endforeach
+            {{-- شيب طبقة العربيات (iTrack ٢٦/٨) — بيخفي/يظهر ماركرات الأجهزة --}}
+            @if ($vans->isNotEmpty())
+                <button type="button" class="trk-chip" id="trkVansChip" style="--rc: #12399B">
+                    🚚 <b>{{ __('gps.vans_layer') }}</b>
+                    <span class="badge b-gray" style="font-size:10px">{{ $vans->count() }}</span>
+                </button>
+            @endif
         </div>
     </div>
 @endif
@@ -152,15 +159,30 @@
             'initials' => $e->user->initials(),
             'color' => $colors[$e->user_id] ?? '#12399B',
         ])->values();
+
+    // ═══ عربيات iTrack (٢٦/٨) — ماركر شاحنة لكل جهاز بآخر موقعه.
+    // اللون = لون مندوبه في العرض ده (لو مربوط)، والبوب أب فيه
+    // اللوحة والمندوب والسرعة ووقت آخر إشارة ═══
+    $vanPts = $vans->map(fn ($v) => [
+        'lat' => (float) $v->lat,
+        'lng' => (float) $v->lng,
+        'color' => $colors[$v->user_id] ?? '#12399B',
+        'title' => '🚚 '.$v->label(),
+        'sub' => trim(($v->user?->displayName() ? $v->user->displayName().' • ' : '')
+            .(($v->speed ?? null) !== null ? $v->speed.' km/h • ' : '')
+            .($v->gps_time?->format('d/m · h:i A') ?? '')),
+        'fresh' => $v->fresh_(),
+    ])->values();
 @endphp
 <script>
 (function () {
   'use strict';
 
   const PTS = {!! json_encode($pts, JSON_UNESCAPED_UNICODE) !!};
+  const VANS = {!! json_encode($vanPts, JSON_UNESCAPED_UNICODE) !!};
   const el = document.getElementById('map');
 
-  if (!PTS.length) {
+  if (!PTS.length && !VANS.length) {
     el.innerHTML = '<div style="display:grid;place-items:center;height:100%;color:var(--muted);font-size:13px">'
       + {!! json_encode(__('common.no_map_points'), JSON_UNESCAPED_UNICODE) !!} + '</div>';
     return;
@@ -217,6 +239,38 @@
       l.group.addLayer(L.polyline(l.path, { color: l.color, weight: 4, opacity: .8 }));
     }
   });
+
+  /* ═══ طبقة العربيات (iTrack ٢٦/٨) — ماركر شاحنة بلون مندوبها،
+     باهت لو الإشارة قديمة (> ١٥ دقيقة) ═══ */
+  const vansLayer = L.layerGroup().addTo(map);
+
+  VANS.forEach(function (v) {
+    const m = L.marker([v.lat, v.lng], {
+      icon: L.divIcon({
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -16],
+        html: '<div style="width:28px;height:28px;border-radius:50%;border:2.5px solid ' + v.color + ';'
+          + 'background:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;'
+          + 'box-shadow:0 1px 6px rgba(0,0,0,.35);opacity:' + (v.fresh ? '1' : '.45') + '">🚚</div>',
+      }),
+    });
+    m.bindPopup('<div style="font:600 13px ' + (IS_RTL ? 'Cairo' : 'Inter') + ',sans-serif;'
+      + 'direction:' + (IS_RTL ? 'rtl' : 'ltr') + ';text-align:start">' + v.title
+      + '<div style="font-weight:400;font-size:11.5px;color:#6B6B66;margin-top:3px">' + v.sub + '</div></div>');
+    vansLayer.addLayer(m);
+    allLatLngs.push([v.lat, v.lng]);
+  });
+
+  const vansChip = document.getElementById('trkVansChip');
+  if (vansChip) {
+    vansChip.addEventListener('click', function () {
+      const off = vansChip.classList.toggle('off');
+      if (off) map.removeLayer(vansLayer);
+      else vansLayer.addTo(map);
+    });
+  }
 
   if (allLatLngs.length === 1) map.setView(allLatLngs[0], 15);
   else map.fitBounds(L.latLngBounds(allLatLngs).pad(0.18));

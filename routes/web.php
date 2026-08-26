@@ -941,6 +941,19 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         Route::middleware('role:admin,manager')->group(function () {
 
+            // ═══ أجهزة تتبع العربيات — iTrack (٢٦/٨) ═══
+            // العرض أدمن+مدير (المدير أجهزة فريقه بس — السكوب في
+            // الكنترولر) — والحساب/السحب/الربط أدمن بس.
+            Route::get('/gps', [\App\Http\Controllers\GpsController::class, 'index'])->name('gps');
+            Route::post('/gps/credentials', [\App\Http\Controllers\GpsController::class, 'credentials'])
+                ->middleware('role:admin')->name('gps.credentials');
+            Route::post('/gps/sync', [\App\Http\Controllers\GpsController::class, 'sync'])
+                ->middleware('role:admin')->name('gps.sync');
+            Route::post('/gps/poll', [\App\Http\Controllers\GpsController::class, 'poll'])
+                ->middleware('role:admin')->name('gps.poll');
+            Route::post('/gps/save', [\App\Http\Controllers\GpsController::class, 'save'])
+                ->middleware('role:admin')->name('gps.save');
+
             Route::get('/journeys', [\App\Http\Controllers\JourneyController::class, 'index'])
                 ->name('journeys');
             Route::get('/assignments', [\App\Http\Controllers\JourneyController::class, 'assignments'])

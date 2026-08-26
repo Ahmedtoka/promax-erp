@@ -3731,9 +3731,20 @@ class OpsController extends Controller
             $colors[$u->id] = $palette[$i % count($palette)];
         }
 
+        // ═══ عربيات iTrack (٢٦/٨): آخر موقع لكل جهاز مفعّل —
+        // الأدمن بيشوف الكل (حتى غير المربوط بمندوب)، وغيره أجهزة
+        // فريقه بس (نفس سكوب fieldVisibleTo بتاع الأحداث فوق) ═══
+        $vans = \App\Models\GpsDevice::with('user')
+            ->where('active', true)
+            ->whereNotNull('lat')->whereNotNull('lng')
+            ->when(auth()->user()->role !== 'admin',
+                fn ($q2) => $q2->whereIn('user_id', $visibleIds))
+            ->get();
+
         return view('ops.tracking', [
             'events' => $events,
             'reps' => $reps,
+            'vans' => $vans,
             'colors' => $colors,
             'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
             'userId' => $userId,

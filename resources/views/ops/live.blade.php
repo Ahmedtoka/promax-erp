@@ -275,6 +275,8 @@
 .lv-marker .tag{position:absolute;top:-18px;left:50%;transform:translateX(-50%);background:rgba(13,16,34,.88);color:#E8EAF6;font-size:10.5px;padding:1px 8px;border-radius:99px;white-space:nowrap;border:1px solid #262C55;z-index:3}
 @keyframes lvPing{0%{transform:translate(-50%,-50%) scale(.5);opacity:.7}100%{transform:translate(-50%,-50%) scale(1.8);opacity:0}}
 @keyframes lvBlink{0%,100%{opacity:1}50%{opacity:.35}}
+/* نبض عربية iTrack البعيدة عن مندوبها (٢٦/٨) */
+@keyframes lvpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}
 .lv-zone-label{background:transparent;border:0;box-shadow:none;color:#8B90B5;font-size:11px;font-weight:700;white-space:nowrap}
 .leaflet-container{background:#0D1022}
 
@@ -326,6 +328,8 @@ let data = {!! json_encode($initial, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSO
 let selectedId = null, followId = null, paused = false, filter = '', search = '';
 let popupId = null;
 const markers = {}, zoneShapes = [], govShapes = [];
+// ماركرز عربيات iTrack (٢٦/٨) — جنب ماركر المندوب مش بداله
+const vanMarkers = {};
 let trackLine = null, trackStart = null;
 
 // طبقات الخريطة — الديفولت المناديب بس، والاختيار محفوظ في المتصفح
@@ -336,6 +340,9 @@ try {
 } catch (e) { /* تخزين بايظ — الديفولت */ }
 
 const T = {
+    // عربيات iTrack (٢٦/٨)
+    vanFar: {!! json_encode(__('gps.van_far'), JSON_UNESCAPED_UNICODE) !!},
+    vanWord: {!! json_encode(__('gps.van_word'), JSON_UNESCAPED_UNICODE) !!},
     statuses: {
         visit: {!! json_encode(__('journey.in_visit_now'), JSON_UNESCAPED_UNICODE) !!},
         moving: {!! json_encode(__('journey.moving_now'), JSON_UNESCAPED_UNICODE) !!},
@@ -636,6 +643,25 @@ function render() {
         if (!seen.has(parseInt(id, 10))) { map.removeLayer(markers[id]); delete markers[id]; }
     });
 
+    /* ═══ عربيات iTrack (٢٦/٨): ماركر شاحنة بلون المندوب جنب
+       ماركره — إطار أحمر نابض لو العربية بعيدة عن تليفونه ═══ */
+    const vseen = new Set();
+    (data.reps || []).forEach(r => {
+        const v = r.van;
+        if (!v || v.lat === null || !layers.reps) return;
+        vseen.add(r.id);
+        if (vanMarkers[r.id]) {
+            slideMarker(vanMarkers[r.id], v.lat, v.lng);
+            vanMarkers[r.id].setIcon(vanIcon(r, v));
+        } else {
+            vanMarkers[r.id] = L.marker([v.lat, v.lng], { icon: vanIcon(r, v) })
+                .addTo(map).on('click', () => selectRep(r.id));
+        }
+    });
+    Object.keys(vanMarkers).forEach(id => {
+        if (!vseen.has(parseInt(id, 10))) { map.removeLayer(vanMarkers[id]); delete vanMarkers[id]; }
+    });
+
     drawTrack();
 
     if (followId !== null) {
@@ -645,6 +671,29 @@ function render() {
 
     renderAlerts();
     if (popupId !== null) renderPopup();
+}
+
+/* ماركر عربية iTrack — شاحنة بإطار بلون المندوب، أحمر نابض لو بعيدة */
+function vanIcon(r, v) {
+    const ring = v.far ? '#DC2626' : repColor(r.id);
+    return L.divIcon({
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        html: `<div style="width:28px;height:28px;border-radius:50%;border:2.5px solid ${ring};` +
+            `background:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;` +
+            `box-shadow:0 1px 6px rgba(0,0,0,.35)${v.far ? ';animation:lvpulse 1s infinite' : ''}">🚚</div>`,
+    });
+}
+
+/* سطر العربية في الكارت — اللوحة والسرعة وآخر إشارة + إنذار التباعد */
+function vanLine(r) {
+    const v = r.van;
+    if (!v) return '';
+    const far = v.far
+        ? `<div class="ln" style="color:#DC2626;font-weight:800">⚠️ ${sub(T.vanFar, ':km', v.gap_km)}</div>` : '';
+    return `<div class="ln">🛰️ ${esc(v.plate || '')} · ${v.speed !== null ? v.speed + ' km/h' : '—'}` +
+        `${v.time ? ' · ' + v.time : ''}</div>${far}`;
 }
 
 /* كارت شخص واحد في الجريد */
@@ -675,6 +724,7 @@ function personCard(r) {
             <span title="${esc(T.visitsT)}">📍 <b>${r.visits || 0}</b></span>
         </div>
         ${sig ? `<div class="ln">${sig}</div>` : ''}
+        ${vanLine(r)}
     </div>`;
 }
 

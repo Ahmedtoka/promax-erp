@@ -2051,7 +2051,14 @@ class JourneyController extends Controller
             ->get(['id', 'user_id', 'type', 'title', 'subtitle', 'happened_at'])
             ->groupBy('user_id');
 
-        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $poToday, $visitsToday, $openVisits, $attDays, $feedByUser) {
+        // ═══ عربيات iTrack (٢٦/٨) — آخر موقع جهاز كل مندوب، كويري
+        // واحدة للفريق كله (الشاشة بتترفرش كل ٣ ثواني) ═══
+        $vansByUser = \App\Models\GpsDevice::where('active', true)
+            ->whereIn('user_id', $reps->pluck('id'))
+            ->whereNotNull('lat')->whereNotNull('lng')
+            ->get()->keyBy('user_id');
+
+        $rows = $reps->map(function (User $rep) use ($eventsByUser, $lastEvents, $salesToday, $poToday, $visitsToday, $openVisits, $attDays, $feedByUser, $vansByUser) {
             // من العلاقة المحمّلة فوق — مش كويري جديدة
             $custody = $rep->custodies->first();
             $summary = Journeys::summary($rep);
@@ -2249,9 +2256,38 @@ class JourneyController extends Controller
                     'text' => trim($e->title.($e->subtitle ? ' · '.$e->subtitle : '')),
                 ])->values()->all();
 
+            // ═══ عربية المندوب (iTrack ٢٦/٨) + إنذار التباعد ═══
+            // «بعيد» = إشارتين طازتين (تليفون < 15 دقيقة وجهاز < 15
+            // دقيقة) والمسافة بينهم > 1 كم — إشارة قديمة ماتتهمش حد.
+            $van = $vansByUser->get($rep->id);
+            $vanFresh = $van !== null && $van->gps_time !== null
+                && $van->gps_time->gt(now()->subMinutes(15));
+            $gapKm = null;
+
+            if ($van !== null && $last !== null) {
+                $gapKm = \App\Services\Itrack::distanceKm(
+                    (float) $last->lat, (float) $last->lng,
+                    (float) $van->lat, (float) $van->lng,
+                );
+            }
+
+            $vanRow = $van === null ? null : [
+                'lat' => (float) $van->lat,
+                'lng' => (float) $van->lng,
+                'plate' => $van->label(),
+                'speed' => $van->speed,
+                'acc' => (int) $van->acc,
+                'time' => $hia($van->gps_time),
+                'fresh' => $vanFresh,
+                'gap_km' => $gapKm,
+                'far' => $vanFresh && $minutes !== null && $minutes < 15
+                    && $gapKm !== null && $gapKm > 1,
+            ];
+
             return [
                 'rep' => $rep,
                 'custody' => $custody,
+                'van' => $vanRow,
                 'remaining_units' => $custody?->remainingUnits() ?? 0,
                 'remaining_value' => round((float) ($remTotals[$repList?->id]['total'] ?? 0), 2),
                 'summary' => $summary,
@@ -2528,6 +2564,9 @@ class JourneyController extends Controller
                     'min' => $r['live_min'],
                 ],
                 'signal_at' => $r['signal_at'],
+                // ═══ عربية iTrack (٢٦/٨) — additive برضه: null لو
+                // مفيش جهاز مربوط، و`far` بينوّر إنذار التباعد ═══
+                'van' => $r['van'],
                 'events' => $r['events'],
                 'tracking_url' => route('ops.tracking', ['user' => $r['rep']->id]),
             ])->values(),

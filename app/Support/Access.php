@@ -407,6 +407,8 @@ class Access
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
+            // أجهزة تتبع العربيات — iTrack (٢٦/٨)
+            ['ops.gps', '🛰️', 'nav.gps', 'ops.gps', null],
         ],
 
         // ═══ ٧. الإعدادات ═══
