@@ -140,9 +140,10 @@
              الصنف / الوزن / سعر المستهلك (قبل الخصم) / سعر العرض
              (بعد الخصمين) / العلبة / الكرتونة — وعدد القطع ليبل فوق السعر.
 
-             والصفحة بتتقسم كل ١٠ أصناف على A4 — كل جزء جدول مستقل
-             بهيدره، واللي بعد الأول بياخد break-before:page في الطباعة --}}
-        @php $qiPages = $lines->values()->chunk(10); @endphp
+             والصفحة بتتقسم كل ٨ أصناف على A4 (متقاسة على اللايف ٢٦/٨ —
+             ٨ يادوب مالْيين الورقة) — كل جزء جدول مستقل بهيدره،
+             واللي بعد الأول بياخد break-before:page في الطباعة --}}
+        @php $qiPages = $lines->values()->chunk(8); @endphp
         @foreach ($qiPages as $pageRows)
         <table class="qi-table @if(! $loop->first) qi-page-break @endif">
             <thead>
