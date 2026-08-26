@@ -102,20 +102,36 @@ class ErpController extends Controller
             ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds));
 
         // ═══ KPIs الفترة ═══
+        // ⚠️ Billed = مستند عليه ضريبة (فاتورة رسمية) — Unbilled = من غير
         $inv = $invQ()->selectRaw("COUNT(*) n, COALESCE(SUM(grand_total),0) g,
             COALESCE(SUM(total),0) net, COALESCE(SUM(tax_total),0) tax,
-            COALESCE(SUM(CASE WHEN payment='cash' THEN grand_total ELSE 0 END),0) cash_g")->first();
+            COALESCE(SUM(CASE WHEN payment='cash' THEN grand_total ELSE 0 END),0) cash_g,
+            COALESCE(SUM(CASE WHEN tax_total > 0 THEN grand_total ELSE 0 END),0) billed_g")->first();
 
         // التحصيل — قيود collection، ولو مفلتر بمندوب/مدير بنمسك القيود
-        // اللي مصدرها فواتيره (كاش مع فاتورة) أو زياراته (تحصيل ميداني)
-        $coll = Transaction::where('kind', 'collection')
+        // اللي مصدرها فواتيره أو زياراته أو أوامره.
+        // ⚠️ **مقسوم بالمصدر (٢٦/٨)** — طلب المالك: «كام اتحصل منين»:
+        // كاش الفواتير الفوري / التحصيل الميداني / تحصيل التوريدات.
+        $collRows = Transaction::where('kind', 'collection')
             ->whereBetween('created_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->where(fn ($w) => $w
                 ->where(fn ($x) => $x->where('source_type', Invoice::class)
                     ->whereIn('source_id', Invoice::whereIn('user_id', $repIds)->select('id')))
                 ->orWhere(fn ($x) => $x->where('source_type', \App\Models\Visit::class)
-                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))))
-            ->sum('credit');
+                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))
+                ->orWhere(fn ($x) => $x->where('source_type', PurchaseOrder::class)
+                    ->whereIn('source_id', PurchaseOrder::whereIn('assigned_to', $repIds)->select('id')))))
+            ->selectRaw('source_type, COALESCE(SUM(credit),0) v')
+            ->groupBy('source_type')
+            ->pluck('v', 'source_type');
+
+        $collSplit = [
+            'invoice' => (float) ($collRows[Invoice::class] ?? 0),
+            'visit' => (float) ($collRows[\App\Models\Visit::class] ?? 0),
+            'po' => (float) ($collRows[PurchaseOrder::class] ?? 0),
+        ];
+        $collSplit['other'] = (float) $collRows->sum() - array_sum($collSplit);
+        $coll = (float) $collRows->sum();
 
         $rets = \App\Models\ClientReturn::whereBetween('created_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))
@@ -202,7 +218,8 @@ class ErpController extends Controller
         $posDelivered = PurchaseOrder::where('status', 'delivered')
             ->whereBetween('delivered_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->whereIn('assigned_to', $repIds))
-            ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g')->first();
+            ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g,
+                COALESCE(SUM(CASE WHEN tax_total > 0 THEN grand_total ELSE 0 END),0) billed_g')->first();
 
         // العهدة في الشارع دلوقتي: العربيات المفتوحة + الوحدات + قيمتها
         // بسعر المستهلك (price_new متزامن مع القايمة الافتراضية)
@@ -259,6 +276,7 @@ class ErpController extends Controller
 
             'inv' => $inv,
             'coll' => (float) $coll,
+            'collSplit' => $collSplit,
             'rets' => $rets,
             'visitsN' => $visitsN,
             'giftsQ' => (int) $giftsQ,

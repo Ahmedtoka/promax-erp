@@ -69,47 +69,67 @@
     </form>
 </div>
 
-{{-- ═══ الصف الأول: فلوس الفترة — ٤ كروت كبيرة بهوية البراند ═══ --}}
-<div class="kpis dash-kpis">
+{{-- ═══ الصف الأول: معادلة الفلوس (٢٦/٨ — طلب المالك) ═══
+     مبيعات − تحصيل − مرتجعات = صافي حركة المديونية — بإشارات ظاهرة
+     بين البوكسات، وكل بوكس مقسوم بمصادره: كاش/آجل/توريدات،
+     وكاش فواتير/ميداني/توريدات، وBilled/Unbilled. --}}
+@php
+    $salesAll = (float) $inv->g + (float) $posDelivered->g;
+    $billedAll = (float) $inv->billed_g + (float) $posDelivered->billed_g;
+    $netMove = $salesAll - (float) $coll - (float) $rets->g;
+@endphp
+<div class="dash-eqrow">
     <a class="kpi dash-link has-bolt" href="{{ $rpt('sales_docs') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="lbl"><span class="kic">💰</span> {{ __('dash.k_sales') }}</div>
-        <div class="val pos big">{{ $fmt($inv->g) }}</div>
+        <div class="val pos big">{{ $fmt($salesAll) }}</div>
         <div class="sub2">
-            <span>🧾 {{ $fmt($inv->n) }} {{ __('rpt.k_count') }}</span><i class="ksep"></i>
-            <span>💵 {{ $fmt($inv->cash_g) }} {{ __('rpt.cash') }}</span><i class="ksep"></i>
-            <span>🕐 {{ $fmt($inv->g - $inv->cash_g) }} {{ __('rpt.credit') }}</span>
+            <span>💵 {{ $fmt($inv->cash_g) }} {{ __('dash.eq_cash') }}</span><i class="ksep"></i>
+            <span>🕐 {{ $fmt($inv->g - $inv->cash_g) }} {{ __('dash.eq_credit') }}</span><i class="ksep"></i>
+            <span>🚚 {{ $fmt($posDelivered->g) }} {{ __('dash.eq_pos') }}</span>
         </div>
-        <div class="dash-hint">{{ __('dash.h_sales') }}</div>
+        <div class="sub2">
+            <span>🧾 {{ $fmt($billedAll) }} {{ __('dash.billed') }}</span><i class="ksep"></i>
+            <span>📄 {{ $fmt($salesAll - $billedAll) }} {{ __('dash.unbilled') }}</span><i class="ksep"></i>
+            <span>⏳ {{ $fmt($openPos) }} {{ __('rpt.k_open') }}</span>
+        </div>
+        <div class="dash-hint">{{ __('dash.h_eq_sales') }}</div>
     </a>
+    <span class="eqop">−</span>
     <a class="kpi dash-link has-bolt" href="{{ $rpt('collections') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="lbl"><span class="kic">🤲</span> {{ __('dash.k_coll') }}</div>
         <div class="val pos big">{{ $fmt($coll) }}</div>
         <div class="sub2">
-            <span>📈 {{ $inv->g > 0 ? number_format($coll / $inv->g * 100, 1) : 0 }}% {{ __('dash.of_sales') }}</span>
+            <span>💵 {{ $fmt($collSplit['invoice']) }} {{ __('dash.coll_cash') }}</span><i class="ksep"></i>
+            <span>🚪 {{ $fmt($collSplit['visit']) }} {{ __('dash.coll_field') }}</span><i class="ksep"></i>
+            <span>🚚 {{ $fmt($collSplit['po']) }} {{ __('dash.coll_pos') }}</span>
+        </div>
+        <div class="sub2">
+            <span>📈 {{ $salesAll > 0 ? number_format($coll / $salesAll * 100, 1) : 0 }}% {{ __('dash.of_sales') }}</span>
         </div>
         <div class="dash-hint">{{ __('dash.h_coll') }}</div>
     </a>
-    <a class="kpi dash-link has-bolt" href="{{ $rpt('pos_status') }}">
+    <span class="eqop">−</span>
+    <a class="kpi dash-link has-bolt" href="{{ $rpt('returns_docs') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
-        <div class="lbl"><span class="kic">🚚</span> {{ __('dash.k_pos') }}</div>
-        <div class="val big">{{ $fmt($posDelivered->g) }}</div>
+        <div class="lbl"><span class="kic">↩️</span> {{ __('dash.k_rets') }}</div>
+        <div class="val neg big">{{ $fmt($rets->g) }}</div>
         <div class="sub2">
-            <span>✅ {{ $fmt($posDelivered->n) }} {{ __('dash.delivered_n') }}</span><i class="ksep"></i>
-            <span>⏳ {{ $fmt($openPos) }} {{ __('rpt.k_open') }}</span>
+            <span>🧾 {{ $fmt($rets->n) }} {{ __('dash.rets_n') }}</span>
         </div>
-        <div class="dash-hint">{{ __('dash.h_pos') }}</div>
+        <div class="dash-hint">{{ __('dash.h_rets') }}</div>
     </a>
+    <span class="eqop">=</span>
     <a class="kpi dash-link has-bolt" href="{{ $rpt('debts') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
-        <div class="lbl"><span class="kic">⏳</span> {{ __('rpt.k_balance') }}</div>
-        <div class="val mid big">{{ $fmt($debt->g) }}</div>
+        <div class="lbl"><span class="kic">🧮</span> {{ __('dash.eq_net') }}</div>
+        <div class="val big {{ $netMove > 0 ? 'mid' : 'pos' }}">{{ $netMove > 0 ? '+' : '' }}{{ $fmt($netMove) }}</div>
         <div class="sub2">
-            <span>👥 {{ $fmt($debt->n) }} {{ __('rpt.k_clients') }}</span><i class="ksep"></i>
-            <span>↩️ {{ $fmt($rets->g) }} {{ __('rpt.k_returns') }}</span>
+            <span>⏳ {{ __('dash.eq_debt_now') }}: <b>{{ $fmt($debt->g) }}</b></span><i class="ksep"></i>
+            <span>👥 {{ $fmt($debt->n) }} {{ __('rpt.k_clients') }}</span>
         </div>
-        <div class="dash-hint">{{ __('dash.h_debt') }}</div>
+        <div class="dash-hint">{{ __('dash.h_eq_net') }}</div>
     </a>
 </div>
 
@@ -452,6 +472,12 @@
   position:relative;overflow:hidden;
   display:flex;flex-direction:column;gap:6px;min-height:148px;
 }
+/* ═══ صف المعادلة (٢٦/٨): مبيعات − تحصيل − مرتجعات = صافي الحركة ═══ */
+.dash-eqrow{display:flex;gap:6px;align-items:stretch;flex-wrap:wrap;margin-bottom:14px}
+.dash-eqrow .kpi{flex:1;min-width:235px;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;gap:6px;min-height:158px}
+.eqop{align-self:center;font-size:28px;font-weight:900;color:var(--royal-blue,#12399B);
+  flex-shrink:0;padding:0 1px;opacity:.75}
 .dash-kpis .bolt-mark{position:absolute;inset-inline-end:-18px;bottom:-22px;width:110px;opacity:.05;transform:rotate(-9deg);pointer-events:none;color:#12399B}
 .kic{
   display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;flex-shrink:0;

@@ -7,6 +7,23 @@ return [
 
     'k_sales' => 'Period sales',
     'h_sales' => 'Invoices grand total incl. tax for the period — click for the detailed invoices report.',
+
+    // ═══ Equation row (2026-08-26): sales − collections − returns = net movement ═══
+    'eq_cash' => 'cash',
+    'eq_credit' => 'credit',
+    'eq_pos' => 'delivered SOs',
+    'billed' => 'billed (VAT)',
+    'unbilled' => 'unbilled',
+    'h_eq_sales' => 'Everything debited to clients this period: cash and credit invoices + delivered sales orders — billed = documents carrying VAT.',
+    'coll_cash' => 'invoice cash',
+    'coll_field' => 'field',
+    'coll_pos' => 'sales orders',
+    'k_rets' => 'Period returns',
+    'rets_n' => 'docs',
+    'h_rets' => 'Goods returned and credited back to clients — click for return documents.',
+    'eq_net' => 'Net receivables movement',
+    'eq_debt_now' => 'Outstanding receivables',
+    'h_eq_net' => 'Sales − collections − returns = what clients owe more (+) or less (−) this period. Outstanding = everything due right now.',
     'k_coll' => 'Period collections',
     'h_coll' => 'Everything actually collected: cash with invoices + field collections — click to open collections.',
     'of_sales' => 'of sales',
