@@ -176,6 +176,51 @@
     </a>
 </div>
 
+{{-- ═══ مهامي (٢٦/٨) — متابعة إدارة المهام من الرئيسية ═══ --}}
+@if (($myTasks['open'] ?? 0) > 0 || ($myTasks['waiting'] ?? 0) > 0)
+<div class="card" style="margin-bottom:14px">
+    <h3 style="margin:0 0 10px;display:flex;align-items:center;gap:8px">📋 {{ __('tasks.my_widget') }}
+        @if ($myTasks['late'] > 0)
+            <span class="badge b-red">{{ $myTasks['late'] }} {{ __('tasks.late') }}</span>
+        @endif
+        @if ($myTasks['waiting'] > 0)
+            <span class="badge b-orange">{{ $myTasks['waiting'] }} {{ __('tasks.k_waiting') }}</span>
+        @endif
+        <a class="btn sm" style="margin-inline-start:auto" href="{{ route('erp.tasks') }}">{{ __('tasks.go_all') }} ←</a>
+    </h3>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        {{-- مهامي المفتوحة --}}
+        <div style="flex:1;min-width:260px">
+            @forelse ($myTasks['list'] as $t)
+                <a href="{{ route('erp.tasks.show', $t) }}" class="dtk-row">
+                    <span class="dtk-dot" style="background:{{ $t->isLate() ? '#DC2626' : ($t->priority === 'urgent' ? '#B96C0A' : '#12399B') }}"></span>
+                    <b style="flex:1;min-width:0;font-size:12.5px">{{ $t->title }}</b>
+                    @if ($t->deadline)
+                        <span dir="ltr" style="font-size:10.5px;{{ $t->isLate() ? 'color:#DC2626;font-weight:800' : 'color:var(--muted)' }}">
+                            🗓 {{ $t->deadline->format('d/m H:i') }}</span>
+                    @endif
+                </a>
+            @empty
+                <div style="font-size:12px;color:var(--muted);padding:6px">{{ __('tasks.none') }} 👌</div>
+            @endforelse
+        </div>
+        {{-- مستنية اعتمادي — بزرار سريع --}}
+        @if ($myTasks['decide']->isNotEmpty())
+            <div style="flex:1;min-width:260px;background:#FFF8EC;border:1px solid #F3E4C2;border-radius:12px;padding:10px 12px">
+                <div style="font-size:11.5px;font-weight:900;margin-bottom:6px">⏳ {{ __('tasks.k_waiting') }}</div>
+                @foreach ($myTasks['decide'] as $t)
+                    <a href="{{ route('erp.tasks.show', $t) }}" class="dtk-row">
+                        <b style="flex:1;min-width:0;font-size:12.5px">{{ $t->title }}</b>
+                        <span style="font-size:10.5px;color:var(--muted)">👤 {{ $t->assignee?->displayName() }}</span>
+                    </a>
+                @endforeach
+            </div>
+        @endif
+    </div>
+    <div class="dash-hint" style="margin-top:8px">{{ __('tasks.h_widget') }}</div>
+</div>
+@endif
+
 {{-- ═══ المبيعات مقابل التحصيل + دونات القنوات ═══ --}}
 <div class="dash-grid2">
     <div class="card">
@@ -483,6 +528,11 @@
   display:flex;flex-direction:column;gap:4px;padding:14px 16px}
 .dash-eqrow .sub2{font-size:10.5px}
 .dash-eqrow .dash-hint{font-size:9.5px;margin-top:auto}
+/* صفوف ويدجت «مهامي» (٢٦/٨) */
+.dtk-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;
+    text-decoration:none;color:inherit;border:1px solid transparent}
+.dtk-row:hover{background:var(--card2,#F7F7FA);border-color:var(--border)}
+.dtk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 /* بوكس المبيعات أعرض من الباقي — فيه صفين مربعات (٢٦/٨) */
 .dash-eqrow .kpi:first-child{flex:1.6;min-width:300px}
 /* ⚠️ المربعات الصغيرة جوه البوكس: الرقم فوق واسمه تحته — بدل سطر sub2 المتلزق */

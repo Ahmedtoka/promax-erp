@@ -28,6 +28,11 @@ return [
     'desc_ph' => 'Describe what is needed…',
     'pick_files' => 'Choose files',
 
+    // Dashboard widget (Aug 26)
+    'my_widget' => 'My tasks',
+    'go_all' => 'All tasks',
+    'h_widget' => 'Your open tasks and the ones awaiting your approval — click any task to open it with its chat.',
+
     // Form
     'f_assignee' => 'Employee',
     'f_title' => 'Task title',

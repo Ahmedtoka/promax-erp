@@ -29,12 +29,16 @@
     $waiting = $assigned->where('status', 'submitted')->count();
 @endphp
 
-{{-- ═══ صف الإحصائيات — الرقم فوق واسمه تحته (نفس نمط الداشبورد) ═══ --}}
-<div class="kpis dash-kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="val big">{{ $today->count() }}</div><div class="lbl">📌 {{ __('tasks.col_today') }}</div></div>
-    <div class="kpi"><div class="val big {{ $late->count() ? 'neg' : '' }}">{{ $late->count() }}</div><div class="lbl">⏰ {{ __('tasks.col_late') }}</div></div>
-    <div class="kpi"><div class="val big {{ $waiting ? 'mid' : '' }}">{{ $waiting }}</div><div class="lbl">⏳ {{ __('tasks.k_waiting') }}</div></div>
-    <div class="kpi"><div class="val big pos">{{ $done->count() }}</div><div class="lbl">🏁 {{ __('tasks.col_done') }}</div></div>
+{{-- ═══ صف الإحصائيات — أيقونة دايرية ملونة جنب الرقم واسمه ═══ --}}
+<div class="tk-stats">
+    <div class="tk-stat"><span class="ic" style="background:#E8EFFD">📌</span>
+        <div><b>{{ $today->count() }}</b><i>{{ __('tasks.col_today') }}</i></div></div>
+    <div class="tk-stat"><span class="ic" style="background:#FDECEC">⏰</span>
+        <div><b style="{{ $late->count() ? 'color:#DC2626' : '' }}">{{ $late->count() }}</b><i>{{ __('tasks.col_late') }}</i></div></div>
+    <div class="tk-stat"><span class="ic" style="background:#FDF1E3">⏳</span>
+        <div><b style="{{ $waiting ? 'color:#B96C0A' : '' }}">{{ $waiting }}</b><i>{{ __('tasks.k_waiting') }}</i></div></div>
+    <div class="tk-stat"><span class="ic" style="background:#E7F7EE">🏁</span>
+        <div><b style="color:#0F7A38">{{ $done->count() }}</b><i>{{ __('tasks.col_done') }}</i></div></div>
 </div>
 
 {{-- ═══ البحث والفلاتر — لايف على الكروت والجدول مع بعض ═══ --}}
@@ -209,6 +213,17 @@
 
 @section('scripts')
 <style>
+/* ═══ صف الإحصائيات ═══ */
+.tk-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tk-stat{flex:1;min-width:170px;background:var(--card,#fff);border:1px solid var(--border);
+    border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;
+    box-shadow:0 1px 4px rgba(18,57,155,.04)}
+.tk-stat .ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;
+    justify-content:center;font-size:19px;flex-shrink:0}
+.tk-stat b{display:block;font-size:23px;font-weight:900;letter-spacing:-.5px;line-height:1.1;
+    font-variant-numeric:tabular-nums}
+.tk-stat i{font-style:normal;font-size:11px;font-weight:800;color:var(--muted)}
+
 /* ═══ البورد ═══ */
 .tk-board{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .tk-col{flex:1;min-width:270px;background:var(--card2,#F7F7FA);border:1px solid var(--border);

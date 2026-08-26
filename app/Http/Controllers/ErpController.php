@@ -262,7 +262,31 @@ class ErpController extends Controller
                 SUM(invoices.grand_total) v')
             ->groupBy('gov')->orderByDesc('v')->take(10)->get();
 
+        // ═══ سيكشن «مهامي» (٢٦/٨) — متابعة إدارة المهام من الرئيسية:
+        // مهامي المفتوحة/المتأخرة + اللي كلفتها ومستنية اعتمادي.
+        // null لأي رول مش في TASK_ROLES فالسيكشن مايترسمش أصلاً. ═══
+        $myTasks = null;
+
+        if (in_array($u->role, \App\Models\User::TASK_ROLES, true)) {
+            $mine = \App\Models\Task::with('creator')
+                ->where('assigned_to', $u->id)->where('status', '!=', 'approved')
+                ->orderByRaw('deadline IS NULL')->orderBy('deadline')->get();
+
+            $waitingQ = \App\Models\Task::with('assignee')
+                ->where('created_by', $u->id)->where('status', 'submitted')
+                ->latest('submitted_at');
+
+            $myTasks = [
+                'open' => $mine->count(),
+                'late' => $mine->filter(fn ($t) => $t->isLate())->count(),
+                'waiting' => (clone $waitingQ)->count(),
+                'list' => $mine->take(5),
+                'decide' => $waitingQ->take(3)->get(),
+            ];
+        }
+
         return view('erp.overview', [
+            'myTasks' => $myTasks,
             'from' => $a->toDateString(),
             'to' => $to->toDateString(),
             'mgrId' => $mgrId,
