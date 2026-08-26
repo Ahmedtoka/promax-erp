@@ -404,7 +404,7 @@ return [
 
     // ═══ Reprice sales order (2026-08-24) ═══
     'po_reprice' => 'Reprice at current client pricing',
-    'po_reprice_confirm' => 'Reprice order :number with the client current price list and live discount? Quantities stay as they are - an approved order goes back to accounting.',
+    'po_reprice_confirm' => 'Reprice order :number with the client current price list and live discount? Quantities, status and picking stay as they are - only prices change.',
     'po_reprice_locked' => 'The order was delivered or cancelled - entries were posted at the old price, fix with a return or settlement.',
     'po_repriced' => 'Order :number repriced: total was :old, now :new.',
 
@@ -416,7 +416,7 @@ return [
     'po_check_found' => ':n mismatched orders',
     'po_check_apply' => 'Reprice selected',
     'po_check_selected' => ':n orders selected',
-    'po_check_confirm' => 'Reprice :n orders at their clients current pricing? Quantities stay - approved ones go back to accounting.',
+    'po_check_confirm' => 'Reprice :n orders at their clients current pricing? Quantities, statuses and picking stay - only prices change.',
     'po_check_stored' => 'Stored total',
     'po_check_expected' => 'At current pricing',
     'po_check_diff' => 'Difference',

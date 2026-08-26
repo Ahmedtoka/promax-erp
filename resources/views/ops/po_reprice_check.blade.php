@@ -77,9 +77,6 @@
                                 </td>
                                 <td>
                                     <span class="badge {{ $po->statusColor() }}">{{ $po->statusLabel() }}</span>
-                                    @if ($po->approval_status === 'approved')
-                                        <span class="badge b-blue" style="font-size:9.5px">{{ __('ops.po_check_back_note') }}</span>
-                                    @endif
                                 </td>
                                 @if ($r['error'] !== null)
                                     <td colspan="3" style="color:var(--red,#DC2626);font-size:11.5px">

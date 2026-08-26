@@ -1637,8 +1637,6 @@ class OpsController extends Controller
             return __('ops.po_needs_rep_wh');
         }
 
-        $wasApproved = $purchaseOrder->approval_status === 'approved';
-
         // الكميات بالقطع زي ما هي — إعادة التسعير ماتلمسش الكميات
         $qty = $purchaseOrder->items->pluck('qty', 'product_id')
             ->map(fn ($q) => (int) $q)->all();
@@ -1657,36 +1655,14 @@ class OpsController extends Controller
                 ]);
             });
 
-            // ═══ أمر معتمد → يرجع للحسابات — نفس فلو updatePo بالحرف ═══
-            if ($wasApproved) {
-                DB::transaction(function () use ($purchaseOrder) {
-                    $pick = $purchaseOrder->pickOrder;
-
-                    if ($pick !== null && ! in_array($pick->status, ['cancelled', 'handed'], true)) {
-                        if ($err = $pick->cancel()) {
-                            throw new \App\Exceptions\Rejected($err);
-                        }
-                    }
-
-                    $purchaseOrder->update([
-                        'approval_status' => 'pending',
-                        'approved_by' => null,
-                        'approved_at' => null,
-                        'pick_order_id' => null,
-                    ]);
-                });
-
-                foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
-                    AppNotification::send(
-                        $acc,
-                        fn () => __('field.notif_po_reapproval_title', ['number' => $purchaseOrder->number]),
-                        fn () => __('field.notif_po_reapproval_body', [
-                            'client' => $purchaseOrder->client->displayName(),
-                            'by' => auth()->user()->displayName(),
-                        ]),
-                    );
-                }
-            }
+            // ⚠️⚠️ **إعادة التسعير ماترجّعش الأمر للحسابات — قرار المالك
+            // ٢٤/٨ بعد الحادثة.** أول نسخة عاملت المعتمد زي التعديل
+            // (رجوع للطابور + إلغاء التجهيز)، والفحص الجماعي طبّقها على
+            // أوامر قديمة شغّالة: المناديب فقدوا أوامرهم والموافقة
+            // التانية كانت هتفتح تجهيزات مكررة. القاعدة من دلوقتي:
+            // السعر بيتغير في مكانه — الحالة والموافقة والتجهيز
+            // ماحدش يلمسهم (الكميات أصلاً ثابتة فالتجهيز صحيح زي ما هو).
+            // اللي اتبهدل ساعتها اترجّع بأمر promax:restore-repriced.
         } catch (\App\Exceptions\Rejected $e) {
             return $e->getMessage();
         }
