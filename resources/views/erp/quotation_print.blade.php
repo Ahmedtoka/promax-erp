@@ -140,10 +140,25 @@
              الصنف / الوزن / سعر المستهلك (قبل الخصم) / سعر العرض
              (بعد الخصمين) / العلبة / الكرتونة — وعدد القطع ليبل فوق السعر.
 
-             والصفحة بتتقسم كل ٨ أصناف على A4 (متقاسة على اللايف ٢٦/٨ —
-             ٨ يادوب مالْيين الورقة) — كل جزء جدول مستقل بهيدره،
-             واللي بعد الأول بياخد break-before:page في الطباعة --}}
-        @php $qiPages = $lines->values()->chunk(8); @endphp
+             تقسيمة الصفحات (متقاسة على اللايف ٢٦/٨): الصفحة الأولى
+             **٨** أصناف — الهيدر والبوكس واكلين جزء من الورقة —
+             ومن التانية **١٠**: مفيش هيدر فوق ففيه مساحة لصنفين
+             زيادة. كل جزء جدول مستقل بهيدر أعمدته، واللي بعد الأول
+             بياخد break-before:page في الطباعة.
+             ⚠️ السلايسات من غير values() — المفاتيح الأصلية هي اللي
+             مكمّلة الترقيم العام ($i+1) عبر الصفحات --}}
+        @php
+            $qiAll = $lines->values();
+            $qiPages = collect();
+
+            if ($qiAll->isNotEmpty()) {
+                $qiPages->push($qiAll->slice(0, 8));
+
+                foreach ($qiAll->slice(8)->chunk(10) as $qiChunk) {
+                    $qiPages->push($qiChunk);
+                }
+            }
+        @endphp
         @foreach ($qiPages as $pageRows)
         <table class="qi-table @if(! $loop->first) qi-page-break @endif">
             <thead>
