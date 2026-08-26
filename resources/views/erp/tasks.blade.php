@@ -223,9 +223,14 @@
 /* المستنية اعتمادي منوّرة في الجدول */
 .tk-wait{background:#FFF8EC}
 
-/* ═══ الديالوج — الإصلاح الأساسي ═══ */
-.tk-dlg{border:none;border-radius:18px;padding:0;max-width:560px;width:94vw;
-    box-shadow:0 20px 60px rgba(0,0,0,.25)}
+/* ═══ الديالوج ═══
+   ⚠️ اللياوت فيه قاعدة عامة `dialog>form{width:min(620px,92vw);
+   padding:20px 22px}` — النسخة الأولى حددت عرض الديالوج 560 فالفورم
+   طلع أعرض منه وكل حاجة فاضت برا (سكرين المالك ٢٦/٨). القاعدة هنا:
+   **العرض بيتحدد على الفورم مش على الديالوج**، والحواف بتتصفّر
+   عشان الهيدر المتدرج ياخد العرض كله وأقسام الفورم تتحكم في حوافها. */
+.tk-dlg{overflow:hidden;border-radius:18px}
+.tk-dlg>form{padding:0;width:min(560px,94vw)}
 .tk-dlg::backdrop{background:rgba(10,10,20,.45);backdrop-filter:blur(2px)}
 .tk-dlg-h{background:linear-gradient(135deg,#12399B,#602D90);color:#fff;
     font-weight:900;font-size:16px;padding:16px 22px}
