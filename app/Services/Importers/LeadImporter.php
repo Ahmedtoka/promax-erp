@@ -76,6 +76,9 @@ class LeadImporter extends Importer
             'city' => ['المدينة', 'city', 'neighborhood', 'المنطقة'],
             'governorate' => ['المحافظة', 'governorate', 'state'],
 
+            // ═══ الحي — لربط/إنشاء الزون بالاسم (بايبلاين ٢٦/٨) ═══
+            'district' => ['الحي', 'district', 'District'],
+
             // ═══ الإحداثيات — الأكتور بيسمّيها بنقطة أو بسلاش ═══
             'lat' => ['خط العرض', 'lat', 'location/lat', 'location.lat', 'latitude'],
             'lng' => ['خط الطول', 'lng', 'location/lng', 'location.lng', 'longitude'],
@@ -358,6 +361,22 @@ class LeadImporter extends Importer
         $zoned = 0;
         $assigned = 0;
         $unzoned = 0;
+        $zonesCreated = 0;
+
+        // ═══ فهرس الزونز بالاسم (بايبلاين ٢٦/٨) — عربي وإنجليزي ═══
+        // «الحي» في الشيت بيتماتش على اسم زون موجود الأول (نشط أو
+        // موقوف)، وبعدين الأقرب جغرافياً، وآخر حل بننشئ زون **موقوف**
+        // باسم الحي — مايظهرش للمناديب غير لما المدير يوزّعه (قرار
+        // المالك ٢٦/٨ مع شيت بايبلاين القاهرة والجيزة).
+        $zonesByName = [];
+
+        foreach (Zone::query()->get(['id', 'name', 'name_en']) as $z) {
+            foreach ([$z->name, $z->name_en] as $n) {
+                if (($k = \App\Support\Dupes::nameKey($n)) !== '') {
+                    $zonesByName[$k] ??= (int) $z->id;
+                }
+            }
+        }
 
         // ═══ الزونز بإحداثياتها — للربط بالأقرب ═══
         $zonePoints = [];
@@ -382,7 +401,7 @@ class LeadImporter extends Importer
         // صف بتتحول لـ٢٠٠٠ كويري زيادة على الإنشاء نفسه.
         $seq = (int) preg_replace('/\D+/', '', Lead::nextNumber());
 
-        DB::transaction(function () use ($rows, $zonePoints, $channelIds, $zoneReps, &$seq, &$created, &$zoned, &$assigned, &$unzoned) {
+        DB::transaction(function () use ($rows, $zonePoints, $channelIds, $zoneReps, $zonesByName, &$seq, &$created, &$zoned, &$assigned, &$unzoned, &$zonesCreated) {
             foreach ($rows as $row) {
                 $name = trim((string) $row['name']);
                 $category = trim((string) ($row['category'] ?? '')) ?: null;
@@ -392,10 +411,32 @@ class LeadImporter extends Importer
                 $rating = Sheet::number($row['rating'] ?? null);
                 $reviews = Sheet::number($row['reviews'] ?? null);
 
-                // ═══ الزون والمندوب ═══
-                $zoneId = ($lat !== null && $lng !== null)
-                    ? $this->nearestZone($zonePoints, $lat, $lng)
-                    : null;
+                // ═══ الزون: اسم الحي ← الأقرب ← إنشاء موقوف ═══
+                $district = trim((string) ($row['district'] ?? ''));
+                $dk = \App\Support\Dupes::nameKey($district);
+                $zoneId = $dk !== '' ? ($zonesByName[$dk] ?? null) : null;
+
+                if ($zoneId === null && $lat !== null && $lng !== null) {
+                    $zoneId = $this->nearestZone($zonePoints, $lat, $lng);
+                }
+
+                if ($zoneId === null && $district !== '' && $lat !== null && $lng !== null) {
+                    // زون جديد **موقوف** باسم الحي — إحداثياته أول ليد
+                    // فيه (كفاية كمركز تقريبي)، وبيدخل الفهرس فباقي
+                    // ليدات نفس الحي في نفس الرفعة بتلحق بيه.
+                    $newZone = Zone::create([
+                        'code' => Zone::nextCode(),
+                        'name' => $district,
+                        'name_en' => preg_match('/[a-z]/i', $district) ? $district : null,
+                        'governorate' => Governorates::match($row['governorate'] ?? null),
+                        'lat' => $lat,
+                        'lng' => $lng,
+                        'active' => false,
+                    ]);
+                    $zoneId = (int) $newZone->id;
+                    $zonesByName[$dk] = $zoneId;
+                    $zonesCreated++;
+                }
 
                 if ($zoneId !== null) {
                     $zoned++;
@@ -453,6 +494,10 @@ class LeadImporter extends Importer
                 $created++;
             }
         });
+
+        if ($zonesCreated > 0) {
+            $this->notes[] = __('lead.zones_created', ['n' => number_format($zonesCreated)]);
+        }
 
         return [
             'created' => $created,

@@ -356,6 +356,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::put('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'update'])->name('leads.update');
         Route::post('/leads/{lead}/convert', [\App\Http\Controllers\LeadController::class, 'convert'])
             ->middleware('role:admin,manager')->name('leads.convert');
+        // التوزيع الجماعي «خد N من المنطقة دي» — بايبلاين ٢٦/٨
+        Route::post('/leads/bulk-assign', [\App\Http\Controllers\LeadController::class, 'bulkAssign'])
+            ->middleware('role:admin,manager')->name('leads.bulk');
 
         // ===== الضريبة والفاتورة الإلكترونية — أدمن ومحاسب =====
         // ⚠️ الرقم الضريبي والنسبة بيأثروا على كل فاتورة جديدة،

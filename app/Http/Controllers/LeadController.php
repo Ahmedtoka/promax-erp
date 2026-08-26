@@ -110,8 +110,48 @@ class LeadController extends Controller
         $q->when($sort === 'score', fn ($x) => $x->orderByDesc('score')->orderByDesc('id'))
             ->when($sort === 'recent', fn ($x) => $x->orderByDesc('id'));
 
+        // ═══ المحفظة (بايبلاين ٢٦/٨) — الخريطة وتوزيعة المناطق ═══
+        //
+        // نقط الخريطة من **نفس الكويري المفلترة** — الفلتر بيسمع في
+        // الخريطة والجدول مع بعض. سقف 1500 نقطة عشان الصفحة ماتتخنقش.
+        $mapLeads = (clone $q)->whereNotNull('lat')->whereNotNull('lng')
+            ->orderByDesc('score')->limit(1500)
+            ->get(['id', 'name', 'lat', 'lng', 'status', 'zone_id', 'assigned_to', 'score'])
+            ->map(fn ($l) => [
+                'id' => $l->id,
+                'name' => $l->name,
+                'lat' => (float) $l->lat,
+                'lng' => (float) $l->lng,
+                'st' => $l->status,
+                'zone' => $l->zone_id,
+                'rep' => $l->assigned_to !== null,
+                'score' => (float) $l->score,
+            ])->values();
+
+        // متوزع على مناديب ولا لأ — أرقام المحفظة الكبيرة
+        $dist = (clone $q)->selectRaw('
+                COUNT(*) as total,
+                COALESCE(SUM(assigned_to IS NOT NULL), 0) as assigned
+            ')->first();
+
+        // توزيعة المناطق: كل زون فيه كام، مفتوح كام، غير متوزع كام،
+        // كسبنا كام — دي شاشة «خد ٥ من المنطقة دي»
+        $zoneRows = (clone $q)->selectRaw("
+                zone_id,
+                COUNT(*) as total,
+                COALESCE(SUM(assigned_to IS NULL AND status IN ('new','contacted','visited','negotiating')), 0) as unassigned,
+                COALESCE(SUM(status IN ('new','contacted','visited','negotiating')), 0) as open_n,
+                COALESCE(SUM(status = 'won'), 0) as won_n
+            ")
+            ->groupBy('zone_id')
+            ->orderByDesc('total')
+            ->get();
+
         return view('erp.leads', [
             'leads' => $q->paginate(30)->withQueryString(),
+            'mapLeads' => $mapLeads,
+            'zoneRows' => $zoneRows,
+            'dist' => $dist,
             // ⚠️ **كل** الزونز والمناديب، مش النشطين بس. لو زون
             // اتوقّف، الليد المرتبط بيه كان بيلاقي الاختيار مش موجود
             // في القايمة فبيرجع فاضي، وأول حفظ بيمسح التخصيص في صمت.
@@ -214,6 +254,58 @@ class LeadController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * توزيع جماعي (بايبلاين ٢٦/٨): «خد N من المنطقة دي» — بياخد
+     * أعلى N ليد **مفتوح وغير متوزع** بالسكور في الزون ويحطهم على
+     * المندوب. أدمن ومدير بس (الراوت)، والزون بيتفعّل لو كان موقوف
+     * ويتعلّم للمندوب — نفس روح Coverage: التوزيع بيجرّ الظهور وراه.
+     */
+    public function bulkAssign(Request $request)
+    {
+        $data = $request->validate([
+            'zone_id' => ['required', 'integer', 'exists:zones,id'],
+            'rep_id' => ['required', 'integer',
+                \Illuminate\Validation\Rule::exists('users', 'id')
+                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+            'count' => ['required', 'integer', 'min:1', 'max:200'],
+        ]);
+
+        $rep = User::findOrFail($data['rep_id']);
+
+        $ids = Lead::where('zone_id', $data['zone_id'])
+            ->whereNull('assigned_to')
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->orderByDesc('score')->orderBy('id')
+            ->limit((int) $data['count'])
+            ->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return back()->withErrors(['zone_id' => __('lead.bulk_none')]);
+        }
+
+        Lead::whereIn('id', $ids)->update(['assigned_to' => $rep->id]);
+
+        // الزون لازم يبان للمندوب — تفعيل + تعليم (إضافة بس، زي Coverage)
+        $zone = Zone::find($data['zone_id']);
+
+        if ($zone !== null) {
+            if (! $zone->active) {
+                $zone->update(['active' => true]);
+            }
+
+            $rep->zones()->syncWithoutDetaching([$zone->id]);
+        }
+
+        // إشعار للمندوب نفسه بس — عقيدة النوتفيكيشن
+        \App\Models\AppNotification::send($rep,
+            fn () => '🎯 '.__('lead.n_bulk_title'),
+            fn () => __('lead.n_bulk_body', ['n' => $ids->count(), 'zone' => $zone?->displayName() ?? '']));
+
+        return back()->with('ok', __('lead.bulk_done', [
+            'n' => $ids->count(), 'rep' => $rep->displayName(),
+        ]));
+    }
+
     private function rules(Request $request): array
     {
         return $request->validate([

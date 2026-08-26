@@ -108,7 +108,84 @@
         <div class="val num">{{ $money($stats['pipeline']) }}</div>
         <div class="sub2">{{ __('common.currency') }}</div>
     </div>
+    {{-- المحفظة (بايبلاين ٢٦/٨): متوزع على مناديب ولا لأ --}}
+    <div class="kpi">
+        <div class="lbl">{{ __('lead.k_assigned') }}</div>
+        <div class="val pos">{{ $fmt($dist->assigned ?? 0) }}</div>
+        <div class="sub2">{{ __('lead.of_total', ['t' => number_format($dist->total ?? 0)]) }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">{{ __('lead.k_unassigned') }}</div>
+        <div class="val {{ ($dist->total ?? 0) - ($dist->assigned ?? 0) > 0 ? 'mid' : 'pos' }}">
+            {{ $fmt(($dist->total ?? 0) - ($dist->assigned ?? 0)) }}</div>
+        <div class="sub2">{{ __('lead.k_unassigned_note') }}</div>
+    </div>
 </div>
+
+{{-- ═══ خريطة المحفظة (بايبلاين ٢٦/٨) — كل النقط ملونة بالحالة،
+     وبتسمع في نفس فلاتر الشاشة ═══ --}}
+@if ($mapLeads->isNotEmpty())
+<div class="card" style="margin-bottom:14px">
+    <h3 style="margin:0 0 10px">🗺️ {{ __('lead.map_title') }}
+        <span class="side">{{ number_format($mapLeads->count()) }} {{ __('lead.map_pts') }}</span></h3>
+    <div class="mapbox" id="ldMap" style="height:420px"></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)">
+        @foreach (['new' => '#2563EB', 'contacted' => '#6B7280', 'visited' => '#7C3AED',
+                   'negotiating' => '#B45309', 'won' => '#0F7A38', 'lost' => '#DC2626'] as $st => $cc)
+            <span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{ $cc }}"></i>
+                {{ __('lead.status_'.$st) }}</span>
+        @endforeach
+        <span style="margin-inline-start:auto">⚪ {{ __('lead.map_unassigned_hint') }}</span>
+    </div>
+</div>
+@endif
+
+{{-- ═══ توزيعة المناطق — «خد N من المنطقة دي» ═══ --}}
+@if ($zoneRows->isNotEmpty())
+<div class="card" style="margin-bottom:14px">
+    <h3 style="margin:0 0 10px">📍 {{ __('lead.zones_title') }}
+        <span class="side">{{ __('lead.zones_hint') }}</span></h3>
+    <div class="tablewrap" style="max-height:340px;overflow-y:auto">
+        <table data-plain>
+            <thead>
+            <tr>
+                <th style="text-align:start">{{ __('client.zone') }}</th>
+                <th>{{ __('lead.z_total') }}</th>
+                <th>{{ __('lead.z_open') }}</th>
+                <th>{{ __('lead.z_unassigned') }}</th>
+                <th>{{ __('lead.z_won') }}</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @php $zoneById = $zones->keyBy('id'); @endphp
+            @foreach ($zoneRows as $zr)
+                @php $z = $zr->zone_id !== null ? $zoneById->get($zr->zone_id) : null; @endphp
+                <tr>
+                    <td style="text-align:start;font-weight:800">
+                        {{ $z?->displayName() ?? __('lead.no_zone') }}
+                        @if ($z !== null && ! $z->active)
+                            <span class="badge b-gray" style="font-size:9px">{{ __('lead.zone_inactive') }}</span>
+                        @endif
+                    </td>
+                    <td class="num">{{ number_format($zr->total) }}</td>
+                    <td class="num">{{ number_format($zr->open_n) }}</td>
+                    <td class="num {{ $zr->unassigned > 0 ? 'mid' : '' }}"><b>{{ number_format($zr->unassigned) }}</b></td>
+                    <td class="num pos">{{ number_format($zr->won_n) }}</td>
+                    <td>
+                        @if ($canConvert && $zr->unassigned > 0 && $z !== null)
+                            <button class="btn sm" type="button"
+                                    onclick="ldOpenBulk({{ $z->id }}, {{ json_encode($z->displayName(), JSON_UNESCAPED_UNICODE) }}, {{ (int) $zr->unassigned }})">
+                                🎯 {{ __('lead.bulk_btn') }}</button>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+@endif
 
 <div class="card">
     <div class="tablewrap">
@@ -330,6 +407,36 @@
     </form>
 </dialog>
 
+{{-- ═══ ديالوج التوزيع الجماعي — «خد N من المنطقة دي» (٢٦/٨) ═══ --}}
+@if ($canConvert)
+<dialog id="dlgBulkAssign">
+    <form method="POST" action="{{ route('erp.leads.bulk') }}">
+        @csrf
+        <h3>🎯 {{ __('lead.bulk_title') }}</h3>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="blkZoneLine"></div>
+        <input type="hidden" name="zone_id" id="blkZone" value="">
+
+        <label class="f">{{ __('ops.rep') }}</label>
+        <select name="rep_id" required style="width:100%;margin-bottom:10px">
+            <option value="">—</option>
+            @foreach ($reps as $r)
+                <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
+            @endforeach
+        </select>
+
+        <label class="f">{{ __('lead.bulk_count') }}</label>
+        <input type="number" name="count" id="blkCount" min="1" max="200" value="5"
+               style="width:100%;margin-bottom:6px">
+        <div class="dash-hint" style="margin-bottom:12px">{{ __('lead.bulk_hint') }}</div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgBulkAssign')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">🎯 {{ __('lead.bulk_btn') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
 @endsection
 
 @section('scripts')
@@ -360,5 +467,61 @@
         toggleLost();
         openDlg('dlgEditLead');
     }
+
+    /* ═══ التوزيع الجماعي (٢٦/٨) ═══ */
+    const BULK_MAX_WORD = @js(__('lead.bulk_available'));
+
+    function ldOpenBulk(zoneId, zoneName, available) {
+        document.getElementById('blkZone').value = zoneId;
+        document.getElementById('blkZoneLine').textContent = zoneName + ' — ' + BULK_MAX_WORD.replace(':n', available);
+        const c = document.getElementById('blkCount');
+        c.max = Math.min(200, available);
+        c.value = Math.min(5, available);
+        openDlg('dlgBulkAssign');
+    }
+
+    /* ═══ خريطة المحفظة (٢٦/٨) — نقط ملونة بالحالة، والغير متوزع
+       بحلقة بيضا جواه. البوب أب: الاسم + الحالة + السكور. ═══ */
+    (function () {
+        'use strict';
+
+        const el = document.getElementById('ldMap');
+        if (!el) return;
+
+        const PTS = {!! json_encode($mapLeads, JSON_UNESCAPED_UNICODE) !!};
+        const ST_COLOR = { new: '#2563EB', contacted: '#6B7280', visited: '#7C3AED',
+            negotiating: '#B45309', won: '#0F7A38', lost: '#DC2626' };
+        const ST_LABEL = @js(collect(\App\Models\Lead::STATUSES)->mapWithKeys(fn ($s) => [$s => __('lead.status_'.$s)]));
+
+        const map = L.map('ldMap', { scrollWheelZoom: false, preferCanvas: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '&copy; OpenStreetMap',
+        }).addTo(map);
+
+        const bounds = [];
+
+        PTS.forEach(function (p) {
+            const c = ST_COLOR[p.st] || '#2563EB';
+            const m = L.circleMarker([p.lat, p.lng], {
+                radius: 6,
+                color: c,
+                weight: 2,
+                // الغير متوزع: قلب أبيض — باين من فوق الخريطة على طول
+                fillColor: p.rep ? c : '#FFFFFF',
+                fillOpacity: p.rep ? 0.85 : 1,
+            }).addTo(map);
+            m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;direction:rtl;text-align:start">'
+                + p.name
+                + '<div style="font-weight:400;font-size:11px;color:#6B6B66;margin-top:2px">'
+                + (ST_LABEL[p.st] || p.st) + ' · ' + Math.round(p.score) + '</div></div>');
+            bounds.push([p.lat, p.lng]);
+        });
+
+        if (bounds.length === 1) map.setView(bounds[0], 13);
+        else if (bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.1));
+
+        map.on('click', function () { map.scrollWheelZoom.enable(); });
+        map.on('mouseout', function () { map.scrollWheelZoom.disable(); });
+    })();
 </script>
 @endsection
