@@ -35,6 +35,18 @@
 @endphp
 
 @section('actions')
+    @if ($canConvert)
+        {{-- فحص الشبيهات (٢٦/٨): هل المحتمل ده عميل عندي فعلاً؟ --}}
+        <form method="POST" action="{{ route('erp.leads.dupcheck') }}" style="display:inline"
+              onsubmit="this.querySelector('button').disabled = true">
+            @csrf
+            <button class="btn" type="submit">🔍 {{ __('lead.dup_check_btn') }}</button>
+        </form>
+        @if ($dupPending > 0)
+            <a class="btn" href="{{ route('erp.leads', ['dup' => 1]) }}">
+                ⚠️ {{ $dupPending }} {{ __('lead.dup_pending') }}</a>
+        @endif
+    @endif
     <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>
 @endsection
 
@@ -128,7 +140,9 @@
 <div class="card" style="margin-bottom:14px">
     <h3 style="margin:0 0 10px">🗺️ {{ __('lead.map_title') }}
         <span class="side">{{ number_format($mapLeads->count()) }} {{ __('lead.map_pts') }}</span></h3>
-    <div class="mapbox" id="ldMap" style="height:420px"></div>
+    {{-- شيبس المناطق (٢٦/٨) — إخفاء/إظهار نقط كل منطقة بضغطة --}}
+    <div id="ldZoneChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div class="mapbox" id="ldMap" style="height:440px"></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)">
         @foreach (['new' => '#2563EB', 'contacted' => '#6B7280', 'visited' => '#7C3AED',
                    'negotiating' => '#B45309', 'won' => '#0F7A38', 'lost' => '#DC2626'] as $st => $cc)
@@ -224,6 +238,39 @@
                             <br><span style="font-size:10.5px;color:var(--muted)">
                                 {{ collect([$l->category_raw, $l->sourceLabel()])->filter()->implode(' · ') }}
                             </span>
+                        @endif
+
+                        {{-- ═══ الشبيه (٢٦/٨): شبه مين وليه + قرار المالك ═══ --}}
+                        @if ($l->dup_client_id !== null && ! $l->dup_dismissed && ! $l->isConverted())
+                            <div class="ld-dup">
+                                <div style="font-size:11px">
+                                    ⚠️ {{ __('lead.dup_like') }}
+                                    <a href="{{ route('erp.clients.show', $l->dup_client_id) }}" target="_blank"
+                                       style="font-weight:900;color:var(--royal-blue)">
+                                        {{ $l->dupClient?->fullName() ?? '—' }} ({{ $l->dupClient?->code }})</a>
+                                    <span class="badge b-orange" style="font-size:9px">{{ __('lead.dup_'.$l->dup_reason) }}</span>
+                                </div>
+                                @if ($l->dup_reason === 'phone')
+                                    <div style="font-size:10px;color:var(--muted)" dir="ltr">📞 {{ $l->dupClient?->phone }}</div>
+                                @elseif ($l->dup_reason === 'address')
+                                    <div style="font-size:10px;color:var(--muted)">📍 {{ $l->dupClient?->address }}</div>
+                                @endif
+                                @if ($canConvert)
+                                    <div style="display:flex;gap:6px;margin-top:5px">
+                                        <form method="POST" action="{{ route('erp.leads.dupdecide', $l) }}"
+                                              onsubmit="return confirm({!! json_encode(__('lead.dup_same_confirm'), JSON_UNESCAPED_UNICODE) !!})">
+                                            @csrf
+                                            <input type="hidden" name="verdict" value="same">
+                                            <button class="btn sm" type="submit">✅ {{ __('lead.dup_same') }}</button>
+                                        </form>
+                                        <form method="POST" action="{{ route('erp.leads.dupdecide', $l) }}">
+                                            @csrf
+                                            <input type="hidden" name="verdict" value="different">
+                                            <button class="btn sm" type="submit">❌ {{ __('lead.dup_diff') }}</button>
+                                        </form>
+                                    </div>
+                                @endif
+                            </div>
                         @endif
                     </td>
                     <td class="num s">{{ $l->phone ?: '—' }}</td>
@@ -440,6 +487,15 @@
 @endsection
 
 @section('scripts')
+<style>
+/* بوكس الشبيه في الجدول (٢٦/٨) */
+.ld-dup{margin-top:6px;background:#FFF8EC;border:1px solid #F3E4C2;border-radius:10px;padding:7px 10px}
+/* شيبس مناطق الخريطة */
+.ld-zchip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
+    cursor:pointer;border:1.5px solid var(--royal-blue,#12399B);
+    background:var(--blue-050,#E8F1FF);font:inherit;font-size:11.5px;font-weight:800}
+.ld-zchip.off{opacity:.35;border-style:dashed;background:transparent}
+</style>
 <script>
     {{-- ⚠️ في ثابت مش جوه onsubmit — الأبوستروف بيكسّر الجافاسكريبت --}}
     const CONVERT_CONFIRM = @js(__('lead.convert_confirm'));
@@ -480,8 +536,9 @@
         openDlg('dlgBulkAssign');
     }
 
-    /* ═══ خريطة المحفظة (٢٦/٨) — نقط ملونة بالحالة، والغير متوزع
-       بحلقة بيضا جواه. البوب أب: الاسم + الحالة + السكور. ═══ */
+    /* ═══ خريطة المحفظة (تطوير ٢٦/٨) — بن لوكيشن SVG ملون بالحالة،
+       القلب الأبيض = غير متوزع، وشيبس المناطق بتخفي/تظهر نقط كل
+       منطقة بضغطة (كل النقط في طبقة لكل زون). ═══ */
     (function () {
         'use strict';
 
@@ -489,31 +546,51 @@
         if (!el) return;
 
         const PTS = {!! json_encode($mapLeads, JSON_UNESCAPED_UNICODE) !!};
+        const ZNAMES = @js($zones->mapWithKeys(fn ($z) => [$z->id => $z->displayName()]));
+        const NO_ZONE = @js(__('lead.no_zone'));
         const ST_COLOR = { new: '#2563EB', contacted: '#6B7280', visited: '#7C3AED',
             negotiating: '#B45309', won: '#0F7A38', lost: '#DC2626' };
         const ST_LABEL = @js(collect(\App\Models\Lead::STATUSES)->mapWithKeys(fn ($s) => [$s => __('lead.status_'.$s)]));
 
-        const map = L.map('ldMap', { scrollWheelZoom: false, preferCanvas: true });
+        const map = L.map('ldMap', { scrollWheelZoom: false });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19, attribution: '&copy; OpenStreetMap',
         }).addTo(map);
 
+        /* بن لوكيشن — قطرة SVG بحدود بيضا وضل خفيف */
+        function pinIcon(c, unassigned) {
+            return L.divIcon({
+                className: '',
+                iconSize: [26, 34],
+                iconAnchor: [13, 32],
+                popupAnchor: [0, -28],
+                html: '<svg width="26" height="34" viewBox="0 0 26 34" '
+                    + 'style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">'
+                    + '<path d="M13 1C6.4 1 1 6.4 1 13c0 8.8 12 20 12 20s12-11.2 12-20C25 6.4 19.6 1 13 1z" '
+                    + 'fill="' + c + '" stroke="#fff" stroke-width="1.6"/>'
+                    + '<circle cx="13" cy="13" r="4.6" fill="' + (unassigned ? '#fff' : 'rgba(255,255,255,.4)') + '"/>'
+                    + '</svg>',
+            });
+        }
+
+        /* طبقة لكل زون — الشيبس بتشيل وتحط الطبقة كاملة */
+        const layers = {};
+        const counts = {};
         const bounds = [];
 
         PTS.forEach(function (p) {
+            const zid = String(p.zone || 0);
+            if (!layers[zid]) { layers[zid] = L.layerGroup().addTo(map); counts[zid] = 0; }
+            counts[zid]++;
+
             const c = ST_COLOR[p.st] || '#2563EB';
-            const m = L.circleMarker([p.lat, p.lng], {
-                radius: 6,
-                color: c,
-                weight: 2,
-                // الغير متوزع: قلب أبيض — باين من فوق الخريطة على طول
-                fillColor: p.rep ? c : '#FFFFFF',
-                fillOpacity: p.rep ? 0.85 : 1,
-            }).addTo(map);
+            const m = L.marker([p.lat, p.lng], { icon: pinIcon(c, !p.rep) });
             m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;direction:rtl;text-align:start">'
                 + p.name
                 + '<div style="font-weight:400;font-size:11px;color:#6B6B66;margin-top:2px">'
-                + (ST_LABEL[p.st] || p.st) + ' · ' + Math.round(p.score) + '</div></div>');
+                + (ST_LABEL[p.st] || p.st) + ' · ' + Math.round(p.score)
+                + ' · ' + (ZNAMES[p.zone] || NO_ZONE) + '</div></div>');
+            layers[zid].addLayer(m);
             bounds.push([p.lat, p.lng]);
         });
 
@@ -522,6 +599,24 @@
 
         map.on('click', function () { map.scrollWheelZoom.enable(); });
         map.on('mouseout', function () { map.scrollWheelZoom.disable(); });
+
+        /* ═══ شيبس المناطق — بالعدد، مترتبة بالأكبر ═══ */
+        const chipBox = document.getElementById('ldZoneChips');
+        Object.keys(layers)
+            .sort(function (a, b) { return counts[b] - counts[a]; })
+            .forEach(function (zid) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'ld-zchip';
+                b.innerHTML = '📍 ' + (ZNAMES[zid] || NO_ZONE)
+                    + ' <span class="badge b-gray" style="font-size:9.5px">' + counts[zid] + '</span>';
+                b.addEventListener('click', function () {
+                    const off = b.classList.toggle('off');
+                    if (off) map.removeLayer(layers[zid]);
+                    else layers[zid].addTo(map);
+                });
+                chipBox.appendChild(b);
+            });
     })();
 </script>
 @endsection

@@ -33,7 +33,7 @@ class LeadController extends Controller
         // فالنتيجة كانت تسريب وضياع في الاتجاهين معاً: المدير بيشوف
         // ليدز فرع تاني لو رقم الزون صادف رقم فرعه، وباقي ليداته
         // بتختفي خالص. السكوب لازم يعدّي **على الزون**.
-        $q = Lead::with(['zone', 'channel', 'assignee', 'client']);
+        $q = Lead::with(['zone', 'channel', 'assignee', 'client', 'dupClient']);
 
         if (! $user->seesAllBranches() && $user->branch_id !== null) {
             $branchId = $user->branch_id;
@@ -63,6 +63,11 @@ class LeadController extends Controller
                 in_array($request->input('source'), Lead::SOURCES, true),
                 fn ($x) => $x->where('source', $request->input('source')),
             )
+            // فلتر الشبيهات المستنية قرار (٢٦/٨) — المفتوحة بس:
+            // اللي اتقرر فيها «صح» اتقفلت وخلاص، مالهاش مكان هنا
+            ->when($request->boolean('dup'),
+                fn ($x) => $x->whereNotNull('dup_client_id')->where('dup_dismissed', false)
+                    ->whereIn('status', Lead::OPEN_STATUSES))
             ->when($request->filled('search'), function ($x) use ($request) {
                 $s = '%'.$request->input('search').'%';
                 $x->where(function ($w) use ($s) {
@@ -152,11 +157,19 @@ class LeadController extends Controller
             ->orderByDesc('total')
             ->get();
 
+        // الشبيهات المستنية قرار — عدّاد زرار الفحص (من غير فلاتر
+        // الشاشة عن قصد: الرقم ده «شغل مستني» مش «نتيجة الفلتر»)
+        $dupPending = Lead::whereNotNull('dup_client_id')
+            ->where('dup_dismissed', false)
+            ->whereIn('status', Lead::OPEN_STATUSES)
+            ->count();
+
         return view('erp.leads', [
             'leads' => $q->paginate(30)->withQueryString(),
             'mapLeads' => $mapLeads,
             'zoneRows' => $zoneRows,
             'dist' => $dist,
+            'dupPending' => $dupPending,
             // ⚠️ **كل** الزونز والمناديب، مش النشطين بس. لو زون
             // اتوقّف، الليد المرتبط بيه كان بيلاقي الاختيار مش موجود
             // في القايمة فبيرجع فاضي، وأول حفظ بيمسح التخصيص في صمت.
@@ -309,6 +322,105 @@ class LeadController extends Controller
         return back()->with('ok', __('lead.bulk_done', [
             'n' => $ids->count(), 'rep' => $rep->displayName(),
         ]));
+    }
+
+    /**
+     * ═══ فحص الشبيهات (٢٦/٨) — «هل المحتمل ده عميل عندي فعلاً؟» ═══
+     *
+     * بيمسح الليدز المفتوحة (اللي مش متشافة قبل كده) ضد العملاء
+     * الحقيقيين بتلات مفاتيح بالترتيب: التليفون المطبّع (الأقوى) ←
+     * الاسم المطبّع ← العنوان المطبّع. بيكتب **اقتراح** بس
+     * (dup_client_id + السبب) — القرار للمالك يدوي واحد واحد:
+     * ✓ نفس العميل = الليد بيتقفل ويختفي · ✗ غلط = بيفضل محتمل
+     * ومايتسألش عنه تاني (dup_dismissed).
+     */
+    public function dupCheck()
+    {
+        // فهارس العملاء — مرة واحدة
+        $byPhone = [];
+        $byName = [];
+        $byAddress = [];
+
+        $addrKey = function (?string $a): string {
+            $a = mb_strtolower(trim((string) $a));
+
+            return $a === '' ? '' : preg_replace('/[\s\-\.،,\/]+/u', '', $a);
+        };
+
+        foreach (Client::query()->get(['id', 'name', 'phone', 'address']) as $c) {
+            if (($pk = \App\Support\Dupes::phoneKey($c->phone)) !== '') {
+                $byPhone[$pk] ??= $c->id;
+            }
+
+            if (($nk = \App\Support\Dupes::nameKey($c->name)) !== '') {
+                $byName[$nk] ??= $c->id;
+            }
+
+            if (($ak = $addrKey($c->address)) !== '') {
+                $byAddress[$ak] ??= $c->id;
+            }
+        }
+
+        $found = 0;
+        $scanned = 0;
+
+        Lead::whereIn('status', Lead::OPEN_STATUSES)
+            ->where('dup_dismissed', false)
+            ->whereNull('dup_client_id')
+            ->chunkById(500, function ($chunk) use ($byPhone, $byName, $byAddress, $addrKey, &$found, &$scanned) {
+                foreach ($chunk as $l) {
+                    $scanned++;
+
+                    // الترتيب بالثقة: تليفون ← اسم ← عنوان
+                    $hit = null;
+                    $why = null;
+
+                    if (($pk = \App\Support\Dupes::phoneKey($l->phone)) !== '' && isset($byPhone[$pk])) {
+                        [$hit, $why] = [$byPhone[$pk], 'phone'];
+                    } elseif (($nk = \App\Support\Dupes::nameKey($l->name)) !== '' && isset($byName[$nk])) {
+                        [$hit, $why] = [$byName[$nk], 'name'];
+                    } elseif (($ak = $addrKey($l->address)) !== '' && isset($byAddress[$ak])) {
+                        [$hit, $why] = [$byAddress[$ak], 'address'];
+                    }
+
+                    if ($hit !== null) {
+                        $l->update(['dup_client_id' => $hit, 'dup_reason' => $why]);
+                        $found++;
+                    }
+                }
+            });
+
+        return back()->with('ok', __('lead.dup_scan_done', ['s' => $scanned, 'n' => $found]))
+            // ودّيه على فلتر الشبيهات على طول — دي شغلته الجاية
+            ->withInput();
+    }
+
+    /** قرار المالك على الشبيه: same = نفس العميل (يتقفل) · different = غلط */
+    public function dupDecide(Request $request, Lead $lead)
+    {
+        $data = $request->validate(['verdict' => ['required', 'in:same,different']]);
+
+        if ($lead->dup_client_id === null) {
+            return back()->withErrors(['verdict' => __('lead.dup_gone')]);
+        }
+
+        if ($data['verdict'] === 'different') {
+            $lead->update(['dup_client_id' => null, 'dup_reason' => null, 'dup_dismissed' => true]);
+
+            return back()->with('ok', __('lead.dup_kept'));
+        }
+
+        // نفس العميل: الليد بيتقفل مربوط بالعميل الموجود — مش «كسبناه»
+        // (مكسبناش حاجة جديدة) ومش تحويل (مفيش عميل اتولد). خسران
+        // بسبب موثّق + client_id بيقفله من أي تعديل (converted_readonly).
+        $client = $lead->dupClient;
+        $lead->update([
+            'status' => 'lost',
+            'lost_reason' => __('lead.dup_lost_reason', ['code' => $client?->code ?? '']),
+            'client_id' => $lead->dup_client_id,
+        ]);
+
+        return back()->with('ok', __('lead.dup_merged', ['code' => $client?->code ?? '']));
     }
 
     private function rules(Request $request): array

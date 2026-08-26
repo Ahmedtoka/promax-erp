@@ -29,6 +29,8 @@ class Lead extends Model
         // «تم» والليدز بتنزل بسكور صفر وبلا مرجع خارجي.
         'external_id', 'website', 'rating', 'reviews_count', 'category_raw',
         'score', 'governorate', 'sub_channel',
+        // فحص الشبيهات (٢٦/٨) — اقتراح «شبه عميل موجود» وقرار المالك
+        'dup_client_id', 'dup_reason', 'dup_dismissed',
     ];
 
     public const STATUSES = ['new', 'contacted', 'visited', 'negotiating', 'won', 'lost'];
@@ -88,6 +90,12 @@ class Lead extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /** العميل المشتبه إنه هو نفسه — فحص الشبيهات (٢٦/٨) */
+    public function dupClient(): BelongsTo
+    {
+        return $this->belongsTo(Client::class, 'dup_client_id');
     }
 
     public function createdBy(): BelongsTo

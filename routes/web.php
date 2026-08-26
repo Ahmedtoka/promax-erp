@@ -359,6 +359,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // التوزيع الجماعي «خد N من المنطقة دي» — بايبلاين ٢٦/٨
         Route::post('/leads/bulk-assign', [\App\Http\Controllers\LeadController::class, 'bulkAssign'])
             ->middleware('role:admin,manager')->name('leads.bulk');
+        // فحص الشبيهات ضد العملاء الحاليين + قرار المالك (٢٦/٨)
+        Route::post('/leads/dup-check', [\App\Http\Controllers\LeadController::class, 'dupCheck'])
+            ->middleware('role:admin,manager')->name('leads.dupcheck');
+        Route::post('/leads/{lead}/dup', [\App\Http\Controllers\LeadController::class, 'dupDecide'])
+            ->middleware('role:admin,manager')->name('leads.dupdecide');
 
         // ===== الضريبة والفاتورة الإلكترونية — أدمن ومحاسب =====
         // ⚠️ الرقم الضريبي والنسبة بيأثروا على كل فاتورة جديدة،
