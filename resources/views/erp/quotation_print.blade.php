@@ -100,9 +100,9 @@
             // ٢٣/٨ الأخير: من غير شطب قبل/بعد) — الخصمين تسلسليين.
             $dp = (1 - ($discountPct ?? 0) / 100) * (1 - ($extraPct ?? 0) / 100);
 
-            // خلية سعر: السعر النهائي و«12 قطعة» **سطر تحته** —
-            // dir=rtl على السطر عشان الترتيب العربي يطلع «12 قطعة»
-            // مش «قطعة 12» (خلية السعر نفسها ltr للأرقام)
+            // خلية علبة/كرتونة (٢٦/٨): **ليبل عدد القطع فوق** والسعر
+            // تحته — الليبل شكل بادج واضح للعميل. dir=rtl جوه الليبل
+            // عشان يطلع «12 قطعة» مش «قطعة 12»
             $pieceWord = __('stock.unit_piece');
             $priceCell = function (?float $v, ?int $factor = null) use ($dp, $pieceWord) {
                 if ($v === null) {
@@ -110,9 +110,9 @@
                 }
 
                 $fac = $factor && $factor > 1
-                    ? '<span class="qi-fac" dir="rtl">'.$factor.' '.e($pieceWord).'</span>' : '';
+                    ? '<span class="qi-lab" dir="rtl">'.$factor.' '.e($pieceWord).'</span>' : '';
 
-                return '<b>'.number_format($v * $dp, 2).'</b>'.$fac;
+                return $fac.'<b>'.number_format($v * $dp, 2).'</b>';
             };
 
             // ⚠️ السبليت عند **أول رقم** (قرار المالك ٢٣/٨): «برو ماكس
@@ -133,36 +133,49 @@
             };
         @endphp
         {{-- ⚠️ من غير كمية ولا إجمالي (قرار المالك ٢٣/٨) — ده عرض
-             أسعار مش أوردر، والمساحة للأصناف وأسعار وحداتها --}}
-        <table class="qi-table">
+             أسعار مش أوردر، والمساحة للأصناف وأسعار وحداتها.
+
+             ترتيب الأعمدة (قرار المالك ٢٦/٨):
+             # / الصورة (والكود **تحتها** — يكسب عمود في الجدول) /
+             الصنف / الوزن / سعر المستهلك (قبل الخصم) / سعر العرض
+             (بعد الخصمين) / العلبة / الكرتونة — وعدد القطع ليبل فوق السعر.
+
+             والصفحة بتتقسم كل ١٠ أصناف على A4 — كل جزء جدول مستقل
+             بهيدره، واللي بعد الأول بياخد break-before:page في الطباعة --}}
+        @php $qiPages = $lines->values()->chunk(10); @endphp
+        @foreach ($qiPages as $pageRows)
+        <table class="qi-table @if(! $loop->first) qi-page-break @endif">
             <thead>
             <tr>
                 <th style="width:26px">#</th>
-                <th style="width:56px"></th>
-                <th style="width:80px">{{ __('common.code') }}</th>
+                <th style="width:86px"></th>
                 <th style="text-align:start">{{ __('rpt.c_product') }}</th>
-                <th style="width:70px">{{ __('rpt.qt_weight') }}</th>
-                <th style="width:110px">{{ __('stock.unit_piece') }}</th>
-                @if ($hasBox)<th style="width:110px">{{ __('stock.unit_box') }}</th>@endif
-                @if ($hasCase)<th style="width:110px">{{ __('stock.unit_case') }}</th>@endif
+                <th style="width:64px">{{ __('rpt.qt_weight') }}</th>
+                <th style="width:82px">{{ __('rpt.qt_c_consumer') }}</th>
+                <th style="width:82px">{{ __('rpt.qt_c_offer') }}</th>
+                @if ($hasBox)<th style="width:96px">{{ __('rpt.qt_c_box') }}</th>@endif
+                @if ($hasCase)<th style="width:96px">{{ __('rpt.qt_c_case') }}</th>@endif
             </tr>
             </thead>
             <tbody>
-            @foreach ($lines as $i => $l)
+            @foreach ($pageRows as $i => $l)
                 <tr>
                     <td>{{ $i + 1 }}</td>
+                    {{-- الصورة أكبر والكود تحتها — بدل عمود كود مستقل --}}
                     <td>
                         @if ($l['image'] ?? null)
                             <img src="{{ $l['image'] }}" alt="" class="qi-thumb">
                         @else
                             <span class="qi-nothumb">📦</span>
                         @endif
+                        <div class="qi-code" dir="ltr">{{ $l['code'] ?? '' }}</div>
                     </td>
                     @php [$qiName, $qiWeight] = $splitWeight((string) $l['name']); @endphp
-                    <td dir="ltr" style="font-weight:700">{{ $l['code'] ?? '—' }}</td>
                     <td style="text-align:start;font-weight:800">{{ $qiName }}</td>
                     <td style="font-weight:700;white-space:nowrap">{{ $qiWeight ?? '—' }}</td>
-                    <td dir="ltr">{!! $priceCell((float) $l['price']) !!}</td>
+                    {{-- سعر المستهلك = السعر المجمّد قبل أي خصم — مرساة العرض --}}
+                    <td dir="ltr" class="qi-consumer">{{ number_format((float) $l['price'], 2) }}</td>
+                    <td dir="ltr" class="qi-offer"><b>{{ number_format((float) $l['price'] * $dp, 2) }}</b></td>
                     @if ($hasBox)
                         @php $ub = $unitPrice($l, 'box'); @endphp
                         <td dir="ltr">{!! $priceCell($ub ? (float) $ub['price'] : null, $ub['factor'] ?? null) !!}</td>
@@ -175,6 +188,7 @@
             @endforeach
             </tbody>
         </table>
+        @endforeach
 
         {{-- ═══ بدل الإجماليات (قرار المالك ٢٣/٨): تاجين للخصمين +
              جملة «شاملة/غير شاملة الضريبة» — الأسعار في الجدول
@@ -248,12 +262,22 @@
 .qi-table td{padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)}
 .qi-table tbody tr{page-break-inside:avoid;break-inside:avoid}
 .qi-table tbody tr:nth-child(even){background:var(--card2,#F7F7FA)}
-.qi-thumb{width:66px;height:66px;object-fit:contain;border-radius:8px;
+/* الصورة أكبر (٢٦/٨) والكود تحتها — وفّرنا عمود الكود للجدول */
+.qi-thumb{width:80px;height:80px;object-fit:contain;border-radius:8px;
   border:1px solid var(--border);background:#fff;display:block;margin:0 auto}
-.qi-nothumb{font-size:24px;color:var(--muted)}
-/* «12 قطعة» سطر تحت السعر — dir=rtl جواه بيظبط الترتيب العربي */
-.qi-fac{display:block;font-size:9.5px;color:var(--muted);font-weight:700;
-  white-space:nowrap;margin-top:1px}
+.qi-nothumb{font-size:26px;color:var(--muted)}
+.qi-code{font-size:9px;font-weight:700;color:var(--muted);margin-top:2px;
+  white-space:nowrap;text-align:center}
+/* ليبل عدد القطع — بادج فوق السعر واضح للعميل (٢٦/٨) */
+.qi-lab{display:block;width:fit-content;margin:0 auto 2px;
+  background:var(--blue-050,#E8F1FF);border:1px solid var(--royal-blue,#12399B);
+  color:var(--royal-blue,#12399B);border-radius:999px;padding:1px 8px;
+  font-size:9px;font-weight:900;white-space:nowrap}
+/* سعر المستهلك رمادي كمرساة — سعر العرض هو البطل */
+.qi-consumer{color:var(--muted);font-weight:700}
+.qi-offer b{font-size:13px;color:var(--royal-blue,#12399B)}
+/* كل جدول بعد الأول = صفحة A4 جديدة في الطباعة */
+.qi-page-break{margin-top:22px}
 /* اللوجو فوق صغير — كان بياكل الترويسة */
 .qt-head .doc-logo{height:24px}
 /* ═══ تاجات الخصم — بدل جدول الإجماليات والختم ═══ */
@@ -267,9 +291,10 @@
     .sidebar, .topbar, .btn { display:none !important; }
     .main{padding:0 !important}
     #qtDoc{border:none;box-shadow:none;max-width:100%}
-    .qi-table thead tr, .qi-tag, .qi-tag2{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .qi-table thead tr, .qi-tag, .qi-tag2, .qi-lab{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .qi-table{font-size:10.5px}
-    .qi-thumb{width:58px;height:58px}
+    .qi-thumb{width:70px;height:70px}
+    .qi-page-break{break-before:page;page-break-before:always;margin-top:0}
 }
 </style>
 @endsection

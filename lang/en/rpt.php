@@ -136,6 +136,11 @@ return [
     'qt_excl' => 'Prices do not include VAT',
     'qt_list_title' => 'PRICE LIST',
     'qt_weight' => 'Weight',
+    // New sheet columns (Aug 26): consumer price before discount as anchor, offer price after both discounts
+    'qt_c_consumer' => 'Consumer price',
+    'qt_c_offer' => 'Offer price',
+    'qt_c_box' => 'Box price',
+    'qt_c_case' => 'Case price',
     'qt_tax' => 'Tax',
     'qt_notes' => 'Notes',
     'qt_notes_ph' => 'Payment terms, delivery schedule, minimum order…',
