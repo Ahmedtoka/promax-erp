@@ -464,35 +464,52 @@ class ReportController extends Controller
 
         $this->like($q, $r, ['memo', 'reference', 'client.name']);
 
-        $all = (clone $q)->get(['id', 'credit', 'method']);
+        $all = (clone $q)->get(['id', 'credit', 'method', 'source_type']);
         $rows = $q->latest()->take(self::MAX_ROWS)->get();
 
         $byMethod = fn ($m) => $this->m($all->where('method', $m)->sum('credit'));
+
+        // ═══ المصدر (٢٦/٨ — «مش عارف أفرق الكاش من الميداني»):
+        // نفس تقسيمة بوكس الداشبورد بالظبط — كاش الفواتير (قيد
+        // أوتوماتيك مع فاتورة الكاش) · ميداني (من زيارة) · توريدات
+        // (تسليم PO لعميل كاش) · مكتب (مسجّل يدوي من الـERP) ═══
+        $srcKey = fn ($t) => match ($t->source_type) {
+            \App\Models\Invoice::class => 'src_invoice',
+            \App\Models\Visit::class => 'src_visit',
+            \App\Models\PurchaseOrder::class => 'src_po',
+            default => 'src_office',
+        };
+        $bySrc = fn ($cls) => $this->m($all->where('source_type', $cls)->sum('credit'));
 
         return [
             'filters' => ['range', 'q'],
             'kpis' => [
                 [__('rpt.k_count'), $this->f0($all->count()), ''],
                 [__('rpt.k_collected'), $this->m($all->sum('credit')), 'pos'],
+                // تقسيمة المصدر — لازم تطابق بوكس التحصيل في الداشبورد
+                [__('rpt.src_invoice'), $bySrc(\App\Models\Invoice::class), ''],
+                [__('rpt.src_visit'), $bySrc(\App\Models\Visit::class), ''],
+                [__('rpt.src_po'), $bySrc(\App\Models\PurchaseOrder::class), ''],
+                // تقسيمة الطريقة — للمطابقة المحاسبية
                 [__('rpt.m_cash'), $byMethod('cash'), ''],
                 [__('rpt.m_card'), $byMethod('card'), ''],
                 [__('rpt.m_cheque'), $byMethod('cheque'), ''],
                 [__('rpt.m_transfer'), $byMethod('transfer'), ''],
-                [__('rpt.m_with_invoice'), $this->m($all->whereNull('method')->sum('credit')), 'mid'],
             ],
             'columns' => [
-                [__('rpt.c_date')], [__('rpt.c_client')], [__('rpt.c_memo')],
+                [__('rpt.c_date')], [__('rpt.c_client')], [__('rpt.c_source')], [__('rpt.c_memo')],
                 [__('rpt.c_method')], [__('rpt.c_ref')], [__('rpt.k_amount'), 'num'],
             ],
             'rows' => $rows->map(fn ($t) => [
                 $t->date instanceof \DateTimeInterface ? $t->date->format('Y-m-d') : (string) $t->date,
                 $t->client?->fullName() ?? '—',
+                __('rpt.'.$srcKey($t)),
                 (string) $t->memo,
                 $t->method ? __('rpt.m_'.$t->method) : __('rpt.m_with_invoice'),
                 $t->reference ?? '—',
                 $this->m($t->credit),
             ])->all(),
-            'totals' => ['', '', '', '', __('common.total'), $this->m($all->sum('credit'))],
+            'totals' => ['', '', '', '', '', __('common.total'), $this->m($all->sum('credit'))],
         ];
     }
 

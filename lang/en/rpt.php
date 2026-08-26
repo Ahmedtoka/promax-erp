@@ -136,6 +136,12 @@ return [
     'qt_excl' => 'Prices do not include VAT',
     'qt_list_title' => 'PRICE LIST',
     'qt_weight' => 'Weight',
+    // Collection entry source (Aug 26) — matches the dashboard box split
+    'c_source' => 'Source',
+    'src_invoice' => 'Invoice cash',
+    'src_visit' => 'Field collection',
+    'src_po' => 'SO collection',
+    'src_office' => 'Office',
     // New sheet columns (Aug 26): consumer price before discount as anchor, offer price after both discounts
     'qt_c_consumer' => 'Consumer price',
     'qt_c_offer' => 'Offer price',
