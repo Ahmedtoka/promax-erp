@@ -69,6 +69,7 @@ return [
     'msg_ph' => 'Write a message… (Where is the update? / Finished part one…)',
     'send' => 'Send',
     'empty_msg' => 'Write a message or attach a file.',
+    'send_err' => 'Sending failed — try again.',
     'closed_hint' => 'Task approved and closed — chat is locked.',
 
     // System lines in chat

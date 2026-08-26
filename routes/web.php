@@ -96,6 +96,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store'])->name('tasks.store');
             Route::get('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'show'])->name('tasks.show');
             Route::post('/tasks/{task}/comment', [\App\Http\Controllers\TaskController::class, 'comment'])->name('tasks.comment');
+            // بولينج الشات الأجاكس (٢٦/٨) — رسايل بعد آخر id + الحالة
+            Route::get('/tasks/{task}/comments', [\App\Http\Controllers\TaskController::class, 'comments'])->name('tasks.comments');
             Route::post('/tasks/{task}/submit', [\App\Http\Controllers\TaskController::class, 'submit'])->name('tasks.submit');
             Route::post('/tasks/{task}/approve', [\App\Http\Controllers\TaskController::class, 'approve'])->name('tasks.approve');
             Route::post('/tasks/{task}/reject', [\App\Http\Controllers\TaskController::class, 'reject'])->name('tasks.reject');

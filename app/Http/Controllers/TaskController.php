@@ -25,8 +25,13 @@ use Illuminate\Validation\Rule;
  */
 class TaskController extends Controller
 {
-    /** مرفقات مسموحة: صور + شيتات + PDF/Word — 10 ميجا للملف */
-    private const FILE_RULE = 'file|max:10240|mimes:jpg,jpeg,png,webp,heic,xlsx,xls,csv,pdf,doc,docx';
+    /**
+     * مرفقات مسموحة: صور + شيتات + PDF/Word — 10 ميجا للملف.
+     * ⚠️ **مصفوفة مش سترينج بالبايبات** — سترينج جوه مصفوفة قواعد
+     * بيتقري كقاعدة واحدة اسمها «file|max» ويرمي BadMethodCallException
+     * (حصلت فعلاً على اللايف ٢٦/٨ عند إرسال صورة في الشات).
+     */
+    private const FILE_RULES = ['file', 'max:10240', 'mimes:jpg,jpeg,png,webp,heic,xlsx,xls,csv,pdf,doc,docx'];
 
     public function index()
     {
@@ -73,7 +78,7 @@ class TaskController extends Controller
             'priority' => ['required', Rule::in(Task::PRIORITIES)],
             'deadline' => ['nullable', 'date'],
             'files' => ['nullable', 'array', 'max:8'],
-            'files.*' => self::FILE_RULE,
+            'files.*' => self::FILE_RULES,
         ]);
 
         $task = Task::create([
@@ -112,22 +117,28 @@ class TaskController extends Controller
         ]);
     }
 
-    /** رسالة في الشات — نص و/أو مرفق، والإشعار للطرف التاني بس */
+    /**
+     * رسالة في الشات — نص و/أو مرفق، والإشعار للطرف التاني بس.
+     * أجاكس (٢٦/٨): بيرجع JSON بالرسالة الجاهزة فالشات بيتحدث من
+     * غير ريفريش — والفورم العادي فولباك لو الجافاسكربت مقفولة.
+     */
     public function comment(Request $request, Task $task)
     {
         $this->guard($task);
 
         $data = $request->validate([
             'body' => ['nullable', 'string', 'max:3000'],
-            'file' => ['nullable', self::FILE_RULE],
+            'file' => array_merge(['nullable'], self::FILE_RULES),
         ]);
 
         $file = $request->file('file');
         if (trim((string) ($data['body'] ?? '')) === '' && $file === null) {
-            return back()->withErrors(['body' => __('tasks.empty_msg')]);
+            return $request->expectsJson()
+                ? response()->json(['ok' => false, 'error' => __('tasks.empty_msg')], 422)
+                : back()->withErrors(['body' => __('tasks.empty_msg')]);
         }
 
-        TaskComment::create([
+        $c = TaskComment::create([
             'task_id' => $task->id,
             'user_id' => auth()->id(),
             'body' => trim((string) ($data['body'] ?? '')) ?: null,
@@ -139,7 +150,49 @@ class TaskController extends Controller
             fn () => '💬 '.__('tasks.n_msg_title'),
             fn () => __('tasks.n_msg_body', ['t' => $task->title, 'by' => auth()->user()->displayName()]));
 
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'comment' => $this->commentPayload($c)]);
+        }
+
         return back();
+    }
+
+    /**
+     * بولينج الشات (٢٦/٨): الرسايل اللي بعد آخر id عند المتصفح +
+     * حالة المهمة — لو الحالة اتغيرت (اتسلمت/اتعمدت) الصفحة بتعمل
+     * ريفريش عشان الأزرار تتظبط.
+     */
+    public function comments(Request $request, Task $task)
+    {
+        $this->guard($task);
+
+        $after = (int) $request->query('after', 0);
+
+        return response()->json([
+            'status' => $task->status,
+            'comments' => $task->comments()->where('id', '>', $after)->get()
+                ->map(fn ($c) => $this->commentPayload($c))->values(),
+        ]);
+    }
+
+    /** شكل الرسالة الموحد للأجاكس — نفس اللي البليد بيرسمه بالظبط */
+    private function commentPayload(TaskComment $c): array
+    {
+        $isImg = $c->file_path !== null
+            && in_array(strtolower(pathinfo($c->file_path, PATHINFO_EXTENSION)),
+                ['jpg', 'jpeg', 'png', 'webp'], true);
+
+        return [
+            'id' => $c->id,
+            'user_id' => (int) $c->user_id,
+            'name' => $c->user?->displayName() ?? '—',
+            'body' => $c->body,
+            'file_url' => $c->fileUrl(),
+            'file_name' => $c->file_name,
+            'is_img' => $isImg,
+            'is_system' => (bool) $c->is_system,
+            't' => $c->created_at?->format('d/m h:i A'),
+        ];
     }
 
     /** «تم التسليم» — المكلَّف بس، والإشعار للمكلِّف */
