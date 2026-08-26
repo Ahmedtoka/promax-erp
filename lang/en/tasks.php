@@ -29,6 +29,15 @@ return [
     'pick_files' => 'Choose files',
 
     // Dashboard widget (Aug 26)
+    // Team board (Aug 26)
+    'team_title' => 'Team board',
+    'team_hint' => 'Click an employee to see only his tasks — click again to clear',
+    'c_open' => 'working on',
+    'c_late' => 'late',
+    'c_wait' => 'awaiting approval',
+    'c_done' => 'done',
+    'clear_filters' => 'Clear filters',
+
     'my_widget' => 'My tasks',
     'go_all' => 'All tasks',
     'h_widget' => 'Your open tasks and the ones awaiting your approval — click any task to open it with its chat.',

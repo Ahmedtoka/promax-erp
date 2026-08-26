@@ -14,7 +14,7 @@
 @endphp
 <a href="{{ route('erp.tasks.show', $t) }}" class="tk-card"
    data-search="{{ mb_strtolower($t->title.' '.($tkWho?->displayName() ?? '')) }}"
-   data-pr="{{ $t->priority }}" data-st="{{ $tkSt }}"
+   data-pr="{{ $t->priority }}" data-st="{{ $tkSt }}" data-emp="{{ $t->assigned_to }}"
    style="display:block;text-decoration:none;color:inherit;background:#fff;
         border:1px solid var(--border);border-inline-start:4px solid {{ $tkEdge }};
         border-radius:12px;padding:10px 12px;margin-bottom:8px">

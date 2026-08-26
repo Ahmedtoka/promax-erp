@@ -56,7 +56,27 @@ class TaskController extends Controller
             ->orderByRaw("status = 'approved' ASC")
             ->latest()->take(100)->get();
 
+        // ═══ بورد الفريق (٢٦/٨ — «زي تريلو»): كل موظف وسامري مهامه —
+        // شغال في كام · متأخر كام · مستني اعتماد كام · خلّص كام.
+        // الأدمن بيشوف كل مهام السيستم، وغيره اللي هو كلّفها بس —
+        // نفس حدود الرؤية: محدش بيشوف تكليفات غيره. ═══
+        $team = Task::with('assignee')
+            ->when($u->role !== 'admin', fn ($q) => $q->where('created_by', $u->id))
+            ->get()
+            ->filter(fn ($t) => $t->assignee !== null)
+            ->groupBy('assigned_to')
+            ->map(fn ($g) => [
+                'user' => $g->first()->assignee,
+                'open' => $g->where('status', 'open')->filter(fn ($t) => ! $t->isLate())->count(),
+                'late' => $g->filter(fn ($t) => $t->isLate())->count(),
+                'submitted' => $g->where('status', 'submitted')->count(),
+                'approved' => $g->where('status', 'approved')->count(),
+            ])
+            ->sortByDesc(fn ($r) => $r['late'] * 100 + $r['open'] + $r['submitted'])
+            ->values();
+
         return view('erp.tasks', [
+            'team' => $team,
             'today' => $today,
             'late' => $late,
             'done' => $done,

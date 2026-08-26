@@ -1,17 +1,20 @@
 @extends('layouts.system')
 
 {{--
-    إدارة المهام — البورد (إعادة تحسين ٢٦ أغسطس ٢٠٢٦ بعد سكرين المالك):
+    إدارة المهام — إعادة بناء UI (٢٦ أغسطس ٢٠٢٦ — جولة تالتة بطلب المالك):
 
-    • صف إحصائيات فوق: مفتوحة / متأخرة / مستنية اعتمادي / خلصت.
-    • بار بحث + فلاتر (أولوية + حالة) — فلترة لايف في المتصفح على
-      كروت البورد وجدول «اللي كلفتها» مع بعض.
-    • البورد ٣ أعمدة والكروت أوضح، والديالوج اتظبط ستايله.
-      ⚠️ **أي input في الديالوج لازم type صريح** — ستايل السيستم
-      بيمسك input[type=text] بالاسم، وإنبت من غير type بيطلع خام
-      (ده اللي بوّظ البوب أب في أول نسخة).
-    • الرؤية زي ما هي: كل موظف شايف مهامه واللي كلّفها بس —
-      Task::visibleTo والحارس في الكنترولر.
+    • «بورد الفريق»: كارت لكل موظف بصورته وسامري مهامه (شغال في /
+      متأخر / مستني اعتماد / خلّص) — والضغط على الكارت بيفلتر
+      الشاشة كلها على الموظف ده (زي بوردات تريلو).
+    • بحث + فلاتر أولوية وحالة — لايف على كروت البورد وجدول
+      التكليفات مع بعض.
+      ⚠️ **مفيش أتربيوت class مرتين على عنصر** — صفوف الجدول كانت
+      عليها @class(...) وclass="tk-row-f" مع بعض، والمتصفح بياخد
+      الأول وبيرمي التاني، ففلترة الجدول ماتت بصمت. كله جوه @class
+      واحدة دلوقتي.
+    • بوكسات الإحصائيات اتظبطت للـRTL: أيقونة دايرية + الرقم فوق
+      واسمه تحته بمحاذاة البداية.
+    • الديالوج بنفس إصلاح الجولة اللي فاتت (العرض على الفورم).
 --}}
 
 @section('title', __('tasks.title'))
@@ -29,17 +32,41 @@
     $waiting = $assigned->where('status', 'submitted')->count();
 @endphp
 
-{{-- ═══ صف الإحصائيات — أيقونة دايرية ملونة جنب الرقم واسمه ═══ --}}
+{{-- ═══ صف الإحصائيات ═══ --}}
 <div class="tk-stats">
     <div class="tk-stat"><span class="ic" style="background:#E8EFFD">📌</span>
         <div><b>{{ $today->count() }}</b><i>{{ __('tasks.col_today') }}</i></div></div>
     <div class="tk-stat"><span class="ic" style="background:#FDECEC">⏰</span>
-        <div><b style="{{ $late->count() ? 'color:#DC2626' : '' }}">{{ $late->count() }}</b><i>{{ __('tasks.col_late') }}</i></div></div>
+        <div><b @if($late->count()) style="color:#DC2626" @endif>{{ $late->count() }}</b><i>{{ __('tasks.col_late') }}</i></div></div>
     <div class="tk-stat"><span class="ic" style="background:#FDF1E3">⏳</span>
-        <div><b style="{{ $waiting ? 'color:#B96C0A' : '' }}">{{ $waiting }}</b><i>{{ __('tasks.k_waiting') }}</i></div></div>
+        <div><b @if($waiting) style="color:#B96C0A" @endif>{{ $waiting }}</b><i>{{ __('tasks.k_waiting') }}</i></div></div>
     <div class="tk-stat"><span class="ic" style="background:#E7F7EE">🏁</span>
         <div><b style="color:#0F7A38">{{ $done->count() }}</b><i>{{ __('tasks.col_done') }}</i></div></div>
 </div>
+
+{{-- ═══ بورد الفريق — كارت لكل موظف بسامري مهامه، والضغط بيفلتر ═══ --}}
+@if ($team->isNotEmpty())
+<div class="card" style="margin-bottom:14px">
+    <h3 style="margin:0 0 10px">👥 {{ __('tasks.team_title') }}
+        <span class="side">{{ __('tasks.team_hint') }}</span></h3>
+    <div class="tk-team">
+        @foreach ($team as $row)
+            <button type="button" class="tk-emp" data-emp="{{ $row['user']->id }}">
+                @include('partials._avatar', ['u' => $row['user'], 'size' => 34])
+                <span class="tk-emp-i">
+                    <b>{{ $row['user']->displayName() }}</b>
+                    <span class="tk-emp-chips">
+                        <em style="background:#E8EFFD;color:#12399B">🔵 {{ $row['open'] }} {{ __('tasks.c_open') }}</em>
+                        @if ($row['late'])<em style="background:#FDECEC;color:#DC2626">🔴 {{ $row['late'] }} {{ __('tasks.c_late') }}</em>@endif
+                        @if ($row['submitted'])<em style="background:#FDF1E3;color:#B96C0A">🟠 {{ $row['submitted'] }} {{ __('tasks.c_wait') }}</em>@endif
+                        <em style="background:#E7F7EE;color:#0F7A38">🟢 {{ $row['approved'] }} {{ __('tasks.c_done') }}</em>
+                    </span>
+                </span>
+            </button>
+        @endforeach
+    </div>
+</div>
+@endif
 
 {{-- ═══ البحث والفلاتر — لايف على الكروت والجدول مع بعض ═══ --}}
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
@@ -59,7 +86,8 @@
             <option value="submitted">{{ __('tasks.st_submitted') }}</option>
             <option value="approved">{{ __('tasks.st_approved') }}</option>
         </select>
-        <span id="tkCount" style="font-size:11px;color:var(--muted)"></span>
+        <span id="tkCount" class="badge b-blue" style="display:none"></span>
+        <button type="button" id="tkClear" class="btn sm" style="display:none">✕ {{ __('tasks.clear_filters') }}</button>
     </div>
 </div>
 
@@ -101,17 +129,23 @@
         </thead>
         <tbody>
         @foreach ($assigned as $t)
-            @php
-                $stKey = $t->isLate() ? 'late' : $t->status;
-            @endphp
-            <tr @class(['tk-wait' => $t->status === 'submitted']) class="tk-row-f"
+            {{-- ⚠️ class واحدة عبر @class — الازدواج هو اللي قتل الفلترة --}}
+            <tr @class(['tk-row-f', 'tk-wait' => $t->status === 'submitted'])
                 data-search="{{ mb_strtolower($t->title.' '.($t->assignee?->displayName() ?? '')) }}"
-                data-pr="{{ $t->priority }}" data-st="{{ $stKey }}">
+                data-pr="{{ $t->priority }}" data-st="{{ $t->isLate() ? 'late' : $t->status }}"
+                data-emp="{{ $t->assigned_to }}">
                 <td style="text-align:start">
                     <a href="{{ route('erp.tasks.show', $t) }}" style="font-weight:800">{{ $t->title }}</a>
                     @if ($t->rejections > 0)<span class="badge b-red" style="font-size:9px">↩️ ×{{ $t->rejections }}</span>@endif
                 </td>
-                <td>{{ $t->assignee?->displayName() ?? '—' }}</td>
+                <td>
+                    <span style="display:inline-flex;align-items:center;gap:6px">
+                        @if ($t->assignee)
+                            @include('partials._avatar', ['u' => $t->assignee, 'size' => 22])
+                        @endif
+                        {{ $t->assignee?->displayName() ?? '—' }}
+                    </span>
+                </td>
                 <td><span class="badge {{ $t->priorityBadge() }}">{{ $prLabel($t) }}</span></td>
                 <td dir="ltr">{{ $t->deadline?->format('Y-m-d H:i') ?? '—' }}
                     @if ($t->isLate())<span class="badge b-red" style="font-size:9px">{{ __('tasks.late') }}</span>@endif
@@ -145,7 +179,7 @@
 </div>
 @endif
 
-{{-- ═══ ديالوج إضافة مهمة — كل input بـtype صريح (شوف الترويسة) ═══ --}}
+{{-- ═══ ديالوج إضافة مهمة — العرض على الفورم (فخ dialog>form الموثق) ═══ --}}
 <dialog id="dlgAddTask" class="tk-dlg">
     <form method="POST" action="{{ route('erp.tasks.store') }}" enctype="multipart/form-data">
         @csrf
@@ -190,7 +224,6 @@
 
             <div>
                 <label class="f">📎 {{ __('tasks.f_files') }}</label>
-                {{-- الليبل ستايل زرار — إنبت الملفات الخام شكله مكسور في كل المتصفحات --}}
                 <label class="btn" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
                     📎 {{ __('tasks.pick_files') }}
                     <input type="file" name="files[]" multiple style="display:none"
@@ -213,16 +246,30 @@
 
 @section('scripts')
 <style>
-/* ═══ صف الإحصائيات ═══ */
+/* ═══ صف الإحصائيات — RTL-صح: كله محاذاة بداية ═══ */
 .tk-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .tk-stat{flex:1;min-width:170px;background:var(--card,#fff);border:1px solid var(--border);
-    border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;
-    box-shadow:0 1px 4px rgba(18,57,155,.04)}
-.tk-stat .ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;
-    justify-content:center;font-size:19px;flex-shrink:0}
-.tk-stat b{display:block;font-size:23px;font-weight:900;letter-spacing:-.5px;line-height:1.1;
+    border-radius:14px;padding:13px 16px;display:flex;align-items:center;gap:12px;
+    text-align:start;box-shadow:0 1px 4px rgba(18,57,155,.05)}
+.tk-stat .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
+    justify-content:center;font-size:20px;flex-shrink:0}
+.tk-stat b{display:block;font-size:24px;font-weight:900;letter-spacing:-.5px;line-height:1.05;
     font-variant-numeric:tabular-nums}
-.tk-stat i{font-style:normal;font-size:11px;font-weight:800;color:var(--muted)}
+.tk-stat i{display:block;font-style:normal;font-size:11px;font-weight:800;color:var(--muted);margin-top:2px}
+
+/* ═══ بورد الفريق ═══ */
+.tk-team{display:flex;gap:10px;flex-wrap:wrap}
+.tk-emp{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;cursor:pointer;
+    border:1.5px solid var(--border);background:var(--card2,#F9F9FB);font:inherit;text-align:start;
+    transition:.12s;min-width:230px;flex:1;max-width:330px}
+.tk-emp:hover{border-color:var(--royal-blue,#12399B);background:#fff}
+.tk-emp.on{border-color:var(--royal-blue,#12399B);background:#EEF3FF;
+    box-shadow:0 0 0 3px rgba(18,57,155,.12)}
+.tk-emp-i{min-width:0;flex:1}
+.tk-emp-i>b{display:block;font-size:12.5px;margin-bottom:5px}
+.tk-emp-chips{display:flex;gap:5px;flex-wrap:wrap}
+.tk-emp-chips em{font-style:normal;font-size:9.5px;font-weight:900;border-radius:999px;
+    padding:2px 8px;white-space:nowrap}
 
 /* ═══ البورد ═══ */
 .tk-board{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
@@ -233,17 +280,10 @@
 .tk-done{border-top-color:#0F7A38}
 .tk-empty{padding:22px 10px;text-align:center;font-size:12px;color:var(--muted)}
 .tk-card{transition:.12s}
-.tk-card:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(18,57,155,.08);
-    border-color:var(--royal-blue,#12399B)}
-/* المستنية اعتمادي منوّرة في الجدول */
+.tk-card:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(18,57,155,.08)}
 .tk-wait{background:#FFF8EC}
 
-/* ═══ الديالوج ═══
-   ⚠️ اللياوت فيه قاعدة عامة `dialog>form{width:min(620px,92vw);
-   padding:20px 22px}` — النسخة الأولى حددت عرض الديالوج 560 فالفورم
-   طلع أعرض منه وكل حاجة فاضت برا (سكرين المالك ٢٦/٨). القاعدة هنا:
-   **العرض بيتحدد على الفورم مش على الديالوج**، والحواف بتتصفّر
-   عشان الهيدر المتدرج ياخد العرض كله وأقسام الفورم تتحكم في حوافها. */
+/* ═══ الديالوج (فخ dialog>form الموثق — العرض على الفورم) ═══ */
 .tk-dlg{overflow:hidden;border-radius:18px}
 .tk-dlg>form{padding:0;width:min(560px,94vw)}
 .tk-dlg::backdrop{background:rgba(10,10,20,.45);backdrop-filter:blur(2px)}
@@ -257,7 +297,7 @@
 .tk-dlg-f{display:flex;gap:10px;justify-content:flex-end;padding:0 22px 18px}
 </style>
 <script>
-// ═══ البحث والفلاتر — لايف على كروت البورد وصفوف الجدول مع بعض ═══
+// ═══ البحث + الفلاتر + فلتر الموظف — لايف على الكروت والجدول ═══
 (function () {
     'use strict';
 
@@ -265,37 +305,62 @@
     var pr = document.getElementById('tkPrFilter');
     var st = document.getElementById('tkStFilter');
     var count = document.getElementById('tkCount');
+    var clearBtn = document.getElementById('tkClear');
     var LBL = {!! json_encode(__('tasks.showing'), JSON_UNESCAPED_UNICODE) !!};
+    var emp = '';   // فلتر الموظف من كروت الفريق
 
     function apply() {
         var needle = q.value.trim().toLowerCase();
         var wantPr = pr.value;
         var wantSt = st.value;
+        var active = !!(needle || wantPr || wantSt || emp);
         var shown = 0, total = 0;
 
         document.querySelectorAll('.tk-card, .tk-row-f').forEach(function (el) {
             total++;
             var ok = (!needle || (el.dataset.search || '').indexOf(needle) !== -1)
                 && (!wantPr || el.dataset.pr === wantPr)
-                && (!wantSt || el.dataset.st === wantSt);
+                && (!wantSt || el.dataset.st === wantSt)
+                && (!emp || el.dataset.emp === emp);
             el.style.display = ok ? '' : 'none';
             if (ok) shown++;
         });
 
-        count.textContent = (needle || wantPr || wantSt) ? LBL.replace(':n', shown).replace(':t', total) : '';
+        count.style.display = active ? '' : 'none';
+        if (active) count.textContent = LBL.replace(':n', shown).replace(':t', total);
+        clearBtn.style.display = active ? '' : 'none';
 
         // عمود فضي بالكامل بعد الفلترة يوري رسالته
         document.querySelectorAll('.tk-col').forEach(function (col) {
             var any = Array.prototype.some.call(col.querySelectorAll('.tk-card'),
                 function (c) { return c.style.display !== 'none'; });
-            var empty = col.querySelector('.tk-empty');
-            if (empty) empty.style.display = any ? 'none' : '';
+            var e = col.querySelector('.tk-empty');
+            if (e) e.style.display = any ? 'none' : '';
         });
     }
 
     q.addEventListener('input', apply);
     pr.addEventListener('change', apply);
     st.addEventListener('change', apply);
+
+    clearBtn.addEventListener('click', function () {
+        q.value = ''; pr.value = ''; st.value = ''; emp = '';
+        document.querySelectorAll('.tk-emp.on').forEach(function (b) { b.classList.remove('on'); });
+        apply();
+    });
+
+    // كروت الفريق: ضغطة بتفلتر بالموظف — تانية بتفكه
+    document.querySelectorAll('.tk-emp').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.dataset.emp;
+            var wasOn = btn.classList.contains('on');
+            document.querySelectorAll('.tk-emp.on').forEach(function (b) { b.classList.remove('on'); });
+            emp = wasOn ? '' : id;
+            if (!wasOn) btn.classList.add('on');
+            apply();
+        });
+    });
+
     apply();
 })();
 </script>
