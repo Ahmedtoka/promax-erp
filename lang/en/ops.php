@@ -442,6 +442,18 @@ return [
     'paper_ref_hint' => "The stamped paper-book invoice number handwritten by the rep - for matching the book against the system. Leave empty if none.",
     'paper_saved' => 'Paper serial saved on invoice :number.',
 
+    // === Invoices Excel export (Aug 28, 2026) ===
+    'inv_excel' => 'Export Excel',
+    'inv_sheet' => 'Invoices',
+    'inv_time' => 'Time',
+    'inv_subtotal' => 'Before Discount',
+    'inv_discount' => 'Discount',
+    'inv_tax' => 'Tax',
+    'inv_docs' => 'invoices',
+    'inv_all_period' => 'All periods',
+    'inv_capped' => 'Only the first :n invoices were exported - narrow the period or filter by rep for the rest. The totals row covers the whole filter.',
+    'inv_total_row' => 'Total',
+
     // === Invoices page summary & totals (Aug 19, 2026) ===
     'inv_count' => 'Invoices',
     'inv_net' => 'Net After Discount',

@@ -3798,6 +3798,16 @@ class OpsController extends Controller
             COALESCE(SUM(payment <> 'cash'), 0) as credit_n
         ")->first();
 
+        // ═══ تصدير إكسيل (٢٨/٨ — طلب المالك) ═══
+        //
+        // ⚠️ **من نفس `$q` المفلترة**، بعد السكوب والفلاتر وقبل
+        // الباجينيشن — فاللي بيتصدّر هو بالظبط اللي الفلتر بيقوله،
+        // مش صفحة الأربعين المعروضة. لو اتعمل كويري تانية هنا،
+        // أول تعديل في فلتر الشاشة هيخلي الملف يكدب.
+        if ($request->boolean('export')) {
+            return $this->invoicesExcel(clone $q, $stats, $request);
+        }
+
         return view('ops.invoices', [
             // `client.group` و`client.channel` — الاسم المركّب (سلسلة —
             // فرع) وبادج القناة لكل صف من غير N+1
@@ -3807,6 +3817,120 @@ class OpsController extends Controller
             'filters' => $request->only(['user', 'from', 'to', 'paper']),
             'stats' => $stats,
         ]);
+    }
+
+    /**
+     * ═══ إكسيل الفواتير — صف لكل فاتورة (٢٨ أغسطس ٢٠٢٦) ═══
+     *
+     * بيتنادى من `invoices()` بنفس الكويري المفلترة (فترة/مندوب/
+     * سيريال) — الملف مرآة الشاشة بالظبط.
+     *
+     * ⚠️ **عقيدة الأرقام التلاتة** زي فوتر الشاشة بالحرف:
+     *   `total` الصافي بعد الخصم قبل الضريبة · `tax_total` الضريبة ·
+     *   `grand_total` اللي العميل بيدفعه. أي عمود يخلط بينهم بيخلي
+     *   الشيت يخالف كشف الحساب.
+     *
+     * ⚠️ سقف ٥٠٠٠ صف — فوقه الذاكرة بتقع على استضافة مشتركة والملف
+     * مايفتحش. الصف الأخير بيقول اتقص ولا لأ، فمحدش ياخد ناقص وهو
+     * فاكره كامل.
+     */
+    private function invoicesExcel($q, $stats, Request $request)
+    {
+        $cap = 5000;
+
+        $rows = $q->with(['client.group', 'client.channel', 'user'])
+            ->orderBy('created_at')->orderBy('id')
+            ->limit($cap + 1)->get();
+
+        $truncated = $rows->count() > $cap;
+        if ($truncated) {
+            $rows = $rows->take($cap);
+        }
+
+        $x = new \App\Services\SheetWriter(__('ops.inv_sheet'));
+
+        foreach ([0 => 13, 1 => 12, 2 => 9, 3 => 34, 4 => 14, 5 => 18, 6 => 10,
+            7 => 13, 8 => 12, 9 => 13, 10 => 12, 11 => 14, 12 => 13] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        // ═══ هيدر: عنوان + وصف الفلتر المطبّق ═══
+        $x->row([['v' => __('ops.inv_sheet'), 'style' => 'title']]);
+        $x->merge(0, 12);
+
+        $rep = $request->integer('user') ? User::find($request->integer('user'))?->displayName() : null;
+        $scope = array_filter([
+            $request->string('from')->value() || $request->string('to')->value()
+                ? (__('rpt.f_from').' '.($request->string('from')->value() ?: '—')
+                    .' → '.($request->string('to')->value() ?: '—'))
+                : __('ops.inv_all_period'),
+            $rep ? __('rpt.c_rep').': '.$rep : null,
+            $request->string('paper')->value() ? __('ops.paper_ref').': '.$request->string('paper')->value() : null,
+        ]);
+
+        $x->row([['v' => implode('   •   ', $scope), 'style' => 'muted']]);
+        $x->merge(0, 12);
+        $x->blank();
+
+        $x->row([
+            ['v' => __('rpt.c_number'), 'style' => 'header'],
+            ['v' => __('rpt.c_date'), 'style' => 'header'],
+            ['v' => __('ops.inv_time'), 'style' => 'header'],
+            ['v' => __('rpt.c_client'), 'style' => 'header'],
+            ['v' => __('rpt.c_channel'), 'style' => 'header'],
+            ['v' => __('rpt.c_rep'), 'style' => 'header'],
+            ['v' => __('rpt.c_payment'), 'style' => 'header'],
+            ['v' => __('ops.inv_subtotal'), 'style' => 'header'],
+            ['v' => __('ops.inv_discount'), 'style' => 'header'],
+            ['v' => __('ops.inv_net'), 'style' => 'header'],
+            ['v' => __('ops.inv_tax'), 'style' => 'header'],
+            ['v' => __('ops.inv_grand'), 'style' => 'header'],
+            ['v' => __('ops.paper_ref'), 'style' => 'header'],
+        ]);
+
+        foreach ($rows as $inv) {
+            $x->row([
+                ['v' => $inv->number, 'style' => 'center'],
+                ['v' => $inv->created_at?->format('Y-m-d'), 'style' => 'center'],
+                ['v' => $inv->created_at?->format('h:i A'), 'style' => 'center'],
+                ['v' => $inv->client?->displayName(), 'style' => 'center'],
+                ['v' => $inv->client?->channel?->displayName(), 'style' => 'center'],
+                ['v' => $inv->user?->displayName(), 'style' => 'center'],
+                ['v' => $inv->paymentLabel(), 'style' => 'center'],
+                ['v' => round((float) $inv->subtotal, 2), 'style' => 'money', 'num' => true],
+                ['v' => round((float) $inv->discount, 2), 'style' => 'money', 'num' => true],
+                ['v' => round((float) $inv->total, 2), 'style' => 'money', 'num' => true],
+                ['v' => round((float) $inv->tax_total, 2), 'style' => 'money', 'num' => true],
+                ['v' => round((float) $inv->grand_total, 2), 'style' => 'money_bold', 'num' => true],
+                ['v' => $inv->paper_ref ?: '—', 'style' => 'center'],
+            ]);
+        }
+
+        // ═══ صف الإجماليات — من `$stats` (الكويري كلها) مش من الصفوف
+        // المصدَّرة، عشان يفضل صح حتى لو اتقص عند السقف ═══
+        $x->row([
+            ['v' => __('ops.inv_total_row'), 'style' => 'total'],
+            ['v' => (int) $stats->n.' '.__('ops.inv_docs'), 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => __('ops.cash').' '.(int) $stats->cash_n.' / '.__('ops.credit').' '.(int) $stats->credit_n, 'style' => 'total'],
+            ['v' => round((float) $stats->subtotal, 2), 'style' => 'total', 'num' => true],
+            ['v' => round((float) $stats->discount, 2), 'style' => 'total', 'num' => true],
+            ['v' => round((float) $stats->total, 2), 'style' => 'total', 'num' => true],
+            ['v' => round((float) $stats->tax, 2), 'style' => 'total', 'num' => true],
+            ['v' => round((float) $stats->grand, 2), 'style' => 'total', 'num' => true],
+            ['v' => '', 'style' => 'total'],
+        ]);
+
+        if ($truncated) {
+            $x->blank();
+            $x->row([['v' => __('ops.inv_capped', ['n' => $cap]), 'style' => 'muted']]);
+            $x->merge(0, 12);
+        }
+
+        return $x->download('invoices-'.now()->format('Y-m-d-Hi').'.xlsx');
     }
 
     /**

@@ -338,8 +338,26 @@ class SheetWriter
         return $s;
     }
 
+    /**
+     * تهريب النص للـXML.
+     *
+     * 🔴 **محارف التحكّم لازم تتشال قبل التهريب** (باج ٢٨/٨): أسماء
+     * المنتجات المستوردة من شيتات إكسيل بتحمل محارف مخفية
+     * (\x0B \x1F \x00…) — `htmlspecialchars` **مابيلمسهاش**، وXML 1.0
+     * بيحرّمها، فإكسيل بيرمي **الخلية دي بالذات** في صمت وهو بيفتح.
+     * النتيجة كانت: عمود «الصنف» فاضي والباقي سليم — أصعب شكل عطل
+     * لأن الملف بيفتح عادي من غير أي رسالة.
+     *
+     * ⚠️ و`ENT_SUBSTITUTE` مش رفاهية: من غيره أي بايت UTF-8 مكسور
+     * بيخلي `htmlspecialchars` يرجّع **نص فاضي بالكامل**.
+     */
     private static function esc(string $s): string
     {
-        return htmlspecialchars($s, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        // \t \n \r مسموحين — أي حاجة تحت 0x20 غيرهم بتتشال
+        $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s);
+
+        // الريجيكس بيرجّع null لو النص UTF-8 مكسور — نكمّل بالخام
+        // وسيب ENT_SUBSTITUTE يتصرف
+        return htmlspecialchars($clean ?? $s, ENT_QUOTES | ENT_XML1 | ENT_SUBSTITUTE, 'UTF-8');
     }
 }

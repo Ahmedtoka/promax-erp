@@ -1297,7 +1297,8 @@ class ReportController extends Controller
             403,
         );
 
-        $quotation->load('items');
+        // `items.product` مش `items` — الفولباك على الاسم الحي محتاجه
+        $quotation->load('items.product');
         $co = \App\Models\Setting::docHeader();
 
         $dp = (1 - ((float) $quotation->discount_pct) / 100)
@@ -1383,7 +1384,13 @@ class ReportController extends Controller
         $pieceWord = __('stock.unit_piece');
 
         foreach ($quotation->items->values() as $i => $item) {
-            [$name, $weight] = $splitWeight((string) $item->name);
+            // ⚠️ فولباك على اسم الصنف الحي لو الاسم المجمّد فاضي —
+            // خلية اسم فاضية بتخلي الورقة كلها بلا معنى للعميل
+            $raw = trim((string) $item->name) !== ''
+                ? (string) $item->name
+                : (string) ($item->product?->displayName() ?? '');
+
+            [$name, $weight] = $splitWeight($raw);
             $price = (float) $item->price;
 
             $row = [
