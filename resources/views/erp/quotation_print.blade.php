@@ -17,6 +17,11 @@
     <a class="btn" href="{{ route('erp.reports.quotations') }}">← {{ __('rpt.qts_title') }}</a>
     <a class="btn" href="{{ route('erp.reports.quotation') }}">➕ {{ __('rpt.qts_new') }}</a>
     <a class="btn" href="{{ route('erp.reports.quotations.edit', $quotation) }}">✏️ {{ __('rpt.qt_edit') }}</a>
+    {{-- ⚠️ **الإكسيل بيتولد على السيرفر مش من الجدول اللي في الشاشة**
+         (٢٨/٨) — الجدول هنا مقسوم صفحات ٨/١٠ وفيه صور وبادجات، فأي
+         تحويل من الـDOM بيطلع ملف مقطّع بنص أعمدة. الراوت بيعيد بناء
+         نفس الأرقام من البنود المجمّدة --}}
+    <a class="btn" href="{{ route('erp.reports.quotations.excel', $quotation) }}">📊 {{ __('rpt.qt_excel') }}</a>
     {{-- المتصفح بيطبع → «حفظ PDF» — نفس مسار كل مستندات A4 --}}
     <button class="btn gold" type="button" onclick="window.print()">🖨️ {{ __('rpt.qt_pdf') }}</button>
 @endsection

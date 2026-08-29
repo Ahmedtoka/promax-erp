@@ -14,10 +14,13 @@ class LocaleController extends Controller
             return back();
         }
 
-        // بيتحفظ على اليوزر عشان يفضل معاه على أي جهاز،
-        // وفي السيشن كمان عشان صفحة اللوجين قبل ما يسجّل دخول
+        // بيتحفظ في السيشن (يلزق فوراً + صفحة اللوجين قبل الدخول)
+        // وفي `web_locale` عشان يتبعه على أي جهاز.
+        // ⚠️ ماينفعش نكتب في `users.locale` — ده بقى ملك الأبلكيشن
+        // لوحده (٢٧/٨): الكتابة فيه من هنا كانت بتقلب لغة الأبلكيشن
+        // على المندوب من غير ما يعمل حاجة.
         $request->session()->put('locale', $locale);
-        $request->user()?->forceFill(['locale' => $locale])->save();
+        $request->user()?->forceFill(['web_locale' => $locale])->save();
 
         return back();
     }

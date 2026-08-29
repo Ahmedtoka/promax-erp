@@ -21,22 +21,30 @@ class SetLocale
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // ⚠️ **لغة الأبلكيشن تغلب لغة اليوزر** (2026-08-08).
+        // ⚠️ **الويب والأبلكيشن لغتين منفصلتين تماماً** (2026-08-27).
         //
-        // فيه نصوص بتتولد عند السيرفر وبتتعرض جوه شاشة الأبلكيشن —
-        // ليبل البانش في حركة اليوم، أسماء الحالات، رسايل الأخطاء.
-        // المندوب اللي بدّل **الأبلكيشن** لعربي كان لسه بياخدها
-        // إنجليزي لأن `users.locale` بتاعه إنجليزي، فالشاشة بتطلع
-        // نصها عربي ونصها إنجليزي.
-        //
-        // ⚠️ والهيدر بيتقرا **بس لو فيه هيدر** — الويب مابيبعتوش،
-        // فلغة الجلسة في الـERP مابتتأثرش خالص.
-        $fromApp = $request->header('X-App-Locale');
+        // كان `users.locale` بيغلب السيشن في الويب، والأبلكيشن هو
+        // اللي بيكتب في `users.locale` (POST /api/locale) — فنفس
+        // الأكاونت شغال ويب عربي وأبلكيشن إنجليزي كان أي سبمت أو
+        // فلتر في الـERP بيقلب اللغة فجأة. دلوقتي:
+        //   - طلب ويب (فيه سيشن): session ← web_locale ← locale ← الديفولت
+        //     السيشن الأول عشان التبديل يلزق فوراً، وweb_locale عشان
+        //     يتبعه على متصفح/جهاز جديد — والأبلكيشن مايلمسوش أبداً.
+        //   - طلب API (بلا سيشن): هيدر X-App-Locale ← users.locale
+        //     زي ما كان (درس 2026-08-08: لغة الأبلكيشن تغلب لغة اليوزر
+        //     عشان النصوص المتولدة عند السيرفر جوه شاشات الأبلكيشن).
+        if ($request->hasSession()) {
+            $locale = $request->session()->get('locale')
+                ?? $request->user()?->web_locale
+                ?? $request->user()?->locale
+                ?? config('app.locale');
+        } else {
+            $fromApp = $request->header('X-App-Locale');
 
-        $locale = ($fromApp !== null && array_key_exists($fromApp, User::LOCALES) ? $fromApp : null)
-            ?? $request->user()?->locale
-            ?? ($request->hasSession() ? $request->session()->get('locale') : null)
-            ?? config('app.locale');
+            $locale = ($fromApp !== null && array_key_exists($fromApp, User::LOCALES) ? $fromApp : null)
+                ?? $request->user()?->locale
+                ?? config('app.locale');
+        }
 
         if (! array_key_exists($locale, User::LOCALES)) {
             $locale = config('app.locale');

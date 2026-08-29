@@ -3,8 +3,10 @@
 use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\FieldApiController;
 use App\Http\Controllers\Api\ManagerApiController;
+use App\Http\Controllers\Api\ManagerDashApiController;
 use App\Http\Controllers\Api\PickApiController;
 use App\Http\Controllers\Api\PromoterApiController;
+use App\Http\Controllers\Api\TaskApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -321,5 +323,29 @@ Route::middleware(['api.token', 'locale'])->group(function () {
             ->middleware('attendance');
         Route::post('/replenishments/{replenishmentRequest}/cancel',
             [ManagerApiController::class, 'cancelReplenishment']);
+
+        // ═══ شاشات المدير/الأدمن المطورة (٢٨/٨) ═══
+        // داشبورد المعادلة — مرآة ErpController::overview بسكوب الفريق
+        Route::get('/dashboard', [ManagerDashApiController::class, 'dashboard']);
+        // بورد اللايف — نفس liveRows (fieldVisibleTo جواها)
+        Route::get('/live', [\App\Http\Controllers\JourneyController::class, 'apiLive']);
+        // متابعة ليدات الفريق + أكاونتات الميدان
+        Route::get('/leads', [ManagerDashApiController::class, 'leads']);
+        // KPI والعمولات — قراءة بس، المدير قنواته والأدمن الكل
+        Route::get('/kpi', [ManagerDashApiController::class, 'kpi']);
+    });
+
+    // ═══ إدارة المهام على الموبايل (٢٨/٨) — نفس رولز الداشبورد
+    // (TASK_ROLES: أدمن/مدير/مدير فرع/محاسب — مفيش مناديب ولا سواقين)،
+    // والحراس جوه TaskApiController نفسها (طرفَي المهمة بس) ═══
+    Route::prefix('tasks')->middleware('api.role:admin,manager,branch_manager,accountant')->group(function () {
+        Route::get('/', [TaskApiController::class, 'index']);
+        Route::post('/', [TaskApiController::class, 'store']);
+        Route::get('/{task}', [TaskApiController::class, 'show']);
+        Route::post('/{task}/comment', [TaskApiController::class, 'comment']);
+        Route::get('/{task}/comments', [TaskApiController::class, 'comments']);
+        Route::post('/{task}/submit', [TaskApiController::class, 'submit']);
+        Route::post('/{task}/approve', [TaskApiController::class, 'approve']);
+        Route::post('/{task}/reject', [TaskApiController::class, 'reject']);
     });
 });

@@ -2394,6 +2394,50 @@ class JourneyController extends Controller
     }
 
     /**
+     * اللايف للموبايل (٢٨/٨) — بورد المدير/الأدمن في الأبلكيشن.
+     * نفس `liveRows` بحرفها (وبنفس حارس `fieldVisibleTo` جواها —
+     * تسريب الشاشة اللايف درس ٨/٨)، بس مقصوصة على اللي الكارت
+     * محتاجه: الموديلات الكاملة والـitems والـevents بيتشالوا،
+     * والعربية بترجع زي ما هي (أصلاً array جاهزة).
+     */
+    public function apiLive(Request $request)
+    {
+        $rows = $this->liveRows($request)->map(fn ($r) => [
+            'id' => $r['rep']->id,
+            'name' => $r['rep']->displayName(),
+            'code' => $r['rep']->code,
+            'role' => $r['rep']->role,
+            'role_label' => $r['rep']->roleLabel(),
+            'avatar_url' => $r['rep']->avatarUrl(),
+            'status' => $r['status'],
+            'work' => $r['work'],
+            'att_in' => $r['att_in'],
+            'att_out' => $r['att_out'],
+            'live_state' => $r['live_state'],
+            'live_min' => $r['live_min'],
+            'signal_at' => $r['signal_at'],
+            'minutes_ago' => $r['minutes_ago'],
+            'lat' => $r['lat'] !== null ? (float) $r['lat'] : null,
+            'lng' => $r['lng'] !== null ? (float) $r['lng'] : null,
+            'in_zone' => $r['in_zone'],
+            'speed' => $r['speed'],
+            'km_today' => $r['km_today'],
+            'sales_today' => (float) $r['sales_today'],
+            'visits_today' => (int) $r['visits_today'],
+            'pos_today' => (int) $r['pos_today'],
+            'shelf_today' => $r['shelf_today'],
+            'open_client' => $r['open_client'],
+            'last_event' => $r['last_event'],
+            'last_event_icon' => $r['last_event_icon'],
+            'remaining_units' => (int) $r['remaining_units'],
+            'remaining_value' => (float) $r['remaining_value'],
+            'van' => $r['van'],
+        ])->values();
+
+        return response()->json(['rows' => $rows, 'at' => now()->format('h:i A')]);
+    }
+
+    /**
      * لايف فوري بـServer-Sent Events — الشاشة بتتحدث كل ٣ ثواني
      * من غير ما تسأل، بدل ما تدق كل ١٥ ثانية على الفاضي.
      *

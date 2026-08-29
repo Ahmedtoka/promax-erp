@@ -1269,4 +1269,230 @@ class ReportController extends Controller
             'grand' => (float) $quotation->grand,
         ]);
     }
+
+    /**
+     * ═══ تصدير عرض السعر إكسيل (٢٨/٨/٢٠٢٦ — طلب المالك) ═══
+     *
+     * ملف xlsx حقيقي منسّق بـ`App\Services\SheetWriter` (مفيش
+     * PhpSpreadsheet على السيرفر — الرايتر مكتوب بالإيد زي القارئ).
+     *
+     * ⚠️ **نفس أرقام الورقة المطبوعة بالحرف** — أي اختلاف بين
+     * الإكسيل والـPDF بلاغ «الرقم مش مطابق» جاهز:
+     *   • سعر المستهلك = السعر المجمّد قبل أي خصم
+     *   • سعر العرض = بعد الخصمين **تسلسلياً** (نفس `$dp`)
+     *   • أسعار العلبة/الكرتونة مخصومة بنفس `$dp` وعدد القطع جنبها
+     *   • عمود الوزن مقسوم من الاسم عند أول رقم (نفس `$splitWeight`)
+     *   • **مفيش كمية ولا إجمالي** — ده عرض أسعار مش أوردر (قرار
+     *     المالك ٢٣/٨، واتأكد تاني ٢٨/٨)
+     *
+     * ⚠️ الصورة مش بتتحط في الإكسيل: الرايتر مابيدعمش `drawings`،
+     * والكود موجود عمود مستقل — العميل بيعرف الصنف منه.
+     */
+    public function quotationExcel(Request $request, \App\Models\Quotation $quotation)
+    {
+        // نفس حارس `quotationShow` بالحرف — التصدير مايفتحش باب أوسع
+        abort_unless(
+            \App\Models\Quotation::query()->visibleTo($request->user())
+                ->whereKey($quotation->id)->exists(),
+            403,
+        );
+
+        $quotation->load('items');
+        $co = \App\Models\Setting::docHeader();
+
+        $dp = (1 - ((float) $quotation->discount_pct) / 100)
+            * (1 - ((float) ($quotation->extra_pct ?? 0)) / 100);
+
+        $unit = function ($item, string $key): ?array {
+            foreach ((array) ($item->units ?? []) as $u) {
+                if (($u['key'] ?? '') === $key) {
+                    return $u;
+                }
+            }
+
+            return null;
+        };
+
+        $hasBox = $quotation->items->contains(fn ($i) => $unit($i, 'box') !== null);
+        $hasCase = $quotation->items->contains(fn ($i) => $unit($i, 'case') !== null);
+
+        // الاسم/الوزن — نفس ريجيكس الورقة (السبليت عند أول رقم)
+        $splitWeight = function (string $name): array {
+            if (preg_match('/^([^0-9٠-٩]+?)[\s\-·،]*([0-9٠-٩].*)$/u', trim($name), $m)) {
+                $base = trim($m[1], " \t-·،");
+                $weight = trim($m[2]);
+
+                if ($base !== '' && $weight !== '') {
+                    return [$base, $weight];
+                }
+            }
+
+            return [$name, null];
+        };
+
+        $x = new \App\Services\SheetWriter(__('rpt.qt_doc_title'));
+
+        // عرض الأعمدة: # · كود · صنف · وزن · مستهلك · عرض · علبة · كرتونة
+        foreach ([0 => 5, 1 => 14, 2 => 38, 3 => 12, 4 => 14, 5 => 14, 6 => 16, 7 => 16] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $lastCol = 5 + ($hasBox ? 1 : 0) + ($hasCase ? 1 : 0);
+
+        // ═══ هيدر المستند ═══
+        $x->row([['v' => $co['name'] ?: 'PROMAX', 'style' => 'title']]);
+        $x->merge(0, $lastCol);
+        $x->row([['v' => __('rpt.qt_doc_title').' — '.$quotation->number, 'style' => 'value']]);
+        $x->merge(0, $lastCol);
+        $x->blank();
+
+        $x->row([
+            ['v' => __('rpt.qt_client'), 'style' => 'label'],
+            ['v' => $quotation->client_name, 'style' => 'value'],
+            null,
+            ['v' => __('rpt.qt_valid_until'), 'style' => 'label'],
+            ['v' => $quotation->valid_until?->format('Y-m-d'), 'style' => 'value'],
+        ]);
+        $x->row([
+            ['v' => __('rpt.qt_list_title'), 'style' => 'label'],
+            ['v' => $quotation->price_list_name, 'style' => 'value'],
+            null,
+            ['v' => __('rpt.c_date'), 'style' => 'label'],
+            ['v' => $quotation->created_at?->format('Y-m-d'), 'style' => 'value'],
+        ]);
+        $x->blank();
+
+        // ═══ رأس الجدول ═══
+        $head = [
+            ['v' => '#', 'style' => 'header'],
+            ['v' => __('rpt.c_code'), 'style' => 'header'],
+            ['v' => __('rpt.c_product'), 'style' => 'header'],
+            ['v' => __('rpt.qt_weight'), 'style' => 'header'],
+            ['v' => __('rpt.qt_c_consumer'), 'style' => 'header'],
+            ['v' => __('rpt.qt_c_offer'), 'style' => 'header'],
+        ];
+        if ($hasBox) {
+            $head[] = ['v' => __('rpt.qt_c_box'), 'style' => 'header'];
+        }
+        if ($hasCase) {
+            $head[] = ['v' => __('rpt.qt_c_case'), 'style' => 'header'];
+        }
+        $x->row($head);
+
+        // ═══ البنود ═══
+        $pieceWord = __('stock.unit_piece');
+
+        foreach ($quotation->items->values() as $i => $item) {
+            [$name, $weight] = $splitWeight((string) $item->name);
+            $price = (float) $item->price;
+
+            $row = [
+                ['v' => $i + 1, 'style' => 'center', 'num' => true],
+                ['v' => $item->code, 'style' => 'center'],
+                ['v' => $name, 'style' => 'center'],
+                ['v' => $weight ?? '—', 'style' => 'center'],
+                ['v' => round($price, 2), 'style' => 'money', 'num' => true],
+                ['v' => round($price * $dp, 2), 'style' => 'money_bold', 'num' => true],
+            ];
+
+            // ⚠️ **خلية الوحدة رقم صافي، مش نص.** الورقة المطبوعة
+            // بتحط بادج «١٢ قطعة» فوق السعر — هنا ممنوع: أي نص جوه
+            // الخلية بيخلي إكسيل يتعامل معاها كنص فالعميل مايقدرش
+            // يحسب عليها. عدد القطع بيتقال مرة واحدة في السطر
+            // التوضيحي تحت الجدول.
+            foreach ([['box', $hasBox], ['case', $hasCase]] as [$key, $show]) {
+                if (! $show) {
+                    continue;
+                }
+
+                $u = $unit($item, $key);
+
+                $row[] = $u === null
+                    ? ['v' => '—', 'style' => 'center']
+                    : [
+                        'v' => round(((float) $u['price']) * $dp, 2),
+                        'style' => 'money',
+                        'num' => true,
+                    ];
+            }
+
+            $x->row($row);
+        }
+
+        // ═══ سطر «الوحدات» التوضيحي — كام قطعة في العلبة/الكرتونة ═══
+        if ($hasBox || $hasCase) {
+            $factors = [];
+            foreach ($quotation->items as $item) {
+                foreach ([['box', __('rpt.qt_c_box')], ['case', __('rpt.qt_c_case')]] as [$key, $label]) {
+                    $u = $unit($item, $key);
+                    $f = (int) ($u['factor'] ?? 0);
+
+                    if ($f > 1) {
+                        $factors[$label][$f] = true;
+                    }
+                }
+            }
+
+            $parts = [];
+            foreach ($factors as $label => $set) {
+                $parts[] = $label.': '.implode(' / ', array_keys($set)).' '.$pieceWord;
+            }
+
+            if ($parts !== []) {
+                $x->blank();
+                $x->row([['v' => implode('   •   ', $parts), 'style' => 'muted']]);
+                $x->merge(0, $lastCol);
+            }
+        }
+
+        // ═══ التاجات والجملة الضريبية — نفس نص الورقة ═══
+        $fmtPct = fn ($p) => rtrim(rtrim(number_format((float) $p, 1), '0'), '.');
+        $tags = [];
+        if ((float) $quotation->discount_pct > 0) {
+            $tags[] = __('rpt.qt_tag_disc', ['p' => $fmtPct($quotation->discount_pct)]);
+        }
+        if ((float) ($quotation->extra_pct ?? 0) > 0) {
+            $tags[] = __('rpt.qt_tag_extra', ['p' => $fmtPct($quotation->extra_pct)]);
+        }
+        $tags[] = ($quotation->tax_inclusive ?? true) ? __('rpt.qt_incl') : __('rpt.qt_excl');
+
+        $x->blank();
+        $x->row([['v' => implode('   •   ', $tags), 'style' => 'total']]);
+        $x->merge(0, $lastCol);
+
+        if ($quotation->notes) {
+            $x->blank();
+            $x->row([['v' => __('rpt.qt_notes').': '.$quotation->notes, 'style' => 'muted']]);
+            $x->merge(0, $lastCol);
+        }
+
+        $x->blank();
+        $x->row([[
+            'v' => __('rpt.qt_footer', ['date' => $quotation->valid_until?->format('Y-m-d')]),
+            'style' => 'muted',
+        ]]);
+        $x->merge(0, $lastCol);
+
+        // بيانات التحويل البنكي — لو مسجلة (زي الورقة بالظبط)
+        $bank = array_filter($co['bank'] ?? []);
+        if ($bank && ! ($co['bank_demo'] ?? false)) {
+            $line = [];
+            foreach ([
+                'doc.bank_name' => $co['bank']['name'] ?? null,
+                'doc.bank_account_no' => $co['bank']['account_no'] ?? null,
+                'doc.bank_iban' => $co['bank']['iban'] ?? null,
+            ] as $lk => $lv) {
+                if ($lv) {
+                    $line[] = __($lk).': '.$lv;
+                }
+            }
+
+            if ($line !== []) {
+                $x->row([['v' => '🏦 '.implode('   •   ', $line), 'style' => 'muted']]);
+                $x->merge(0, $lastCol);
+            }
+        }
+
+        return $x->download($quotation->number.'.xlsx');
+    }
 }

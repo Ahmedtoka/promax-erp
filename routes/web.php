@@ -557,6 +557,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->name('reports.quotations.edit');
         Route::post('/reports/quotations/{quotation}', [\App\Http\Controllers\ReportController::class, 'quotationUpdate'])
             ->name('reports.quotations.update');
+        // ⚠️ `/excel` قبل الراوت البارامتري الصافي — وإلا `{quotation}`
+        // بيبلع المسار (نفس درس ترتيب `/quotations/new`)
+        Route::get('/reports/quotations/{quotation}/excel', [\App\Http\Controllers\ReportController::class, 'quotationExcel'])
+            ->name('reports.quotations.excel');
         Route::get('/reports/quotations/{quotation}', [\App\Http\Controllers\ReportController::class, 'quotationShow'])
             ->name('reports.quotations.show');
 
