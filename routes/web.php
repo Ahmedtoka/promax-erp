@@ -734,6 +734,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayReceipt'])->name('receipt.putaway');
             // تعديل تواريخ/رقم/تكلفة الباتش من صفحة الإذن — الكميات لأ
             Route::post('/batches/{batch}/update', [WarehouseController::class, 'updateBatch'])->name('batch.update');
+            // ⚠️ تصحيح كمية باتش الاستلام (٢٨/٨) — **أدمن بس**: ده
+            // الباب الوحيد اللي بيكتب كمية بالإيد بره الجرد، وحراسه
+            // جوه الميثود (ممنوع لو خرج من الباتش حاجة)
+            Route::post('/batches/{batch}/fix-qty', [WarehouseController::class, 'fixBatchQty'])
+                ->middleware('role:admin')->name('batch.fixqty');
             // الترصيف الجماعي من شاشة عمليات المخزن — نفس صلاحية putaway
             // (بادئة `wh.putaway` في ACTIONS بتغطي `wh.putaway.bulk`)
             Route::post('/put-away-bulk', [WarehouseController::class, 'putAwayBulk'])->name('putaway.bulk');

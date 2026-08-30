@@ -116,7 +116,28 @@
                     <td class="num">{{ $b->produced_on?->format('Y-m-d') ?? '—' }}</td>
                     <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
                     <td><span class="badge {{ $b->expiryClass() }}">{{ $b->expiryLabel() }}</span></td>
-                    <td class="num">{{ $fmt($b->qty_received) }}</td>
+                    <td class="num">
+                        {{ $fmt($b->qty_received) }}
+                        {{-- ⚠️ **تفسير الفرق** (٢٨/٨ — بلاغ «اترصف ٨ من ٢٠»):
+                             «مترصّف» بيتقارن بـ**المتبقي** مش بالمستلم، فباتش
+                             خرج منه بضاعة كان بيبان كأن الترصيف فشل. السطر ده
+                             بيقول القطع راحت فين بدل ما اللغز يتكرر --}}
+                        @if ((int) $b->qty_issued > 0 || (int) $b->qty_damaged > 0)
+                            <div style="font-size:10px;color:var(--muted);font-weight:400;white-space:nowrap">
+                                @if ((int) $b->qty_issued > 0)
+                                    ↗ {{ __('stock.b_issued') }} {{ $fmt($b->qty_issued) }}
+                                @endif
+                                @if ((int) $b->qty_damaged > 0)
+                                    • ✖ {{ __('stock.b_damaged') }} {{ $fmt($b->qty_damaged) }}
+                                @endif
+                            </div>
+                        @endif
+                        @if ($b->entry_qty)
+                            <div style="font-size:10px;color:var(--muted);font-weight:400">
+                                {{ $fmt($b->entry_qty) }} {{ __('stock.unit_'.($b->entry_unit ?: 'piece')) }}
+                            </div>
+                        @endif
+                    </td>
                     <td class="num pos">{{ $fmt($b->shelvedQty()) }}</td>
                     <td class="num {{ $left > 0 ? 'mid' : '' }}"><b>{{ $fmt($left) }}</b></td>
                     <td style="font-size:11.5px;color:var(--muted);white-space:normal;max-width:240px">{{ $b->locationCodes() }}</td>
@@ -133,6 +154,15 @@
                                 {{-- تعديل التواريخ/الرقم/التكلفة — الكميات من الجرد بس --}}
                                 <button class="btn sm" type="button" onclick="openDlg('dlgEditB{{ $b->id }}')"
                                         title="{{ __('stock.edit_batch') }}">✎</button>
+                                {{-- ⚖️ تصحيح الكمية (٢٨/٨) — أدمن بس، ولباتش
+                                     ماخرجش منه حاجة. الزرار نفسه مابيبانش لغيره
+                                     عشان محدش يدوس ويتقال له «ممنوع» --}}
+                                @if (auth()->user()?->role === 'admin'
+                                    && (int) $b->qty_issued === 0 && (int) $b->qty_damaged === 0
+                                    && (int) $b->qty_remaining === (int) $b->qty_received)
+                                    <button class="btn sm" type="button" onclick="openDlg('dlgFixQ{{ $b->id }}')"
+                                            title="{{ __('stock.fix_qty') }}">⚖️</button>
+                                @endif
                             </div>
                         </td>
                     @endif
@@ -193,6 +223,83 @@
         </dialog>
     @endforeach
 
+    {{-- ═══ تصحيح الكمية بالوحدة الصحيحة (٢٨ أغسطس ٢٠٢٦) ═══
+         السيناريو: الاستلام اتعمل «٢٠ كرتونة» ومضاعِف الكرتونة على
+         الصنف كان غلط. بعد تصحيح الصنف، الكمية بتتحسب من جديد
+         بالمضاعِف الصح. الحساب بيحصل **في السيرفر** — الجافاسكريبت
+         بيعرض «= N قطعة» بس (نفس دوكترين وحدات الإدخال) --}}
+    @foreach ($receipt->batches as $b)
+        @if (auth()->user()?->role === 'admin'
+            && (int) $b->qty_issued === 0 && (int) $b->qty_damaged === 0
+            && (int) $b->qty_remaining === (int) $b->qty_received)
+            @php
+                $facts = $b->product?->unitFactors() ?? ['piece' => 1];
+                $entryUnit = $b->entry_unit && isset($facts[$b->entry_unit]) ? $b->entry_unit : 'piece';
+                $entryQty = $b->entry_qty ?: (int) $b->qty_received;
+            @endphp
+            <dialog id="dlgFixQ{{ $b->id }}">
+                <form class="dlg" method="POST" action="{{ route('wh.batch.fixqty', $b) }}">
+                    @csrf
+                    <h4>⚖️ {{ __('stock.fix_qty') }} — {{ $b->product?->displayName() }}</h4>
+
+                    <div class="alert info" style="margin-bottom:12px">
+                        <span>ℹ️</span><span>{{ __('stock.fix_hint') }}</span>
+                    </div>
+
+                    <div style="background:#F8FAFC;border-radius:10px;padding:10px 12px;
+                                font-size:12px;margin-bottom:12px;line-height:1.9">
+                        <div>
+                            <b>{{ __('stock.fix_current') }}:</b>
+                            {{ $fmt($b->qty_received) }} {{ __('stock.unit_piece') }}
+                            @if ($b->entry_qty)
+                                <span style="color:var(--muted)">
+                                    ({{ __('stock.fix_entered') }}: {{ $fmt($b->entry_qty) }}
+                                    {{ __('stock.unit_'.($b->entry_unit ?: 'piece')) }})
+                                </span>
+                            @endif
+                        </div>
+                        <div style="color:var(--muted)">
+                            <b>{{ __('stock.fix_factors') }}:</b>
+                            @foreach ($facts as $k => $f)
+                                {{ __('stock.unit_'.$k) }} = {{ $fmt($f) }} {{ __('stock.unit_piece') }}@if(! $loop->last) • @endif
+                            @endforeach
+                        </div>
+                    </div>
+
+                    {{-- ⚠️ المعاينة بالـdata attributes مش بدوال لكل باتش:
+                         الليّاوت بيستخدم `@yield('scripts')` مش `@stack`،
+                         فسكربت واحد عام في آخر الصفحة هو اللي بيترندر --}}
+                    <div class="frow fix-row" data-old="{{ (int) $b->qty_received }}"
+                         data-facts="{{ json_encode($facts) }}">
+                        <div>
+                            <label class="f">{{ __('stock.qty') }} <b class="req-star">*</b></label>
+                            <input type="number" name="qty" class="fix-q" min="1" step="1" required
+                                   value="{{ $entryQty }}" style="width:100%">
+                        </div>
+                        <div>
+                            <label class="f">{{ __('stock.unit') }} <b class="req-star">*</b></label>
+                            <select name="unit" class="fix-u" style="width:100%">
+                                @foreach ($facts as $k => $f)
+                                    <option value="{{ $k }}" @selected($k === $entryUnit)>
+                                        {{ __('stock.unit_'.$k) }}@if ($f > 1) ({{ $fmt($f) }}){{ '' }}@endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div style="align-self:end">
+                            <div class="fix-p" style="font-size:13px;font-weight:800"></div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+                        <button class="btn" type="button" onclick="closeDlg('dlgFixQ{{ $b->id }}')">{{ __('common.cancel') }}</button>
+                        <button class="btn gold" type="submit">{{ __('stock.fix_apply') }}</button>
+                    </div>
+                </form>
+            </dialog>
+        @endif
+    @endforeach
+
     @foreach ($receipt->batches as $b)
         @if ($b->unshelvedQty() > 0)
             <dialog id="dlgPut{{ $b->id }}">
@@ -230,4 +337,35 @@
     @endforeach
 @endif
 
+@endsection
+
+@section('scripts')
+<script>
+  // ═══ معاينة تصحيح الكمية (٢٨/٨) — عرض بس، الضرب المعتمد في السيرفر ═══
+  // ⚠️ الليّاوت بيستخدم `@yield('scripts')` مش `@stack` — فسكربت واحد
+  // عام بيمشي على كل الصفوف، مش دالة لكل باتش.
+  (function () {
+    const PIECE = @js(__('stock.unit_piece'));
+
+    function preview(row) {
+      const facts = JSON.parse(row.dataset.facts || '{"piece":1}');
+      const old = parseInt(row.dataset.old || '0', 10);
+      const q = parseInt(row.querySelector('.fix-q').value || '0', 10);
+      const u = row.querySelector('.fix-u').value;
+      const pieces = (q > 0 ? q : 0) * (facts[u] || 1);
+      const diff = pieces - old;
+      const box = row.querySelector('.fix-p');
+
+      box.textContent = '= ' + pieces.toLocaleString() + ' ' + PIECE
+        + (diff !== 0 ? '  (' + (diff > 0 ? '+' : '') + diff.toLocaleString() + ')' : '');
+      box.style.color = diff === 0 ? '#6B7280' : (diff > 0 ? '#16A34A' : '#DC2626');
+    }
+
+    document.querySelectorAll('.fix-row').forEach(function (row) {
+      row.querySelector('.fix-q').addEventListener('input', () => preview(row));
+      row.querySelector('.fix-u').addEventListener('change', () => preview(row));
+      preview(row);
+    });
+  })();
+</script>
 @endsection

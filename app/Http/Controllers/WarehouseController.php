@@ -155,6 +155,12 @@ class WarehouseController extends Controller
                     'produced_on' => $produced,
                     'expires_on' => $expires,
                     'cost' => $line['cost'] ?? $batch->cost,
+                    // ⚠️ **الكمية والوحدة زي ما اتكتبوا** (٢٨/٨) — القطع
+                    // لوحدها رقم أصمّ: لو مضاعِف الكرتونة على الصنف
+                    // اتصحح بعدين، ده هو اللي بيخلي «إعادة الحساب»
+                    // ممكنة بدل ما المخزن يتصلّح بالإيد
+                    'entry_qty' => (int) $line['qty'],
+                    'entry_unit' => $line['unit'] ?? 'piece',
                 ]);
                 // الكمية بتتزوّد — نفس الباتش ممكن يوصل على أكتر من شحنة
                 $batch->qty_received = (int) $batch->qty_received + $qtyPieces;
@@ -353,6 +359,131 @@ class WarehouseController extends Controller
         ]);
 
         return back()->with('ok', __('stock.batch_updated', ['batch' => $batch->batch_no]));
+    }
+
+    /**
+     * ═══ تصحيح كمية باتش في إذن الاستلام (٢٨ أغسطس ٢٠٢٦) ═══
+     *
+     * بلاغ المالك: اتعمل إذن استلام بـ«٢٠ كرتونة»، وبعدين اتكشف إن
+     * مضاعِف الكرتونة على الصنف كان متسجّل غلط (١٦ بدل ٦) والعلبة
+     * مش معرّفة أصلاً. الصنف اتصحح — بس الباتش متخزن **قطع صمّاء**
+     * محسوبة بالمضاعِف الغلط، ومفيش باب يصححها.
+     *
+     * الباب ده هو الاستثناء الوحيد لقاعدة «الكمية بتتحرك من الجرد
+     * والحركات بس» — وهو مقفول بحراس قاسية:
+     *
+     * 🔴 **ممنوع لو خرج من الباتش أي حاجة** (`qty_issued > 0`) أو
+     *    اتسجّل عليه تالف (`qty_damaged > 0`) أو `qty_remaining` مش
+     *    مساوي `qty_received`. لأن القطع اللي خرجت اتحاسبت بالمضاعِف
+     *    الغلط في عهدة وفواتير وقيود — تصحيح الباتش لوحده ساعتها
+     *    بيخلي الباتش يقول رقم والليدجر يقول رقم تاني. الحالة دي
+     *    شغل **جرد** (`/wh/counts`) عشان الفرق يتسجّل ويتشرح.
+     *
+     * ⚠️ ومزامنة التلات مستويات إجبارية (دوكترين المخزون): الباتش →
+     *    الأرفف → `stocks`. تصحيح الباتش لوحده بيخلي `availableFor`
+     *    (اللي بيقرا من الأرفف) يقول رقم مش موجود، فأمر التجهيز
+     *    بيتقبل وبيفشل عند التنفيذ.
+     *
+     * ⚠️ الزيادة **مابتترصّفش أوتوماتيك** — بتبان «لسه مترصّفش»
+     *    والمخزن يرصّفها بإيده زي أي استلام. النقص بيتشال من آخر رف
+     *    اترصّف عليه للأول (ترتيب عكسي ثابت — مش عشوائي).
+     */
+    public function fixBatchQty(Request $request, Batch $batch)
+    {
+        $this->guardWarehouse($request, $batch->warehouse_id);
+
+        $data = $request->validate([
+            'qty' => ['required', 'integer', 'min:1'],
+            'unit' => ['required', 'in:piece,box,case'],
+        ]);
+
+        $product = $batch->product;
+
+        if ($product === null) {
+            return back()->withErrors(['qty' => __('stock.fix_no_product')]);
+        }
+
+        // 🔴 الحارس: أي حركة خرجت = الباب مقفول، والطريق هو الجرد
+        $moved = (int) $batch->qty_issued > 0
+            || (int) $batch->qty_damaged > 0
+            || (int) $batch->qty_remaining !== (int) $batch->qty_received;
+
+        if ($moved) {
+            return back()->withErrors(['qty' => __('stock.fix_moved_blocked', [
+                'issued' => (int) $batch->qty_issued,
+                'damaged' => (int) $batch->qty_damaged,
+            ])]);
+        }
+
+        $factor = $product->unitFactor($data['unit']);
+
+        if ($factor === null) {
+            return back()->withErrors(['unit' => __('stock.unit_not_for_product', [
+                'name' => $product->displayName(),
+            ])]);
+        }
+
+        $newQty = (int) $data['qty'] * $factor;
+        $oldQty = (int) $batch->qty_received;
+
+        if ($newQty === $oldQty) {
+            return back()->with('ok', __('stock.fix_same', ['qty' => $newQty]));
+        }
+
+        DB::transaction(function () use ($batch, $product, $data, $factor, $newQty, $oldQty, $request) {
+            // قفل الصف — تصحيح وترصيف في نفس اللحظة كانوا هيتخانقوا
+            $batch = Batch::lockForUpdate()->findOrFail($batch->id);
+
+            $batch->qty_received = $newQty;
+            $batch->qty_remaining = $newQty;
+            $batch->entry_qty = (int) $data['qty'];
+            $batch->entry_unit = $data['unit'];
+
+            // سطر أوديت على الباتش — مين صحّح وإمتى ومن كام لكام
+            $batch->notes = trim((string) $batch->notes."\n".__('stock.fix_note', [
+                'old' => $oldQty,
+                'new' => $newQty,
+                'qty' => (int) $data['qty'],
+                'unit' => __('stock.unit_'.$data['unit']),
+                'factor' => $factor,
+                'by' => $request->user()->displayName(),
+                'at' => now()->format('Y-m-d h:i A'),
+            ]));
+
+            $batch->save();
+
+            // ═══ الأرفف: النقص بيتشال من آخر رف للأول ═══
+            $shelved = (int) $batch->locations()->sum('qty');
+
+            if ($shelved > $newQty) {
+                $toRemove = $shelved - $newQty;
+
+                $rows = $batch->locations()->orderByDesc('location_id')
+                    ->lockForUpdate()->get();
+
+                foreach ($rows as $row) {
+                    if ($toRemove <= 0) {
+                        break;
+                    }
+
+                    $take = min((int) $row->qty, $toRemove);
+                    $row->qty = (int) $row->qty - $take;
+                    $toRemove -= $take;
+
+                    // صف رف بصفر = ضجيج في كل شاشات الأرفف
+                    $row->qty > 0 ? $row->save() : $row->delete();
+                }
+            }
+
+            // التلات مستويات لازم يقولوا نفس الرقم
+            \App\Services\StockCounting::resync($product->id, (int) $batch->warehouse_id);
+        });
+
+        return back()->with('ok', __('stock.fix_done', [
+            'batch' => $batch->batch_no,
+            'old' => $oldQty,
+            'new' => $newQty,
+        ]));
     }
 
     public function putAway(Request $request, Batch $batch)

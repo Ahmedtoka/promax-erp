@@ -29,6 +29,9 @@ class Batch extends Model
         'product_id', 'warehouse_id', 'goods_receipt_id', 'batch_no',
         'produced_on', 'expires_on',
         'qty_received', 'qty_remaining', 'qty_issued', 'qty_damaged',
+        // الكمية والوحدة زي ما اتكتبوا في الإذن (٢٨/٨) — مرساة
+        // «إعادة الحساب» لو مضاعِف الوحدة على الصنف اتصحح بعدين
+        'entry_qty', 'entry_unit',
         'cost', 'blocked', 'notes',
     ];
 
