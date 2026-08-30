@@ -154,12 +154,10 @@
                                 {{-- تعديل التواريخ/الرقم/التكلفة — الكميات من الجرد بس --}}
                                 <button class="btn sm" type="button" onclick="openDlg('dlgEditB{{ $b->id }}')"
                                         title="{{ __('stock.edit_batch') }}">✎</button>
-                                {{-- ⚖️ تصحيح الكمية (٢٨/٨) — أدمن بس، ولباتش
-                                     ماخرجش منه حاجة. الزرار نفسه مابيبانش لغيره
-                                     عشان محدش يدوس ويتقال له «ممنوع» --}}
-                                @if (auth()->user()?->role === 'admin'
-                                    && (int) $b->qty_issued === 0 && (int) $b->qty_damaged === 0
-                                    && (int) $b->qty_remaining === (int) $b->qty_received)
+                                {{-- ⚖️ تصحيح الكمية (٢٨/٨) — أدمن بس. بيبان
+                                     حتى لو خرج من الباتش بضاعة: اللي خرج
+                                     ثابت مايتلمسش والتصحيح على المستلم بس --}}
+                                @if (auth()->user()?->role === 'admin')
                                     <button class="btn sm" type="button" onclick="openDlg('dlgFixQ{{ $b->id }}')"
                                             title="{{ __('stock.fix_qty') }}">⚖️</button>
                                 @endif
@@ -229,13 +227,12 @@
          بالمضاعِف الصح. الحساب بيحصل **في السيرفر** — الجافاسكريبت
          بيعرض «= N قطعة» بس (نفس دوكترين وحدات الإدخال) --}}
     @foreach ($receipt->batches as $b)
-        @if (auth()->user()?->role === 'admin'
-            && (int) $b->qty_issued === 0 && (int) $b->qty_damaged === 0
-            && (int) $b->qty_remaining === (int) $b->qty_received)
+        @if (auth()->user()?->role === 'admin')
             @php
                 $facts = $b->product?->unitFactors() ?? ['piece' => 1];
                 $entryUnit = $b->entry_unit && isset($facts[$b->entry_unit]) ? $b->entry_unit : 'piece';
                 $entryQty = $b->entry_qty ?: (int) $b->qty_received;
+                $gone = (int) $b->qty_issued + (int) $b->qty_damaged;
             @endphp
             <dialog id="dlgFixQ{{ $b->id }}">
                 <form class="dlg" method="POST" action="{{ route('wh.batch.fixqty', $b) }}">
@@ -245,6 +242,17 @@
                     <div class="alert info" style="margin-bottom:12px">
                         <span>ℹ️</span><span>{{ __('stock.fix_hint') }}</span>
                     </div>
+
+                    {{-- الباتش اتحرك: اللي خرج ثابت والتصحيح على المستلم بس --}}
+                    @if ($gone > 0)
+                        <div class="alert warn" style="margin-bottom:12px">
+                            <span>⚠️</span>
+                            <span>{{ __('stock.fix_gone_warn', [
+                                'issued' => $fmt($b->qty_issued),
+                                'damaged' => $fmt($b->qty_damaged),
+                            ]) }}</span>
+                        </div>
+                    @endif
 
                     <div style="background:#F8FAFC;border-radius:10px;padding:10px 12px;
                                 font-size:12px;margin-bottom:12px;line-height:1.9">
@@ -270,6 +278,7 @@
          السكربتات في الليّاوت yield مش stack، فسكربت واحد عام في آخر
          الصفحة هو اللي بيترندر --}}
                     <div class="frow fix-row" data-old="{{ (int) $b->qty_received }}"
+                         data-gone="{{ $gone }}"
                          data-facts="{{ json_encode($facts) }}">
                         <div>
                             <label class="f">{{ __('stock.qty') }} <b class="req-star">*</b></label>
@@ -353,18 +362,29 @@
   // yield مش بستاك، فمينفعش بلوك لكل باتش — واحد بيمشي على الصفوف.
   (function () {
     const PIECE = @js(__('stock.unit_piece'));
+    const LEFT = @js(__('stock.fix_left_becomes'));
+    const BAD = @js(__('stock.fix_below_gone_short'));
 
     function preview(row) {
       const facts = JSON.parse(row.dataset.facts || '{"piece":1}');
       const old = parseInt(row.dataset.old || '0', 10);
+      const gone = parseInt(row.dataset.gone || '0', 10);
       const q = parseInt(row.querySelector('.fix-q').value || '0', 10);
       const u = row.querySelector('.fix-u').value;
       const pieces = (q > 0 ? q : 0) * (facts[u] || 1);
       const diff = pieces - old;
       const box = row.querySelector('.fix-p');
 
+      // رقم مستحيل: مستلم أقل من اللي خرج فعلاً
+      if (pieces < gone) {
+        box.textContent = BAD;
+        box.style.color = '#DC2626';
+        return;
+      }
+
       box.textContent = '= ' + pieces.toLocaleString() + ' ' + PIECE
-        + (diff !== 0 ? '  (' + (diff > 0 ? '+' : '') + diff.toLocaleString() + ')' : '');
+        + (diff !== 0 ? '  (' + (diff > 0 ? '+' : '') + diff.toLocaleString() + ')' : '')
+        + (gone > 0 ? '  •  ' + LEFT + ' ' + (pieces - gone).toLocaleString() : '');
       box.style.color = diff === 0 ? '#6B7280' : (diff > 0 ? '#16A34A' : '#DC2626');
     }
 

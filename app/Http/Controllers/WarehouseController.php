@@ -370,14 +370,21 @@ class WarehouseController extends Controller
      * محسوبة بالمضاعِف الغلط، ومفيش باب يصححها.
      *
      * الباب ده هو الاستثناء الوحيد لقاعدة «الكمية بتتحرك من الجرد
-     * والحركات بس» — وهو مقفول بحراس قاسية:
+     * والحركات بس» — وحدوده بالظبط:
      *
-     * 🔴 **ممنوع لو خرج من الباتش أي حاجة** (`qty_issued > 0`) أو
-     *    اتسجّل عليه تالف (`qty_damaged > 0`) أو `qty_remaining` مش
-     *    مساوي `qty_received`. لأن القطع اللي خرجت اتحاسبت بالمضاعِف
-     *    الغلط في عهدة وفواتير وقيود — تصحيح الباتش لوحده ساعتها
-     *    بيخلي الباتش يقول رقم والليدجر يقول رقم تاني. الحالة دي
-     *    شغل **جرد** (`/wh/counts`) عشان الفرق يتسجّل ويتشرح.
+     * ⚠️ **اللي خرج من الباتش مايتلمسش** (٢٨/٨ — النسخة الأولى كانت
+     *    بتقفل الباب خالص لو خرجت قطعة، وده كان متشدد أكتر من اللازم).
+     *    القطع اللي خرجت راحت عهدة وفواتير **بالقطعة** وتكلفتها من
+     *    `batches.cost` اللي هي تكلفة القطعة — يعني الغلط في المضاعِف
+     *    ماأثّرش عليها. اللي غلط هو **المستلم** بس. فالتصحيح بيكتب
+     *    مستلم جديد وبيسيب `qty_issued` و`qty_damaged` زي ما هُم:
+     *
+     *        المتبقي = المستلم الجديد − اللي خرج − التالف
+     *
+     * 🔴 **وممنوع المستلم الجديد ينزل تحت (خرج + تالف)** — ده معناه
+     *    إن السيستم بيقول خرج أكتر من اللي دخل، ومفيش رقم صح ينتج
+     *    عن ده. الحالة دي شغل **جرد** (`/wh/counts`) عشان الفرق
+     *    يتسجّل بسببه ويتحاسب عليه.
      *
      * ⚠️ ومزامنة التلات مستويات إجبارية (دوكترين المخزون): الباتش →
      *    الأرفف → `stocks`. تصحيح الباتش لوحده بيخلي `availableFor`
@@ -403,18 +410,6 @@ class WarehouseController extends Controller
             return back()->withErrors(['qty' => __('stock.fix_no_product')]);
         }
 
-        // 🔴 الحارس: أي حركة خرجت = الباب مقفول، والطريق هو الجرد
-        $moved = (int) $batch->qty_issued > 0
-            || (int) $batch->qty_damaged > 0
-            || (int) $batch->qty_remaining !== (int) $batch->qty_received;
-
-        if ($moved) {
-            return back()->withErrors(['qty' => __('stock.fix_moved_blocked', [
-                'issued' => (int) $batch->qty_issued,
-                'damaged' => (int) $batch->qty_damaged,
-            ])]);
-        }
-
         $factor = $product->unitFactor($data['unit']);
 
         if ($factor === null) {
@@ -426,16 +421,29 @@ class WarehouseController extends Controller
         $newQty = (int) $data['qty'] * $factor;
         $oldQty = (int) $batch->qty_received;
 
+        // اللي خرج واللي اتشطب — دول ثابتين، والمتبقي بيتحسب منهم
+        $gone = (int) $batch->qty_issued + (int) $batch->qty_damaged;
+
+        // 🔴 المستلم مايقلّش عن اللي خرج فعلاً — ده رقم مستحيل
+        if ($newQty < $gone) {
+            return back()->withErrors(['qty' => __('stock.fix_below_gone', [
+                'new' => $newQty,
+                'issued' => (int) $batch->qty_issued,
+                'damaged' => (int) $batch->qty_damaged,
+            ])]);
+        }
+
         if ($newQty === $oldQty) {
             return back()->with('ok', __('stock.fix_same', ['qty' => $newQty]));
         }
 
-        DB::transaction(function () use ($batch, $product, $data, $factor, $newQty, $oldQty, $request) {
+        DB::transaction(function () use ($batch, $product, $data, $factor, $newQty, $oldQty, $gone, $request) {
             // قفل الصف — تصحيح وترصيف في نفس اللحظة كانوا هيتخانقوا
             $batch = Batch::lockForUpdate()->findOrFail($batch->id);
 
             $batch->qty_received = $newQty;
-            $batch->qty_remaining = $newQty;
+            // المتبقي = الجديد − (اللي خرج + التالف) — الحركات ماتتلمسش
+            $batch->qty_remaining = $newQty - $gone;
             $batch->entry_qty = (int) $data['qty'];
             $batch->entry_unit = $data['unit'];
 
@@ -453,10 +461,13 @@ class WarehouseController extends Controller
             $batch->save();
 
             // ═══ الأرفف: النقص بيتشال من آخر رف للأول ═══
+            // ⚠️ المقارنة بالـ**متبقي** مش بالمستلم — الأرفف بتشيل
+            // اللي لسه موجود بس، واللي خرج مش على رف أصلاً
             $shelved = (int) $batch->locations()->sum('qty');
+            $keep = $newQty - $gone;
 
-            if ($shelved > $newQty) {
-                $toRemove = $shelved - $newQty;
+            if ($shelved > $keep) {
+                $toRemove = $shelved - $keep;
 
                 $rows = $batch->locations()->orderByDesc('location_id')
                     ->lockForUpdate()->get();
