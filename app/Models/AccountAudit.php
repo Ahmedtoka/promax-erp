@@ -21,6 +21,8 @@ class AccountAudit extends Model
         'entity_type', 'entity_id',
         'has_account', 'their_balance',
         'has_statement', 'statement_path', 'statement_name',
+        // إذون استلام الكشف · الفاتورة الضريبية · تأكيد المدير (٢٨/٨)
+        'has_receipt', 'tax_invoice', 'confirmed_at', 'confirmed_by',
         'note', 'reviewed_by', 'reviewed_at',
     ];
 
@@ -29,14 +31,22 @@ class AccountAudit extends Model
         return [
             'has_account' => 'boolean',
             'has_statement' => 'boolean',
+            'has_receipt' => 'boolean',
+            'tax_invoice' => 'boolean',
             'their_balance' => 'decimal:2',
             'reviewed_at' => 'datetime',
+            'confirmed_at' => 'datetime',
         ];
     }
 
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function confirmer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'confirmed_by');
     }
 
     /** رابط تحميل الكشف — null لو مفيش ملف */
@@ -48,8 +58,17 @@ class AccountAudit extends Model
     /**
      * حالة الصف في سطر واحد — بتغذي الفلاتر والسامري.
      *
-     * pending = لسه ماتحددش · no_account = مالوش حساب ·
-     * no_statement = له حساب ومفيش كشف · done = له حساب وكشفه موصول
+     * سلسلة السؤال زي ما المالك وصفها بالحرف، وكل حالة بتقف عند
+     * أول «لا» في السلسلة:
+     *
+     *   pending   لسه ماتحددش أه ولا لا
+     *   no_account   مالوش حساب أصلاً — السلسلة بتقف هنا
+     *   no_statement له حساب بس مفيش كشف
+     *   no_receipt   له حساب وكشف بس مفيش إذن استلام
+     *   full         حساب + كشف + إذن استلام — مظبوط تماماً
+     *
+     * ⚠️ الفاتورة الضريبية **محور مستقل** مش خطوة في السلسلة —
+     * ممكن عميل يبقى مظبوط تماماً ومتعملّهوش فاتورة، والعكس.
      */
     public function state(): string
     {
@@ -61,6 +80,16 @@ class AccountAudit extends Model
             return 'no_account';
         }
 
-        return $this->has_statement === true ? 'done' : 'no_statement';
+        if ($this->has_statement !== true) {
+            return 'no_statement';
+        }
+
+        return $this->has_receipt === true ? 'full' : 'no_receipt';
+    }
+
+    /** مظبوط تماماً — حساب وكشف وإذن استلام */
+    public function isFull(): bool
+    {
+        return $this->state() === 'full';
     }
 }

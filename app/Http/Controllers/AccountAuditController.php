@@ -29,11 +29,12 @@ use Illuminate\Support\Facades\Storage;
  */
 class AccountAuditController extends Controller
 {
-    /** صفحة السلاسل */
+    /** صفحة السلاسل — **مرتبة بأكبر عدد فروع** (طلب المالك ٢٨/٨) */
     public function chains(Request $request)
     {
         $groups = ClientGroup::withCount('clients')
-            ->where('active', true)->orderBy('name')->get();
+            ->where('active', true)
+            ->orderByDesc('clients_count')->orderBy('name')->get();
 
         // رصيدنا للسلسلة = مجموع أرصدة فروعها (سكوب الرؤية محفوظ)
         $ours = Client::visibleTo(Client::query(), $request->user())
@@ -48,6 +49,7 @@ class AccountAuditController extends Controller
             'id' => $g->id,
             'title' => $g->displayName(),
             'sub' => __('audit.branches_n', ['n' => $g->clients_count]),
+            'branches' => (int) $g->clients_count,
             'ours' => (float) ($ours[$g->id] ?? 0),
             'audit' => $audits[$g->id] ?? null,
         ]);
@@ -58,11 +60,13 @@ class AccountAuditController extends Controller
     /** صفحة العملاء الفرادى — **بدون** أي عميل في سلسلة */
     public function clients(Request $request)
     {
+        // ⚠️ الأكبر رصيداً الأول — نفس منطق «أكبر عدد فروع» في
+        // السلاسل: تبدأ باللي فلوسه أكتر، مش بالترتيب الأبجدي
         $clients = Client::visibleTo(Client::query(), $request->user())
             ->with('zone')
             ->whereNull('group_id')
             ->where('status', '!=', 'rejected')
-            ->orderBy('name')->get();
+            ->orderByDesc('balance')->orderBy('name')->get();
 
         $audits = $this->auditsFor('client', $clients->pluck('id'));
 
@@ -70,6 +74,7 @@ class AccountAuditController extends Controller
             'id' => $c->id,
             'title' => $c->displayName(),
             'sub' => trim(($c->code ?: '').' · '.($c->zone?->displayName() ?? '—'), ' ·'),
+            'branches' => null,
             'ours' => (float) $c->balance,
             'audit' => $audits[$c->id] ?? null,
         ]);
@@ -93,26 +98,63 @@ class AccountAuditController extends Controller
      * الشاشة بتقول «١٢ مالهمش حساب» وانت شايف ١٢ صف، ومحدش يعرف
      * إن ده الفلتر مش الحقيقة.
      */
+    /**
+     * السامري — بيجاوب على أسئلة المالك بالحرف:
+     *
+     *   «معايا كام عميل؟ · كام واحد حسابه مظبوط؟ · كام واحد حسابه
+     *    مش موجود؟ · اللي حسابه موجود ليه كشف تفصيلي ولا لأ؟ · واللي
+     *    ليه كشف معاه هارد كوبي كمان ولا كشف وخلاص؟ · واتعملّه فاتورة
+     *    ضريبية ولا لأ؟»
+     *
+     * كل رقم هنا هو إجابة سؤال من دول — والوصف تحت المربع في الشاشة
+     * بيقول السؤال نفسه، عشان الرقم مايتقريش غلط.
+     *
+     * ⚠️ **الأرصدة مش في السامري** (قرار المالك ٢٨/٨): «رصيد السيستم
+     * ريفرنس بس، مش يزوّد حاجة ولا يفرّق حاجة». فمفيش مجاميع ولا
+     * فروق — الصفحة بتعدّ حالات مش بتحسب فلوس.
+     */
+    public static function summarize($rows): array
+    {
+        $st = fn ($r) => $r['audit']?->state() ?? 'pending';
+        $cnt = fn (callable $f) => $rows->filter($f)->count();
+
+        return [
+            'total' => $rows->count(),
+            'pending' => $cnt(fn ($r) => $st($r) === 'pending'),
+            'reviewed' => $cnt(fn ($r) => $st($r) !== 'pending'),
+
+            // ١) حسابه موجود ولا لأ
+            'has_account' => $cnt(fn ($r) => $r['audit']?->has_account === true),
+            'no_account' => $cnt(fn ($r) => $r['audit']?->has_account === false),
+
+            // ٢) اللي له حساب — معاه كشف ولا لأ
+            'has_statement' => $cnt(fn ($r) => $r['audit']?->has_statement === true),
+            'no_statement' => $cnt(fn ($r) => $st($r) === 'no_statement'),
+            'files' => $cnt(fn ($r) => $r['audit']?->statement_path !== null),
+
+            // ٣) اللي معاه كشف — معاه إذن استلام ولا لأ
+            'has_receipt' => $cnt(fn ($r) => $r['audit']?->has_receipt === true),
+            'no_receipt' => $cnt(fn ($r) => $st($r) === 'no_receipt'),
+
+            // ٤) المظبوط تماماً: حساب + كشف + إذن
+            'full' => $cnt(fn ($r) => $st($r) === 'full'),
+
+            // ٥) الفاتورة الضريبية — محور مستقل
+            'billed' => $cnt(fn ($r) => $r['audit']?->tax_invoice === true),
+            'unbilled' => $cnt(fn ($r) => $r['audit']?->tax_invoice === false),
+            'billing_pending' => $cnt(fn ($r) => $r['audit']?->tax_invoice === null),
+            // الجاهز للفوترة: مظبوط تماماً ولسه متعملّهوش فاتورة
+            'ready_to_bill' => $cnt(fn ($r) => $st($r) === 'full' && $r['audit']?->tax_invoice !== true),
+
+            // ٦) تأكيد مدير القناة من عند العميل
+            'confirmed' => $cnt(fn ($r) => $r['audit']?->confirmed_at !== null),
+        ];
+    }
+
     private function render(Request $request, string $mode, $rows)
     {
         $state = fn ($r) => $r['audit']?->state() ?? 'pending';
-
-        $summary = [
-            'total' => $rows->count(),
-            'pending' => $rows->filter(fn ($r) => $state($r) === 'pending')->count(),
-            'has_account' => $rows->filter(fn ($r) => $r['audit']?->has_account === true)->count(),
-            'no_account' => $rows->filter(fn ($r) => $r['audit']?->has_account === false)->count(),
-            'has_statement' => $rows->filter(fn ($r) => $r['audit']?->has_statement === true)->count(),
-            'no_statement' => $rows->filter(fn ($r) => $state($r) === 'no_statement')->count(),
-            'files' => $rows->filter(fn ($r) => $r['audit']?->statement_path)->count(),
-            // إجمالي الفرق بين رصيدنا ورصيدهم — لللي اتراجعوا بس
-            'gap' => round($rows->sum(function ($r) {
-                $a = $r['audit'];
-
-                return $a?->their_balance === null ? 0 : (float) $a->their_balance - $r['ours'];
-            }), 2),
-            'ours' => round($rows->sum('ours'), 2),
-        ];
+        $summary = self::summarize($rows);
 
         $show = $request->string('show')->value() ?: 'all';
 
@@ -120,14 +162,11 @@ class AccountAuditController extends Controller
             'pending' => $rows->filter(fn ($r) => $state($r) === 'pending'),
             'no_account' => $rows->filter(fn ($r) => $state($r) === 'no_account'),
             'no_statement' => $rows->filter(fn ($r) => $state($r) === 'no_statement'),
-            'done' => $rows->filter(fn ($r) => $state($r) === 'done'),
-            // فرق بين رصيدنا ورصيدهم — أهم فلتر في الشاشة
-            'gap' => $rows->filter(function ($r) {
-                $a = $r['audit'];
-
-                return $a?->their_balance !== null
-                    && abs((float) $a->their_balance - $r['ours']) >= 0.01;
-            }),
+            'no_receipt' => $rows->filter(fn ($r) => $state($r) === 'no_receipt'),
+            'full' => $rows->filter(fn ($r) => $state($r) === 'full'),
+            'ready_to_bill' => $rows->filter(fn ($r) => $state($r) === 'full'
+                && $r['audit']?->tax_invoice !== true),
+            'unbilled' => $rows->filter(fn ($r) => $r['audit']?->tax_invoice === false),
             default => $rows,
         };
 
@@ -162,7 +201,8 @@ class AccountAuditController extends Controller
             'rows.*.has_account' => ['nullable', 'in:1,0'],
             'rows.*.their_balance' => ['nullable', 'numeric', 'between:-99999999,99999999'],
             'rows.*.has_statement' => ['nullable', 'in:1,0'],
-            'rows.*.note' => ['nullable', 'string', 'max:300'],
+            'rows.*.has_receipt' => ['nullable', 'in:1,0'],
+            'rows.*.tax_invoice' => ['nullable', 'in:1,0'],
             // ⚠️ **مصفوفة مش سترينج بالبايبات** — درس ٢٦/٨ (الشرطة
             // جوه مصفوفة قواعد بتتقري كقاعدة واحدة وترمي استثناء)
             'files' => ['nullable', 'array'],
@@ -197,6 +237,10 @@ class AccountAuditController extends Controller
                     ? null : (bool) (int) $row['has_account'];
                 $audit->has_statement = ($row['has_statement'] ?? '') === ''
                     ? null : (bool) (int) $row['has_statement'];
+                $audit->has_receipt = ($row['has_receipt'] ?? '') === ''
+                    ? null : (bool) (int) $row['has_receipt'];
+                $audit->tax_invoice = ($row['tax_invoice'] ?? '') === ''
+                    ? null : (bool) (int) $row['tax_invoice'];
 
                 // ⚠️ الرصيد بيتمسح لو الحساب مش موجود — رقم متعلّق
                 // بحساب مش موجود بيفضل يلخبط السامري بعد كده
@@ -204,7 +248,17 @@ class AccountAuditController extends Controller
                     ? null
                     : (($row['their_balance'] ?? '') === '' ? null : (float) $row['their_balance']);
 
-                $audit->note = trim((string) ($row['note'] ?? '')) ?: null;
+                // ⚠️ **السلسلة بتقف عند أول «لا»** — «مالوش حساب»
+                // معناها مفيش كشف ولا إذن، وإجابة قديمة فاضلة كانت
+                // هتخلي السامري يقول «معاه كشف» لعميل مالوش حساب
+                if ($audit->has_account === false) {
+                    $audit->has_statement = null;
+                    $audit->has_receipt = null;
+                }
+
+                if ($audit->has_statement !== true) {
+                    $audit->has_receipt = null;
+                }
 
                 $file = $request->file("files.$id");
 
@@ -229,6 +283,61 @@ class AccountAuditController extends Controller
         });
 
         return back()->with('ok', __('audit.saved', ['n' => $saved]));
+    }
+
+    /**
+     * ═══ تقرير السامري (٢٨/٨) — مربعات بس ═══
+     *
+     * «تقرير فيه مربعات كلها سامريهات بالإجابات على الأسئلة دي».
+     * السلاسل والعملاء في صفحة واحدة، كل قسم بأرقامه، وتحت كل رقم
+     * السؤال اللي بيجاوب عليه.
+     */
+    public function report(Request $request)
+    {
+        $groups = ClientGroup::withCount('clients')->where('active', true)->get();
+        $gAudits = $this->auditsFor('group', $groups->pluck('id'));
+
+        $chainRows = $groups->map(fn ($g) => [
+            'id' => $g->id,
+            'audit' => $gAudits[$g->id] ?? null,
+        ]);
+
+        $clients = Client::visibleTo(Client::query(), $request->user())
+            ->whereNull('group_id')->where('status', '!=', 'rejected')
+            ->get(['id']);
+        $cAudits = $this->auditsFor('client', $clients->pluck('id'));
+
+        $clientRows = $clients->map(fn ($c) => [
+            'id' => $c->id,
+            'audit' => $cAudits[$c->id] ?? null,
+        ]);
+
+        return view('erp.account_audit_report', [
+            'chains' => self::summarize($chainRows),
+            'clients' => self::summarize($clientRows),
+        ]);
+    }
+
+    /**
+     * «تم التأكيد إن الحساب مظبوط» — مدير القناة وهو عند العميل.
+     *
+     * ⚠️ ختم بشري مش حساب: مفيش رقم بيتغير، بس بنعرف إن حد راح
+     * للعميل وشاف الورق بعينه. الضغطة التانية بتشيل التأكيد (تراجُع).
+     */
+    public function confirm(Request $request, AccountAudit $audit)
+    {
+        if (! $this->entityVisible($audit->entity_type, (int) $audit->entity_id, $request)) {
+            abort(403);
+        }
+
+        $on = $audit->confirmed_at === null;
+
+        $audit->update([
+            'confirmed_at' => $on ? now() : null,
+            'confirmed_by' => $on ? $request->user()->id : null,
+        ]);
+
+        return back()->with('ok', __($on ? 'audit.confirmed_ok' : 'audit.unconfirmed_ok'));
     }
 
     /** مسح كشف مرفوع */

@@ -42,7 +42,7 @@ class Access
             // السايكل الجديدة (١٧/٨): الديفيجنز + الإعداد + رصيد العناوين
             'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
             // مراجعة الحسابات (٢٨/٨) — مدير القناة بيراجع عملاءه
-            'erp.audit.chains', 'erp.audit.clients',
+            'erp.audit.chains', 'erp.audit.clients', 'erp.audit.report',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
@@ -373,6 +373,7 @@ class Access
             ['erp.setup.clients', '🧩', 'client.setup_clients', 'erp.setup.clients', null],
             ['erp.audit.chains', '🧾', 'audit.chains_title', 'erp.audit.chains', null],
             ['erp.audit.clients', '👤', 'audit.clients_title', 'erp.audit.clients', null],
+            ['erp.audit.report', '📊', 'audit.report_title', 'erp.audit.report', null],
         ],
 
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══

@@ -649,11 +649,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('audit.chains');
             Route::get('/audit/clients', [\App\Http\Controllers\AccountAuditController::class, 'clients'])
                 ->name('audit.clients');
-            Route::post('/audit/{mode}/save', [\App\Http\Controllers\AccountAuditController::class, 'save'])
-                ->name('audit.save');
+            Route::get('/audit/report', [\App\Http\Controllers\AccountAuditController::class, 'report'])
+                ->name('audit.report');
             Route::post('/audit/statement/{audit}/delete',
                 [\App\Http\Controllers\AccountAuditController::class, 'deleteStatement'])
                 ->name('audit.statement.delete');
+            Route::post('/audit/confirm/{audit}', [\App\Http\Controllers\AccountAuditController::class, 'confirm'])
+                ->name('audit.confirm');
+            // ⚠️ الأخير — `{mode}` بارامتري وكان هيبلع `report`/`confirm`
+            Route::post('/audit/{mode}/save', [\App\Http\Controllers\AccountAuditController::class, 'save'])
+                ->name('audit.save');
         });
 
         // ===== القنوات =====
