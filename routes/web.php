@@ -792,6 +792,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // لحد بعينه من شاشة الصلاحيات — EnsureRole بيحترم المنح).
         Route::post('/reps/{user}/custody/adjust', [OpsController::class, 'adjustCustody'])
             ->middleware('role:admin')->name('rep.adjust');
+        // ═══ تفريغ العربية بضغطة (٢٨ أغسطس ٢٠٢٦) ═══
+        // ⚠️ `role:admin` — بيصفّر عهدة كاملة، وفي وضع «ترجع المخزن»
+        // بيحرّك الأرفف والباتشات زي التصحيح الإداري بالظبط
+        Route::post('/reps/{user}/custody/clear', [OpsController::class, 'clearCustody'])
+            ->middleware('role:admin')->name('rep.clear');
 
         // ═══ الزيارات — اللي حصل فعلاً في الشارع (١٥ أغسطس ٢٠٢٦) ═══
         // ⚠️ **الراوت الثابت قبل أي بارامتري** تحت `ops/` — و`/visits`

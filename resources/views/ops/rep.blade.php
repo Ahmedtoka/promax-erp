@@ -105,6 +105,13 @@
     @if ($canAdjust)
         <button class="btn" type="button" onclick="openDlg('dlgAdjust')">🛠️ {{ __('field.custody_adjust') }}</button>
     @endif
+    {{-- ═══ تفريغ العربية (٢٨/٨) — أدمن بس. نفس نتيجة كتابة صفر في
+         كل سطر في التصحيح الإداري، بس بضغطة وباختيار مصير البضاعة --}}
+    @if ($custody && $custody->status === 'open' && $me?->role === 'admin')
+        <button class="btn" type="button" onclick="openDlg('dlgClearCustody')">
+            🧹 {{ __('field.clear_btn') }}
+        </button>
+    @endif
     @if ($seeDay)
         <a class="btn" href="{{ route('ops.rep_day', $u) }}">🗓️ {{ __('ops.rc_a_day') }}</a>
     @endif
@@ -1414,6 +1421,62 @@ a.src-ref:hover{text-decoration-style:solid}
         ])->values();
     }
 @endphp
+{{-- ═══ تفريغ العربية (٢٨ أغسطس ٢٠٢٦) ═══
+     الاختيار هنا مش تفصيلة شكلية — هو الفرق بين حركة مخزون سليمة
+     وبين بضاعة بتختفي من السيستم. الافتراضي **ترجع المخزن** عن قصد --}}
+@if ($custody && $custody->status === 'open' && $me?->role === 'admin')
+    @php
+        // المتبقي الفعلي في العربية — نفس معادلة remaining() للبنود كلها
+        $clrUnits = $custody->items->sum(fn ($i) => $i->remaining()) + $custody->items->sum(fn ($i) => $i->giftLeft());
+    @endphp
+    <dialog id="dlgClearCustody">
+        <form class="dlg" method="POST" action="{{ route('ops.rep.clear', $u) }}"
+              style="width:min(560px,94vw)"
+              onsubmit="return confirm(@js(__('field.clear_confirm')))">
+            @csrf
+            <h4>🧹 {{ __('field.clear_title') }} — {{ $u->displayName() }}</h4>
+
+            <div class="alert warn" style="margin-bottom:12px">
+                <span>⚠️</span><span>{{ __('field.clear_hint', ['units' => number_format($clrUnits)]) }}</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+                <label style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;
+                              border:1px solid var(--border);border-radius:10px;cursor:pointer">
+                    <input type="radio" name="mode" value="return" checked style="margin-top:3px">
+                    <span>
+                        <b>📦 {{ __('field.clear_mode_return') }}</b>
+                        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">
+                            {{ __('field.clear_mode_return_hint') }}
+                        </div>
+                    </span>
+                </label>
+                <label style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;
+                              border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;cursor:pointer">
+                    <input type="radio" name="mode" value="wipe" style="margin-top:3px">
+                    <span>
+                        <b style="color:#B91C1C">🧪 {{ __('field.clear_mode_wipe') }}</b>
+                        <div style="font-size:11.5px;color:#B91C1C;margin-top:2px">
+                            {{ __('field.clear_mode_wipe_hint') }}
+                        </div>
+                    </span>
+                </label>
+            </div>
+
+            <div style="margin-bottom:12px">
+                <label class="f">{{ __('field.custody_adjust_reason') }} <b class="req-star">*</b></label>
+                <input type="text" name="reason" required maxlength="300" style="width:100%"
+                       placeholder="{{ __('field.clear_reason_ph') }}">
+            </div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn" type="button" onclick="closeDlg('dlgClearCustody')">{{ __('common.cancel') }}</button>
+                <button class="btn gold" type="submit">🧹 {{ __('field.clear_apply') }}</button>
+            </div>
+        </form>
+    </dialog>
+@endif
+
 @if ($canAdjust)
     <dialog id="dlgAdjust" class="wide">
         <form class="dlg" method="POST" action="{{ route('ops.rep.adjust', $u) }}"

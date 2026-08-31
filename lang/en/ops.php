@@ -93,7 +93,9 @@ return [
     'kpi_rejected_hint' => 'Rejected by accounting',
     'kpi_delivered_hint' => 'Delivered to branches',
     'kpi_late_hint' => 'Past due and not delivered',
-    'search_po_ph' => 'Order no., chain PO no. or branch…',
+    'search_po_ph' => 'Order no., branch, or product name / code…',
+    // shown under the order number when the search matched an item (Aug 28)
+    'po_match_item' => 'contains',
     'track' => 'Track',
     'avail_in_wh' => 'Available in WH',
     'po_parent_client' => 'Parent client / chain',

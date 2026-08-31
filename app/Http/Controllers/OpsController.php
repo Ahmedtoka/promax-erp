@@ -1429,6 +1429,116 @@ class OpsController extends Controller
         return back()->with('ok', __('flash.custody_adjusted'));
     }
 
+    /**
+     * ═══ تفريغ عربية المندوب بضغطة (٢٨ أغسطس ٢٠٢٦ — طلب المالك) ═══
+     *
+     * «صفّر كل العهدة وخلّي العربية فاضية». نفس نتيجة «تصحيح العهدة»
+     * لو كتبت صفر في كل سطر — بس بضغطة، ومعاه اختيار **مصير البضاعة**
+     * وده أهم حاجة في الشاشة دي:
+     *
+     *   `return` → البضاعة **ترجع المخزن**: بتمرّ على `adjustTo` اللي
+     *     بيرجّع كل كمية لرفّ باتشها (عكس التحميل بالحرف) وبيزامن
+     *     `stocks`. ده المسار الصح لأي عربية رجعت فعلاً.
+     *
+     *   `wipe` → **تصفير بلا حركة مخزن** (تنظيف بيانات تجريبية).
+     *     🔴 البضاعة دي كانت خرجت من المخزن فعلاً ومخصومة منه —
+     *     التصفير كده بيخليها تختفي من السيستم من غير أثر. ممنوع
+     *     يتستخدم على حركة حقيقية: البضاعة اللي ضاعت أو تلفت مكانها
+     *     الجرد عشان الفرق يتسجّل بسببه ويتحاسب عليه.
+     *
+     * ⚠️ **الأرضية محفوظة في الحالتين**: المباع والمرتجع والمحوَّل
+     *    لمندوب تاني ماينزلوش — `remaining` بتوصل صفر، والتاريخ
+     *    بيفضل زي ما هو (`adjustTo` بيرفض النزول تحت الأرضية أصلاً).
+     */
+    public function clearCustody(Request $request, User $user)
+    {
+        Scope::assertRep($request->user(), $user);
+
+        $data = $request->validate([
+            'mode' => ['required', 'in:return,wipe'],
+            // السبب إجباري — نفس قاعدة التصحيح الإداري: الرقم بيتغير
+            // وتصفية المندوب بتتأثر، فلازم يفضل مكتوب ليه
+            'reason' => ['required', 'string', 'max:300'],
+        ]);
+
+        $custody = $user->currentCustody();
+
+        if ($custody === null || $custody->status === 'closed') {
+            return back()->withErrors(['clear' => __('field.custody_adjust_none')]);
+        }
+
+        $custody->load(['items.product', 'items.batch']);
+
+        // ═══ الأهداف = الأرضية: المباع والمرتجع والمحوَّل ماينزلوش ═══
+        $assigned = [];
+        $gift = [];
+        $units = 0;
+
+        foreach ($custody->items->groupBy('product_id') as $pid => $rows) {
+            $pid = (int) $pid;
+
+            $assigned[$pid] = (int) $rows->sum('sold')
+                + (int) $rows->sum('returned')
+                + (int) $rows->sum('transferred_out');
+            $gift[$pid] = (int) $rows->sum('gift_given');
+
+            $units += ((int) $rows->sum('assigned') - $assigned[$pid])
+                + ((int) $rows->sum('gift_assigned') - $gift[$pid]);
+        }
+
+        if ($units <= 0) {
+            return back()->withErrors(['clear' => __('field.clear_already_empty')]);
+        }
+
+        if ($data['mode'] === 'return') {
+            // المسار الصح — البضاعة بترجع لرفوفها و`stocks` بتتزامن
+            if ($err = $custody->adjustTo($assigned, $gift, $request->user(), $data['reason'])) {
+                return back()->withErrors(['clear' => $err]);
+            }
+        } else {
+            // 🔴 تصفير بلا حركة مخزن — بيانات تجريبية بس
+            DB::transaction(function () use ($custody, $assigned, $gift) {
+                foreach ($custody->items()->lockForUpdate()->get() as $item) {
+                    $pid = (int) $item->product_id;
+
+                    // بند بند: المحمَّل يساوي اللي خرج منه فعلاً
+                    $item->assigned = (int) $item->sold
+                        + (int) $item->returned
+                        + (int) $item->transferred_out;
+                    $item->gift_assigned = (int) $item->gift_given;
+                    $item->save();
+
+                    unset($assigned[$pid], $gift[$pid]);
+                }
+            });
+        }
+
+        TrackEvent::log(
+            $user,
+            'custody_adjust',
+            __('field.event_custody_cleared'),
+            __('field.clear_event_body', [
+                'mode' => __('field.clear_mode_'.$data['mode']),
+                'units' => $units,
+            ]).' — '.$data['reason'],
+        );
+
+        AppNotification::send(
+            $user,
+            fn () => __('field.notif_custody_cleared_title'),
+            fn () => __('field.notif_custody_cleared_body', [
+                'by' => $request->user()->displayName(),
+                'reason' => $data['reason'],
+            ]),
+            good: false,
+        );
+
+        return back()->with('ok', __('field.clear_done', [
+            'units' => $units,
+            'mode' => __('field.clear_mode_'.$data['mode']),
+        ]));
+    }
+
     // ================= أوامر التوريد =================
 
     /**
@@ -1446,11 +1556,19 @@ class OpsController extends Controller
             ->when($u?->role === 'manager',
                 fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')))
             ->when($request->string('q')->trim()->value(), function ($q2, $s) {
+                // ⚠️ **والبحث بالصنف كمان** (٢٨/٨ — طلب المالك): «جيبلي
+                // كل الأوامر اللي فيها المنتج ده». بند الأمر مالوش اسم
+                // مجمّد (`purchase_order_items` فيها `product_id` بس)،
+                // فالفلترة بتعدّي على العلاقة مش على عمود في البند.
                 $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
                     ->orWhere('source', 'like', "%$s%")
                     ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
                         ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%")));
+                        ->orWhere('code', 'like', "%$s%"))
+                    ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%")
+                        ->orWhere('barcode', 'like', "%$s%")));
             })
             ->when($request->integer('channel'),
                 fn ($q2, $ch) => $q2->whereHas('client', fn ($c) => $c->where('channel_id', $ch)))
@@ -1468,8 +1586,10 @@ class OpsController extends Controller
         // ⚠️ `replenishmentRequest.requester` في الإيجر لودينج: العمود
         // بيعرض «جاي من أنهي طلب ومين طلبه» لكل صف (إصلاح ١٥/٨)، ومن
         // غيرها دي كويريتين لكل أمر في الصفحة.
+        // ⚠️ `items.product` مش `items` (٢٨/٨): الصف بيوري أنهي صنف
+        // طابق البحث — من غير المنتج ده N+1 على كل أمر في الصفحة
         $q = $base()->with([
-            'client.channel', 'courier', 'items', 'creator', 'approvedBy', 'editor',
+            'client.channel', 'courier', 'items.product', 'creator', 'approvedBy', 'editor',
             'replenishmentRequest.requester',
         ]);
 
@@ -2955,11 +3075,17 @@ class OpsController extends Controller
             ->when(auth()->user()?->role === 'manager',
                 fn ($q2) => $q2->whereHas('client', fn ($c) => Client::visibleTo($c)))
             ->when($request->string('q')->trim()->value(), function ($q2, $s) {
+                // نفس بحث الصنف في لوحة التوريد (٢٨/٨) — الحسابات
+                // بتدوّر على «الأوامر اللي فيها الصنف ده» برضو
                 $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
                     ->orWhere('source', 'like', "%$s%")
                     ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
                         ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%")));
+                        ->orWhere('code', 'like', "%$s%"))
+                    ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%")
+                        ->orWhere('barcode', 'like', "%$s%")));
             })
             ->when($request->integer('group'),
                 fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))

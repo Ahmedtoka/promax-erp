@@ -139,9 +139,35 @@
                          بعد ترجمتها الشارة ماكانتش بتضيف معلومة — الأمر
                          أمر توريد في كل الأحوال. مكانها بقى الأصل الحقيقي:
                          رقم طلب البضاعة · مين طلبه · مين وافق. --}}
-                    @php $orig = $po->origin(); @endphp
+                    @php
+                        $orig = $po->origin();
+
+                        // ⚠️ البحث بيطابق الأصناف كمان (٢٨/٨) — الصف
+                        // بيوري أنهي صنف طابق وكميته، وإلا الأمر بيبان
+                        // في النتيجة والمستخدم مش عارف ليه
+                        $qTerm = trim((string) ($f['q'] ?? ''));
+                        $hitItems = $qTerm === '' ? collect() : $po->items->filter(function ($it) use ($qTerm) {
+                            $p = $it->product;
+
+                            return $p !== null && (
+                                mb_stripos((string) $p->name, $qTerm) !== false
+                                || mb_stripos((string) $p->name_en, $qTerm) !== false
+                                || mb_stripos((string) $p->code, $qTerm) !== false
+                                || mb_stripos((string) $p->barcode, $qTerm) !== false
+                            );
+                        });
+                    @endphp
                     <td class="num"><b>{{ $po->number }}</b>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}</span>
+                        @foreach ($hitItems->take(2) as $hit)
+                            <div style="font-size:10px;color:#15803D;font-weight:700;white-space:normal;max-width:190px">
+                                🔎 {{ __('ops.po_match_item') }}: {{ $hit->product?->displayName() }}
+                                — {{ number_format((int) $hit->qty) }}
+                            </div>
+                        @endforeach
+                        @if ($hitItems->count() > 2)
+                            <div style="font-size:9.5px;color:var(--muted)">+{{ $hitItems->count() - 2 }}</div>
+                        @endif
                         @if ($orig)
                             <br><a href="{{ route('ops.replenishments') }}" target="_blank" rel="noopener"
                                    onclick="event.stopPropagation()"
