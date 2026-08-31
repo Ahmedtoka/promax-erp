@@ -100,7 +100,7 @@
         <table class="tbl">
             <thead>
             <tr>
-                <th style="width:34px" data-nosum>#</th>
+                <th style="width:62px" data-nosum title="{{ __('audit.sort_hint') }}">↕ {{ __('audit.c_sort') }}</th>
                 <th style="min-width:190px">{{ $isChains ? __('audit.c_chain') : __('audit.c_client') }}</th>
                 <th style="width:132px">1️⃣ {{ __('audit.c_has_account') }}</th>
                 <th class="num" style="width:118px" data-nosum>2️⃣ {{ __('audit.c_their') }}</th>
@@ -129,7 +129,14 @@
                     $lockAfterStm = $lockAfterAcc || $hasStm !== true;
                 @endphp
                 <tr @class(['aud-row', 'aud-pending' => $state === 'pending', 'aud-full' => $state === 'full'])>
-                    <td class="num" style="color:var(--muted);font-size:11px">{{ $i + 1 }}</td>
+                    {{-- ترتيب يدوي: اكتب ١ ٢ ٣ ودوس حفظ الكل تحت.
+                         الفاضي = سيبه في مكانه الافتراضي --}}
+                    <td class="num">
+                        <input type="number" min="1" max="99999" step="1" class="aud-sort"
+                               name="rows[{{ $r['id'] }}][sort]" value="{{ $a?->sort }}"
+                               placeholder="{{ $i + 1 }}"
+                               style="width:52px;text-align:center;font-weight:800">
+                    </td>
 
                     <td>
                         <b>{{ $r['title'] }}</b>
@@ -232,6 +239,9 @@
     <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
         <button class="btn gold" type="submit">💾 {{ __('audit.save_all') }}</button>
         <span style="font-size:11.5px;color:var(--muted)">{{ __('audit.save_hint') }}</span>
+    </div>
+    <div class="alert info" style="margin-top:10px">
+        <span>↕</span><span>{{ __('audit.sort_hint') }}</span>
     </div>
 </form>
 

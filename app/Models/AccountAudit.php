@@ -19,6 +19,8 @@ class AccountAudit extends Model
 
     protected $fillable = [
         'entity_type', 'entity_id',
+        // ترتيب يدوي لليستة — بيتكتب بالإيد ويتحفظ مع الصف (٢٨/٨)
+        'sort',
         'has_account', 'their_balance',
         'has_statement', 'statement_path', 'statement_name',
         // إذون استلام الكشف · الفاتورة الضريبية · تأكيد المدير (٢٨/٨)
@@ -29,6 +31,7 @@ class AccountAudit extends Model
     protected function casts(): array
     {
         return [
+            'sort' => 'integer',
             'has_account' => 'boolean',
             'has_statement' => 'boolean',
             'has_receipt' => 'boolean',

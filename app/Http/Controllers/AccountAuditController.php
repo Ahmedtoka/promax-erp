@@ -156,6 +156,15 @@ class AccountAuditController extends Controller
         $state = fn ($r) => $r['audit']?->state() ?? 'pending';
         $summary = self::summarize($rows);
 
+        // ═══ الترتيب اليدوي (٢٨/٨) ═══
+        //
+        // اللي المالك كتبله رقم بيطلع فوق بالترتيب، واللي مالوش رقم
+        // بيكمّل بالترتيب الافتراضي اللي جاي من الكويري (أكبر عدد
+        // فروع / أكبر رصيد) — `sortBy` في لارافيل **مستقر**، يعني
+        // المتساويين بيفضلوا بترتيبهم الأصلي، وده اللي بيخلي الجزء
+        // اللي مااتلمسش زي ما هو بالظبط.
+        $rows = $rows->sortBy(fn ($r) => $r['audit']?->sort ?? PHP_INT_MAX)->values();
+
         $show = $request->string('show')->value() ?: 'all';
 
         $filtered = match ($show) {
@@ -198,6 +207,8 @@ class AccountAuditController extends Controller
 
         $data = $request->validate([
             'rows' => ['required', 'array'],
+            // ترتيب يدوي — فاضي معناه «سيبه في مكانه الافتراضي»
+            'rows.*.sort' => ['nullable', 'integer', 'min:1', 'max:99999'],
             'rows.*.has_account' => ['nullable', 'in:1,0'],
             'rows.*.their_balance' => ['nullable', 'numeric', 'between:-99999999,99999999'],
             'rows.*.has_statement' => ['nullable', 'in:1,0'],
@@ -230,6 +241,10 @@ class AccountAuditController extends Controller
                     'entity_type' => $type,
                     'entity_id' => $id,
                 ]);
+
+                // الترتيب اليدوي — الفاضي بيمسح الرقم القديم فالصف
+                // يرجع لمكانه الافتراضي (مش بيتساب زي ما هو)
+                $audit->sort = ($row['sort'] ?? '') === '' ? null : (int) $row['sort'];
 
                 // الفاضي = «لسه ماتحددش» مش false — الفرق بين
                 // «قال لأ» و«ماردش» هو نص فايدة الشاشة

@@ -81,6 +81,8 @@ return [
     'c_tax' => 'Tax invoice?',
     'c_ours' => 'Ours (reference)',
     'c_confirm' => 'Confirm',
+    'c_sort' => 'Order',
+    'sort_hint' => 'Type 1, 2, 3 in the order you want and hit "Save all" below - the order is stored and stays. Leave a box empty to keep that row in its default position.',
 
     'yes' => 'Yes',
     'no' => 'No',
