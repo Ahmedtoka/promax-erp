@@ -41,6 +41,8 @@ class Access
         'manager' => [
             // السايكل الجديدة (١٧/٨): الديفيجنز + الإعداد + رصيد العناوين
             'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
+            // مراجعة الحسابات (٢٨/٨) — مدير القناة بيراجع عملاءه
+            'erp.audit.chains', 'erp.audit.clients',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
@@ -251,6 +253,7 @@ class Access
         'nav.group_ka' => '🚚',
         'nav.group_purchasing' => '🤝',
         'nav.group_clients' => '👥',
+        'nav.group_review' => '🧾',
         'nav.group_field' => '🗺️',
         'nav.group_money' => '💰',
         'nav.group_hr' => '🕒',
@@ -346,8 +349,9 @@ class Access
             // (بلاغ المالك). أي شاشة جديدة لازم تتسجل **هنا** عشان
             // تبان في المنيو، والشورتكاتس رفاهية فوقها.
             ['erp.divisions', '🗂️', 'client.divisions', 'erp.divisions', null],
-            ['erp.setup.chains', '⚙️', 'client.setup_chains', 'erp.setup.chains', null],
-            ['erp.setup.clients', '🧩', 'client.setup_clients', 'erp.setup.clients', null],
+            // ⚠️ **شاشتا الإعداد اتنقلوا لمجموعة «مراجعة العملاء»**
+            // (٢٨/٨ — طلب المالك): هما وصفحتَي مراجعة الحسابات بقوا
+            // تاب واحد، لأن الشغل عليهم بيتعمل ورا بعض
             // ⚠️ العدّاد `null` مش رولز — الخانة دي مفتاح عدّاد
             // (`?string`)، وحطّ أراي فيها كان بيرمي 500 على كل صفحة
             ['erp.client_locations', '📍', 'nav.client_locations', 'erp.client_locations', null],
@@ -357,6 +361,18 @@ class Access
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
             ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
             ['erp.managers.clients', '🧑‍💼', 'perm.manager_clients', 'erp.managers*', null],
+        ],
+
+        // ═══ ٦ب. مراجعة العملاء (٢٨ أغسطس ٢٠٢٦ — طلب المالك) ═══
+        //
+        // «تاب جديد اسمه مراجعة العملاء: فيه إعداد العملاء وإعداد
+        // السلاسل والصفحتين الجداد». الترتيب = ترتيب الشغل: تظبط
+        // الإعداد الأول، وبعدين تمشي على الحسابات كيان كيان.
+        'nav.group_review' => [
+            ['erp.setup.chains', '⚙️', 'client.setup_chains', 'erp.setup.chains', null],
+            ['erp.setup.clients', '🧩', 'client.setup_clients', 'erp.setup.clients', null],
+            ['erp.audit.chains', '🧾', 'audit.chains_title', 'erp.audit.chains', null],
+            ['erp.audit.clients', '👤', 'audit.clients_title', 'erp.audit.clients', null],
         ],
 
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══

@@ -642,6 +642,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('setup.clients');
             Route::post('/setup/clients', [\App\Http\Controllers\ClientSetupController::class, 'saveClients'])
                 ->name('setup.clients.save');
+
+            // ═══ مراجعة الحسابات (٢٨/٨) — سلسلة سلسلة وعميل عميل ═══
+            // ⚠️ المسارات الثابتة قبل أي بارامتري تحت `audit/`
+            Route::get('/audit/chains', [\App\Http\Controllers\AccountAuditController::class, 'chains'])
+                ->name('audit.chains');
+            Route::get('/audit/clients', [\App\Http\Controllers\AccountAuditController::class, 'clients'])
+                ->name('audit.clients');
+            Route::post('/audit/{mode}/save', [\App\Http\Controllers\AccountAuditController::class, 'save'])
+                ->name('audit.save');
+            Route::post('/audit/statement/{audit}/delete',
+                [\App\Http\Controllers\AccountAuditController::class, 'deleteStatement'])
+                ->name('audit.statement.delete');
         });
 
         // ===== القنوات =====

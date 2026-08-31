@@ -10,6 +10,7 @@ return [
 
     // ---------- Groups ----------
     'group_clients' => 'Clients & Contracts',
+    'group_review' => 'Client Review',
     'group_money' => 'Accounts & Collections',
     'group_field' => 'Field & Reps',
     'group_reports' => 'Reports & Tracking',
