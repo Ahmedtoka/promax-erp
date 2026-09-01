@@ -246,6 +246,15 @@
                      background:var(--blue-050,#E8F1FF);border:1px solid var(--royal-blue,#12399B);
                      border-radius:12px;padding:10px 14px">
             @csrf
+            {{-- ═══ وضع «كل نتايج الفلتر» (١/٩): الفلاتر الحالية بتتبعت
+                 مع الفورم عشان السيرفر يعيد بناء نفس الكويري لما
+                 all_filtered=1 — أي فلتر جديد في الشاشة يتضاف هنا ═══ --}}
+            <input type="hidden" name="all_filtered" id="ldAllFiltered" value="">
+            @foreach (['status', 'zone', 'rep', 'search', 'source', 'cat', 'unassigned', 'dup'] as $fk)
+                @if (($filters[$fk] ?? '') !== '' && $filters[$fk] !== null)
+                    <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] }}">
+                @endif
+            @endforeach
             <b style="font-size:12.5px">🎯 {{ __('lead.bulkset_title') }}</b>
             <span id="ldCkCount" class="badge b-blue">0</span>
             <select name="rep_id" required style="flex:0 1 240px">
@@ -256,6 +265,14 @@
             </select>
             <button class="btn gold" type="submit" id="ldApplyBtn" disabled>
                 ✅ {{ __('lead.apply_all') }}</button>
+            {{-- لافتة «متحدد الكل عبر الصفحات» — بتظهر بس لما المستخدم
+                 يختار كل نتايج الفلتر، و✕ بترجّعه للتحديد العادي --}}
+            <span id="ldAllBanner" style="display:none;align-items:center;gap:6px;font-size:11.5px;
+                   font-weight:800;background:#FFF4D6;border:1px solid #E3C56A;border-radius:999px;
+                   padding:4px 12px">
+                ⚡ <span id="ldAllBannerTxt"></span>
+                <button type="button" class="btn sm" id="ldAllCancel" style="padding:1px 8px">✕</button>
+            </span>
         </form>
     @endif
     <div class="tablewrap">
@@ -407,7 +424,24 @@
         </table>
     </div>
 
-    <div class="pag">{{ $leads->links() }}</div>
+    {{-- ═══ ترقيم مضبوط (١/٩): البارشال المرقّم بتاع السيستم بدل
+         الليّاوت الافتراضي المكسور + اختيار حجم الصفحة ═══ --}}
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        <span style="font-size:11.5px;color:var(--muted);font-weight:800">{{ __('lead.per_page') }}:</span>
+        @foreach ([30, 60, 100, 'all'] as $opt)
+            @php $lbl = $opt === 'all' ? __('lead.show_all') : $opt; @endphp
+            @if ($per === $opt)
+                <span class="btn sm gold" style="pointer-events:none">{{ $lbl }}</span>
+            @else
+                <a class="btn sm" href="{{ request()->fullUrlWithQuery(['per' => $opt, 'page' => null]) }}">{{ $lbl }}</a>
+            @endif
+        @endforeach
+        @if ($per === 'all' && (int) ($dist->total ?? 0) > 2000)
+            <span class="badge b-orange">{{ __('lead.all_capped', ['n' => 2000]) }}</span>
+        @endif
+    </div>
+
+    @include('partials._pagination', ['p' => $leads])
 </div>
 
 {{-- ═══════════ إضافة ═══════════ --}}
@@ -556,6 +590,21 @@
         </div>
     </form>
 </dialog>
+
+{{-- ═══ ديالوج نطاق «تحديد الكل» (١/٩): الصفحة دي ولا كل نتايج
+     الفلتر؟ بيظهر بس لما فيه نتايج أكتر من المعروض ═══ --}}
+<dialog id="dlgCkScope">
+    <div class="dlg" style="max-width:420px">
+        <h4>☑️ {{ __('lead.sel_scope_title') }}</h4>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px" id="ckScopeHint"></div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn" type="button" id="ckScopePage"></button>
+            <button class="btn gold" type="button" id="ckScopeAll"></button>
+            <button class="btn" type="button" onclick="closeDlg('dlgCkScope')" style="opacity:.7">
+                {{ __('common.cancel') }}</button>
+        </div>
+    </div>
+</dialog>
 @endif
 
 @endsection
@@ -598,7 +647,10 @@
         openDlg('dlgEditLead');
     }
 
-    /* ═══ التحديد المتعدد + Apply (٢٦/٨) ═══ */
+    /* ═══ التحديد المتعدد + Apply (٢٦/٨ → نطاق التحديد ١/٩) ═══
+       «تحديد الكل» بيسأل: الصفحة دي بس ولا كل نتايج الفلتر عبر
+       الصفحات؟ وضع الكل بيبعت all_filtered=1 والسيرفر بيعيد بناء
+       الكويري — أي فك لأي تشيك بوكس بيلغي وضع الكل فوراً. */
     (function () {
         'use strict';
 
@@ -607,19 +659,94 @@
         var count = document.getElementById('ldCkCount');
         if (!all || !btn) return;
 
+        var allInput = document.getElementById('ldAllFiltered');
+        var banner = document.getElementById('ldAllBanner');
+        var bannerTxt = document.getElementById('ldAllBannerTxt');
+        var form = document.getElementById('ldBulkForm');
+
+        /* المفتوحين المطابقين للفلتر كله (مش الصفحة) — من نفس عدّادات
+           السيرفر؛ التسكين مابيلمسش المكسوب/المخسور/المتحوّل أصلاً */
+        var OPEN_TOTAL = {{ (int) ($stats['open'] ?? 0) }};
+        var T = {
+            page: @js(__('lead.sel_page_only')),
+            allF: @js(__('lead.sel_all_filtered')),
+            hint: @js(__('lead.sel_scope_hint')),
+            on: @js(__('lead.sel_all_on')),
+            confirm: @js(__('lead.sel_all_confirm')),
+        };
+
+        function boxes() { return document.querySelectorAll('.ld-ck'); }
+
+        function setAllMode(on) {
+            allInput.value = on ? '1' : '';
+            banner.style.display = on ? 'inline-flex' : 'none';
+            if (on) bannerTxt.textContent = T.on.replace(':n', OPEN_TOTAL);
+            refresh();
+        }
+
         function refresh() {
             var n = document.querySelectorAll('.ld-ck:checked').length;
-            count.textContent = n;
-            btn.disabled = n === 0;
+            var allMode = allInput.value === '1';
+            count.textContent = allMode ? OPEN_TOTAL : n;
+            btn.disabled = allMode ? false : n === 0;
+        }
+
+        function checkPage(v) {
+            boxes().forEach(function (c) { c.checked = v; });
         }
 
         all.addEventListener('change', function () {
-            document.querySelectorAll('.ld-ck').forEach(function (c) { c.checked = all.checked; });
-            refresh();
+            if (!all.checked) { checkPage(false); setAllMode(false); return; }
+
+            var pageN = boxes().length;
+
+            /* لو الفلتر أوسع من المعروض — اسأل. لو كله قدامك خلاص */
+            if (OPEN_TOTAL > pageN) {
+                all.checked = false; /* لسه ما اختارش */
+                document.getElementById('ckScopeHint').textContent =
+                    T.hint.replace(':total', OPEN_TOTAL).replace(':page', pageN);
+                document.getElementById('ckScopePage').textContent =
+                    '☑️ ' + T.page.replace(':n', pageN);
+                document.getElementById('ckScopeAll').textContent =
+                    '⚡ ' + T.allF.replace(':n', OPEN_TOTAL);
+                openDlg('dlgCkScope');
+            } else {
+                checkPage(true);
+                setAllMode(false);
+            }
         });
-        document.querySelectorAll('.ld-ck').forEach(function (c) {
-            c.addEventListener('change', refresh);
+
+        document.getElementById('ckScopePage').addEventListener('click', function () {
+            closeDlg('dlgCkScope');
+            all.checked = true;
+            checkPage(true);
+            setAllMode(false);
         });
+        document.getElementById('ckScopeAll').addEventListener('click', function () {
+            closeDlg('dlgCkScope');
+            all.checked = true;
+            checkPage(true);
+            setAllMode(true);
+        });
+        document.getElementById('ldAllCancel').addEventListener('click', function () {
+            setAllMode(false);
+        });
+
+        boxes().forEach(function (c) {
+            c.addEventListener('change', function () {
+                /* فك واحد = مش «الكل» خلاص */
+                if (!c.checked && allInput.value === '1') { setAllMode(false); all.checked = false; }
+                refresh();
+            });
+        });
+
+        /* تأكيد قبل تسكين الفلتر كله — دي ضغطة بتحرّك مئات */
+        form.addEventListener('submit', function (e) {
+            if (allInput.value === '1' && !confirm(T.confirm.replace(':n', OPEN_TOTAL))) {
+                e.preventDefault();
+            }
+        });
+
         refresh();
     })();
 

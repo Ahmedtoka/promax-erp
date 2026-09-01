@@ -143,6 +143,17 @@ return [
     'bulkset_title' => 'Assign selected to a rep',
     'apply_all' => 'Apply to selected',
     'select_all' => 'Select all',
+
+    // ═══ Pagination + select-all scope (Sep 1) ═══
+    'per_page' => 'Show',
+    'show_all' => 'All',
+    'all_capped' => 'Showing first :n only — narrow the filter',
+    'sel_scope_title' => 'Select what exactly?',
+    'sel_scope_hint' => 'The current filter matches :total open leads — you can only see :page on this page.',
+    'sel_page_only' => 'This page only (:n)',
+    'sel_all_filtered' => 'All filtered results (:n)',
+    'sel_all_on' => 'All :n leads matching the filter are selected — not just this page',
+    'sel_all_confirm' => 'All :n open leads matching the filter will be assigned to this rep at once. Sure?',
     'clear_btn' => 'Clear all assignments',
     'clear_confirm' => 'Sure? All open leads will lose their rep so you can distribute from scratch. Closed ones (won/lost) are untouched.',
     'cleared_all' => 'Rep removed from :n leads — start distributing.',

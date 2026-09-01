@@ -20,21 +20,32 @@ use Illuminate\Http\Request;
  */
 class LeadController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * ═══ الكويري المفلترة المشتركة (٢٦/٨ → اتفصلت ١/٩) ═══
+     *
+     * السكوب + كل فلاتر الشاشة في مكان واحد — بيستخدمها `index`
+     * (العرض) و`bulkSet` في وضع «كل نتايج الفلتر» (التسكين الجماعي
+     * عبر الصفحات). **أي فلتر جديد يتضاف هنا** وإلا التحديد الشامل
+     * هيسكّن ناس الفلتر مش شايفهم.
+     *
+     * ⚠️ الليدز مربوطة بالزون، والزون مربوط بالفرع — بنسكّنها
+     * بزون الفرع عشان مدير فرع مايشوفش خط أنابيب فرع تاني.
+     *
+     * ⚠️⚠️ **مش `Branch::scope($q, $user, 'zone_id')`** (إصلاح
+     * 2026-08-13). `Branch::scope` بيعمل `where(<العمود>, branch_id)`
+     * — يعني كان بيقارن `leads.zone_id` برقم **الفرع**. جدول
+     * `leads` أصلاً مالوش `branch_id` (مش في `Branch::SCOPED`)،
+     * فالنتيجة كانت تسريب وضياع في الاتجاهين معاً. السكوب لازم
+     * يعدّي **على الزون**.
+     *
+     * ⚠️⚠️ **كل الأعمدة متأهلة بـ`leads.`** (إصلاح ٢٦/٨): كويري
+     * «متسكّن مع» بتعمل clone من هنا + join على `users`، و`users`
+     * فيها نفس الأسماء (zone_id/name/phone/status...) — عمود غير
+     * متأهل بيرمي 1052 «ambiguous» أول ما الفلتر يشتغل مع الـjoin.
+     */
+    private function filteredQuery(Request $request, User $user)
     {
-        $user = $request->user();
-
-        // ⚠️ الليدز مربوطة بالزون، والزون مربوط بالفرع — بنسكّبها
-        // بزون الفرع عشان مدير فرع مايشوفش خط أنابيب فرع تاني.
-        //
-        // ⚠️⚠️ **مش `Branch::scope($q, $user, 'zone_id')`** (إصلاح
-        // 2026-08-13). `Branch::scope` بيعمل `where(<العمود>, branch_id)`
-        // — يعني كان بيقارن `leads.zone_id` برقم **الفرع**. جدول
-        // `leads` أصلاً مالوش `branch_id` (مش في `Branch::SCOPED`)،
-        // فالنتيجة كانت تسريب وضياع في الاتجاهين معاً: المدير بيشوف
-        // ليدز فرع تاني لو رقم الزون صادف رقم فرعه، وباقي ليداته
-        // بتختفي خالص. السكوب لازم يعدّي **على الزون**.
-        $q = Lead::with(['zone', 'channel', 'assignee', 'client', 'dupClient']);
+        $q = Lead::query();
 
         if (! $user->seesAllBranches() && $user->branch_id !== null) {
             $branchId = $user->branch_id;
@@ -42,7 +53,6 @@ class LeadController extends Controller
             $q->where(function ($w) use ($branchId) {
                 // الزونز المركزية (`branch_id` فاضي) بتفضل مشتركة —
                 // نفس قاعدة `Branch::scope` بالظبط
-                // ⚠️ متأهلة بـ`leads.` — نفس درس join «متسكّن مع»
                 $w->whereNull('leads.zone_id')
                     ->orWhereIn('leads.zone_id', Zone::query()
                         ->where(fn ($z) => $z->where('branch_id', $branchId)->orWhereNull('branch_id'))
@@ -56,10 +66,6 @@ class LeadController extends Controller
             $q->where('leads.assigned_to', $user->id);
         }
 
-        // ⚠️⚠️ **كل الأعمدة متأهلة بـ`leads.`** (إصلاح ٢٦/٨): كويري
-        // «متسكّن مع» بتعمل clone من هنا + join على `users`، و`users`
-        // فيها نفس الأسماء (zone_id/name/phone/status...) — عمود غير
-        // متأهل بيرمي 1052 «ambiguous» أول ما الفلتر يشتغل مع الـjoin.
         $q->when($request->filled('status'), fn ($x) => $x->where('leads.status', $request->input('status')))
             ->when($request->filled('zone'), fn ($x) => $x->where('leads.zone_id', $request->input('zone')))
             ->when($request->filled('rep'), fn ($x) => $x->where('leads.assigned_to', $request->input('rep')))
@@ -89,6 +95,16 @@ class LeadController extends Controller
                         ->orWhere('leads.number', 'like', $s);
                 });
             });
+
+        return $q;
+    }
+
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        $q = $this->filteredQuery($request, $user)
+            ->with(['zone', 'channel', 'assignee', 'client', 'dupClient']);
 
         // ⚠️ تجميع في الداتابيز مش تحميل الجدول كله. بعد استيراد
         // شيت فيه آلاف الليدز، `->get()` كان بيجيبهم كلهم بعلاقاتهم
@@ -195,8 +211,23 @@ class LeadController extends Controller
             ->whereIn('status', Lead::OPEN_STATUSES)
             ->count();
 
+        // ═══ حجم الصفحة (١/٩): ٣٠/٦٠/١٠٠ أو «الكل» ═══
+        //
+        // «الكل» بيعرض كل نتايج الفلتر في صفحة واحدة — عشان التعليم
+        // والتسكين الجماعي من غير تنقّل. بسقف 2000 صف عشان الصفحة
+        // ماتتخنقش (نفس روح سقف مركز التقارير) — لو الفلتر أوسع من
+        // كده ضيّق الأول.
+        $per = in_array((int) $request->input('per'), [30, 60, 100], true)
+            ? (int) $request->input('per')
+            : ($request->input('per') === 'all' ? 'all' : 30);
+
+        $pageSize = $per === 'all'
+            ? max(1, min((int) ($dist->total ?? 0), 2000))
+            : $per;
+
         return view('erp.leads', [
-            'leads' => $q->paginate(30)->withQueryString(),
+            'leads' => $q->paginate($pageSize)->withQueryString(),
+            'per' => $per,
             'mapLeads' => $mapLeads,
             'zoneRows' => $zoneRows,
             'zoneReps' => $zoneReps,
@@ -220,7 +251,7 @@ class LeadController extends Controller
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
             'sort' => $sort,
-            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort', 'cat', 'unassigned']),
+            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per']),
             'canConvert' => $user->isManager(),
         ]);
     }
@@ -545,8 +576,17 @@ class LeadController extends Controller
      */
     public function bulkSet(Request $request)
     {
+        // ═══ وضع «كل نتايج الفلتر» (١/٩) ═══
+        //
+        // تحديد الكل عبر الصفحات: الفورم بيبعت `all_filtered=1` + نفس
+        // فلاتر الشاشة (hidden inputs)، والسيرفر بيعيد بناء الكويري
+        // بـ`filteredQuery` بدل قايمة ids — عشان 593 ليد مايتبعتوش
+        // كـ593 حقل ولا يتحدّدوا صفحة صفحة.
+        $allMode = $request->boolean('all_filtered');
+
         $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            // في وضع الكل الـids مالهاش لازمة — الفلتر هو التحديد
+            'ids' => [$allMode ? 'nullable' : 'required', 'array', 'max:2000'],
             'ids.*' => ['integer'],
             'rep_id' => ['required', 'integer',
                 \Illuminate\Validation\Rule::exists('users', 'id')
@@ -555,10 +595,16 @@ class LeadController extends Controller
 
         $rep = User::findOrFail($data['rep_id']);
 
-        $leads = Lead::whereIn('id', $data['ids'])
-            ->whereIn('status', Lead::OPEN_STATUSES)
-            ->whereNull('client_id')
-            ->get(['id', 'zone_id']);
+        // ⚠️ الأعمدة متأهلة بـ`leads.` — filteredQuery ممكن تبقى معمولة
+        // للـjoin (نفس درس 1052 الموثق فوقها)
+        $base = $allMode
+            ? $this->filteredQuery($request, $request->user())
+            : Lead::query()->whereIn('leads.id', $data['ids'] ?? []);
+
+        $leads = $base
+            ->whereIn('leads.status', Lead::OPEN_STATUSES)
+            ->whereNull('leads.client_id')
+            ->get(['leads.id', 'leads.zone_id']);
 
         if ($leads->isEmpty()) {
             return back()->withErrors(['ids' => __('lead.bulk_none')]);
