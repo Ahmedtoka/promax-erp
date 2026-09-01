@@ -74,6 +74,13 @@ class PromoterApiController extends Controller
             // مسجّله حاضر خلاص.
             'attendance' => \App\Services\Attendance::payload($user),
 
+            // ═══ خط السير (٢٨/٨ — بلاغ المالك) ═══
+            //
+            // الجدولة في الـERP بتحفظ خطط للبروموتر من زمان، بس البوت
+            // ستراب ده **ماكانش بيبعتها خالص** — فالمالك يجدول والشاشة
+            // ماتعرفش. نفس بايلود خط سير الميدان بالحرف.
+            'journey' => FieldApiController::journeyPayload($user),
+
             // ═══ حزمة التسليم (١١/٨ مساءً) — نفس مفاتيح bootstrap الميدان ═══
             // البروموتر بيشوف عهدته بالسعر الجديد زي السيلز.
             'custody' => FieldApiController::custodyPayload($custody, 'new'),
