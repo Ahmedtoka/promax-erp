@@ -664,6 +664,9 @@ class FieldApiController extends Controller
                 'tax_rate' => \App\Services\Tax::rate($r['client']),
                 'category' => $r['client']->category,
                 'category_label' => $r['client']->categoryLabel(),
+                // فرع سلسلة ولا عميل فردي؟ — شاشة خط السير بتفصلهم
+                // سكشنين (طلب المالك ٢٨/٨)
+                'is_chain' => $r['client']->group_id !== null,
                 'status' => $r['status'],
                 'visit_id' => $r['visit']?->id,
                 'sort' => $r['sort'],

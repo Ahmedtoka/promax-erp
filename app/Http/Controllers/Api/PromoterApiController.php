@@ -48,6 +48,25 @@ class PromoterApiController extends Controller
             ->orderBy('name')
             ->get();
 
+        // ═══ خط السير بيتحسب مرة واحدة (٢٨/٨) ═══
+        $journey = FieldApiController::journeyPayload($user);
+
+        // 🔴 **فروع الخطة بتنضم لفروعه** (بلاغ «مفيش فروع متخصصة ليك»):
+        // قايمة الفروع بتتبني من زونه وقناته، والمالك ممكن يجدوله
+        // فروع بره الزون — المحطة كانت بتيجي في الخطة والفرع مش في
+        // القايمة، فبدء الزيارة بيترفض. أي عميل في خطة النهارده بيدخل
+        // القايمة، فالزيارة والريفيل شغالين عليه زي فروعه بالظبط.
+        $missingIds = collect($journey['stops'] ?? [])->pluck('client_id')
+            ->diff($branches->pluck('id'));
+
+        if ($missingIds->isNotEmpty()) {
+            $branches = $branches->concat(
+                Client::whereIn('id', $missingIds)
+                    ->where('status', 'active')
+                    ->with('channel')->get()
+            );
+        }
+
         $todayVisits = MerchVisit::where('user_id', $user->id)
             ->whereDate('created_at', today())->get()->keyBy('client_id');
 
@@ -77,9 +96,9 @@ class PromoterApiController extends Controller
             // ═══ خط السير (٢٨/٨ — بلاغ المالك) ═══
             //
             // الجدولة في الـERP بتحفظ خطط للبروموتر من زمان، بس البوت
-            // ستراب ده **ماكانش بيبعتها خالص** — فالمالك يجدول والشاشة
-            // ماتعرفش. نفس بايلود خط سير الميدان بالحرف.
-            'journey' => FieldApiController::journeyPayload($user),
+            // ستراب ده **ماكانش بيبعتها خالص**. متحسوبة فوق مرة واحدة
+            // — بتغذي القايمة والخطة الاتنين.
+            'journey' => $journey,
 
             // ═══ حزمة التسليم (١١/٨ مساءً) — نفس مفاتيح bootstrap الميدان ═══
             // البروموتر بيشوف عهدته بالسعر الجديد زي السيلز.

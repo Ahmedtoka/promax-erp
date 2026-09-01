@@ -327,6 +327,9 @@ return [
     'board_unassigned_n' => ':n not placed yet',
     'board_search' => 'Search clients…',
     'f_unassigned' => 'Unplaced',
+    // Pool split (Aug 28) - chain branches vs cash van
+    'sec_chains' => 'Chain branches',
+    'sec_cash' => 'Cash van & standalone',
     'f_all' => 'All',
     'board_owes' => 'Owes :n',
     'board_late' => 'Overdue',

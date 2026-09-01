@@ -146,6 +146,8 @@ class JourneyController extends Controller
             'name' => $c->fullName(),
             'zone' => $c->zone?->displayName(),
             'channel' => $c->channel?->displayName(),
+            // فرع سلسلة ولا فردي — البول بيتفصل سكشنين (٢٨/٨)
+            'chain' => $c->group?->displayName(),
             'balance' => (float) $c->balance,
             // كتلة بحث عابرة اللغات — نفس فكرة الأبلكيشن
             'q' => mb_strtolower(trim($c->fullName().' '.$c->name_en.' '

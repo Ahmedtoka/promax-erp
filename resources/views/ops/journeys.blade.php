@@ -218,6 +218,9 @@
         'missedN' => __('journey.pulse_missed_n'),
         'todayLbl' => __('journey.pulse_today'),
         'addBtn' => __('journey.board_add'),
+        // فصل البول (٢٨/٨): فروع السلاسل سكشن والكاش فان سكشن
+        'secChains' => __('journey.sec_chains'),
+        'secCash' => __('journey.sec_cash'),
     ];
 @endphp
 <script>
@@ -354,7 +357,38 @@
             return true;
         };
 
-        state.pool.filter(match).forEach(function (c) { rows.push(poolRow(c)); });
+        // ═══ الفصل (طلب المالك ٢٨/٨): فروع السلاسل سكشن لوحدهم —
+        // مجمّعين بالسلسلة — وبعديهم عملاء الكاش فان/الفرادى.
+        // العناوين بتظهر بس لما البول مخلوط، فبول من نوع واحد
+        // بيتعرض زي زمان من غير دوشة.
+        const chainRows = state.pool.filter(function (c) { return match(c) && c.chain; });
+        const soloRows = state.pool.filter(function (c) { return match(c) && !c.chain; });
+
+        const secHead = function (label, n) {
+            return '<div class="jb-sec">' + label +
+                ' <span class="jb-sec-n">' + n + '</span></div>';
+        };
+
+        if (chainRows.length && soloRows.length) {
+            rows.push(secHead('🔗 ' + T.secChains, chainRows.length));
+        }
+
+        // تجميع فروع السلسلة الواحدة ورا بعض — بعنوان صغير لكل سلسلة
+        const byChain = {};
+        chainRows.forEach(function (c) { (byChain[c.chain] = byChain[c.chain] || []).push(c); });
+        Object.keys(byChain).sort().forEach(function (ch) {
+            if (Object.keys(byChain).length > 1) {
+                rows.push('<div class="jb-chainhead">' + esc(ch) +
+                    ' · ' + byChain[ch].length + '</div>');
+            }
+            byChain[ch].forEach(function (c) { rows.push(poolRow(c)); });
+        });
+
+        if (chainRows.length && soloRows.length) {
+            rows.push(secHead('🚐 ' + T.secCash, soloRows.length));
+        }
+
+        soloRows.forEach(function (c) { rows.push(poolRow(c)); });
 
         if (state.filter !== 'un') {
             plannedList().forEach(function (r) {
@@ -664,6 +698,12 @@
 .jb-fchip.on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff}
 .jb-pool{flex:1;overflow-y:auto;min-height:120px;border:1px solid var(--border);
   border-radius:12px;padding:5px}
+/* سكشنات فصل البول (٢٨/٨): السلاسل فوق والكاش فان تحت */
+.jb-sec{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;
+    padding:9px 4px 4px;color:#374151}
+.jb-sec-n{background:#E5E7EB;border-radius:20px;padding:1px 8px;font-size:10.5px}
+.jb-chainhead{font-size:10.5px;font-weight:800;color:var(--muted);
+    padding:5px 6px 2px}
 .jb-crow{display:flex;align-items:center;gap:6px;padding:8px 9px;border-radius:10px;
   cursor:grab;border-bottom:1px solid var(--border)}
 .jb-crow:last-child{border-bottom:none}
