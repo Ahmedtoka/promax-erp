@@ -60,6 +60,13 @@
         <input type="search" id="jbSearch" placeholder="{{ __('journey.board_search') }}"
                onkeydown="if (event.key === 'Enter') event.preventDefault()">
 
+        {{-- محافظة ← منطقة، بالأعداد (طلب المالك ٢٨/٨) — المنطقة
+             بتتفلتر بالمحافظة المختارة، والأعداد بتتحدث مع بعض --}}
+        <div class="jb-geo">
+            <select id="jbGov" onchange="setGov(this.value)"></select>
+            <select id="jbZone" onchange="setZone(this.value)"></select>
+        </div>
+
         <div class="jb-filters" id="jbFilters"></div>
 
         <div class="jb-pool" id="jbPool"></div>
@@ -221,6 +228,9 @@
         // فصل البول (٢٨/٨): فروع السلاسل سكشن والكاش فان سكشن
         'secChains' => __('journey.sec_chains'),
         'secCash' => __('journey.sec_cash'),
+        // محافظة ← منطقة بالأعداد (٢٨/٨)
+        'allGovs' => __('journey.all_govs'),
+        'allZones' => __('journey.all_zones'),
     ];
 @endphp
 <script>
@@ -238,6 +248,9 @@
         pool: BOARD.pool.slice(),
         filter: 'un',
         q: '',
+        // محافظة ← منطقة (٢٨/٨) — فاضي = الكل
+        gov: '',
+        zone: '',
         dirty: false,
     };
 
@@ -325,6 +338,61 @@
         renderSide();
     }
 
+    // ═══ محافظة ← منطقة بالأعداد (٢٨/٨) ═══
+
+    /// كل الصفوف (البول + المتوزع) — الأعداد بتتحسب عليهم كلهم
+    function allRows() {
+        return state.pool.concat(plannedList().map(function (r) { return r.c; }));
+    }
+
+    function setGov(v) {
+        state.gov = v;
+        // تغيير المحافظة بيصفّر المنطقة — منطقة من محافظة تانية
+        // فلتر كاذب بيرجّع صفر صفوف من غير سبب باين
+        state.zone = '';
+        renderSide();
+    }
+
+    function setZone(v) {
+        state.zone = v;
+        renderSide();
+    }
+
+    function renderGeo() {
+        const rows = allRows();
+
+        // المحافظات بأعدادها
+        const govs = {};
+        rows.forEach(function (c) {
+            const g = c.gov || '—';
+            govs[g] = (govs[g] || 0) + 1;
+        });
+
+        let gh = '<option value="">' + T.allGovs + ' · ' + rows.length + '</option>';
+        Object.keys(govs).sort().forEach(function (g) {
+            gh += '<option value="' + esc(g) + '"' + (state.gov === g ? ' selected' : '') + '>'
+                + esc(g) + ' · ' + govs[g] + '</option>';
+        });
+        document.getElementById('jbGov').innerHTML = gh;
+
+        // المناطق — جوه المحافظة المختارة بس، بأعدادها
+        const inGov = state.gov
+            ? rows.filter(function (c) { return (c.gov || '—') === state.gov; })
+            : rows;
+        const zones = {};
+        inGov.forEach(function (c) {
+            const z = c.zone || '—';
+            zones[z] = (zones[z] || 0) + 1;
+        });
+
+        let zh = '<option value="">' + T.allZones + ' · ' + inGov.length + '</option>';
+        Object.keys(zones).sort().forEach(function (z) {
+            zh += '<option value="' + esc(z) + '"' + (state.zone === z ? ' selected' : '') + '>'
+                + esc(z) + ' · ' + zones[z] + '</option>';
+        });
+        document.getElementById('jbZone').innerHTML = zh;
+    }
+
     function poolRow(c, day) {
         const late = c.last_days !== null && c.last_days > 14;
         const meta = [];
@@ -345,6 +413,7 @@
     }
 
     function renderSide() {
+        renderGeo();
         renderFilters();
 
         const q = state.q.trim().toLowerCase();
@@ -353,6 +422,9 @@
 
         const match = function (c) {
             if (q && !(c.q || '').includes(q) && !c.name.toLowerCase().includes(q)) return false;
+            // محافظة ← منطقة (٢٨/٨)
+            if (state.gov && (c.gov || '—') !== state.gov) return false;
+            if (state.zone && (c.zone || '—') !== state.zone) return false;
             if (state.filter.startsWith('ch:')) return c.channel === state.filter.slice(3);
             return true;
         };
@@ -698,6 +770,10 @@
 .jb-fchip.on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff}
 .jb-pool{flex:1;overflow-y:auto;min-height:120px;border:1px solid var(--border);
   border-radius:12px;padding:5px}
+/* محافظة ← منطقة (٢٨/٨) */
+.jb-geo{display:flex;gap:6px;margin:6px 0}
+.jb-geo select{flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);
+    border-radius:9px;font-size:11.5px;background:#fff}
 /* سكشنات فصل البول (٢٨/٨): السلاسل فوق والكاش فان تحت */
 .jb-sec{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;
     padding:9px 4px 4px;color:#374151}

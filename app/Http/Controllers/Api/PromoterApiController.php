@@ -244,6 +244,16 @@ class PromoterApiController extends Controller
             $allowed = false;
         }
 
+        // ⚠️ **وفروع خطة النهارده كمان** (٢٨/٨ — الفخ اللي الكومنت
+        // فوق محذّر منه بالحرف): البوت ستراب بقى بيضم عملاء الخطة
+        // للقايمة، والحارس هنا فضل على الزون بس — فالمحطة بتظهر
+        // و«ابدأ الزيارة» بترمي «مش مسكّن عليك». المالك اللي حطه
+        // في الخطة، فهو مسموح له بالزيارة.
+        if (! $allowed) {
+            $allowed = \App\Services\Journeys::forDay($user)
+                ->contains(fn ($r) => (int) $r['client']->id === (int) $client->id);
+        }
+
         if (! $allowed || $client->status !== 'active') {
             return response()->json(['message' => __('api.not_your_client')], 403);
         }

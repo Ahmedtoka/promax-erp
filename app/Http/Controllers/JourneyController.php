@@ -145,6 +145,9 @@ class JourneyController extends Controller
             'id' => $c->id,
             'name' => $c->fullName(),
             'zone' => $c->zone?->displayName(),
+            // المحافظة: من الزون الأول (المخطط بيشتغل بالزونز) وإلا
+            // من العميل نفسه — لفلتر محافظة ← منطقة (٢٨/٨)
+            'gov' => $c->zone?->governorateLabel() ?: $c->governorateLabel(),
             'channel' => $c->channel?->displayName(),
             // فرع سلسلة ولا فردي — البول بيتفصل سكشنين (٢٨/٨)
             'chain' => $c->group?->displayName(),

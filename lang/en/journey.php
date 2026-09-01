@@ -330,6 +330,8 @@ return [
     // Pool split (Aug 28) - chain branches vs cash van
     'sec_chains' => 'Chain branches',
     'sec_cash' => 'Cash van & standalone',
+    'all_govs' => 'All governorates',
+    'all_zones' => 'All zones',
     'f_all' => 'All',
     'board_owes' => 'Owes :n',
     'board_late' => 'Overdue',
