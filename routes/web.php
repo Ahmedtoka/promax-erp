@@ -1113,4 +1113,64 @@ Route::middleware(['auth', 'screen'])->group(function () {
             [ChannelController::class, 'updateReplenishment'])
             ->middleware('role:admin,manager')->name('replenishments.update');
     });
+
+    // ═══════════ موديول الأونلاين — أوردرات شوبيفاي (٣/٩) ═══════════
+    //
+    // الفلو بالترتيب: سينك ← تأكيد ← تجهيز ← فاتورة ← جاهز ← بيك اب
+    // ← تحصيل ← حسابات. العرض بيتحكم فيه SCREENS، والأكشنات بـrole:
+    // (التيم = admin,manager · التجهيز معاه أمين المخزن · التحصيل
+    // معاه المحاسب · إعدادات شوبيفاي أدمن بس).
+    Route::prefix('erp/online')->name('online.')->group(function () {
+        $c = \App\Http\Controllers\OnlineOrderController::class;
+
+        // ١. السينك
+        Route::get('/sync', [$c, 'sync'])->name('sync');
+        Route::post('/sync/run', [$c, 'runSync'])
+            ->middleware('role:admin,manager')->name('sync.run');
+        Route::post('/sync/settings', [$c, 'saveSettings'])
+            ->middleware('role:admin')->name('sync.settings');
+
+        // ٢. أكشنات المكالمة
+        Route::post('/orders/{order}/confirm', [$c, 'confirm'])
+            ->middleware('role:admin,manager')->name('confirm');
+        Route::post('/orders/{order}/postpone', [$c, 'postpone'])
+            ->middleware('role:admin,manager')->name('postpone');
+        Route::post('/orders/{order}/cancel', [$c, 'cancel'])
+            ->middleware('role:admin,manager')->name('cancel');
+
+        // ٣. التجهيز
+        Route::get('/prep', [$c, 'prep'])->name('prep');
+        Route::post('/prep/{pick}/start', [$c, 'prepStart'])
+            ->middleware('role:admin,manager,warehouse_keeper')->name('prep.start');
+        Route::post('/prep/{pick}/done', [$c, 'prepDone'])
+            ->middleware('role:admin,manager,warehouse_keeper')->name('prep.done');
+        Route::get('/orders/{order}/invoice', [$c, 'invoice'])->name('invoice');
+
+        // ٤. جاهزة للشحن → بيك اب
+        Route::get('/ready', [$c, 'readyList'])->name('ready');
+        Route::post('/ship', [$c, 'ship'])
+            ->middleware('role:admin,manager')->name('ship');
+        Route::post('/couriers', [$c, 'courierStore'])
+            ->middleware('role:admin,manager')->name('couriers.store');
+
+        // ٥. البيك اب والتحصيل
+        Route::get('/pickups', [$c, 'pickups'])->name('pickups');
+        Route::get('/pickups/{pickup}', [$c, 'pickupShow'])->name('pickup');
+        Route::post('/orders/{order}/collect', [$c, 'collect'])
+            ->middleware('role:admin,manager,accountant')->name('collect');
+        Route::post('/orders/{order}/return', [$c, 'returnOrder'])
+            ->middleware('role:admin,manager')->name('return');
+        Route::get('/collections', [$c, 'collections'])->name('collections');
+
+        // ٦. كل الأوردرات + الحسابات
+        Route::get('/orders', [$c, 'orders'])->name('orders');
+        Route::get('/accounts', [$c, 'accounts'])->name('accounts');
+
+        // ٧. ربط المنتجات
+        Route::get('/products', [$c, 'products'])->name('products');
+        Route::post('/products/fetch', [$c, 'productsFetch'])
+            ->middleware('role:admin,manager')->name('products.fetch');
+        Route::post('/products/save', [$c, 'productsSave'])
+            ->middleware('role:admin,manager')->name('products.save');
+    });
 });

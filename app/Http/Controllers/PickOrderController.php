@@ -29,7 +29,11 @@ class PickOrderController extends Controller
         $q = PickOrder::with([
             'warehouse', 'rep', 'requester', 'items.product',
             'purchaseOrder:id,number,client_id,due_at', 'purchaseOrder.client:id,name,name_en',
-        ]);
+        ])
+            // ⚠️ أوامر الأونلاين ليها صفحتها المستقلة «تجهيز الأونلاين»
+            // (قرار المالك ٣/٩: «في مكان لوحده») — هنا فلو العهدة بس،
+            // وأكشنات الصفحة دي (تسليم لمندوب) مالهاش معنى لأوردر شحن
+            ->where('purpose', '!=', PickOrder::PURPOSE_ONLINE);
 
         if ($status = $request->string('status')->value()) {
             $status === 'open' ? $q->open() : $q->where('status', $status);
@@ -64,6 +68,10 @@ class PickOrderController extends Controller
 
     public function show(PickOrder $pick)
     {
+        // أوامر الأونلاين ليها صفحتها — حتى العرض، عشان زرايره
+        // (تسليم/تعديل) مايتقدّموش لأمر مش بتاع الفلو ده
+        abort_if($pick->purpose === PickOrder::PURPOSE_ONLINE, 404);
+
         $pick->load([
             'warehouse', 'rep', 'requester', 'picker', 'custody',
             'items.product', 'items.batch', 'items.location',
@@ -96,9 +104,21 @@ class PickOrderController extends Controller
             || (int) $pick->warehouse_id === (int) $user->warehouse_id;
     }
 
+    /**
+     * ⚠️ حارس أوامر الأونلاين (٣/٩): أكشنات الشاشة دي لفلو العهدة —
+     * markReady من هنا كان بيطلّع البضاعة والأوردر الأونلاين بيفضل
+     * «جاري التجهيز» للأبد (مفيش ready ولا cost_total)، والإلغاء
+     * بعدها بيضيّع البضاعة. أوامر ON- ليها صفحتها وأكشناتها.
+     */
+    private function rejectOnline(PickOrder $pick): void
+    {
+        abort_if($pick->purpose === PickOrder::PURPOSE_ONLINE, 404);
+    }
+
     /** أمين المخزن بدأ يجمع من الأرفف */
     public function startPicking(Request $request, PickOrder $pick)
     {
+        $this->rejectOnline($pick);
         abort_unless($this->guardKeeperWarehouse($request->user(), $pick), 403);
 
         if ($error = $pick->startPicking($request->user())) {
@@ -111,6 +131,7 @@ class PickOrderController extends Controller
     /** "جاهز" — البضاعة بتخرج من الأرفف وتتحجز للمندوب */
     public function markReady(Request $request, PickOrder $pick)
     {
+        $this->rejectOnline($pick);
         abort_unless($this->guardKeeperWarehouse($request->user(), $pick), 403);
 
         $data = $request->validate([
@@ -127,6 +148,8 @@ class PickOrderController extends Controller
 
     public function cancel(PickOrder $pick)
     {
+        $this->rejectOnline($pick);
+
         if ($error = $pick->cancel()) {
             return back()->withErrors(['status' => $error]);
         }

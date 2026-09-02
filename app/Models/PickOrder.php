@@ -35,6 +35,11 @@ class PickOrder extends Model
     public const PURPOSE_CUSTOMER_PO = 'customer_po';
     public const PURPOSE_REPLENISHMENT = 'replenishment';
 
+    // أوردر أونلاين من شوبيفاي (٣/٩) — بيتجهز من مخزن الأونلاين
+    // ورقمه ON-{رقم أوردر شوبيفاي}. البضاعة بتخرج عند ready وخلاص —
+    // مفيش handOver لأن مفيش عهدة، الشحن بيتم من موديول الأونلاين.
+    public const PURPOSE_ONLINE = 'online';
+
     public const STATUSES = [
         'requested' => 'b-gray',
         'picking' => 'b-orange',
@@ -533,6 +538,14 @@ class PickOrder extends Model
         } catch (StockShortage $e) {
             // نقص على الرف بس — أي خطأ SQL بيكمّل لـ 500 عن قصد
             return $error ?? $e->getMessage();
+        }
+
+        // ⚠️ أوامر الأونلاين: `assigned_to` هو الموظف اللي أكّد
+        // الأوردر مش مندوب هيستلم عهدة — إشعار «بضاعتك جاهزة»
+        // هيوصله غلط ويلخبط. موديول الأونلاين بيحدّث حالة أوردره
+        // بنفسه بعد النداء ده.
+        if ($this->purpose === self::PURPOSE_ONLINE) {
+            return null;
         }
 
         // ⚠️ **الإشعار ده بيتقرا من مسافة ذراع وفي الشمس** (طلب

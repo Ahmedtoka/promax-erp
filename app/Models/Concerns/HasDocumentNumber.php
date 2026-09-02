@@ -47,7 +47,13 @@ trait HasDocumentNumber
      */
     protected static function nextDocumentNumber(string $prefix, int $start): string
     {
+        // ⚠️ **مقصورة على نفس البادئة** (٣/٩/٢٠٢٦). أوامر تجهيز
+        // الأونلاين بتتخزن في pick_orders بأرقام ON-{رقم شوبيفاي}
+        // (بالآلاف) — من غير الـwhere دي كان أول أوردر أونلاين
+        // هينطّط ترقيم PCK- لرقم شوبيفاي + 1 للأبد. الجداول اللي
+        // ببادئة واحدة مش بتتأثر.
         $max = (int) static::query()
+            ->where('number', 'like', $prefix.'%')
             ->selectRaw("MAX(CAST(SUBSTRING_INDEX(number, '-', -1) AS UNSIGNED)) as n")
             ->value('n');
 

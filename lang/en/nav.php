@@ -16,6 +16,7 @@ return [
     'group_reports' => 'Reports & Tracking',
     'group_home' => 'Home',
     'group_purchasing' => 'Suppliers & Purchasing',
+    'group_online' => 'Online',
     'group_products' => 'Products & Prices',
     'group_ka' => 'Sales Orders',
     'group_wh' => 'Warehouses & Stock',

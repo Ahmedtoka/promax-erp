@@ -63,6 +63,8 @@ class Access
             // إدارة المهام (٢٦/٨) — البادئة بتغطي show/comment/submit...
             'erp.tasks',
             'wh.', 'ops.',
+            // موديول الأونلاين كامل (٣/٩) — التيم اللي بيأكد ويشحن
+            'online.',
             // ⚠️ **قرار الموافقة على أوامر الكي أكاونت شغل الحسابات**
             // (فلو 2026-08-04). المدير بيشوف الطابور (بيتوجّه له بعد
             // رفع الشيتات وبعد تعديل أمر) بس مايقررش — الراوتس
@@ -132,6 +134,10 @@ class Access
             // والافتتاحي قرارات إدارة (`role:admin,manager` في الراوت).
             'erp.suppliers',
             '!erp.suppliers.store', '!erp.suppliers.update', '!erp.suppliers.opening',
+            // الأونلاين (٣/٩): التحصيل والحسابات والمتابعة — فلوس مش
+            // تشغيل. السينك والتأكيد والشحن والربط قرارات تشغيلية مش له.
+            'online.collections', 'online.collect', 'online.accounts',
+            'online.orders', 'online.pickups', 'online.pickup',
             'ops.invoices', 'ops.invoice',
             // ⚠️ **المرتجع من الـERP شغل الحسابات** (٨/٨/٢٠٢٦):
             // مرتجع بييجي المخزن مباشرة أو باتفاق مع سلسلة مالوش
@@ -175,6 +181,9 @@ class Access
             // `role:admin,manager` جوه الراوت نفسه.
             'erp.stock', 'erp.batches', 'erp.warehouses', 'erp.products',
             'wh.',
+            // تجهيز أوردرات الأونلاين + طباعة فاتورتها (٣/٩) —
+            // ده شغل المخزن؛ السينك والشحن والتحصيل مش له
+            'online.prep', 'online.invoice',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
             // ⚠️ **بس عرض الأوامر مش إنشاءها ولا تسكينها** (تدقيق
@@ -252,6 +261,7 @@ class Access
         'nav.group_custody' => '🚐',
         'nav.group_ka' => '🚚',
         'nav.group_purchasing' => '🤝',
+        'nav.group_online' => '🛒',
         'nav.group_clients' => '👥',
         'nav.group_review' => '🧾',
         'nav.group_field' => '🗺️',
@@ -327,6 +337,20 @@ class Access
         'nav.group_purchasing' => [
             ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
+        ],
+
+        // ═══ الأونلاين — أوردرات شوبيفاي (٣/٩): الترتيب هو الفلو
+        // نفسه: سينك ← تجهيز ← جاهز ← بيك اب ← تحصيل ← الكل ←
+        // حسابات ← ربط المنتجات ═══
+        'nav.group_online' => [
+            ['online.sync', '🔄', 'online.nav_sync', 'online.sync*', null],
+            ['online.prep', '📦', 'online.nav_prep', 'online.prep*', null],
+            ['online.ready', '🚚', 'online.nav_ready', 'online.ready', null],
+            ['online.pickups', '📋', 'online.nav_pickups', 'online.pickup*', null],
+            ['online.collections', '💰', 'online.nav_collections', 'online.collections', null],
+            ['online.orders', '🧾', 'online.nav_orders', 'online.orders', null],
+            ['online.accounts', '🧮', 'online.nav_accounts', 'online.accounts', null],
+            ['online.products', '🔗', 'online.nav_products', 'online.products*', null],
         ],
 
         // ═══ سكشن العملاء المحتملين (٢٦/٨ — طلب المالك): المحفظة ←

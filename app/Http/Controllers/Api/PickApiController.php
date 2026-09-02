@@ -26,6 +26,11 @@ class PickApiController extends Controller
         $history = $request->boolean('history');
 
         $orders = PickOrder::forRep($request->user()->id)
+            // ⚠️ أوامر الأونلاين assigned_to فيها هو الموظف اللي أكّد
+            // الأوردر مش مندوب هيستلم عهدة — من غير الاستبعاد ده كانت
+            // هتظهر له في «استلام العهدة» على الموبايل وhandOver
+            // هينزّلها عهدة بالغلط (٣/٩)
+            ->where('purpose', '!=', PickOrder::PURPOSE_ONLINE)
             ->with(['warehouse', 'items.product', 'items.batch', 'items.location',
                 'purchaseOrder:id,client_id,due_at', 'purchaseOrder.client:id,name,name_en'])
             ->when(

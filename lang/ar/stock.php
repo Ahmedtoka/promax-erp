@@ -250,6 +250,7 @@ return [
     'pick_purpose_van_load' => 'تحميل عهدة',
     'pick_purpose_customer_po' => 'أمر عميل',
     'pick_purpose_replenishment' => 'ريفيل',
+    'pick_purpose_online' => 'أوردر أونلاين',
     'start_picking' => 'ابدأ التجهيز',
     'mark_ready' => 'جاهز',
     'receive_goods' => 'استلام البضاعة',

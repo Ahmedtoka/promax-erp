@@ -87,6 +87,17 @@ class Setting extends Model
         'app_min_version' => '1.0.0',
         'app_apk_url' => '',             // فاضي = الأبلكيشن مش هيعرض زرار تنزيل
         'app_update_note' => '',
+
+        // ═══ موديول الأونلاين — شوبيفاي (٣/٩/٢٠٢٦) ═══
+        //
+        // ⚠️ التوكن ده Admin API access token من Custom App على المتجر
+        // (سكوبات read_orders + read_products + write_products).
+        // بيتحط من شاشة السينك — **ممنوع يتكتب في جيت أو يتطبع في لوج.**
+        'shopify_domain' => '',              // xxxx.myshopify.com
+        'shopify_admin_token' => '',
+        'shopify_api_version' => '2025-01',
+        // المخزن اللي أوردرات الأونلاين بتتجهز منه (المعادي) — id من warehouses
+        'online_warehouse_id' => '',
     ];
 
     /** كل الإعدادات كمصفوفة — الافتراضي متسّرب تحت المحفوظ */

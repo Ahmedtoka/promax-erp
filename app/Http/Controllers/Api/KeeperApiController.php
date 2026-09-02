@@ -52,6 +52,10 @@ class KeeperApiController extends Controller
         $history = $request->boolean('history');
 
         $orders = PickOrder::whereIn('warehouse_id', $ids)
+            // ⚠️ أوامر الأونلاين بتتجهز من شاشة «تجهيز الأونلاين» في
+            // الداشبورد — فلو الموبايل بينتهي بتسليم عهدة لمندوب،
+            // وده مالوش وجود في أوردر شحن (٣/٩)
+            ->where('purpose', '!=', PickOrder::PURPOSE_ONLINE)
             ->with(['warehouse', 'rep:id,name,code', 'items.product', 'items.batch', 'items.location',
                 'purchaseOrder:id,client_id,due_at', 'purchaseOrder.client:id,name,name_en'])
             ->when(

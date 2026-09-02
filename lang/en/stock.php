@@ -251,6 +251,7 @@ return [
     'pick_purpose_van_load' => 'Van Load',
     'pick_purpose_customer_po' => 'Customer Order',
     'pick_purpose_replenishment' => 'Replenishment',
+    'pick_purpose_online' => 'Online Order',
     'start_picking' => 'Start Picking',
     'mark_ready' => 'Mark Ready',
     'receive_goods' => 'Receive Goods',

@@ -16,6 +16,7 @@ return [
     'group_reports' => 'التقارير والتتبع',
     'group_home' => 'الرئيسية',
     'group_purchasing' => 'الموردين والمشتريات',
+    'group_online' => 'الأونلاين',
     'group_products' => 'المنتجات والأسعار',
     'group_ka' => 'أوامر التوريد',
     'group_wh' => 'المخازن والجرد',
