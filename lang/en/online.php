@@ -182,6 +182,7 @@ return [
     'link_item_title' => 'Link item to product',
     'link_item_hint' => 'Old orders arrive as a snapshot (empty SKU, possibly changed variant) — linking here fixes this item and marks the variant so future orders with it link automatically.',
     'item_linked' => 'Item linked — order #:number is ready to confirm ✓',
+    'rcpt_thanks' => 'Thank you for ordering from PROMAX 💙',
 
     // ═══ Status push to Shopify ═══
     'push_failed' => 'Order #:number updated here but the tag did not reach Shopify — check the write_orders scope.',

@@ -11,104 +11,122 @@
 
 @include('partials._doc_style')
 
-<div style="display:flex;gap:8px;margin-bottom:12px" class="no-print">
+{{-- ═══ فاتورة ريسيت حراري 80mm (قرار المالك ٤/٩ — زي ريسيت المطاعم)
+     مش A4: بتتحط جوه الشحنة وبتتقري بالمسدس. الطباعة بعرض بكرة
+     الريسيت والطول على قد المحتوى. ═══ --}}
+<style>
+    .rcpt{
+        width:302px;              /* ≈ 80mm على 96dpi */
+        margin:0 auto;background:#fff;color:#000;
+        font-family:'Cairo', monospace;font-size:12.5px;line-height:1.55;
+        padding:14px 10px;border:1px solid var(--border);border-radius:8px;
+    }
+    .rcpt .c{text-align:center}
+    .rcpt .dash{border-top:1.5px dashed #000;margin:8px 0}
+    .rcpt .row{display:flex;justify-content:space-between;gap:8px}
+    .rcpt .row span:last-child{white-space:nowrap}
+    .rcpt .big{font-size:15px;font-weight:900}
+    .rcpt .logo{height:40px;width:auto}
+    .rcpt table{width:100%;border-collapse:collapse}
+    .rcpt td{padding:1.5px 0;vertical-align:top;font-size:12.5px}
+    .rcpt .qty{white-space:nowrap;padding-inline-end:6px}
+    .rcpt .amt{text-align:end;white-space:nowrap;direction:ltr}
+    .rcpt svg{max-width:100%;height:52px}
+
+    @media print{
+        @page{size:80mm auto;margin:0}
+        body{background:#fff !important}
+        .rcpt{
+            width:72mm;border:0;border-radius:0;padding:2mm 1mm;margin:0 auto;
+        }
+    }
+</style>
+
+<div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center" class="no-print">
     <button class="btn gold" onclick="window.print()">🖨 {{ __('ops.print') }}</button>
     <a class="btn" href="{{ route('online.prep') }}">← {{ __('online.prep_title') }}</a>
 </div>
 
-<div class="doc has-bolt">
-    {!! file_exists(public_path('brand/bolt-watermark.svg'))
-        ? '<img src="'.asset('brand/bolt-watermark.svg').'" class="bolt-mark" alt="">' : '' !!}
-
-    {{-- ═══ الترويسة — نفس نظام مستندات المنصة (هيدر أبيض + خط التدرج) ═══ --}}
-    <div class="doc-head" style="background:#fff;color:var(--ink,#0A0A0F);padding:18px 24px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;width:100%">
-            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
-                <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
-                    ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
-                     alt="PROMAX" class="doc-logo">
-                <div style="font-size:12px;font-weight:900">{{ $co['name'] ?: 'PROMAX' }}</div>
-            </div>
-            <div style="text-align:center;flex:1">
-                <div style="font-size:26px;font-weight:900">{{ __('online.invoice_title') }}</div>
-                <div style="font-size:12px;color:var(--muted)">{{ __('online.invoice_sub') }}</div>
-            </div>
-            <div style="text-align:end">
-                <div style="font-size:20px;font-weight:900;color:var(--royal-blue,#12399B)" dir="ltr">#{{ $order->number }}</div>
-                <div style="font-size:11px;color:var(--muted)" dir="ltr">{{ now()->format('Y-m-d H:i') }}</div>
-            </div>
-        </div>
+<div class="rcpt">
+    {{-- ═══ الهيدر: اللوجو والشركة في النص ═══ --}}
+    <div class="c">
+        <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
+            ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
+             alt="PROMAX" class="logo">
+        <div style="font-weight:900;font-size:14px;margin-top:2px">{{ $co['name'] ?: 'PROMAX' }}</div>
+        @if ($co['address'])
+            <div style="font-size:10.5px">{{ $co['address'] }}</div>
+        @endif
+        @if ($co['tax_id'])
+            <div style="font-size:10.5px">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
+        @endif
     </div>
-    <div style="height:4px;background:var(--brand-gradient, linear-gradient(135deg,#12399B,#602D90))"></div>
 
-    <div class="doc-body" style="padding:18px 24px">
+    <div class="dash"></div>
 
-        {{-- ═══ بيانات العميل ═══ --}}
-        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-                    background:var(--blue-050,#E8F1FF);border:1px solid var(--royal-blue,#12399B);
-                    border-radius:12px;padding:12px 15px;margin-bottom:14px">
-            <div>
-                <div style="font-size:10.5px;color:var(--muted)">{{ __('common.name') }}</div>
-                <div style="font-size:15px;font-weight:900">{{ $order->customer_name ?: '—' }}</div>
-            </div>
-            <div>
-                <div style="font-size:10.5px;color:var(--muted)">{{ __('common.phone') }}</div>
-                <div style="font-size:15px;font-weight:900" dir="ltr">{{ $order->phone ?: '—' }}</div>
-            </div>
-            <div style="max-width:340px">
-                <div style="font-size:10.5px;color:var(--muted)">{{ __('online.address') }}</div>
-                <div style="font-size:13px;font-weight:700">{{ $order->area ? $order->area.' — ' : '' }}{{ $order->address ?: '—' }}</div>
-            </div>
-        </div>
+    {{-- ═══ الأوردر والوقت ═══ --}}
+    <div class="row">
+        <span style="font-weight:900">{{ __('online.invoice_title') }}</span>
+        <span class="big" dir="ltr">#{{ $order->number }}</span>
+    </div>
+    <div class="row" style="font-size:11px">
+        <span>{{ __('online.invoice_sub') }}</span>
+        <span dir="ltr">{{ now()->format('d/m/Y h:i A') }}</span>
+    </div>
 
-        {{-- ═══ الباركود في النص — المسدس بيقراه pro{{ $order->number }} ═══ --}}
-        <div style="text-align:center;margin:14px 0">
-            {!! $barcode !!}
-            <div style="font-family:monospace;font-size:14px;font-weight:900;letter-spacing:2px" dir="ltr">
-                {{ $order->barcode() }}</div>
-        </div>
+    <div class="dash"></div>
 
-        {{-- ═══ البنود ═══ --}}
-        <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
-            <tr style="background:var(--blue-050,#E8F1FF)">
-                <th style="padding:7px 10px;text-align:start;font-size:12px">{{ __('stock.product') }}</th>
-                <th style="padding:7px 10px;font-size:12px" class="num">{{ __('common.qty') }}</th>
-                <th style="padding:7px 10px;font-size:12px" class="num">{{ __('common.price') }}</th>
-                <th style="padding:7px 10px;font-size:12px" class="num">{{ __('common.total') }}</th>
+    {{-- ═══ العميل ═══ --}}
+    <div style="font-size:12px">
+        <div><b>{{ $order->customer_name ?: '—' }}</b></div>
+        <div dir="ltr" style="text-align:start">📞 {{ $order->phone ?: '—' }}</div>
+        <div>📍 {{ $order->area ? $order->area.' — ' : '' }}{{ $order->address ?: '—' }}</div>
+    </div>
+
+    <div class="dash"></div>
+
+    {{-- ═══ البنود: كمية × صنف .... إجمالي ═══ --}}
+    <table>
+        @foreach ($order->items as $i)
+            <tr>
+                <td class="qty"><b>{{ $i->qty }}</b> ×</td>
+                <td>{{ $i->product?->displayName() ?? $i->title }}
+                    @if ((int) $i->units_per > 1)
+                        <span style="font-size:10px">({{ $i->pieces() }} {{ __('online.pcs') }})</span>
+                    @endif
+                </td>
+                <td class="amt">{{ $money($i->total) }}</td>
             </tr>
-            @foreach ($order->items as $i)
-                <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:7px 10px;font-size:12.5px">{{ $i->product?->displayName() ?? $i->title }}</td>
-                    <td style="padding:7px 10px;text-align:center" class="num">{{ $i->qty }}</td>
-                    <td style="padding:7px 10px;text-align:center" class="num">{{ $money($i->price) }}</td>
-                    <td style="padding:7px 10px;text-align:center" class="num"><b>{{ $money($i->total) }}</b></td>
-                </tr>
-            @endforeach
-        </table>
+        @endforeach
+    </table>
 
-        {{-- ═══ الإجماليات ═══ --}}
-        <div style="display:flex;justify-content:flex-end">
-            <table style="min-width:260px;border-collapse:collapse">
-                <tr>
-                    <td style="padding:4px 10px;font-size:12.5px">{{ __('online.amount') }}</td>
-                    <td style="padding:4px 10px;text-align:end" class="num">{{ $money($order->subtotal) }}</td>
-                </tr>
-                <tr>
-                    <td style="padding:4px 10px;font-size:12.5px">{{ __('online.shipping') }}</td>
-                    <td style="padding:4px 10px;text-align:end" class="num">{{ $money($order->shipping) }}</td>
-                </tr>
-                <tr style="border-top:2px solid var(--royal-blue,#12399B)">
-                    <td style="padding:6px 10px;font-weight:900">{{ __('online.cod_total') }}</td>
-                    <td style="padding:6px 10px;text-align:end;font-weight:900;font-size:16px" class="num">
-                        {{ $money($order->total) }}</td>
-                </tr>
-            </table>
-        </div>
+    <div class="dash"></div>
+
+    {{-- ═══ الإجماليات ═══ --}}
+    <div class="row"><span>{{ __('online.amount') }}</span><span>{{ $money($order->subtotal) }}</span></div>
+    <div class="row"><span>{{ __('online.shipping') }}</span><span>{{ $money($order->shipping) }}</span></div>
+    <div class="row big" style="margin-top:4px">
+        <span>{{ __('online.cod_total') }}</span>
+        <span>{{ $money($order->total) }}</span>
     </div>
 
-    <div class="doc-foot" style="padding:10px 24px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <span>{{ $co['name'] }} @if ($co['phone']) · 📞 <span dir="ltr">{{ $co['phone'] }}</span> @endif</span>
-        <span>{{ $co['address'] }}</span>
+    <div class="dash"></div>
+
+    {{-- ═══ الباركود في النص — المسدس بيقراه ═══ --}}
+    <div class="c" style="margin:6px 0">
+        {!! $barcode !!}
+        <div style="font-family:monospace;font-size:13px;font-weight:900;letter-spacing:2px" dir="ltr">
+            {{ $order->barcode() }}</div>
+    </div>
+
+    <div class="dash"></div>
+
+    {{-- ═══ الفوتر ═══ --}}
+    <div class="c" style="font-size:11px">
+        <div style="font-weight:900">{{ __('online.rcpt_thanks') }}</div>
+        @if ($co['phone'])
+            <div dir="ltr">{{ $co['phone'] }}</div>
+        @endif
     </div>
 </div>
 
