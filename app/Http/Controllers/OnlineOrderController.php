@@ -103,6 +103,12 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['sync' => $result['error']]);
         }
 
+        // ⚠️ السينك بيعيد مطابقة البنود الفاضية كمان (٣/٩ مساءً):
+        // أوردر اتسينك **قبل** ما الربط يتعمل كان بيفضل «مش مربوط»
+        // للأبد إلا لو المالك افتكر يدوس «احفظ الربط» تاني — دلوقتي
+        // أي سينك بيلمّ اللي اتربط بعد وصوله.
+        ShopifyOnline::rematchUnlinked();
+
         // أوردرات اتعدّت لبايلود غريب — نبلّغ بدل ما نبلع
         if (! empty($result['failed'])) {
             return back()->with('ok', __('online.synced', ['n' => $result['created']]))
