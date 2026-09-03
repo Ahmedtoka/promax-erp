@@ -17,7 +17,7 @@ class ShopifyProductLink extends Model
 {
     protected $fillable = [
         'shopify_variant_id', 'shopify_product_id', 'title', 'variant_title',
-        'sku', 'image', 'product_id', 'sku_pushed_at',
+        'sku', 'image', 'product_id', 'units', 'sku_pushed_at',
     ];
 
     protected function casts(): array

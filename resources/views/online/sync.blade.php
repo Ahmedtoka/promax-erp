@@ -62,6 +62,19 @@
             <div class="dash-hint" style="margin:6px 0 10px">{{ __('online.settings_hint') }}</div>
             <button class="btn gold" type="submit">💾 {{ __('common.save') }}</button>
         </form>
+
+        {{-- ═══ تصفير بيانات التيست — أدمن بس، بكلمة تأكيد ═══ --}}
+        <form method="POST" action="{{ route('online.reset') }}" id="resetForm"
+              style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);
+                     display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            @csrf
+            <b style="font-size:12px;color:#B42318">🧨 {{ __('online.reset_btn') }}</b>
+            <span class="dash-hint" style="flex:1;min-width:240px">{{ __('online.reset_hint') }}</span>
+            <input name="confirm_word" placeholder="RESET" required autocomplete="off"
+                   style="width:110px;text-align:center" dir="ltr">
+            <button class="btn red" type="submit" onclick="return confirm(RESET_MSG)">
+                🧨 {{ __('online.reset_btn') }}</button>
+        </form>
     </details>
 @endif
 
@@ -116,6 +129,11 @@
                         @foreach ($o->items as $i)
                             <div style="font-size:11px">
                                 {{ $i->qty }} × {{ $i->product?->displayName() ?? $i->title }}
+                                {{-- باك متعدد القطع — الكمية الفعلية اللي هتتجهز --}}
+                                @if ((int) $i->units_per > 1)
+                                    <span class="badge b-purple" style="font-size:9px">
+                                        = {{ $i->pieces() }} {{ __('online.pcs') }}</span>
+                                @endif
                                 @if ($i->product_id === null)
                                     <span class="badge b-red" style="font-size:9px">{{ __('online.unlinked') }}</span>
                                 @endif
@@ -197,6 +215,7 @@
 @section('scripts')
 <script>
     const CONFIRM_MSG = @js(__('online.confirm_msg'));
+    const RESET_MSG = @js(__('online.reset_confirm'));
     const POSTPONE_URL = @js(url('erp/online/orders'));
 
     function openPostpone(id, num) {

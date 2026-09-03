@@ -20,7 +20,7 @@ return [
     'admin_token' => 'Admin API Token',
     'api_version' => 'API version',
     'warehouse' => 'Online warehouse',
-    'settings_hint' => 'Token comes from a Custom App on the store with read_orders, read_products and write_products scopes — saved once, never displayed again. The online warehouse is where prep orders deduct from.',
+    'settings_hint' => 'Token comes from a Custom App on the store with read_orders, write_orders, read_products and write_products scopes (write_orders lets tags and cancellations reach Shopify) — saved once, never displayed again. The online warehouse is where prep orders deduct from.',
     'settings_saved' => 'Shopify settings saved ✓',
     'err_not_configured' => 'Shopify settings are missing — set the domain and token first.',
     'err_network' => 'Shopify is not responding — try again shortly.',
@@ -173,6 +173,22 @@ return [
     'save_links_hint' => 'Saving writes the product code as the SKU in Shopify and retro-links open order items.',
     'links_saved' => 'Saved :n mappings and retro-linked :m order items ✓',
     'sku_push_failed' => ':n variants rejected their SKU update in Shopify',
+
+    // ═══ Pack units (Sep 3 evening) ═══
+    'units' => 'Pack pcs',
+    'units_hint' => 'How many system-product pieces is this variant? The 12-pc variant = 12 — prep and stock deduction use it',
+    'pcs' => 'pcs',
+
+    // ═══ Status push to Shopify ═══
+    'push_failed' => 'Order #:number updated here but the tag did not reach Shopify — check the write_orders scope.',
+    'push_failed_n' => ':n orders shipped here but their tags did not reach Shopify.',
+    'cancel_push_failed' => 'Order #:number cancelled here but the cancellation did not reach Shopify — cancel it there manually.',
+
+    // ═══ Test reset ═══
+    'reset_btn' => 'Reset test data',
+    'reset_hint' => 'Wipes all orders, pickups and online prep orders; any stock that left goes back to its shelf and batch — mapping, couriers and settings stay. The next sync pulls everything from Shopify fresh. Type RESET then click.',
+    'reset_confirm' => 'Sure? All online data will be wiped and issued stock returned — this cannot be undone. (Orders cancelled in Shopify itself stay cancelled there)',
+    'reset_done' => 'Wiped :n orders and restocked :m — run a sync to start fresh ✓',
 
     // Collections KPI
     'k_outstanding_hint' => 'Shipped, not collected',

@@ -63,6 +63,8 @@
                     <th>{{ __('online.shopify_product') }}</th>
                     <th>SKU</th>
                     <th>{{ __('online.system_product') }}</th>
+                    {{-- قطع الباك: فاريانت «pcs 12» = 12 قطعة من المنتج --}}
+                    <th class="num" data-nosum title="{{ __('online.units_hint') }}">{{ __('online.units') }}</th>
                     <th>{{ __('online.sku_pushed') }}</th>
                 </tr>
                 @forelse ($links as $link)
@@ -89,6 +91,15 @@
                                 {{ $link->product?->displayName() ?: '—' }}
                             @endif
                         </td>
+                        <td class="num">
+                            @if ($canAct)
+                                <input type="number" name="units[{{ $link->id }}]" min="1" max="1000"
+                                       value="{{ (int) ($link->units ?? 1) }}"
+                                       style="width:68px;text-align:center">
+                            @else
+                                {{ (int) ($link->units ?? 1) }}
+                            @endif
+                        </td>
                         <td>
                             @if ($link->sku_pushed_at)
                                 <span class="badge b-green" title="{{ $link->sku_pushed_at->format('Y-m-d h:i A') }}">✓</span>
@@ -100,7 +111,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('online.products_empty') }}
                     </td></tr>
                 @endforelse

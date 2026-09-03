@@ -10,8 +10,14 @@ class OnlineOrderItem extends Model
 {
     protected $fillable = [
         'online_order_id', 'shopify_line_id', 'shopify_variant_id',
-        'sku', 'title', 'product_id', 'qty', 'price', 'total',
+        'sku', 'title', 'product_id', 'qty', 'units_per', 'price', 'total',
     ];
+
+    /** عدد القطع الفعلي — الكمية × قطع الباك (فاريانت الـ12 قطعة) */
+    public function pieces(): int
+    {
+        return (int) $this->qty * max((int) $this->units_per, 1);
+    }
 
     protected function casts(): array
     {

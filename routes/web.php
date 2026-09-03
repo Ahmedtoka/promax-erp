@@ -1129,6 +1129,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('sync.run');
         Route::post('/sync/settings', [$c, 'saveSettings'])
             ->middleware('role:admin')->name('sync.settings');
+        // تصفير بيانات التيست — أدمن بس وبكلمة تأكيد
+        Route::post('/reset-test', [$c, 'resetTest'])
+            ->middleware('role:admin')->name('reset');
 
         // ٢. أكشنات المكالمة
         Route::post('/orders/{order}/confirm', [$c, 'confirm'])

@@ -142,10 +142,12 @@ class OnlineOrderController extends Controller
             ])]);
         }
 
+        // ⚠️ بالقطع مش بالبنود: فاريانت «12 قطعة» كمية 2 = 24 قطعة
+        // من منتج السيستم تتجهز وتتخصم (units_per من شاشة الربط)
         $qtyByProduct = [];
 
         foreach ($order->items as $item) {
-            $qtyByProduct[$item->product_id] = ($qtyByProduct[$item->product_id] ?? 0) + (int) $item->qty;
+            $qtyByProduct[$item->product_id] = ($qtyByProduct[$item->product_id] ?? 0) + $item->pieces();
         }
 
         // ⚠️ **الادعاء الذري الأول** (مراجعة ٣/٩): ضغطتين تأكيد ورا
@@ -194,7 +196,10 @@ class OnlineOrderController extends Controller
             'postponed_to' => null,
         ]);
 
-        return back()->with('ok', __('online.confirmed', ['number' => $order->number]));
+        // «الابديت يسمع في شوبيفاي» — تاج pmx-preparing على الأوردر
+        $warn = ShopifyOnline::pushStatus($order->fresh());
+
+        return $this->okWithPushWarn(__('online.confirmed', ['number' => $order->number]), $warn);
     }
 
     /** «كلمت العميل — أجّل» */
@@ -213,7 +218,9 @@ class OnlineOrderController extends Controller
             'postponed_to' => $data['postponed_to'],
         ]);
 
-        return back()->with('ok', __('online.postponed_ok', ['number' => $order->number]));
+        $warn = ShopifyOnline::pushStatus($order->fresh());
+
+        return $this->okWithPushWarn(__('online.postponed_ok', ['number' => $order->number]), $warn);
     }
 
     /**
@@ -255,7 +262,11 @@ class OnlineOrderController extends Controller
             ]);
         });
 
-        return back()->with('ok', __('online.cancelled_ok', ['number' => $order->number]));
+        // إلغاء حقيقي في شوبيفاي + تاج pmx-cancelled — بعد نجاح
+        // الإلغاء المحلي، وفشله هناك بيتبلّغ ومايرجّعش حاجة هنا
+        $warn = ShopifyOnline::cancelInShopify($order->fresh());
+
+        return $this->okWithPushWarn(__('online.cancelled_ok', ['number' => $order->number]), $warn);
     }
 
     // ==================== ٣. التجهيز ====================
@@ -322,8 +333,12 @@ class OnlineOrderController extends Controller
                 'cost_total' => round($cost, 2),
             ]);
 
-            return redirect()->route('online.invoice', $order)
+            $warn = ShopifyOnline::pushStatus($order->fresh());
+
+            $redirect = redirect()->route('online.invoice', $order)
                 ->with('ok', __('online.prep_done', ['number' => $order->number]));
+
+            return $warn !== null ? $redirect->withErrors(['push' => $warn]) : $redirect;
         }
 
         return back()->with('ok', __('online.prep_done', ['number' => $pick->number]));
@@ -389,8 +404,21 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['ship' => __('online.nothing_to_ship')]);
         }
 
-        return redirect()->route('online.pickup', $pickup)
+        // تاج pmx-shipped على كل أوردر في الشيت — بعد نجاح الشحن محلياً
+        $warns = 0;
+
+        foreach ($pickup->orders()->get() as $o) {
+            if (ShopifyOnline::pushStatus($o) !== null) {
+                $warns++;
+            }
+        }
+
+        $redirect = redirect()->route('online.pickup', $pickup)
             ->with('ok', __('online.shipped_ok', ['number' => $pickup->number]));
+
+        return $warns > 0
+            ? $redirect->withErrors(['push' => __('online.push_failed_n', ['n' => $warns])])
+            : $redirect;
     }
 
     /** إضافة مندوب أونلاين — من مودال صفحة الجاهزة */
@@ -463,7 +491,11 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['collect' => $err]);
         }
 
-        return back()->with('ok', __('online.collected_ok', ['number' => $order->number]));
+        // لو التحصيل كمّل الأوردر → تاج pmx-completed في شوبيفاي
+        $fresh = $order->fresh();
+        $warn = $fresh->status === 'completed' ? ShopifyOnline::pushStatus($fresh) : null;
+
+        return $this->okWithPushWarn(__('online.collected_ok', ['number' => $order->number]), $warn);
     }
 
     /** مرتجع بعد الشحن — البضاعة بترجع لنفس الرف والباتش */
@@ -484,7 +516,9 @@ class OnlineOrderController extends Controller
             $order->update(['status' => 'returned']);
         });
 
-        return back()->with('ok', __('online.returned_ok', ['number' => $order->number]));
+        $warn = ShopifyOnline::pushStatus($order->fresh());
+
+        return $this->okWithPushWarn(__('online.returned_ok', ['number' => $order->number]), $warn);
     }
 
     public function collections(Request $request)
@@ -615,10 +649,14 @@ class OnlineOrderController extends Controller
         $data = $request->validate([
             'links' => ['required', 'array'],
             'links.*' => ['nullable', 'integer', 'exists:products,id'],
+            // قطع الباك: فاريانت الـ«pcs 12» = 12 قطعة من منتج السيستم
+            'units' => ['nullable', 'array'],
+            'units.*' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
 
         $changed = 0;
         $pushErrors = [];
+        $changedVariants = [];   // shopify_variant_id => [product_id, units]
 
         foreach ($data['links'] as $linkId => $productId) {
             $link = ShopifyProductLink::find((int) $linkId);
@@ -629,15 +667,20 @@ class OnlineOrderController extends Controller
 
             $productId = $productId !== null ? (int) $productId : null;
             $currentId = $link->product_id !== null ? (int) $link->product_id : null;
+            $units = max((int) ($data['units'][$linkId] ?? $link->units ?? 1), 1);
 
             // ⚠️ مفيش تغيير = تخطّي — شامل «فاضي فضل فاضي» (مراجعة
             // ٣/٩: كل حفظة كانت بتعيد كتابة الصفوف الفاضية وتعدّهم)
-            if ($currentId === $productId) {
+            if ($currentId === $productId && (int) $link->units === $units) {
                 continue;
             }
 
-            $link->update(['product_id' => $productId]);
+            $link->update(['product_id' => $productId, 'units' => $units]);
             $changed++;
+
+            if ($productId !== null) {
+                $changedVariants[(int) $link->shopify_variant_id] = [$productId, $units];
+            }
 
             // كتابة الكود كـSKU في شوبيفاي — بس لو فيه منتج مربوط
             if ($productId !== null) {
@@ -648,6 +691,28 @@ class OnlineOrderController extends Controller
                         $pushErrors[] = $link->title.': '.$err;
                     }
                 }
+            }
+        }
+
+        // ⚠️ بنود الأوردرات **المفتوحة** بتاخد الربط والباك الجديدين —
+        // المؤكد وما بعده سنابشوت مقفول (البضاعة اتحسبت واتخصمت)
+        if (! empty($changedVariants)) {
+            $touched = [];
+
+            OnlineOrderItem::whereIn('shopify_variant_id', array_keys($changedVariants))
+                ->whereHas('order', fn ($q) => $q->whereIn('status', ['new', 'postponed']))
+                ->get()
+                ->each(function ($item) use ($changedVariants, &$touched) {
+                    [$pid, $units] = $changedVariants[(int) $item->shopify_variant_id];
+                    $item->update(['product_id' => $pid, 'units_per' => $units]);
+                    $touched[$item->online_order_id] = true;
+                });
+
+            foreach (array_keys($touched) as $orderId) {
+                $order = OnlineOrder::with('items')->find($orderId);
+                $order?->update([
+                    'items_count' => $order->items->sum(fn ($i) => $i->pieces()),
+                ]);
             }
         }
 
@@ -663,5 +728,66 @@ class OnlineOrderController extends Controller
         return back()->with('ok', __('online.links_saved', [
             'n' => $changed, 'm' => $rematched,
         ]));
+    }
+
+    // ==================== ٨. تصفير التيست ====================
+
+    /**
+     * ═══ «زرار يرجع كل حاجة من الأول» (قرار المالك ٣/٩) ═══
+     *
+     * للتجربة على الأوردرات القديمة: بيمسح **كل** بيانات الموديول —
+     * الأوردرات وبنودها، شيتات البيك اب، وأوامر تجهيز الأونلاين —
+     * وأي بضاعة كانت خرجت بترجع لنفس الرف والباتش الأول. أول سينك
+     * بعده بينزّل كل حاجة من شوبيفاي زي ما هي (since_id بيرجع صفر).
+     *
+     * بيسيب: ربط المنتجات + مناديب الأونلاين + الإعدادات — دول
+     * تعريفات مش ترانزاكشنات.
+     *
+     * ⚠️ أدمن بس + تأكيد بكتابة الكلمة. وبيحاول يمسح تاجات pmx- من
+     * شوبيفاي للأوردرات اللي اتلمست (أفضل جهد — فشله مايوقفش المسح).
+     * ⚠️ اللي اتلغى في شوبيفاي نفسها أثناء التيست هيرجع «ملغي» —
+     * الإلغاء هناك حقيقي ومفيش un-cancel في الـAPI.
+     */
+    public function resetTest(Request $request)
+    {
+        $request->validate(['confirm_word' => ['required', 'in:RESET,reset']]);
+
+        // تنضيف تاجات pmx- في شوبيفاي — قبل المسح وأفضل جهد
+        OnlineOrder::whereNotNull('shopify_id')
+            ->where('status', '!=', 'new')
+            ->limit(200)->get()
+            ->each(fn ($o) => ShopifyOnline::pushStatus($o, ''));
+
+        $stats = DB::transaction(function () {
+            // ١) أي بضاعة برة ترجع لرفها وباتشها الأول
+            $restocked = 0;
+
+            OnlineOrder::whereIn('status', OnlineOrder::STOCK_OUT)
+                ->with('pickOrder.items')->get()
+                ->each(function ($o) use (&$restocked) {
+                    $o->restock();
+                    $restocked++;
+                });
+
+            // ٢) المسح — الأوردرات (البنود cascade) ← الشيتات ←
+            //    أوامر تجهيز الأونلاين بس (بنودها cascade)
+            $orders = OnlineOrder::query()->delete();
+            OnlinePickup::query()->delete();
+            PickOrder::where('purpose', PickOrder::PURPOSE_ONLINE)->delete();
+
+            return ['orders' => $orders, 'restocked' => $restocked];
+        });
+
+        return back()->with('ok', __('online.reset_done', [
+            'n' => $stats['orders'], 'm' => $stats['restocked'],
+        ]));
+    }
+
+    /** فلاش نجاح + تحذير دفع شوبيفاي لو فيه — من غير ما يبوّظ الفلو */
+    private function okWithPushWarn(string $ok, ?string $warn)
+    {
+        $redirect = back()->with('ok', $ok);
+
+        return $warn !== null ? $redirect->withErrors(['push' => $warn]) : $redirect;
     }
 }

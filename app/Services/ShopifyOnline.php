@@ -159,7 +159,14 @@ class ShopifyOnline
         $shipping = (float) ($o['total_shipping_price_set']['shop_money']['amount'] ?? 0);
 
         $lines = $o['line_items'] ?? [];
-        $itemsCount = array_sum(array_map(fn ($l) => (int) ($l['quantity'] ?? 0), $lines));
+
+        // عدد القطع الحقيقي = الكمية × قطع الباك (فاريانت الـ12 = 12 قطعة)
+        $itemsCount = 0;
+
+        foreach ($lines as $l) {
+            $m = self::matchLine($l);
+            $itemsCount += (int) ($l['quantity'] ?? 0) * $m['units'];
+        }
 
         // أوردر ملغي في شوبيفاي بيدخل ملغي عندنا على طول —
         // مايظهرش في السينك ويبان في «كل الأوردرات» بحالته
@@ -185,13 +192,16 @@ class ShopifyOnline
             ]);
 
             foreach ($lines as $l) {
+                $m = self::matchLine($l);
+
                 OnlineOrderItem::create([
                     'online_order_id' => $order->id,
                     'shopify_line_id' => $l['id'] ?? null,
                     'shopify_variant_id' => $l['variant_id'] ?? null,
                     'sku' => isset($l['sku']) && $l['sku'] !== '' ? mb_substr($l['sku'], 0, 100) : null,
                     'title' => mb_substr((string) ($l['title'] ?? '—'), 0, 250),
-                    'product_id' => self::matchProduct($l),
+                    'product_id' => $m['product_id'],
+                    'units_per' => $m['units'],
                     'qty' => (int) ($l['quantity'] ?? 1),
                     'price' => (float) ($l['price'] ?? 0),
                     // ⚠️ خصم البند (total_discount) لازم يتخصم — من غيره
@@ -206,21 +216,27 @@ class ShopifyOnline
     }
 
     /**
-     * مطابقة بند شوبيفاي بمنتج السيستم:
-     * ١) جدول الربط بالفاريانت (شاشة ربط المنتجات)
-     * ٢) الـSKU على كود المنتج
-     * لو مفيش → null، والأوردر مايتأكدش لحد ما الربط يتعمل.
+     * مطابقة بند شوبيفاي بمنتج السيستم **وعدد قطع الباك**:
+     * ١) جدول الربط بالفاريانت (شاشة ربط المنتجات) — بيرجع المنتج
+     *    و`units` (فاريانت الـ12 قطعة = 12 من منتج السيستم)
+     * ٢) الـSKU على كود المنتج — باك مجهول = قطعة واحدة
+     * لو مفيش منتج → null، والأوردر مايتأكدش لحد ما الربط يتعمل.
+     *
+     * @return array{product_id: ?int, units: int}
      */
-    private static function matchProduct(array $line): ?int
+    private static function matchLine(array $line): array
     {
         $variantId = $line['variant_id'] ?? null;
 
         if ($variantId !== null) {
-            $linked = ShopifyProductLink::where('shopify_variant_id', $variantId)
-                ->value('product_id');
+            $link = ShopifyProductLink::where('shopify_variant_id', $variantId)
+                ->first(['product_id', 'units']);
 
-            if ($linked !== null) {
-                return (int) $linked;
+            if ($link?->product_id !== null) {
+                return [
+                    'product_id' => (int) $link->product_id,
+                    'units' => max((int) $link->units, 1),
+                ];
             }
         }
 
@@ -230,36 +246,121 @@ class ShopifyOnline
             $byCode = Product::where('code', $sku)->value('id');
 
             if ($byCode !== null) {
-                return (int) $byCode;
+                return ['product_id' => (int) $byCode, 'units' => 1];
             }
         }
 
-        return null;
+        return ['product_id' => null, 'units' => 1];
     }
 
     /** إعادة محاولة المطابقة للبنود الفاضية — بعد أي حفظ في شاشة الربط */
     public static function rematchUnlinked(): int
     {
         $fixed = 0;
+        $touchedOrders = [];
 
         OnlineOrderItem::whereNull('product_id')
             ->whereHas('order', fn ($q) => $q->whereIn('status', ['new', 'postponed']))
             ->with('order')
-            ->chunkById(200, function ($items) use (&$fixed) {
+            ->chunkById(200, function ($items) use (&$fixed, &$touchedOrders) {
                 foreach ($items as $item) {
-                    $pid = self::matchProduct([
+                    $m = self::matchLine([
                         'variant_id' => $item->shopify_variant_id,
                         'sku' => $item->sku,
                     ]);
 
-                    if ($pid !== null) {
-                        $item->update(['product_id' => $pid]);
+                    if ($m['product_id'] !== null) {
+                        $item->update(['product_id' => $m['product_id'], 'units_per' => $m['units']]);
+                        $touchedOrders[$item->online_order_id] = true;
                         $fixed++;
                     }
                 }
             });
 
+        // عدد القطع على الأوردر بيتحسب تاني — الباك اتعرف بعد السينك
+        foreach (array_keys($touchedOrders) as $orderId) {
+            $order = OnlineOrder::with('items')->find($orderId);
+            $order?->update([
+                'items_count' => $order->items->sum(fn ($i) => $i->pieces()),
+            ]);
+        }
+
         return $fixed;
+    }
+
+    // ==================== دفع الحالة لشوبيفاي ====================
+
+    /**
+     * ═══ «الابديت يسمع في شوبيفاي في كل خطوة» (قرار المالك ٣/٩) ═══
+     *
+     * كل تغيير حالة عندنا بيتكتب **تاج** على الأوردر في شوبيفاي:
+     * pmx-confirmed · pmx-preparing · pmx-ready · pmx-shipped ·
+     * pmx-returned · pmx-completed · pmx-cancelled ·
+     * pmx-postponed-YYYY-MM-DD — تاجاتنا كلها ببادئة pmx- وبنشيل
+     * القديمة قبل ما نحط الجديدة، وتاجات المتجر نفسها مابنلمسهاش.
+     *
+     * ⚠️ **مش بتوقف الفلو المحلي أبداً** — بترجع رسالة تحذير للعرض
+     * بس. محتاجة سكوب write_orders على الـCustom App.
+     */
+    public static function pushStatus(OnlineOrder $order, ?string $tag = null): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id) {
+            return null;
+        }
+
+        [$data, $err] = self::api('get', 'orders/'.$order->shopify_id.'.json', ['fields' => 'id,tags']);
+
+        if ($err !== null) {
+            return __('online.push_failed', ['number' => $order->number]);
+        }
+
+        $tags = array_values(array_filter(
+            array_map('trim', explode(',', (string) ($data['order']['tags'] ?? ''))),
+            fn ($t) => $t !== '' && ! str_starts_with($t, 'pmx-'),
+        ));
+
+        if ($tag === null) {
+            $tag = 'pmx-'.$order->status;
+
+            if ($order->status === 'postponed' && $order->postponed_to !== null) {
+                $tag .= '-'.$order->postponed_to->format('Y-m-d');
+            }
+        }
+
+        if ($tag !== '') {
+            $tags[] = $tag;
+        }
+
+        [$res, $err2] = self::api('put', 'orders/'.$order->shopify_id.'.json', [
+            'order' => ['id' => (int) $order->shopify_id, 'tags' => implode(', ', $tags)],
+        ]);
+
+        if ($err2 !== null || empty($res['order']['id'])) {
+            return __('online.push_failed', ['number' => $order->number]);
+        }
+
+        return null;
+    }
+
+    /**
+     * إلغاء الأوردر في شوبيفاي نفسها — مع تاج pmx-cancelled.
+     * فشل الإلغاء هناك مايرجّعش الإلغاء هنا، بيتبلّغ بس.
+     */
+    public static function cancelInShopify(OnlineOrder $order): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id) {
+            return null;
+        }
+
+        [$data, $err] = self::api('post', 'orders/'.$order->shopify_id.'/cancel.json', []);
+
+        $tagWarn = self::pushStatus($order);
+
+        if ($err !== null) {
+            return __('online.cancel_push_failed', ['number' => $order->number]);
+        }
+
+        return $tagWarn;
     }
 
     // ==================== المنتجات والربط ====================
@@ -297,17 +398,39 @@ class ShopifyOnline
                 $image = $p['image']['src'] ?? null;
 
                 foreach ($p['variants'] ?? [] as $v) {
-                    ShopifyProductLink::updateOrCreate(
-                        ['shopify_variant_id' => $v['id']],
-                        [
-                            'shopify_product_id' => $p['id'],
-                            'title' => mb_substr((string) $p['title'], 0, 250),
-                            'variant_title' => ($v['title'] ?? '') !== 'Default Title'
-                                ? mb_substr((string) $v['title'], 0, 190) : null,
-                            'sku' => ($v['sku'] ?? '') !== '' ? mb_substr($v['sku'], 0, 100) : null,
-                            'image' => $image !== null ? mb_substr($image, 0, 500) : null,
-                        ],
-                    );
+                    $vTitle = ($v['title'] ?? '') !== 'Default Title'
+                        ? mb_substr((string) $v['title'], 0, 190) : null;
+
+                    $fields = [
+                        'shopify_product_id' => $p['id'],
+                        'title' => mb_substr((string) $p['title'], 0, 250),
+                        'variant_title' => $vTitle,
+                        'sku' => ($v['sku'] ?? '') !== '' ? mb_substr($v['sku'], 0, 100) : null,
+                        'image' => $image !== null ? mb_substr($image, 0, 500) : null,
+                    ];
+
+                    $link = ShopifyProductLink::where('shopify_variant_id', $v['id'])->first();
+
+                    if ($link !== null) {
+                        // ⚠️ الجلب مايداسش على اللي المالك حدده بإيده —
+                        // product_id وunits بيتعدلوا من شاشة الربط بس
+                        $link->update($fields);
+                    } else {
+                        // تخمين قطع الباك من اسم الفاريانت («pcs 12» /
+                        // «6 (50%)») — أول رقم فيه، والمالك بيصححه من
+                        // خانة القطع لو التخمين غلط
+                        $guess = 1;
+
+                        if ($vTitle !== null && preg_match('/(\d+)/', $vTitle, $mm)) {
+                            $guess = max((int) $mm[1], 1);
+                        }
+
+                        ShopifyProductLink::create($fields + [
+                            'shopify_variant_id' => $v['id'],
+                            'units' => $guess,
+                        ]);
+                    }
+
                     $fetched++;
                 }
             }
