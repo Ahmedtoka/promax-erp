@@ -56,6 +56,10 @@ class OnlineOrderController extends Controller
         return view('online.sync', [
             'orders' => $orders,
             'ready' => ShopifyOnline::ready(),
+            // للربط اليدوي للبند — أوردر قديم SKUه فاضي وفاريانته
+            // مش في جدول الربط مالوش غير الطريق ده
+            'products' => Product::where('active', true)
+                ->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'warehouses' => Warehouse::orderBy('name')->get(['id', 'name', 'name_en']),
             'settings' => Setting::all_(),
             'counts' => [
@@ -735,6 +739,57 @@ class OnlineOrderController extends Controller
         return back()->with('ok', __('online.links_saved', [
             'n' => $changed, 'm' => $rematched,
         ]));
+    }
+
+    /**
+     * ═══ ربط بند يدوي من صفحة السينك (٣/٩ مساءً) ═══
+     *
+     * الأوردرات القديمة بتيجي من شوبيفاي بصورة وقت الطلب: SKU فاضي
+     * وvariant_id ممكن يكون لفاريانت اتغيّر — فالمطابقة الأوتوماتيك
+     * بطريقيها بتفشل. الزرار ده بيربط البند مباشرة، ولو البند شايل
+     * variant_id بيتسجل في جدول الربط كمان فالأوردرات الجاية بنفس
+     * الفاريانت تتربط لوحدها.
+     */
+    public function itemLink(Request $request, OnlineOrderItem $item)
+    {
+        $order = $item->order;
+
+        if ($order === null || ! in_array($order->status, ['new', 'postponed'], true)) {
+            return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
+
+        $data = $request->validate([
+            'product_id' => ['required', 'integer', 'exists:products,id'],
+            'units' => ['required', 'integer', 'min:1', 'max:1000'],
+        ]);
+
+        $item->update([
+            'product_id' => (int) $data['product_id'],
+            'units_per' => (int) $data['units'],
+        ]);
+
+        // عدد قطع الأوردر بيتحسب تاني بالباك الجديد
+        $order->load('items');
+        $order->update(['items_count' => $order->items->sum(fn ($i) => $i->pieces())]);
+
+        // تعليم الفاريانت للمستقبل — لو البند أصلاً شايل variant_id
+        if ($item->shopify_variant_id !== null) {
+            ShopifyProductLink::updateOrCreate(
+                ['shopify_variant_id' => $item->shopify_variant_id],
+                [
+                    // 0 = فاريانت معروف من أوردر مش من جلب المنتجات —
+                    // الجلب الجاي بيكمّل بياناته لو لسه موجود في المتجر
+                    'shopify_product_id' => ShopifyProductLink::where('shopify_variant_id', $item->shopify_variant_id)
+                        ->value('shopify_product_id') ?? 0,
+                    'title' => mb_substr($item->title, 0, 250),
+                    'sku' => $item->sku,
+                    'product_id' => (int) $data['product_id'],
+                    'units' => (int) $data['units'],
+                ],
+            );
+        }
+
+        return back()->with('ok', __('online.item_linked', ['number' => $order->number]));
     }
 
     // ==================== ٨. تصفير التيست ====================

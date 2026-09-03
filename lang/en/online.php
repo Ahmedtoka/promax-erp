@@ -178,6 +178,10 @@ return [
     'units' => 'Pack pcs',
     'units_hint' => 'How many system-product pieces is this variant? The 12-pc variant = 12 — prep and stock deduction use it',
     'pcs' => 'pcs',
+    'link_item' => 'Link it',
+    'link_item_title' => 'Link item to product',
+    'link_item_hint' => 'Old orders arrive as a snapshot (empty SKU, possibly changed variant) — linking here fixes this item and marks the variant so future orders with it link automatically.',
+    'item_linked' => 'Item linked — order #:number is ready to confirm ✓',
 
     // ═══ Status push to Shopify ═══
     'push_failed' => 'Order #:number updated here but the tag did not reach Shopify — check the write_orders scope.',

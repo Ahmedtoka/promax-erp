@@ -6,6 +6,13 @@
     $isAdmin = auth()->user()->role === 'admin';
     $canAct = in_array(auth()->user()->role, ['admin', 'manager'], true);
     $money = fn ($v) => number_format((float) $v, 2);
+
+    // قايمة المنتجات لديالوج الربط اليدوي — مرة واحدة في <template>
+    $optsHtml = '<option value="">—</option>';
+    foreach ($products as $p) {
+        $optsHtml .= '<option value="'.$p->id.'">'
+            .e($p->code.' · '.$p->displayName()).'</option>';
+    }
 @endphp
 
 @section('content')
@@ -135,7 +142,15 @@
                                         = {{ $i->pieces() }} {{ __('online.pcs') }}</span>
                                 @endif
                                 @if ($i->product_id === null)
-                                    <span class="badge b-red" style="font-size:9px">{{ __('online.unlinked') }}</span>
+                                    @if ($canAct)
+                                        {{-- أوردر قديم الـSKU فاضي والفاريانت مش في الربط —
+                                             الزرار بيربط البند وبيعلّم الفاريانت للمستقبل --}}
+                                        <button type="button" class="badge b-red" style="font-size:9px;cursor:pointer;border:0"
+                                                onclick="openItemLink({{ $i->id }}, '{{ str_replace("'", '', $i->title) }}')">
+                                            🔗 {{ __('online.link_item') }}</button>
+                                    @else
+                                        <span class="badge b-red" style="font-size:9px">{{ __('online.unlinked') }}</span>
+                                    @endif
                                 @endif
                             </div>
                         @endforeach
@@ -196,6 +211,27 @@
     </form>
 </dialog>
 
+{{-- ═══ ديالوج ربط بند يدوي ═══ --}}
+<dialog id="dlgItemLink">
+    <form class="dlg" method="POST" id="formItemLink" style="min-width:380px">
+        @csrf
+        <h4>🔗 {{ __('online.link_item_title') }}</h4>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="ilTitle"></div>
+        <label class="f">{{ __('online.system_product') }}</label>
+        <select name="product_id" id="ilProduct" required style="width:100%;margin-bottom:8px"></select>
+        <label class="f">{{ __('online.units') }}</label>
+        <input type="number" name="units" value="1" min="1" max="1000" required
+               style="width:100%;margin-bottom:6px">
+        <div class="dash-hint" style="margin-bottom:12px">{{ __('online.link_item_hint') }}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgItemLink')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">🔗 {{ __('online.link_item') }}</button>
+        </div>
+    </form>
+</dialog>
+
+<template id="prodOpts">{!! $optsHtml !!}</template>
+
 {{-- ═══ ديالوج الإلغاء ═══ --}}
 <dialog id="dlgCancel">
     <form class="dlg" method="POST" id="formCancel">
@@ -228,6 +264,19 @@
         document.getElementById('formCancel').action = POSTPONE_URL + '/' + id + '/cancel';
         document.getElementById('ccNum').textContent = '#' + num;
         openDlg('dlgCancel');
+    }
+
+    function openItemLink(itemId, title) {
+        var sel = document.getElementById('ilProduct');
+
+        if (!sel.options.length) {
+            sel.innerHTML = document.getElementById('prodOpts').innerHTML;
+        }
+
+        document.getElementById('formItemLink').action =
+            @js(url('erp/online/items')) + '/' + itemId + '/link';
+        document.getElementById('ilTitle').textContent = title;
+        openDlg('dlgItemLink');
     }
 </script>
 @endsection

@@ -1140,6 +1140,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('postpone');
         Route::post('/orders/{order}/cancel', [$c, 'cancel'])
             ->middleware('role:admin,manager')->name('cancel');
+        // ربط بند يدوي — للأوردرات القديمة اللي المطابقة الأوتوماتيك مش شايفاها
+        Route::post('/items/{item}/link', [$c, 'itemLink'])
+            ->middleware('role:admin,manager')->name('item.link');
 
         // ٣. التجهيز
         Route::get('/prep', [$c, 'prep'])->name('prep');
