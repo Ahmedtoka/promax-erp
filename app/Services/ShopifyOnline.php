@@ -57,9 +57,14 @@ class ShopifyOnline
             $req = Http::withHeaders(['X-Shopify-Access-Token' => $token])
                 ->acceptJson()->timeout(40);
 
+            // ⚠️ بايلود فاضي لازم يتبعت `{}` مش `[]` — json_encode([])
+            // بيطلع مصفوفة وشوبيفاي بترفضها 400 (ده اللي منع
+            // orders/{id}/cancel.json تشتغل في أول تيست ٣/٩)
             $res = $method === 'get'
                 ? $req->get($url, $payload)
-                : $req->send(strtoupper($method), $url, ['json' => $payload]);
+                : $req->send(strtoupper($method), $url, [
+                    'json' => $payload === [] ? (object) [] : $payload,
+                ]);
         } catch (\Throwable $e) {
             // ⚠️ رسالة الاستثناء ممكن تحتوي الـURL — كفاية نوعه
             return [null, __('online.err_network')];
@@ -70,7 +75,18 @@ class ShopifyOnline
         }
 
         if ($res->failed()) {
-            return [null, __('online.err_http', ['code' => $res->status()])];
+            // نص خطأ شوبيفاي (مقصوص) بيوفّر جولة تخمين كاملة —
+            // «Unavailable Shipping Rate» أوضح من «خطأ 422»
+            $detail = $res->json('errors') ?? $res->json('error');
+
+            if (is_array($detail)) {
+                $detail = json_encode($detail, JSON_UNESCAPED_UNICODE);
+            }
+
+            $detail = is_string($detail) ? mb_substr($detail, 0, 140) : '';
+
+            return [null, __('online.err_http', ['code' => $res->status()])
+                .($detail !== '' ? ' — '.$detail : '')];
         }
 
         return [$res->json(), null];
@@ -343,7 +359,9 @@ class ShopifyOnline
     }
 
     /**
-     * إلغاء الأوردر في شوبيفاي نفسها — مع تاج pmx-cancelled.
+     * إلغاء الأوردر في شوبيفاي نفسها — مع تاج pmx-cancelled وكتابة
+     * **سبب الإلغاء في نوت الأوردر** عشان يتشاف من أدمن شوبيفاي
+     * (endpoint الإلغاء نفسه مابياخدش نص حر).
      * فشل الإلغاء هناك مايرجّعش الإلغاء هنا، بيتبلّغ بس.
      */
     public static function cancelInShopify(OnlineOrder $order): ?string
@@ -352,12 +370,24 @@ class ShopifyOnline
             return null;
         }
 
-        [$data, $err] = self::api('post', 'orders/'.$order->shopify_id.'/cancel.json', []);
+        [$data, $err] = self::api('post', 'orders/'.$order->shopify_id.'/cancel.json', [
+            'reason' => 'other',
+        ]);
+
+        // السبب اللي التيم كتبه → نوت الأوردر في شوبيفاي
+        if ($order->cancel_reason !== null && $order->cancel_reason !== '') {
+            self::api('put', 'orders/'.$order->shopify_id.'.json', [
+                'order' => [
+                    'id' => (int) $order->shopify_id,
+                    'note' => 'PROMAX: '.__('online.status_cancelled').' — '.$order->cancel_reason,
+                ],
+            ]);
+        }
 
         $tagWarn = self::pushStatus($order);
 
         if ($err !== null) {
-            return __('online.cancel_push_failed', ['number' => $order->number]);
+            return __('online.cancel_push_failed', ['number' => $order->number]).' ('.$err.')';
         }
 
         return $tagWarn;
