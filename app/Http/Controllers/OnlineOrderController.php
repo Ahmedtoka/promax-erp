@@ -284,10 +284,12 @@ class OnlineOrderController extends Controller
 
     public function prep()
     {
+        // ⚠️ المطلوب تجهيزه **بس** (قرار المالك ٤/٩) — اللي خلص بيختفي
+        // من هنا وبيبان في «جاهزة للشحن»
         $picks = PickOrder::with(['items.product', 'items.batch', 'items.location', 'warehouse'])
             ->where('purpose', PickOrder::PURPOSE_ONLINE)
-            ->whereIn('status', ['requested', 'picking', 'ready'])
-            ->orderByRaw("CASE status WHEN 'picking' THEN 0 WHEN 'requested' THEN 1 ELSE 2 END")
+            ->whereIn('status', ['requested', 'picking'])
+            ->orderByRaw("CASE status WHEN 'picking' THEN 0 ELSE 1 END")
             ->orderBy('id')
             ->get();
 
@@ -447,13 +449,103 @@ class OnlineOrderController extends Controller
 
     // ==================== ٥. البيك اب والتحصيل ====================
 
-    public function pickups()
+    public function pickups(Request $request)
     {
-        $pickups = OnlinePickup::with(['courier', 'orders'])
-            ->orderByDesc('date')->orderByDesc('id')
-            ->paginate(30)->withQueryString();
+        $q = OnlinePickup::with(['courier', 'creator', 'orders']);
 
-        return view('online.pickups', ['pickups' => $pickups]);
+        // بحث شامل (٤/٩): رقم أوردر / اسم عميل / موبايل → كل
+        // البيك ابات اللي فيها أوردر مطابق
+        $q->when($request->filled('search'), function ($x) use ($request) {
+            $s = '%'.trim($request->input('search')).'%';
+            $x->whereHas('orders', function ($w) use ($s) {
+                $w->where('number', 'like', $s)
+                    ->orWhere('customer_name', 'like', $s)
+                    ->orWhere('phone', 'like', $s);
+            });
+        });
+
+        return view('online.pickups', [
+            'pickups' => $q->orderByDesc('date')->orderByDesc('id')
+                ->paginate(30)->withQueryString(),
+            'search' => trim((string) $request->input('search')),
+        ]);
+    }
+
+    /**
+     * شيت البيك اب إكسيل (٤/٩) — بنفس رايتر الكوتيشن (SheetWriter):
+     * رأس بالشيت والمندوب واللي عمله، صف لكل أوردر بفصل مبلغ
+     * البضاعة عن الشحن عن الإجمالي، وصف إجماليات تحت.
+     */
+    public function pickupExcel(OnlinePickup $pickup)
+    {
+        $pickup->load(['courier', 'creator', 'orders']);
+        $t = $pickup->totals();
+
+        $x = new \App\Services\SheetWriter(__('online.pickup_no').' '.$pickup->number);
+
+        foreach ([26, 22, 15, 16, 16, 34, 8, 12, 10, 12, 12, 12] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $x->row([['v' => __('online.pickup_no').' '.$pickup->number, 'style' => 'title']]);
+        $x->merge(0, 11);
+        $x->row([
+            ['v' => __('common.date').': '.$pickup->date->format('Y-m-d'), 'style' => 'label'],
+            '', '',
+            ['v' => __('online.courier').': '.($pickup->courier?->name ?: '-'), 'style' => 'label'],
+            '', '',
+            ['v' => __('online.by_user').': '.($pickup->creator?->displayName() ?: '-'), 'style' => 'label'],
+        ]);
+        $x->blank();
+
+        $x->row([
+            ['v' => __('online.shopify_no'), 'style' => 'header'],
+            ['v' => __('common.name'), 'style' => 'header'],
+            ['v' => __('common.phone'), 'style' => 'header'],
+            ['v' => __('online.rcpt_gov'), 'style' => 'header'],
+            ['v' => __('online.rcpt_area'), 'style' => 'header'],
+            ['v' => __('online.rcpt_addr'), 'style' => 'header'],
+            ['v' => __('online.pieces'), 'style' => 'header'],
+            ['v' => __('online.goods_amount'), 'style' => 'header'],
+            ['v' => __('online.shipping'), 'style' => 'header'],
+            ['v' => __('common.total'), 'style' => 'header'],
+            ['v' => __('online.collected'), 'style' => 'header'],
+            ['v' => __('common.status'), 'style' => 'header'],
+        ]);
+
+        foreach ($pickup->orders as $o) {
+            $parts = array_map('trim', explode(' - ', (string) $o->area, 2));
+
+            $x->row([
+                ['v' => '#'.$o->number, 'style' => 'value'],
+                ['v' => $o->customer_name ?: '-'],
+                ['v' => $o->phone ?: '-'],
+                ['v' => $parts[1] ?? '-'],
+                ['v' => $parts[0] ?? '-'],
+                ['v' => $o->address ?: '-'],
+                ['v' => (int) $o->items_count, 'style' => 'center'],
+                ['v' => (float) $o->subtotal, 'style' => 'money'],
+                ['v' => (float) $o->shipping, 'style' => 'money'],
+                ['v' => (float) $o->total, 'style' => 'money_bold'],
+                ['v' => (float) $o->collected_total, 'style' => 'money'],
+                ['v' => $o->statusLabel()],
+            ]);
+        }
+
+        $x->row([
+            ['v' => __('common.total'), 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => $t['pieces'], 'style' => 'total'],
+            ['v' => $t['goods'], 'style' => 'total'],
+            ['v' => $t['ship'], 'style' => 'total'],
+            ['v' => $t['amount'], 'style' => 'total'],
+            ['v' => $t['collected'], 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+        ]);
+
+        return $x->download($pickup->number.'.xlsx');
     }
 
     public function pickupShow(OnlinePickup $pickup)

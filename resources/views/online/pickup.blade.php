@@ -17,57 +17,93 @@
     <div class="alert good" style="margin-bottom:12px">{{ session('ok') }}</div>
 @endif
 
-<div style="display:flex;gap:8px;margin-bottom:12px" class="no-print">
-    <button class="btn gold" onclick="window.print()">🖨 {{ __('online.print_sheet') }}</button>
+<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap" class="no-print">
+    <a class="btn gold" href="{{ route('online.pickup.excel', $pickup) }}">📊 {{ __('online.excel_btn') }}</a>
+    <button class="btn" onclick="window.print()">🖨 {{ __('online.print_sheet') }}</button>
     <a class="btn" href="{{ route('online.pickups') }}">← {{ __('online.pickups_title') }}</a>
 </div>
 
-{{-- ═══ رأس الشيت + الأرصدة ═══ --}}
+{{-- ═══ رأس الشيت: مين عمله + المندوب + التاريخ ═══ --}}
 <div class="card" style="margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div>
             <b style="font-size:17px">📋 {{ $pickup->number }}</b>
             <span class="badge {{ $totals['remaining'] <= 0 ? 'b-green' : 'b-orange' }}">
                 {{ $totals['remaining'] <= 0 ? __('online.settled') : __('online.open') }}</span>
-            <div style="font-size:12px;color:var(--muted);margin-top:3px">
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">
                 📅 {{ $pickup->date->format('Y-m-d') }}
                 · 🛵 {{ $pickup->courier?->name ?: '—' }}
-                @if ($pickup->courier?->phone) · <span dir="ltr">{{ $pickup->courier->phone }}</span> @endif
+                @if ($pickup->courier?->phone) <span dir="ltr">{{ $pickup->courier->phone }}</span> @endif
+                · 👤 {{ __('online.by_user') }}: <b>{{ $pickup->creator?->displayName() ?: '—' }}</b>
             </div>
         </div>
     </div>
 </div>
 
-<div class="kpis">
-    <div class="kpi"><b class="num">{{ $totals['orders'] }}</b><span>{{ __('online.orders_count') }}</span></div>
-    <div class="kpi"><b class="num">{{ $totals['pieces'] }}</b><span>{{ __('online.pieces') }}</span></div>
-    <div class="kpi"><b class="num">{{ $money($totals['amount']) }}</b><span>{{ __('online.amount') }}</span></div>
-    <div class="kpi"><b class="num pos">{{ $money($totals['collected']) }}</b><span>{{ __('online.collected') }}</span></div>
-    <div class="kpi"><b class="num {{ $totals['remaining'] > 0 ? 'neg' : 'pos' }}">{{ $money($totals['remaining']) }}</b>
-        <span>{{ __('online.remaining') }}</span></div>
+{{-- ═══ المربعات (٤/٩): الرقم كبير في النص وتحته الاسم + لون وأيقونة ═══ --}}
+<div class="pu-kpis">
+    <div class="pu-kpi"><div class="ic">🧾</div><div class="v">{{ $totals['orders'] }}</div><div class="l">{{ __('online.orders_count') }}</div></div>
+    <div class="pu-kpi"><div class="ic">📦</div><div class="v">{{ $totals['pieces'] }}</div><div class="l">{{ __('online.pieces') }}</div></div>
+    <div class="pu-kpi"><div class="ic">🛒</div><div class="v">{{ $money($totals['goods']) }}</div><div class="l">{{ __('online.goods_amount') }}</div></div>
+    <div class="pu-kpi"><div class="ic">🚚</div><div class="v">{{ $money($totals['ship']) }}</div><div class="l">{{ __('online.shipping') }}</div></div>
+    <div class="pu-kpi blue"><div class="ic">💰</div><div class="v">{{ $money($totals['amount']) }}</div><div class="l">{{ __('common.total') }}</div></div>
+    <div class="pu-kpi green"><div class="ic">✅</div><div class="v">{{ $money($totals['collected']) }}</div><div class="l">{{ __('online.collected') }}</div></div>
+    <div class="pu-kpi {{ $totals['remaining'] > 0 ? 'red' : 'green' }}">
+        <div class="ic">⏳</div><div class="v">{{ $money($totals['remaining']) }}</div><div class="l">{{ __('online.remaining') }}</div></div>
 </div>
 
 <div class="card">
-    <div class="tablewrap">
-        <table>
+    {{-- بحث جوه الشيت + اختيار الأعمدة الظاهرة --}}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px" class="no-print">
+        <input id="puFilter" placeholder="{{ __('online.pu_filter_ph') }}" style="min-width:260px" autocomplete="off">
+        <span id="puFilterN" class="badge b-gray" style="display:none"></span>
+
+        {{-- كولوم فيزابيلتي: العنوان مقفول افتراضياً والاختيار بيتحفظ --}}
+        <details style="margin-inline-start:auto;position:relative" id="puColsBox">
+            <summary class="btn sm" style="list-style:none;cursor:pointer">⚙️ {{ __('online.cols_btn') }}</summary>
+            <div style="position:absolute;inset-inline-end:0;top:110%;z-index:30;background:#fff;
+                        border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);
+                        padding:10px 14px;min-width:180px;display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;display:flex;gap:6px;align-items:center">
+                    <input type="checkbox" class="pu-col" data-col="gov" checked> {{ __('online.rcpt_gov') }}</label>
+                <label style="font-size:12px;display:flex;gap:6px;align-items:center">
+                    <input type="checkbox" class="pu-col" data-col="area" checked> {{ __('online.rcpt_area') }}</label>
+                <label style="font-size:12px;display:flex;gap:6px;align-items:center">
+                    <input type="checkbox" class="pu-col" data-col="addr"> {{ __('online.rcpt_addr') }}</label>
+            </div>
+        </details>
+    </div>
+
+    <div class="tablewrap frz" style="max-height:64vh;overflow:auto">
+        <table id="puTable">
             <tr>
                 <th>{{ __('online.shopify_no') }}</th>
                 <th>{{ __('common.name') }}</th>
                 <th>{{ __('common.phone') }}</th>
-                <th>{{ __('online.area') }}</th>
+                <th data-col="gov">{{ __('online.rcpt_gov') }}</th>
+                <th data-col="area">{{ __('online.rcpt_area') }}</th>
+                <th data-col="addr">{{ __('online.rcpt_addr') }}</th>
                 <th class="num" data-nosum>{{ __('online.pieces') }}</th>
-                <th class="num">{{ __('online.cod_total') }}</th>
+                <th class="num">{{ __('online.goods_amount') }}</th>
+                <th class="num">{{ __('online.shipping') }}</th>
+                <th class="num">{{ __('common.total') }}</th>
                 <th class="num">{{ __('online.collected') }}</th>
                 <th>{{ __('common.status') }}</th>
                 <th class="no-print"></th>
             </tr>
             @foreach ($pickup->orders as $o)
-                <tr>
+                @php $parts = array_map('trim', explode(' - ', (string) $o->area, 2)); @endphp
+                <tr class="pu-row"
+                    data-q="{{ mb_strtolower(($o->number ?? '').' '.($o->customer_name ?? '').' '.($o->phone ?? '')) }}">
                     <td class="num s"><b>#{{ $o->number }}</b></td>
                     <td>{{ $o->customer_name ?: '—' }}</td>
                     <td class="num s" dir="ltr">{{ $o->phone ?: '—' }}</td>
-                    <td class="s">{{ $o->area ?: '—' }}</td>
+                    <td class="s" data-col="gov">{{ ($parts[1] ?? '') !== '' ? $parts[1] : '—' }}</td>
+                    <td class="s" data-col="area">{{ ($parts[0] ?? '') !== '' ? $parts[0] : '—' }}</td>
+                    <td class="s" data-col="addr" style="max-width:220px">{{ $o->address ?: '—' }}</td>
                     <td class="num">{{ $o->items_count }}</td>
+                    <td class="num">{{ $money($o->subtotal) }}</td>
+                    <td class="num">{{ $money($o->shipping) }}</td>
                     <td class="num"><b>{{ $money($o->total) }}</b></td>
                     <td class="num pos">{{ $money($o->collected_total) }}</td>
                     <td><span class="badge {{ $o->statusClass() }}">{{ $o->statusLabel() }}</span></td>
@@ -114,7 +150,7 @@
     </form>
 </dialog>
 
-{{-- ═══ ديالوج الإلغاء بعد الشحن — العميل رجّعه قبل ما يفتحه ═══ --}}
+{{-- ═══ ديالوج الإلغاء بعد الشحن ═══ --}}
 <dialog id="dlgCancel">
     <form class="dlg" method="POST" id="formCancel">
         @csrf
@@ -131,6 +167,28 @@
 @endsection
 
 @section('scripts')
+<style>
+    .frz th{position:sticky;top:0;z-index:2}
+
+    /* مربعات الشيت — الرقم كبير في النص والاسم تحته + شريط لون فوق */
+    .pu-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+    .pu-kpi{
+        background:var(--card);border:1px solid var(--border);border-radius:14px;
+        padding:14px 10px;text-align:center;position:relative;overflow:hidden;
+    }
+    .pu-kpi::before{
+        content:'';position:absolute;top:0;left:0;right:0;height:3px;
+        background:linear-gradient(135deg,#12399B,#602D90);
+    }
+    .pu-kpi .ic{font-size:17px}
+    .pu-kpi .v{font-size:23px;font-weight:900;font-variant-numeric:tabular-nums;margin:2px 0;color:var(--ink)}
+    .pu-kpi .l{font-size:11px;color:var(--muted);font-weight:700}
+    .pu-kpi.blue .v{color:var(--royal-blue,#12399B)}
+    .pu-kpi.green .v{color:#16A34A}
+    .pu-kpi.green::before{background:#16A34A}
+    .pu-kpi.red .v{color:#DC2626}
+    .pu-kpi.red::before{background:#DC2626}
+</style>
 <script>
     const RETURN_MSG = @js(__('online.return_msg'));
     const COLLECT_REMAIN = @js(__('online.collect_remaining'));
@@ -151,5 +209,57 @@
         document.getElementById('ccNum').textContent = '#' + num;
         openDlg('dlgCancel');
     }
+
+    (function () {
+        'use strict';
+
+        /* ═══ بحث جوه الشيت — رقم أوردر / اسم / موبايل ═══ */
+        var filter = document.getElementById('puFilter');
+        var badge = document.getElementById('puFilterN');
+
+        if (filter) {
+            filter.addEventListener('input', function () {
+                var q = filter.value.trim().toLowerCase();
+                var n = 0;
+
+                document.querySelectorAll('.pu-row').forEach(function (r) {
+                    var hit = q === '' || r.dataset.q.indexOf(q) !== -1;
+                    r.style.display = hit ? '' : 'none';
+                    if (hit) n++;
+                });
+
+                badge.style.display = q === '' ? 'none' : '';
+                badge.textContent = n;
+            });
+        }
+
+        /* ═══ إظهار/إخفاء الأعمدة — العنوان مقفول افتراضياً،
+           والاختيار بيتحفظ في المتصفح ═══ */
+        var KEY = 'pu_cols_v1';
+        var saved = {};
+
+        try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
+
+        function applyCol(col, on) {
+            document.querySelectorAll('[data-col="' + col + '"]').forEach(function (el) {
+                el.style.display = on ? '' : 'none';
+            });
+        }
+
+        document.querySelectorAll('.pu-col').forEach(function (ck) {
+            var col = ck.dataset.col;
+
+            if (col in saved) { ck.checked = !!saved[col]; }
+
+            applyCol(col, ck.checked);
+
+            ck.addEventListener('change', function () {
+                applyCol(col, ck.checked);
+                saved[col] = ck.checked;
+
+                try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* خاص */ }
+            });
+        });
+    })();
 </script>
 @endsection

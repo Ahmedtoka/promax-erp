@@ -29,7 +29,7 @@
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.collections_hint') }}</div>
 
-    <div class="tablewrap">
+    <div class="tablewrap frz" style="max-height:68vh;overflow:auto">
         <table>
             <tr>
                 <th>{{ __('online.shopify_no') }}</th>
@@ -37,7 +37,10 @@
                 <th>{{ __('online.courier') }}</th>
                 <th>{{ __('common.name') }}</th>
                 <th>{{ __('common.phone') }}</th>
-                <th class="num">{{ __('online.cod_total') }}</th>
+                {{-- فصل الفلوس (٤/٩): بضاعة + شحن = إجمالي --}}
+                <th class="num">{{ __('online.goods_amount') }}</th>
+                <th class="num">{{ __('online.shipping') }}</th>
+                <th class="num">{{ __('common.total') }}</th>
                 <th class="num">{{ __('online.collected') }}</th>
                 <th class="num">{{ __('online.remaining') }}</th>
                 <th>{{ __('online.shipped_at') }}</th>
@@ -57,6 +60,8 @@
                     <td class="s">{{ $o->pickup?->courier?->name ?: '—' }}</td>
                     <td>{{ $o->customer_name ?: '—' }}</td>
                     <td class="num s" dir="ltr">{{ $o->phone ?: '—' }}</td>
+                    <td class="num">{{ $money($o->subtotal) }}</td>
+                    <td class="num">{{ $money($o->shipping) }}</td>
                     <td class="num"><b>{{ $money($o->total) }}</b></td>
                     <td class="num pos">{{ $money($o->collected_total) }}</td>
                     <td class="num neg">{{ $money($o->remaining()) }}</td>
@@ -70,7 +75,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('online.collections_empty') }}
                 </td></tr>
             @endforelse
@@ -98,6 +103,9 @@
 @endsection
 
 @section('scripts')
+<style>
+    .frz th{position:sticky;top:0;z-index:2}
+</style>
 <script>
     const COLLECT_REMAIN = @js(__('online.collect_remaining'));
     const BASE_URL = @js(url('erp/online/orders'));

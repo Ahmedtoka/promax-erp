@@ -1161,6 +1161,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         // ٥. البيك اب والتحصيل
         Route::get('/pickups', [$c, 'pickups'])->name('pickups');
+        // ⚠️ الثابت قبل البارامتري
+        Route::get('/pickups/{pickup}/excel', [$c, 'pickupExcel'])->name('pickup.excel');
         Route::get('/pickups/{pickup}', [$c, 'pickupShow'])->name('pickup');
         Route::post('/orders/{order}/collect', [$c, 'collect'])
             ->middleware('role:admin,manager,accountant')->name('collect');

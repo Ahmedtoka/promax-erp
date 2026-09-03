@@ -5,128 +5,145 @@
 @php
     $money = fn ($v) => number_format((float) $v, 2);
     $co = $header;
+
+    // فاتورة الأونلاين **إنجليزي دايماً** (قرار المالك ٤/٩) مهما كانت
+    // لغة الداشبورد — النصوص من lang/en عبر باراميتر اللوكيل
+    $t = fn (string $k) => __('online.'.$k, [], 'en');
+
+    // المحافظة والمنطقة: المخزنة "city - province" من شوبيفاي
+    $areaParts = array_map('trim', explode(' - ', (string) $order->area, 2));
+    $city = $areaParts[0] ?? '';
+    $gov = $areaParts[1] ?? '';
 @endphp
 
 @section('content')
 
 @include('partials._doc_style')
 
-{{-- ═══ فاتورة ريسيت حراري 80mm (قرار المالك ٤/٩ — زي ريسيت المطاعم)
-     مش A4: بتتحط جوه الشحنة وبتتقري بالمسدس. الطباعة بعرض بكرة
-     الريسيت والطول على قد المحتوى. ═══ --}}
+{{-- ═══ ريسيت 80mm — أبيض وأسود بالكامل، إنجليزي بالكامل، من غير
+     أي أيقونات ملونة (قرار المالك ٤/٩). Poppins زي الهوية. ═══ --}}
 <style>
     .rcpt{
-        width:302px;              /* ≈ 80mm على 96dpi */
-        margin:0 auto;background:#fff;color:#000;
-        font-family:'Cairo', monospace;font-size:12.5px;line-height:1.55;
-        padding:14px 10px;border:1px solid var(--border);border-radius:8px;
+        width:302px;margin:0 auto;background:#fff;color:#000;
+        font-family:Poppins, Zagma, sans-serif;font-size:12px;line-height:1.5;
+        padding:16px 14px;border:1px solid var(--border);border-radius:8px;
+        direction:ltr;text-align:left;
     }
+    .rcpt *{color:#000}
     .rcpt .c{text-align:center}
-    .rcpt .dash{border-top:1.5px dashed #000;margin:8px 0}
-    .rcpt .row{display:flex;justify-content:space-between;gap:8px}
-    .rcpt .row span:last-child{white-space:nowrap}
-    .rcpt .big{font-size:15px;font-weight:900}
-    .rcpt .logo{height:40px;width:auto}
-    .rcpt table{width:100%;border-collapse:collapse}
-    .rcpt td{padding:1.5px 0;vertical-align:top;font-size:12.5px}
-    .rcpt .qty{white-space:nowrap;padding-inline-end:6px}
-    .rcpt .amt{text-align:end;white-space:nowrap;direction:ltr}
-    .rcpt svg{max-width:100%;height:52px}
+    .rcpt .dash{border-top:1.5px dashed #000;margin:9px 0}
+    .rcpt .logo{height:34px;width:auto;filter:grayscale(1) contrast(1.2)}
+    .rcpt .inv-no{font-size:17px;font-weight:800;letter-spacing:.5px}
+
+    /* سطور البيانات: ليبل ثابت وقيمة بتلف من غير ما تخرج */
+    .rcpt .kv{display:flex;gap:6px;font-size:11.5px;margin:1px 0}
+    .rcpt .kv b{flex-shrink:0;font-weight:700}
+    .rcpt .kv span{word-break:break-word;min-width:0}
+    .rcpt .kv2{display:flex;gap:14px}
+    .rcpt .kv2 .kv{flex:1;margin:0}
+
+    /* جدول الأصناف — شكل فاتورة: رأس بخط علوي وسفلي، أعمدة مظبوطة */
+    .rcpt table{width:100%;border-collapse:collapse;table-layout:fixed}
+    .rcpt th{
+        font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;
+        border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:4px 2px;
+    }
+    .rcpt td{
+        font-size:11.5px;padding:4px 2px;vertical-align:top;
+        border-bottom:1px solid #ddd;word-break:break-word;
+    }
+    .rcpt .col-item{width:56%;text-align:left}
+    .rcpt .col-qty{width:12%;text-align:center}
+    .rcpt .col-price{width:32%;text-align:right;white-space:nowrap}
+
+    .rcpt .tot{display:flex;justify-content:space-between;font-size:12px;margin:2px 0}
+    .rcpt .tot.big{font-size:15px;font-weight:800;border-top:2px solid #000;padding-top:5px;margin-top:6px}
+
+    .rcpt svg{max-width:100%;height:48px}
+    .rcpt .qr{width:86px;height:86px;display:block;margin:6px auto 2px}
+    .rcpt .foot{font-size:10.5px;line-height:1.6}
 
     @media print{
         @page{size:80mm auto;margin:0}
         body{background:#fff !important}
-        .rcpt{
-            width:72mm;border:0;border-radius:0;padding:2mm 1mm;margin:0 auto;
-        }
+        .rcpt{width:72mm;border:0;border-radius:0;padding:3mm 2mm;margin:0 auto}
     }
 </style>
 
 <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center" class="no-print">
-    <button class="btn gold" onclick="window.print()">🖨 {{ __('ops.print') }}</button>
-    <a class="btn" href="{{ route('online.prep') }}">← {{ __('online.prep_title') }}</a>
+    <button class="btn gold" onclick="window.print()">{{ __('ops.print') }}</button>
+    <a class="btn" href="{{ route('online.prep') }}">{{ __('online.prep_title') }}</a>
 </div>
 
 <div class="rcpt">
-    {{-- ═══ الهيدر: اللوجو والشركة في النص ═══ --}}
+    {{-- ═══ ١) اللوجو في النص ═══ --}}
     <div class="c">
         <img src="{{ file_exists(public_path('brand/logo/logo-h-blue.svg'))
             ? asset('brand/logo/logo-h-blue.svg') : asset('img/promax-logo.png') }}"
              alt="PROMAX" class="logo">
-        <div style="font-weight:900;font-size:14px;margin-top:2px">{{ $co['name'] ?: 'PROMAX' }}</div>
-        @if ($co['address'])
-            <div style="font-size:10.5px">{{ $co['address'] }}</div>
-        @endif
-        @if ($co['tax_id'])
-            <div style="font-size:10.5px">{{ __('doc.tax_id') }}: <b>{{ $co['tax_id'] }}</b></div>
-        @endif
+    </div>
+
+    {{-- ═══ ٢) الباركود ورقم الفاتورة تحته ═══ --}}
+    <div class="c" style="margin-top:8px">
+        {!! $barcode !!}
+        <div style="font-family:monospace;font-size:11px;letter-spacing:2px">{{ $order->barcode() }}</div>
+        <div class="inv-no">INVOICE #{{ $order->number }}</div>
     </div>
 
     <div class="dash"></div>
 
-    {{-- ═══ الأوردر والوقت ═══ --}}
-    <div class="row">
-        <span style="font-weight:900">{{ __('online.invoice_title') }}</span>
-        <span class="big" dir="ltr">#{{ $order->number }}</span>
+    {{-- ═══ ٣) البيانات ═══ --}}
+    <div class="kv"><b>{{ $t('rcpt_date') }}:</b><span>{{ now()->format('d/m/Y h:i A') }}</span></div>
+    <div class="kv"><b>{{ $t('rcpt_order') }}:</b><span>#{{ $order->number }}</span></div>
+    <div class="kv"><b>{{ $t('rcpt_customer') }}:</b><span>{{ $order->customer_name ?: '-' }}</span></div>
+    <div class="kv"><b>{{ $t('rcpt_mobile') }}:</b><span>{{ $order->phone ?: '-' }}</span></div>
+    <div class="kv2">
+        <div class="kv"><b>{{ $t('rcpt_gov') }}:</b><span>{{ $gov ?: '-' }}</span></div>
+        <div class="kv"><b>{{ $t('rcpt_area') }}:</b><span>{{ $city ?: '-' }}</span></div>
     </div>
-    <div class="row" style="font-size:11px">
-        <span>{{ __('online.invoice_sub') }}</span>
-        <span dir="ltr">{{ now()->format('d/m/Y h:i A') }}</span>
-    </div>
+    <div class="kv"><b>{{ $t('rcpt_addr') }}:</b><span>{{ $order->address ?: '-' }}</span></div>
 
     <div class="dash"></div>
 
-    {{-- ═══ العميل ═══ --}}
-    <div style="font-size:12px">
-        <div><b>{{ $order->customer_name ?: '—' }}</b></div>
-        <div dir="ltr" style="text-align:start">📞 {{ $order->phone ?: '—' }}</div>
-        <div>📍 {{ $order->area ? $order->area.' — ' : '' }}{{ $order->address ?: '—' }}</div>
-    </div>
-
-    <div class="dash"></div>
-
-    {{-- ═══ البنود: كمية × صنف .... إجمالي ═══ --}}
+    {{-- ═══ ٤) جدول الأصناف — Product / Qty / Price ═══ --}}
     <table>
+        <tr>
+            <th class="col-item">{{ $t('rcpt_product') }}</th>
+            <th class="col-qty">{{ $t('rcpt_qty') }}</th>
+            <th class="col-price">{{ $t('rcpt_price') }}</th>
+        </tr>
         @foreach ($order->items as $i)
             <tr>
-                <td class="qty"><b>{{ $i->qty }}</b> ×</td>
-                <td>{{ $i->product?->displayName() ?? $i->title }}
+                {{-- الاسم الإنجليزي مباشرة — الريسيت إنجليزي مهما كان لوكيل الداشبورد --}}
+                <td class="col-item">{{ $i->product?->name_en ?: ($i->product?->name ?? $i->title) }}
                     @if ((int) $i->units_per > 1)
-                        <span style="font-size:10px">({{ $i->pieces() }} {{ __('online.pcs') }})</span>
+                        <span style="font-size:9.5px">({{ $i->pieces() }} pcs)</span>
                     @endif
                 </td>
-                <td class="amt">{{ $money($i->total) }}</td>
+                <td class="col-qty">{{ $i->qty }}</td>
+                <td class="col-price">{{ $money($i->total) }}</td>
             </tr>
         @endforeach
     </table>
 
-    <div class="dash"></div>
-
-    {{-- ═══ الإجماليات ═══ --}}
-    <div class="row"><span>{{ __('online.amount') }}</span><span>{{ $money($order->subtotal) }}</span></div>
-    <div class="row"><span>{{ __('online.shipping') }}</span><span>{{ $money($order->shipping) }}</span></div>
-    <div class="row big" style="margin-top:4px">
-        <span>{{ __('online.cod_total') }}</span>
-        <span>{{ $money($order->total) }}</span>
+    {{-- ═══ ٥) الإجماليات ═══ --}}
+    <div style="margin-top:8px">
+        <div class="tot"><span>{{ $t('rcpt_subtotal') }}</span><span>{{ $money($order->subtotal) }}</span></div>
+        <div class="tot"><span>{{ $t('rcpt_shipping') }}</span><span>{{ $money($order->shipping) }}</span></div>
+        <div class="tot big"><span>{{ $t('rcpt_total_due') }}</span><span>{{ $money($order->total) }} EGP</span></div>
     </div>
 
     <div class="dash"></div>
 
-    {{-- ═══ الباركود في النص — المسدس بيقراه ═══ --}}
-    <div class="c" style="margin:6px 0">
-        {!! $barcode !!}
-        <div style="font-family:monospace;font-size:13px;font-weight:900;letter-spacing:2px" dir="ltr">
-            {{ $order->barcode() }}</div>
-    </div>
-
-    <div class="dash"></div>
-
-    {{-- ═══ الفوتر ═══ --}}
-    <div class="c" style="font-size:11px">
-        <div style="font-weight:900">{{ __('online.rcpt_thanks') }}</div>
+    {{-- ═══ ٦) الفوتر: شكر + تليفوننا + عنواننا + QR الموقع ═══ --}}
+    <div class="c foot">
+        <div style="font-weight:800;font-size:11.5px">{{ $t('rcpt_thank_en') }}</div>
         @if ($co['phone'])
-            <div dir="ltr">{{ $co['phone'] }}</div>
+            <div>{{ $co['phone'] }}</div>
         @endif
+        <div>{{ $t('rcpt_addr_en') }}</div>
+        <img src="{{ asset('brand/qr-promax-market.svg') }}" alt="promax.market" class="qr">
+        <div style="font-weight:700">promax.market</div>
     </div>
 </div>
 

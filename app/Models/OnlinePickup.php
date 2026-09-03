@@ -67,6 +67,9 @@ class OnlinePickup extends Model
             'orders' => $orders->count(),
             'live' => $live->count(),
             'pieces' => (int) $orders->sum('items_count'),
+            // فصل الفلوس (٤/٩): بضاعة + شحن = إجمالي
+            'goods' => round((float) $live->sum('subtotal'), 2),
+            'ship' => round((float) $live->sum('shipping'), 2),
             'amount' => $amount,
             'collected' => $collected,
             'remaining' => round($amount - $collected, 2),
