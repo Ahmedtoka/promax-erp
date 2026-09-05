@@ -615,4 +615,15 @@ return [
     'del_custody' => 'custody rows',
     'del_gifts' => 'gifts',
     'del_batches' => 'batches with movement',
+
+    // ═══ Manual receipt put-away — stands A–J (Sep 5, 2026) ═══
+    'pa_title' => 'Put away receipt :number',
+    'pa_hint' => 'Pick a shelf for every batch from the dropdown - rows with no shelf are left for later. At prep time the picker sees the batch, the stand and the shelf.',
+    'pa_manual_btn' => 'Put away - pick shelves',
+    'pa_choose' => '- pick a shelf -',
+    'pa_left' => 'Not yet shelved',
+    'pa_on' => 'Shelved on',
+    'pa_save' => 'Save put-away',
+    'pa_auto' => 'Auto put-away (by expiry blocks)',
+    'pa_all_done' => 'The whole receipt is shelved ✓',
 ];

@@ -692,6 +692,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/receipts/{receipt}', [WarehouseController::class, 'receipt'])->name('receipt');
         // باك أب الإذن CSV — بنفس أعمدة مستورد المخزون فيرجع يتسحب
         Route::get('/receipts/{receipt}/export', [WarehouseController::class, 'exportReceipt'])->name('receipt.export');
+        // ═══ شاشة ترصيف الإذن يدوي (٥/٩) — دروب منيو رف لكل باتش ═══
+        // العرض مفتوح زي صفحة الإذن — الحفظ جوه جروب الرولز تحت
+        Route::get('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayForm'])->name('receipt.putaway.form');
         Route::get('/shelves', [WarehouseController::class, 'locations'])->name('locations');
         Route::get('/expiry', [WarehouseController::class, 'expiryReport'])->name('expiry');
         Route::get('/transfers', [WarehouseController::class, 'transfers'])->name('transfers');
@@ -749,6 +752,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/batches/{batch}/put-away', [WarehouseController::class, 'putAway'])->name('putaway');
             // ترصيف الإذن كله بضغطة — كل باتش في بلوكه حسب التاريخ (2026-08-06)
             Route::post('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayReceipt'])->name('receipt.putaway');
+            // حفظ الترصيف اليدوي — رف مختار من دروب منيو لكل باتش (٥/٩)
+            Route::post('/receipts/{receipt}/put-away-save', [WarehouseController::class, 'putAwaySave'])->name('receipt.putaway.save');
             // تعديل تواريخ/رقم/تكلفة الباتش من صفحة الإذن — الكميات لأ
             Route::post('/batches/{batch}/update', [WarehouseController::class, 'updateBatch'])->name('batch.update');
             // ⚠️ تصحيح كمية باتش الاستلام (٢٨/٨) — **أدمن بس**: ده

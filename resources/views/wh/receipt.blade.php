@@ -18,13 +18,11 @@
     {{-- باك أب كامل — يترفع تاني من شاشة الاستيراد (نوع «المخزون») كرصيد أول مدة --}}
     <a class="btn" href="{{ route('wh.receipt.export', $receipt) }}">⬇️ {{ __('stock.export_receipt') }}</a>
     <a class="btn" href="{{ route('wh.locations', ['warehouse' => $receipt->warehouse_id]) }}">🗄️ {{ __('stock.shelf_map') }}</a>
-    {{-- ترصيف الإذن كله بضغطة — كل باتش في بلوكه حسب تاريخ انتهائه (2026-08-06) --}}
+    {{-- الترصيف بقى شاشة اختيار أرفف (٥/٩ — نظام الاستاندات A–J):
+         دروب منيو رف لكل باتش، والأوتوماتيك بالبلوكات جواها لو محتاجه --}}
     @if ($unshelved > 0 && $manager && \App\Support\Access::action(auth()->user(), 'act.wh.putaway'))
-        <form method="POST" action="{{ route('wh.receipt.putaway', $receipt) }}" style="display:inline"
-              onsubmit="return confirm(@js(__('stock.putaway_receipt_confirm')))">
-            @csrf
-            <button class="btn gold" type="submit">📥 {{ __('stock.putaway_receipt') }} ({{ $fmt($unshelved) }})</button>
-        </form>
+        <a class="btn gold" href="{{ route('wh.receipt.putaway.form', $receipt) }}">
+            📥 {{ __('stock.pa_manual_btn') }} ({{ $fmt($unshelved) }})</a>
     @endif
 @endsection
 

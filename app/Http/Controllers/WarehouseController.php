@@ -656,6 +656,88 @@ class WarehouseController extends Controller
         return $errors === [] ? $resp : $resp->withErrors($errors);
     }
 
+    /**
+     * ═══ شاشة ترصيف الإذن اليدوي (٥/٩/٢٠٢٦ — نظام الاستاندات) ═══
+     *
+     * طلب المالك بالنص: «لما أدوس ترصيف يطلعلي الاستلامة وجمب كل
+     * باتش أختار الرف من دروب منيو». كل باتش لسه مترصّفش بياخد
+     * سيلكت بأرفف المخزن (A01..J05 وما بعدها) وكمية متملية بالباقي.
+     */
+    public function putAwayForm(Request $request, GoodsReceipt $receipt)
+    {
+        $this->guardWarehouse($request, $receipt->warehouse_id);
+
+        $receipt->load(['warehouse', 'batches.product', 'batches.locations.location']);
+
+        return view('wh.receipt_putaway', [
+            'receipt' => $receipt,
+            'locations' => Location::where('warehouse_id', $receipt->warehouse_id)
+                ->where('active', true)->orderBy('code')->get(),
+        ]);
+    }
+
+    /** حفظ الترصيف اليدوي — سطر واقع مايوقّعش الباقي (نفس فلسفة bulk) */
+    public function putAwaySave(Request $request, GoodsReceipt $receipt)
+    {
+        $this->guardWarehouse($request, $receipt->warehouse_id);
+
+        $data = $request->validate([
+            'rows' => ['required', 'array'],
+            'rows.*.location_id' => ['nullable', 'integer'],
+            'rows.*.qty' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $done = 0;
+        $doneQty = 0;
+        $errors = [];
+
+        foreach ($receipt->batches as $batch) {
+            $row = $data['rows'][$batch->id] ?? null;
+
+            // مفيش رف متختار = السطر ده مش هيترصّف دلوقتي — مش خطأ
+            if ($row === null || empty($row['location_id'])) {
+                continue;
+            }
+
+            $qty = (int) ($row['qty'] ?? 0) ?: $batch->unshelvedQty();
+
+            if ($qty <= 0) {
+                continue;
+            }
+
+            // ⚠️ الرف من نفس مخزن الإذن — سيلكت متلاعب فيه مايعدّيش
+            $location = Location::where('warehouse_id', $receipt->warehouse_id)
+                ->where('id', (int) $row['location_id'])->first();
+
+            if ($location === null) {
+                $errors[] = __('stock.location_not_found', ['code' => '#'.$row['location_id']]);
+
+                continue;
+            }
+
+            if ($error = BatchLocation::putAway($batch, $location, $qty)) {
+                $errors[] = $error;
+
+                continue;
+            }
+
+            $done++;
+            $doneQty += $qty;
+        }
+
+        $resp = redirect()->route('wh.receipt', $receipt);
+
+        if ($done > 0) {
+            $resp->with('ok', __('stock.putaway_done_count', ['count' => $done, 'qty' => $doneQty]));
+        }
+
+        if ($done === 0 && $errors === []) {
+            $errors[] = __('stock.no_rows_selected');
+        }
+
+        return $errors === [] ? $resp : $resp->withErrors($errors);
+    }
+
     /** نقل بضاعة من رف لرف */
     public function moveStock(Request $request, BatchLocation $batchLocation)
     {
