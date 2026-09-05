@@ -596,6 +596,42 @@ class OnlineOrderController extends Controller
         return $x->download($pickup->number.'.xlsx');
     }
 
+    /**
+     * ═══ «ادفع الحالة لشوبيفاي» (٥/٩) — علاج بأثر رجعي ═══
+     *
+     * شيت اتعمل قبل ما ربط الحالات يترفع (أو والسكوبات ناقصة) بيسيب
+     * أوردرات Unfulfilled في شوبيفاي رغم إنها اتشحنت عندنا. الزرار ده
+     * بيعيد المحاولة لكل أوردرات الشيت: Fulfillment للمشحون،
+     * وMark as paid كمان للكامل — وبيعرض خطأ شوبيفاي بنصه لو فيه.
+     */
+    public function pickupPush(OnlinePickup $pickup)
+    {
+        $pickup->load('orders');
+        $warns = [];
+
+        foreach ($pickup->orders as $o) {
+            if (! in_array($o->status, ['shipped', 'completed'], true)) {
+                continue;
+            }
+
+            if ($w = ShopifyOnline::fulfillOrder($o)) {
+                $warns[] = $w;
+            }
+
+            if ($o->status === 'completed' && ($w = ShopifyOnline::markPaid($o))) {
+                $warns[] = $w;
+            }
+
+            ShopifyOnline::pushStatus($o);
+        }
+
+        $redirect = back()->with('ok', __('online.pushed_ok', ['number' => $pickup->number]));
+
+        return empty($warns)
+            ? $redirect
+            : $redirect->withErrors(['push' => implode(' · ', array_slice($warns, 0, 3))]);
+    }
+
     public function pickupShow(OnlinePickup $pickup)
     {
         $pickup->load(['courier', 'creator', 'orders.items.product']);

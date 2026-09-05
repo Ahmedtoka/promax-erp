@@ -113,6 +113,8 @@ return [
     'settled' => 'Settled',
     'open' => 'Open',
     'print_sheet' => 'Print sheet',
+    'push_btn' => 'Push status to Shopify',
+    'pushed_ok' => 'Sheet :number statuses pushed to Shopify ✓',
     'by_user' => 'Created by',
     'goods_amount' => 'Goods amount',
     'excel_btn' => 'Download Excel',

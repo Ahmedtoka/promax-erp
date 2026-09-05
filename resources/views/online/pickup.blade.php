@@ -20,6 +20,13 @@
 <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap" class="no-print">
     <a class="btn gold" href="{{ route('online.pickup.excel', $pickup) }}">📊 {{ __('online.excel_btn') }}</a>
     <button class="btn" onclick="window.print()">🖨 {{ __('online.print_sheet') }}</button>
+    @if ($canAct)
+        {{-- علاج بأثر رجعي: Fulfilled/Paid لأوردرات الشيت في شوبيفاي --}}
+        <form method="POST" action="{{ route('online.pickup.push', $pickup) }}" style="display:inline">
+            @csrf
+            <button class="btn" type="submit">🔁 {{ __('online.push_btn') }}</button>
+        </form>
+    @endif
     <a class="btn" href="{{ route('online.pickups') }}">← {{ __('online.pickups_title') }}</a>
 </div>
 

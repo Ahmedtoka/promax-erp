@@ -1166,6 +1166,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/pickups', [$c, 'pickups'])->name('pickups');
         // ⚠️ الثابت قبل البارامتري
         Route::get('/pickups/{pickup}/excel', [$c, 'pickupExcel'])->name('pickup.excel');
+        // إعادة دفع الحالات لشوبيفاي — علاج الشيتات اللي اتشحنت قبل الربط
+        Route::post('/pickups/{pickup}/push', [$c, 'pickupPush'])
+            ->middleware('role:admin,manager')->name('pickup.push');
         Route::get('/pickups/{pickup}', [$c, 'pickupShow'])->name('pickup');
         Route::post('/orders/{order}/collect', [$c, 'collect'])
             ->middleware('role:admin,manager,accountant')->name('collect');
