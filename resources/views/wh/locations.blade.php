@@ -148,11 +148,13 @@
                                     $packTip = __('stock.map_pack', ['c' => $tc, 'b' => $tb, 'p' => $tp]);
                                     $cls = $searching ? (isset($hits[$sh->code]) ? ' hit' : ' dim') : '';
                                     $payload = json_encode([
-                                        'code' => $sh->code,
+                                        'code' => $sh->stand.$sh->level,
                                         'total' => $sq,
+                                        'pack' => $sq > 0 ? $packTip : '',
                                         'rows' => $bls->map(fn ($bl) => [
                                             'p' => (($bl->product ?? $bl->batch?->product)?->displayName()) ?? '—',
                                             'c' => ($bl->product ?? $bl->batch?->product)?->code,
+                                            'i' => ($bl->product ?? $bl->batch?->product)?->imageSrc(),
                                             'b' => $bl->batch?->batch_no,
                                             'e' => $bl->batch?->expires_on?->format('Y-m-d'),
                                             'q' => (int) $bl->qty,
@@ -305,13 +307,17 @@
 </div>
 
 {{-- ═══ بوب أب محتوى الرف — بيتملى بالجافاسكريبت من بايلود الخريطة ═══ --}}
-<dialog id="dlgShelf" style="min-width:min(680px,94vw)">
+<dialog id="dlgShelf" style="width:min(760px,94vw)">
     <div class="dlg">
-        <h4 style="display:flex;align-items:center;gap:10px">
-            🗄️ <span id="shTitle" dir="ltr"></span>
-            <span class="badge b-blue" id="shTotal"></span>
+        <h4 style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;
+                         border-radius:10px;color:#111;font-weight:900;font-size:15px;
+                         background:linear-gradient(to bottom,#ffe968 0 20%,#ffd400 20% 80%,#cfa400 80%);
+                         box-shadow:0 2px 4px rgba(0,0,0,.2)" dir="ltr" id="shTitle"></span>
+            <span class="badge b-blue" id="shTotal" style="font-size:12px"></span>
+            <span class="badge b-gray" id="shPack" style="font-size:11px"></span>
         </h4>
-        <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
+        <div class="tablewrap sh-tbl" style="max-height:55vh;overflow-y:auto">
             <table>
                 <thead>
                 <tr>
@@ -426,6 +432,12 @@
 <style>
 .loc-tbl th, .loc-tbl td { text-align: center; vertical-align: middle; }
 
+/* جدول البوب أب — نفس روح جدول المخزون */
+.sh-tbl th, .sh-tbl td { text-align: center; vertical-align: middle; }
+.sh-tbl td { padding: 9px 10px; }
+.sh-tbl tbody tr { border-bottom: 1px solid var(--border); }
+.sh-tbl tbody tr:hover { background: rgba(18,57,155,.04); }
+
 /* ═══ الاستاندات الفيجوال — تقليد الاستاند الحقيقي (٦/٩):
        عواميد زرقا + ألواح صفرا سميكة عليها الكود والكمية ═══ */
 .whfloor { display: grid; gap: 14px; align-items: end; padding: 12px 4px 4px;
@@ -491,6 +503,9 @@ var SH_EMPTY = @js(__('stock.shelf_pop_empty'));
 function shelfOpen(d) {
     document.getElementById('shTitle').textContent = d.code;
     document.getElementById('shTotal').textContent = Number(d.total).toLocaleString('en') + ' ' + SH_UNITS;
+    var pk = document.getElementById('shPack');
+    pk.textContent = d.pack || '';
+    pk.style.display = d.pack ? '' : 'none';
 
     var tb = document.getElementById('shRows');
     tb.textContent = '';
@@ -510,16 +525,36 @@ function shelfOpen(d) {
 
         var tdP = document.createElement('td');
         tdP.style.textAlign = 'start';
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:10px;align-items:center';
+
+        if (r.i) {
+            var im = document.createElement('img');
+            im.src = r.i;
+            im.style.cssText = 'width:58px;height:58px;object-fit:contain;border-radius:9px;'
+                + 'border:1px solid var(--border);background:#fff;flex-shrink:0';
+            wrap.appendChild(im);
+        } else {
+            var ph = document.createElement('div');
+            ph.style.cssText = 'width:58px;height:58px;border-radius:9px;border:1px dashed var(--border);'
+                + 'display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0';
+            ph.textContent = '📦';
+            wrap.appendChild(ph);
+        }
+
+        var nm = document.createElement('div');
         var bP = document.createElement('b');
         bP.style.fontSize = '12.5px';
         bP.textContent = r.p || '—';
-        tdP.appendChild(bP);
+        nm.appendChild(bP);
         if (r.c) {
             var dv = document.createElement('div');
             dv.style.cssText = 'font-size:10px;color:var(--muted)';
             dv.textContent = r.c;
-            tdP.appendChild(dv);
+            nm.appendChild(dv);
         }
+        wrap.appendChild(nm);
+        tdP.appendChild(wrap);
         tr.appendChild(tdP);
 
         ['b', 'e'].forEach(function (k) {
