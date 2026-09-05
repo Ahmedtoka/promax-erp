@@ -90,6 +90,63 @@
         <a class="btn" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">{{ __('common.clear') }}</a>
     </form>
 
+    {{-- ═══ خريطة الاستاندات 2D (٥/٩/٢٠٢٦ — طلب المالك): عمود لكل
+         استاند A–J زي ما انت واقف قدامه، الرف ٥ فوق والرف ١ تحت،
+         وجوه كل خانة عدد القطع. اللون بيغمق مع الكمية، والضغط على
+         أي رف بيفلتر تفاصيله تحت. ═══ --}}
+    @php
+        // الاستاندات اللي ليها حرف ومستويات بس (البلوكات القديمة برة الخريطة)
+        $mapStands = $stands->filter(fn ($g, $k) => is_string($k) && preg_match('/^[A-Z]$/', (string) $k))
+            ->sortKeys();
+        $mapMax = 1;
+        foreach ($mapStands as $g) {
+            foreach ($g as $l) {
+                $mapMax = max($mapMax, (int) $l->batchLocations->where('qty', '>', 0)->sum('qty'));
+            }
+        }
+    @endphp
+
+    @if ($mapStands->isNotEmpty())
+        <div style="overflow-x:auto;padding:4px 0 10px">
+            <div style="display:flex;gap:10px;min-width:max-content" dir="ltr">
+                @foreach ($mapStands as $standKey => $shelves)
+                    <div style="display:flex;flex-direction:column;gap:6px;width:108px">
+                        <div style="text-align:center;font-weight:900;font-size:17px;color:#fff;border-radius:10px;
+                                    padding:5px 0;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))">
+                            {{ $standKey }}</div>
+                        @foreach ($shelves->sortByDesc('level') as $sh)
+                            @php
+                                $sq = (int) $sh->batchLocations->where('qty', '>', 0)->sum('qty');
+                                $sk = $sh->batchLocations->where('qty', '>', 0)->pluck('product_id')->unique()->count();
+                                $alpha = $sq > 0 ? round(0.14 + 0.66 * $sq / $mapMax, 2) : 0;
+                                $dark = $alpha > 0.45;
+                                $st = $sq > 0 ? $sh->worstExpiryState() : null;
+                                $dot = ['warn' => '#B86E00', 'danger' => '#B00020', 'expired' => '#B00020'][$st] ?? null;
+                            @endphp
+                            <a href="{{ route('wh.locations', ['warehouse' => $warehouse->id, 'q' => $sh->code]) }}"
+                               title="{{ $sh->code }} — {{ $fmt($sq) }} {{ __('stock.units') }} • {{ $sk }} {{ __('stock.skus') }}"
+                               style="text-decoration:none;border-radius:10px;padding:7px 6px 6px;text-align:center;position:relative;
+                                      border:1.5px {{ $sq === 0 ? 'dashed var(--border)' : 'solid transparent' }};
+                                      background:{{ $sq === 0 ? 'var(--card)' : 'rgba(18,57,155,'.$alpha.')' }};
+                                      color:{{ $dark ? '#fff' : 'var(--ink)' }}">
+                                @if ($dot)
+                                    <span style="position:absolute;top:5px;inset-inline-end:6px;width:8px;height:8px;
+                                                 border-radius:50%;background:{{ $dot }}"></span>
+                                @endif
+                                <div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;
+                                            color:{{ $dark ? 'rgba(255,255,255,.85)' : 'var(--muted)' }}">{{ $sh->code }}</div>
+                                <div class="num" style="font-size:19px;font-weight:900;line-height:1.15">{{ $fmt($sq) }}</div>
+                                <div style="font-size:9px;color:{{ $dark ? 'rgba(255,255,255,.8)' : 'var(--muted)' }}">
+                                    {{ $sq > 0 ? $sk.' '.__('stock.skus') : __('stock.empty_shelf') }}</div>
+                            </a>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">{{ __('stock.map_hint') }}</div>
+    @endif
+
     {{-- ═══ الحائط (2026-08-06): كل البلوكات جنب بعض في صف واحد —
          زي ما انت واقف قدام حيطة المخزن. الترتيب من الأقرب انتهاءً
          (شهر ← 3 شهور ← 6 شهور ← سنة) وبعدين الأرفف الحرة. ═══ --}}

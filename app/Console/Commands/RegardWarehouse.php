@@ -246,13 +246,18 @@ class RegardWarehouse extends Command
 
         // ═══ التنفيذ — ترانزاكشن واحدة ═══
         DB::transaction(function () use ($wh, $plan) {
-            // ١. الأرفف الجديدة A01..J05
+            // ١. الأرفف الجديدة A01..J05 — ⚠️ firstOrNew مش firstOrCreate:
+            // لو الكود موجود من نظام البلوكات القديم (H01 كان بلوك «٦
+            // شهور») لازم نطهّره من نطاق العمر، وإلا LifeBands::guard
+            // هيرفض الترصيف على استاند H كله والترانزاكشن ترجع
             foreach (self::STANDS as $stand) {
                 for ($lvl = 1; $lvl <= self::LEVELS; $lvl++) {
-                    Location::firstOrCreate(
+                    Location::firstOrNew(
                         ['warehouse_id' => $wh->id, 'code' => $stand.'0'.$lvl],
-                        ['stand' => $stand, 'level' => $lvl, 'is_pick_face' => true, 'active' => true],
-                    );
+                    )->fill([
+                        'stand' => $stand, 'level' => $lvl,
+                        'is_pick_face' => true, 'active' => true, 'life_band' => null,
+                    ])->save();
                 }
             }
 

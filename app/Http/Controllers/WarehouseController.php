@@ -779,6 +779,10 @@ class WarehouseController extends Controller
             ->orderBy('stand')->orderBy('level')
             ->get();
 
+        // خريطة الاستاندات 2D (٥/٩) بتتبني من **كل** الأرفف — الفلاتر
+        // تحت بتقص الجدول بس، وإلا الضغط على رف كان بيخفي باقي الخريطة
+        $allStands = $locations->groupBy('stand');
+
         // فلتر بحالة الصلاحية
         if ($state = $request->string('state')->value()) {
             $locations = $locations->filter(
@@ -802,7 +806,7 @@ class WarehouseController extends Controller
             'warehouse' => $warehouse,
             'warehouses' => $this->visibleWarehouses($request),
             'locations' => $locations,
-            'stands' => $locations->groupBy('stand'),
+            'stands' => $allStands,
             'filters' => $request->only(['state', 'q']),
         ]);
     }

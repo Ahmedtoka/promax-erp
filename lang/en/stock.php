@@ -626,4 +626,5 @@ return [
     'pa_save' => 'Save put-away',
     'pa_auto' => 'Auto put-away (by expiry blocks)',
     'pa_all_done' => 'The whole receipt is shelved ✓',
+    'map_hint' => 'Each column is a stand as you face it - shelf 5 on top, shelf 1 at the bottom, the number is pieces. Darker means fuller; a red/orange dot flags near-expiry. Click any shelf to see its details below.',
 ];
