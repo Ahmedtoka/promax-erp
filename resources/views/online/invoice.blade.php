@@ -32,7 +32,7 @@
     .rcpt *{color:#000}
     .rcpt .c{text-align:center}
     .rcpt .dash{border-top:1.5px dashed #000;margin:9px 0}
-    .rcpt .logo{height:34px;width:auto;filter:grayscale(1) contrast(1.2)}
+    .rcpt .logo{height:34px;width:auto;filter:grayscale(1) contrast(1.2);display:block;margin:0 auto}
     .rcpt .inv-no{font-size:17px;font-weight:800;letter-spacing:.5px}
 
     /* سطور البيانات: ليبل ثابت وقيمة بتلف من غير ما تخرج */
@@ -44,20 +44,27 @@
 
     /* جدول الأصناف — شكل فاتورة: رأس بخط علوي وسفلي، أعمدة مظبوطة */
     .rcpt table{width:100%;border-collapse:collapse;table-layout:fixed}
+    {{-- ⚠️ background صريحة — ستايل الجداول العام في اللاي أوت بيلوّن
+         الهيدر أزرق، والريسيت أبيض وأسود (قرار المالك ٥/٩: #ededed) --}}
     .rcpt th{
         font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;
-        border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:4px 2px;
+        background:#ededed !important;color:#000 !important;
+        border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:4px 3px;
     }
     .rcpt td{
-        font-size:11.5px;padding:4px 2px;vertical-align:top;
-        border-bottom:1px solid #ddd;word-break:break-word;
+        font-size:11.5px;padding:4px 3px;vertical-align:top;
+        border-bottom:1px solid #ddd;word-break:break-word;white-space:normal;
     }
     .rcpt .col-item{width:56%;text-align:left}
     .rcpt .col-qty{width:12%;text-align:center}
     .rcpt .col-price{width:32%;text-align:right;white-space:nowrap}
 
     .rcpt .tot{display:flex;justify-content:space-between;font-size:12px;margin:2px 0}
-    .rcpt .tot.big{font-size:15px;font-weight:800;border-top:2px solid #000;padding-top:5px;margin-top:6px}
+    {{-- فاصل منقّط بين الشحن والإجمالي + الإجمالي بخط كبير (٥/٩) --}}
+    .rcpt .tot.big{
+        font-size:18px;font-weight:900;
+        border-top:2px dotted #000;padding-top:6px;margin-top:6px;
+    }
 
     .rcpt svg{max-width:100%;height:48px}
     .rcpt .qr{width:86px;height:86px;display:block;margin:6px auto 2px}
@@ -67,6 +74,8 @@
         @page{size:80mm auto;margin:0}
         body{background:#fff !important}
         .rcpt{width:72mm;border:0;border-radius:0;padding:3mm 2mm;margin:0 auto}
+        {{-- زراير الطباعة والرجوع ماينزلوش على الورقة (٥/٩) --}}
+        .no-print{display:none !important}
     }
 </style>
 
@@ -83,13 +92,14 @@
              alt="PROMAX" class="logo">
     </div>
 
-    {{-- ═══ ٢) الباركود ورقم الفاتورة تحته ═══ --}}
+    {{-- ═══ ٢) الباركود، وبعده INVOICE بين خطين منقطين (٥/٩) —
+         نص pro123 اتشال، المسدس بيقرا الباركود نفسه ═══ --}}
     <div class="c" style="margin-top:8px">
         {!! $barcode !!}
-        <div style="font-family:monospace;font-size:11px;letter-spacing:2px">{{ $order->barcode() }}</div>
-        <div class="inv-no">INVOICE #{{ $order->number }}</div>
     </div>
 
+    <div class="dash"></div>
+    <div class="c inv-no">INVOICE #{{ $order->number }}</div>
     <div class="dash"></div>
 
     {{-- ═══ ٣) البيانات ═══ --}}
@@ -103,10 +113,9 @@
     </div>
     <div class="kv"><b>{{ $t('rcpt_addr') }}:</b><span>{{ $order->address ?: '-' }}</span></div>
 
-    <div class="dash"></div>
-
-    {{-- ═══ ٤) جدول الأصناف — Product / Qty / Price ═══ --}}
-    <table>
+    {{-- ═══ ٤) جدول الأصناف — Product / Qty / Price (من غير فاصل
+         قبله — الفاصل اتنقل حوالين INVOICE فوق، قرار ٥/٩) ═══ --}}
+    <table style="margin-top:8px">
         <tr>
             <th class="col-item">{{ $t('rcpt_product') }}</th>
             <th class="col-qty">{{ $t('rcpt_qty') }}</th>
@@ -135,13 +144,13 @@
 
     <div class="dash"></div>
 
-    {{-- ═══ ٦) الفوتر: شكر + تليفوننا + عنواننا + QR الموقع ═══ --}}
+    {{-- ═══ ٦) الفوتر: شكر + التليفون كبير + العنوان أصغر + QR ═══ --}}
     <div class="c foot">
         <div style="font-weight:800;font-size:11.5px">{{ $t('rcpt_thank_en') }}</div>
         @if ($co['phone'])
-            <div>{{ $co['phone'] }}</div>
+            <div style="font-size:15px;font-weight:900;letter-spacing:.5px">{{ $co['phone'] }}</div>
         @endif
-        <div>{{ $t('rcpt_addr_en') }}</div>
+        <div style="font-size:9.5px">{{ $t('rcpt_addr_en') }}</div>
         <img src="{{ asset('brand/qr-promax-market.svg') }}" alt="promax.market" class="qr">
         <div style="font-weight:700">promax.market</div>
     </div>
