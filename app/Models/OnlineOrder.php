@@ -45,7 +45,7 @@ class OnlineOrder extends Model
         'items_count', 'subtotal', 'shipping', 'total', 'cost_total',
         'collected_total', 'returned_total', 'status', 'postponed_to', 'cancel_reason',
         'pick_order_id', 'pickup_id', 'confirmed_by',
-        'ordered_at', 'confirmed_at', 'ready_at', 'shipped_at', 'collected_at',
+        'ordered_at', 'confirmed_at', 'ready_at', 'reviewed_at', 'shipped_at', 'collected_at',
         'notes',
     ];
 
@@ -62,6 +62,7 @@ class OnlineOrder extends Model
             'ordered_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'ready_at' => 'datetime',
+            'reviewed_at' => 'datetime',
             'shipped_at' => 'datetime',
             'collected_at' => 'datetime',
         ];

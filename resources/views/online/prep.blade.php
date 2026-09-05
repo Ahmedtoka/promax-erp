@@ -64,15 +64,22 @@
                     <td class="s">{{ $o?->area ?: '—' }}</td>
                     <td class="num">{{ $pick->items->count() }}</td>
                     <td class="num"><b>{{ $pick->qtyRequested() }}</b></td>
-                    <td><span class="badge {{ $pick->statusClass() }}">{{ $pick->statusLabel() }}</span></td>
+                    <td>
+                        @if ($pick->status === 'ready')
+                            <span class="badge b-gold">{{ __('online.prep_wait_review') }}</span>
+                        @else
+                            <span class="badge {{ $pick->statusClass() }}">{{ $pick->statusLabel() }}</span>
+                        @endif
+                    </td>
                     <td class="num" onclick="event.stopPropagation()">
                         @if ($canPrep)
-                            @if ($pick->status === 'requested')
-                                <form method="POST" action="{{ route('online.prep.start', $pick) }}" style="display:inline">
-                                    @csrf
-                                    <button class="btn sm gold" type="submit">▶ {{ __('online.prep_start') }}</button>
-                                </form>
+                            @if ($pick->status === 'ready')
+                                {{-- اتجهز — مستني المراجعة (٥/٩) --}}
+                                <button class="btn sm gold" type="button"
+                                        onclick='openPrep({{ $pick->id }}, {!! $payload !!})'>
+                                    🔍 {{ __('online.prep_review') }}</button>
                             @else
+                                {{-- ضغطة واحدة — زرار البدء اتلغى (٥/٩) --}}
                                 <form method="POST" action="{{ route('online.prep.done', $pick) }}" style="display:inline"
                                       onsubmit="return confirm(PREP_DONE_MSG)">
                                     @csrf
@@ -106,14 +113,16 @@
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgPrep')">{{ __('common.cancel') }}</button>
             @if ($canPrep)
-                <form method="POST" id="ppStartForm" style="display:none">
-                    @csrf
-                    <button class="btn gold" type="submit">▶ {{ __('online.prep_start') }}</button>
-                </form>
                 <form method="POST" id="ppDoneForm" style="display:none"
                       onsubmit="return confirm(PREP_DONE_MSG)">
                     @csrf
                     <button class="btn green" type="submit">✅ {{ __('online.prep_finish') }}</button>
+                </form>
+                {{-- «تمام» بتاعة المراجعة — بتنزّله جاهزة للشحن وتفتح
+                     الفاتورة بطباعة أوتوماتيك ورجوع للتجهيز (٥/٩) --}}
+                <form method="POST" id="ppReviewForm" style="display:none">
+                    @csrf
+                    <button class="btn gold" type="submit">✅ {{ __('online.review_ok') }}</button>
                 </form>
             @endif
         </div>
@@ -183,15 +192,16 @@
                 + '</div>');
         });
 
-        /* زرار الأكشن المناسب لحالة الأمر */
-        var startF = document.getElementById('ppStartForm');
+        /* زرار الأكشن المناسب: مطلوب/بيتجهز → «تم التجهيز» —
+           جاهز → «تمام» بتاعة المراجعة */
         var doneF = document.getElementById('ppDoneForm');
+        var reviewF = document.getElementById('ppReviewForm');
 
-        if (startF && doneF) {
-            startF.style.display = p.status === 'requested' ? '' : 'none';
-            doneF.style.display = p.status === 'picking' ? '' : 'none';
-            startF.action = START_URL + '/' + pickId + '/start';
+        if (doneF && reviewF) {
+            doneF.style.display = p.status === 'ready' ? 'none' : '';
+            reviewF.style.display = p.status === 'ready' ? '' : 'none';
             doneF.action = START_URL + '/' + pickId + '/done';
+            reviewF.action = START_URL + '/' + pickId + '/review';
         }
 
         openDlg('dlgPrep');

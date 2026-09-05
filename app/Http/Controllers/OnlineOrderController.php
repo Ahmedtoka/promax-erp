@@ -284,18 +284,26 @@ class OnlineOrderController extends Controller
 
     public function prep()
     {
-        // ⚠️ المطلوب تجهيزه **بس** (قرار المالك ٤/٩) — اللي خلص بيختفي
-        // من هنا وبيبان في «جاهزة للشحن»
+        // ═══ بوابة المراجعة (٥/٩): المطلوب تجهيزه + اللي اتجهز ولسه
+        // ماتراجعش — الأوردر بيسيب الشاشة دي بعد «مراجعة → تمام»
+        // وساعتها بس بينزل «جاهزة للشحن» ═══
         $picks = PickOrder::with(['items.product', 'items.batch', 'items.location', 'warehouse'])
             ->where('purpose', PickOrder::PURPOSE_ONLINE)
-            ->whereIn('status', ['requested', 'picking'])
-            ->orderByRaw("CASE status WHEN 'picking' THEN 0 ELSE 1 END")
+            ->whereIn('status', ['requested', 'picking', 'ready'])
+            ->orderByRaw("CASE status WHEN 'ready' THEN 0 WHEN 'picking' THEN 1 ELSE 2 END")
             ->orderBy('id')
             ->get();
 
         // أوردرات الأونلاين بتوع الأوامر دي — بمفتاح pick_order_id
         $orders = OnlineOrder::whereIn('pick_order_id', $picks->pluck('id'))
             ->get()->keyBy('pick_order_id');
+
+        // الجاهز **المتراجع** خلص من هنا — شيله من القايمة
+        $picks = $picks->reject(function ($pick) use ($orders) {
+            $o = $orders[$pick->id] ?? null;
+
+            return $pick->status === 'ready' && $o !== null && $o->reviewed_at !== null;
+        })->values();
 
         return view('online.prep', ['picks' => $picks, 'orders' => $orders]);
     }
@@ -314,13 +322,24 @@ class OnlineOrderController extends Controller
     }
 
     /**
-     * «تم التجهيز» — هنا البضاعة بتخرج فعلاً (FEFO) والأوردر بيبقى
-     * جاهز للشحن، وبنصوّر تكلفة البضاعة من باتشات الخروج نفسها.
+     * «تم التجهيز» — **ضغطة واحدة** (٥/٩، زرار البدء اتلغى): بنبدأ
+     * التجهيز داخلياً وبنقفله، البضاعة بتخرج فعلاً (FEFO)، والأوردر
+     * بيفضل في شاشة التجهيز مستني «مراجعة». التكلفة من باتشات الخروج.
      */
     public function prepDone(Request $request, PickOrder $pick)
     {
         if ($pick->purpose !== PickOrder::PURPOSE_ONLINE) {
             abort(404);
+        }
+
+        // markReady بتشترط «ابدأ الأول» (عشان مدة التجهيز في فلو
+        // العهدة) — هنا الخطوتين بقوا ضغطة واحدة بقرار المالك
+        if ($pick->status === 'requested') {
+            if ($err = $pick->startPicking($request->user())) {
+                return back()->withErrors(['prep' => $err]);
+            }
+
+            $pick->refresh();
         }
 
         if ($err = $pick->markReady($request->user())) {
@@ -346,15 +365,37 @@ class OnlineOrderController extends Controller
                 'cost_total' => round($cost, 2),
             ]);
 
-            $warn = ShopifyOnline::pushStatus($order->fresh());
+            ShopifyOnline::pushStatus($order->fresh());
 
-            $redirect = redirect()->route('online.invoice', $order)
-                ->with('ok', __('online.prep_done', ['number' => $order->number]));
-
-            return $warn !== null ? $redirect->withErrors(['push' => $warn]) : $redirect;
+            // بيفضل في شاشة التجهيز بزرار «مراجعة» — مش بيروح الفاتورة
+            return back()->with('ok', __('online.prep_done2', ['number' => $order->number]));
         }
 
-        return back()->with('ok', __('online.prep_done', ['number' => $pick->number]));
+        return back()->with('ok', __('online.prep_done2', ['number' => $pick->number]));
+    }
+
+    /**
+     * «مراجعة → تمام» (٥/٩): المراجع شاف محتوى الأوردر ووافق —
+     * بنعلّم reviewed_at (وساعتها بينزل «جاهزة للشحن») وبنوديه
+     * الفاتورة بوضع الطباعة الأوتوماتيك اللي بيرجّعه للتجهيز لوحده.
+     */
+    public function prepReview(Request $request, PickOrder $pick)
+    {
+        if ($pick->purpose !== PickOrder::PURPOSE_ONLINE || $pick->status !== 'ready') {
+            abort(404);
+        }
+
+        $order = OnlineOrder::where('pick_order_id', $pick->id)->first();
+
+        if ($order === null || $order->status !== 'ready') {
+            return back()->withErrors(['prep' => __('online.wrong_status')]);
+        }
+
+        if ($order->reviewed_at === null) {
+            $order->update(['reviewed_at' => now()]);
+        }
+
+        return redirect()->route('online.invoice', [$order, 'autoback' => 1]);
     }
 
     /** فاتورة الطباعة — بيانات العميل + البنود + باركود pro{number} */
@@ -374,7 +415,10 @@ class OnlineOrderController extends Controller
     public function readyList()
     {
         return view('online.ready', [
-            'orders' => OnlineOrder::status('ready')->orderBy('ready_at')->get(),
+            // المتراجع بس (٥/٩) — الجاهز الغير متراجع لسه في شاشة التجهيز
+            'orders' => OnlineOrder::status('ready')
+                ->whereNotNull('reviewed_at')
+                ->orderBy('ready_at')->get(),
             'couriers' => OnlineCourier::where('active', true)->orderBy('name')->get(),
         ]);
     }

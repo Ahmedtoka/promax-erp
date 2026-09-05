@@ -1150,6 +1150,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager,warehouse_keeper')->name('prep.start');
         Route::post('/prep/{pick}/done', [$c, 'prepDone'])
             ->middleware('role:admin,manager,warehouse_keeper')->name('prep.done');
+        // «مراجعة → تمام» — بتنزّل الأوردر جاهزة للشحن وتفتح الفاتورة
+        Route::post('/prep/{pick}/review', [$c, 'prepReview'])
+            ->middleware('role:admin,manager,warehouse_keeper')->name('prep.review');
         Route::get('/orders/{order}/invoice', [$c, 'invoice'])->name('invoice');
 
         // ٤. جاهزة للشحن → بيك اب

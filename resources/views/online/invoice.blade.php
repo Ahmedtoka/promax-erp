@@ -157,3 +157,32 @@
 </div>
 
 @endsection
+
+@section('scripts')
+@if (request()->boolean('autoback'))
+<script>
+    /* ═══ وضع المراجعة (٥/٩): الفاتورة بتطبع لوحدها، وبعد الطباعة
+       بثانيتين بترجع لشاشة التجهيز — وفولباك ١٥ ثانية لو حوار
+       الطباعة اتقفل من غير ما يبلّغ ═══ */
+    (function () {
+        'use strict';
+
+        var BACK = @js(route('online.prep'));
+        var went = false;
+
+        function goBack() {
+            if (went) return;
+            went = true;
+            location.href = BACK;
+        }
+
+        window.addEventListener('afterprint', function () {
+            setTimeout(goBack, 2000);
+        });
+
+        setTimeout(function () { window.print(); }, 500);
+        setTimeout(goBack, 15000);
+    })();
+</script>
+@endif
+@endsection
