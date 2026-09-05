@@ -130,7 +130,8 @@
                                     $sq = (int) $bls->sum('qty');
                                     $st = $sq > 0 ? $sh->worstExpiryState() : null;
                                     $dot = ['warn' => '#B86E00', 'danger' => '#B00020', 'expired' => '#B00020'][$st ?? ''] ?? null;
-                                    $boxes = $sq > 0 ? max(1, (int) ceil($sq / $mapMax * 8)) : 0;
+                                    // لحد ١٥ كرتونة 3D على الرف — بحجم الكمية النسبي
+                                    $boxes = $sq > 0 ? max(1, (int) ceil($sq / $mapMax * 15)) : 0;
                                     $cls = $searching ? (isset($hits[$sh->code]) ? ' hit' : ' dim') : '';
                                     $payload = json_encode([
                                         'code' => $sh->code,
@@ -409,43 +410,61 @@
 <style>
 .loc-tbl th, .loc-tbl td { text-align: center; vertical-align: middle; }
 
-/* ═══ الاستاندات الفيجوال ═══ */
-.whfloor { display: flex; gap: 18px; min-width: max-content; align-items: flex-end;
-           padding: 10px 6px 2px;
-           background: linear-gradient(to top, rgba(18,57,155,.05), transparent 55%); }
-.rack { width: 128px; display: flex; flex-direction: column; }
+/* ═══ الاستاندات الفيجوال — تقليد الاستاند الحقيقي (٦/٩):
+       عواميد زرقا مخرّمة + ألواح صفرا 3D + كراتين أيزومترك ═══ */
+.whfloor { display: flex; gap: 22px; min-width: max-content; align-items: flex-end;
+           padding: 12px 8px 4px;
+           background: linear-gradient(to top, rgba(120,120,130,.14), transparent 60%); }
+.rack { width: 168px; display: flex; flex-direction: column; }
 .rack-sign { text-align: center; font-weight: 900; font-size: 18px; color: #fff;
              border-radius: 10px 10px 0 0; padding: 6px 0; letter-spacing: 1px;
              background: linear-gradient(135deg, var(--royal-blue), var(--purple-heart));
              box-shadow: 0 2px 6px rgba(18,57,155,.35); }
-.rack-frame { position: relative; padding: 8px 10px 2px; background: var(--card);
-              border-inline: 7px solid #24346e; border-bottom: 4px solid #24346e;
-              background-image: repeating-linear-gradient(to bottom, transparent 0 26px, rgba(36,52,110,.06) 26px 28px); }
-.rack-feet { display: flex; justify-content: space-between; padding: 0 2px; }
-.rack-feet i { width: 16px; height: 10px; background: #24346e; border-radius: 0 0 4px 4px; }
+/* العواميد الزرقا المخرّمة — نفس قوايم الصورة */
+.rack-frame { position: relative; padding: 10px 18px 2px; background: transparent; }
+.rack-frame::before, .rack-frame::after { content: ''; position: absolute; top: 0; bottom: -2px;
+    width: 12px; border-radius: 2px; z-index: 2;
+    background-image:
+        radial-gradient(circle 1.5px at 50% 6px, rgba(255,255,255,.75) 1.4px, transparent 1.9px),
+        linear-gradient(90deg, #2a55cf 0 3px, #1d3fa8 3px 9px, #142c78 9px 100%);
+    background-size: 12px 13px, 100% 100%;
+    box-shadow: 2px 2px 4px rgba(0,0,0,.25); }
+.rack-frame::before { left: 0; }
+.rack-frame::after { right: 0; }
+.rack-feet { display: flex; justify-content: space-between; padding: 0 1px; }
+.rack-feet i { width: 18px; height: 11px; background: linear-gradient(90deg, #1d3fa8, #142c78);
+               border-radius: 0 0 4px 4px; box-shadow: 0 3px 3px rgba(0,0,0,.25); }
 
-.shelf { position: relative; cursor: pointer; padding: 4px 3px 0; margin-bottom: 7px;
+.shelf { position: relative; cursor: pointer; padding: 3px 2px 0; margin-bottom: 9px;
          border-radius: 6px 6px 0 0; transition: transform .12s, box-shadow .12s; }
-.shelf:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(18,57,155,.18);
-               background: rgba(18,57,155,.05); }
-.shelf.hit { outline: 3px solid var(--yellow, #FFF927); outline-offset: 1px;
-             background: rgba(255,249,39,.12); }
+.shelf:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(18,57,155,.22);
+               background: rgba(255,212,0,.07); }
+.shelf.hit { outline: 3px solid #FFD400; outline-offset: 1px; background: rgba(255,212,0,.14); }
 .shelf.dim { opacity: .3; }
 .sh-meta { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
 .sh-code { font-size: 10px; font-weight: 800; color: var(--muted); letter-spacing: .4px; }
 .sh-qty { font-size: 15px; font-weight: 900; color: var(--royal-blue); }
-.sh-dot { position: absolute; top: 4px; left: 4px; width: 8px; height: 8px; border-radius: 50%; }
-.sh-boxes { display: flex; flex-wrap: wrap-reverse; gap: 2px; align-items: flex-end;
-            align-content: flex-end; min-height: 30px; padding: 2px 2px 0; }
+.sh-dot { position: absolute; top: 4px; left: 4px; width: 8px; height: 8px; border-radius: 50%; z-index: 3; }
+/* الكراتين واقفة على اللوح — صفين بحد أقصى، والتفاف من تحت لفوق */
+.sh-boxes { display: flex; flex-wrap: wrap-reverse; column-gap: 6px; row-gap: 4px;
+            align-items: flex-end; align-content: flex-end; min-height: 46px; padding: 4px 4px 0; }
 .sh-empty { font-size: 9px; color: var(--muted); opacity: .7; width: 100%; text-align: center;
-            padding-bottom: 6px; }
-/* كرتونة صغيرة — جسم كرتون + شريط لاصق */
-.cbx { width: 17px; height: 14px; border-radius: 2.5px; display: inline-block;
-       background: linear-gradient(to bottom, #e0aa63 0 4px, #c98f47 4px 100%);
-       border: 1px solid #a9743a; box-shadow: inset 0 -2px 0 rgba(0,0,0,.08); }
-/* اللوح اللي الكراتين واقفة عليه */
-.sh-board { height: 7px; margin: 0 -10px; background: linear-gradient(to bottom, #3a4d94, #24346e);
-            border-radius: 2px; box-shadow: 0 2px 3px rgba(0,0,0,.18); }
+            padding-bottom: 8px; }
+/* ═══ كرتونة 3D أيزومترك: وش + سطح مايل + جنب غامق + شريط لاصق ═══ */
+.cbx { position: relative; width: 15px; height: 11px; margin-top: 7px; margin-right: 5px;
+       background: linear-gradient(180deg, #d9a05b, #bd8140);
+       border: 1px solid #8f612c; border-top: none; border-radius: 0 0 1px 1px; }
+.cbx::before { content: ''; position: absolute; top: -6px; left: 2px; width: 100%; height: 6px;
+       background: linear-gradient(90deg, #efc17f 40%, #d8a75f 40% 60%, #efc17f 60%);
+       border: 1px solid #8f612c; border-bottom: none;
+       transform: skewX(-40deg); transform-origin: bottom left; }
+.cbx::after { content: ''; position: absolute; top: -3.5px; right: -6px; width: 5px; height: 11px;
+       background: #9d7136; border: 1px solid #8f612c; border-left: none;
+       transform: skewY(-51deg); transform-origin: left top; }
+/* اللوح الأصفر 3D — سطح فاتح + وش أصفر + ضل تحت */
+.sh-board { height: 13px; margin: 0 -16px; position: relative; z-index: 1; border-radius: 2px;
+            background: linear-gradient(to bottom, #ffe968 0 3px, #ffd400 3px 9px, #cfa400 9px 11px, #8a6d00 11px 100%);
+            box-shadow: 0 3px 5px rgba(0,0,0,.28); }
 </style>
 <script>
 var SH_MOVE = @js($manager ?? false);
