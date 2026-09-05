@@ -118,8 +118,10 @@
     @if ($mapStands->isEmpty())
         <div class="alert warn"><span>🗄️</span><span>{{ __('stock.no_locations') }}</span></div>
     @else
-        <div style="overflow-x:auto;padding:8px 0 4px">
-            <div class="whfloor" dir="ltr">
+        <div style="padding:8px 0 4px">
+            {{-- الـ١٠ استاندات في عرض الصفحة — جريد بيتقسم بالتساوي --}}
+            <div class="whfloor" dir="ltr"
+                 style="grid-template-columns:repeat({{ max($mapStands->count(), 1) }}, minmax(0, 1fr))">
                 @foreach ($mapStands as $standKey => $shelves)
                     <div class="rack">
                         <div class="rack-sign">{{ $standKey }}</div>
@@ -130,8 +132,20 @@
                                     $sq = (int) $bls->sum('qty');
                                     $st = $sq > 0 ? $sh->worstExpiryState() : null;
                                     $dot = ['warn' => '#B86E00', 'danger' => '#B00020', 'expired' => '#B00020'][$st ?? ''] ?? null;
-                                    // لحد ١٥ كرتونة 3D على الرف — بحجم الكمية النسبي
-                                    $boxes = $sq > 0 ? max(1, (int) ceil($sq / $mapMax * 15)) : 0;
+                                    // صف كراتين واحد — لحد ١٠ بحجم الكمية النسبي
+                                    $boxes = $sq > 0 ? max(1, (int) ceil($sq / $mapMax * 10)) : 0;
+                                    // تلميح ⓘ: الكمية متفكّكة كرتونة/علبة/قطعة بمضاعفات كل صنف
+                                    $tc = $tb = $tp = 0;
+                                    foreach ($bls as $bl2) {
+                                        $p2 = $bl2->product ?? $bl2->batch?->product;
+                                        $q2 = (int) $bl2->qty;
+                                        $upc = (int) ($p2?->units_per_case ?? 0);
+                                        $bu = (int) ($p2?->box_units ?? 0);
+                                        if ($upc > 0) { $tc += intdiv($q2, $upc); $q2 %= $upc; }
+                                        if ($bu > 0) { $tb += intdiv($q2, $bu); $q2 %= $bu; }
+                                        $tp += $q2;
+                                    }
+                                    $packTip = __('stock.map_pack', ['c' => $tc, 'b' => $tb, 'p' => $tp]);
                                     $cls = $searching ? (isset($hits[$sh->code]) ? ' hit' : ' dim') : '';
                                     $payload = json_encode([
                                         'code' => $sh->code,
@@ -146,15 +160,13 @@
                                         ])->values(),
                                     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                                 @endphp
-                                <div class="shelf{{ $cls }}" onclick='shelfOpen({!! $payload !!})'
-                                     title="{{ $sh->code }} — {{ $fmt($sq) }} {{ __('stock.units') }}">
+                                <div class="shelf{{ $cls }}" onclick='shelfOpen({!! $payload !!})'>
                                     @if ($dot)
                                         <span class="sh-dot" style="background:{{ $dot }}"></span>
                                     @endif
-                                    <div class="sh-meta">
-                                        <span class="sh-code">{{ $sh->code }}</span>
-                                        <span class="sh-qty num">{{ $sq > 0 ? $fmt($sq) : '' }}</span>
-                                    </div>
+                                    @if ($sq > 0)
+                                        <span class="sh-info" title="{{ $packTip }}">i</span>
+                                    @endif
                                     <div class="sh-boxes">
                                         @if ($boxes === 0)
                                             <span class="sh-empty">{{ __('stock.empty_shelf') }}</span>
@@ -164,7 +176,11 @@
                                             @endfor
                                         @endif
                                     </div>
-                                    <div class="sh-board"></div>
+                                    {{-- اللوح الأصفر: كود الرف شمال بالأسود والقطع يمين --}}
+                                    <div class="sh-board">
+                                        <span class="sh-bcode">{{ $sh->stand.$sh->level }}</span>
+                                        <span class="sh-bqty num">{{ $sq > 0 ? $fmt($sq) : '' }}</span>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -411,60 +427,59 @@
 .loc-tbl th, .loc-tbl td { text-align: center; vertical-align: middle; }
 
 /* ═══ الاستاندات الفيجوال — تقليد الاستاند الحقيقي (٦/٩):
-       عواميد زرقا مخرّمة + ألواح صفرا 3D + كراتين أيزومترك ═══ */
-.whfloor { display: flex; gap: 22px; min-width: max-content; align-items: flex-end;
-           padding: 12px 8px 4px;
+       عواميد زرقا + ألواح صفرا سميكة عليها الكود والكمية ═══ */
+.whfloor { display: grid; gap: 14px; align-items: end; padding: 12px 4px 4px;
            background: linear-gradient(to top, rgba(120,120,130,.14), transparent 60%); }
-.rack { width: 168px; display: flex; flex-direction: column; }
+.rack { min-width: 0; display: flex; flex-direction: column; }
 .rack-sign { text-align: center; font-weight: 900; font-size: 18px; color: #fff;
              border-radius: 10px 10px 0 0; padding: 6px 0; letter-spacing: 1px;
              background: linear-gradient(135deg, var(--royal-blue), var(--purple-heart));
              box-shadow: 0 2px 6px rgba(18,57,155,.35); }
-/* العواميد الزرقا المخرّمة — نفس قوايم الصورة */
-.rack-frame { position: relative; padding: 10px 18px 2px; background: transparent; }
+/* العواميد الزرقا — نقط تعليق متباعدة وهادية */
+.rack-frame { position: relative; padding: 10px 16px 2px; background: transparent; }
 .rack-frame::before, .rack-frame::after { content: ''; position: absolute; top: 0; bottom: -2px;
-    width: 12px; border-radius: 2px; z-index: 2;
+    width: 11px; border-radius: 2px; z-index: 2;
     background-image:
-        radial-gradient(circle 1.5px at 50% 6px, rgba(255,255,255,.75) 1.4px, transparent 1.9px),
-        linear-gradient(90deg, #2a55cf 0 3px, #1d3fa8 3px 9px, #142c78 9px 100%);
-    background-size: 12px 13px, 100% 100%;
+        radial-gradient(circle 1.4px at 50% 10px, rgba(255,255,255,.6) 1.3px, transparent 1.8px),
+        linear-gradient(90deg, #2a55cf 0 3px, #1d3fa8 3px 8px, #142c78 8px 100%);
+    background-size: 11px 34px, 100% 100%;
     box-shadow: 2px 2px 4px rgba(0,0,0,.25); }
 .rack-frame::before { left: 0; }
 .rack-frame::after { right: 0; }
 .rack-feet { display: flex; justify-content: space-between; padding: 0 1px; }
-.rack-feet i { width: 18px; height: 11px; background: linear-gradient(90deg, #1d3fa8, #142c78);
+.rack-feet i { width: 17px; height: 11px; background: linear-gradient(90deg, #1d3fa8, #142c78);
                border-radius: 0 0 4px 4px; box-shadow: 0 3px 3px rgba(0,0,0,.25); }
 
-.shelf { position: relative; cursor: pointer; padding: 3px 2px 0; margin-bottom: 9px;
+.shelf { position: relative; cursor: pointer; padding: 3px 2px 0; margin-bottom: 10px;
          border-radius: 6px 6px 0 0; transition: transform .12s, box-shadow .12s; }
 .shelf:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(18,57,155,.22);
                background: rgba(255,212,0,.07); }
 .shelf.hit { outline: 3px solid #FFD400; outline-offset: 1px; background: rgba(255,212,0,.14); }
 .shelf.dim { opacity: .3; }
-.sh-meta { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
-.sh-code { font-size: 10px; font-weight: 800; color: var(--muted); letter-spacing: .4px; }
-.sh-qty { font-size: 15px; font-weight: 900; color: var(--royal-blue); }
 .sh-dot { position: absolute; top: 4px; left: 4px; width: 8px; height: 8px; border-radius: 50%; z-index: 3; }
-/* الكراتين واقفة على اللوح — صفين بحد أقصى، والتفاف من تحت لفوق */
-.sh-boxes { display: flex; flex-wrap: wrap-reverse; column-gap: 6px; row-gap: 4px;
-            align-items: flex-end; align-content: flex-end; min-height: 46px; padding: 4px 4px 0; }
+/* أيقونة ⓘ — هوفر بيقول الرف فيه كام كرتونة وعلبة وقطعة */
+.sh-info { position: absolute; top: 3px; right: 4px; z-index: 3; width: 14px; height: 14px;
+           border-radius: 50%; background: var(--royal-blue); color: #fff; font-size: 9.5px;
+           font-weight: 900; font-style: normal; display: flex; align-items: center;
+           justify-content: center; cursor: help; opacity: .85; }
+/* صف كراتين واحد — نفس الارتفاع في كل الأرفف */
+.sh-boxes { display: flex; gap: 3px; align-items: flex-end; height: 26px;
+            overflow: hidden; padding: 2px 3px 0; }
 .sh-empty { font-size: 9px; color: var(--muted); opacity: .7; width: 100%; text-align: center;
-            padding-bottom: 8px; }
-/* ═══ كرتونة 3D أيزومترك: وش + سطح مايل + جنب غامق + شريط لاصق ═══ */
-.cbx { position: relative; width: 15px; height: 11px; margin-top: 7px; margin-right: 5px;
-       background: linear-gradient(180deg, #d9a05b, #bd8140);
-       border: 1px solid #8f612c; border-top: none; border-radius: 0 0 1px 1px; }
-.cbx::before { content: ''; position: absolute; top: -6px; left: 2px; width: 100%; height: 6px;
-       background: linear-gradient(90deg, #efc17f 40%, #d8a75f 40% 60%, #efc17f 60%);
-       border: 1px solid #8f612c; border-bottom: none;
-       transform: skewX(-40deg); transform-origin: bottom left; }
-.cbx::after { content: ''; position: absolute; top: -3.5px; right: -6px; width: 5px; height: 11px;
-       background: #9d7136; border: 1px solid #8f612c; border-left: none;
-       transform: skewY(-51deg); transform-origin: left top; }
-/* اللوح الأصفر 3D — سطح فاتح + وش أصفر + ضل تحت */
-.sh-board { height: 13px; margin: 0 -16px; position: relative; z-index: 1; border-radius: 2px;
-            background: linear-gradient(to bottom, #ffe968 0 3px, #ffd400 3px 9px, #cfa400 9px 11px, #8a6d00 11px 100%);
+            align-self: center; }
+/* الكرتونة — جسم كرتون بسطح أفتح وشريط لاصق (النسخة الأولى) */
+.cbx { flex: 0 1 17px; min-width: 9px; height: 15px; border-radius: 2.5px;
+       background:
+           linear-gradient(90deg, transparent 0 38%, rgba(140,95,45,.55) 38% 62%, transparent 62%),
+           linear-gradient(to bottom, #e6b273 0 5px, #cf9146 5px 100%);
+       border: 1px solid #a9743a; box-shadow: inset 0 -2px 0 rgba(0,0,0,.1); }
+/* اللوح الأصفر السميك — الكود بالأسود شمال والكمية يمين */
+.sh-board { height: 21px; margin: 0 -14px; position: relative; z-index: 1; border-radius: 3px;
+            display: flex; align-items: center; justify-content: space-between; padding: 0 18px;
+            background: linear-gradient(to bottom, #ffe968 0 4px, #ffd400 4px 15px, #cfa400 15px 18px, #8a6d00 18px 100%);
             box-shadow: 0 3px 5px rgba(0,0,0,.28); }
+.sh-bcode { font-size: 11.5px; font-weight: 900; color: #111; letter-spacing: .5px; line-height: 1; }
+.sh-bqty { font-size: 12.5px; font-weight: 900; color: #111; line-height: 1; }
 </style>
 <script>
 var SH_MOVE = @js($manager ?? false);
