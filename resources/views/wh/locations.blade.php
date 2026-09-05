@@ -2,20 +2,22 @@
 
 @section('title', __('stock.locations'))
 
+{{--
+    شاشة الأرفف (اتبنت من جديد ٦/٩/٢٠٢٦ — نظام الاستاندات A–J):
+
+    ١. خريطة 2D فيجوال: كل استاند شكله استاند حقيقي — يافطة بحرفه،
+       قوايم جانبية، ولوح لكل رف عليه كراتين مرسومة بحجم الكمية.
+    ٢. الضغط على أي رف بيفتح بوب أب بالبضاعة اللي عليه: صنف/باتش/
+       صلاحية/كمية + زرار نقل لكل سطر.
+    ٣. كروت «الحائط» وملخص البلوكات القديمة اتشالت (طلب المالك) —
+       التفاصيل كلها في البوب أب وجدول المخزون تحت.
+--}}
+
 @php
     $fmt = fn ($n) => number_format((float) $n);
-    // ⚠️ **أمين المخزن لازم يشوف الأزرار دي — دي شغله.** كانت
-    // `isManager()` وهو مش منهم، فالراوتس اتديتله والأزرار اتخبّت
-    // عنه: مخزن للقراية بس.
+    // ⚠️ **أمين المخزن لازم يشوف الأزرار دي — دي شغله.**
     $manager = auth()->user()->canWorkWarehouse();
 
-    // ألوان حالة الصلاحية على حافة كارت الرف
-    $stateColor = [
-        'ok' => 'var(--green)',
-        'warn' => 'var(--orange)',
-        'danger' => 'var(--red)',
-        'expired' => 'var(--red)',
-    ];
     $stateLabel = [
         'ok' => __('stock.expiry_ok'),
         'warn' => __('stock.expiry_warn'),
@@ -41,6 +43,13 @@
 @endsection
 
 @section('content')
+
+@if (session('ok'))
+    <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
+@endif
+@if ($errors->any())
+    <div class="alert" style="margin-bottom:12px"><span>⚠️</span><span>{{ $errors->first() }}</span></div>
+@endif
 
 @if ($warehouses->count() > 1)
     <div class="searchbar">
@@ -75,8 +84,9 @@
 </div>
 
 <div class="card">
-    <h3>🗄️ {{ __('stock.shelf_map') }} <span class="side">{{ __('stock.pick_face_hint') }}</span></h3>
+    <h3>🗄️ {{ __('stock.shelf_map') }} <span class="side">{{ __('stock.map_hint') }}</span></h3>
 
+    {{-- البحث بيضوّي على الأرفف المطابقة في الخريطة (سيرفر سايد) --}}
     <form class="searchbar" method="GET">
         <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
         <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('stock.search_shelf') }}">
@@ -90,12 +100,8 @@
         <a class="btn" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">{{ __('common.clear') }}</a>
     </form>
 
-    {{-- ═══ خريطة الاستاندات 2D (٥/٩/٢٠٢٦ — طلب المالك): عمود لكل
-         استاند A–J زي ما انت واقف قدامه، الرف ٥ فوق والرف ١ تحت،
-         وجوه كل خانة عدد القطع. اللون بيغمق مع الكمية، والضغط على
-         أي رف بيفلتر تفاصيله تحت. ═══ --}}
     @php
-        // الاستاندات اللي ليها حرف ومستويات بس (البلوكات القديمة برة الخريطة)
+        // الاستاندات بحرف واحد بس (A..J) — أي رف قديم تاني برة الخريطة
         $mapStands = $stands->filter(fn ($g, $k) => is_string($k) && preg_match('/^[A-Z]$/', (string) $k))
             ->sortKeys();
         $mapMax = 1;
@@ -104,234 +110,83 @@
                 $mapMax = max($mapMax, (int) $l->batchLocations->where('qty', '>', 0)->sum('qty'));
             }
         }
+        // البحث نشط؟ الأرفف المطابقة (من الكوليكشن المفلترة) بتضوّي دهبي
+        $searching = ($filters['q'] ?? '') !== '' || ($filters['state'] ?? '') !== '';
+        $hits = $searching ? $locations->pluck('code')->flip() : collect();
     @endphp
 
-    @if ($mapStands->isNotEmpty())
-        <div style="overflow-x:auto;padding:4px 0 10px">
-            <div style="display:flex;gap:10px;min-width:max-content" dir="ltr">
+    @if ($mapStands->isEmpty())
+        <div class="alert warn"><span>🗄️</span><span>{{ __('stock.no_locations') }}</span></div>
+    @else
+        <div style="overflow-x:auto;padding:8px 0 4px">
+            <div class="whfloor" dir="ltr">
                 @foreach ($mapStands as $standKey => $shelves)
-                    <div style="display:flex;flex-direction:column;gap:6px;width:108px">
-                        <div style="text-align:center;font-weight:900;font-size:17px;color:#fff;border-radius:10px;
-                                    padding:5px 0;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))">
-                            {{ $standKey }}</div>
-                        @foreach ($shelves->sortByDesc('level') as $sh)
-                            @php
-                                $sq = (int) $sh->batchLocations->where('qty', '>', 0)->sum('qty');
-                                $sk = $sh->batchLocations->where('qty', '>', 0)->pluck('product_id')->unique()->count();
-                                $alpha = $sq > 0 ? round(0.14 + 0.66 * $sq / $mapMax, 2) : 0;
-                                $dark = $alpha > 0.45;
-                                $st = $sq > 0 ? $sh->worstExpiryState() : null;
-                                $dot = ['warn' => '#B86E00', 'danger' => '#B00020', 'expired' => '#B00020'][$st] ?? null;
-                            @endphp
-                            <a href="{{ route('wh.locations', ['warehouse' => $warehouse->id, 'q' => $sh->code]) }}"
-                               title="{{ $sh->code }} — {{ $fmt($sq) }} {{ __('stock.units') }} • {{ $sk }} {{ __('stock.skus') }}"
-                               style="text-decoration:none;border-radius:10px;padding:7px 6px 6px;text-align:center;position:relative;
-                                      border:1.5px {{ $sq === 0 ? 'dashed var(--border)' : 'solid transparent' }};
-                                      background:{{ $sq === 0 ? 'var(--card)' : 'rgba(18,57,155,'.$alpha.')' }};
-                                      color:{{ $dark ? '#fff' : 'var(--ink)' }}">
-                                @if ($dot)
-                                    <span style="position:absolute;top:5px;inset-inline-end:6px;width:8px;height:8px;
-                                                 border-radius:50%;background:{{ $dot }}"></span>
-                                @endif
-                                <div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;
-                                            color:{{ $dark ? 'rgba(255,255,255,.85)' : 'var(--muted)' }}">{{ $sh->code }}</div>
-                                <div class="num" style="font-size:19px;font-weight:900;line-height:1.15">{{ $fmt($sq) }}</div>
-                                <div style="font-size:9px;color:{{ $dark ? 'rgba(255,255,255,.8)' : 'var(--muted)' }}">
-                                    {{ $sq > 0 ? $sk.' '.__('stock.skus') : __('stock.empty_shelf') }}</div>
-                            </a>
-                        @endforeach
+                    <div class="rack">
+                        <div class="rack-sign">{{ $standKey }}</div>
+                        <div class="rack-frame">
+                            @foreach ($shelves->sortByDesc('level') as $sh)
+                                @php
+                                    $bls = $sh->batchLocations->where('qty', '>', 0);
+                                    $sq = (int) $bls->sum('qty');
+                                    $st = $sq > 0 ? $sh->worstExpiryState() : null;
+                                    $dot = ['warn' => '#B86E00', 'danger' => '#B00020', 'expired' => '#B00020'][$st ?? ''] ?? null;
+                                    $boxes = $sq > 0 ? max(1, (int) ceil($sq / $mapMax * 8)) : 0;
+                                    $cls = $searching ? (isset($hits[$sh->code]) ? ' hit' : ' dim') : '';
+                                    $payload = json_encode([
+                                        'code' => $sh->code,
+                                        'total' => $sq,
+                                        'rows' => $bls->map(fn ($bl) => [
+                                            'p' => (($bl->product ?? $bl->batch?->product)?->displayName()) ?? '—',
+                                            'c' => ($bl->product ?? $bl->batch?->product)?->code,
+                                            'b' => $bl->batch?->batch_no,
+                                            'e' => $bl->batch?->expires_on?->format('Y-m-d'),
+                                            'q' => (int) $bl->qty,
+                                            'id' => $bl->id,
+                                        ])->values(),
+                                    ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+                                @endphp
+                                <div class="shelf{{ $cls }}" onclick='shelfOpen({!! $payload !!})'
+                                     title="{{ $sh->code }} — {{ $fmt($sq) }} {{ __('stock.units') }}">
+                                    @if ($dot)
+                                        <span class="sh-dot" style="background:{{ $dot }}"></span>
+                                    @endif
+                                    <div class="sh-meta">
+                                        <span class="sh-code">{{ $sh->code }}</span>
+                                        <span class="sh-qty num">{{ $sq > 0 ? $fmt($sq) : '' }}</span>
+                                    </div>
+                                    <div class="sh-boxes">
+                                        @if ($boxes === 0)
+                                            <span class="sh-empty">{{ __('stock.empty_shelf') }}</span>
+                                        @else
+                                            @for ($i = 0; $i < $boxes; $i++)
+                                                <i class="cbx"></i>
+                                            @endfor
+                                        @endif
+                                    </div>
+                                    <div class="sh-board"></div>
+                                </div>
+                            @endforeach
+                        </div>
+                        <div class="rack-feet"><i></i><i></i></div>
                     </div>
                 @endforeach
             </div>
         </div>
-        <div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">{{ __('stock.map_hint') }}</div>
-    @endif
-
-    {{-- ═══ الحائط (2026-08-06): كل البلوكات جنب بعض في صف واحد —
-         زي ما انت واقف قدام حيطة المخزن. الترتيب من الأقرب انتهاءً
-         (شهر ← 3 شهور ← 6 شهور ← سنة) وبعدين الأرفف الحرة. ═══ --}}
-    @php
-        $bandOrder = ['month' => 0, 'quarter' => 1, 'half' => 2, 'year' => 3];
-        $wall = $locations->sortBy([
-            fn ($a, $b) => ($bandOrder[$a->life_band] ?? 9) <=> ($bandOrder[$b->life_band] ?? 9),
-            fn ($a, $b) => strcmp($a->code, $b->code),
-        ])->values();
-
-        // لون حافة كل نطاق — نفس ألوان الشارات
-        $bandEdge = [
-            'month' => 'var(--red, #B00020)',
-            'quarter' => 'var(--orange, #B86E00)',
-            'half' => 'var(--royal-blue, #12399B)',
-            'year' => 'var(--green, #1B7A3D)',
-        ];
-
-        // نطاق التواريخ اللي كل بلوك بيستقبله **النهارده** — من حدود LifeBands
-        $bandWindow = function (?string $band) {
-            $d = fn ($days) => now()->addDays($days)->format('Y-m-d');
-            return match ($band) {
-                'month' => __('stock.accepts_until', ['date' => $d(30)]),
-                'quarter' => __('stock.accepts_between', ['from' => $d(31), 'to' => $d(90)]),
-                'half' => __('stock.accepts_between', ['from' => $d(91), 'to' => $d(180)]),
-                'year' => __('stock.accepts_after', ['date' => $d(180)]),
-                default => __('stock.band_desc_free'),
-            };
-        };
-        $bandDesc = fn (?string $band) => __('stock.band_desc_'.($band ?: 'free'));
-
-        // مسمى عائلة الصنف — نفس مصدر النظرة العامة
-        $famLabel = fn ($f) => $f
-            ? (\Illuminate\Support\Facades\Lang::has('enums.family.'.$f) ? __('enums.family.'.$f) : (\App\Models\Product::FAMILIES[$f] ?? $f))
-            : '—';
-
-        $grandQty = max($totalOnShelves, 1);
-    @endphp
-
-    @if ($wall->isEmpty())
-        <div class="alert warn"><span>🗄️</span><span>{{ __('stock.no_locations') }}</span></div>
-    @else
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;align-items:stretch">
-            @foreach ($wall as $loc)
-                @php
-                    $bls = $loc->batchLocations->where('qty', '>', 0);
-                    $q = (int) $bls->sum('qty');
-                    $skus = $bls->pluck('product_id')->unique()->count();
-                    $exps = $bls->map(fn ($bl) => $bl->batch?->expires_on)->filter()->sort()->values();
-                    $state = $q > 0 ? $loc->worstExpiryState() : null;
-                    $edge = $bandEdge[$loc->life_band] ?? 'var(--border)';
-                    // العائلات اللي على البلوك: عدد الأصناف + الكمية لكل عائلة
-                    $fams = $bls->groupBy(fn ($bl) => ($bl->product ?? $bl->batch?->product)?->family)
-                        ->map(fn ($g) => [
-                            'skus' => $g->pluck('product_id')->unique()->count(),
-                            'qty' => (int) $g->sum('qty'),
-                        ])->sortByDesc('qty');
-                @endphp
-                <div style="background:var(--card);border:1px solid var(--border);border-top:5px solid {{ $edge }};
-                            border-radius:14px;padding:14px 12px;box-shadow:var(--shadow);text-align:center;
-                            display:flex;flex-direction:column;gap:6px;{{ $q === 0 ? 'opacity:.78' : '' }}">
-                    {{-- الكود كبير — ده اللي مكتوب على الحيطة فعلاً --}}
-                    <div style="font-size:21px;font-weight:900;letter-spacing:.5px" dir="ltr">{{ $loc->code }}</div>
-                    <div>
-                        <span class="badge {{ $loc->bandBadge() }}" style="font-size:10px">{{ $loc->bandLabel() }}</span>
-                        @if ($loc->is_pick_face)
-                            <span class="badge b-purple" style="font-size:10px" title="{{ __('stock.pick_face') }}">★</span>
-                        @endif
-                    </div>
-                    {{-- الوصف بالعربي + نطاق التواريخ اللي بيستقبله --}}
-                    <div style="font-size:10px;color:var(--muted);line-height:1.6">
-                        {{ $bandDesc($loc->life_band) }}<br>
-                        <span dir="ltr" style="font-weight:700">📅 {{ $bandWindow($loc->life_band) }}</span>
-                    </div>
-
-                    @if ($q > 0)
-                        {{-- الرقم الأساسي كبير وفي النص --}}
-                        <div class="num" style="font-size:30px;font-weight:900;line-height:1;margin:4px 0 0">{{ $fmt($q) }}</div>
-                        <div style="font-size:10.5px;color:var(--muted)">
-                            {{ __('stock.units') }} • {{ $skus }} {{ __('stock.skus') }}
-                        </div>
-                        {{-- التواريخ الموجودة فعلاً على البلوك --}}
-                        @if ($exps->isNotEmpty())
-                            <div style="font-size:10px;color:var(--muted)" dir="ltr">
-                                {{ $exps->first()->format('Y-m-d') }}@if ($exps->count() > 1) → {{ $exps->last()->format('Y-m-d') }}@endif
-                            </div>
-                        @endif
-                        {{-- العائلات: عدد المنتجات والكمية لكل واحدة --}}
-                        <div style="text-align:start;font-size:10.5px;border-top:1px dashed var(--border);padding-top:6px;margin-top:2px">
-                            @foreach ($fams->take(4) as $famKey => $fam)
-                                <div style="display:flex;justify-content:space-between;gap:6px;line-height:1.9">
-                                    <span>{{ $famLabel($famKey) }}</span>
-                                    <span class="num" style="color:var(--muted)">{{ $fam['skus'] }} × <b style="color:var(--ink)">{{ $fmt($fam['qty']) }}</b></span>
-                                </div>
-                            @endforeach
-                            @if ($fams->count() > 4)
-                                <div style="color:var(--muted)">+{{ $fams->count() - 4 }}…</div>
-                            @endif
-                        </div>
-                        <div style="margin-top:auto">
-                            <span class="badge {{ $state === 'ok' ? 'b-green' : ($state === 'warn' ? 'b-orange' : 'b-red') }}">
-                                {{ $stateLabel[$state] ?? $state }}
-                            </span>
-                        </div>
-                    @else
-                        <div style="font-size:13px;color:var(--muted);margin-top:auto;margin-bottom:auto;padding:10px 0">
-                            {{ __('stock.empty_shelf') }}
-                        </div>
-                    @endif
-
-                    @if ($loc->capacity)
-                        <div style="font-size:9.5px;color:var(--muted)">
-                            {{ __('stock.free_capacity') }} {{ $fmt($loc->freeCapacity()) }}/{{ $fmt($loc->capacity) }}
-                        </div>
-                    @endif
-                </div>
-            @endforeach
-        </div>
     @endif
 </div>
 
-{{-- ═══ ملخص البلوكات — الجدول الشيك: نظرة واحدة تعرف انت فين ═══ --}}
-@if ($wall->isNotEmpty())
-<div class="card">
-    <h3>👁️ {{ __('stock.block_summary') }}
-        <span class="side">{{ __('stock.block_summary_hint') }}</span></h3>
-    <div class="tablewrap loc-tbl">
-        <table>
-            <tr>
-                <th>{{ __('stock.location') }}</th>
-                <th>{{ __('stock.life_band') }}</th>
-                <th>{{ __('stock.expires_on') }}</th>
-                <th class="num">{{ __('stock.skus') }}</th>
-                <th class="num">{{ __('common.qty') }}</th>
-                <th style="width:200px">{{ __('stock.stock_share') }}</th>
-                <th>{{ __('common.status') }}</th>
-            </tr>
-            @foreach ($wall as $loc)
-                @php
-                    $bls = $loc->batchLocations->where('qty', '>', 0);
-                    $q = (int) $bls->sum('qty');
-                    $share = (int) round($q / $grandQty * 100);
-                    $state = $q > 0 ? $loc->worstExpiryState() : null;
-                    $edge = $bandEdge[$loc->life_band] ?? 'var(--muted)';
-                @endphp
-                <tr>
-                    <td><b style="font-size:14px" dir="ltr">{{ $loc->code }}</b>@if ($loc->is_pick_face) ★@endif</td>
-                    <td><span class="badge {{ $loc->bandBadge() }}">{{ $loc->bandLabel() }}</span></td>
-                    <td style="font-size:11px" dir="ltr">{{ $bandWindow($loc->life_band) }}</td>
-                    <td class="num">{{ $bls->pluck('product_id')->unique()->count() ?: '—' }}</td>
-                    <td class="num"><b>{{ $q ? $fmt($q) : '—' }}</b></td>
-                    <td>
-                        <div style="display:flex;align-items:center;gap:8px">
-                            <div style="flex:1;height:9px;border-radius:6px;background:var(--card2, #eee);overflow:hidden;border:1px solid var(--border)">
-                                <div style="height:100%;width:{{ $share }}%;background:{{ $edge }};border-radius:6px"></div>
-                            </div>
-                            <span style="font-size:10.5px;font-weight:800" dir="ltr">{{ $share }}%</span>
-                        </div>
-                    </td>
-                    <td>
-                        @if ($q > 0)
-                            <span class="badge {{ $state === 'ok' ? 'b-green' : ($state === 'warn' ? 'b-orange' : 'b-red') }}">{{ $stateLabel[$state] ?? $state }}</span>
-                        @else
-                            <span class="badge b-gray">{{ __('stock.empty_shelf') }}</span>
-                        @endif
-                    </td>
-                </tr>
-            @endforeach
-        </table>
-    </div>
-</div>
-@endif
-
+{{-- ═══ جدول المخزون بالأرفف — الليستة الكاملة بالنقل والصور ═══ --}}
 <div class="card">
     <h3>📋 {{ __('stock.stock_by_location') }}
         <span class="side">{{ __('stock.total_on_shelves') }}: {{ $fmt($totalOnShelves) }}</span></h3>
 
-    {{-- ═══ فلاتر لايف فوق الجدول — بحث + بلوك + حالة (2026-08-06) ═══ --}}
     <div class="searchbar" style="margin-bottom:10px">
         <input type="search" id="slFilter" placeholder="🔍 {{ __('stock.search_stock_rows') }}"
                oninput="slApply()" style="flex:1;min-width:220px">
         <select id="slLoc" onchange="slApply()" style="min-width:130px">
             <option value="">{{ __('stock.location') }}: {{ __('common.all') }}</option>
-            @foreach ($wall as $loc)
-                <option value="{{ $loc->code }}">{{ $loc->code }} — {{ $loc->bandLabel() }}</option>
+            @foreach ($locations->sortBy('code') as $loc)
+                <option value="{{ $loc->code }}">{{ $loc->code }}</option>
             @endforeach
         </select>
         <select id="slState" onchange="slApply()" style="min-width:130px">
@@ -381,20 +236,14 @@
                     <tr class="sl-row"
                         data-q="{{ mb_strtolower(($p?->displayName() ?? '').' '.($p?->code ?? '').' '.($b?->batch_no ?? '').' '.$loc->code) }}"
                         data-loc="{{ $loc->code }}" data-state="{{ $b ? $st : '' }}">
-                        <td>
-                            <b style="font-size:13px" dir="ltr">{{ $loc->code }}</b>
-                            @if ($loc->life_band)
-                                <div><span class="badge {{ $loc->bandBadge() }}" style="font-size:9px">{{ $loc->bandLabel() }}</span></div>
-                            @endif
-                        </td>
-                        {{-- الصورة جوه خانة الصنف — نفس نمط باقي السيستم --}}
+                        <td><b style="font-size:13px" dir="ltr">{{ $loc->code }}</b></td>
                         <td style="text-align:start">
                             <div style="display:flex;gap:10px;align-items:center">
                                 @if ($p?->imageSrc())
                                     <img src="{{ $p->imageSrc() }}"
-                                         style="width:96px;height:96px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
+                                         style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                                 @else
-                                    <div style="width:96px;height:96px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
+                                    <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                 @endif
                                 <div>
                                     <b style="font-size:12.5px">{{ $p?->displayName() ?? '—' }}</b>
@@ -406,7 +255,6 @@
                         </td>
                         <td class="num">{{ $b?->batch_no ?? '—' }}</td>
                         <td class="num">{{ $b?->expires_on?->format('Y-m-d') ?? '—' }}</td>
-                        {{-- بار العمر % — بالعين تعرف إيه اللي بيحصل --}}
                         <td>
                             @if ($pct === null)
                                 <span class="badge b-gray">—</span>
@@ -439,9 +287,36 @@
     </div>
 </div>
 
+{{-- ═══ بوب أب محتوى الرف — بيتملى بالجافاسكريبت من بايلود الخريطة ═══ --}}
+<dialog id="dlgShelf" style="min-width:min(680px,94vw)">
+    <div class="dlg">
+        <h4 style="display:flex;align-items:center;gap:10px">
+            🗄️ <span id="shTitle" dir="ltr"></span>
+            <span class="badge b-blue" id="shTotal"></span>
+        </h4>
+        <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
+            <table>
+                <thead>
+                <tr>
+                    <th style="text-align:start">{{ __('stock.item') }}</th>
+                    <th>{{ __('stock.batch_no') }}</th>
+                    <th>{{ __('stock.expires_on') }}</th>
+                    <th>{{ __('common.qty') }}</th>
+                    @if ($manager)<th></th>@endif
+                </tr>
+                </thead>
+                <tbody id="shRows"></tbody>
+            </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgShelf')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
+
 <datalist id="whLocCodes">
-    @foreach ($locations as $loc)
-        <option value="{{ $loc->code }}">{{ $loc->life_band ? $loc->bandLabel() : ($loc->is_pick_face ? __('stock.pick_face') : __('stock.location')) }}</option>
+    @foreach ($locations->sortBy('code') as $loc)
+        <option value="{{ $loc->code }}"></option>
     @endforeach
 </datalist>
 
@@ -453,9 +328,6 @@
                 <form class="dlg" method="POST" action="{{ route('wh.move', $bl) }}">
                     @csrf
                     <h4>{{ __('stock.move_stock') }} — {{ $loc->code }}</h4>
-                    <div class="alert info" style="margin-bottom:12px">
-                        <span>🏷️</span><span>{{ __('stock.put_away_hint') }}</span>
-                    </div>
                     <div class="frow">
                         <div>
                             <label class="f">{{ __('stock.move_to_shelf') }}</label>
@@ -514,24 +386,13 @@
             </div>
             <div class="frow" style="margin-top:10px">
                 <div>
-                    {{-- بلوك FEFO — فاضي يعني رف حر بيقبل أي حاجة --}}
-                    <label class="f">{{ __('stock.life_band') }}</label>
-                    <select name="life_band" style="width:100%">
-                        <option value="">{{ __('stock.band_free') }}</option>
-                        @foreach (\App\Support\LifeBands::options() as $bk => $bLbl)
-                            <option value="{{ $bk }}">{{ $bLbl }} ({{ \App\Support\LifeBands::PREFIX[$bk] }})</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
                     <label class="f">{{ __('common.notes') }}</label>
                     <textarea name="notes" rows="2" style="width:100%"></textarea>
                 </div>
             </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12.5px">
-                <input type="checkbox" name="is_pick_face" value="1"> ★ {{ __('stock.pick_face') }}
+                <input type="checkbox" name="is_pick_face" value="1" checked> ★ {{ __('stock.pick_face') }}
             </label>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">{{ __('stock.pick_face_hint') }}</div>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
                 <button class="btn" type="button" onclick="closeDlg('dlgNewLoc')">{{ __('common.cancel') }}</button>
                 <button class="btn gold" type="submit">{{ __('common.save') }}</button>
@@ -546,12 +407,123 @@
 
 @section('scripts')
 <style>
-/* المحتوى متوسّط ومتظبط — والصنف على البداية عشان الصورة والاسم */
 .loc-tbl th, .loc-tbl td { text-align: center; vertical-align: middle; }
+
+/* ═══ الاستاندات الفيجوال ═══ */
+.whfloor { display: flex; gap: 18px; min-width: max-content; align-items: flex-end;
+           padding: 10px 6px 2px;
+           background: linear-gradient(to top, rgba(18,57,155,.05), transparent 55%); }
+.rack { width: 128px; display: flex; flex-direction: column; }
+.rack-sign { text-align: center; font-weight: 900; font-size: 18px; color: #fff;
+             border-radius: 10px 10px 0 0; padding: 6px 0; letter-spacing: 1px;
+             background: linear-gradient(135deg, var(--royal-blue), var(--purple-heart));
+             box-shadow: 0 2px 6px rgba(18,57,155,.35); }
+.rack-frame { position: relative; padding: 8px 10px 2px; background: var(--card);
+              border-inline: 7px solid #24346e; border-bottom: 4px solid #24346e;
+              background-image: repeating-linear-gradient(to bottom, transparent 0 26px, rgba(36,52,110,.06) 26px 28px); }
+.rack-feet { display: flex; justify-content: space-between; padding: 0 2px; }
+.rack-feet i { width: 16px; height: 10px; background: #24346e; border-radius: 0 0 4px 4px; }
+
+.shelf { position: relative; cursor: pointer; padding: 4px 3px 0; margin-bottom: 7px;
+         border-radius: 6px 6px 0 0; transition: transform .12s, box-shadow .12s; }
+.shelf:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(18,57,155,.18);
+               background: rgba(18,57,155,.05); }
+.shelf.hit { outline: 3px solid var(--yellow, #FFF927); outline-offset: 1px;
+             background: rgba(255,249,39,.12); }
+.shelf.dim { opacity: .3; }
+.sh-meta { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
+.sh-code { font-size: 10px; font-weight: 800; color: var(--muted); letter-spacing: .4px; }
+.sh-qty { font-size: 15px; font-weight: 900; color: var(--royal-blue); }
+.sh-dot { position: absolute; top: 4px; left: 4px; width: 8px; height: 8px; border-radius: 50%; }
+.sh-boxes { display: flex; flex-wrap: wrap-reverse; gap: 2px; align-items: flex-end;
+            align-content: flex-end; min-height: 30px; padding: 2px 2px 0; }
+.sh-empty { font-size: 9px; color: var(--muted); opacity: .7; width: 100%; text-align: center;
+            padding-bottom: 6px; }
+/* كرتونة صغيرة — جسم كرتون + شريط لاصق */
+.cbx { width: 17px; height: 14px; border-radius: 2.5px; display: inline-block;
+       background: linear-gradient(to bottom, #e0aa63 0 4px, #c98f47 4px 100%);
+       border: 1px solid #a9743a; box-shadow: inset 0 -2px 0 rgba(0,0,0,.08); }
+/* اللوح اللي الكراتين واقفة عليه */
+.sh-board { height: 7px; margin: 0 -10px; background: linear-gradient(to bottom, #3a4d94, #24346e);
+            border-radius: 2px; box-shadow: 0 2px 3px rgba(0,0,0,.18); }
 </style>
 <script>
+var SH_MOVE = @js($manager ?? false);
+var SH_MOVE_LBL = @js(__('stock.move_stock'));
+var SH_UNITS = @js(__('stock.units'));
+var SH_EMPTY = @js(__('stock.shelf_pop_empty'));
+
+/** بوب أب محتوى الرف — البايلود جاي من خانة الخريطة نفسها */
+function shelfOpen(d) {
+    document.getElementById('shTitle').textContent = d.code;
+    document.getElementById('shTotal').textContent = Number(d.total).toLocaleString('en') + ' ' + SH_UNITS;
+
+    var tb = document.getElementById('shRows');
+    tb.textContent = '';
+
+    if (!d.rows || d.rows.length === 0) {
+        var tr0 = document.createElement('tr');
+        var td0 = document.createElement('td');
+        td0.colSpan = SH_MOVE ? 5 : 4;
+        td0.style.cssText = 'text-align:center;color:var(--muted);padding:22px';
+        td0.textContent = SH_EMPTY;
+        tr0.appendChild(td0);
+        tb.appendChild(tr0);
+    }
+
+    (d.rows || []).forEach(function (r) {
+        var tr = document.createElement('tr');
+
+        var tdP = document.createElement('td');
+        tdP.style.textAlign = 'start';
+        var bP = document.createElement('b');
+        bP.style.fontSize = '12.5px';
+        bP.textContent = r.p || '—';
+        tdP.appendChild(bP);
+        if (r.c) {
+            var dv = document.createElement('div');
+            dv.style.cssText = 'font-size:10px;color:var(--muted)';
+            dv.textContent = r.c;
+            tdP.appendChild(dv);
+        }
+        tr.appendChild(tdP);
+
+        ['b', 'e'].forEach(function (k) {
+            var td = document.createElement('td');
+            td.className = 'num';
+            td.textContent = r[k] || '—';
+            tr.appendChild(td);
+        });
+
+        var tdQ = document.createElement('td');
+        tdQ.className = 'num';
+        var bQ = document.createElement('b');
+        bQ.textContent = Number(r.q).toLocaleString('en');
+        tdQ.appendChild(bQ);
+        tr.appendChild(tdQ);
+
+        if (SH_MOVE) {
+            var tdM = document.createElement('td');
+            var btn = document.createElement('button');
+            btn.className = 'btn sm';
+            btn.type = 'button';
+            btn.textContent = SH_MOVE_LBL;
+            btn.onclick = function () { closeDlg('dlgShelf'); openDlg('dlgMove' + r.id); };
+            tdM.appendChild(btn);
+            tr.appendChild(tdM);
+        }
+
+        tb.appendChild(tr);
+    });
+
+    openDlg('dlgShelf');
+}
+
 /** فلاتر جدول المخزون بالأرفف — لايف من غير سيرفر */
 function slApply() {
+    // الشاشة ممكن تترندر من غير مخزن — مفيش جدول ساعتها
+    if (! document.getElementById('slFilter')) { return; }
+
     const q = (document.getElementById('slFilter').value || '').trim().toLowerCase();
     const loc = document.getElementById('slLoc').value;
     const state = document.getElementById('slState').value;
