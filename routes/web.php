@@ -865,6 +865,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('pos.reprice.check');
         Route::post('/pos/reprice-bulk', [OpsController::class, 'repriceBulk'])
             ->middleware('role:admin,manager')->name('pos.reprice.bulk');
+        // ═══ تصدير الأوامر إكسيل (٥/٩) — ليستة أو مفصّل بشيت لكل أمر ═══
+        // ⚠️ مسارات ثابتة — لازم قبل `{purchaseOrder}` (سكوب المدير جوه الفلاتر)
+        Route::get('/pos/excel-list', [OpsController::class, 'posExcelList'])->name('pos.excel.list');
+        Route::get('/pos/excel-detail', [OpsController::class, 'posExcelDetail'])->name('pos.excel.detail');
         // ═══ صفحة الأمر الكاملة — عرض + تعديل (١٢ أغسطس ٢٠٢٦) ═══
         // العرض لكل اللي شايف اللوحة (سكوب المدير جوه الكنترولر)،
         // والتعديل نفسه فاضل على راوتاته (`ops.po.edit` بشرط poEditable)

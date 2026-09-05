@@ -45,10 +45,48 @@ class SheetWriter
 
     private string $title;
 
+    /**
+     * الشيتات اللي اتقفلت قبل الحالية — دعم الملف متعدد الشيتات (٥/٩).
+     * كل عنصر: ['title', 'rows', 'widths', 'merges'].
+     * الـAPI القديم زي ما هو: ملف بشيت واحد مش محتاج يعرف عن دي حاجة.
+     */
+    private array $done = [];
+
     public function __construct(string $title = 'Sheet1')
     {
-        // ⚠️ اسم الورقة ممنوع فيه : \ / ? * [ ] وأقصاه 31 حرف
-        $this->title = mb_substr(str_replace([':', '\\', '/', '?', '*', '[', ']'], ' ', $title), 0, 31);
+        $this->title = self::sheetName($title);
+    }
+
+    /**
+     * قفل الشيت الحالي وابدأ شيت جديد — كل row/width/merge بعدها
+     * بتكتب في الشيت الجديد.
+     *
+     * ⚠️ أسماء الشيتات لازم تكون فريدة — الفحص بيحصل وقت البناء
+     * (بيتزوّد رقم للاسم المكرر) عشان النداءات هنا تفضل بسيطة.
+     */
+    public function addSheet(string $title): static
+    {
+        $this->done[] = [
+            'title' => $this->title,
+            'rows' => $this->rows,
+            'widths' => $this->widths,
+            'merges' => $this->merges,
+        ];
+
+        $this->title = self::sheetName($title);
+        $this->rows = [];
+        $this->widths = [];
+        $this->merges = [];
+
+        return $this;
+    }
+
+    /** ⚠️ اسم الورقة ممنوع فيه : \ / ? * [ ] وأقصاه 31 حرف */
+    private static function sheetName(string $title): string
+    {
+        $t = mb_substr(str_replace([':', '\\', '/', '?', '*', '[', ']'], ' ', $title), 0, 31);
+
+        return trim($t) === '' ? 'Sheet' : $t;
     }
 
     /**
@@ -112,27 +150,70 @@ class SheetWriter
             throw new \RuntimeException('cannot create xlsx');
         }
 
-        $zip->addFromString('[Content_Types].xml', $this->contentTypes());
+        $sheets = $this->allSheets();
+
+        $zip->addFromString('[Content_Types].xml', $this->contentTypes(count($sheets)));
         $zip->addFromString('_rels/.rels', $this->rootRels());
-        $zip->addFromString('xl/workbook.xml', $this->workbook());
-        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->workbookRels());
+        $zip->addFromString('xl/workbook.xml', $this->workbook($sheets));
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->workbookRels(count($sheets)));
         $zip->addFromString('xl/styles.xml', $this->styles());
-        $zip->addFromString('xl/worksheets/sheet1.xml', $this->sheet());
+
+        foreach ($sheets as $i => $s) {
+            $zip->addFromString(
+                'xl/worksheets/sheet'.($i + 1).'.xml',
+                $this->sheetXml($s['rows'], $s['widths'], $s['merges']),
+            );
+        }
+
         $zip->close();
 
         return $path;
     }
 
+    /**
+     * كل الشيتات بالترتيب (المقفولة + الحالية) بأسماء **فريدة** —
+     * إكسيل بيرفض الملف كله لو اسمين اتكرروا، فالمكرر بياخد لاحقة رقم.
+     */
+    private function allSheets(): array
+    {
+        $sheets = array_merge($this->done, [[
+            'title' => $this->title,
+            'rows' => $this->rows,
+            'widths' => $this->widths,
+            'merges' => $this->merges,
+        ]]);
+
+        $used = [];
+        foreach ($sheets as &$s) {
+            $name = $s['title'];
+            $n = 2;
+            while (isset($used[mb_strtolower($name)])) {
+                $suffix = ' '.$n++;
+                $name = mb_substr($s['title'], 0, 31 - mb_strlen($suffix)).$suffix;
+            }
+            $used[mb_strtolower($name)] = true;
+            $s['title'] = $name;
+        }
+        unset($s);
+
+        return $sheets;
+    }
+
     // ═══════════════ أجزاء الملف ═══════════════
 
-    private function contentTypes(): string
+    private function contentTypes(int $sheetCount): string
     {
+        $overrides = '';
+        for ($i = 1; $i <= $sheetCount; $i++) {
+            $overrides .= '<Override PartName="/xl/worksheets/sheet'.$i.'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+        }
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
             .'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             .'<Default Extension="xml" ContentType="application/xml"/>'
             .'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-            .'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            .$overrides
             .'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
             .'</Types>';
     }
@@ -145,20 +226,31 @@ class SheetWriter
             .'</Relationships>';
     }
 
-    private function workbook(): string
+    private function workbook(array $sheets): string
     {
+        $entries = '';
+        foreach ($sheets as $i => $s) {
+            $n = $i + 1;
+            $entries .= '<sheet name="'.self::esc($s['title']).'" sheetId="'.$n.'" r:id="rId'.$n.'"/>';
+        }
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
             .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            .'<sheets><sheet name="'.self::esc($this->title).'" sheetId="1" r:id="rId1"/></sheets>'
+            .'<sheets>'.$entries.'</sheets>'
             .'</workbook>';
     }
 
-    private function workbookRels(): string
+    private function workbookRels(int $sheetCount): string
     {
+        $rels = '';
+        for ($i = 1; $i <= $sheetCount; $i++) {
+            $rels .= '<Relationship Id="rId'.$i.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'.$i.'.xml"/>';
+        }
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            .$rels
             .'</Relationships>';
     }
 
@@ -250,12 +342,12 @@ class SheetWriter
             .'</styleSheet>';
     }
 
-    private function sheet(): string
+    private function sheetXml(array $rows, array $widths, array $merges): string
     {
         $cols = '';
-        if ($this->widths !== []) {
+        if ($widths !== []) {
             $cols = '<cols>';
-            foreach ($this->widths as $i => $w) {
+            foreach ($widths as $i => $w) {
                 $n = $i + 1;
                 $cols .= '<col min="'.$n.'" max="'.$n.'" width="'.$w.'" customWidth="1"/>';
             }
@@ -263,7 +355,7 @@ class SheetWriter
         }
 
         $data = '';
-        foreach ($this->rows as $r => $cells) {
+        foreach ($rows as $r => $cells) {
             $rowNum = $r + 1;
             $body = '';
 
@@ -287,13 +379,13 @@ class SheetWriter
             $data .= '<row r="'.$rowNum.'">'.$body.'</row>';
         }
 
-        $merges = '';
-        if ($this->merges !== []) {
-            $merges = '<mergeCells count="'.count($this->merges).'">';
-            foreach ($this->merges as $m) {
-                $merges .= '<mergeCell ref="'.$m.'"/>';
+        $mergeXml = '';
+        if ($merges !== []) {
+            $mergeXml = '<mergeCells count="'.count($merges).'">';
+            foreach ($merges as $m) {
+                $mergeXml .= '<mergeCell ref="'.$m.'"/>';
             }
-            $merges .= '</mergeCells>';
+            $mergeXml .= '</mergeCells>';
         }
 
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -302,7 +394,7 @@ class SheetWriter
             .'<sheetViews><sheetView rightToLeft="1" workbookViewId="0"/></sheetViews>'
             .$cols
             .'<sheetData>'.$data.'</sheetData>'
-            .$merges
+            .$mergeXml
             .'</worksheet>';
     }
 

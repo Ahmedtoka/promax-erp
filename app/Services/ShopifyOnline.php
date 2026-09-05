@@ -71,7 +71,16 @@ class ShopifyOnline
         }
 
         if ($res->status() === 401 || $res->status() === 403) {
-            return [null, __('online.err_auth')];
+            // 403 مش دايماً توكن غلط — ممكن تكون Protected customer data
+            // مش متفعّلة على الأبلكيشن؛ نص شوبيفاي بيفرّق بينهم
+            $detail = $res->json('errors') ?? $res->json('error');
+
+            if (is_array($detail)) {
+                $detail = json_encode($detail, JSON_UNESCAPED_UNICODE);
+            }
+
+            return [null, __('online.err_auth')
+                .($detail ? ' — '.mb_substr((string) $detail, 0, 180) : '')];
         }
 
         if ($res->failed()) {

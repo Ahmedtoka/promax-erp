@@ -31,6 +31,9 @@
         {{-- فحص الأسعار (٢٤/٨) — الأوامر اللي تسعيرتها اتغيرت --}}
         <a class="btn" href="{{ route('ops.pos.reprice.check') }}">🔍 {{ __('ops.po_check_btn') }}</a>
     @endif
+    {{-- تصدير إكسيل (٥/٩) — بنفس فلاتر الشاشة الحالية بالحرف --}}
+    <a class="btn" href="{{ route('ops.pos.excel.list', request()->query()) }}">📄 {{ __('ops.x_list_btn') }}</a>
+    <a class="btn" href="{{ route('ops.pos.excel.detail', request()->query()) }}">📚 {{ __('ops.x_detail_btn') }}</a>
 @endsection
 
 @section('content')

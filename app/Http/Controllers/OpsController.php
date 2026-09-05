@@ -1552,30 +1552,9 @@ class OpsController extends Controller
         $u = auth()->user();
 
         // الفلاتر المشتركة (من غير الحالة) — الأساس للقايمة والـKPIs
-        $base = fn () => PurchaseOrder::query()
-            ->when($u?->role === 'manager',
-                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')))
-            ->when($request->string('q')->trim()->value(), function ($q2, $s) {
-                // ⚠️ **والبحث بالصنف كمان** (٢٨/٨ — طلب المالك): «جيبلي
-                // كل الأوامر اللي فيها المنتج ده». بند الأمر مالوش اسم
-                // مجمّد (`purchase_order_items` فيها `product_id` بس)،
-                // فالفلترة بتعدّي على العلاقة مش على عمود في البند.
-                $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
-                    ->orWhere('source', 'like', "%$s%")
-                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%"))
-                    ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%")
-                        ->orWhere('barcode', 'like', "%$s%")));
-            })
-            ->when($request->integer('channel'),
-                fn ($q2, $ch) => $q2->whereHas('client', fn ($c) => $c->where('channel_id', $ch)))
-            ->when($request->integer('group'),
-                fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))
-            ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '>=', $d))
-            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d));
+        // (اتنقلت لميثود عشان التصديرين إكسيل يستخدموا **نفس** الفلاتر
+        // بالحرف — ليستة الشاشة والملف لازم يقولوا نفس الكلام)
+        $base = fn () => $this->poFilterBase($request);
 
         // «متأخر» = عدّى معاده ولسه ماتسلمش (والمرفوض مش متأخر — اتقفل)
         $lateScope = fn ($q2) => $q2->whereNotNull('due_at')
@@ -1623,6 +1602,248 @@ class OpsController extends Controller
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
             'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'from', 'to']),
         ]);
+    }
+
+    /**
+     * فلاتر لوحة أوامر التوريد المشتركة (من غير الحالة) — بتخدم
+     * الشاشة والـKPIs **والتصديرين إكسيل** بنفس المنطق بالحرف.
+     */
+    private function poFilterBase(Request $request)
+    {
+        $u = auth()->user();
+
+        return PurchaseOrder::query()
+            ->when($u?->role === 'manager',
+                fn ($q2) => $q2->whereIn('client_id', Client::visibleTo(Client::query(), $u)->select('id')))
+            ->when($request->string('q')->trim()->value(), function ($q2, $s) {
+                // ⚠️ **والبحث بالصنف كمان** (٢٨/٨ — طلب المالك): «جيبلي
+                // كل الأوامر اللي فيها المنتج ده». بند الأمر مالوش اسم
+                // مجمّد (`purchase_order_items` فيها `product_id` بس)،
+                // فالفلترة بتعدّي على العلاقة مش على عمود في البند.
+                $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
+                    ->orWhere('source', 'like', "%$s%")
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%"))
+                    ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
+                        ->orWhere('name_en', 'like', "%$s%")
+                        ->orWhere('code', 'like', "%$s%")
+                        ->orWhere('barcode', 'like', "%$s%")));
+            })
+            ->when($request->integer('channel'),
+                fn ($q2, $ch) => $q2->whereHas('client', fn ($c) => $c->where('channel_id', $ch)))
+            ->when($request->integer('group'),
+                fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))
+            ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '>=', $d))
+            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d));
+    }
+
+    /**
+     * أوامر التصدير — نفس فلاتر الشاشة كلها (بحث/قناة/سلسلة/تواريخ
+     * + حالة/موافقة/متأخر) عشان «اللي على الشاشة هو اللي في الملف».
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: bool} [الأوامر، اتقصّت؟]
+     */
+    private function posForExport(Request $request, int $cap)
+    {
+        $q = $this->poFilterBase($request)
+            ->when($request->string('status')->value(), fn ($q2, $s) => $q2->where('status', $s))
+            ->when($request->string('approval')->value(), fn ($q2, $a) => $q2->where('approval_status', $a))
+            ->when($request->boolean('late'), fn ($q2) => $q2->whereNotNull('due_at')
+                ->where('due_at', '<', now())
+                ->where('status', '!=', 'delivered')
+                ->where(fn ($w) => $w->whereNull('approval_status')->orWhere('approval_status', '!=', 'rejected')))
+            ->with([
+                'client.group', 'client.channel', 'courier', 'creator', 'approvedBy',
+                'pickOrder.picker', 'items.product',
+            ])
+            ->latest();
+
+        // ⚠️ +1 عشان نعرف اتقصّت ولا لأ من غير COUNT تاني
+        $rows = $q->limit($cap + 1)->get();
+        $truncated = $rows->count() > $cap;
+
+        return [$rows->take($cap), $truncated];
+    }
+
+    /** صف الليستة الموحّد — بيخدم تصدير الليستة وشيت الملخص في المفصّل */
+    private function poExportRow(PurchaseOrder $po): array
+    {
+        return [
+            ['v' => $po->number, 'style' => 'value'],
+            ['v' => $po->client?->group?->displayName() ?: __('ops.x_direct')],
+            ['v' => $po->client?->displayName() ?: '—'],
+            ['v' => $po->courier?->displayName() ?: '—'],
+            ['v' => $po->due_at?->format('Y-m-d H:i') ?? $po->due_date?->format('Y-m-d') ?? '—', 'style' => 'center'],
+            ['v' => $po->items->sum('qty'), 'num' => true, 'style' => 'center'],
+            ['v' => (float) $po->grand_total, 'num' => true, 'style' => 'money'],
+            ['v' => $po->statusLabel(), 'style' => 'center'],
+            ['v' => $po->approvedBy?->displayName()
+                ?: ($po->approval_status ? __('enums.po_approval.'.$po->approval_status) : '—'), 'style' => 'center'],
+            ['v' => $po->creator?->displayName() ?: '—', 'style' => 'center'],
+            ['v' => $po->pickOrder?->picker?->displayName() ?: '—', 'style' => 'center'],
+        ];
+    }
+
+    /** هيدر أعمدة الليستة + عرضها — مكان واحد للتصديرين */
+    private function poExportHeader(\App\Services\SheetWriter $x): void
+    {
+        foreach ([14, 20, 30, 18, 16, 10, 14, 14, 18, 18, 18] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $x->row([
+            ['v' => __('ops.x_po'), 'style' => 'header'],
+            ['v' => __('ops.x_chain'), 'style' => 'header'],
+            ['v' => __('ops.x_branch'), 'style' => 'header'],
+            ['v' => __('ops.x_courier'), 'style' => 'header'],
+            ['v' => __('ops.x_due'), 'style' => 'header'],
+            ['v' => __('ops.x_pieces'), 'style' => 'header'],
+            ['v' => __('ops.x_value'), 'style' => 'header'],
+            ['v' => __('common.status'), 'style' => 'header'],
+            ['v' => __('ops.x_approved_by'), 'style' => 'header'],
+            ['v' => __('ops.x_created_by'), 'style' => 'header'],
+            ['v' => __('ops.x_prepared_by'), 'style' => 'header'],
+        ]);
+    }
+
+    /**
+     * ═══ تصدير إكسيل ١ — ليستة كل الأوامر صف صف (٥/٩/٢٠٢٦) ═══
+     *
+     * الأعمدة بطلب المالك بالحرف: الأمر · السلسلة · الفرع/العميل ·
+     * المندوب · ميعاد التوريد · القطع · القيمة · الحالة · مين اعتمده
+     * من الحسابات · مين نزّله · مين جهّزه — **أسماء مش أرقام**.
+     */
+    public function posExcelList(Request $request)
+    {
+        [$pos, $truncated] = $this->posForExport($request, 5000);
+
+        $x = new \App\Services\SheetWriter(__('ops.purchase_orders'));
+
+        $x->row([['v' => __('ops.purchase_orders'), 'style' => 'title']]);
+        $x->merge(0, 10);
+        $x->row([['v' => __('common.date').': '.now()->format('Y-m-d H:i'), 'style' => 'label']]);
+
+        if ($truncated) {
+            $x->row([['v' => __('ops.x_truncated', ['n' => 5000]), 'style' => 'muted']]);
+        }
+
+        $x->blank();
+        $this->poExportHeader($x);
+
+        foreach ($pos as $po) {
+            $x->row($this->poExportRow($po));
+        }
+
+        $x->row([
+            ['v' => __('ops.x_count').': '.$pos->count(), 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => $pos->sum(fn ($p) => $p->items->sum('qty')), 'num' => true, 'style' => 'total'],
+            ['v' => round($pos->sum(fn ($p) => (float) $p->grand_total), 2), 'num' => true, 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+        ]);
+
+        return $x->download('purchase-orders-'.now()->format('Y-m-d').'.xlsx');
+    }
+
+    /**
+     * ═══ تصدير إكسيل ٢ — المفصّل: شيت ملخص + شيت لكل أمر (٥/٩) ═══
+     *
+     * أول شيت هو نفس الليستة، وبعده شيت باسم رقم كل أمر جواه بياناته
+     * وبنوده بالتفصيل (كود · صنف · كمية · سعر قايمة · خصم · سعر ·
+     * ضريبة · إجمالي) زي صفحة العرض بالظبط.
+     *
+     * ⚠️ السقف ٢٠٠ أمر — ملف بمئات الشيتات بياخد وقت بناء وفتح؛
+     * اللي عاوز أكتر يضيّق الفلاتر (الملخص بيقول لو اتقص).
+     */
+    public function posExcelDetail(Request $request)
+    {
+        [$pos, $truncated] = $this->posForExport($request, 200);
+
+        $x = new \App\Services\SheetWriter(__('ops.x_summary'));
+
+        $x->row([['v' => __('ops.purchase_orders'), 'style' => 'title']]);
+        $x->merge(0, 10);
+        $x->row([['v' => __('common.date').': '.now()->format('Y-m-d H:i'), 'style' => 'label']]);
+
+        if ($truncated) {
+            $x->row([['v' => __('ops.x_truncated', ['n' => 200]), 'style' => 'muted']]);
+        }
+
+        $x->blank();
+        $this->poExportHeader($x);
+
+        foreach ($pos as $po) {
+            $x->row($this->poExportRow($po));
+        }
+
+        foreach ($pos as $po) {
+            $x->addSheet($po->number);
+
+            foreach ([14, 34, 10, 14, 12, 14, 14, 16] as $i => $w) {
+                $x->width($i, $w);
+            }
+
+            $x->row([['v' => $po->number.' — '.($po->client?->displayName() ?: '—'), 'style' => 'title']]);
+            $x->merge(0, 7);
+
+            // بيانات الأمر — سطرين لابل/قيمة
+            $x->row([
+                ['v' => __('ops.x_chain').': '.($po->client?->group?->displayName() ?: __('ops.x_direct')), 'style' => 'label'],
+                '', ['v' => __('ops.x_courier').': '.($po->courier?->displayName() ?: '—'), 'style' => 'label'],
+                '', ['v' => __('ops.x_due').': '.($po->due_at?->format('Y-m-d H:i') ?? $po->due_date?->format('Y-m-d') ?? '—'), 'style' => 'label'],
+                '', ['v' => __('common.status').': '.$po->statusLabel(), 'style' => 'label'],
+            ]);
+            $x->row([
+                ['v' => __('ops.x_approved_by').': '.($po->approvedBy?->displayName() ?: '—'), 'style' => 'label'],
+                '', ['v' => __('ops.x_created_by').': '.($po->creator?->displayName() ?: '—'), 'style' => 'label'],
+                '', ['v' => __('ops.x_prepared_by').': '.($po->pickOrder?->picker?->displayName() ?: '—'), 'style' => 'label'],
+            ]);
+            $x->blank();
+
+            $x->row([
+                ['v' => __('ops.x_code'), 'style' => 'header'],
+                ['v' => __('ops.x_product'), 'style' => 'header'],
+                ['v' => __('ops.x_qty'), 'style' => 'header'],
+                ['v' => __('ops.x_list_price'), 'style' => 'header'],
+                ['v' => __('ops.x_discount'), 'style' => 'header'],
+                ['v' => __('ops.x_price'), 'style' => 'header'],
+                ['v' => __('ops.x_tax'), 'style' => 'header'],
+                ['v' => __('ops.x_line_total'), 'style' => 'header'],
+            ]);
+
+            foreach ($po->items as $it) {
+                $x->row([
+                    ['v' => $it->product?->code ?: '—', 'style' => 'center'],
+                    ['v' => $it->product?->displayName() ?: '—'],
+                    ['v' => (int) $it->qty, 'num' => true, 'style' => 'center'],
+                    ['v' => $it->listPrice(), 'num' => true, 'style' => 'money'],
+                    ['v' => $it->discountPercent(), 'num' => true, 'style' => 'money'],
+                    ['v' => (float) $it->price, 'num' => true, 'style' => 'money'],
+                    ['v' => (float) ($it->tax ?? 0), 'num' => true, 'style' => 'money'],
+                    ['v' => (float) $it->total, 'num' => true, 'style' => 'money'],
+                ]);
+            }
+
+            $x->row([
+                ['v' => '', 'style' => 'total'],
+                ['v' => __('ops.x_net'), 'style' => 'total'],
+                ['v' => $po->items->sum('qty'), 'num' => true, 'style' => 'total'],
+                ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+                ['v' => '', 'style' => 'total'],
+                ['v' => (float) $po->tax_total, 'num' => true, 'style' => 'total'],
+                ['v' => (float) $po->total, 'num' => true, 'style' => 'total'],
+            ]);
+            $x->row([
+                '', ['v' => __('ops.x_grand'), 'style' => 'value'],
+                '', '', '', '', '',
+                ['v' => (float) $po->grand_total, 'num' => true, 'style' => 'money_bold'],
+            ]);
+        }
+
+        return $x->download('purchase-orders-detail-'.now()->format('Y-m-d').'.xlsx');
     }
 
     /**
