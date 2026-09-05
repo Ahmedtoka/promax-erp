@@ -146,6 +146,7 @@ return [
     'return_none' => 'Enter a returned quantity for at least one line.',
     'return_money_clash' => 'Collected money exceeds the goods value that would remain — review the cash first.',
     'fulfill_failed' => 'Order #:number shipped here but the fulfillment did not reach Shopify.',
+    'fulfill_no_fo' => 'Order #:number has no fulfillment orders in Shopify — check the fulfillment-orders scopes on the Custom App (and refresh the token after any scope change).',
     'paid_push_failed' => 'Order #:number collected here but Mark as paid did not reach Shopify.',
     'return_push_failed' => 'The return was recorded here but did not reach Shopify for order #:number.',
     'shipped_at' => 'Shipped',

@@ -146,6 +146,7 @@ return [
     'return_none' => 'اكتب كمية راجعة لبند واحد على الأقل.',
     'return_money_clash' => 'المتحصّل من الأوردر أكبر من قيمة البضاعة اللي هتفضل — راجع الفلوس الأول.',
     'fulfill_failed' => 'الأوردر #:number اتشحن عندنا بس الـFulfillment ماوصلش شوبيفاي.',
+    'fulfill_no_fo' => 'الأوردر #:number مالوش fulfillment orders في شوبيفاي — راجع سكوبات fulfillment orders على الـCustom App (وحدّث التوكن بعد أي تعديل).',
     'paid_push_failed' => 'الأوردر #:number اتحصّل عندنا بس Mark as paid ماوصلش شوبيفاي.',
     'return_push_failed' => 'المرتجع اتسجل عندنا بس الـReturn ماوصلش شوبيفاي للأوردر #:number.',
     'shipped_at' => 'اتشحن',

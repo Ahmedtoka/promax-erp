@@ -357,8 +357,12 @@ class ShopifyOnline
      */
     public static function fulfillOrder(OnlineOrder $order): ?string
     {
-        if (! self::ready() || ! $order->shopify_id) {
-            return null;
+        if (! self::ready()) {
+            return __('online.err_not_configured');
+        }
+
+        if (! $order->shopify_id) {
+            return __('online.fulfill_failed', ['number' => $order->number]).' (no shopify id)';
         }
 
         $gid = 'gid://shopify/Order/'.$order->shopify_id;
@@ -374,12 +378,64 @@ class ShopifyOnline
             return __('online.fulfill_failed', ['number' => $order->number]).' ('.$err.')';
         }
 
+        if (! isset($data['order']) || $data['order'] === null) {
+            // الأوردر نفسه مش راجع — غالباً سكوبات ناقصة أو gid غلط
+            return __('online.fulfill_failed', ['number' => $order->number]).' (order not returned — check scopes)';
+        }
+
         $nodes = $data['order']['fulfillmentOrders']['nodes'] ?? [];
-        $open = array_values(array_filter($nodes,
-            fn ($n) => in_array($n['status'] ?? '', ['OPEN', 'IN_PROGRESS'], true)));
+
+        // ⚠️ Payment pending وأشباهه بيسيبوا الـ FO على ON_HOLD أو SCHEDULED —
+        // بنفك الهولد / بنفتح الـ scheduled وبعدين نفلفل. أي حالة تانية
+        // (غير CLOSED/CANCELLED) بنطلعها بالاسم بدل السكوت.
+        $open = [];
+        $blocked = [];
+
+        foreach ($nodes as $n) {
+            $st = $n['status'] ?? '';
+
+            if (in_array($st, ['OPEN', 'IN_PROGRESS'], true)) {
+                $open[] = $n;
+
+                continue;
+            }
+
+            if ($st === 'ON_HOLD' || $st === 'SCHEDULED') {
+                $mutName = $st === 'ON_HOLD' ? 'fulfillmentOrderReleaseHold' : 'fulfillmentOrderOpen';
+                [$m, $e] = self::gql(
+                    'mutation($id: ID!) { '.$mutName.'(id: $id) {
+                        fulfillmentOrder { id status }
+                        userErrors { message }
+                    } }',
+                    ['id' => $n['id']],
+                );
+                $ue = $e ?? self::userError($m[$mutName] ?? null);
+
+                if ($ue === null && ! empty($m[$mutName]['fulfillmentOrder']['id'])) {
+                    $open[] = $n;
+                } else {
+                    $blocked[] = $st.($ue !== null ? ' — '.$ue : '');
+                }
+
+                continue;
+            }
+
+            if (! in_array($st, ['CLOSED', 'CANCELLED'], true)) {
+                $blocked[] = $st;
+            }
+        }
 
         if (empty($open)) {
-            // متفلفل من قبل (أو مفيش FOs) — مش فشل
+            if (! empty($blocked)) {
+                return __('online.fulfill_failed', ['number' => $order->number])
+                    .' ('.implode(' · ', array_unique($blocked)).')';
+            }
+
+            if (empty($nodes)) {
+                return __('online.fulfill_no_fo', ['number' => $order->number]);
+            }
+
+            // كلها CLOSED — متفلفل فعلاً من قبل
             return null;
         }
 
