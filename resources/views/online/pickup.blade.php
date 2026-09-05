@@ -116,11 +116,21 @@
                                         💰 {{ __('online.act_collect') }}</button>
                                 @endif
                                 @if ($canAct)
-                                    <form method="POST" action="{{ route('online.return', $o) }}"
-                                          onsubmit="return confirm(RETURN_MSG)">
-                                        @csrf
-                                        <button class="btn sm red" type="submit">↩ {{ __('online.act_return') }}</button>
-                                    </form>
+                                    @php
+                                        // بايلود ديالوج المرتجع الجزئي — ⚠️ ممنوع @json (فخ البارسر)
+                                        $retPayload = json_encode([
+                                            'id' => $o->id,
+                                            'number' => $o->number,
+                                            'items' => $o->items->map(fn ($i) => [
+                                                'id' => $i->id,
+                                                'name' => $i->product?->displayName() ?? $i->title,
+                                                'max' => (int) $i->qty - (int) $i->returned_qty,
+                                            ])->values()->all(),
+                                        ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
+                                    @endphp
+                                    <button class="btn sm red" type="button"
+                                            onclick='openReturn({!! $retPayload !!})'>
+                                        ↩ {{ __('online.act_return') }}</button>
                                     <button class="btn sm" type="button"
                                             onclick="openCancel({{ $o->id }}, '{{ $o->number }}')">
                                         ✖ {{ __('online.act_cancel') }}</button>
@@ -146,6 +156,23 @@
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgCollect')">{{ __('common.cancel') }}</button>
             <button class="btn gold" type="submit">💰 {{ __('online.act_collect') }}</button>
+        </div>
+    </form>
+</dialog>
+
+{{-- ═══ ديالوج المرتجع الجزئي (٥/٩): كمية راجعة لكل بند —
+     صفر = مرجعش، الكل = الأوردر يرجع بالكامل ═══ --}}
+<dialog id="dlgReturn">
+    <form class="dlg" method="POST" id="formReturn" style="min-width:380px"
+          onsubmit="return confirm(RETURN_MSG)">
+        @csrf
+        <h4>↩ {{ __('online.return_title') }} <span id="rtNum"></span></h4>
+        <div class="dash-hint" style="margin-bottom:10px">{{ __('online.return_hint') }}</div>
+        <div id="rtItems" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;
+             max-height:50vh;overflow-y:auto"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgReturn')">{{ __('common.cancel') }}</button>
+            <button class="btn red" type="submit">↩ {{ __('online.act_return') }}</button>
         </div>
     </form>
 </dialog>
@@ -208,6 +235,35 @@
         document.getElementById('formCancel').action = BASE_URL + '/' + id + '/cancel';
         document.getElementById('ccNum').textContent = '#' + num;
         openDlg('dlgCancel');
+    }
+
+    const RET_OF = @js(__('online.return_of'));
+
+    function escR(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function openReturn(p) {
+        document.getElementById('formReturn').action = BASE_URL + '/' + p.id + '/return';
+        document.getElementById('rtNum').textContent = '#' + p.number;
+
+        var box = document.getElementById('rtItems');
+        box.innerHTML = '';
+
+        p.items.forEach(function (it) {
+            box.insertAdjacentHTML('beforeend',
+                '<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:10px;padding:8px 12px">'
+                + '<div style="flex:1;min-width:0"><b style="font-size:12.5px">' + escR(it.name) + '</b>'
+                + '<div style="font-size:10.5px;color:var(--muted)">' + RET_OF.replace(':n', it.max) + '</div></div>'
+                + '<input type="number" name="items[' + it.id + ']" value="0" min="0" max="' + it.max + '"'
+                + (it.max <= 0 ? ' disabled' : '')
+                + ' style="width:70px;text-align:center">'
+                + '</div>');
+        });
+
+        openDlg('dlgReturn');
     }
 
     (function () {

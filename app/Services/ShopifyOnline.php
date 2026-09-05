@@ -111,8 +111,12 @@ class ShopifyOnline
         // بحد أقصى 10 صفحات × 250 في النداء الواحد — سينك أول مرة
         // على متجر قديم يتعمل على دفعات بدل ما يعلّق الريكوست
         for ($page = 0; $page < 10; $page++) {
+            // ⚠️ من بعد أول سينك كامل: **الجديد الغير مشحون بس** (قرار
+            // المالك ٥/٩) — أوردر اتشحن أو اتلغى في شوبيفاي مالوش
+            // لازمة في طابور الاتصال بتاعنا
             [$data, $err] = self::api('get', 'orders.json', [
-                'status' => 'any',
+                'status' => 'open',
+                'fulfillment_status' => 'unshipped',
                 'limit' => 250,
                 'since_id' => $sinceId,
                 'order' => 'id asc',
@@ -302,6 +306,261 @@ class ShopifyOnline
         }
 
         return $fixed;
+    }
+
+    // ==================== GraphQL — الحالات الحقيقية ====================
+
+    /**
+     * نداء GraphQL Admin — نفس التوكن ونفس الدومين.
+     * بيرجع [data|null, error|null]، والأخطاء بنوعيها (errors العلوية
+     * وuserErrors بتاعة الميوتيشن) بتتلم في رسالة واحدة مقروءة.
+     */
+    private static function gql(string $query, array $vars = []): array
+    {
+        [$res, $err] = self::api('post', 'graphql.json', [
+            'query' => $query,
+            'variables' => $vars,
+        ]);
+
+        if ($err !== null) {
+            return [null, $err];
+        }
+
+        if (! empty($res['errors'])) {
+            $msg = $res['errors'][0]['message'] ?? 'GraphQL error';
+
+            return [null, mb_substr((string) $msg, 0, 140)];
+        }
+
+        return [$res['data'] ?? [], null];
+    }
+
+    /** أول userError في ريسبونس ميوتيشن — null لو مفيش */
+    private static function userError(?array $node): ?string
+    {
+        $e = $node['userErrors'][0]['message'] ?? null;
+
+        return $e !== null ? mb_substr((string) $e, 0, 140) : null;
+    }
+
+    /**
+     * ═══ الأوردر بيتقلب Fulfilled في شوبيفاي أول ما يطلع في بيك اب
+     * (قرار المالك ٥/٩) ═══
+     *
+     * بنجيب fulfillment orders المفتوحة وبنعمل fulfillment لكل واحد
+     * (كل بنوده) من غير إشعار للعميل.
+     *
+     * ⚠️ محتاج سكوبات read/write_merchant_managed_fulfillment_orders
+     * (+ read/write_fulfillments) على الـCustom App — وتعديل السكوبات
+     * بيولّد **توكن جديد** لازم يتحدث في الإعدادات فوراً.
+     * 🔴 النجاح = fulfillment.id متعمّر — مش غياب الخطأ (عقيدة شوبيفاي).
+     */
+    public static function fulfillOrder(OnlineOrder $order): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id) {
+            return null;
+        }
+
+        $gid = 'gid://shopify/Order/'.$order->shopify_id;
+
+        [$data, $err] = self::gql(
+            'query($id: ID!) { order(id: $id) {
+                fulfillmentOrders(first: 10) { nodes { id status } }
+            } }',
+            ['id' => $gid],
+        );
+
+        if ($err !== null) {
+            return __('online.fulfill_failed', ['number' => $order->number]).' ('.$err.')';
+        }
+
+        $nodes = $data['order']['fulfillmentOrders']['nodes'] ?? [];
+        $open = array_values(array_filter($nodes,
+            fn ($n) => in_array($n['status'] ?? '', ['OPEN', 'IN_PROGRESS'], true)));
+
+        if (empty($open)) {
+            // متفلفل من قبل (أو مفيش FOs) — مش فشل
+            return null;
+        }
+
+        foreach ($open as $fo) {
+            [$mut, $err2] = self::gql(
+                'mutation($f: FulfillmentInput!) {
+                    fulfillmentCreate(fulfillment: $f) {
+                        fulfillment { id }
+                        userErrors { message }
+                    }
+                }',
+                ['f' => [
+                    'lineItemsByFulfillmentOrder' => [
+                        ['fulfillmentOrderId' => $fo['id']],
+                    ],
+                    'notifyCustomer' => false,
+                ]],
+            );
+
+            $ue = $err2 ?? self::userError($mut['fulfillmentCreate'] ?? null);
+
+            if ($ue !== null || empty($mut['fulfillmentCreate']['fulfillment']['id'])) {
+                return __('online.fulfill_failed', ['number' => $order->number])
+                    .($ue !== null ? ' ('.$ue.')' : '');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * ═══ الأوردر بيتقلب Paid أول ما يتحصّل بالكامل (٥/٩) ═══
+     * orderMarkAsPaid — نفس زرار «Mark as paid» في أدمن شوبيفاي،
+     * وده الصح لأوردرات الكاش أون ديليفري المعلقة pending.
+     */
+    public static function markPaid(OnlineOrder $order): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id) {
+            return null;
+        }
+
+        [$mut, $err] = self::gql(
+            'mutation($input: OrderMarkAsPaidInput!) {
+                orderMarkAsPaid(input: $input) {
+                    order { id }
+                    userErrors { message }
+                }
+            }',
+            ['input' => ['id' => 'gid://shopify/Order/'.$order->shopify_id]],
+        );
+
+        $ue = $err ?? self::userError($mut['orderMarkAsPaid'] ?? null);
+
+        if ($ue !== null || empty($mut['orderMarkAsPaid']['order']['id'])) {
+            return __('online.paid_push_failed', ['number' => $order->number])
+                .($ue !== null ? ' ('.$ue.')' : '');
+        }
+
+        return null;
+    }
+
+    /**
+     * ═══ ريتيرن / بارشال ريتيرن حقيقي في شوبيفاي (٥/٩) ═══
+     *
+     * بالكميات اللي رجعت فعلاً: بنجيب بنود الفلفلمنت القابلة للإرجاع
+     * (returnableFulfillments — معمولة مخصوص لبناء المرتجعات)، بنطابقها
+     * على line items الأوردر، وبنعمل returnCreate ثم returnClose —
+     * فالأوردر بياخد باج Returned أو Partially returned حسب العدد.
+     *
+     * ⚠️ محتاج سكوبات read/write_returns.
+     * @param  array<int, int>  $qtyByLineId  [shopify_line_id => باكات راجعة]
+     */
+    public static function createReturn(OnlineOrder $order, array $qtyByLineId): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id || empty($qtyByLineId)) {
+            return null;
+        }
+
+        $gid = 'gid://shopify/Order/'.$order->shopify_id;
+
+        [$data, $err] = self::gql(
+            'query($oid: ID!) {
+                returnableFulfillments(orderId: $oid, first: 10) {
+                    edges { node {
+                        returnableFulfillmentLineItems(first: 50) {
+                            edges { node {
+                                fulfillmentLineItem { id lineItem { id } }
+                                quantity
+                            } }
+                        }
+                    } }
+                }
+            }',
+            ['oid' => $gid],
+        );
+
+        if ($err !== null) {
+            return __('online.return_push_failed', ['number' => $order->number]).' ('.$err.')';
+        }
+
+        // خريطة line item → بنود فلفلمنت قابلة للإرجاع (ممكن أكتر من واحد)
+        $lines = [];
+
+        foreach ($data['returnableFulfillments']['edges'] ?? [] as $f) {
+            foreach ($f['node']['returnableFulfillmentLineItems']['edges'] ?? [] as $li) {
+                $node = $li['node'];
+                $lineGid = $node['fulfillmentLineItem']['lineItem']['id'] ?? '';
+
+                if (preg_match('~/LineItem/(\d+)$~', $lineGid, $m)) {
+                    $lines[(int) $m[1]][] = [
+                        'fid' => $node['fulfillmentLineItem']['id'],
+                        'available' => (int) $node['quantity'],
+                    ];
+                }
+            }
+        }
+
+        $returnLineItems = [];
+
+        foreach ($qtyByLineId as $lineId => $qty) {
+            $need = (int) $qty;
+
+            foreach ($lines[(int) $lineId] ?? [] as $slot) {
+                if ($need <= 0) {
+                    break;
+                }
+
+                $take = min($need, $slot['available']);
+
+                if ($take > 0) {
+                    $returnLineItems[] = [
+                        'fulfillmentLineItemId' => $slot['fid'],
+                        'quantity' => $take,
+                        'returnReason' => 'OTHER',
+                    ];
+                    $need -= $take;
+                }
+            }
+
+            if ($need > 0) {
+                // مفيش كمية قابلة للإرجاع كفاية في شوبيفاي — بلّغ ومتكسّرش
+                return __('online.return_push_failed', ['number' => $order->number])
+                    .' (returnable < requested)';
+            }
+        }
+
+        if (empty($returnLineItems)) {
+            return __('online.return_push_failed', ['number' => $order->number]);
+        }
+
+        [$mut, $err2] = self::gql(
+            'mutation($input: ReturnInput!) {
+                returnCreate(returnInput: $input) {
+                    return { id }
+                    userErrors { message }
+                }
+            }',
+            ['input' => [
+                'orderId' => $gid,
+                'returnLineItems' => $returnLineItems,
+            ]],
+        );
+
+        $ue = $err2 ?? self::userError($mut['returnCreate'] ?? null);
+        $returnId = $mut['returnCreate']['return']['id'] ?? null;
+
+        if ($ue !== null || empty($returnId)) {
+            return __('online.return_push_failed', ['number' => $order->number])
+                .($ue !== null ? ' ('.$ue.')' : '');
+        }
+
+        // قفل المرتجع — البضاعة رجعت مخزننا فعلاً، فالريتيرن مكتمل.
+        // فشل القفل مش بيرجّع خطأ: الريتيرن نفسه اتسجل والباج ظهر.
+        self::gql(
+            'mutation($id: ID!) {
+                returnClose(id: $id) { return { id } userErrors { message } }
+            }',
+            ['id' => $returnId],
+        );
+
+        return null;
     }
 
     // ==================== دفع الحالة لشوبيفاي ====================

@@ -43,7 +43,7 @@ class OnlineOrder extends Model
     protected $fillable = [
         'shopify_id', 'number', 'customer_name', 'phone', 'address', 'area',
         'items_count', 'subtotal', 'shipping', 'total', 'cost_total',
-        'collected_total', 'status', 'postponed_to', 'cancel_reason',
+        'collected_total', 'returned_total', 'status', 'postponed_to', 'cancel_reason',
         'pick_order_id', 'pickup_id', 'confirmed_by',
         'ordered_at', 'confirmed_at', 'ready_at', 'shipped_at', 'collected_at',
         'notes',
@@ -57,6 +57,7 @@ class OnlineOrder extends Model
             'total' => 'decimal:2',
             'cost_total' => 'decimal:2',
             'collected_total' => 'decimal:2',
+            'returned_total' => 'decimal:2',
             'postponed_to' => 'date',
             'ordered_at' => 'datetime',
             'confirmed_at' => 'datetime',
@@ -104,10 +105,26 @@ class OnlineOrder extends Model
         return 'pro'.$this->number;
     }
 
-    /** الباقي على الأوردر (للتحصيل) */
+    /**
+     * الباقي على الأوردر (للتحصيل).
+     *
+     * ⚠️ **من مبلغ البضاعة بس — الشحن مش بيتحصّل** (قرار المالك ٥/٩):
+     * العميل بيدفع الإجمالي للمندوب، والمندوب بياخد الشحن بتاعه
+     * وبيسلّم الشركة تمن البضاعة. فالمستهدف تحصيله = subtotal.
+     */
     public function remaining(): float
     {
-        return round((float) $this->total - (float) $this->collected_total, 2);
+        // المرتجع الجزئي بيقلل المستهدف تحصيله (٥/٩)
+        return round(
+            (float) $this->subtotal - (float) $this->returned_total - (float) $this->collected_total,
+            2,
+        );
+    }
+
+    /** المستهدف تحصيله = البضاعة − اللي رجع منها */
+    public function collectible(): float
+    {
+        return round((float) $this->subtotal - (float) $this->returned_total, 2);
     }
 
     /** فيه بند مش مربوط بمنتج؟ التأكيد بيترفض لحد ما الربط يخلص */

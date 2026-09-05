@@ -417,13 +417,17 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['ship' => __('online.nothing_to_ship')]);
         }
 
-        // تاج pmx-shipped على كل أوردر في الشيت — بعد نجاح الشحن محلياً
+        // ═══ «الأوردر بيتقلب Fulfilled أول ما يطلع بيه شيت بيك اب»
+        // (قرار المالك ٥/٩) — فلفلمنت حقيقي + التاج، بعد نجاح الشحن
+        // محلياً. الفشل بيتبلّغ ومايرجّعش الشحنة.
         $warns = 0;
 
         foreach ($pickup->orders()->get() as $o) {
-            if (ShopifyOnline::pushStatus($o) !== null) {
+            if (ShopifyOnline::fulfillOrder($o) !== null) {
                 $warns++;
             }
+
+            ShopifyOnline::pushStatus($o);
         }
 
         $redirect = redirect()->route('online.pickup', $pickup)
@@ -572,14 +576,16 @@ class OnlineOrderController extends Controller
         $err = DB::transaction(function () use ($order, $data) {
             $fresh = OnlineOrder::whereKey($order->id)->lockForUpdate()->first();
 
-            $remaining = round((float) $fresh->total - (float) $fresh->collected_total, 2);
+            // ⚠️ التحصيل على **البضاعة بس** (− المرتجع) — الشحن بتاع المندوب
+            $target = round((float) $fresh->subtotal - (float) $fresh->returned_total, 2);
+            $remaining = round($target - (float) $fresh->collected_total, 2);
 
             if ((float) $data['amount'] > $remaining + 0.009) {
                 return __('online.collect_too_much', ['v' => number_format($remaining, 2)]);
             }
 
             $collected = round((float) $fresh->collected_total + (float) $data['amount'], 2);
-            $done = $collected >= (float) $fresh->total - 0.009;
+            $done = $collected >= $target - 0.009;
 
             $fresh->update([
                 'collected_total' => $collected,
@@ -594,38 +600,142 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['collect' => $err]);
         }
 
-        // لو التحصيل كمّل الأوردر → تاج pmx-completed في شوبيفاي
+        // «بيتقلب Paid أول ما يتحصّل» (٥/٩) — Mark as paid حقيقي + التاج
         $fresh = $order->fresh();
-        $warn = $fresh->status === 'completed' ? ShopifyOnline::pushStatus($fresh) : null;
+        $warn = null;
+
+        if ($fresh->status === 'completed') {
+            $warn = ShopifyOnline::markPaid($fresh);
+            ShopifyOnline::pushStatus($fresh);
+        }
 
         return $this->okWithPushWarn(__('online.collected_ok', ['number' => $order->number]), $warn);
     }
 
-    /** مرتجع بعد الشحن — البضاعة بترجع لنفس الرف والباتش */
+    /**
+     * ═══ مرتجع بعد الشحن — كامل أو **جزئي بالكميات** (٥/٩) ═══
+     *
+     * الفورم بيبعت items[بند] = عدد الباكات الراجعة (نفس وحدة شوبيفاي).
+     * البضاعة بترجع لنفس الرف والباتش بالقطع (باكات × قطع الباك)،
+     * وقيمة الراجع بتتخصم من المستهدف تحصيله، وفي شوبيفاي بيتعمل
+     * Return حقيقي فالأوردر بياخد Returned أو Partially returned.
+     */
     public function returnOrder(Request $request, OnlineOrder $order)
     {
         if ($order->status !== 'shipped') {
             return back()->withErrors(['order' => __('online.wrong_status')]);
         }
 
-        // ⚠️ نفس قاعدة الإلغاء: عليه تحصيل مسجل = مايرجعش قبل ما
-        // يتشاف موضوع الفلوس دي — وإلا بتختفي من حساب البيك اب
-        if ((float) $order->collected_total > 0) {
-            return back()->withErrors(['order' => __('online.has_money')]);
-        }
+        $data = $request->validate([
+            'items' => ['required', 'array'],
+            'items.*' => ['nullable', 'integer', 'min:0'],
+        ]);
 
-        DB::transaction(function () use ($order) {
-            $order->restock();
-            $order->update(['status' => 'returned']);
+        $shopifyQty = [];   // [shopify_line_id => باكات] للريتيرن هناك
+
+        $err = DB::transaction(function () use ($order, $data, &$shopifyQty) {
+            $fresh = OnlineOrder::whereKey($order->id)->lockForUpdate()->first();
+            $fresh->load(['items', 'pickOrder.items']);
+
+            $value = 0.0;
+            $moves = [];   // [product_id => قطع ترجع]
+
+            foreach ($fresh->items as $item) {
+                $qty = (int) ($data['items'][$item->id] ?? 0);
+
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $max = (int) $item->qty - (int) $item->returned_qty;
+
+                if ($qty > $max) {
+                    return __('online.return_over', ['n' => $max]);
+                }
+
+                // قيمة الباك = إجمالي البند ÷ كميته (بعد خصم شوبيفاي)
+                $value += round(((float) $item->total / max((int) $item->qty, 1)) * $qty, 2);
+
+                if ($item->product_id !== null) {
+                    $pieces = $qty * max((int) $item->units_per, 1);
+                    $moves[$item->product_id] = ($moves[$item->product_id] ?? 0) + $pieces;
+                }
+
+                $item->update(['returned_qty' => (int) $item->returned_qty + $qty]);
+
+                if ($item->shopify_line_id !== null) {
+                    $shopifyQty[(int) $item->shopify_line_id] = $qty;
+                }
+            }
+
+            if (empty($moves) && $value <= 0) {
+                return __('online.return_none');
+            }
+
+            $newReturned = round((float) $fresh->returned_total + $value, 2);
+
+            // ⚠️ المتحصّل مايزيدش عن المستهدف الجديد — وإلا فلوس مسجلة
+            // تبقى من غير مقابل بضاعة
+            if ((float) $fresh->collected_total > (float) $fresh->subtotal - $newReturned + 0.009) {
+                return __('online.return_money_clash');
+            }
+
+            // رجوع القطع لنفس الرف والباتش — بنمشي على بنود أمر التجهيز
+            // بتاعة نفس المنتج وبننقص qty_picked بقد ما رجع، فالإلغاء
+            // الكامل بعدين بيرجّع الباقي بس
+            foreach ($moves as $productId => $need) {
+                foreach ($fresh->pickOrder?->items ?? [] as $pi) {
+                    if ($need <= 0 || (int) $pi->product_id !== (int) $productId) {
+                        continue;
+                    }
+
+                    $take = min($need, (int) $pi->qty_picked);
+
+                    if ($take > 0) {
+                        $pi->returnToShelf($take);
+                        $pi->update(['qty_picked' => (int) $pi->qty_picked - $take]);
+                        $need -= $take;
+                    }
+                }
+            }
+
+            // كله رجع؟ → الأوردر «رجع». جزء؟ → لسه «اتشحن» والباقي بيتحصّل
+            $allBack = $fresh->items->every(
+                fn ($i) => (int) $i->returned_qty >= (int) $i->qty,
+            );
+
+            $fresh->update([
+                'returned_total' => $newReturned,
+                'status' => $allBack ? 'returned' : 'shipped',
+            ]);
+
+            return null;
         });
 
-        $warn = ShopifyOnline::pushStatus($order->fresh());
+        if ($err !== null) {
+            return back()->withErrors(['order' => $err]);
+        }
+
+        // ريتيرن حقيقي في شوبيفاي (كامل/جزئي بالكميات) + التاج
+        $fresh = $order->fresh();
+        $warn = ShopifyOnline::createReturn($fresh, $shopifyQty);
+        ShopifyOnline::pushStatus($fresh,
+            $fresh->status === 'returned' ? null : 'pmx-partial-return');
 
         return $this->okWithPushWarn(__('online.returned_ok', ['number' => $order->number]), $warn);
     }
 
     public function collections(Request $request)
     {
+        // ⚠️ تطبيع (٥/٩): أوردر متحصّل منه تمن البضاعة كامل تحت
+        // القاعدة القديمة (اللي كانت بتستنى الشحن كمان) بيتقفل
+        // «كامل» هنا — من غيره كان هيفضل معلق بباقي صفر للأبد
+        // وزرار التحصيل مايقدرش يضيف صفر.
+        OnlineOrder::where('status', 'shipped')
+            ->where('subtotal', '>', 0)
+            ->whereRaw('collected_total >= subtotal - returned_total')
+            ->update(['status' => 'completed', 'collected_at' => now()]);
+
         $q = OnlineOrder::with('pickup.courier')
             ->where('status', 'shipped');
 
@@ -640,8 +750,9 @@ class OnlineOrderController extends Controller
 
         return view('online.collections', [
             'orders' => $q->orderByDesc('shipped_at')->paginate(50)->withQueryString(),
+            // بره = تمن البضاعة (− المرتجع) الغير محصّل — الشحن للمندوب
             'outstanding' => round((float) OnlineOrder::status('shipped')
-                ->selectRaw('COALESCE(SUM(total - collected_total), 0) as v')->value('v'), 2),
+                ->selectRaw('COALESCE(SUM(subtotal - returned_total - collected_total), 0) as v')->value('v'), 2),
         ]);
     }
 
@@ -685,14 +796,15 @@ class OnlineOrderController extends Controller
     public function accounts()
     {
         // كل الأرقام من كويري تجميع واحدة لكل نطاق — مش لوب صفوف
+        // ⚠️ «فلوس بره» = تمن البضاعة بس — الشحن للمندوب (٥/٩)
         $sum = OnlineOrder::selectRaw("
-            COALESCE(SUM(CASE WHEN status = 'shipped' THEN total - collected_total ELSE 0 END), 0) as outstanding,
+            COALESCE(SUM(CASE WHEN status = 'shipped' THEN subtotal - returned_total - collected_total ELSE 0 END), 0) as outstanding,
             COALESCE(SUM(collected_total), 0) as collected,
-            COALESCE(SUM(CASE WHEN status = 'returned' THEN total ELSE 0 END), 0) as returned_amount,
+            COALESCE(SUM(returned_total), 0) as returned_amount,
             COALESCE(SUM(CASE WHEN status IN ('ready','shipped','completed') THEN shipping ELSE 0 END), 0) as shipping_sum,
             COALESCE(SUM(CASE WHEN status IN ('ready','shipped','completed') THEN cost_total ELSE 0 END), 0) as cost_sum,
             COALESCE(SUM(CASE WHEN status IN ('ready','shipped','completed') THEN total ELSE 0 END), 0) as live_amount,
-            COALESCE(SUM(CASE WHEN status = 'completed' THEN total ELSE 0 END), 0) as completed_amount,
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN subtotal - returned_total ELSE 0 END), 0) as completed_amount,
             COALESCE(SUM(CASE WHEN status = 'completed' THEN cost_total ELSE 0 END), 0) as completed_cost
         ")->first();
 

@@ -63,16 +63,23 @@ class OnlinePickup extends Model
         // بيضمن إن «الباقي» مايتنفخش لو الداتا اتلمست يدوي
         $collected = round((float) $live->sum('collected_total'), 2);
 
+        // المرتجع الجزئي بيتخصم من بضاعة الشيت (٥/٩)
+        $goods = round((float) $live->sum(
+            fn ($o) => (float) $o->subtotal - (float) $o->returned_total,
+        ), 2);
+
         return [
             'orders' => $orders->count(),
             'live' => $live->count(),
             'pieces' => (int) $orders->sum('items_count'),
             // فصل الفلوس (٤/٩): بضاعة + شحن = إجمالي
-            'goods' => round((float) $live->sum('subtotal'), 2),
+            'goods' => $goods,
             'ship' => round((float) $live->sum('shipping'), 2),
             'amount' => $amount,
             'collected' => $collected,
-            'remaining' => round($amount - $collected, 2),
+            // ⚠️ الباقي من **البضاعة بس** (٥/٩) — الشحن بتاع المندوب
+            // مش دين عليه، فالشيت بيتصفى لما تمن البضاعة يكمل
+            'remaining' => round($goods - $collected, 2),
         ];
     }
 
