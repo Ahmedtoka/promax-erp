@@ -177,4 +177,17 @@ return [
     'skip_dup_sheet' => ':n rows skipped: repeated inside the uploaded file',
     'skip_closed' => ':n rows skipped: the place is marked closed',
     'skip_off_target' => ':n rows skipped: the activity is not one we sell to',
+
+    // ═══ Manager distribution + lead delete (Sep 6, 2026) ═══
+    'assign_to' => 'Assign to',
+    'grp_managers' => 'Channel managers',
+    'grp_reps' => 'Reps',
+    'at_manager' => 'With manager',
+    'bulk_mgr_done' => ':n leads moved to :mgr portfolio - he distributes them to his team.',
+    'n_mgr_title' => 'New leads in your portfolio',
+    'n_mgr_body' => 'The admin assigned you :n prospects - distribute them to your reps from the Leads screen.',
+    'del_confirm' => 'This prospect and its scheduling will be permanently deleted - sure?',
+    'deleted' => 'Prospect ":name" deleted.',
+    'del_converted' => 'This prospect became a real client - its history cannot be deleted.',
+    'del_not_yours' => 'This lead is not in your portfolio - only the admin can delete it.',
 ];

@@ -47,12 +47,37 @@ class LeadApiController extends Controller
             ->map(fn ($p) => $this->payload($p->lead))
             ->values();
 
-        // مجمّعة بالزون — نفس روح تاب المناطق
-        $zones = $leads->groupBy('zone_id')->map(fn ($g) => [
-            'zone_id' => $g->first()->zone_id,
-            'zone' => $g->first()->zone?->displayName() ?? __('lead.no_zone'),
-            'leads' => $g->map(fn (Lead $l) => $this->payload($l))->values(),
-        ])->sortByDesc(fn ($z) => count($z['leads']))->values();
+        // ═══ الترتيب بالمسافة (٦/٩ — طلب المالك): جوه كل زون الليدات
+        // بتترتب سلسلة «الأقرب فالأقرب» بداية من مكان المندوب الحالي
+        // (الأبلكيشن بيبعت lat/lng) — أول واحد «الأقرب ليك» وكل اللي
+        // بعده بمسافته من اللي قبله، واللي من غير لوكيشن في الآخر ═══
+        $repLat = $request->filled('lat') ? (float) $request->query('lat') : null;
+        $repLng = $request->filled('lng') ? (float) $request->query('lng') : null;
+
+        $zones = $leads->groupBy('zone_id')->map(function ($g) use ($repLat, $repLng) {
+            [$chain, $rest] = $this->nearChain($g, $repLat, $repLng);
+
+            $rows = [];
+            foreach ($chain as $i => [$lead, $distM]) {
+                $rows[] = $this->payload($lead, $distM, $i === 0 ? 'first' : 'next');
+            }
+            foreach ($rest as $lead) {
+                $rows[] = $this->payload($lead);
+            }
+
+            return [
+                'zone_id' => $g->first()->zone_id,
+                'zone' => $g->first()->zone?->displayName() ?? __('lead.no_zone'),
+                // مسافة أقرب ليد في الزون — لترتيب الزونز نفسها
+                'near_m' => $chain !== [] ? $chain[0][1] : null,
+                'leads' => $rows,
+            ];
+        });
+
+        // الزون الأقرب الأول لما الـGPS موجود — وإلا الأكتر ليدات (القديم)
+        $zones = ($repLat !== null
+            ? $zones->sortBy(fn ($z) => $z['near_m'] ?? PHP_INT_MAX)
+            : $zones->sortByDesc(fn ($z) => count($z['leads'])))->values();
 
         return response()->json([
             'today' => $today,
@@ -214,7 +239,7 @@ class LeadApiController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function payload(Lead $l): array
+    private function payload(Lead $l, ?int $distM = null, ?string $near = null): array
     {
         return [
             'id' => $l->id,
@@ -231,6 +256,72 @@ class LeadApiController extends Controller
             'lng' => $l->lng !== null ? (float) $l->lng : null,
             'confirmed' => $l->confirmed_at !== null,
             'notes' => $l->notes,
+            // ترتيب المسافة (٦/٩): 'first' = الأقرب ليك · 'next' = بمسافته
+            // من اللي قبله في السلسلة · null = ملوش لوكيشن
+            'near' => $near,
+            'dist_m' => $distM,
         ];
+    }
+
+    /**
+     * سلسلة «الأقرب فالأقرب» — greedy nearest-neighbour.
+     *
+     * بيبدأ من مكان المندوب (لو الأبلكيشن بعته)، وبعدين كل خطوة
+     * بيختار أقرب ليد للنقطة اللي واقف عندها. من غير GPS بيبدأ من
+     * أعلى سكور ويكمّل بالقرب من بعضه — فالترتيب برضو «أماكن جنب
+     * بعضها» حتى لو مانعرفش المندوب فين.
+     *
+     * @return array{0: array<int, array{0: Lead, 1: ?int}>, 1: \Illuminate\Support\Collection}
+     *         [السلسلة (ليد + مسافة بالمتر من اللي قبله)، اللي من غير لوكيشن]
+     */
+    private function nearChain($leads, ?float $lat, ?float $lng): array
+    {
+        $located = $leads->filter(fn (Lead $l) => $l->lat !== null && $l->lng !== null)
+            ->values()->all();
+        $rest = $leads->filter(fn (Lead $l) => $l->lat === null || $l->lng === null)->values();
+
+        $out = [];
+
+        // مفيش نقطة بداية من المندوب؟ ابدأ من أعلى سكور
+        if ($lat === null && $located !== []) {
+            usort($located, fn ($a, $b) => (int) $b->score <=> (int) $a->score);
+            $first = array_shift($located);
+            $out[] = [$first, null];
+            $lat = (float) $first->lat;
+            $lng = (float) $first->lng;
+        }
+
+        while ($located !== []) {
+            $bestI = 0;
+            $bestD = PHP_FLOAT_MAX;
+
+            foreach ($located as $i => $l) {
+                $d = $this->meters($lat, $lng, (float) $l->lat, (float) $l->lng);
+                if ($d < $bestD) {
+                    $bestD = $d;
+                    $bestI = $i;
+                }
+            }
+
+            $pick = $located[$bestI];
+            array_splice($located, $bestI, 1);
+            $out[] = [$pick, (int) round($bestD)];
+            $lat = (float) $pick->lat;
+            $lng = (float) $pick->lng;
+        }
+
+        return [$out, $rest];
+    }
+
+    /** مسافة هافرساين بالمتر */
+    private function meters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371000;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return 2 * $r * asin(min(1, sqrt($a)));
     }
 }

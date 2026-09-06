@@ -250,18 +250,29 @@
                  مع الفورم عشان السيرفر يعيد بناء نفس الكويري لما
                  all_filtered=1 — أي فلتر جديد في الشاشة يتضاف هنا ═══ --}}
             <input type="hidden" name="all_filtered" id="ldAllFiltered" value="">
-            @foreach (['status', 'zone', 'rep', 'search', 'source', 'cat', 'unassigned', 'dup'] as $fk)
+            @foreach (['status', 'zone', 'rep', 'mgr', 'search', 'source', 'cat', 'unassigned', 'dup'] as $fk)
                 @if (($filters[$fk] ?? '') !== '' && $filters[$fk] !== null)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] }}">
                 @endif
             @endforeach
             <b style="font-size:12.5px">🎯 {{ __('lead.bulkset_title') }}</b>
             <span id="ldCkCount" class="badge b-blue">0</span>
-            <select name="rep_id" required style="flex:0 1 240px">
-                <option value="">— {{ __('ops.rep') }} —</option>
-                @foreach ($reps as $r)
-                    <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
-                @endforeach
+            {{-- ⭐ التوزيع بالرول (٦/٩): الأدمن بينزّل على مدير قناة أو
+                 مندوب، والمدير على مناديبه هو بس (القايمة أصلاً مقصوصة) --}}
+            <select name="target" required style="flex:0 1 260px">
+                <option value="">— {{ __('lead.assign_to') }} —</option>
+                @if ($managers->isNotEmpty())
+                    <optgroup label="👔 {{ __('lead.grp_managers') }}">
+                        @foreach ($managers as $m)
+                            <option value="m-{{ $m->id }}">{{ $m->displayName() }}</option>
+                        @endforeach
+                    </optgroup>
+                @endif
+                <optgroup label="🧢 {{ __('lead.grp_reps') }}">
+                    @foreach ($reps as $r)
+                        <option value="r-{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
+                    @endforeach
+                </optgroup>
             </select>
             <button class="btn gold" type="submit" id="ldApplyBtn" disabled>
                 ✅ {{ __('lead.apply_all') }}</button>
@@ -361,7 +372,14 @@
                     </td>
                     <td class="num s">{{ $l->phone ?: '—' }}</td>
                     <td class="s">{{ $l->zone?->displayName() ?: '—' }}</td>
-                    <td class="s">{{ $l->assignee?->displayName() ?: '—' }}</td>
+                    <td class="s">
+                        {{ $l->assignee?->displayName() ?: '—' }}
+                        {{-- في محفظة مدير ولسه ماتوزعش لمندوب (٦/٩) --}}
+                        @if ($l->manager_id !== null && $l->assigned_to === null)
+                            <br><span class="badge b-purple" style="font-size:9px">
+                                👔 {{ __('lead.at_manager') }}: {{ $l->manager?->displayName() ?? '—' }}</span>
+                        @endif
+                    </td>
                     <td class="num">{{ $money($l->expected_monthly) }}</td>
                     <td class="num s {{ $l->isOverdue() ? 'neg' : '' }}">
                         {{ $l->next_action_on?->format('Y-m-d') ?: '—' }}
@@ -410,6 +428,12 @@
                                       style="display:inline" onsubmit="return confirm(CONVERT_CONFIRM)">
                                     @csrf
                                     <button class="btn sm green">{{ __('lead.convert') }}</button>
+                                </form>
+                                {{-- مسح ليد (٦/٩) — الحارس النهائي جوه الكنترولر --}}
+                                <form method="POST" action="{{ route('erp.leads.delete', $l) }}"
+                                      style="display:inline" onsubmit="return confirm(LEAD_DEL_CONFIRM)">
+                                    @csrf
+                                    <button class="btn sm red" title="{{ __('common.delete') }}">🗑</button>
                                 </form>
                             @endif
                         @endif
@@ -571,12 +595,21 @@
         <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="blkZoneLine"></div>
         <input type="hidden" name="zone_id" id="blkZone" value="">
 
-        <label class="f">{{ __('ops.rep') }}</label>
-        <select name="rep_id" required style="width:100%;margin-bottom:10px">
+        <label class="f">{{ __('lead.assign_to') }}</label>
+        <select name="target" required style="width:100%;margin-bottom:10px">
             <option value="">—</option>
-            @foreach ($reps as $r)
-                <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
-            @endforeach
+            @if ($managers->isNotEmpty())
+                <optgroup label="👔 {{ __('lead.grp_managers') }}">
+                    @foreach ($managers as $m)
+                        <option value="m-{{ $m->id }}">{{ $m->displayName() }}</option>
+                    @endforeach
+                </optgroup>
+            @endif
+            <optgroup label="🧢 {{ __('lead.grp_reps') }}">
+                @foreach ($reps as $r)
+                    <option value="r-{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
+                @endforeach
+            </optgroup>
         </select>
 
         <label class="f">{{ __('lead.bulk_count') }}</label>
@@ -622,6 +655,7 @@
 <script>
     {{-- ⚠️ في ثابت مش جوه onsubmit — الأبوستروف بيكسّر الجافاسكريبت --}}
     const CONVERT_CONFIRM = @js(__('lead.convert_confirm'));
+    const LEAD_DEL_CONFIRM = @js(__('lead.del_confirm'));
 
     function toggleLost() {
         const s = document.getElementById('edLStatus').value;

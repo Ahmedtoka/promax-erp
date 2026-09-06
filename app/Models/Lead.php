@@ -21,7 +21,7 @@ class Lead extends Model
 
     protected $fillable = [
         'number', 'name', 'name_en', 'phone', 'contact_name', 'address',
-        'zone_id', 'channel_id', 'assigned_to', 'status', 'source', 'lost_reason',
+        'zone_id', 'channel_id', 'assigned_to', 'manager_id', 'status', 'source', 'lost_reason',
         'lat', 'lng', 'expected_monthly', 'client_id', 'converted_at',
         'next_action_on', 'notes', 'created_by',
         // ⚠️ أعمدة السورسنج (2026-08-13) — من غيرها في `$fillable`
@@ -90,6 +90,12 @@ class Lead extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /** المدير اللي الليد في محفظته (٦/٩) — الأدمن بيوزع له وهو بيوزع لمناديبه */
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manager_id');
     }
 
     public function client(): BelongsTo

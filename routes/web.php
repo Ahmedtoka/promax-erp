@@ -376,6 +376,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // فحص الشبيهات ضد العملاء الحاليين + قرار المالك (٢٦/٨)
         Route::post('/leads/dup-check', [\App\Http\Controllers\LeadController::class, 'dupCheck'])
             ->middleware('role:admin,manager')->name('leads.dupcheck');
+        // مسح ليد (٦/٩) — أدمن أي ليد، والمدير محفظته بس (الحارس جوه الميثود)
+        Route::post('/leads/{lead}/delete', [\App\Http\Controllers\LeadController::class, 'destroy'])
+            ->middleware('role:admin,manager')->name('leads.delete');
         Route::post('/leads/{lead}/dup', [\App\Http\Controllers\LeadController::class, 'dupDecide'])
             ->middleware('role:admin,manager')->name('leads.dupdecide');
 

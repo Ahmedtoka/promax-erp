@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\Rejected;
+use App\Models\AppNotification;
 use App\Models\Channel;
 use App\Models\Client;
 use App\Models\Lead;
 use App\Models\User;
 use App\Models\Zone;
 use App\Services\Leads;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 
 /**
@@ -69,6 +71,8 @@ class LeadController extends Controller
         $q->when($request->filled('status'), fn ($x) => $x->where('leads.status', $request->input('status')))
             ->when($request->filled('zone'), fn ($x) => $x->where('leads.zone_id', $request->input('zone')))
             ->when($request->filled('rep'), fn ($x) => $x->where('leads.assigned_to', $request->input('rep')))
+            // فلتر محفظة المدير (٦/٩) — «توزيعات المدير الفلاني»
+            ->when($request->filled('mgr'), fn ($x) => $x->where('leads.manager_id', $request->input('mgr')))
             // ⚠️ فلتر المصدر لازم يتحقق من القايمة مش يعدّي خام —
             // `?source=<script>` كان بيرجع صفر نتايج ويتطبع في اللينك
             ->when(
@@ -104,7 +108,7 @@ class LeadController extends Controller
         $user = $request->user();
 
         $q = $this->filteredQuery($request, $user)
-            ->with(['zone', 'channel', 'assignee', 'client', 'dupClient']);
+            ->with(['zone', 'channel', 'assignee', 'manager', 'client', 'dupClient']);
 
         // ⚠️ تجميع في الداتابيز مش تحميل الجدول كله. بعد استيراد
         // شيت فيه آلاف الليدز، `->get()` كان بيجيبهم كلهم بعلاقاتهم
@@ -239,7 +243,13 @@ class LeadController extends Controller
             // في القايمة فبيرجع فاضي، وأول حفظ بيمسح التخصيص في صمت.
             'zones' => Zone::orderBy('code')->get(),
             'channels' => Channel::orderBy('name')->get(),
-            'reps' => User::whereIn('role', User::FIELD_ROLES)->orderBy('name')->get(),
+            // ⚠️ المدير بيشوف مناديبه هو بس في التوزيع (٦/٩) — الأدمن الكل
+            'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))
+                ->where('active', true)->orderBy('name')->get(),
+            // مديري القنوات — للأدمن بس: بينزّل الليدات عليهم
+            'managers' => $user->role === 'admin'
+                ? User::where('role', 'manager')->where('active', true)->orderBy('name')->get()
+                : collect(),
             'statuses' => Lead::STATUSES,
             'sources' => Lead::SOURCES,
             'stats' => [
@@ -251,7 +261,7 @@ class LeadController extends Controller
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
             'sort' => $sort,
-            'filters' => $request->only(['status', 'zone', 'rep', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per']),
+            'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per']),
             'canConvert' => $user->isManager(),
         ]);
     }
@@ -346,13 +356,12 @@ class LeadController extends Controller
     {
         $data = $request->validate([
             'zone_id' => ['required', 'integer', 'exists:zones,id'],
-            'rep_id' => ['required', 'integer',
-                \Illuminate\Validation\Rule::exists('users', 'id')
-                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+            // ⭐ نفس توزيع bulkSet (٦/٩): `r-ID` مندوب أو `m-ID` مدير (أدمن بس)
+            'target' => ['required', 'string', 'regex:/^[rm]-\d+$/'],
             'count' => ['required', 'integer', 'min:1', 'max:200'],
         ]);
 
-        $rep = User::findOrFail($data['rep_id']);
+        [$kind, $targetId] = explode('-', $data['target'], 2);
 
         $ids = Lead::where('zone_id', $data['zone_id'])
             ->whereNull('assigned_to')
@@ -365,7 +374,28 @@ class LeadController extends Controller
             return back()->withErrors(['zone_id' => __('lead.bulk_none')]);
         }
 
-        Lead::whereIn('id', $ids)->update(['assigned_to' => $rep->id]);
+        if ($kind === 'm') {
+            abort_unless($request->user()->role === 'admin', 403);
+            $mgr = User::where('role', 'manager')->where('active', true)
+                ->findOrFail((int) $targetId);
+
+            Lead::whereIn('id', $ids)->update(['manager_id' => $mgr->id, 'assigned_to' => null]);
+
+            AppNotification::send($mgr,
+                fn () => '🎯 '.__('lead.n_mgr_title'),
+                fn () => __('lead.n_mgr_body', ['n' => $ids->count()]));
+
+            return back()->with('ok', __('lead.bulk_mgr_done', [
+                'n' => $ids->count(), 'mgr' => $mgr->displayName(),
+            ]));
+        }
+
+        $rep = User::whereIn('role', User::FIELD_ROLES)->where('active', true)
+            ->findOrFail((int) $targetId);
+        // ⚠️ حارس الفريق — المدير لمناديبه بس (الأدمن بيعدّي)
+        Scope::assertRep($request->user(), $rep);
+
+        Lead::whereIn('id', $ids)->update(['assigned_to' => $rep->id, 'manager_id' => $rep->manager_id]);
 
         // الزون لازم يبان للمندوب — تفعيل + تعليم (إضافة بس، زي Coverage)
         $zone = Zone::find($data['zone_id']);
@@ -588,12 +618,28 @@ class LeadController extends Controller
             // في وضع الكل الـids مالهاش لازمة — الفلتر هو التحديد
             'ids' => [$allMode ? 'nullable' : 'required', 'array', 'max:2000'],
             'ids.*' => ['integer'],
-            'rep_id' => ['required', 'integer',
-                \Illuminate\Validation\Rule::exists('users', 'id')
-                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+            // ⭐ التوزيع بالرول (٦/٩ — طلب المالك): `r-ID` مندوب أو
+            // `m-ID` مدير قناة. الأدمن بينزّل على المدير، والمدير
+            // بينزّل على مناديبه هو بس.
+            'target' => ['required', 'string', 'regex:/^[rm]-\d+$/'],
         ]);
 
-        $rep = User::findOrFail($data['rep_id']);
+        [$kind, $targetId] = explode('-', $data['target'], 2);
+
+        $mgr = null;
+        $rep = null;
+
+        if ($kind === 'm') {
+            // التوزيع لمدير — أدمن بس
+            abort_unless($request->user()->role === 'admin', 403);
+            $mgr = User::where('role', 'manager')->where('active', true)
+                ->findOrFail((int) $targetId);
+        } else {
+            $rep = User::whereIn('role', User::FIELD_ROLES)->where('active', true)
+                ->findOrFail((int) $targetId);
+            // ⚠️ حارس الفريق: المدير يوزّع لمناديبه هو بس (الأدمن بيعدّي)
+            Scope::assertRep($request->user(), $rep);
+        }
 
         // ⚠️ الأعمدة متأهلة بـ`leads.` — filteredQuery ممكن تبقى معمولة
         // للـjoin (نفس درس 1052 الموثق فوقها)
@@ -610,7 +656,24 @@ class LeadController extends Controller
             return back()->withErrors(['ids' => __('lead.bulk_none')]);
         }
 
-        Lead::whereIn('id', $leads->pluck('id'))->update(['assigned_to' => $rep->id]);
+        // ═══ توزيع لمدير: الليد بيدخل محفظته وبيتشال من أي مندوب —
+        // هو اللي هيوزعه على فريقه بعدين ═══
+        if ($mgr !== null) {
+            Lead::whereIn('id', $leads->pluck('id'))
+                ->update(['manager_id' => $mgr->id, 'assigned_to' => null]);
+
+            AppNotification::send($mgr,
+                fn () => '🎯 '.__('lead.n_mgr_title'),
+                fn () => __('lead.n_mgr_body', ['n' => $leads->count()]));
+
+            return back()->with('ok', __('lead.bulk_mgr_done', [
+                'n' => $leads->count(), 'mgr' => $mgr->displayName(),
+            ]));
+        }
+
+        // ═══ توزيع لمندوب — والمدير بيتزامن بمدير المندوب نفسه ═══
+        Lead::whereIn('id', $leads->pluck('id'))
+            ->update(['assigned_to' => $rep->id, 'manager_id' => $rep->manager_id]);
 
         // زونات المختارين تتفعل وتتعلّم للمندوب — عشان تظهر له
         $zoneIds = $leads->pluck('zone_id')->filter()->unique();
@@ -620,13 +683,44 @@ class LeadController extends Controller
             $rep->zones()->syncWithoutDetaching($zoneIds->all());
         }
 
-        \App\Models\AppNotification::send($rep,
+        AppNotification::send($rep,
             fn () => '🎯 '.__('lead.n_bulk_title'),
             fn () => __('lead.n_bulk_body', ['n' => $leads->count(), 'zone' => '']));
 
         return back()->with('ok', __('lead.bulk_done', [
             'n' => $leads->count(), 'rep' => $rep->displayName(),
         ]));
+    }
+
+    /**
+     * ═══ مسح عميل محتمل (٦/٩ — طلب المالك) ═══
+     *
+     * الأدمن بيمسح أي ليد، والمدير بيمسح اللي في محفظته بس (متوزع
+     * له أو لواحد من مناديبه). الليد اللي اتحول لعميل فعلاً ممنوع
+     * يتمسح — هو التاريخ الوحيد لمصدر العميل ده.
+     */
+    public function destroy(Request $request, Lead $lead)
+    {
+        $actor = $request->user();
+
+        if ($lead->isConverted()) {
+            return back()->withErrors(['lead' => __('lead.del_converted')]);
+        }
+
+        if ($actor->role !== 'admin') {
+            $mine = (int) $lead->manager_id === (int) $actor->id
+                || ((int) $lead->assignee?->manager_id === (int) $actor->id && $lead->assigned_to !== null);
+
+            abort_unless($mine, 403, __('lead.del_not_yours'));
+        }
+
+        // خطط الأسبوع اللي بتشاور عليه — مفيش FK cascade على الجدول
+        \App\Models\LeadPlan::where('lead_id', $lead->id)->delete();
+
+        $name = $lead->displayName();
+        $lead->delete();
+
+        return back()->with('ok', __('lead.deleted', ['name' => $name]));
     }
 
     /**
