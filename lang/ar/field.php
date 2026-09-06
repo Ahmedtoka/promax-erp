@@ -289,6 +289,7 @@ return [
     'custody_adjust_gift_new' => 'الهدايا الصح',
     'custody_adjust_total_value' => 'إجمالي قيمة المحمَّل الجديد',
     'custody_adjust_floor_err' => 'مينفعش :product ينزل تحت :floor — ده المتصرّف منه فعلاً (مباع + مرجّع/موزّع).',
+    'custody_adjust_min_js' => 'أقل رقم مسموح هنا :floor — ده المتصرّف بمستندات فعلاً (مباع + مرتجع + متحوّل). لو العربية فيها أقل من كده، الفرق ده عجز بيتحاسب في التصفية مش من هنا.',
     'custody_adjust_no_change' => 'مفيش أي رقم اتغيّر.',
     'custody_adjust_none' => 'مفيش عهدة مفتوحة للمندوب ده.',
     'custody_adjust_note' => 'تصحيح إداري: :reason',

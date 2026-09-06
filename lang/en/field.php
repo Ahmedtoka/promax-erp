@@ -290,6 +290,7 @@ return [
     'custody_adjust_gift_new' => 'Correct gift qty',
     'custody_adjust_total_value' => 'New loaded total value',
     'custody_adjust_floor_err' => ':product cannot go below :floor - that much was already moved (sold + returned/given).',
+    'custody_adjust_min_js' => 'The minimum allowed here is :floor - that much already left with documents (sold + returned + transferred). If the van really holds less, the gap is a settlement shortage, not fixed here.',
     'custody_adjust_no_change' => 'No number was changed.',
     'custody_adjust_none' => 'This rep has no open van stock.',
     'custody_adjust_note' => 'Admin correction: :reason',

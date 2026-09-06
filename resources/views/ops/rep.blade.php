@@ -1555,13 +1555,18 @@ a.src-ref:hover{text-decoration-style:solid}
                                     @endif
                                 </td>
                                 <td>
+                                    {{-- ⚠️ رسالة الأرضية بالعربي (٦/٩) — رسالة المتصفح
+                                         الإنجليزي كانت بتبان «إيرور» مش مفهوم --}}
                                     <input type="number" name="assigned[{{ $p->id }}]" min="{{ $r['floor'] }}" step="1"
                                            value="{{ $r['assigned'] }}" style="width:92px"
-                                           oninput="cadjSync({{ $p->id }})">
+                                           oninvalid="cadjMinMsg(this)"
+                                           oninput="this.setCustomValidity(''); cadjSync({{ $p->id }})">
                                 </td>
                                 <td>
                                     <input type="number" name="gift[{{ $p->id }}]" min="{{ $r['gift_floor'] }}" step="1"
-                                           value="{{ $r['gift'] }}" style="width:82px">
+                                           value="{{ $r['gift'] }}" style="width:82px"
+                                           oninvalid="cadjMinMsg(this)"
+                                           oninput="this.setCustomValidity('')">
                                 </td>
                                 @php $adjPrice = (float) ($cadjPrices[$p->id] ?? 0); @endphp
                                 <td class="num">
@@ -1639,6 +1644,13 @@ a.src-ref:hover{text-decoration-style:solid}
     const money = n => Number(n || 0).toLocaleString(undefined, {
         minimumFractionDigits: 2, maximumFractionDigits: 2
     });
+
+    // رسالة الأرضية بالعربي (٦/٩) — بدل تولتيب المتصفح الإنجليزي:
+    // الحد الأدنى = المتصرّف بمستندات (مباع + مرتجع + متحوّل)، ولو
+    // العربية فيها أقل فده عجز مكانه التصفية مش هنا
+    window.cadjMinMsg = function (el) {
+        el.setCustomValidity(@js(__('field.custody_adjust_min_js')).replace(':floor', el.min));
+    };
 
     // قيمة صف = المحمَّل الجديد × سعر قايمة المندوب — والإجمالي بعده
     window.cadjSync = function (id) {

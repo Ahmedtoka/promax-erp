@@ -92,9 +92,13 @@ class AppVersionController extends Controller
             'app_version' => $data['app_version'],
             'app_min_version' => $data['app_min_version'],
             'app_update_note' => (string) ($data['app_update_note'] ?? ''),
-            // الرابط بيتولّد لوحده — كتابته بالإيد مصدر أخطاء
+            // الرابط بيتولّد لوحده — كتابته بالإيد مصدر أخطاء.
+            // ⚠️ **كاش-باستينج بوقت الملف مش برقم الإصدار** (٦/٩): رفعتين
+            // بنفس الرقم كانوا بياخدوا نفس الـURL، وVarnish بتاع
+            // Cloudways كان بيسرّف الـAPK القديم من الكاش — المندوب
+            // يحدّث وينزّله النسخة القديمة ويفضل في لوب التحديث.
             'app_apk_url' => is_file(public_path(self::APK_PATH))
-                ? url(self::APK_PATH).'?v='.$data['app_version']
+                ? url(self::APK_PATH).'?v='.filemtime(public_path(self::APK_PATH))
                 : '',
         ]);
 
@@ -177,9 +181,10 @@ class AppVersionController extends Controller
         rename($part, public_path(self::APK_PATH));
         @unlink($meta);
 
-        // الرابط بنفس نسخة الإعدادات الحالية — «حفظ» بيحدّثها بعدين
+        // ⚠️ نفس قاعدة الكاش-باستينج بتاعت save (٦/٩): وقت الملف مش
+        // رقم الإصدار — كل رفع = URL جديد، فمفيش كاش يقدر يسرّف القديم
         Setting::write('app_apk_url',
-            url(self::APK_PATH).'?v='.Setting::read('app_version', '1.0.0'));
+            url(self::APK_PATH).'?v='.filemtime(public_path(self::APK_PATH)));
 
         return response()->json([
             'ok' => true,
