@@ -307,7 +307,9 @@
 </div>
 
 {{-- ═══ بوب أب محتوى الرف — بيتملى بالجافاسكريبت من بايلود الخريطة ═══ --}}
-<dialog id="dlgShelf" style="width:min(760px,94vw)">
+{{-- ⚠️ `wide` — العنصر الجواني في الليّاوت مقفول على 620px، ومن غيرها
+     الدايالوج بيبقى أعرض من محتواه: مسافة بيضا + سكرول أفقي للجدول --}}
+<dialog id="dlgShelf" class="wide">
     <div class="dlg">
         <h4 style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;
@@ -432,9 +434,12 @@
 <style>
 .loc-tbl th, .loc-tbl td { text-align: center; vertical-align: middle; }
 
-/* جدول البوب أب — نفس روح جدول المخزون */
+/* جدول البوب أب — كله باين من غير سكرول أفقي */
+.sh-tbl { overflow-x: hidden; }
+.sh-tbl table { width: 100%; min-width: 0; }
 .sh-tbl th, .sh-tbl td { text-align: center; vertical-align: middle; }
-.sh-tbl td { padding: 9px 10px; }
+.sh-tbl td { padding: 9px 8px; }
+.sh-tbl td b { white-space: normal; word-break: break-word; }
 .sh-tbl tbody tr { border-bottom: 1px solid var(--border); }
 .sh-tbl tbody tr:hover { background: rgba(18,57,155,.04); }
 
