@@ -202,4 +202,12 @@ return [
     'route_nearest' => 'Nearest first',
     'route_add' => 'Add to this day',
     'route_remove' => 'Remove from day',
+    'route_title' => 'Route builder',
+    'route_page_hint' => 'Click the shops on the map in the order you want - they get numbered 1 2 3 and the line is drawn between them. Pick the rep and the day and hit Apply: the leads are assigned to the rep and written into that day plan in the same order, showing up in his Today Scheduled.',
+    'route_date' => 'Visit day',
+    'route_selected' => 'Selected',
+    'route_unselect' => 'Clear selection',
+    'route_apply' => 'Save route',
+    'route_none_sel' => 'Pick at least one shop on the map first.',
+    'route_saved' => 'Route with :n stops set for :rep on :date ✓',
 ];

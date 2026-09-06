@@ -694,6 +694,124 @@ class LeadController extends Controller
     }
 
     /**
+     * ═══ راسم خط السير التفاعلي (٦/٩ — طلب المالك) ═══
+     *
+     * «اخترت التجمع والجيم جابلي ٦ محلات على الخريطة، فهختار ده ١
+     * وده ٢ وده ٣ وأعمل Apply يرسم خط السير ويحدده للمندوب» —
+     * صفحة خريطة كبيرة بفلاتر المحفظة: تدوس على النقط بالترتيب
+     * فتترقّم ويترسم الخط، وApply بيسكّن الليدات للمندوب وبيكتبهم
+     * في خطة اليوم المختار بنفس الترتيب (نفس جدول `lead_plans`
+     * بتاع الجدولة — فبيظهروا للمندوب في «مجدولين النهارده» يومها).
+     */
+    public function routePlanner(Request $request)
+    {
+        $user = $request->user();
+
+        $leads = $this->filteredQuery($request, $user)
+            ->whereIn('leads.status', Lead::OPEN_STATUSES)
+            ->whereNotNull('leads.lat')->whereNotNull('leads.lng')
+            ->with(['zone', 'assignee'])
+            ->orderByDesc('leads.score')->limit(800)
+            ->get(['leads.id', 'leads.name', 'leads.zone_id', 'leads.lat', 'leads.lng',
+                'leads.score', 'leads.status', 'leads.assigned_to', 'leads.address', 'leads.category_raw']);
+
+        return view('erp.leads_route', [
+            'leads' => $leads->map(fn ($l) => [
+                'id' => $l->id,
+                'name' => $l->displayName(),
+                'zone' => $l->zone?->displayName() ?? '',
+                'lat' => (float) $l->lat,
+                'lng' => (float) $l->lng,
+                'score' => (int) $l->score,
+                'addr' => (string) ($l->address ?? ''),
+                'cat' => (string) ($l->category_raw ?? ''),
+                'rep' => $l->assignee?->displayName(),
+            ])->values(),
+            'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))
+                ->where('active', true)->orderBy('name')->get(),
+            'zones' => Zone::orderBy('code')->get(),
+            'cats' => Lead::selectRaw('category_raw, COUNT(*) n')
+                ->whereNotNull('category_raw')->where('category_raw', '!=', '')
+                ->groupBy('category_raw')->orderByDesc('n')->get(),
+            'filters' => $request->only(['zone', 'cat', 'search']),
+        ]);
+    }
+
+    /** حفظ خط السير — تسكين للمندوب + خطة اليوم بالترتيب المرسوم */
+    public function routeSave(Request $request)
+    {
+        $data = $request->validate([
+            'rep_id' => ['required', 'integer',
+                \Illuminate\Validation\Rule::exists('users', 'id')
+                    ->whereIn('role', User::FIELD_ROLES)->where('active', true)],
+            'date' => ['required', 'date'],
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $rep = User::findOrFail((int) $data['rep_id']);
+        // ⚠️ حارس الفريق — المدير لمناديبه هو بس (الأدمن بيعدّي)
+        Scope::assertRep($request->user(), $rep);
+
+        $date = \Illuminate\Support\Carbon::parse($data['date'])->toDateString();
+
+        // ⚠️ `lead_plans` عليها unique (lead_id, plan_date) **لأي مندوب**
+        // — ليد متجدول اليوم ده لحد تاني بيتعدّى بدل ما الكتابة تقع
+        $takenToday = \App\Models\LeadPlan::whereDate('plan_date', $date)
+            ->whereIn('lead_id', $data['ids'])->pluck('lead_id')->flip();
+
+        $startSort = (int) (\App\Models\LeadPlan::where('user_id', $rep->id)
+            ->whereDate('plan_date', $date)->max('sort') ?? -1) + 1;
+
+        $saved = 0;
+        $zoneIds = collect();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($data, $rep, $date, $takenToday, $startSort, &$saved, &$zoneIds) {
+            foreach (array_values($data['ids']) as $leadId) {
+                $lead = Lead::whereIn('status', Lead::OPEN_STATUSES)->find((int) $leadId);
+
+                if ($lead === null || $lead->isConverted()) {
+                    continue;
+                }
+
+                // التسكين للمندوب + مزامنة مديره (نفس قاعدة bulkSet)
+                $lead->update(['assigned_to' => $rep->id, 'manager_id' => $rep->manager_id]);
+                $zoneIds->push($lead->zone_id);
+
+                if ($takenToday->has($lead->id)) {
+                    continue;
+                }
+
+                \App\Models\LeadPlan::create([
+                    'user_id' => $rep->id,
+                    'lead_id' => $lead->id,
+                    'plan_date' => $date,
+                    'sort' => $startSort + $saved,
+                    'created_by' => auth()->id(),
+                ]);
+                $saved++;
+            }
+
+            // الزونز لازم تبان للمندوب — تفعيل + تعليم (إضافة بس)
+            $zids = $zoneIds->filter()->unique();
+            if ($zids->isNotEmpty()) {
+                Zone::whereIn('id', $zids)->where('active', false)->update(['active' => true]);
+                $rep->zones()->syncWithoutDetaching($zids->all());
+            }
+        });
+
+        if ($saved > 0) {
+            AppNotification::send($rep,
+                fn () => '📅 '.__('lead.n_plan_title'),
+                fn () => __('lead.n_plan_body', ['n' => $saved]));
+        }
+
+        return back()->with('ok', __('lead.route_saved', [
+            'n' => $saved, 'rep' => $rep->displayName(), 'date' => $date,
+        ]));
+    }
+
+    /**
      * ═══ مسح عميل محتمل (٦/٩ — طلب المالك) ═══
      *
      * الأدمن بيمسح أي ليد، والمدير بيمسح اللي في محفظته بس (متوزع

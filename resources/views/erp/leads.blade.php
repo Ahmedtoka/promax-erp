@@ -55,6 +55,10 @@
             <button class="btn" type="submit">🧹 {{ __('lead.clear_btn') }}</button>
         </form>
     @endif
+    @if ($canConvert)
+        {{-- راسم خط السير التفاعلي (٦/٩) --}}
+        <a class="btn" href="{{ route('erp.leads.route') }}">🧭 {{ __('lead.route_title') }}</a>
+    @endif
     <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>
 @endsection
 

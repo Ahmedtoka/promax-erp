@@ -367,6 +367,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('leads.planner.save');
         Route::get('/leads/week', [\App\Http\Controllers\LeadController::class, 'week'])
             ->middleware('role:admin,manager')->name('leads.week');
+        // ═══ راسم خط السير التفاعلي (٦/٩) — ثابتة قبل {lead} ═══
+        Route::get('/leads/route', [\App\Http\Controllers\LeadController::class, 'routePlanner'])
+            ->middleware('role:admin,manager')->name('leads.route');
+        Route::post('/leads/route', [\App\Http\Controllers\LeadController::class, 'routeSave'])
+            ->middleware('role:admin,manager')->name('leads.route.save');
 
         // تسكين المحدد بالتشيك بوكسات + تصفير كل التوزيعات (٢٦/٨)
         Route::post('/leads/bulk-set', [\App\Http\Controllers\LeadController::class, 'bulkSet'])
