@@ -358,6 +358,8 @@ class Access
         // بايبلاين كامل بخطة أسبوعية وحصاد. ═══
         'nav.group_leads' => [
             ['erp.leads', '✨', 'nav.leads_portfolio', 'erp.leads', null],
+            // راسم خط السير التفاعلي (٦/٩) — ترقيم المحطات على الخريطة
+            ['erp.leads.route', '🧭', 'nav.leads_route', 'erp.leads.route', null],
             ['erp.leads.planner', '📅', 'nav.leads_planner', 'erp.leads.planner', null],
             ['erp.leads.week', '👁', 'nav.leads_week', 'erp.leads.week', null],
         ],

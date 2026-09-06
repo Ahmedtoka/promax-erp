@@ -516,4 +516,95 @@ class ManualDocController extends Controller
 
         return back()->with('ok', __('flash.md_gift_done'));
     }
+
+    /**
+     * ═══ تحصيل يدوي من المكتب (٦/٩/٢٠٢٦ — طلب المالك) ═══
+     *
+     * «اختار تاريخ التحصيل، العميل اللي اتحصل منه، مين المندوب،
+     * حصّل كام، كاش ولا فيزا» — قيد `collection` حقيقي بتاريخ
+     * الورقة، منسوب للمندوب (`source_type = User`)، بنفس طرق
+     * التحصيل وحقول الشيك بتاعة الأبلكيشن بالحرف، والرصيد بيتعاد
+     * حسابه جوه نفس الترانزاكشن (عقيدة القيود).
+     */
+    public function storeCollection(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'exists:users,id'],
+            'client_id' => ['required', 'exists:clients,id'],
+            'doc_date' => ['required', 'date', 'before_or_equal:today'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
+            'method' => ['required', \Illuminate\Validation\Rule::in(Transaction::METHODS)],
+            // الفيزا والشيك والتحويل لازم مرجع — نفس قاعدة الأبلكيشن
+            'reference' => ['nullable', 'string', 'max:100',
+                \Illuminate\Validation\Rule::requiredIf(
+                    fn () => in_array($request->input('method'), Transaction::METHODS_NEED_REF, true),
+                )],
+            'cheque_bank' => ['nullable', 'string', 'max:120', 'required_if:method,cheque'],
+            'cheque_due' => ['nullable', 'date', 'required_if:method,cheque'],
+            'note' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        [$rep, $client, $date] = $this->anchors($request, $data);
+
+        $amount = round((float) $data['amount'], 2);
+
+        $tx = DB::transaction(function () use ($data, $rep, $client, $date, $amount, $request) {
+            $tx = Transaction::create([
+                'client_id' => $client->id,
+                'date' => $date->toDateString(),
+                'memo' => ($data['note'] ?? null)
+                    ?: __('ops.md_collect_memo', [
+                        'rep' => $rep->displayName(),
+                        'user' => $request->user()->displayName(),
+                    ]),
+                'debit' => 0,
+                'credit' => $amount,
+                'kind' => 'collection',
+                'method' => $data['method'],
+                'reference' => $data['reference'] ?? null,
+                'cheque_bank' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_bank'] ?? null) : null,
+                'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
+                    ? ($data['cheque_due'] ?? null) : null,
+                // نسبة التحصيل للمندوب — شاشة التحصيلات بتعرضه بيها
+                'source_type' => User::class,
+                'source_id' => $rep->id,
+            ]);
+
+            // التاريخ الرجعي — `created_at` مش fillable، وده المسار الوحيد
+            Transaction::whereKey($tx->id)->update(['created_at' => $date]);
+
+            $client->recalculate();
+
+            return $tx;
+        });
+
+        TrackEvent::log($rep, 'collect',
+            __('field.event_collect', [
+                'amount' => number_format($amount, 2),
+                'client' => $client->displayName(),
+            ]),
+            __('ops.md_by_admin', ['user' => $request->user()->displayName()]));
+
+        // ⚠️ غير الكاش بيتبلّغ للمحاسبين — نفس قاعدة تحصيل الأبلكيشن
+        if ($data['method'] !== Transaction::METHOD_CASH) {
+            foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
+                AppNotification::send(
+                    $acc,
+                    fn () => __('ops.md_collect_notif_title'),
+                    fn () => __('ops.md_collect_notif_body', [
+                        'amount' => number_format($amount, 2),
+                        'client' => $client->displayName(),
+                        'method' => $tx->methodLabel(),
+                    ]),
+                    false,
+                );
+            }
+        }
+
+        return back()->with('ok', __('flash.md_collect_done', [
+            'amount' => number_format($amount, 2),
+            'client' => $client->displayName(),
+        ]));
+    }
 }

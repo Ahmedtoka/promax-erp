@@ -108,10 +108,21 @@ class PickOrderItem extends Model
         $row = $this->currentRow();
 
         if ($row === null) {
+            // ⚠️ **الرف الأصلي ممكن يكون اتمسح من السيستم خالص**
+            // (`pick_order_items.location_id` عليها `nullOnDelete` —
+            // إعادة تنظيم الأرفف ٥/٩ مسحت M01/Q01/Y01 وخلّت البنود
+            // القديمة location_id = null). الإنشاء بـnull كان بيرمي
+            // 1048 على اللايف (٦/٩) — بنرصّف على رف السحب بدل ما نقع.
+            $location = $this->location_id
+                ?? \App\Services\OpeningStock::pickShelf(
+                    $this->batch?->warehouse
+                        ?? $this->pickOrder->warehouse,
+                )->id;
+
             // الصف اتمسح لأنه فضي — بنعمله من جديد
             $row = BatchLocation::create([
                 'batch_id' => $this->batch_id,
-                'location_id' => $this->location_id,
+                'location_id' => $location,
                 'product_id' => $this->product_id,
                 'qty' => 0,
             ]);
@@ -125,6 +136,12 @@ class PickOrderItem extends Model
 
     private function currentRow(): ?BatchLocation
     {
+        // رف البند اتمسح؟ يبقى مفيش صف حالي أصلاً — و`= null` في
+        // SQL عمرها ما بتطابق، فالشرط الصريح أوضح وأأمن
+        if ($this->location_id === null) {
+            return null;
+        }
+
         return BatchLocation::where('batch_id', $this->batch_id)
             ->where('location_id', $this->location_id)
             ->first();

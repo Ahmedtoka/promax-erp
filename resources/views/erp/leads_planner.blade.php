@@ -59,6 +59,10 @@
                         <b>{{ __('lead.wd_'.$d->dayOfWeek) }}</b>
                         <span dir="ltr">{{ $d->format('d/m') }}</span>
                         <span class="badge b-gray lp-day-n">0</span>
+                        {{-- بوب أب خط سير اليوم (٦/٩) — عرض بس --}}
+                        <span class="lp-day-map" title="{{ __('lead.route_map') }}"
+                              data-d="{{ $d->toDateString() }}"
+                              data-t="{{ __('lead.wd_'.$d->dayOfWeek) }} {{ $d->format('d/m') }}">🗺</span>
                     </div>
                     <div class="lp-day-body"></div>
                 </div>
@@ -77,25 +81,23 @@
     </div>
 </div>
 
-{{-- ═══ خريطة خط السير 2D (٦/٩ — طلب المالك): اختار اليوم وشوف
-     ليداته أرقام ١ ٢ ٣ متوصلين بخط — الرمادي غير مجدول (اضغطه من
-     البوب أب يتضاف لليوم)، والمرقّم بيتشال من البوب أب برضو،
-     وزرار «رتب بالأقرب» بيعيد ترتيب اليوم سلسلة أقرب-فالأقرب ═══ --}}
-<div class="card" style="margin-top:14px">
-    <h3 style="margin:0 0 10px">🗺️ {{ __('lead.route_map') }}
-        <span class="side">{{ __('lead.route_map_hint') }}</span></h3>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <label class="f" style="margin:0">{{ __('lead.route_day') }}</label>
-        <select id="lpMapDay">
-            @foreach ($days as $d)
-                <option value="{{ $d->toDateString() }}" @selected($d->isToday())>
-                    {{ __('lead.wd_'.$d->dayOfWeek) }} {{ $d->format('d/m') }}</option>
-            @endforeach
-        </select>
-        <button class="btn sm" type="button" id="lpNearBtn">🧭 {{ __('lead.route_nearest') }}</button>
+{{-- ═══ بوب أب خط سير اليوم (٦/٩ — اتغيّر): الخريطة الثابتة اتشالت،
+     وبدلها زرار 🗺 على هيدر كل يوم بيفتح دايالوج فيه الرسمة
+     النهائية لليوم — أرقام ١ ٢ ٣ متوصلين بخط + ليستة المحطات.
+     الرسم نفسه بيتعمل من صفحة «راسم خط السير». ═══ --}}
+<dialog id="dlgDayMap" class="wide">
+    <div class="dlg">
+        <h4 style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            🗺️ <span id="dmTitle"></span>
+            <span class="badge b-blue" id="dmCount"></span>
+        </h4>
+        <div id="dmMap" style="height:52vh;border-radius:12px;border:1px solid var(--border)"></div>
+        <div id="dmList" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgDayMap')">{{ __('common.close') }}</button>
+        </div>
     </div>
-    <div id="lpMap" style="height:440px;border-radius:12px;border:1px solid var(--border)"></div>
-</div>
+</dialog>
 
 @endsection
 
@@ -107,6 +109,8 @@
 .lp-day.today{border-color:var(--royal-blue,#12399B);background:#F2F6FF}
 .lp-day.armed{border-color:#0F7A38;box-shadow:0 0 0 3px rgba(15,122,56,.15)}
 .lp-day-h{display:flex;gap:5px;align-items:center;font-size:11px;margin-bottom:8px;flex-wrap:wrap}
+.lp-day-map{cursor:pointer;font-size:14px;margin-inline-start:auto;opacity:.75;transition:.12s}
+.lp-day-map:hover{opacity:1;transform:scale(1.15)}
 .lp-card{background:#fff;border:1px solid var(--border);border-radius:9px;padding:6px 8px;
     margin-bottom:6px;font-size:11px;position:relative}
 .lp-card .x{position:absolute;top:2px;inset-inline-end:4px;cursor:pointer;color:var(--red,#DC2626);
@@ -205,9 +209,6 @@
             });
             d.querySelector('.lp-day-n').textContent = list.length;
         });
-
-        // الخريطة مرآة البورد (٦/٩) — أي تغيير هنا يبان هناك فوراً
-        mapRender();
     }
 
     document.querySelectorAll('.lp-day').forEach(function (d) {
@@ -225,29 +226,17 @@
 
     search.addEventListener('input', renderPool);
 
-    /* ═══ خريطة خط السير 2D (٦/٩) — جوه نفس الكلوجر عشان تشارك
-       days و POOL مع البورد: أي تعديل هنا بيبان هناك والعكس ═══ */
-    var NEAR_ADD = @js(__('lead.route_add'));
-    var NEAR_REMOVE = @js(__('lead.route_remove'));
-    var mapEl = document.getElementById('lpMap');
-    var daySel = document.getElementById('lpMapDay');
-    var lpMap = null;
-    var routeLayer = null;
-    var selDate = daySel ? daySel.value : null;
-    var didFit = false;
+    /* ═══ بوب أب خط سير اليوم (٦/٩) — عرض بس: زرار 🗺 على هيدر
+       اليوم بيفتح دايالوج فيه الأرقام ١ ٢ ٣ والخط والليستة.
+       الرسم والتعديل من صفحة «راسم خط السير». ═══ */
+    var dmMap = null;
+    var dmLayer = null;
 
     function hasXY(l) { return l.lat != null && l.lng != null; }
 
-    // مسافة تقريبية بالمتر — كفاية للمقارنة النسبية بين النقط
-    function dist(a, b) {
-        var dy = (a.lat - b.lat) * 111320;
-        var dx = (a.lng - b.lng) * 111320 * Math.cos(a.lat * Math.PI / 180);
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
     function numIcon(n) {
         return L.divIcon({
-            className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14],
+            className: '', iconSize: [28, 28], iconAnchor: [14, 14],
             html: '<div style="width:28px;height:28px;border-radius:50%;background:#12399B;'
                 + 'border:2.5px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35);color:#fff;'
                 + 'font:900 12px Cairo,Inter,sans-serif;display:flex;align-items:center;'
@@ -255,107 +244,65 @@
         });
     }
 
-    function dotIcon() {
-        return L.divIcon({
-            className: '', iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -8],
-            html: '<div style="width:14px;height:14px;border-radius:50%;background:#9CA3AF;'
-                + 'border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+    function dayMapOpen(date, title) {
+        var list = days[date] || [];
+        document.getElementById('dmTitle').textContent = title;
+        document.getElementById('dmCount').textContent = list.length;
+
+        // الليستة — المحطات بالترتيب
+        var box = document.getElementById('dmList');
+        box.innerHTML = '';
+        list.forEach(function (l, i) {
+            var chip = document.createElement('span');
+            chip.className = 'badge b-blue';
+            chip.style.cssText = 'font-size:11px;padding:5px 10px';
+            chip.innerHTML = '<b>' + (i + 1) + '</b> ' + esc(l.name);
+            box.appendChild(chip);
         });
-    }
 
-    function mapRender() {
-        if (!lpMap) return;
-        routeLayer.clearLayers();
+        openDlg('dlgDayMap');
 
+        // ⚠️ Leaflet جوه dialog: الإنشاء أول مرة بس + invalidateSize
+        // بعد ما الدايالوج يبان، وإلا الخريطة بترندر رمادي
+        if (dmMap === null) {
+            dmMap = L.map('dmMap', { scrollWheelZoom: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19, attribution: '&copy; OpenStreetMap',
+            }).addTo(dmMap);
+            dmLayer = L.layerGroup().addTo(dmMap);
+            dmMap.on('click', function () { dmMap.scrollWheelZoom.enable(); });
+            dmMap.on('mouseout', function () { dmMap.scrollWheelZoom.disable(); });
+        }
+
+        dmLayer.clearLayers();
         var pts = [];
-        (days[selDate] || []).forEach(function (l, i) {
+        list.forEach(function (l, i) {
             if (!hasXY(l)) return;
-            var m = L.marker([l.lat, l.lng], { icon: numIcon(i + 1), zIndexOffset: 500 });
-            m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;text-align:start">'
-                + (i + 1) + '. ' + esc(l.name)
-                + '<br><button class="btn sm red" style="margin-top:6px" '
-                + 'onclick="lpMapRemove(' + l.id + ')">✕ ' + esc(NEAR_REMOVE) + '</button></div>');
-            routeLayer.addLayer(m);
+            var m = L.marker([l.lat, l.lng], { icon: numIcon(i + 1) });
+            m.bindTooltip('<b>' + (i + 1) + '. ' + esc(l.name) + '</b>',
+                { direction: 'top', offset: [0, -12] });
+            dmLayer.addLayer(m);
             pts.push([l.lat, l.lng]);
         });
-
         if (pts.length > 1) {
-            routeLayer.addLayer(L.polyline(pts, { color: '#12399B', weight: 3, dashArray: '7 7', opacity: .85 }));
+            dmLayer.addLayer(L.polyline(pts, { color: '#12399B', weight: 3.5, dashArray: '8 8', opacity: .9 }));
         }
 
-        POOL.forEach(function (l) {
-            if (!hasXY(l)) return;
-            var m = L.marker([l.lat, l.lng], { icon: dotIcon() });
-            m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;text-align:start">'
-                + esc(l.name)
-                + '<div style="font-weight:400;font-size:10.5px;color:#6B7280">📍 ' + esc(l.zone) + '</div>'
-                + '<button class="btn sm green" style="margin-top:6px" '
-                + 'onclick="lpMapAdd(' + l.id + ')">➕ ' + esc(NEAR_ADD) + '</button></div>');
-            routeLayer.addLayer(m);
-        });
-
-        if (!didFit) {
-            var all = pts.slice();
-            POOL.forEach(function (l) { if (hasXY(l)) all.push([l.lat, l.lng]); });
-            if (all.length) { lpMap.fitBounds(L.latLngBounds(all).pad(0.15)); didFit = true; }
-        }
+        setTimeout(function () {
+            dmMap.invalidateSize();
+            if (pts.length === 1) dmMap.setView(pts[0], 14);
+            else if (pts.length) dmMap.fitBounds(L.latLngBounds(pts).pad(0.2));
+            else dmMap.setView([30.05, 31.4], 10);
+        }, 120);
     }
-    // البورد بينده mapRender بعد أي تغيير — نخليها متاحة للكل جوه الكلوجر
-    window.lpMapAdd = function (id) {
-        var i = POOL.findIndex(function (l) { return l.id === id; });
-        if (i === -1 || !selDate) return;
-        (days[selDate] = days[selDate] || []).push(POOL[i]);
-        POOL.splice(i, 1);
-        renderDays(); renderPool(); mapRender();
-    };
 
-    window.lpMapRemove = function (id) {
-        var list = days[selDate] || [];
-        var i = list.findIndex(function (l) { return l.id === id; });
-        if (i === -1) return;
-        POOL.unshift(list[i]);
-        list.splice(i, 1);
-        renderDays(); renderPool(); mapRender();
-    };
-
-    if (mapEl && daySel) {
-        lpMap = L.map('lpMap', { scrollWheelZoom: false });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19, attribution: '&copy; OpenStreetMap',
-        }).addTo(lpMap);
-        routeLayer = L.layerGroup().addTo(lpMap);
-        lpMap.on('click', function () { lpMap.scrollWheelZoom.enable(); });
-        lpMap.on('mouseout', function () { lpMap.scrollWheelZoom.disable(); });
-
-        daySel.addEventListener('change', function () {
-            selDate = daySel.value;
-            mapRender();
+    document.querySelectorAll('.lp-day-map').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+            // ⚠️ الهيدر جوه اليوم واليوم كليكابل للتسليح — نوقف الفقاعة
+            e.stopPropagation();
+            dayMapOpen(b.dataset.d, b.dataset.t);
         });
-
-        // «رتب بالأقرب» — سلسلة greedy من أول نقطة في اليوم
-        document.getElementById('lpNearBtn').addEventListener('click', function () {
-            var list = days[selDate] || [];
-            var located = list.filter(hasXY);
-            var rest = list.filter(function (l) { return !hasXY(l); });
-            if (located.length < 3) return;
-
-            var chain = [located[0]];
-            var pool = located.slice(1);
-            while (pool.length) {
-                var last = chain[chain.length - 1];
-                var bi = 0, bd = Infinity;
-                pool.forEach(function (l, i) {
-                    var d = dist(last, l);
-                    if (d < bd) { bd = d; bi = i; }
-                });
-                chain.push(pool.splice(bi, 1)[0]);
-            }
-            days[selDate] = chain.concat(rest);
-            renderDays(); mapRender();
-        });
-
-        mapRender();
-    }
+    });
 
     // بيتنده وقت السبمت — بيرجّع JSON {تاريخ: [ids بالترتيب]}
     window.lpSerialize = function () {

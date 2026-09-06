@@ -56,6 +56,7 @@ return [
     'tasks' => 'المهام',
     'group_leads' => 'العملاء المحتملين',
     'leads_portfolio' => 'المحفظة',
+    'leads_route' => 'راسم خط السير',
     'leads_planner' => 'جدولة الأسبوع',
     'leads_week' => 'متابعة الأسبوع',
 

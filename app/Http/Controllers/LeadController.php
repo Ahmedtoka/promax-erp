@@ -730,6 +730,15 @@ class LeadController extends Controller
             'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_ROLES))
                 ->where('active', true)->orderBy('name')->get(),
             'zones' => Zone::orderBy('code')->get(),
+            // عدد الليدات المفتوحة اللي ليها لوكيشن في كل زون — «الزون (n)»
+            // ⚠️ ريكوست فاضية = السكوب بس من غير فلاتر الشاشة، عشان
+            // العدد يفضل ثابت مهما فلترت
+            'zoneCounts' => $this->filteredQuery(new \Illuminate\Http\Request(), $user)
+                ->whereIn('leads.status', Lead::OPEN_STATUSES)
+                ->whereNotNull('leads.lat')->whereNotNull('leads.lng')
+                ->selectRaw('leads.zone_id, COUNT(*) n')
+                ->groupBy('leads.zone_id')
+                ->pluck('n', 'zone_id'),
             'cats' => Lead::selectRaw('category_raw, COUNT(*) n')
                 ->whereNotNull('category_raw')->where('category_raw', '!=', '')
                 ->groupBy('category_raw')->orderByDesc('n')->get(),

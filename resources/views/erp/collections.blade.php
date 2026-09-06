@@ -68,7 +68,11 @@
                 <th>{{ __('common.total') }}</th>
             </tr>
             @forelse ($rows as $t)
-                @php $visit = $t->source_type === \App\Models\Visit::class ? $repByVisit->get($t->source_id) : null; @endphp
+                @php
+                    $visit = $t->source_type === \App\Models\Visit::class ? $repByVisit->get($t->source_id) : null;
+                    // المستند اليدوي بينسب التحصيل للمندوب بـ source_type = User (انظر ٦/٩)
+                    $manualRep = $t->source_type === \App\Models\User::class ? $repByUser->get($t->source_id) : null;
+                @endphp
                 <tr>
                     <td style="text-align:start">
                         <a href="{{ route('erp.clients.show', $t->client_id) }}"><b>{{ $t->client?->fullName() ?? '—' }}</b></a>
@@ -81,6 +85,11 @@
                         @if ($visit?->user)
                             {{ $visit->user->name }}
                             <div style="font-size:10px;color:var(--muted)">{{ $visit->user->code }}</div>
+                        @elseif ($manualRep)
+                            {{ $manualRep->name }}
+                            <div style="font-size:10px;color:var(--muted)">
+                                {{ $manualRep->code }} · {{ __('ops.office_entry') }}
+                            </div>
                         @else
                             <span class="badge b-gray">{{ __('ops.office_entry') }}</span>
                         @endif

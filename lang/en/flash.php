@@ -98,4 +98,5 @@ return [
     'md_invoice_done' => 'Invoice :number saved for :amount — deducted from the rep\'s van stock and posted to the client.',
     'md_return_done' => 'Return :number saved — back into the rep\'s van stock and credited to the client.',
     'md_gift_done' => 'Gift saved and deducted from the rep\'s gift balance.',
+    'md_collect_done' => ':amount collected from :client ✓ — balance updated instantly.',
 ];

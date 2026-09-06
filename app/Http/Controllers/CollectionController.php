@@ -50,11 +50,17 @@ class CollectionController extends Controller
                     fn ($q) => $q->where('method', $method))
                 ->when($from, fn ($q) => $q->whereDate('date', '>=', $from))
                 ->when($to, fn ($q) => $q->whereDate('date', '<=', $to))
-                // فلتر المندوب عبر مرساة الزيارة — تحصيل الميدان
-                // مصدره `Visit`، وتحصيل المكتب مصدره null
-                ->when($repId > 0, fn ($q) => $q
-                    ->where('source_type', Visit::class)
-                    ->whereIn('source_id', Visit::where('user_id', $repId)->select('id')))
+                // فلتر المندوب بمرساتيه الاتنين — تحصيل الميدان مصدره
+                // `Visit`، والتحصيل اليدوي من المستند اليدوي مصدره
+                // `User` (المندوب نفسه). قبل ٦/٩ كان بيشوف الزيارات بس
+                ->when($repId > 0, fn ($q) => $q->where(function ($w) use ($repId) {
+                    $w->where(fn ($v) => $v
+                        ->where('source_type', Visit::class)
+                        ->whereIn('source_id', Visit::where('user_id', $repId)->select('id')))
+                    ->orWhere(fn ($m) => $m
+                        ->where('source_type', User::class)
+                        ->where('source_id', $repId));
+                }))
                 ->when(! in_array($user->role, ['admin', 'accountant'], true),
                     fn ($q) => $q->whereIn('client_id',
                         Client::visibleTo(Client::query(), $user)->select('id')));
@@ -70,6 +76,13 @@ class CollectionController extends Controller
         $repByVisit = Visit::with('user:id,name,code')->whereIn('id', $visitIds)
             ->get()->keyBy('id');
 
+        // التحصيل اليدوي (المستند اليدوي) منسوب للمندوب مباشرة
+        // بـ`source_type = User` — نجيبهم دفعة واحدة برضو
+        $manualRepIds = $rows->getCollection()
+            ->where('source_type', User::class)->pluck('source_id')->unique();
+        $repByUser = User::whereIn('id', $manualRepIds)
+            ->get(['id', 'name', 'code'])->keyBy('id');
+
         // الإجماليات من **نفس السكوب** — الكروت لازم تساوي مجموع
         // الجدول اللي تحتها، وإلا الشاشة بتكدب على المحاسب.
         $totals = $scoped()
@@ -80,6 +93,7 @@ class CollectionController extends Controller
         return view('erp.collections', [
             'rows' => $rows,
             'repByVisit' => $repByVisit,
+            'repByUser' => $repByUser,
             'totals' => $totals,
             'method' => $method,
             'repId' => $repId,

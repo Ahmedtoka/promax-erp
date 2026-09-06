@@ -774,6 +774,18 @@ return [
     'md_more_hint' => 'Keep typing to narrow the results',
     'md_fam_hint' => 'Add a whole family - one box of each:',
 
+    // Manual-doc collection tab (Sep 6)
+    'md_tab_collect' => 'Collection',
+    'md_amount' => 'Amount collected',
+    'md_method' => 'Collection method',
+    'md_chq_bank' => 'Cheque bank',
+    'md_chq_due' => 'Cheque due date',
+    'md_collect_hint' => 'A real collection entry with the paper date under the rep\'s name — card, cheque and transfer need a reference, and any non-cash method notifies the accountants.',
+    'md_save_collect' => 'Save collection',
+    'md_collect_memo' => 'Manual collection for :rep — back-office entry by :user',
+    'md_collect_notif_title' => 'Non-cash collection recorded from the office',
+    'md_collect_notif_body' => ':amount from :client via :method — review and reconcile it.',
+
     // Invoice line editing (Aug 22)
     'edit_inv_btn' => 'Edit lines',
     'edit_inv_hint' => 'Decreases and removals return goods to the rep custody; increases and additions deduct from it - entries and client balance adjust automatically.',

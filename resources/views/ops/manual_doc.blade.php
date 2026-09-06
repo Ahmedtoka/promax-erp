@@ -50,6 +50,8 @@
         <button type="button" class="btn md-tab on" data-tab="inv">🧾 {{ __('ops.md_tab_invoice') }}</button>
         <button type="button" class="btn md-tab" data-tab="ret">↩️ {{ __('ops.md_tab_return') }}</button>
         <button type="button" class="btn md-tab" data-tab="gift">🎁 {{ __('ops.md_tab_gift') }}</button>
+        {{-- تحصيل يدوي (٦/٩) — قيد بتاريخ رجعي باسم المندوب --}}
+        <button type="button" class="btn md-tab" data-tab="col">💰 {{ __('ops.md_tab_collect') }}</button>
     </div>
 
     {{-- ═══ فاتورة ═══ --}}
@@ -132,6 +134,47 @@
         </div>
         <div class="md-items" data-list="gift"></div>
         <button class="btn gold" type="submit" style="margin-top:12px">✓ {{ __('ops.md_save_gift') }}</button>
+    </form>
+
+    {{-- ═══ تاب التحصيل اليدوي (٦/٩): المبلغ + الطريقة (كاش/فيزا/شيك/
+         تحويل) + المرجع وبيانات الشيك حسب الطريقة — التاريخ والعميل
+         والمندوب من الهيدر فوق زي باقي التابات بالحرف ═══ --}}
+    <form method="POST" action="{{ route('ops.manual.collection') }}" class="md-pane" data-pane="col"
+          style="display:none" onsubmit="return mdSubmitCollect(this)">
+        @csrf
+        <div class="searchbar" style="align-items:flex-end;row-gap:10px">
+            <div>
+                <label class="f">{{ __('ops.md_amount') }}</label>
+                <input type="number" name="amount" step="0.01" min="0.01" max="99999999"
+                       required style="width:170px">
+            </div>
+            <div>
+                <label class="f">{{ __('ops.md_method') }}</label>
+                <select name="method" id="mdColMethod" onchange="mdColMethodChange()">
+                    @foreach (\App\Models\Transaction::METHODS as $m)
+                        <option value="{{ $m }}">{{ __('client.pay_method_'.$m) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="md-col-ref" style="display:none">
+                <label class="f">{{ __('ops.reference') }}</label>
+                <input type="text" name="reference" maxlength="100" style="width:180px">
+            </div>
+            <div class="md-col-chq" style="display:none">
+                <label class="f">{{ __('ops.md_chq_bank') }}</label>
+                <input type="text" name="cheque_bank" maxlength="120" style="width:170px">
+            </div>
+            <div class="md-col-chq" style="display:none">
+                <label class="f">{{ __('ops.md_chq_due') }}</label>
+                <input type="date" name="cheque_due">
+            </div>
+            <div style="flex:1;min-width:220px">
+                <label class="f">{{ __('ops.md_note') }}</label>
+                <input type="text" name="note" maxlength="200" style="width:100%">
+            </div>
+        </div>
+        <div class="dash-hint" style="margin-top:8px">{{ __('ops.md_collect_hint') }}</div>
+        <button class="btn gold" type="submit" style="margin-top:12px">✓ {{ __('ops.md_save_collect') }}</button>
     </form>
 </div>
 
@@ -465,6 +508,41 @@
     }
 
     // ═══════════ الإرسال ═══════════
+    /* ═══ تاب التحصيل (٦/٩) — إظهار المرجع/الشيك حسب الطريقة ═══ */
+    // ⚠️ الاسم مقصود يختلف عن id السيلكت — id بيعمل جلوبال ضمني
+    // بنفس الاسم وكان هيتلخبط مع الفانكشن
+    window.mdColMethodChange = function () {
+        const m = document.getElementById('mdColMethod').value;
+        document.querySelectorAll('.md-col-ref').forEach(function (e) {
+            e.style.display = m === 'cash' ? 'none' : '';
+        });
+        document.querySelectorAll('.md-col-chq').forEach(function (e) {
+            e.style.display = m === 'cheque' ? '' : 'none';
+        });
+    };
+
+    // سبمت التحصيل — مفيش أصناف، بس مراسي الهيدر (مندوب/عميل/تاريخ)
+    window.mdSubmitCollect = function (form) {
+        form.querySelectorAll('.md-h').forEach(e => e.remove());
+
+        const add = function (name, value) {
+            const i = document.createElement('input');
+            i.type = 'hidden';
+            i.className = 'md-h';
+            i.name = name;
+            i.value = value;
+            form.appendChild(i);
+        };
+
+        add('user_id', document.getElementById('mdRep').value);
+        add('client_id', document.getElementById('mdClient').value);
+        add('doc_date', document.getElementById('mdDate').value);
+
+        form.querySelector('button[type=submit]').disabled = true;
+
+        return true;
+    };
+
     function mdSubmit(form, tab) {
         if (!rows[tab].length) {
             alert(T.noItems);

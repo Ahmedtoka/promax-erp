@@ -1108,6 +1108,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('manual.return');
             Route::post('/manual/gift', [\App\Http\Controllers\ManualDocController::class, 'storeGift'])
                 ->name('manual.gift');
+            // تحصيل يدوي من المكتب (٦/٩) — قيد collection بتاريخ رجعي باسم المندوب
+            Route::post('/manual/collection', [\App\Http\Controllers\ManualDocController::class, 'storeCollection'])
+                ->name('manual.collection');
 
             Route::post('/assignments', [\App\Http\Controllers\JourneyController::class, 'assign'])
                 ->name('assignments.assign');

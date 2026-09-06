@@ -34,16 +34,19 @@
         </div>
         <div>
             <label class="f">{{ __('client.zone') }}</label>
-            @include('partials._zone_select', [
-                'zones' => $zones,
-                'name' => 'zone',
-                'selected' => $filters['zone'] ?? null,
-                'placeholder' => __('common.all'),
-            ])
+            {{-- الزون بعدد ليداته (٦/٩) — الأكتر فوق، واللي مفيهوش برة --}}
+            <select name="zone" style="min-width:200px">
+                <option value="">{{ __('common.all') }}</option>
+                @foreach ($zones->filter(fn ($z) => ($zoneCounts[$z->id] ?? 0) > 0)
+                    ->sortByDesc(fn ($z) => $zoneCounts[$z->id]) as $z)
+                    <option value="{{ $z->id }}" @selected(($filters['zone'] ?? '') == $z->id)>
+                        {{ $z->displayName() }} ({{ $zoneCounts[$z->id] }})</option>
+                @endforeach
+            </select>
         </div>
         <div>
             <label class="f">{{ __('lead.f_cat') }}</label>
-            <select name="cat">
+            <select name="cat" style="min-width:180px">
                 <option value="">{{ __('lead.all_cats') }}</option>
                 @foreach ($cats as $c)
                     <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
@@ -65,9 +68,9 @@
                  border-radius:12px;padding:12px 14px;margin:0"
           onsubmit="return rtSubmit(this)">
         @csrf
-        <div>
+        <div style="flex:0 1 280px;min-width:230px">
             <label class="f">{{ __('ops.rep') }}</label>
-            <select name="rep_id" required>
+            <select name="rep_id" required style="width:100%">
                 <option value="">—</option>
                 @foreach ($reps as $r)
                     <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
@@ -91,6 +94,9 @@
 </div>
 
 <div class="card">
+    {{-- ═══ ليجند الأقسام بالألوان (٦/٩): كل قسم لون هادي — والشيب
+         فلتر: دوس على «جيم» تشوف نقط الجيمات بس، ودوسة تانية ترجّع الكل ═══ --}}
+    <div id="rtLegend" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
     <div id="rtMap" style="height:66vh;border-radius:12px;border:1px solid var(--border)"></div>
 </div>
 
@@ -102,10 +108,19 @@
     'use strict';
 
     var LEADS = {!! json_encode($leads, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
+    var CATS = {!! json_encode($cats->map(fn ($c) => ['name' => $c->category_raw, 'n' => (int) $c->n])->values(), JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) !!};
     var SEL_ERR = @js(__('lead.route_none_sel'));
     var UNASSIGNED = @js(__('lead.k_unassigned'));
 
+    /* ═══ ألوان هادية لكل قسم (٦/٩) — بتتوزع بترتيب حجم القسم ═══ */
+    var PALETTE = ['#5B8DEF', '#67B99A', '#C9915B', '#9B7EDE', '#E28BA6',
+        '#5FB6C9', '#B5A642', '#8A9BAE', '#D98E73', '#7FA86F', '#C97FB8', '#7C8AE0'];
+    var CAT_COLOR = {};
+    CATS.forEach(function (c, i) { CAT_COLOR[c.name] = PALETTE[i % PALETTE.length]; });
+    function catColor(cat) { return CAT_COLOR[cat] || '#9CA3AF'; }
+
     var sel = [];          // ids بالترتيب المختار
+    var catSel = null;     // فلتر الليجند — قسم واحد ظاهر أو null = الكل
     var markers = {};      // id -> L.marker
     var byId = {};
     LEADS.forEach(function (l) { byId[l.id] = l; });
@@ -122,10 +137,10 @@
     }).addTo(map);
     var lineLayer = L.layerGroup().addTo(map);
 
-    function dotIcon() {
+    function dotIcon(color) {
         return L.divIcon({
             className: '', iconSize: [16, 16], iconAnchor: [8, 8],
-            html: '<div style="width:16px;height:16px;border-radius:50%;background:#9CA3AF;'
+            html: '<div style="width:16px;height:16px;border-radius:50%;background:' + color + ';'
                 + 'border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
         });
     }
@@ -149,10 +164,16 @@
     }
 
     function refresh() {
-        // الأيقونات: المختار مرقّم والباقي نقطة رمادي
+        // الأيقونات: المختار مرقّم أزرق، والباقي نقطة بلون قسمه —
+        // وفلتر الليجند بيخفي أقسام تانية (المختار دايماً ظاهر)
         LEADS.forEach(function (l) {
             var i = sel.indexOf(l.id);
-            markers[l.id].setIcon(i === -1 ? dotIcon() : numIcon(i + 1));
+            var visible = i !== -1 || catSel === null || l.cat === catSel;
+
+            if (visible && !map.hasLayer(markers[l.id])) markers[l.id].addTo(map);
+            if (!visible && map.hasLayer(markers[l.id])) map.removeLayer(markers[l.id]);
+
+            markers[l.id].setIcon(i === -1 ? dotIcon(catColor(l.cat)) : numIcon(i + 1));
             markers[l.id].setZIndexOffset(i === -1 ? 0 : 500);
         });
 
@@ -179,10 +200,36 @@
         });
     }
 
+    /* ═══ ليجند الأقسام — شيب لكل قسم بلونه وعدده، والضغط = فلتر
+       حصري (القسم ده بس على الخريطة)، وضغطة تانية بترجّع الكل ═══ */
+    var legend = document.getElementById('rtLegend');
+    CATS.forEach(function (c) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'btn sm';
+        chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px';
+        chip.innerHTML = '<span style="width:11px;height:11px;border-radius:50%;display:inline-block;'
+            + 'background:' + catColor(c.name) + ';border:1.5px solid rgba(0,0,0,.15)"></span>'
+            + esc(c.name) + ' <span class="badge b-gray" style="font-size:9.5px">' + c.n + '</span>';
+        chip.addEventListener('click', function () {
+            catSel = catSel === c.name ? null : c.name;
+            Array.prototype.forEach.call(legend.children, function (el) {
+                el.style.outline = '';
+                el.style.opacity = catSel === null ? '' : '.45';
+            });
+            if (catSel !== null) {
+                chip.style.outline = '2.5px solid ' + catColor(c.name);
+                chip.style.opacity = '';
+            }
+            refresh();
+        });
+        legend.appendChild(chip);
+    });
+
     // النقط
     var bounds = [];
     LEADS.forEach(function (l) {
-        var m = L.marker([l.lat, l.lng], { icon: dotIcon() });
+        var m = L.marker([l.lat, l.lng], { icon: dotIcon(catColor(l.cat)) });
         m.bindTooltip(
             '<b>' + esc(l.name) + '</b>'
             + (l.cat ? '<br>🏷 ' + esc(l.cat) : '')
