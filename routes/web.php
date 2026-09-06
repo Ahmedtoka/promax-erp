@@ -37,6 +37,12 @@ Route::post('/locale/{locale}', [LocaleController::class, 'switch'])->name('loca
 // بأوامر التجهيز، وأمين المخزن مالوش دعوة بمديونيات العملاء.
 // الميدل وير بيسأل `App\Support\Access` — نفس المصدر اللي السايدبار
 // بيرسم منه، فمستحيل اللينك يبان لواحد والصفحة ترفضه.
+// ═══ مساعد بروماكس (٧/٩) — شات قراءة لكل مسجّل دخول ═══
+// ⚠️ auth بس من غير `screen` — المساعد متاح لكل الرولز، والسكوب
+// الحقيقي جوه الأدوات نفسها (نفس حراس الشاشات بالحرف)
+Route::middleware('auth')->post('/agent/ask',
+    [\App\Http\Controllers\AgentChatController::class, 'ask'])->name('agent.ask');
+
 Route::middleware(['auth', 'screen'])->group(function () {
 
     // ═══ جرس الإشعارات في الداش بورد (2026-08-09) ═══

@@ -109,6 +109,7 @@
         <div style="max-height:520px;overflow-y:auto" id="timeline">
             @forelse ($events as $e)
                 <div class="trk-row" data-uid="{{ $e->user_id }}"
+                     @isset ($mapSeq[$e->id]) data-eid="{{ $e->id }}" @endisset
                      style="border-inline-start:4px solid {{ $colors[$e->user_id] ?? 'var(--border)' }}">
                     @include('partials._avatar', ['u' => $e->user, 'size' => 34, 'ring' => $colors[$e->user_id] ?? null])
                     <div style="flex:1;min-width:0">
@@ -159,6 +160,14 @@
     background: var(--card2, #FAFAFC); border: 1px solid var(--border);
     border-radius: 12px;
 }
+/* صف له نقطة على الخريطة = كليكابل، بيعلّم عليها ويقرّب (٧/٩) */
+.trk-row[data-eid] { cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+.trk-row[data-eid]:hover { border-color: var(--royal-blue, #12399B); }
+.trk-row.on {
+    border-color: var(--royal-blue, #12399B);
+    box-shadow: 0 0 0 2px rgba(18, 57, 155, .18);
+    background: #F2F5FF;
+}
 </style>
 @php
     // بترتيب الوقت من الأقدم للأحدث عشان مسار كل مندوب يترسم صح.
@@ -180,6 +189,8 @@
             'color' => $colors[$e->user_id] ?? '#12399B',
             // رقم المشوار (٧/٩) — نفس ترقيم التايم لاين
             'seq' => $mapSeq[$e->id] ?? null,
+            // id الحدث — ربط صف التايم لاين بماركره على الخريطة
+            'id' => $e->id,
         ])->values();
 
     // ═══ عربيات iTrack (٢٦/٨) — ماركر شاحنة لكل جهاز بآخر موقعه.
@@ -247,6 +258,8 @@
      وتحط الطبقة كاملة بضغطة */
   const layers = {};
   const allLatLngs = [];
+  /* ماركر كل حدث بالـid — عشان كليك صف التايم لاين يوصّل له (٧/٩) */
+  const markerById = {};
 
   PTS.forEach(function (p) {
     const uid = String(p.uid);
@@ -263,6 +276,7 @@
     layers[uid].group.addLayer(m);
     layers[uid].path.push([p.lat, p.lng]);
     allLatLngs.push([p.lat, p.lng]);
+    if (p.id) markerById[p.id] = { marker: m, uid: uid };
   });
 
   Object.values(layers).forEach(function (l) {
@@ -322,6 +336,30 @@
       document.querySelectorAll('.trk-row[data-uid="' + uid + '"]').forEach(function (row) {
         row.style.display = off ? 'none' : '';
       });
+    });
+  });
+
+  /* ═══ كليك على صف التايم لاين (٧/٩ — طلب المالك): يعلّم على
+     ماركره في الخريطة ويعمل زوم إن عليه ويفتح البوب أب ═══ */
+  document.querySelectorAll('.trk-row[data-eid]').forEach(function (row) {
+    row.addEventListener('click', function () {
+      const hit = markerById[row.dataset.eid];
+      if (!hit) return;
+
+      // لو طبقة المندوب متقفلة من الشيبس — نفتحها الأول
+      if (layers[hit.uid] && !map.hasLayer(layers[hit.uid].group)) {
+        layers[hit.uid].group.addTo(map);
+        document.querySelectorAll('.trk-chip[data-uid="' + hit.uid + '"]')
+          .forEach(c => c.classList.remove('off'));
+        document.querySelectorAll('.trk-row[data-uid="' + hit.uid + '"]')
+          .forEach(r => { r.style.display = ''; });
+      }
+
+      document.querySelectorAll('.trk-row.on').forEach(r => r.classList.remove('on'));
+      row.classList.add('on');
+
+      map.flyTo(hit.marker.getLatLng(), Math.max(map.getZoom(), 16), { duration: .6 });
+      setTimeout(function () { hit.marker.openPopup(); }, 650);
     });
   });
 })();
