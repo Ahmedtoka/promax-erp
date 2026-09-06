@@ -63,49 +63,75 @@
 <div class="card">
     <h3>🎯 {{ __('lead.page') }} <span class="side">{{ __('lead.page_sub') }}</span></h3>
 
-    <form method="GET" action="{{ route('erp.leads') }}" class="searchbar">
-        <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="{{ __('common.search') }}">
-        <select name="status">
-            <option value="">{{ __('common.all') }}</option>
-            @foreach ($statuses as $s)
-                <option value="{{ $s }}" @selected(($filters['status'] ?? '') === $s)>{{ __('lead.status_'.$s) }}</option>
-            @endforeach
-        </select>
-        @include('partials._zone_select', [
-            'zones' => $zones,
-            'name' => 'zone',
-            'selected' => $filters['zone'] ?? null,
-            'placeholder' => __('common.all'),
-        ])
-        <select name="rep">
-            <option value="">{{ __('common.all') }}</option>
-            @foreach ($reps as $r)
-                <option value="{{ $r->id }}" @selected(($filters['rep'] ?? '') == $r->id)>{{ $r->displayName() }}</option>
-            @endforeach
-        </select>
-        <select name="source">
-            <option value="">{{ __('lead.all_sources') }}</option>
-            @foreach ($sources as $s)
-                <option value="{{ $s }}" @selected(($filters['source'] ?? '') === $s)>{{ __('lead.source_'.$s) }}</option>
-            @endforeach
-        </select>
+    {{-- ⭐ ليبل فوق كل فلتر (٦/٩ — طلب المالك: «ده إيه وده إيه») --}}
+    <form method="GET" action="{{ route('erp.leads') }}" class="searchbar"
+          style="align-items:flex-end;row-gap:10px">
+        <div style="flex:1;min-width:200px">
+            <label class="f">🔎 {{ __('common.search') }}</label>
+            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
+                   placeholder="{{ __('common.search') }}" style="width:100%">
+        </div>
+        <div>
+            <label class="f">{{ __('common.status') }}</label>
+            <select name="status">
+                <option value="">{{ __('common.all') }}</option>
+                @foreach ($statuses as $s)
+                    <option value="{{ $s }}" @selected(($filters['status'] ?? '') === $s)>{{ __('lead.status_'.$s) }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label class="f">{{ __('client.zone') }}</label>
+            @include('partials._zone_select', [
+                'zones' => $zones,
+                'name' => 'zone',
+                'selected' => $filters['zone'] ?? null,
+                'placeholder' => __('common.all'),
+            ])
+        </div>
+        <div>
+            <label class="f">{{ __('ops.rep') }}</label>
+            <select name="rep">
+                <option value="">{{ __('common.all') }}</option>
+                @foreach ($reps as $r)
+                    <option value="{{ $r->id }}" @selected(($filters['rep'] ?? '') == $r->id)>{{ $r->displayName() }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label class="f">{{ __('lead.f_source') }}</label>
+            <select name="source">
+                <option value="">{{ __('lead.all_sources') }}</option>
+                @foreach ($sources as $s)
+                    <option value="{{ $s }}" @selected(($filters['source'] ?? '') === $s)>{{ __('lead.source_'.$s) }}</option>
+                @endforeach
+            </select>
+        </div>
         {{-- فلتر القسم/النشاط (٢٦/٨) — «كل الجيمات في الدقي» --}}
-        <select name="cat">
-            <option value="">{{ __('lead.all_cats') }}</option>
-            @foreach ($cats as $c)
-                <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
-                    {{ $c->category_raw }} ({{ $c->n }})</option>
-            @endforeach
-        </select>
-        <select name="sort">
-            <option value="score" @selected($sort === 'score')>{{ __('lead.sort_score') }}</option>
-            <option value="recent" @selected($sort === 'recent')>{{ __('lead.sort_recent') }}</option>
-        </select>
-        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap">
+        <div>
+            <label class="f">{{ __('lead.f_cat') }}</label>
+            <select name="cat">
+                <option value="">{{ __('lead.all_cats') }}</option>
+                @foreach ($cats as $c)
+                    <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
+                        {{ $c->category_raw }} ({{ $c->n }})</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label class="f">{{ __('lead.f_sort') }}</label>
+            <select name="sort">
+                <option value="score" @selected($sort === 'score')>{{ __('lead.sort_score') }}</option>
+                <option value="recent" @selected($sort === 'recent')>{{ __('lead.sort_recent') }}</option>
+            </select>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;padding-bottom:8px">
             <input type="checkbox" name="unassigned" value="1" @checked($filters['unassigned'] ?? false)>
             {{ __('lead.only_unassigned') }}
         </label>
-        <button class="btn">{{ __('common.filter') }}</button>
+        <button class="btn gold">{{ __('common.filter') }}</button>
+        {{-- مسح كل الفلاتر بضغطة (٦/٩) --}}
+        <a class="btn" href="{{ route('erp.leads') }}">🧹 {{ __('lead.clear_filters') }}</a>
     </form>
 </div>
 
@@ -371,7 +397,14 @@
                         @endif
                     </td>
                     <td class="num s">{{ $l->phone ?: '—' }}</td>
-                    <td class="s">{{ $l->zone?->displayName() ?: '—' }}</td>
+                    <td class="s">
+                        {{ $l->zone?->displayName() ?: '—' }}
+                        {{-- العنوان تحت المنطقة (٦/٩) — «علشان أبقى فاهم مكانه فين» --}}
+                        @if ($l->address)
+                            <div style="font-size:10px;color:var(--muted);max-width:180px"
+                                 title="{{ $l->address }}">📍 {{ \Illuminate\Support\Str::limit($l->address, 45) }}</div>
+                        @endif
+                    </td>
                     <td class="s">
                         {{ $l->assignee?->displayName() ?: '—' }}
                         {{-- في محفظة مدير ولسه ماتوزعش لمندوب (٦/٩) --}}
@@ -862,6 +895,33 @@
 
         /* ═══ شيبس المناطق — بالعدد، مترتبة بالأكبر ═══ */
         const chipBox = document.getElementById('ldZoneChips');
+        const chips = {};
+
+        function setZone(zid, on) {
+            chips[zid].classList.toggle('off', !on);
+            if (on) layers[zid].addTo(map);
+            else map.removeLayer(layers[zid]);
+        }
+
+        /* زرارين الكل (٦/٩) — علّم على الكل / شيل الكل بضغطة */
+        const allOn = document.createElement('button');
+        allOn.type = 'button';
+        allOn.className = 'btn sm';
+        allOn.textContent = '✅ ' + @js(__('lead.chips_all'));
+        allOn.addEventListener('click', function () {
+            Object.keys(layers).forEach(function (z) { setZone(z, true); });
+        });
+        chipBox.appendChild(allOn);
+
+        const allOff = document.createElement('button');
+        allOff.type = 'button';
+        allOff.className = 'btn sm';
+        allOff.textContent = '⬜ ' + @js(__('lead.chips_none'));
+        allOff.addEventListener('click', function () {
+            Object.keys(layers).forEach(function (z) { setZone(z, false); });
+        });
+        chipBox.appendChild(allOff);
+
         Object.keys(layers)
             .sort(function (a, b) { return counts[b] - counts[a]; })
             .forEach(function (zid) {
@@ -871,10 +931,9 @@
                 b.innerHTML = '📍 ' + (ZNAMES[zid] || NO_ZONE)
                     + ' <span class="badge b-gray" style="font-size:9.5px">' + counts[zid] + '</span>';
                 b.addEventListener('click', function () {
-                    const off = b.classList.toggle('off');
-                    if (off) map.removeLayer(layers[zid]);
-                    else layers[zid].addTo(map);
+                    setZone(zid, b.classList.contains('off'));
                 });
+                chips[zid] = b;
                 chipBox.appendChild(b);
             });
     })();

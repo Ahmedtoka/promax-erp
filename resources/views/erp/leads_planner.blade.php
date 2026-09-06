@@ -77,6 +77,26 @@
     </div>
 </div>
 
+{{-- ═══ خريطة خط السير 2D (٦/٩ — طلب المالك): اختار اليوم وشوف
+     ليداته أرقام ١ ٢ ٣ متوصلين بخط — الرمادي غير مجدول (اضغطه من
+     البوب أب يتضاف لليوم)، والمرقّم بيتشال من البوب أب برضو،
+     وزرار «رتب بالأقرب» بيعيد ترتيب اليوم سلسلة أقرب-فالأقرب ═══ --}}
+<div class="card" style="margin-top:14px">
+    <h3 style="margin:0 0 10px">🗺️ {{ __('lead.route_map') }}
+        <span class="side">{{ __('lead.route_map_hint') }}</span></h3>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label class="f" style="margin:0">{{ __('lead.route_day') }}</label>
+        <select id="lpMapDay">
+            @foreach ($days as $d)
+                <option value="{{ $d->toDateString() }}" @selected($d->isToday())>
+                    {{ __('lead.wd_'.$d->dayOfWeek) }} {{ $d->format('d/m') }}</option>
+            @endforeach
+        </select>
+        <button class="btn sm" type="button" id="lpNearBtn">🧭 {{ __('lead.route_nearest') }}</button>
+    </div>
+    <div id="lpMap" style="height:440px;border-radius:12px;border:1px solid var(--border)"></div>
+</div>
+
 @endsection
 
 @section('scripts')
@@ -102,10 +122,14 @@
     $lpPool = $pool->map(fn ($l) => [
         'id' => $l->id, 'name' => $l->displayName(),
         'zone' => $l->zone?->displayName() ?? '', 'score' => (int) $l->score,
+        'lat' => $l->lat !== null ? (float) $l->lat : null,
+        'lng' => $l->lng !== null ? (float) $l->lng : null,
     ])->values();
     $lpPlanned = $plans->map(fn ($g) => $g->map(fn ($p) => [
         'id' => $p->lead_id, 'name' => $p->lead?->displayName() ?? '—',
         'zone' => $p->lead?->zone?->displayName() ?? '', 'score' => (int) ($p->lead?->score ?? 0),
+        'lat' => $p->lead?->lat !== null ? (float) $p->lead->lat : null,
+        'lng' => $p->lead?->lng !== null ? (float) $p->lead->lng : null,
     ])->values());
 @endphp
 <script>
@@ -181,6 +205,9 @@
             });
             d.querySelector('.lp-day-n').textContent = list.length;
         });
+
+        // الخريطة مرآة البورد (٦/٩) — أي تغيير هنا يبان هناك فوراً
+        mapRender();
     }
 
     document.querySelectorAll('.lp-day').forEach(function (d) {
@@ -197,6 +224,138 @@
     });
 
     search.addEventListener('input', renderPool);
+
+    /* ═══ خريطة خط السير 2D (٦/٩) — جوه نفس الكلوجر عشان تشارك
+       days و POOL مع البورد: أي تعديل هنا بيبان هناك والعكس ═══ */
+    var NEAR_ADD = @js(__('lead.route_add'));
+    var NEAR_REMOVE = @js(__('lead.route_remove'));
+    var mapEl = document.getElementById('lpMap');
+    var daySel = document.getElementById('lpMapDay');
+    var lpMap = null;
+    var routeLayer = null;
+    var selDate = daySel ? daySel.value : null;
+    var didFit = false;
+
+    function hasXY(l) { return l.lat != null && l.lng != null; }
+
+    // مسافة تقريبية بالمتر — كفاية للمقارنة النسبية بين النقط
+    function dist(a, b) {
+        var dy = (a.lat - b.lat) * 111320;
+        var dx = (a.lng - b.lng) * 111320 * Math.cos(a.lat * Math.PI / 180);
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function numIcon(n) {
+        return L.divIcon({
+            className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14],
+            html: '<div style="width:28px;height:28px;border-radius:50%;background:#12399B;'
+                + 'border:2.5px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35);color:#fff;'
+                + 'font:900 12px Cairo,Inter,sans-serif;display:flex;align-items:center;'
+                + 'justify-content:center">' + n + '</div>',
+        });
+    }
+
+    function dotIcon() {
+        return L.divIcon({
+            className: '', iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -8],
+            html: '<div style="width:14px;height:14px;border-radius:50%;background:#9CA3AF;'
+                + 'border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+        });
+    }
+
+    function mapRender() {
+        if (!lpMap) return;
+        routeLayer.clearLayers();
+
+        var pts = [];
+        (days[selDate] || []).forEach(function (l, i) {
+            if (!hasXY(l)) return;
+            var m = L.marker([l.lat, l.lng], { icon: numIcon(i + 1), zIndexOffset: 500 });
+            m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;text-align:start">'
+                + (i + 1) + '. ' + esc(l.name)
+                + '<br><button class="btn sm red" style="margin-top:6px" '
+                + 'onclick="lpMapRemove(' + l.id + ')">✕ ' + esc(NEAR_REMOVE) + '</button></div>');
+            routeLayer.addLayer(m);
+            pts.push([l.lat, l.lng]);
+        });
+
+        if (pts.length > 1) {
+            routeLayer.addLayer(L.polyline(pts, { color: '#12399B', weight: 3, dashArray: '7 7', opacity: .85 }));
+        }
+
+        POOL.forEach(function (l) {
+            if (!hasXY(l)) return;
+            var m = L.marker([l.lat, l.lng], { icon: dotIcon() });
+            m.bindPopup('<div style="font:700 12.5px Cairo,Inter,sans-serif;text-align:start">'
+                + esc(l.name)
+                + '<div style="font-weight:400;font-size:10.5px;color:#6B7280">📍 ' + esc(l.zone) + '</div>'
+                + '<button class="btn sm green" style="margin-top:6px" '
+                + 'onclick="lpMapAdd(' + l.id + ')">➕ ' + esc(NEAR_ADD) + '</button></div>');
+            routeLayer.addLayer(m);
+        });
+
+        if (!didFit) {
+            var all = pts.slice();
+            POOL.forEach(function (l) { if (hasXY(l)) all.push([l.lat, l.lng]); });
+            if (all.length) { lpMap.fitBounds(L.latLngBounds(all).pad(0.15)); didFit = true; }
+        }
+    }
+    // البورد بينده mapRender بعد أي تغيير — نخليها متاحة للكل جوه الكلوجر
+    window.lpMapAdd = function (id) {
+        var i = POOL.findIndex(function (l) { return l.id === id; });
+        if (i === -1 || !selDate) return;
+        (days[selDate] = days[selDate] || []).push(POOL[i]);
+        POOL.splice(i, 1);
+        renderDays(); renderPool(); mapRender();
+    };
+
+    window.lpMapRemove = function (id) {
+        var list = days[selDate] || [];
+        var i = list.findIndex(function (l) { return l.id === id; });
+        if (i === -1) return;
+        POOL.unshift(list[i]);
+        list.splice(i, 1);
+        renderDays(); renderPool(); mapRender();
+    };
+
+    if (mapEl && daySel) {
+        lpMap = L.map('lpMap', { scrollWheelZoom: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '&copy; OpenStreetMap',
+        }).addTo(lpMap);
+        routeLayer = L.layerGroup().addTo(lpMap);
+        lpMap.on('click', function () { lpMap.scrollWheelZoom.enable(); });
+        lpMap.on('mouseout', function () { lpMap.scrollWheelZoom.disable(); });
+
+        daySel.addEventListener('change', function () {
+            selDate = daySel.value;
+            mapRender();
+        });
+
+        // «رتب بالأقرب» — سلسلة greedy من أول نقطة في اليوم
+        document.getElementById('lpNearBtn').addEventListener('click', function () {
+            var list = days[selDate] || [];
+            var located = list.filter(hasXY);
+            var rest = list.filter(function (l) { return !hasXY(l); });
+            if (located.length < 3) return;
+
+            var chain = [located[0]];
+            var pool = located.slice(1);
+            while (pool.length) {
+                var last = chain[chain.length - 1];
+                var bi = 0, bd = Infinity;
+                pool.forEach(function (l, i) {
+                    var d = dist(last, l);
+                    if (d < bd) { bd = d; bi = i; }
+                });
+                chain.push(pool.splice(bi, 1)[0]);
+            }
+            days[selDate] = chain.concat(rest);
+            renderDays(); mapRender();
+        });
+
+        mapRender();
+    }
 
     // بيتنده وقت السبمت — بيرجّع JSON {تاريخ: [ids بالترتيب]}
     window.lpSerialize = function () {

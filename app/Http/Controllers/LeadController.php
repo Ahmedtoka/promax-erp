@@ -459,7 +459,8 @@ class LeadController extends Controller
             ->whereIn('status', Lead::OPEN_STATUSES)
             ->whereNotIn('id', $plannedIds)
             ->orderByDesc('score')
-            ->get(['id', 'name', 'zone_id', 'score', 'category_raw', 'status']);
+            // lat/lng/address لخريطة خط السير (٦/٩)
+            ->get(['id', 'name', 'zone_id', 'score', 'category_raw', 'status', 'lat', 'lng', 'address']);
 
         return view('erp.leads_planner', [
             'reps' => $reps,
