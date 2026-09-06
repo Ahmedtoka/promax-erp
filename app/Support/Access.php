@@ -466,6 +466,9 @@ class Access
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
             // أجهزة تتبع العربيات — iTrack (٢٦/٨)
             ['ops.gps', '🛰️', 'nav.gps', 'ops.gps', null],
+            // مراجعة مساعد بروماكس (٧/٩) — أدمن بس (الراوت role:admin
+            // والرؤية بتختفي لباقي الرولز من SCREENS تلقائياً)
+            ['erp.agent.runs', '🤖', 'nav.agent_runs', 'erp.agent*', null],
         ],
 
         // ═══ إدارة المهام (٢٦/٨) — تاب مستقل (طلب المالك)، رولز

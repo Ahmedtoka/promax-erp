@@ -62,6 +62,38 @@
 
 .pmx-link { align-self: flex-start; }
 
+/* كارت تأكيد الأكشن (المرحلة التانية) — أصفر تحذيري لحد ما يتأكد */
+.pmx-act { align-self: stretch; background: #FFFBEB; border: 1.5px solid #F59E0B; border-radius: 12px; overflow: hidden; }
+.pmx-act .t { font-size: 12px; font-weight: 800; padding: 8px 10px; color: #92400E; border-bottom: 1px solid #FDE68A; }
+.pmx-act .cr { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; font-size: 12px; border-top: 1px solid #FDE68A; }
+.pmx-act .cr:first-of-type { border-top: 0; }
+.pmx-act .cr b { font-variant-numeric: tabular-nums; direction: ltr; }
+.pmx-act .warn { font-size: 10.5px; color: #92400E; padding: 6px 10px; }
+.pmx-act .btns { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #FDE68A; }
+.pmx-act .btns button { flex: 1; border: 0; border-radius: 9px; padding: 8px; cursor: pointer;
+    font-weight: 800; font-size: 12px; font-family: inherit; }
+.pmx-act .ok-btn { background: #16A34A; color: #fff; }
+.pmx-act .no-btn { background: #E4E4EA; color: #12121A; }
+.pmx-act .done { padding: 9px 10px; font-size: 12px; font-weight: 700; }
+.pmx-act.confirmed { border-color: #16A34A; background: #F0FDF4; }
+.pmx-act.confirmed .t { color: #166534; border-color: #BBF7D0; }
+.pmx-act.cancelled { opacity: .55; }
+
+/* شيبس الاقتراحات — بتعلّم المستخدم نطاق المساعد */
+.pmx-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px 0; }
+.pmx-chips button {
+    border: 1px solid var(--border, #E4E4EA); background: #fff; border-radius: 999px;
+    padding: 5px 11px; font-size: 11px; cursor: pointer; color: var(--royal-blue, #12399B);
+    font-family: inherit; font-weight: 600;
+}
+.pmx-chips button:hover { background: #F2F5FF; border-color: var(--royal-blue, #12399B); }
+
+/* زرار المايك — بيختفي لو المتصفح مش داعم */
+#pmxMic { border: 1px solid var(--border, #E4E4EA); background: #fff; border-radius: 10px;
+    padding: 0 12px; cursor: pointer; font-size: 16px; }
+#pmxMic.rec { background: #FDE8E8; border-color: #DC2626; animation: pmxRec 1s infinite; }
+@keyframes pmxRec { 50% { opacity: .55; } }
+
 /* مؤشر التحميل — تلات نقط */
 .pmx-wait { align-self: flex-start; display: flex; gap: 5px; padding: 12px 14px; }
 .pmx-wait i { width: 7px; height: 7px; border-radius: 50%; background: var(--royal-blue, #12399B);
@@ -105,7 +137,16 @@
         </div>
     </div>
 
+    {{-- شيبس اقتراحات — بتملى الخانة وتبعت على طول --}}
+    <div class="pmx-chips" id="pmxChips">
+        <button type="button">{{ __('agent.chip_expiry') }}</button>
+        <button type="button">{{ __('agent.chip_aging') }}</button>
+        <button type="button">{{ __('agent.chip_sales') }}</button>
+        <button type="button">{{ __('agent.chip_attendance') }}</button>
+    </div>
+
     <form class="pmx-foot" id="pmxForm">
+        <button type="button" id="pmxMic" aria-label="{{ __('agent.mic_label') }}" style="display:none">🎤</button>
         <input type="text" id="pmxInput" maxlength="2000"
                placeholder="{{ __('agent.placeholder') }}" autocomplete="off">
         <button type="submit" id="pmxSend">{{ __('agent.send') }}</button>
@@ -245,6 +286,84 @@
         scrollDown();
     }
 
+    /* ═══ كارت تأكيد الأكشن (المرحلة التانية ٧/٩) ═══
+       التنفيذ بيحصل في السيرفر وقت ضغطة التأكيد بس — الزرارين
+       بيتقفلوا فوراً عشان مايتداسش مرتين */
+    function actionCard(act) {
+        if (!act || !act.action_id) return;
+
+        const box = document.createElement('div');
+        box.className = 'pmx-act';
+
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = '⚠️ ' + (act.title || '');
+        box.appendChild(t);
+
+        (act.rows || []).forEach(function (pair) {
+            const r = document.createElement('div');
+            r.className = 'cr';
+            const l = document.createElement('span');
+            l.textContent = pair[0];
+            const v = document.createElement('b');
+            v.textContent = pair[1];
+            r.appendChild(l);
+            r.appendChild(v);
+            box.appendChild(r);
+        });
+
+        if (act.warn) {
+            const w = document.createElement('div');
+            w.className = 'warn';
+            w.textContent = act.warn;
+            box.appendChild(w);
+        }
+
+        const btns = document.createElement('div');
+        btns.className = 'btns';
+
+        const ok = document.createElement('button');
+        ok.type = 'button';
+        ok.className = 'ok-btn';
+        ok.textContent = '✓ ' + (act.confirm_label || 'OK');
+
+        const no = document.createElement('button');
+        no.type = 'button';
+        no.className = 'no-btn';
+        no.textContent = act.cancel_label || 'X';
+
+        async function decide(url, confirmed) {
+            ok.disabled = no.disabled = true;
+            try {
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json'},
+                });
+                const body = await r.json().catch(() => ({}));
+                btns.remove();
+                const d = document.createElement('div');
+                d.className = 'done';
+                d.textContent = body.message || '';
+                d.style.color = (r.ok && confirmed) ? '#166534' : (r.ok ? '#6B6B7B' : '#B91C1C');
+                box.appendChild(d);
+                box.classList.add(r.ok && confirmed ? 'confirmed' : 'cancelled');
+            } catch (_) {
+                ok.disabled = no.disabled = false;
+                bubble('err', CTX.errGeneric);
+            }
+        }
+
+        ok.addEventListener('click', () => decide(act.confirm_url, true));
+        no.addEventListener('click', () => decide(act.cancel_url, false));
+
+        btns.appendChild(ok);
+        btns.appendChild(no);
+        box.appendChild(btns);
+
+        msgs.appendChild(box);
+        scrollDown();
+    }
+
     /* زرار «افتح في السيستم» — الرابط جاي من السيرفر (route()) مش من الموديل */
     function linkBtn(link) {
         if (!link || !link.url) return;
@@ -300,6 +419,7 @@
             bubble('bot', body.text || '');
             dataBlock(body.data);
             linkBtn(body.link);
+            actionCard(body.action);
         } catch (_) {
             wait.remove();
             bubble('err', CTX.errGeneric);
@@ -317,5 +437,43 @@
         input.value = '';
         send(text);
     });
+
+    /* ═══ شيبس الاقتراحات — كليك = ابعت على طول ═══ */
+    document.querySelectorAll('#pmxChips button').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            if (busy) return;
+            send(chip.textContent.trim());
+        });
+    });
+
+    /* ═══ المايك — Web Speech API (بيختفي لو المتصفح مش داعم) ═══ */
+    (function () {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return;
+
+        const mic = document.getElementById('pmxMic');
+        mic.style.display = '';
+
+        let rec = null;
+
+        mic.addEventListener('click', function () {
+            if (rec) { rec.stop(); return; }
+
+            rec = new SR();
+            rec.lang = document.documentElement.lang === 'ar' ? 'ar-EG' : 'en-US';
+            rec.interimResults = false;
+            rec.maxAlternatives = 1;
+
+            rec.onresult = function (e) {
+                const said = e.results[0][0].transcript.trim();
+                if (said) { input.value = said; input.focus(); }
+            };
+            rec.onend = function () { mic.classList.remove('rec'); rec = null; };
+            rec.onerror = function () { mic.classList.remove('rec'); rec = null; };
+
+            mic.classList.add('rec');
+            rec.start();
+        });
+    })();
 })();
 </script>

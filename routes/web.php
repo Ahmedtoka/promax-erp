@@ -40,8 +40,16 @@ Route::post('/locale/{locale}', [LocaleController::class, 'switch'])->name('loca
 // ═══ مساعد بروماكس (٧/٩) — شات قراءة لكل مسجّل دخول ═══
 // ⚠️ auth بس من غير `screen` — المساعد متاح لكل الرولز، والسكوب
 // الحقيقي جوه الأدوات نفسها (نفس حراس الشاشات بالحرف)
-Route::middleware('auth')->post('/agent/ask',
-    [\App\Http\Controllers\AgentChatController::class, 'ask'])->name('agent.ask');
+Route::middleware('auth')->group(function () {
+    Route::post('/agent/ask',
+        [\App\Http\Controllers\AgentChatController::class, 'ask'])->name('agent.ask');
+    // الأكشنات بموافقة (٧/٩) — التأكيد لصاحب الاقتراح بس، والبوابة
+    // الحقيقية جوه الكنترولر (نفس مفتاح المستند اليدوي)
+    Route::post('/agent/actions/{action}/confirm',
+        [\App\Http\Controllers\AgentChatController::class, 'confirmAction'])->name('agent.action.confirm');
+    Route::post('/agent/actions/{action}/cancel',
+        [\App\Http\Controllers\AgentChatController::class, 'cancelAction'])->name('agent.action.cancel');
+});
 
 Route::middleware(['auth', 'screen'])->group(function () {
 
@@ -538,6 +546,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('families.assign');
 
         Route::get('/reports', [ErpController::class, 'reports'])->name('reports');
+
+        // ═══ مراجعة مساعد بروماكس (٧/٩) — أدمن بس ═══
+        Route::get('/agent-runs', [\App\Http\Controllers\AgentAdminController::class, 'runs'])
+            ->middleware('role:admin')->name('agent.runs');
 
         // ═══ مركز التقارير الجديد (٢١/٨) — ١٤ تقرير + الكوتيشن ═══
         // الأسماء تحت بادئة `erp.reports.` عشان صلاحيات Access

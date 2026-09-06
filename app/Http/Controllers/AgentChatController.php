@@ -93,6 +93,7 @@ class AgentChatController extends Controller
                     'text' => $res['text'],
                     'data' => $res['data'],
                     'link' => $res['link'],
+                    'action' => $res['action'] ?? null,
                 ],
                 'tokens_in' => $res['tokens_in'],
                 'tokens_out' => $res['tokens_out'],
@@ -107,6 +108,7 @@ class AgentChatController extends Controller
                 'text' => ltrim($res['text'], "⛔ \n"),
                 'data' => $res['data'],
                 'link' => $res['link'],
+                'action' => $res['action'] ?? null,
             ]);
         } catch (AgentException $e) {
             $this->logFailure($conv->id, $data['message'], $t0, $e->getMessage());
@@ -130,10 +132,113 @@ class AgentChatController extends Controller
         AgentRun::create([
             'conversation_id' => $convId,
             'user_message' => trim($message),
-            'agent_name' => \App\Agents\AccountingAgent::NAME,
+            'agent_name' => \App\Agents\PromaxAgent::NAME,
             'duration_ms' => (int) round((microtime(true) - $t0) * 1000),
             'status' => AgentRun::STATUS_FAILED,
             'error' => Str::limit($error, 500),
         ]);
+    }
+
+    // ═══════════════ الأكشنات بموافقة (المرحلة التانية ٧/٩) ═══════════════
+
+    /**
+     * POST /agent/actions/{action}/confirm — تنفيذ أكشن مقترح.
+     *
+     * ⚠️ التنفيذ بنفس مسار كود الشاشة الأصلية: التحصيل بيمر
+     * بـ`ManualCollection` — نفس سيرفس المستند اليدوي بالحرف —
+     * وبنفس حراس `Scope` اللي الشاشة بتستخدمهم.
+     */
+    public function confirmAction(Request $request, \App\Models\AgentAction $action)
+    {
+        $user = $request->user();
+
+        // ⚠️ الأكشن لصاحبه بس
+        abort_unless((int) $action->user_id === (int) $user->id, 403);
+
+        // نفس بوابة المستند اليدوي — اللي ممنوع من الشاشة ممنوع هنا
+        abort_unless(\App\Support\Access::allows($user, 'ops.manual'), 403);
+
+        // ⚠️⚠️ حجز ذرّي (مراجعة ٧/٩): دبل كليك أو ريتراي متزامنين
+        // كانوا بيعدوا فحص الحالة الاتنين ويسجلوا قيدين حقيقيين.
+        // UPDATE مشروط واحد — اللي يكسبه ينفذ واللي يخسره بياخد 422
+        $claimed = \App\Models\AgentAction::whereKey($action->id)
+            ->where('status', \App\Models\AgentAction::STATUS_PENDING)
+            ->update(['status' => \App\Models\AgentAction::STATUS_RUNNING]);
+
+        if ($claimed === 0) {
+            return response()->json(['message' => __('agent.act_already')], 422);
+        }
+
+        try {
+            $result = match ($action->type) {
+                \App\Models\AgentAction::TYPE_COLLECTION => $this->executeCollection($user, $action),
+                default => throw new \RuntimeException('unknown action type'),
+            };
+
+            $action->update([
+                'status' => \App\Models\AgentAction::STATUS_CONFIRMED,
+                'result' => $result,
+                'confirmed_at' => now(),
+            ]);
+
+            return response()->json(['message' => $result['message']]);
+        } catch (\Throwable $e) {
+            report($e);
+            $action->update([
+                'status' => \App\Models\AgentAction::STATUS_FAILED,
+                'error' => Str::limit(get_class($e).': '.$e->getMessage(), 500),
+            ]);
+
+            return response()->json(['message' => __('agent.act_failed')], 422);
+        }
+    }
+
+    /** POST /agent/actions/{action}/cancel — إلغاء اقتراح */
+    public function cancelAction(Request $request, \App\Models\AgentAction $action)
+    {
+        abort_unless((int) $action->user_id === (int) $request->user()->id, 403);
+
+        if ($action->status === \App\Models\AgentAction::STATUS_PENDING) {
+            $action->update(['status' => \App\Models\AgentAction::STATUS_CANCELLED]);
+        }
+
+        return response()->json(['message' => __('agent.act_cancelled')]);
+    }
+
+    /** @return array{message: string, transaction_id: int} */
+    private function executeCollection(\App\Models\User $user, \App\Models\AgentAction $action): array
+    {
+        $p = $action->payload;
+
+        $rep = \App\Models\User::findOrFail($p['rep_id']);
+        $client = Client::findOrFail($p['client_id']);
+
+        // ⚠️ نفس حراس المستند اليدوي (`anchors`) بالحرف — بيترمّوا
+        // تاني وقت التنفيذ لأن النطاق ممكن يكون اتغير بعد الاقتراح
+        \App\Support\Scope::assertRep($user, $rep);
+        \App\Support\Scope::assertClient($user, $client);
+
+        $date = \Illuminate\Support\Carbon::parse($p['date'])->setTime(12, 0);
+
+        $tx = \App\Services\ManualCollection::record(
+            actor: $user,
+            rep: $rep,
+            client: $client,
+            date: $date,
+            amount: (float) $p['amount'],
+            method: $p['method'],
+            reference: $p['reference'] ?? null,
+            chequeBank: $p['cheque_bank'] ?? null,
+            chequeDue: $p['cheque_due'] ?? null,
+            note: $p['note'] ?? null,
+        );
+
+        return [
+            'transaction_id' => $tx->id,
+            'message' => __('flash.md_collect_done', [
+                'amount' => number_format((float) $p['amount'], 2),
+                'client' => $client->displayName(),
+            ]),
+        ];
     }
 }

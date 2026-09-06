@@ -109,4 +109,6 @@ return [
     'manual_doc' => 'Manual document',
     'quotations' => 'Quotations',
     'kpi' => 'Commission & KPI',
+    // مراجعة مساعد بروماكس (٧/٩)
+    'agent_runs' => 'Promax Assistant',
 ];

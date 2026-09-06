@@ -548,59 +548,20 @@ class ManualDocController extends Controller
 
         $amount = round((float) $data['amount'], 2);
 
-        $tx = DB::transaction(function () use ($data, $rep, $client, $date, $amount, $request) {
-            $tx = Transaction::create([
-                'client_id' => $client->id,
-                'date' => $date->toDateString(),
-                'memo' => ($data['note'] ?? null)
-                    ?: __('ops.md_collect_memo', [
-                        'rep' => $rep->displayName(),
-                        'user' => $request->user()->displayName(),
-                    ]),
-                'debit' => 0,
-                'credit' => $amount,
-                'kind' => 'collection',
-                'method' => $data['method'],
-                'reference' => $data['reference'] ?? null,
-                'cheque_bank' => $data['method'] === Transaction::METHOD_CHEQUE
-                    ? ($data['cheque_bank'] ?? null) : null,
-                'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
-                    ? ($data['cheque_due'] ?? null) : null,
-                // نسبة التحصيل للمندوب — شاشة التحصيلات بتعرضه بيها
-                'source_type' => User::class,
-                'source_id' => $rep->id,
-            ]);
-
-            // التاريخ الرجعي — `created_at` مش fillable، وده المسار الوحيد
-            Transaction::whereKey($tx->id)->update(['created_at' => $date]);
-
-            $client->recalculate();
-
-            return $tx;
-        });
-
-        TrackEvent::log($rep, 'collect',
-            __('field.event_collect', [
-                'amount' => number_format($amount, 2),
-                'client' => $client->displayName(),
-            ]),
-            __('ops.md_by_admin', ['user' => $request->user()->displayName()]));
-
-        // ⚠️ غير الكاش بيتبلّغ للمحاسبين — نفس قاعدة تحصيل الأبلكيشن
-        if ($data['method'] !== Transaction::METHOD_CASH) {
-            foreach (User::where('role', 'accountant')->where('active', true)->get() as $acc) {
-                AppNotification::send(
-                    $acc,
-                    fn () => __('ops.md_collect_notif_title'),
-                    fn () => __('ops.md_collect_notif_body', [
-                        'amount' => number_format($amount, 2),
-                        'client' => $client->displayName(),
-                        'method' => $tx->methodLabel(),
-                    ]),
-                    false,
-                );
-            }
-        }
+        // ⚠️ القلب المشترك (٧/٩): نفس السيرفس اللي مساعد بروماكس
+        // بينفذ بيها أكشن التحصيل بموافقة — مصدر واحد للعملية
+        \App\Services\ManualCollection::record(
+            actor: $request->user(),
+            rep: $rep,
+            client: $client,
+            date: $date,
+            amount: $amount,
+            method: $data['method'],
+            reference: $data['reference'] ?? null,
+            chequeBank: $data['cheque_bank'] ?? null,
+            chequeDue: $data['cheque_due'] ?? null,
+            note: $data['note'] ?? null,
+        );
 
         return back()->with('ok', __('flash.md_collect_done', [
             'amount' => number_format($amount, 2),
