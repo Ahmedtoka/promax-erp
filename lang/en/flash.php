@@ -86,7 +86,7 @@ return [
     'po_back_to_accounting' => 'Edit saved - the order went back to the accounting approval queue and the old pick order was cancelled.',
 
     // ═══ Custody correction + replenishment edit (Aug 12, 2026) ═══
-    'custody_adjusted' => 'Van stock corrected and warehouse stock adjusted with it - the rep was notified.',
+    'custody_adjusted' => 'Van stock corrected as a record-only adjustment - warehouse stock was not touched, and the rep was notified.',
     'replenishment_updated' => 'The request was updated and the requester was notified.',
 
     // Sales order cancellation (Aug 21)

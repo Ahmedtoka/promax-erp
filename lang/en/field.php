@@ -281,7 +281,7 @@ return [
 
     // ═══ Van-stock admin correction (Aug 12, 2026) ═══
     'custody_adjust' => 'Adjust van stock',
-    'custody_adjust_hint' => 'Fix a loading that was entered wrong: type the correct loaded quantity per item, in pieces. Increases are pulled from the warehouse shelves (FEFO) and decreases go back to the shelves - so warehouse stock stays true. You cannot go below what was already moved (sold + returned).',
+    'custody_adjust_hint' => 'Fix a miscounted loading: type the correct loaded quantity per item, in pieces. This is a record-only adjustment - warehouse stock is never touched (real warehouse gaps belong to the stock count). You cannot go below what already left with documents (sold + returned + transferred).',
     'custody_adjust_reason' => 'Adjustment reason',
     'custody_adjust_reason_ph' => 'e.g. loading was entered as 100 but the truth is 10',
     'custody_adjust_loaded' => 'Currently loaded',

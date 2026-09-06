@@ -289,26 +289,22 @@ class Custody extends Model
     }
 
     /**
-     * ═══ تصحيح إداري للعهدة — «التحميل اتسجّل غلط» (١٢ أغسطس ٢٠٢٦) ═══
+     * ═══ تصحيح إداري للعهدة — «العد اتسجّل غلط» (١٢/٨ · اتغيّر ٦/٩) ═══
      *
      * بياخد **أرقام مستهدفة** بالصنف (مش فروق): المحمَّل الجديد والهدايا
-     * الجديدة، وبيظبط العهدة **والمخزن مع بعض** — التصحيح معناه إن
-     * المخزن فعلياً ادّى كمية مختلفة عن المتسجّل، فالفرق لازم يرجع
-     * للأرفف أو يخرج منها، وإلا الجرد الجاي هيطلع عجز/زيادة وهمية.
+     * الجديدة.
      *
-     * ⚠️ **مفيش مسار حساب موازي:**
-     *   - الزيادة بتمرّ بـ`PickOrder::issueDirect` + `handOver` — نفس
-     *     مسار التحميل الرسمي بالحرف (FEFO، باتش على البند، خصم أرفف).
-     *   - النقص بيرجع للرف بنفس `PickOrderItem::returnToShelf` بتاعة
-     *     فرق الاستلام — من بند التجهيز الأصلي للباتش نفسه.
+     * ⭐⭐ **قرار المالك ٦/٩/٢٠٢٦: التصحيح تسوية سجل بس — المخزن
+     * مايتلمسش نهائياً.** الفلسفة: «المخزن مظبوط بس العد غلط» — غلطة
+     * العد على العربية بتتصحح في دفتر العهدة وبتتسجل بسببها في
+     * التايم لاين، وأي فرق مخزون حقيقي مكانه **جرد المخزن** (/wh/counts)
+     * مش الشاشة دي. (السلوك القديم — رجوع للأرفف وأمر تجهيز للزيادة —
+     * اتشال؛ لو البضاعة رجعت المخزن فعلاً استخدم «تحويل من عربية».)
      *
-     * ⚠️ **الأرضية (floor):** المحمَّل الجديد ≥ المباع + المرجّع للمخزن
-     * (والمباع شامل تسليمات أوامر التوريد — `deduct` بيزوّد `sold`).
-     * والهدايا الجديدة ≥ الموزّع فعلاً. من غير الأرضية دي `remaining()`
-     * بيطلع سالب ومعادلة التصفية بتتكسر.
-     *
-     * ⚠️ بند قديم من غير باتش: العهدة بتتظبط والمخزن مابيتلمسش —
-     * البند ده أصلاً ماخصمش من باتش، فمفيش حقيقة مخزنية نرجّع لها.
+     * ⚠️ **الأرضية (floor) باقية زي ما هي:** المحمَّل الجديد ≥ المباع +
+     * المرجّع + المتحوّل (دول خرجوا بمستندات رسمية). والهدايا الجديدة ≥
+     * الموزّع فعلاً. من غير الأرضية دي `remaining()` بيطلع سالب
+     * ومعادلة التصفية بتتكسر.
      *
      * @param  array<int, int>  $assignedTarget  [product_id => المحمَّل الجديد]
      * @param  array<int, int>  $giftTarget      [product_id => هدايا جديدة]
@@ -396,48 +392,26 @@ class Custody extends Model
         }
 
         try {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($dec, $decGift, $inc, $incGift, $actor, $reason, $touched) {
-                // ═══ ١. النقص — يرجع للرف (عكس pull بالحرف) ═══
+            // ═══ تسوية سجل بس (قرار المالك ٦/٩/٢٠٢٦) ═══
+            // «المخزن مظبوط بس العد غلط» — التصحيح بيغيّر أرقام العهدة
+            // **من غير ما يلمس المخزن نهائياً**: مفيش رجوع للأرفف ولا
+            // أمر تجهيز ولا resync. أي فرق مخزون فعلي بيتظبط من جرد
+            // المخزن نفسه (/wh/counts)، مش من هنا.
+            \Illuminate\Support\Facades\DB::transaction(function () use ($dec, $decGift, $inc, $incGift) {
+                // النقص — بيتشال من بنود العهدة بعكس الـFEFO، بلا مخزن
                 foreach ($dec as $pid => $qty) {
-                    $this->pullBackToShelf((int) $pid, (int) $qty, false);
+                    $this->pullBackToShelf((int) $pid, (int) $qty, false, restock: false);
                 }
                 foreach ($decGift as $pid => $qty) {
-                    $this->pullBackToShelf((int) $pid, (int) $qty, true);
+                    $this->pullBackToShelf((int) $pid, (int) $qty, true, restock: false);
                 }
 
-                // ═══ ٢. الزيادة — أمر تجهيز حقيقي بيتسلّم فوراً ═══
-                // نفس مسار التحميل الرسمي: FEFO بيختار الباتش، البضاعة
-                // بتخرج من الأرفف في `markReady`، و`handOver` بيكمّل
-                // على **العهدة المفتوحة دي نفسها** (عقيدة ١٠/٨).
-                if ($inc !== [] || $incGift !== []) {
-                    $result = PickOrder::issueDirect(
-                        $this->warehouse,
-                        $this->user,
-                        $inc,
-                        $incGift,
-                        $actor,
-                        __('field.custody_adjust_note', ['reason' => $reason]),
-                    );
-
-                    if ($result['error'] !== null) {
-                        throw new \App\Exceptions\Rejected($result['error']);
-                    }
-
-                    if ($err = $result['order']->handOver($this->user)) {
-                        throw new \App\Exceptions\Rejected($err);
-                    }
-
-                    // ⚠️ `handOver` بيدوّر على العهدة المفتوحة بنفسه —
-                    // لو (بداتا شاذة: صفين مفتوحين) كمّل على عهدة تانية،
-                    // نرجّع كل حاجة بدل ما التصحيح ينزل على صف غلط.
-                    if ((int) $result['order']->fresh()->custody_id !== (int) $this->id) {
-                        throw new \App\Exceptions\Rejected(__('field.custody_adjust_none'));
-                    }
+                // الزيادة — بتتسجل على بنود العهدة الموجودة، بلا مخزن
+                foreach ($inc as $pid => $qty) {
+                    $this->addRecordOnly((int) $pid, (int) $qty, false);
                 }
-
-                // ═══ ٣. `stocks` صورة من الباتشات — مصالحة ختامية ═══
-                foreach (array_keys($touched) as $pid) {
-                    \App\Services\StockCounting::resync((int) $pid, (int) $this->warehouse_id);
+                foreach ($incGift as $pid => $qty) {
+                    $this->addRecordOnly((int) $pid, (int) $qty, true);
                 }
             });
         } catch (\App\Exceptions\Rejected $e) {
@@ -448,15 +422,53 @@ class Custody extends Model
     }
 
     /**
-     * إنقاص محمَّل (أو هدايا) صنف وإرجاع الفرق للرف — جوه ترانزاكشن بس.
+     * زيادة سجل بس على بنود العهدة — من غير أي حركة مخزن.
+     *
+     * بتتضاف على البند الأقرب انتهاءً (اللي هيخرج الأول)، ولو الصنف
+     * مالوش بند خالص بيتعمل بند جديد من غير باتش (`source = adjust`).
+     */
+    private function addRecordOnly(int $productId, int $qty, bool $gift): void
+    {
+        $item = $this->items()
+            ->with('batch')
+            ->where('product_id', $productId)
+            ->lockForUpdate()
+            ->get()
+            ->sortBy(fn (CustodyItem $i) => $i->batch?->expires_on?->timestamp ?? PHP_INT_MAX)
+            ->first();
+
+        if ($item === null) {
+            $item = $this->items()->create([
+                'product_id' => $productId,
+                'batch_id' => null,
+                'assigned' => 0,
+                'gift_assigned' => 0,
+                'source' => 'adjust',
+            ]);
+        }
+
+        if ($gift) {
+            $item->gift_assigned = (int) $item->gift_assigned + $qty;
+        } else {
+            $item->assigned = (int) $item->assigned + $qty;
+        }
+
+        $item->save();
+    }
+
+    /**
+     * إنقاص محمَّل (أو هدايا) صنف — جوه ترانزاكشن بس.
      *
      * بيقلّل من البنود بعكس الـFEFO (الأبعد انتهاءً الأول — اللي كان
-     * هيخرج آخر حاجة هو اللي «ماتحمّلش أصلاً»)، وبيرجّع كل كمية لرفّ
-     * باتشها عن طريق بند التجهيز الأصلي (`returnToShelf`).
+     * هيخرج آخر حاجة هو اللي «ماتحمّلش أصلاً»).
+     *
+     * ⚠️ `$restock`: بـtrue بيرجّع كل كمية لرف باتشها (`returnToShelf`)
+     * — الوضع القديم. تصحيح العهدة بقى بينده بـfalse (قرار ٦/٩:
+     * تسوية **سجل بس**، المخزن مايتلمسش).
      *
      * @throws \App\Exceptions\Rejected لو الكمية مش متاحة للإنقاص
      */
-    private function pullBackToShelf(int $productId, int $qty, bool $gift): void
+    private function pullBackToShelf(int $productId, int $qty, bool $gift, bool $restock = true): void
     {
         $items = $this->items()
             ->with(['product', 'batch'])
@@ -488,7 +500,9 @@ class Custody extends Model
             $item->save();
             $left -= $take;
 
-            $this->restockFromItem($item, $take);
+            if ($restock) {
+                $this->restockFromItem($item, $take);
+            }
         }
 
         if ($left > 0) {
