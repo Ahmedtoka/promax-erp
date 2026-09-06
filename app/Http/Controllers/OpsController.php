@@ -4280,10 +4280,14 @@ class OpsController extends Controller
         }
 
         // فلتر السيريال الورقي (٢٢/٨ — طلب المالك): بيمسك سيريال
-        // الورقية أو رقم الفاتورة — عشان المطابقة مع الدفتر المختوم
+        // الورقية أو رقم الفاتورة — عشان المطابقة مع الدفتر المختوم.
+        // (٦/٩) واتزود عليه اسم العميل بـ`Client::search` الموحّد —
+        // نفس البحث المتسامح مع الأخطاء بتاع كل الشاشات (تطبيع
+        // الهمزات والتاء المربوطة + كل كلمة لوحدها).
         if ($paper = $request->string('paper')->trim()->value()) {
             $q->where(fn ($w) => $w->where('paper_ref', 'like', "%$paper%")
-                ->orWhere('number', 'like', "%$paper%"));
+                ->orWhere('number', 'like', "%$paper%")
+                ->orWhereHas('client', fn ($c) => Client::search($c, $paper)));
         }
 
         // ═══ سامري + إجماليات (١٩ أغسطس ٢٠٢٦) ═══

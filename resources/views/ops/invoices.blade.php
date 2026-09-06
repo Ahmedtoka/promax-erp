@@ -66,9 +66,11 @@
         </select>
         <input type="date" name="from" value="{{ $filters['from'] ?? '' }}">
         <input type="date" name="to" value="{{ $filters['to'] ?? '' }}">
-        {{-- فلتر السيريال الورقي (٢٢/٨) — بيمسك رقم الفاتورة كمان --}}
+        {{-- فلتر السيريال الورقي (٢٢/٨) — بيمسك رقم الفاتورة كمان،
+             و(٦/٩) اسم العميل بالبحث الموحّد المتسامح مع الأخطاء.
+             dir=auto عشان اسم العميل عربي والسيريال إنجليزي --}}
         <input type="search" name="paper" value="{{ $filters['paper'] ?? '' }}"
-               placeholder="🧾 {{ __('ops.paper_filter_ph') }}" dir="ltr" style="width:170px">
+               placeholder="🧾 {{ __('ops.paper_filter_ph') }}" dir="auto" style="width:240px">
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.invoices') }}">{{ __('common.clear') }}</a>
     </form>
