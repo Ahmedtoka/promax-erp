@@ -180,8 +180,19 @@ class AccountAuditController extends Controller
         };
 
         if ($s = trim((string) $request->string('q')->value())) {
-            $filtered = $filtered->filter(fn ($r) => mb_stripos($r['title'], $s) !== false
-                || mb_stripos((string) $r['sub'], $s) !== false);
+            // بحث العميل الموحّد (٦/٩) — نفس توحيد Client::search بس على
+            // كوليكشن في الميموري: همزات/تاء مربوطة موحّدة وكلمات بأي ترتيب
+            $tokens = array_filter(preg_split('/\s+/u', \App\Models\Client::normalizeArabic($s)));
+            $filtered = $filtered->filter(function ($r) use ($tokens) {
+                $hay = \App\Models\Client::normalizeArabic($r['title'].' '.$r['sub']);
+                foreach ($tokens as $t) {
+                    if (! str_contains($hay, $t)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
         }
 
         return view('erp.account_audit', [

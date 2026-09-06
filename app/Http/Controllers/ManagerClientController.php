@@ -46,12 +46,8 @@ class ManagerClientController extends Controller
             ->where('status', 'active')
             ->when($request->filled('channel'), fn ($q) => $q->where('channel_id', $request->input('channel')))
             ->when($request->filled('q'), function ($q) use ($request) {
-                $s = $request->string('q')->trim()->value();
-                $q->where(fn ($w) => $w->where('name', 'like', "%$s%")
-                    ->orWhere('name_en', 'like', "%$s%")
-                    ->orWhere('code', 'like', "%$s%")
-                    ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")));
+                // بحث العميل الموحّد (٦/٩) — Client::search بدل LIKE يدوي
+                Client::search($q, $request->string('q')->trim()->value());
             })
             ->orderBy('name')
             ->limit(300)

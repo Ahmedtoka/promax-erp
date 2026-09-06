@@ -1619,11 +1619,11 @@ class OpsController extends Controller
                 // كل الأوامر اللي فيها المنتج ده». بند الأمر مالوش اسم
                 // مجمّد (`purchase_order_items` فيها `product_id` بس)،
                 // فالفلترة بتعدّي على العلاقة مش على عمود في البند.
+                // ⚠️ بحث العميل الموحّد (٦/٩) — Client::search: توحيد
+                // همزات/تاء مربوطة + كلمات بأي ترتيب + السلسلة والتليفون
                 $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
                     ->orWhere('source', 'like', "%$s%")
-                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%"))
+                    ->orWhereHas('client', fn ($c) => Client::search($c, $s))
                     ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
                         ->orWhere('name_en', 'like', "%$s%")
                         ->orWhere('code', 'like', "%$s%")
@@ -3297,11 +3297,11 @@ class OpsController extends Controller
             ->when($request->string('q')->trim()->value(), function ($q2, $s) {
                 // نفس بحث الصنف في لوحة التوريد (٢٨/٨) — الحسابات
                 // بتدوّر على «الأوامر اللي فيها الصنف ده» برضو
+                // ⚠️ بحث العميل الموحّد (٦/٩) — نفس Client::search بتاع
+                // كل الشاشات: توحيد الهمزات + كلمات بأي ترتيب + السلسلة
                 $q2->where(fn ($w) => $w->where('number', 'like', "%$s%")
                     ->orWhere('source', 'like', "%$s%")
-                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%$s%")
-                        ->orWhere('name_en', 'like', "%$s%")
-                        ->orWhere('code', 'like', "%$s%"))
+                    ->orWhereHas('client', fn ($c) => Client::search($c, $s))
                     ->orWhereHas('items.product', fn ($p) => $p->where('name', 'like', "%$s%")
                         ->orWhere('name_en', 'like', "%$s%")
                         ->orWhere('code', 'like', "%$s%")

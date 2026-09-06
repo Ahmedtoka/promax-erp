@@ -463,14 +463,86 @@ public function zone(): BelongsTo
      * فتكتب بأي لغة وبأول كام حرف من أي جزء وتلاقيه.
      * أي خانة بحث عملاء جديدة لازم تستخدمه بدل ما تكتب like بإيدها.
      */
+    /**
+     * ═══ البحث الموحّد بالعميل (اتطوّر ٦/٩/٢٠٢٦ — طلب المالك) ═══
+     *
+     * ده **المكان الوحيد** اللي بيتكتب فيه شرط البحث بالعميل — أي
+     * شاشة فيها بحث بعميل لازم تنده هنا (مباشرة أو جوه
+     * `whereHas('client', ...)`) بدل ما تكتب LIKE بإيدها.
+     *
+     * إزاي بيشتغل:
+     *   ١. التليفون والكود بيتلاقوا بالنص الخام زي ما هو.
+     *   ٢. الاسم بيتوحّد قبل المقارنة — **في الاتنين: المكتوب في
+     *      البحث وعمود الداتابيز** (`normalizeArabic` + `normSql`):
+     *      أ/إ/آ ← ا · ة ← ه · ى/ئ ← ي · ؤ ← و · التطويل بيتشال.
+     *      فـ«اسلام» بتلاقي «إسلام»، و«شبره» بتلاقي «شبرة».
+     *   ٣. البحث **بالكلمات مش بالجملة**: كل كلمة لازم تتلاقى، بأي
+     *      ترتيب، في (اسم الفرع أو الإنجليزي أو اسم السلسلة) —
+     *      فـ«سيركل معادي» بتجيب «Circle K المعادي» رغم إن الكلمتين
+     *      في عمودين مختلفين.
+     */
     public static function search($query, string $s)
     {
-        return $query->where(fn ($w) => $w->where('name', 'like', "%$s%")
-            ->orWhere('name_en', 'like', "%$s%")
-            ->orWhere('phone', 'like', "%$s%")
-            ->orWhere('code', 'like', "%$s%")
-            ->orWhereHas('group', fn ($g) => $g->where('name', 'like', "%$s%")
-                ->orWhere('name_en', 'like', "%$s%")));
+        $s = trim($s);
+
+        if ($s === '') {
+            return $query;
+        }
+
+        // أقصى ٥ كلمات — كل كلمة EXISTS على السلسلة، والزيادة تقيل ببلاش
+        $tokens = array_slice(
+            array_values(array_filter(preg_split('/\s+/u', self::normalizeArabic($s)))),
+            0, 5,
+        );
+
+        return $query->where(function ($w) use ($s, $tokens) {
+            $w->where('phone', 'like', "%$s%")
+                ->orWhere('code', 'like', "%$s%");
+
+            if ($tokens === []) {
+                return;
+            }
+
+            $w->orWhere(function ($all) use ($tokens) {
+                foreach ($tokens as $t) {
+                    $all->where(function ($one) use ($t) {
+                        $one->whereRaw(self::normSql('name').' like ?', ["%{$t}%"])
+                            ->orWhere('name_en', 'like', "%{$t}%")
+                            ->orWhereHas('group', fn ($g) => $g
+                                ->whereRaw(self::normSql('client_groups.name').' like ?', ["%{$t}%"])
+                                ->orWhere('name_en', 'like', "%{$t}%"));
+                    });
+                }
+            });
+        });
+    }
+
+    /**
+     * توحيد النص العربي للبحث — نفس قواعد `normSql` بالحرف.
+     * ⚠️ لو زوّدت حرف هنا زوّده هناك — الاتنين لازم يفضلوا مرآة.
+     */
+    public static function normalizeArabic(string $s): string
+    {
+        $s = mb_strtolower(trim($s));
+        $s = str_replace(['أ', 'إ', 'آ', 'ٱ'], 'ا', $s);
+        $s = str_replace('ة', 'ه', $s);
+        $s = str_replace(['ى', 'ئ'], 'ي', $s);
+        $s = str_replace('ؤ', 'و', $s);
+        $s = str_replace('ـ', '', $s);                       // التطويل
+        $s = (string) preg_replace('/[\x{064B}-\x{0652}]/u', '', $s);  // التشكيل
+
+        return (string) preg_replace('/\s+/u', ' ', $s);
+    }
+
+    /** تعبير SQL بيوحّد عمود اسم بنفس قواعد `normalizeArabic` */
+    public static function normSql(string $column): string
+    {
+        $e = $column;
+        foreach ([['أ', 'ا'], ['إ', 'ا'], ['آ', 'ا'], ['ة', 'ه'], ['ى', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ـ', '']] as [$from, $to]) {
+            $e = "REPLACE($e, '$from', '$to')";
+        }
+
+        return $e;
     }
 
     public static function visibleTo($query, ?User $user = null)
