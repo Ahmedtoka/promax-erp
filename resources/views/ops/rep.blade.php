@@ -102,6 +102,9 @@
     @if ($canTransfer && $custody && $custody->status === 'open')
         <a class="btn" href="{{ route('wh.transfers.van') }}?rep={{ $u->id }}">🔄 {{ __('stock.van_transfer_short') }}</a>
     @endif
+    @if ($custody)
+        <a class="btn" href="{{ route('ops.rep.custody.excel', $u) }}">⬇️ {{ __('ops.x_custody_btn') }}</a>
+    @endif
     @if ($canAdjust)
         <button class="btn" type="button" onclick="openDlg('dlgAdjust')">🛠️ {{ __('field.custody_adjust') }}</button>
     @endif

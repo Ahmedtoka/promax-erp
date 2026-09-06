@@ -709,6 +709,164 @@ class OpsController extends Controller
         ];
     }
 
+    /**
+     * ═══ تصدير عهدة المندوب إكسيل (٦/٩/٢٠٢٦ — طلب المالك) ═══
+     *
+     * شيتين: «العهدة» بنفس جدول المطابقة اللي على الشاشة بالحرف —
+     * نفس `custodyDrill` مش حساب موازي (عقيدة الأرقام: مصدر واحد) —
+     * و«الباتشات» بباتشات الباقي وصلاحيتها. نفس حراس صفحة المندوب.
+     */
+    public function repCustodyExcel(Request $request, User $user)
+    {
+        abort_unless($request->user()->canSeeBranch($user->branch_id), 403);
+        abort_unless($request->user()->role !== 'manager'
+            || (int) $user->manager_id === (int) $request->user()->id, 403);
+
+        $custody = $user->currentCustody();
+
+        if ($custody === null) {
+            return back()->withErrors(['custody' => __('ops.x_no_custody')]);
+        }
+
+        $custody->load(['items.product', 'items.batch', 'warehouse']);
+
+        $drill = $this->custodyDrill($user, $custody);
+        $lists = \App\Support\CustodyValue::lists();
+
+        $x = new \App\Services\SheetWriter(__('ops.x_custody_sheet'));
+
+        // ═══ شيت ١ — المطابقة ═══
+        $x->row([['v' => __('ops.x_custody_title', ['rep' => $user->displayName()]), 'style' => 'title']]);
+        $x->merge(0, 13 + $lists->count());
+        $x->row([['v' => ($custody->warehouse?->name ?? '—')
+            .' · '.($drill['from']?->format('Y-m-d') ?? '—')
+            .' → '.($drill['to']?->format('Y-m-d H:i') ?? '—')
+            .' · '.__('common.date').': '.now()->format('Y-m-d H:i'), 'style' => 'label']]);
+        $x->blank();
+
+        foreach ([12, 34, 34, 11, 11, 11, 11, 11, 11, 11, 12, 11, 11] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $head = [
+            ['v' => __('common.code'), 'style' => 'header'],
+            ['v' => __('stock.item'), 'style' => 'header'],
+            ['v' => __('stock.source'), 'style' => 'header'],
+            ['v' => __('ops.loaded'), 'style' => 'header'],
+            ['v' => __('ops.x_gift_assigned'), 'style' => 'header'],
+            ['v' => __('field.sold'), 'style' => 'header'],
+            ['v' => __('ops.x_inv_qty'), 'style' => 'header'],
+            ['v' => __('ops.x_po_qty'), 'style' => 'header'],
+            ['v' => __('ops.rc_c_gifts'), 'style' => 'header'],
+            ['v' => __('ops.rc_c_gift_left'), 'style' => 'header'],
+            ['v' => __('ops.rc_c_returned'), 'style' => 'header'],
+            ['v' => __('ops.rc_c_moved'), 'style' => 'header'],
+            ['v' => __('ops.remaining'), 'style' => 'header'],
+        ];
+        foreach ($lists as $L) {
+            $head[] = ['v' => __('ops.remaining_value').' — '.$L->displayName(), 'style' => 'header'];
+        }
+        $head[] = ['v' => __('ops.rc_c_diff'), 'style' => 'header'];
+        $x->row($head);
+
+        foreach ($drill['rows'] as $r) {
+            // المصدر نص واحد: «إذن تسليم ×٤٨ (PCK-12) + توريد ×٢٤ (PO-7)»
+            $src = collect($r['sources'])->map(function ($s) {
+                $refs = implode(' ', array_keys($s['refs']));
+
+                return $s['label'].' ×'.$s['qty'].($refs !== '' ? ' ('.$refs.')' : '');
+            })->implode(' + ');
+
+            $cells = [
+                ['v' => $r['product']?->code ?? '—'],
+                ['v' => $r['product']?->displayName() ?? '#'.$r['pid']],
+                ['v' => $src],
+                ['v' => $r['assigned'], 'num' => true],
+                ['v' => $r['gift_assigned'], 'num' => true],
+                ['v' => $r['sold'], 'num' => true],
+                ['v' => $r['inv_qty'], 'num' => true],
+                ['v' => $r['po_qty'], 'num' => true],
+                ['v' => $r['gift_given'], 'num' => true],
+                ['v' => $r['gift_left'], 'num' => true],
+                ['v' => $r['returned'], 'num' => true],
+                ['v' => $r['transferred_out'], 'num' => true],
+                ['v' => $r['remaining'], 'num' => true],
+            ];
+            foreach ($lists as $L) {
+                $cells[] = ['v' => $r['values'][$L->id] ?? 0, 'num' => true];
+            }
+            $cells[] = ['v' => $r['diff'], 'num' => true];
+            $x->row($cells);
+        }
+
+        $T = $drill['totals'];
+        $tot = [
+            ['v' => __('common.total'), 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'],
+            ['v' => $T['assigned'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['gift_assigned'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['sold'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['inv_qty'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['po_qty'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['gift_given'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['gift_left'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['returned'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['transferred_out'], 'num' => true, 'style' => 'total'],
+            ['v' => $T['remaining'], 'num' => true, 'style' => 'total'],
+        ];
+        foreach ($lists as $L) {
+            $tot[] = ['v' => round($drill['rows']->sum(fn ($r) => (float) ($r['values'][$L->id] ?? 0)), 2),
+                'num' => true, 'style' => 'total'];
+        }
+        $tot[] = ['v' => $T['diff'], 'num' => true, 'style' => 'total'];
+        $x->row($tot);
+
+        // ═══ شيت ٢ — باتشات الباقي ═══
+        $x->addSheet(__('stock.batches'));
+
+        foreach ([12, 34, 16, 13, 12, 10] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $x->row([['v' => __('stock.batches').' — '.$user->displayName(), 'style' => 'title']]);
+        $x->merge(0, 5);
+        $x->blank();
+        $x->row([
+            ['v' => __('common.code'), 'style' => 'header'],
+            ['v' => __('stock.item'), 'style' => 'header'],
+            ['v' => __('stock.batch'), 'style' => 'header'],
+            ['v' => __('stock.expiry'), 'style' => 'header'],
+            ['v' => __('ops.x_days'), 'style' => 'header'],
+            ['v' => __('ops.x_qty'), 'style' => 'header'],
+        ]);
+
+        $prodByPid = $custody->items->keyBy('product_id')->map(fn ($i) => $i->product);
+
+        foreach ($drill['batches'] as $b) {
+            $p = $prodByPid->get($b['pid']);
+            $x->row([
+                ['v' => $p?->code ?? '—'],
+                ['v' => $p?->displayName() ?? '#'.$b['pid']],
+                ['v' => $b['batch'] ?: '—'],
+                ['v' => $b['expires']?->format('Y-m-d') ?? '—'],
+                ['v' => $b['days'] ?? '—', 'num' => $b['days'] !== null],
+                ['v' => $b['qty'], 'num' => true],
+            ]);
+        }
+
+        $x->row([
+            ['v' => __('common.total'), 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
+            ['v' => $drill['batches']->sum('qty'), 'num' => true, 'style' => 'total'],
+        ]);
+
+        $safe = preg_replace('/[^A-Za-z0-9\-]+/', '', (string) $user->code) ?: 'rep-'.$user->id;
+
+        return $x->download('custody-'.$safe.'-'.now()->format('Y-m-d').'.xlsx');
+    }
+
     // ================= العهدة =================
 
     // ⚠️ `loadVan` (التحميل المباشر) **اتشال** (قرار المالك 2026-08-03):

@@ -812,6 +812,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/', [OpsController::class, 'dashboard'])->name('dashboard');
 
         Route::get('/reps/{user}', [OpsController::class, 'rep'])->name('rep');
+        // تصدير العهدة إكسيل (٦/٩) — نفس حراس صفحة المندوب جوه الميثود
+        Route::get('/reps/{user}/custody/excel', [OpsController::class, 'repCustodyExcel'])
+            ->name('rep.custody.excel');
         // ⚠️ راوت التحميل المباشر اتشال (2026-08-03) — التحميل بيمرّ
         // بفلو تسليم العهدة: طلب ← تجهيز ← تأكيد ← استلام المندوب
         Route::post('/reps/{user}/close', [OpsController::class, 'closeCustody'])

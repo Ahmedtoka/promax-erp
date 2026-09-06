@@ -839,4 +839,14 @@ return [
     'x_net' => 'Net / Tax',
     'x_grand' => 'Grand total due',
     'x_truncated' => 'Export capped at the first :n orders — narrow the filters for the rest.',
+
+    // Van-stock export (Sep 6)
+    'x_custody_btn' => 'Van stock Excel',
+    'x_custody_sheet' => 'Van stock',
+    'x_custody_title' => 'Van stock — :rep',
+    'x_no_custody' => 'The rep has no van stock — nothing to export.',
+    'x_gift_assigned' => 'Gifts loaded',
+    'x_inv_qty' => 'Via invoices',
+    'x_po_qty' => 'Via POs',
+    'x_days' => 'Days left',
 ];
