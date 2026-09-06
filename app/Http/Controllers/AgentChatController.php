@@ -33,6 +33,45 @@ class AgentChatController extends Controller
 
         $user = $request->user();
 
+        // ═══ قفل كلمة السر (٧/٩ — طلب المالك) ═══
+        //
+        // أول رسالة في السيشن → «قولي كلمة السر الأول». كلمة السر
+        // صح → القفل بيتفك للسيشن دي. أي حاجة تانية بعد السؤال →
+        // الشات بيتقفل (kick) والواجهة بتقفل البانل، ومايفتحش تاني
+        // غير بكلمة السر في البوكس.
+        //
+        // ⚠️ الفحص هنا قبل أي حاجة — لا محادثة بتتعمل ولا الـAPI
+        // بيتندهله وإحنا مقفولين. مقارنة بـhash_equals.
+        $pw = (string) config('agents.chat_password');
+
+        if ($pw !== '' && ! $request->session()->get('agent_unlocked', false)) {
+            $blank = ['conversation_id' => null, 'data' => null, 'link' => null, 'action' => null];
+
+            if (hash_equals($pw, trim($data['message']))) {
+                $request->session()->put('agent_unlocked', true);
+
+                return response()->json($blank + [
+                    'unlocked' => true,
+                    'text' => __('agent.pw_ok'),
+                ]);
+            }
+
+            if (! $request->session()->get('agent_pw_asked', false)) {
+                $request->session()->put('agent_pw_asked', true);
+
+                return response()->json($blank + [
+                    'locked' => true,
+                    'text' => __('agent.pw_ask'),
+                ]);
+            }
+
+            return response()->json($blank + [
+                'locked' => true,
+                'kick' => true,
+                'text' => __('agent.pw_kick'),
+            ]);
+        }
+
         // ⚠️ المحادثة لازم تبقى بتاعة نفس اليوزر — id متلاعب فيه
         // بيتجاهل وبيتفتح محادثة جديدة، مش 403 يقطع الشات
         $conv = null;

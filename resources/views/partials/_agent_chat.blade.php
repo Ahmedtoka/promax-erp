@@ -164,6 +164,10 @@
             ? $pmxRoute->originalParameters() : []),
         'thinking' => __('agent.thinking'),
         'errGeneric' => __('agent.err_generic'),
+        'placeholder' => __('agent.placeholder'),
+        'pwPlaceholder' => __('agent.pw_placeholder'),
+        'pwHint' => __('agent.pw_hint'),
+        'emptyHint' => __('agent.empty_hint'),
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
 @endphp
 
@@ -181,6 +185,25 @@
 
     let convId = Number(sessionStorage.getItem('pmxAgentConv') || 0) || null;
     let busy = false;
+
+    /* ═══ قفل كلمة السر (٧/٩) — الحُكم في السيرفر، ده UI بس ═══ */
+    function setLockUi(on) {
+        sessionStorage.setItem('pmxLocked', on ? '1' : '0');
+        input.placeholder = on ? CTX.pwPlaceholder : CTX.placeholder;
+        const chips = document.getElementById('pmxChips');
+        if (chips) chips.style.display = on ? 'none' : '';
+        const empty = document.getElementById('pmxEmpty');
+        if (empty) {
+            empty.querySelector('.ic').textContent = on ? '🔒' : '🤝';
+            empty.childNodes.forEach(function (n) {
+                if (n.nodeType === 3 && n.textContent.trim() !== '') {
+                    n.textContent = on ? CTX.pwHint : CTX.emptyHint;
+                }
+            });
+        }
+    }
+
+    if (sessionStorage.getItem('pmxLocked') === '1') setLockUi(true);
 
     document.getElementById('pmxAgentBtn').addEventListener('click', function () {
         panel.classList.toggle('on');
@@ -410,6 +433,36 @@
 
             if (!r.ok) {
                 bubble('err', body.message || CTX.errGeneric);
+                return;
+            }
+
+            /* ═══ ردود القفل (٧/٩) — قبل أي عرض عادي ═══ */
+            if (body.kick) {
+                // كلمة سر غلط: البانل بيتقفل والمحادثة بتتمسح —
+                // ومايفتحش يرد تاني غير بكلمة السر في البوكس
+                bubble('err', body.text || '');
+                setLockUi(true);
+                convId = null;
+                sessionStorage.removeItem('pmxAgentConv');
+                setTimeout(function () {
+                    msgs.querySelectorAll(':scope > *:not(#pmxEmpty)').forEach(e => e.remove());
+                    const empty = document.getElementById('pmxEmpty');
+                    if (empty) empty.style.display = '';
+                    panel.classList.remove('on');
+                    panel.setAttribute('aria-hidden', 'true');
+                }, 1200);
+                return;
+            }
+
+            if (body.locked) {
+                bubble('bot', body.text || '');
+                setLockUi(true);
+                return;
+            }
+
+            if (body.unlocked) {
+                bubble('bot', body.text || '');
+                setLockUi(false);
                 return;
             }
 

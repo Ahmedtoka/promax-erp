@@ -49,6 +49,13 @@ return [
     'err_not_configured' => 'The assistant is not set up yet — the admin needs to add the API key.',
     'empty_reply' => "I couldn't come up with an answer — try rephrasing your question.",
 
+    // Password lock (Sep 7)
+    'pw_ask' => 'Tell me the password first so I can answer 🔒',
+    'pw_kick' => 'Wrong password — the chat is now locked. Open it again and type the password.',
+    'pw_ok' => 'All good ✅ go ahead, ask away.',
+    'pw_placeholder' => 'Type the password…',
+    'pw_hint' => 'The assistant is locked — type the password below to unlock it.',
+
     // Suggestion chips + mic (Sep 7)
     'chip_expiry' => 'Which batches expire soon?',
     'chip_aging' => 'Show receivables aging',
