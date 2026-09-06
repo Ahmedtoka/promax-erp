@@ -93,13 +93,33 @@
         </div>
 
         {{-- ═══ التايم لاين — بالتاريخ والوقت والصورة ═══ --}}
+        @php
+            // ═══ ترقيم المشوار (٧/٩ — طلب المالك): لكل مندوب، أحداث
+            // الإحداثيات بترتيب الوقت ١، ٢، ٣… — نفس الرقم على ماركر
+            // الخريطة وفي التايم لاين، عشان يبان راح ورجع كام مرة
+            $mapSeq = [];
+            $seqCounters = [];
+            foreach ($events->reverse() as $seqEv) {
+                if ($seqEv->lat && $seqEv->lng) {
+                    $seqCounters[$seqEv->user_id] = ($seqCounters[$seqEv->user_id] ?? 0) + 1;
+                    $mapSeq[$seqEv->id] = $seqCounters[$seqEv->user_id];
+                }
+            }
+        @endphp
         <div style="max-height:520px;overflow-y:auto" id="timeline">
             @forelse ($events as $e)
                 <div class="trk-row" data-uid="{{ $e->user_id }}"
                      style="border-inline-start:4px solid {{ $colors[$e->user_id] ?? 'var(--border)' }}">
                     @include('partials._avatar', ['u' => $e->user, 'size' => 34, 'ring' => $colors[$e->user_id] ?? null])
                     <div style="flex:1;min-width:0">
-                        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                            @isset ($mapSeq[$e->id])
+                                {{-- رقم المشوار — نفس الرقم اللي على الماركر --}}
+                                <span style="display:inline-flex;min-width:18px;height:18px;padding:0 4px;
+                                             border-radius:9px;align-items:center;justify-content:center;
+                                             background:{{ $colors[$e->user_id] ?? '#12399B' }};color:#fff;
+                                             font-size:10.5px;font-weight:900">{{ $mapSeq[$e->id] }}</span>
+                            @endisset
                             <b style="font-size:12.5px;color:{{ $colors[$e->user_id] ?? 'inherit' }}">{{ $e->user->displayName() }}</b>
                             <span style="font-size:12.5px">{{ $e->icon() }} {{ $e->title }}</span>
                         </div>
@@ -158,6 +178,8 @@
             'avatar' => $e->user->avatarUrl(),
             'initials' => $e->user->initials(),
             'color' => $colors[$e->user_id] ?? '#12399B',
+            // رقم المشوار (٧/٩) — نفس ترقيم التايم لاين
+            'seq' => $mapSeq[$e->id] ?? null,
         ])->values();
 
     // ═══ عربيات iTrack (٢٦/٨) — ماركر شاحنة لكل جهاز بآخر موقعه.
@@ -212,6 +234,11 @@
         + 'box-shadow:0 1px 6px rgba(0,0,0,.35);overflow:hidden;background:#fff">' + inner + '</div>'
         + '<div style="position:absolute;bottom:-2px;right:-4px;font-size:13px;'
         + 'text-shadow:0 0 3px #fff,0 0 3px #fff">' + p.icon + '</div>'
+        /* رقم المشوار فوق شمال — بيقول ده المحطة كام في يوم المندوب */
+        + (p.seq ? '<div style="position:absolute;top:-5px;left:-6px;min-width:17px;height:17px;'
+          + 'padding:0 3px;border-radius:9px;background:' + p.color + ';color:#fff;'
+          + 'border:2px solid #fff;display:flex;align-items:center;justify-content:center;'
+          + 'font:900 10px Inter,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)">' + p.seq + '</div>' : '')
         + '</div>',
     });
   }
@@ -227,7 +254,11 @@
 
     const m = L.marker([p.lat, p.lng], { icon: avatarIcon(p) });
     m.bindPopup('<div style="font:600 13px ' + (IS_RTL ? 'Cairo' : 'Inter') + ',sans-serif;'
-      + 'direction:' + (IS_RTL ? 'rtl' : 'ltr') + ';text-align:start">' + p.title
+      + 'direction:' + (IS_RTL ? 'rtl' : 'ltr') + ';text-align:start">'
+      + (p.seq ? '<span style="display:inline-flex;min-width:18px;height:18px;padding:0 4px;'
+        + 'border-radius:9px;background:' + p.color + ';color:#fff;align-items:center;'
+        + 'justify-content:center;font-size:10.5px;margin-inline-end:5px">' + p.seq + '</span>' : '')
+      + p.title
       + '<div style="font-weight:400;font-size:11.5px;color:#6B6B66;margin-top:3px">' + p.sub + '</div></div>');
     layers[uid].group.addLayer(m);
     layers[uid].path.push([p.lat, p.lng]);
