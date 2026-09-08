@@ -372,7 +372,6 @@ class ClientImporter extends Importer
                 if ($discount !== null) {
                     // الشيت بالنسبة، الداتابيز بالكسر — القسمة مرة واحدة
                     $payload['discount'] = $discount / 100;
-                    $payload['uses_channel_discount'] = $discount <= 0;
                 }
 
                 // لينك اللوكيشن بيتخزن على العميل كمرجع — الإحداثيات
@@ -442,7 +441,6 @@ class ClientImporter extends Importer
                     // الجديد من غير عمود خصم بياخد صفر وبيرجع لخصم القناة
                     $client = Client::create($payload + [
                         'discount' => ($discount ?? 0) / 100,
-                        'uses_channel_discount' => ($discount ?? 0) <= 0,
                     ]);
                     $created++;
 

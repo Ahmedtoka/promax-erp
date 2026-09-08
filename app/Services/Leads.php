@@ -72,9 +72,8 @@ class Leads
                 'category' => 'ok',
                 'status' => 'active',
                 'is_new' => true,
-                // ⚠️ من غير خصم خاص — بياخد خصم قناته لحد ما يتعمل له عقد
+                // من غير خصم خاص — خصمه من عقده أو سلسلته لما يتعمل
                 'discount' => 0,
-                'uses_channel_discount' => true,
                 'price_list' => 'new',
                 'created_by' => $by->id,
             ]);

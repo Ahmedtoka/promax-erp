@@ -1330,7 +1330,7 @@ class ErpController extends Controller
      */
     private const DB_DEFAULTED = [
         'eta_type', 'tax_rate', 'taxable', 'price_list', 'category',
-        'status', 'discount', 'uses_channel_discount', 'is_new', 'has_docs',
+        'status', 'discount', 'is_new', 'has_docs',
     ];
 
     /** حقول العميل بس — بنشيل حقول العقد ونحوّل النسب */
@@ -1360,8 +1360,6 @@ class ErpController extends Controller
             ->all();
 
         $fields['discount'] = (float) ($data['discount'] ?? 0) / 100;
-        // خصم صفر معناه «خُد خصم السلسلة أو القناة»
-        $fields['uses_channel_discount'] = $fields['discount'] <= 0;
 
         // ⚠️ **مزامنة عمود `price_list` النصي مع القايمة المختارة**
         // (2026-08-07). الفورم بقى بيبعت `price_list_id` بس، والعمود

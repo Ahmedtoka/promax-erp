@@ -3995,7 +3995,6 @@ class OpsController extends Controller
                     // بيكتب العمود ده، فنفس الطلب كان بيطلّع عميل
                     // بإعداد خصم مختلف حسب اتعتمد من الويب ولا من
                     // الأبلكيشن.
-                    'uses_channel_discount' => $discount <= 0,
                     'notes' => $wantsContract ? __('ops.contract_pending_note') : null,
                     'is_new' => true,
                     'has_docs' => $clientRequest->has_docs,
@@ -4081,8 +4080,8 @@ class OpsController extends Controller
      * (مش الطلب)، وأي تعديل بيتكتب على العميل نفسه: الاسم باللغتين
      * بعقيدة التركيبة، المحافظة والمنطقة والعنوان، القناة والقسم
      * والسلسلة، والقايمة والخصم بنفس أعمدة الاعتماد بالحرف
-     * (`price_list_id` + العمود النصي متزامنين، والخصم بيقلب
-     * `uses_channel_discount`) — فطريقة الحساب بتتسكّل فوراً.
+     * (`price_list_id` + العمود النصي متزامنين) — فطريقة الحساب
+     * بتتسكّل فوراً.
      *
      * ⚠️ لو المنطقة اتغيّرت، لاحقة المنطقة القديمة بتتشال من الاسم
      * الأول وبعدين الجديدة بتتركّب — من غير كده كان هيطلع
@@ -4199,7 +4198,6 @@ class OpsController extends Controller
                 'price_list_id' => $priceList?->id,
                 ...($priceList !== null ? ['price_list' => $priceList->code] : []),
                 'discount' => $discount / 100,
-                'uses_channel_discount' => $discount <= 0,
             ]);
         });
 

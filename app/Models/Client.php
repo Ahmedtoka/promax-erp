@@ -148,9 +148,11 @@ class Client extends Model
         return [
             'discount' => 'decimal:4',
             'contacts' => 'array',
-            // ⚠️ **مهجور.** كان معناه «ارجع لخصم القناة»، والقناة
-            // مابقاش لها نسبة. العمود سايب عشان الداتا القديمة، بس
-            // `effectiveDiscount()` مابتقراهوش.
+            // ⚠️ **مهجور ومحدش بيكتبه.** كان معناه «ارجع لخصم القناة»،
+            // والقناة مابقاش لها نسبة. العمود والكاست سايبين عشان
+            // الداتا القديمة تفضل مقروءة، و`PricingTest` بيزرعه `true`
+            // عمداً عشان يثبت إن `effectiveDiscount()` بتتجاهله.
+            // **متكتبوش في أي مسار جديد.**
             'uses_channel_discount' => 'boolean',
             'taxable' => 'boolean',
             'tax_rate' => 'decimal:4',

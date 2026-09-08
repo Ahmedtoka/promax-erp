@@ -353,7 +353,6 @@ class ManagerApiController extends Controller
                     'category' => 'grow',
                     'status' => 'active',
                     'discount' => ($data['discount'] ?? 0) / 100,
-                    'uses_channel_discount' => ($data['discount'] ?? 0) <= 0,
                     'is_new' => true,
                     'has_docs' => $clientRequest->has_docs,
                     'photo_path' => $clientRequest->photo_path,

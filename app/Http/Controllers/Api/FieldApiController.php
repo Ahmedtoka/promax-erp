@@ -2895,7 +2895,6 @@ class FieldApiController extends Controller
                 'category' => 'grow',
                 'status' => 'active',
                 'discount' => 0,
-                'uses_channel_discount' => true,
                 'is_new' => true,
                 'has_docs' => $req->has_docs,
                 'photo_path' => $req->photo_path,
