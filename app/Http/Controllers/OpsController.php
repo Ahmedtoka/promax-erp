@@ -3794,7 +3794,11 @@ class OpsController extends Controller
             // بيوصل هنا هو الاسم الصح، واسم المندوب الخام مجرد فولباك.
             'name' => ['nullable', 'string', 'max:190'],
             'name_en' => ['nullable', 'string', 'max:190'],
-            'zone_id' => ['nullable', 'exists:zones,id'],
+            // ⚠️ **إجباري عند الاعتماد** (قرار المالك ٨/٩/٢٠٢٦): الزون أول حلقة
+            // في سلسلة ظهور العميل للمندوب. الحارس اللي تحت كان بيرجع للزون
+            // من الطلب أو من المندوب في صمت — 11 من 13 عميل بلا قايمة سعر
+            // طلعوا بلا زون كمان. المعتمِد لازم يختاره بإيده زي قايمة السعر.
+            'zone_id' => ['required_if:decision,approved', 'nullable', 'exists:zones,id'],
             'governorate' => ['nullable', 'string', 'max:60'],
             'address' => ['nullable', 'string', 'max:190'],
             'address_ar' => ['nullable', 'string', 'max:190'],

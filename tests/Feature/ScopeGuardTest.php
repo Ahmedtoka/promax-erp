@@ -288,6 +288,8 @@ class ScopeGuardTest extends TestCase
             ->post(route('ops.requests.decide', $req), [
                 'decision' => 'approved',
                 'price_list_id' => $list->id,
+                // والزون إجباري عند الاعتماد كمان (٨/٩) — شوف التيست اللي تحت
+                'zone_id' => $zone->id,
             ])
             ->assertRedirect();
 
@@ -359,5 +361,44 @@ class ScopeGuardTest extends TestCase
 
         $this->assertTrue(Scope::canRep($admin, $repB));
         $this->assertFalse(Scope::canRep($admin, $this->makeAdmin(['role' => 'accountant'])));
+    }
+
+    /**
+     * ⚠️ **الزون إجباري عند الاعتماد** (قرار المالك ٨/٩/٢٠٢٦).
+     *
+     * عميل بلا زون عميل مخفي عن المندوب — أول حلقة في سلسلة الظهور.
+     * الحارس القديم كان بيرجع للزون من الطلب أو من المندوب في صمت، فلو
+     * الاتنين فاضيين العميل كان بيتولد تايه (11 من 13 عميل بلا قايمة سعر
+     * على اللايف طلعوا بلا زون كمان). الرفض بيرجع المودال بأخطائه
+     * ومايتولدش عميل والطلب يفضل `pending`.
+     */
+    public function test_approval_without_a_zone_is_refused(): void
+    {
+        [$manager, $rep] = $this->team('A');
+        $list = $this->makePriceList('new');
+
+        $req = \App\Models\ClientRequest::create([
+            'number' => 'REQ-NOZONE',
+            'name' => 'عميل بلا زون',
+            'status' => 'pending',
+            'created_by' => $rep->id,
+        ]);
+
+        $before = Client::count();
+
+        $this->actingAs($manager)
+            ->post(route('ops.requests.decide', $req), [
+                'decision' => 'approved',
+                'price_list_id' => $list->id,
+            ])
+            ->assertSessionHasErrors('zone_id');
+
+        $this->assertSame($before, Client::count(), 'اتولد عميل بلا زون');
+        $this->assertSame('pending', $req->fresh()->status);
+
+        // المراجعة والرفض مش محتاجين زون — القرار مش بيولّد عميل
+        $this->actingAs($manager)
+            ->post(route('ops.requests.decide', $req), ['decision' => 'rejected', 'note' => 'مش مناسب'])
+            ->assertSessionHasNoErrors();
     }
 }

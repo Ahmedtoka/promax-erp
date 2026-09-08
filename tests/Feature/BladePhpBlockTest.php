@@ -47,6 +47,12 @@ class BladePhpBlockTest extends TestCase
         $dir = self::viewsDir();
 
         foreach (glob($dir.DIRECTORY_SEPARATOR.'**'.DIRECTORY_SEPARATOR.'*.blade.php') as $path) {
+            // ⚠️ الفيو من غير بلوك @php مالوش حاجة يتفحصها هنا — كان بيطلع
+            // «risky: no assertions» 16 مرة وبيخبّي أي risky حقيقي وسطهم
+            if (! str_contains((string) file_get_contents($path), '@php')) {
+                continue;
+            }
+
             $out[str_replace($dir.DIRECTORY_SEPARATOR, '', $path)] = [$path];
         }
 
