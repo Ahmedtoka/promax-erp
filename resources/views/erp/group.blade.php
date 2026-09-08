@@ -44,6 +44,8 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
+    {{-- تصدير فروع السلسلة بإجمالي كشف حساب كل فرع (٨/٩) --}}
+    <a class="btn" href="{{ route('erp.groups.statements', $g) }}">⬇ {{ __('client.export_branches') }}</a>
     @if ($canClone)
         <a class="btn gold" href="{{ route('erp.clients.clone', $cloneFrom) }}">+ {{ __('client.new_branch_like_chain') }}</a>
     @endif
@@ -156,6 +158,7 @@
                 <th class="srt" data-k="col" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
                 <th class="srt" data-k="bal" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
                 <th class="srt" data-k="act" data-t="s">{{ __('client.last_activity') }}<span class="arw"></span></th>
+                <th data-nosum>{{ __('client.statement') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
             </thead>
@@ -209,6 +212,8 @@
                     <td class="num pos">{{ $fmt($b->collections) }}</td>
                     <td class="num {{ $b->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($b->balance) }}</td>
                     <td class="num">{{ $b->last_activity_at?->format('Y-m-d') ?? '—' }}</td>
+                    {{-- كشف حساب الفرع إكسيل (٨/٩) — فرع بفرعه --}}
+                    <td><a class="btn sm" href="{{ route('erp.groups.branch_statement', [$g, $b]) }}" title="{{ __('client.export_branch_statement') }}">📄 {{ __('rpt.export') }}</a></td>
                     @if ($manager)
                         <td>
                             <form method="POST" action="{{ route('erp.groups.attach', $g) }}" style="display:inline"
@@ -222,7 +227,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $manager ? 12 : 11 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('client.no_branches') }}
                 </td></tr>
             @endforelse

@@ -634,7 +634,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         // ===== السلاسل =====
         Route::get('/groups', [GroupController::class, 'index'])->name('groups');
+        // ⚠️ الثابت قبل البارامتري — `/groups/export` لازم قبل `/groups/{group}`
+        Route::get('/groups/export', [GroupController::class, 'export'])->name('groups.export');
         Route::get('/groups/{group}', [GroupController::class, 'show'])->name('groups.show');
+        // تصدير CSV (٨/٩): فروع السلسلة بأرصدتها، وكشف حساب فرع بالحركة —
+        // قراءة بس، بنفس سكوب الشاشة، فمن غير `role:` زي `show`
+        Route::get('/groups/{group}/statements', [GroupController::class, 'exportStatements'])
+            ->name('groups.statements');
+        Route::get('/groups/{group}/branches/{client}/statement', [GroupController::class, 'exportBranchStatement'])
+            ->name('groups.branch_statement');
         Route::middleware('role:admin,manager')->group(function () {
             Route::post('/groups', [GroupController::class, 'store'])->name('groups.store');
             Route::put('/groups/{group}', [GroupController::class, 'update'])->name('groups.update');

@@ -152,6 +152,11 @@ return [
 
     // ---------- Statement ----------
     'statement' => 'Statement of Account',
+    'export_chains' => 'Export chains with balances',
+    'export_branches' => 'Export branches with statements',
+    'export_branch_statement' => 'Branch statement (Excel)',
+    'running_balance' => 'Running balance',
+    'previous_balance' => 'Balance brought forward',
     'monthly_movement' => 'Monthly Movement',
     'chain_monthly_movement' => 'Chain Monthly Movement',
     'sales_by_family' => 'Sales by Product Family',

@@ -8,6 +8,8 @@ use App\Models\ClientGroup;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Transaction;
+use App\Support\Csv;
+use App\Support\Scope;
 use Illuminate\Http\Request;
 
 /**
@@ -16,6 +18,71 @@ use Illuminate\Http\Request;
 class GroupController extends Controller
 {
     public function index(Request $request)
+    {
+        [$groups, $stats] = $this->chainsWithStats($request);
+
+        return view('erp.groups', [
+            'groups' => $groups,
+            'stats' => $stats,
+            'channels' => Channel::orderBy('id')->get(),
+            'filters' => $request->only(['q', 'channel']),
+            'ungrouped' => Client::visibleTo(Client::whereNull('group_id'), $request->user())
+                ->where('category', '!=', 'internal')->count(),
+        ]);
+    }
+
+    /**
+     * ═══ تصدير السلاسل كلها بأرقامها (٨ سبتمبر ٢٠٢٦) ═══
+     *
+     * نفس صفوف الشاشة بنفس فلاترها (بحث + قناة) — CSV بالـBOM بيفتح في
+     * إكسيل. الأرقام من نفس `chainsWithStats()` فمستحيل تختلف عن الشاشة.
+     */
+    public function export(Request $request)
+    {
+        [$groups, $stats] = $this->chainsWithStats($request);
+
+        $rows = [];
+        $sum = ['branches' => 0, 'purchases' => 0.0, 'collections' => 0.0, 'balance' => 0.0];
+
+        foreach ($groups as $g) {
+            $st = $stats->get($g->id);
+            $p = (float) ($st->purchases ?? 0);
+            $c = (float) ($st->collections ?? 0);
+            $b = (float) ($st->balance ?? 0);
+
+            $rows[] = [
+                $g->displayName(), $g->code,
+                $g->channel?->displayName() ?? '', $g->subChannelLabel() ?? '',
+                $g->clients_count, Csv::money($p), Csv::money($c), Csv::money($b),
+                $p > 0 ? round($c / $p * 100, 1) : 0,
+            ];
+
+            $sum['branches'] += $g->clients_count;
+            $sum['purchases'] += $p;
+            $sum['collections'] += $c;
+            $sum['balance'] += $b;
+        }
+
+        return Csv::download('chains-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('client.chain'), __('common.code'), __('client.channel'), __('client.segment'),
+            __('client.branch_count'), __('client.purchases'), __('client.collected'), __('client.balance'),
+            __('client.collection_rate'),
+        ], $rows, [
+            __('common.total'), '', '', '',
+            $sum['branches'], Csv::money($sum['purchases']), Csv::money($sum['collections']), Csv::money($sum['balance']),
+            $sum['purchases'] > 0 ? round($sum['collections'] / $sum['purchases'] * 100, 1) : 0,
+        ]);
+    }
+
+    /**
+     * السلاسل بفلاتر الشاشة + أرقام كل سلسلة في استعلام واحد.
+     *
+     * ⚠️ الأرقام بـ`Client::visibleTo` — مدير القناة بيشوف مجموع فروع
+     * فريقه بس، زي الشاشة بالظبط.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
+     */
+    private function chainsWithStats(Request $request): array
     {
         $q = ClientGroup::query()->with('channel')->withCount('clients');
 
@@ -51,24 +118,12 @@ class GroupController extends Controller
             ->groupBy('group_id')
             ->get()->keyBy('group_id');
 
-        return view('erp.groups', [
-            'groups' => $groups,
-            'stats' => $stats,
-            'channels' => Channel::orderBy('id')->get(),
-            'filters' => $request->only(['q', 'channel']),
-            'ungrouped' => Client::visibleTo(Client::whereNull('group_id'), $request->user())
-                ->where('category', '!=', 'internal')->count(),
-        ]);
+        return [$groups, $stats];
     }
 
     public function show(ClientGroup $group, Request $request)
     {
-        $branches = Client::visibleTo(
-            $group->clients()->with(['zone', 'contract', 'group.contract']),
-            $request->user()
-        )
-            ->orderByDesc('purchases')
-            ->get();
+        $branches = $this->branchesOf($group, $request);
 
         $ids = $branches->pluck('id');
 
@@ -89,6 +144,122 @@ class GroupController extends Controller
             'contracts' => $branches->filter(fn ($b) => $b->contract !== null),
             'zones' => \App\Models\Zone::orderBy('code')->get(),
         ]);
+    }
+
+    /**
+     * ═══ تصدير فروع السلسلة بإجمالي كشف حساب كل فرع (٨ سبتمبر ٢٠٢٦) ═══
+     *
+     * صف لكل فرع (نفس فروع الشاشة بنفس السكوب) + صف إجماليات. الأرقام
+     * هي الأعمدة المجمّعة اللي `recalculate()` بتكتبها من `transactions`.
+     */
+    public function exportStatements(ClientGroup $group, Request $request)
+    {
+        $branches = $this->branchesOf($group, $request);
+        $rows = [];
+
+        foreach ($branches as $b) {
+            $rows[] = [
+                $group->displayName().' — '.$b->displayName(), $b->code,
+                $b->zone?->displayName() ?? '', $b->categoryLabel(), $b->paymentTermsLabel(),
+                Csv::money($b->purchases), Csv::money($b->collections), Csv::money($b->returns), Csv::money($b->balance),
+                $b->last_activity_at?->format('Y-m-d') ?? '',
+            ];
+        }
+
+        return Csv::download('chain-'.$group->code.'-branches-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('client.branch'), __('common.code'), __('client.zone'), __('client.category'), __('client.pay_terms_col'),
+            __('client.purchases'), __('client.collected'), __('client.returns'), __('client.balance'),
+            __('client.last_activity'),
+        ], $rows, [
+            __('common.total'), '', '', '', '',
+            Csv::money($branches->sum('purchases')), Csv::money($branches->sum('collections')),
+            Csv::money($branches->sum('returns')), Csv::money($branches->sum('balance')), '',
+        ]);
+    }
+
+    /**
+     * ═══ كشف حساب فرع واحد بالحركة (٨ سبتمبر ٢٠٢٦) ═══
+     *
+     * كل قيد من `transactions` بالترتيب الزمني والرصيد بعد كل حركة.
+     * فترة اختيارية (`from`/`to`): اللي قبل `from` بيتلخّص في صف «رصيد
+     * سابق» عشان الرصيد الجاري يقفل على رصيد العميل الحقيقي دايماً.
+     *
+     * ⚠️ الفرع لازم يكون من السلسلة دي (404) وجوه سكوب الفاعل
+     * (`Scope::assertClient` → 403) — فلترة القايمة مش حماية.
+     */
+    public function exportBranchStatement(ClientGroup $group, Client $client, Request $request)
+    {
+        abort_unless((int) $client->group_id === (int) $group->id, 404);
+        Scope::assertClient($request->user(), $client);
+
+        $from = $this->dateOrNull($request->input('from'));
+        $to = $this->dateOrNull($request->input('to'));
+
+        $q = $client->transactions()->reorder()->orderBy('date')->orderBy('id');
+
+        if ($to !== null) {
+            $q->whereDate('date', '<=', $to);
+        }
+
+        $running = 0.0;
+        $rows = [];
+
+        if ($from !== null) {
+            $before = $client->transactions()->reorder()->whereDate('date', '<', $from)
+                ->selectRaw('COALESCE(SUM(debit), 0) as d, COALESCE(SUM(credit), 0) as c')->first();
+            $running = (float) $before->d - (float) $before->c;
+            $rows[] = [$from->toDateString(), '', __('client.previous_balance'), '', '', '', Csv::money($running)];
+            $q->whereDate('date', '>=', $from);
+        }
+
+        $debit = 0.0;
+        $credit = 0.0;
+
+        foreach ($q->get() as $t) {
+            $running += (float) $t->debit - (float) $t->credit;
+            $debit += (float) $t->debit;
+            $credit += (float) $t->credit;
+
+            $rows[] = [
+                $t->date instanceof \DateTimeInterface ? $t->date->format('Y-m-d') : (string) $t->date,
+                $t->kindLabel(), (string) $t->memo,
+                trim(($t->methodLabel() ?? '').' '.($t->reference ?? '')),
+                $t->debit > 0 ? Csv::money($t->debit) : '', $t->credit > 0 ? Csv::money($t->credit) : '',
+                Csv::money($running),
+            ];
+        }
+
+        return Csv::download('statement-'.$client->code.'-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('common.date'), __('client.type'), __('client.memo'), __('client.pay_method_label'),
+            __('client.debit'), __('client.credit'), __('client.running_balance'),
+        ], $rows, [
+            __('common.total'), '', $client->displayName(), '',
+            Csv::money($debit), Csv::money($credit), Csv::money($running),
+        ]);
+    }
+
+    /** فروع السلسلة زي ما الشاشة بتشوفها — نفس السكوب ونفس الترتيب */
+    private function branchesOf(ClientGroup $group, Request $request)
+    {
+        return Client::visibleTo(
+            $group->clients()->with(['zone', 'contract', 'group.contract']),
+            $request->user()
+        )
+            ->orderByDesc('purchases')
+            ->get();
+    }
+
+    private function dateOrNull(mixed $raw): ?\Illuminate\Support\Carbon
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse((string) $raw)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function store(Request $request)

@@ -154,6 +154,11 @@ return [
 
     // ---------- كشف الحساب ----------
     'statement' => 'كشف الحساب',
+    'export_chains' => 'تصدير السلاسل بأرصدتها',
+    'export_branches' => 'تصدير الفروع بكشف الحساب',
+    'export_branch_statement' => 'كشف حساب الفرع (إكسيل)',
+    'running_balance' => 'الرصيد بعد الحركة',
+    'previous_balance' => 'رصيد سابق',
     'monthly_movement' => 'الحركة الشهرية',
     'chain_monthly_movement' => 'الحركة الشهرية للسلسلة',
     'sales_by_family' => 'مبيعاته حسب عائلة المنتج',

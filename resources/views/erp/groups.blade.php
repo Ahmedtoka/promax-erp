@@ -10,6 +10,8 @@
 @endphp
 
 @section('actions')
+    {{-- تصدير القايمة بنفس فلاترها (٨/٩) — CSV بيفتح في إكسيل --}}
+    <a class="btn" href="{{ route('erp.groups.export', array_filter($filters ?? [])) }}" title="{{ __('client.export_chains') }}">⬇ {{ __('client.export_chains') }}</a>
     @if ($manager)
         <button class="btn gold" onclick="openDlg('dlgNewG')">+ {{ __('client.new_chain') }}</button>
     @endif
