@@ -55,8 +55,12 @@
             <button class="btn" type="submit">🧹 {{ __('lead.clear_btn') }}</button>
         </form>
     @endif
-    @if ($canConvert)
-        {{-- راسم خط السير التفاعلي (٦/٩) --}}
+    {{-- ⚠️ **بمفتاح الراوت مش `$canConvert`.** الراوت `role:admin,manager`،
+         و`$canConvert` بترجّع true لمدير الفرع كمان (`MANAGER_ROLES`) — فكان
+         بيشوف الزرار وياخد 403 أول ما يدوس. `$canConvert` صح لباقي استخداماتها
+         (التحويل والتسكين)، فالحارس هنا على الشاشة دي بس. --}}
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.leads.route'))
+        {{-- راسم خط السير التفاعلي --}}
         <a class="btn" href="{{ route('erp.leads.route') }}">🧭 {{ __('lead.route_title') }}</a>
     @endif
     <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>

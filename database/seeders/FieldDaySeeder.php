@@ -156,6 +156,8 @@ class FieldDaySeeder extends Seeder
             $discPct = $client->effectiveDiscount();
             $discount = round($subtotal - $net, 2);
             $total = $net;
+            // نفس مصدر الحقيقة اللي بيستخدمه `storeInvoice` — مش حساب يدوي
+            $taxTotal = round(\App\Services\Tax::on($total, $client), 2);
 
             $invoice = Invoice::create([
                 'number' => Invoice::nextNumber(),
@@ -169,6 +171,12 @@ class FieldDaySeeder extends Seeder
                 'discount_source' => $client->discountSourceKey(),
                 'discount' => $discount,
                 'total' => $total,
+                // ⚠️ **عقيدة الأرقام التلاتة.** `total` صافي قبل الضريبة،
+                // و`grand_total` هو اللي بيروح الليدجر وشاشة السواق
+                // والأبلكيشن. سيبهم فاضيين معناه صفر — يعني فواتير
+                // مزروعة العميل متحاسب فيها على لا حاجة.
+                'tax_total' => $taxTotal,
+                'grand_total' => round($total + $taxTotal, 2),
                 'cost_total' => round($costTotal, 2),
                 'lat' => $visit->lat, 'lng' => $visit->lng,
             ]);
