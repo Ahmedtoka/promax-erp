@@ -59,8 +59,11 @@ class ClientGroupSeeder extends Seeder
                     'name' => $name,
                     'channel_id' => $channel?->id,
                     'sub_channel' => $sub,
-                    'discount' => 0,
-                    'uses_group_discount' => false,
+                    // ⚠️ **مفيش `discount` ولا `uses_group_discount`.**
+                    // خصم السلسلة اتلغى ومايجريشن `000028_drop_group_discount`
+                    // شال العمودين — وكتابتهم هنا كانت بتوقّف
+                    // `migrate:fresh --seed` كله عند السيدر ده.
+                    // خصم السلسلة دلوقتي بيعيش في عقد السلسلة.
                     'active' => true,
                 ],
             );

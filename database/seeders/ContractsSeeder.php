@@ -271,7 +271,6 @@ class ContractsSeeder extends Seeder
             'category' => 'idle',
             'status' => 'active',
             'discount' => 0,
-            'uses_channel_discount' => true,
             'price_list' => 'new',
             'is_new' => true,
         ]);
