@@ -286,7 +286,10 @@
 
             <div class="frow">
                 <div>
-                    <label class="f">{{ __('client.price_list') }}</label>
+                    {{-- ⚠️ **إجبارية عند الاعتماد** — `required_if:decision,approved`
+                         (بلاغ INV-1065). من غير النجمة المعتمِد كان بيملا كل حاجة
+                         ويترمي برسالة خطأ من غير ما يعرف الخانة دي كانت لازمة. --}}
+                    <label class="f">{{ __('client.price_list') }} <b class="req-star">*</b></label>
                     <select name="price_list_id" style="width:100%">
                         <option value="">— {{ __('client.pick_price_list') }} —</option>
                         @foreach ($priceLists as $pl)
