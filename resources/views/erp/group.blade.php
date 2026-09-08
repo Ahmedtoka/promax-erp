@@ -101,6 +101,14 @@
     </div>
 </div>
 
+{{-- ═══ مسحوبات السلسلة بالكمية (٨/٩/٢٠٢٦): كام قطعة من كل صنف، بكام، وإمتى ═══ --}}
+@include('partials._movements_table', [
+    'movements' => $movements,
+    'exportUrl' => route('erp.groups.movements', $g),
+    'title' => __('client.movements_title_chain'),
+    'hint' => __('client.movements_hint_chain'),
+])
+
 <div class="grid2">
     <div class="card">
         <h3>🗾 {{ __('client.by_governorate') }}</h3>

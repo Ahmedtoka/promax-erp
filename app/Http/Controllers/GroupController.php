@@ -143,6 +143,8 @@ class GroupController extends Controller
                 ->whereDate('created_at', today())->sum('total'),
             'contracts' => $branches->filter(fn ($b) => $b->contract !== null),
             'zones' => \App\Models\Zone::orderBy('code')->get(),
+            // حركة أصناف السلسلة بالكمية (٨/٩) — كل الفروع اللي الفاعل شايفها
+            'movements' => \App\Services\ProductMovements::summary($ids->all()),
         ]);
     }
 

@@ -420,6 +420,15 @@
 
 <div class="card"><h3>{{ __('client.sales_by_family') }}</h3><div class="chartbox"><canvas id="chSplit"></canvas></div></div>
 
+{{-- ═══ حركة الأصناف بالكمية (٨/٩/٢٠٢٦) — طلب المالك: «الكميات والمنتجات
+     وكام عائلة وسحب كام من ده ورجع كام» — الكارت المشترك مع صفحة السلسلة ═══ --}}
+@include('partials._movements_table', [
+    'movements' => $movements,
+    'exportUrl' => route('erp.clients.movements', $c),
+    'title' => __('client.movements_title'),
+    'hint' => __('client.movements_hint_client'),
+])
+
 <div class="card"><h3>{{ __('client.monthly_movement') }}</h3><div class="chartbox"><canvas id="chM"></canvas></div></div>
 
 {{-- ═══════════ آخر الزيارات (١٥ أغسطس ٢٠٢٦) ═══════════

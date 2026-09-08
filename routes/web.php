@@ -270,6 +270,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
         Route::get('/contracts', [ErpController::class, 'contracts'])->name('contracts');
         // صفحة عقد العميل — كل عقد لوحده
+        // حركة أصناف العميل بالكمية (٨/٩) — CSV تفصيلي أو ملخص
+        Route::get('/clients/{client}/movements', [\App\Http\Controllers\ProductMovementController::class, 'client'])
+            ->name('clients.movements');
         Route::get('/contracts/{contract}', [ErpController::class, 'contract'])->name('contracts.show');
         Route::post('/contracts', [ErpController::class, 'storeContract'])
             ->middleware('role:admin,manager')->name('contracts.store');
@@ -643,6 +646,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->name('groups.statements');
         Route::get('/groups/{group}/branches/{client}/statement', [GroupController::class, 'exportBranchStatement'])
             ->name('groups.branch_statement');
+        // حركة أصناف السلسلة بالكمية (٨/٩) — CSV تفصيلي أو ملخص
+        Route::get('/groups/{group}/movements', [\App\Http\Controllers\ProductMovementController::class, 'group'])
+            ->name('groups.movements');
         Route::middleware('role:admin,manager')->group(function () {
             Route::post('/groups', [GroupController::class, 'store'])->name('groups.store');
             Route::put('/groups/{group}', [GroupController::class, 'update'])->name('groups.update');

@@ -877,6 +877,8 @@ class ErpController extends Controller
             // ودي بتقول كام منها عدّى ميعاد سداده حسب شروط العقد.
             'overdue' => $client->overdue(),
             'split' => $client->familySplit(),
+            // حركة الأصناف بالكمية (٨/٩): كام قطعة من كل صنف وعائلة، سحب ومرتجع وهدايا
+            'movements' => \App\Services\ProductMovements::summary([$client->id]),
             'monthly' => $client->transactions()
                 ->selectRaw("DATE_FORMAT(date, '%Y-%m') as m,
                              SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) as sales,
