@@ -42,7 +42,11 @@ class Access
             // السايكل الجديدة (١٧/٨): الديفيجنز + الإعداد + رصيد العناوين
             'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
             // مراجعة الحسابات (٢٨/٨) — مدير القناة بيراجع عملاءه
+            // ⚠️ بالاسم مش بالبادئة: `erp.audit` لوحدها سجل النظام (`role:admin`).
+            // الحفظ والتأكيد ومسح الكشف `role:admin,manager` — كانوا ناقصين (٨/٩)
+            // فالفورم بيبان والخريطة ترفضه
             'erp.audit.chains', 'erp.audit.clients', 'erp.audit.report',
+            'erp.audit.save', 'erp.audit.confirm', 'erp.audit.statement',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
@@ -72,6 +76,8 @@ class Access
             // `role:admin,accountant`، ومن غير الاستثناء ده بادئة
             // `ops.` كانت بتقول إنه مسموح والراوت يرفضه.
             '!ops.po.decide',
+            // إعدادات العمولات `role:admin` — الحاسبة نفسها مفتوحة للمدير
+            '!erp.kpi.setup',
         ],
 
         // ═══ مدير الفرع — نفس المدير، بس البيانات مفلترة بفرعه ═══
@@ -116,6 +122,8 @@ class Access
             // ⚠️ المرتجعات **عرض بس** لمدير الفرع — الإنشاء بيمس
             // دفتر العميل، وده قرار تجاري (`role:admin,manager,accountant`).
             'ops.returns', '!ops.returns.new', '!ops.returns.store',
+            // إعادة تسعير أوامر التوريد `role:admin,manager` (٨/٩)
+            '!ops.pos.reprice',
         ],
 
         // ═══ المحاسب — الفلوس بس ═══
@@ -196,6 +204,8 @@ class Access
             // و`ops.pos.assign` كمان — أمين المخزن مالوش قرار إن أمر
             // ينزل على مين، ده قرار تجاري.
             '!ops.pos.store', '!ops.pos.assign',
+            // إعادة التسعير والتحويل لعميل تاني قرار إدارة (٨/٩)
+            '!ops.pos.reprice', '!ops.pos.reassign',
             // بيستلم بضاعة الموردين — عرض الأوامر والاستلام بس،
             // الإنشاء والفوترة والإلغاء قرارات إدارة.
             'erp.purchasing',
@@ -540,25 +550,34 @@ class Access
         'act.clients.collect' => ['perm.act_clients_collect', 'erp.clients', ['manager', 'branch_manager', 'accountant'], ['erp.clients.collect', 'erp.clients.opening']],
         'act.clients.activate' => ['perm.act_clients_activate', 'erp.clients.activate', ['manager'], ['erp.clients.activate.do', 'erp.clients.deactivate']],
         'act.contracts.manage' => ['perm.act_contracts_manage', 'erp.contracts', ['manager'], ['erp.contracts.store', 'erp.contracts.link', 'erp.contracts.destroy', 'erp.clauses.store', 'erp.clauses.destroy']],
-        'act.leads.manage' => ['perm.act_leads_manage', 'erp.leads', null, ['erp.leads.store', 'erp.leads.update', 'erp.leads.convert']],
+        // ⚠️ `null` كان بيوري مدير الفرع زراير التحويل والمسح والتوزيع
+        // وكلها `role:admin,manager` — 403 أول ما يدوس (زحف ٨/٩)
+        'act.leads.manage' => ['perm.act_leads_manage', 'erp.leads', ['manager'], ['erp.leads.store', 'erp.leads.update', 'erp.leads.convert', 'erp.leads.delete', 'erp.leads.dupcheck', 'erp.leads.dupdecide', 'erp.leads.bulkset', 'erp.leads.bulk']],
 
         // ═══ المنتجات والتسعير ═══
         'act.products.edit' => ['perm.act_products_edit', 'erp.stock', ['manager'], ['erp.products.store', 'erp.products.update']],
-        'act.prices.edit' => ['perm.act_prices_edit', 'erp.prices', null, ['erp.prices.store', 'erp.prices.update', 'erp.prices.save', 'erp.prices.bulk']],
-        'act.prices.activate' => ['perm.act_prices_activate', 'erp.prices', null, ['erp.prices.activate', 'erp.prices.deactivate', 'erp.prices.default']],
+        'act.prices.edit' => ['perm.act_prices_edit', 'erp.prices', ['manager'], ['erp.prices.store', 'erp.prices.update', 'erp.prices.save', 'erp.prices.bulk']],
+        'act.prices.activate' => ['perm.act_prices_activate', 'erp.prices', ['manager'], ['erp.prices.activate', 'erp.prices.deactivate', 'erp.prices.default']],
 
         // ═══ المخزن ═══
-        'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', null, ['wh.receipts.store', 'wh.receipts.import', 'wh.batch.update']],
-        'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', null, ['wh.putaway', 'wh.receipt.putaway', 'wh.move', 'wh.locations.store']],
-        'act.wh.transfer' => ['perm.act_wh_transfer', 'wh.transfers', null, ['wh.transfers.store', 'wh.transfers.receive', 'wh.transfers.new']],
+        'act.wh.receive' => ['perm.act_wh_receive', 'wh.receipts', ['manager', 'warehouse_keeper'], ['wh.receipts.store', 'wh.receipts.import', 'wh.batch.update']],
+        'act.wh.putaway' => ['perm.act_wh_putaway', 'wh.locations', ['manager', 'warehouse_keeper'], ['wh.putaway', 'wh.putaway.bulk', 'wh.receipt.putaway', 'wh.receipt.putaway.save', 'wh.move', 'wh.locations.store']],
+        // ⚠️ إنشاء التحويل `role:admin,manager`، والاستلام مفتوح لأمين المخزن كمان —
+        // كانوا مفتاح واحد بـ`null` فمدير الفرع كان شايف «تحويل جديد» وبيترفض
+        'act.wh.transfer' => ['perm.act_wh_transfer', 'wh.transfers', ['manager'], ['wh.transfers.store', 'wh.transfers.new']],
+        'act.wh.transfer_receive' => ['perm.act_wh_transfer_receive', 'wh.transfers', ['manager', 'warehouse_keeper'], ['wh.transfers.receive']],
         // ═══ تحويل من عربية مندوب (١٤/٨) ═══
         // ⚠️ **أكشن مستقل عن تحويل المخازن عن قصد.** ده بيسحب بضاعة
         // من عهدة مندوب ويغيّر أرقام تصفيته — قرار إداري مش شغل مخزن
         // يومي. `['manager']` = الأدمن والمدير، والأدمن يقدر يمنحه
         // لأمين مخزن عشان يستقبل في مخزنه هو (`guardWarehouse`).
         'act.wh.van_transfer' => ['perm.act_wh_van_transfer', 'wh.transfers', ['manager'], ['wh.transfers.van', 'wh.transfers.van.store']],
-        'act.wh.count' => ['perm.act_wh_count', 'wh.counts', null, ['wh.counts.store', 'wh.count.record', 'wh.count.approve', 'wh.count.cancel']],
-        'act.wh.pick' => ['perm.act_wh_pick', 'wh.picks', null, ['wh.picks.start', 'wh.picks.ready', 'wh.picks.update', 'wh.picks.cancel', 'wh.picks.po', 'wh.picks.rpl']],
+        // أمين المخزن بيعدّ (`record`)؛ فتح الجرد واعتماده وإلغاؤه `role:admin,manager`
+        'act.wh.count' => ['perm.act_wh_count', 'wh.counts', ['manager', 'warehouse_keeper'], ['wh.count.record']],
+        'act.wh.count_manage' => ['perm.act_wh_count_manage', 'wh.counts', ['manager'], ['wh.counts.store', 'wh.count.approve', 'wh.count.cancel']],
+        // أمين المخزن بيجهّز؛ رفع أمر تجهيز من PO/ريفيل وإلغاؤه `role:admin,manager`
+        'act.wh.pick' => ['perm.act_wh_pick', 'wh.picks', ['manager', 'warehouse_keeper'], ['wh.picks.start', 'wh.picks.ready', 'wh.picks.update']],
+        'act.wh.pick_raise' => ['perm.act_wh_pick_raise', 'wh.picks', ['manager'], ['wh.picks.cancel', 'wh.picks.po', 'wh.picks.rpl']],
         'act.warehouses.manage' => ['perm.act_warehouses_manage', 'erp.warehouses', ['manager'], ['erp.warehouses.store', 'erp.warehouses.update', 'erp.warehouses.stock.save']],
 
         // ═══ العهدة وتوريد الكي أكاونت ═══
@@ -566,7 +585,7 @@ class Access
         // تصحيح إداري للعهدة (١٢/٨) — `[]` = أدمن بس، والأدمن يقدر
         // يمنحه لحد بعينه. بيحرّك العهدة والأرفف مع بعض.
         'act.custody.adjust' => ['perm.act_custody_adjust', 'ops.vans', [], ['ops.rep.adjust']],
-        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
+        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.pos.reassign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
         'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide', 'ops.po.decide.all']],
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 
@@ -589,8 +608,12 @@ class Access
         'act.money.eta' => ['perm.act_money_eta', 'erp.eta', ['accountant'], ['erp.eta.export', 'erp.eta.submitted', 'erp.tax.settings.save']],
 
         // ═══ الإعدادات ═══
-        'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password']],
-        'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.channels.update', 'erp.channels.manager']],
+        'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password', 'erp.channels.manager']],
+        // ⚠️ اتقسم (٨/٩): مدير الفرع بيدير **مناطق** فرعه (`role:…,branch_manager`)
+        // بس المحافظات والفروع والعربيات والسلاسل والقنوات `role:admin,manager` —
+        // المفتاح الواحد كان بيوريه فورم «محافظة جديدة» و«سلسلة جديدة» وبيترفض
+        'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.groups.quick']],
+        'act.org.structure' => ['perm.act_org_structure', 'erp.zones', ['manager'], ['erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.channels.update']],
         'act.import.run' => ['perm.act_import_run', 'erp.import', [], ['erp.import.upload', 'erp.import.apply']],
     ];
 

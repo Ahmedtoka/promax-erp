@@ -240,7 +240,9 @@
                     </select>
                 </div>
                 <div>
-                    <label class="f">{{ __('geo.zone') }}</label>
+                    {{-- ⚠️ الزون إجباري في «مراجعة» (`reviseDecision`)، وهو أول حلقة في سلسلة
+                         ظهور العميل للمندوب — عميل بلا زون بيتعمد ويختفي من الأبلكيشن في صمت. --}}
+                    <label class="f">{{ __('geo.zone') }} <b class="req-star">*</b></label>
                     {{-- ⚠️ سيلكت مسطّح بـ`data-gov` عشان الفلترة في المتصفح
                          (نفس نمط client_form) مش البارشال المجمّع. --}}
                     <select name="zone_id" id="dZone" style="width:100%" onchange="syncGovFromZone()">

@@ -136,7 +136,11 @@
 
 {{-- ═══ الصف التاني: الميدان والعهد ═══ --}}
 <div class="kpis dash-kpis">
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.vans'))
     <a class="kpi dash-link has-bolt" href="{{ route('ops.vans') }}">
+    @else
+    <div class="kpi has-bolt">
+    @endif
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($street->val) }}</div>
         <div class="lbl"><span class="kic">🚐</span> {{ __('dash.k_street') }}</div>
@@ -145,7 +149,7 @@
             <span><b>{{ $fmt($street->units) }}</b><i>📦 {{ __('dash.units') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_street') }}</div>
-    </a>
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.vans'))</a>@else</div>@endif
     <a class="kpi dash-link has-bolt" href="{{ $rpt('visits_log') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($visitsN) }}</div>
@@ -165,7 +169,11 @@
         </div>
         <div class="dash-hint">{{ __('dash.h_new') }}</div>
     </a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.stock'))
     <a class="kpi dash-link has-bolt" href="{{ route('erp.stock') }}">
+    @else
+    <div class="kpi has-bolt">
+    @endif
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val big">{{ $fmt($stockValue) }}</div>
         <div class="lbl"><span class="kic">🏭</span> {{ __('dash.k_stock') }}</div>
@@ -173,7 +181,7 @@
             <span><b>💵</b><i>{{ __('dash.h_stock_short') }}</i></span>
         </div>
         <div class="dash-hint">{{ __('dash.h_stock') }}</div>
-    </a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.stock'))</a>@else</div>@endif
 </div>
 
 {{-- ═══ مهامي (٢٦/٨) — متابعة إدارة المهام من الرئيسية ═══ --}}
@@ -469,8 +477,9 @@
 {{-- ═══ اختصارات سريعة ═══ --}}
 <div class="dash-quick">
     <a class="dash-qbtn" href="{{ $rpt('inactive_clients') }}">😴 {{ __('rpt.inactive_clients') }}</a>
-    <a class="dash-qbtn" href="{{ route('ops.live') }}">📡 {{ __('dash.q_live') }}</a>
-    <a class="dash-qbtn" href="{{ route('ops.rep_board') }}">📊 {{ __('dash.q_rep_board') }}</a>
+    {{-- ⚠️ الشاشة اللايف وبورد المناديب `role:admin,manager` — المحاسب ومدير الفرع كانوا شايفين الزرارين وبيترفضوا (زحف ٨/٩) --}}
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.live'))<a class="dash-qbtn" href="{{ route('ops.live') }}">📡 {{ __('dash.q_live') }}</a>@endif
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.rep_board'))<a class="dash-qbtn" href="{{ route('ops.rep_board') }}">📊 {{ __('dash.q_rep_board') }}</a>@endif
     <a class="dash-qbtn main" href="{{ route('erp.reports.hub') }}">📑 {{ __('rpt.hub_title') }}</a>
 </div>
 

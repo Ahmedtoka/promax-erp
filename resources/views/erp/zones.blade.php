@@ -12,7 +12,7 @@
 @endphp
 
 @section('actions')
-    <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.assignments'))<a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>@endif
     <button class="btn gold" onclick="openZone(null)">+ {{ __('team.new_zone') }}</button>
 @endsection
 
@@ -55,7 +55,8 @@
 
 {{-- ═══════════ المحافظات: كروت المرجع الجغرافي (2026-08-05) ═══════════ --}}
 @php
-    $canGov = \App\Support\Access::action(auth()->user(), 'act.org.manage');
+    // المحافظات `role:admin,manager` — مفتاحها اتفصل عن المناطق (٨/٩)
+    $canGov = \App\Support\Access::action(auth()->user(), 'act.org.structure');
     $isAr = app()->getLocale() === 'ar';
     // إحصاءات كل محافظة من المناطق المحمّلة — مفيش كويريز زيادة
     $govStats = $byGov->map(fn ($g) => ['zones' => $g->count(), 'clients' => $g->sum('active_clients')]);
@@ -261,7 +262,7 @@
              بتعدّل اللغتين مع بعض. --}}
         <div class="frow">
             <div>
-                <label class="f">{{ __('client.name_en_field') }}</label>
+                <label class="f">{{ __('client.name_en_field') }} <b class="req-star">*</b></label>
                 <input type="text" name="name_en" id="zNameEn" dir="ltr" maxlength="190" style="width:100%">
             </div>
             <div>

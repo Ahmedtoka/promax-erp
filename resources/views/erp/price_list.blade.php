@@ -128,7 +128,7 @@
                         </select>
                     </div>
                     <div id="bulkValueBox">
-                        <label class="f" id="bulkValueLabel">{{ __('price.value') }}</label>
+                        <label class="f"><span id="bulkValueLabel">{{ __('price.value') }}</span> <b class="req-star">*</b></label>
                         <input type="number" step="0.01" name="value" id="bulkValue" style="width:100%">
                     </div>
                     <div id="bulkFromBox" style="display:none">

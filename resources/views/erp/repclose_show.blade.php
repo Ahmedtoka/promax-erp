@@ -683,7 +683,8 @@
                                 {{ $l['diff'] == 0 ? '—' : number_format($l['diff']) }}
                             </td>
                             <td class="act">@include('partials._view', [
-                                'url' => $l['product'] ? route('erp.products.show', $l['product']->id) : null,
+                                'url' => $l['product'] && \App\Support\Access::allows(auth()->user(), 'erp.products.show')
+                                    ? route('erp.products.show', $l['product']->id) : null,
                                 'label' => __('stock.product'),
                             ])</td>
                         </tr>

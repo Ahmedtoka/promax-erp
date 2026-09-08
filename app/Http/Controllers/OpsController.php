@@ -127,8 +127,11 @@ class OpsController extends Controller
         // ⚠️ نفس القاعدة: الشاشة بتوري عهدة المندوب وفواتيره وتحركاته
         abort_unless($request->user()->canSeeBranch($user->branch_id), 403);
         // ⚠️ وسكوب التشانل مانجر — مندوب مش من فريقه مايتفتحش بالـid
+        // ⚠️ والمدير الميداني بيفتح يومه هو — صف المدير في «العربيات» كان
+        // بيودّي لـ403 لأن `manager_id` بتاعه null (زحف ٨/٩)
         abort_unless($request->user()->role !== 'manager'
-            || (int) $user->manager_id === (int) $request->user()->id, 403);
+            || (int) $user->manager_id === (int) $request->user()->id
+            || (int) $user->id === (int) $request->user()->id, 403);
 
         [$fromD, $toD] = $this->boardWindow($request);
         $from = \Illuminate\Support\Carbon::parse($fromD)->startOfDay();
@@ -719,8 +722,11 @@ class OpsController extends Controller
     public function repCustodyExcel(Request $request, User $user)
     {
         abort_unless($request->user()->canSeeBranch($user->branch_id), 403);
+        // ⚠️ والمدير الميداني بيفتح يومه هو — صف المدير في «العربيات» كان
+        // بيودّي لـ403 لأن `manager_id` بتاعه null (زحف ٨/٩)
         abort_unless($request->user()->role !== 'manager'
-            || (int) $user->manager_id === (int) $request->user()->id, 403);
+            || (int) $user->manager_id === (int) $request->user()->id
+            || (int) $user->id === (int) $request->user()->id, 403);
 
         $custody = $user->currentCustody();
 

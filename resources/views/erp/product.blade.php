@@ -315,7 +315,7 @@
                 <th>{{ __('client.purchases') }}</th><th>{{ __('stock.last_bought') }}</th>
             </tr>
             @forelse ($buyers as $b)
-                <tr onclick="location.href='{{ route('erp.clients.show', $b->id) }}'" style="cursor:pointer">
+                <tr @if (\App\Support\Access::allows(auth()->user(), 'erp.clients.show'))onclick="location.href='{{ route('erp.clients.show', $b->id) }}'" style="cursor:pointer"@endif>
                     <td>
                         {{-- ⚠️ الاسم من الأعمدة المجمّعة مباشرةً — الكويري
                              `groupBy` مابترجّعش موديل، فمفيش `displayName()`. --}}

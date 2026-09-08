@@ -66,7 +66,7 @@
 
 @section('actions')
     <a class="btn" href="{{ route('ops.pos') }}">← {{ __('ops.purchase_orders') }}</a>
-    <a class="btn" href="{{ route('ops.po.print', $po) }}" target="_blank">🖨️ {{ __('ops.print') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.po.print'))<a class="btn" href="{{ route('ops.po.print', $po) }}" target="_blank">🖨️ {{ __('ops.print') }}</a>@endif
     @if ($po->sheet_path)
         <a class="btn" href="{{ route('ops.po.sheet', $po) }}">📎 {{ __('ops.po_sheet') }}</a>
     @endif
@@ -78,7 +78,7 @@
     @endif
     {{-- ═══ تحويل لعميل تاني (٢٤/٨) — قبل التسليم بس: مفيش قيود لسه ═══ --}}
     @if (! in_array($po->status, ['delivered', 'cancelled'], true)
-        && in_array(auth()->user()?->role, ['admin', 'manager'], true))
+        && \App\Support\Access::action(auth()->user(), 'act.ka.create'))
         <button type="button" class="btn" onclick="openDlg('dlgReassignPo')">
             🔁 {{ __('ops.po_reassign') }}
         </button>
@@ -120,7 +120,7 @@
     <div class="kpi">
         <div class="lbl">{{ __('ops.branch_client') }}</div>
         <div class="val" style="font-size:16px">
-            <a href="{{ $po->client ? route('erp.clients.show', $po->client) : '#' }}" style="color:inherit">{{ $po->client?->fullName() ?? '—' }}</a>
+            @if ($po->client && \App\Support\Access::allows(auth()->user(), 'erp.clients.show'))<a href="{{ route('erp.clients.show', $po->client) }}" style="color:inherit">{{ $po->client->fullName() }}</a>@else{{ $po->client?->fullName() ?? '—' }}@endif
         </div>
         <div class="sub2">
             @if ($po->client?->channel)<span class="badge {{ $po->client->channel->badgeClass() }}" style="font-size:9.5px">{{ $po->client->channel->displayName() }}</span>@endif
@@ -276,6 +276,9 @@
         $poHanded = $po->pickOrder !== null && $po->pickOrder->status === 'handed';
     @endphp
     {{-- ═══ تحويل الأمر لعميل تاني (٢٤/٨) ═══ --}}
+    {{-- ⚠️ الديالوج كله ورا الحارس مش الزرار بس — مدير الفرع وأمين المخزن كانوا
+         بيلاقوا الفورم في الصفحة وزرار «تحويل» جواه بيرفضهم (زحف ٨/٩) --}}
+    @if (\App\Support\Access::action(auth()->user(), 'act.ka.create'))
     <dialog id="dlgReassignPo">
         <form class="dlg" method="POST" action="{{ route('ops.pos.reassign', $po) }}"
               onsubmit="return confirm(@js(__('ops.po_reassign_confirm', ['number' => $po->number])))">
@@ -300,6 +303,7 @@
             </div>
         </form>
     </dialog>
+    @endif
     <script>
         // فلترة قايمة عملاء التحويل بالاسم/الكود — من غير إعادة تحميل
         function poReasFilter() {

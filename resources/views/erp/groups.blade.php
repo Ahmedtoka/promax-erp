@@ -5,7 +5,8 @@
 @php
     use App\Models\Channel;
     $fmt = fn ($n) => number_format((float) $n);
-    $manager = auth()->user()->isManager();
+    // ⚠️ `isManager()` بتشمل مدير الفرع و`erp.groups.store` بترفضه — الزرار بيتحكم فيه الأكشن (٨/٩)
+    $manager = \App\Support\Access::action(auth()->user(), 'act.org.structure');
 @endphp
 
 @section('actions')

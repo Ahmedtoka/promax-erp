@@ -262,7 +262,9 @@ class LeadController extends Controller
             ],
             'sort' => $sort,
             'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per']),
-            'canConvert' => $user->isManager(),
+            // ⚠️ `isManager()` بتشمل مدير الفرع، وكل أكشنات الليدز `role:admin,manager` —
+            // الفيو كان بيوريه التحويل والمسح والتوزيع وبيترفض (زحف ٨/٩)
+            'canConvert' => \App\Support\Access::action($user, 'act.leads.manage'),
         ]);
     }
 

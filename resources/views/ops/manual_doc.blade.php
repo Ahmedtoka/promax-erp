@@ -157,15 +157,15 @@
                 </select>
             </div>
             <div class="md-col-ref" style="display:none">
-                <label class="f">{{ __('ops.reference') }}</label>
+                <label class="f">{{ __('ops.reference') }} <b class="req-star">*</b></label>
                 <input type="text" name="reference" maxlength="100" style="width:180px">
             </div>
             <div class="md-col-chq" style="display:none">
-                <label class="f">{{ __('ops.md_chq_bank') }}</label>
+                <label class="f">{{ __('ops.md_chq_bank') }} <b class="req-star">*</b></label>
                 <input type="text" name="cheque_bank" maxlength="120" style="width:170px">
             </div>
             <div class="md-col-chq" style="display:none">
-                <label class="f">{{ __('ops.md_chq_due') }}</label>
+                <label class="f">{{ __('ops.md_chq_due') }} <b class="req-star">*</b></label>
                 <input type="date" name="cheque_due">
             </div>
             <div style="flex:1;min-width:220px">

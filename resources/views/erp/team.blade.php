@@ -18,8 +18,9 @@
 @endphp
 
 @section('actions')
-    <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
-    <a class="btn" href="{{ route('ops.journeys') }}">🗺️ {{ __('journey.page') }}</a>
+    {{-- التخصيص وخطط السير `role:admin,manager` — مدير الفرع كان شايف الزرارين وبيترفض (٨/٩) --}}
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.assignments'))<a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>@endif
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.journeys'))<a class="btn" href="{{ route('ops.journeys') }}">🗺️ {{ __('journey.page') }}</a>@endif
     @if ($canSetPassword)
         <button class="btn gold" onclick="openUser(null)">+ {{ __('team.new_user') }}</button>
     @endif
@@ -170,7 +171,7 @@
 
         <div class="frow">
             <div>
-                <label class="f">{{ __('client.name_en_field') }}</label>
+                <label class="f">{{ __('client.name_en_field') }} <b class="req-star">*</b></label>
                 <input type="text" name="name_en" id="uNameEn" dir="ltr" maxlength="190" style="width:100%">
             </div>
             <div>
@@ -279,7 +280,7 @@
         <h4>📍 {{ __('team.new_zone') }}</h4>
         <div class="frow">
             <div>
-                <label class="f">{{ __('client.name_en_field') }}</label>
+                <label class="f">{{ __('client.name_en_field') }} <b class="req-star">*</b></label>
                 <input type="text" name="name_en" dir="ltr" maxlength="190" style="width:100%">
             </div>
             <div>

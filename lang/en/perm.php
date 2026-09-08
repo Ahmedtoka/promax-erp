@@ -81,7 +81,11 @@ return [
     'act_money_dues' => 'Dues: generate, settle, waive',
     'act_money_eta' => 'Tax & ETA export',
     'act_team_manage' => 'Team & passwords',
-    'act_org_manage' => 'Zones, branches, vehicles, chains & channels',
+    'act_org_manage' => 'Zones (and quick chain)',
+    'act_org_structure' => 'Governorates, branches, vehicles, chains & channels',
+    'act_wh_transfer_receive' => 'Receive an incoming transfer',
+    'act_wh_count_manage' => 'Open, approve and cancel stock counts',
+    'act_wh_pick_raise' => 'Raise a pick from a PO/replenishment and cancel picks',
     'act_import_run' => 'Sheet imports',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══

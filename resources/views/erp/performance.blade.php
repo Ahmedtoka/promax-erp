@@ -17,7 +17,7 @@
 @section('title', __('incent.performance_title'))
 
 @section('actions')
-    <a class="btn" href="{{ route('erp.targets', ['month' => $month->format('Y-m')]) }}">🎯 {{ __('nav.targets') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.targets'))<a class="btn" href="{{ route('erp.targets', ['month' => $month->format('Y-m')]) }}">🎯 {{ __('nav.targets') }}</a>@endif
 @endsection
 
 @section('content')

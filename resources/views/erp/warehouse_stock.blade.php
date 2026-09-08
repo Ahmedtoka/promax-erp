@@ -127,7 +127,8 @@
             </table>
         </div>
 
-        @if ($manager && $products->isNotEmpty())
+        {{-- الحفظ `role:admin,manager` — مدير الفرع وأمين المخزن كانوا شايفين الزرار وبيترفضوا (٨/٩) --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.warehouses.manage') && $products->isNotEmpty())
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
                 <button class="btn gold" type="submit">{{ __('stock.save_stock') }}</button>
             </div>
