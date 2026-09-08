@@ -102,8 +102,21 @@ class LanguageTest extends TestCase
     {
         $bad = [];
 
-        foreach ($this->flatten($this->load('ar')) as $key => $value) {
+        $all = $this->flatten($this->load('ar'));
+
+        foreach ($all as $key => $value) {
             if (! is_string($value) || $value === '') {
+                continue;
+            }
+
+            // ⚠️ المفتاح المنتهي بـ`_en` **وله شقيق من غير اللاحقة** هو
+            // النسخة الإنجليزية المقصودة من نفس البيان — زي
+            // `rcpt_addr` (العنوان) و`rcpt_addr_en` (عنوان الشركة
+            // الإنجليزي المطبوع على الإيصال). إنجليزي فيه صح.
+            // ⚠️ الشرط «له شقيق» مقصود: من غيره أي مفتاح يتسمّى `*_en`
+            // ويهرب من الفحص، والاستثناء يبقى ثغرة مفتوحة.
+            if (str_ends_with($key, '_en')
+                && array_key_exists(substr($key, 0, -3), $all)) {
                 continue;
             }
 
@@ -227,8 +240,22 @@ class LanguageTest extends TestCase
 
                 $code = explode('//', $line)[0];
 
-                if (preg_match("/'[^']*[\x{0600}-\x{06FF}][^']*'/u", $code)) {
+                if (! preg_match_all("/'([^']*[\x{0600}-\x{06FF}][^']*)'/u", $code, $m)) {
+                    continue;
+                }
+
+                foreach ($m[1] as $literal) {
+                    // ⚠️ **حرف واحد مش نص للترجمة.** الموجودين فعلاً:
+                    // `ع` لِيبل زرار تبديل اللغة (لازم يفضل بحروفه زي
+                    // `EN` بالظبط)، و`؟` بديل أول حرف لما الاسم يبقى
+                    // فاضي. أي جملة حقيقية أطول من حرف، فالاستثناء
+                    // مايفتحش باب.
+                    if (mb_strlen($literal) <= 1) {
+                        continue;
+                    }
+
                     $bad[] = $file->getFilename().':'.($no + 1);
+                    break;
                 }
             }
         }

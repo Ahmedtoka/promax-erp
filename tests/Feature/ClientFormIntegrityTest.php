@@ -34,6 +34,11 @@ class ClientFormIntegrityTest extends TestCase
         'contract_payment_days_from', 'contract_starts_at', 'contract_ends_at',
         'contract_note', 'contract_clauses', 'contract_file', 'clause',
         'cloned_from', '_token', '_method',
+        // ⚠️ مستثناة من `clientRules()` **عن قصد** (موثّق في
+        // `ErpController::dupeGuard`): لو دخلت `$data` كانت هتوصل
+        // لـ`create()` على عمود مش موجود في الجدول.
+        // بتتقرا من الريكوست مباشرة بـ`$request->boolean()`.
+        'confirm_duplicate',
     ];
 
     /**
@@ -381,7 +386,11 @@ class ClientFormIntegrityTest extends TestCase
 
             $out[$view] = array_values(array_filter(
                 array_unique($m[1]),
-                fn ($n) => ! in_array($n, self::OTHER_FORMS[$view] ?? [], true),
+                // ⚠️ الريجيكس فوق بيمسك `name="` جوه الجافاسكربت كمان —
+                // `querySelector('[name="' + field + '"]')` ده سيلكتور مش
+                // خانة على الشاشة. اسم الخانة الحقيقي مافيهوش كوت ولا `+`.
+                fn ($n) => ! in_array($n, self::OTHER_FORMS[$view] ?? [], true)
+                    && preg_match('/^[A-Za-z_][A-Za-z0-9_.* -]*(\[[^\]]*\])*$/', $n) === 1,
             ));
         }
 

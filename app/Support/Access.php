@@ -82,7 +82,12 @@ class Access
             // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
             'erp.divisions',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
-            'erp.leads', 'erp.stock', 'erp.batches', 'erp.reports',
+            // ⚠️ **محفظة الليدز قراءة بس.** الجدولة وخط السير والحصاد
+            // كلهم `role:admin,manager` على الراوت — والبادئة الواسعة
+            // `erp.leads` كانت بتوريهم في سايدبار مدير الفرع وبترفضه
+            // أول ما يدوس. نفس غلطة `ops.` و`erp.products` المسجّلة تحت.
+            'erp.leads', '!erp.leads.route', '!erp.leads.planner', '!erp.leads.week',
+            'erp.stock', 'erp.batches', 'erp.reports',
             // إدارة المهام (٢٦/٨)
             'erp.tasks',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',

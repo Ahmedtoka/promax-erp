@@ -17,7 +17,7 @@ return [
     'settings' => 'إعدادات شوبيفاي',
     'not_configured' => 'الربط مش متظبط',
     'shop_domain' => 'دومين المتجر',
-    'admin_token' => 'Admin API Token',
+    'admin_token' => 'توكن الـ Admin API',
     'api_version' => 'إصدار الـ API',
     'warehouse' => 'مخزن الأونلاين',
     'settings_hint' => 'التوكن من Custom App بسكوبات: read/write_orders و read/write_products و read/write_merchant_managed_fulfillment_orders و read/write_fulfillments و read/write_returns — دول علشان الشحن يتقلب Fulfilled والتحصيل Paid والمرتجع Return في شوبيفاي. ⚠️ أي تعديل سكوبات بيولّد توكن جديد لازم يتحط هنا فوراً. مخزن الأونلاين هو اللي أوامر التجهيز بتخصم منه.',

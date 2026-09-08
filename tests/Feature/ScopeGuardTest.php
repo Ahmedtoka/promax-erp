@@ -277,8 +277,18 @@ class ScopeGuardTest extends TestCase
             'created_by' => $rep->id,
         ]);
 
+        // ⚠️ **قايمة السعر إجبارية عند الاعتماد** (بلاغ INV-1065) —
+        // `price_list_id` عليها `required_if:decision,approved`. من
+        // غيرها الفاليديشن بترفض، الطلب يرجع بـ302 لنفس الصفحة،
+        // ومايتولدش عميل — فـ`latest()` تحت كانت بتجيب صف قديم
+        // وتفشّل التيست في تأكيد مالوش علاقة بالسكوب.
+        $list = $this->makePriceList('new');
+
         $this->actingAs($manager)
-            ->post(route('ops.requests.decide', $req), ['decision' => 'approved'])
+            ->post(route('ops.requests.decide', $req), [
+                'decision' => 'approved',
+                'price_list_id' => $list->id,
+            ])
             ->assertRedirect();
 
         $client = Client::latest('id')->first();

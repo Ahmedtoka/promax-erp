@@ -260,10 +260,19 @@ class ClientFlowTest extends TestCase
                 "«{$label}» اتحفظت بس مش ظاهرة في شاشة التعديل");
         }
 
-        // الدروب داونز: المختار لازم يكون عليه `selected`
+        // ⚠️ **طريقة الدفع مابقتش دروب داون.** بقت تشيك بوكسين
+        // (كاش/آجل) + `input hidden` هو اللي بيتبعت فعلاً — فالتأكيد
+        // القديم على `selected` كان بيدوّر على كنترول مابقاش موجود.
+        // بنتحقق من الاتنين: القيمة المبعوتة، والحالة الظاهرة للمستخدم.
         $this->assertMatchesRegularExpression(
-            '/value="'.Client::PAY_BOTH.'"[^>]*selected/',
-            $html, 'طريقة الدفع مش مختارة في الدروب داون');
+            '/name="payment_terms"[^>]*value="'.Client::PAY_BOTH.'"/',
+            $html, 'القيمة المبعوتة لطريقة الدفع مش مظبوطة');
+
+        foreach (['ptCash', 'ptCredit'] as $box) {
+            $this->assertMatchesRegularExpression(
+                '/id="'.$box.'"[^>]*checked/', $html,
+                "«{$box}» اتحفظ بس مش متعلّم في شاشة التعديل");
+        }
 
         $this->assertMatchesRegularExpression(
             '/value="'.$c->zone_id.'"[^>]*selected/',
