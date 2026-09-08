@@ -14,6 +14,7 @@ use App\Models\TrackEvent;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Visit;
+use Database\Seeders\Concerns\LoadsVanFromWarehouse;
 use Illuminate\Database\Seeder;
 
 /**
@@ -22,6 +23,8 @@ use Illuminate\Database\Seeder;
  */
 class FieldDaySeeder extends Seeder
 {
+    use LoadsVanFromWarehouse;
+
     public function run(): void
     {
         $ahmed = User::where('code', 'SLS-014')->first();
@@ -51,26 +54,13 @@ class FieldDaySeeder extends Seeder
         $this->seedPurchaseOrders($courier);
         $this->seedClientRequest($ahmed);
 
-        $this->command->info('   • عهدة 3 عربيات + زيارات وفواتير + 5 أوامر توريد');
+        $this->command->info('   • عهدة 3 عربيات بأوامر تجهيز من المعادي + زيارات وفواتير + 5 أوامر توريد');
     }
 
-    /** تحميل عربية بعهدة النهارده */
-    private function loadVan(User $user, array $codeQty): Custody
+    /** تحميل عربية بعهدة النهارده — بأمر تجهيز من المعادي (الترايت) */
+    private function loadVan(User $user, array $codeQty): ?Custody
     {
-        $custody = Custody::updateOrCreate(
-            ['user_id' => $user->id, 'date' => today()],
-            ['status' => 'open'],
-        );
-
-        foreach ($codeQty as $code => $qty) {
-            $product = Product::where('code', (string) $code)->first();
-            if ($product) {
-                $custody->items()->updateOrCreate(
-                    ['product_id' => $product->id],
-                    ['assigned' => $qty, 'sold' => 0, 'returned' => 0],
-                );
-            }
-        }
+        $custody = $this->loadVanFromWarehouse($user, $codeQty);
 
         TrackEvent::firstOrCreate(
             ['user_id' => $user->id, 'type' => 'start', 'title' => 'بداية اليوم'],
@@ -132,6 +122,13 @@ class FieldDaySeeder extends Seeder
             foreach ($lines as $code => $qty) {
                 $product = Product::where('code', (string) $code)->first();
                 if (! $product) {
+                    continue;
+                }
+                // ⚠️ الكمية مقصوصة على اللي في العربية فعلاً (٨/٩): العهدة بقت
+                // بتتحمّل بأمر تجهيز من رف حقيقي فممكن تطلع أقل من الخطة —
+                // وفاتورة ببضاعة مش في العربية كانت بتوقع `deduct()` بصوت عالي.
+                $qty = min((int) $qty, $this->inVan($custody, $product));
+                if ($qty <= 0) {
                     continue;
                 }
                 // ⚠️ نفس مصدر التسعير اللي الـ API بيستخدمه (Pricing)، عشان
@@ -294,6 +291,13 @@ class FieldDaySeeder extends Seeder
                 if (! $product) {
                     continue;
                 }
+                // الأمر المسلَّم بيخصم من العربية — فكميته مقصوصة على اللي فيها (٨/٩)
+                if ($status === 'delivered') {
+                    $qty = min((int) $qty, $this->inVan($custody, $product));
+                    if ($qty <= 0) {
+                        continue;
+                    }
+                }
                 // ⚠️ الديمو بيتحسب بقايمة `old` (سعر صافي بدون خصم)،
                 // بس ورقة أمر التوريد فيها عمود خصم. من غير خصم في
                 // الديمو، العمود بيطلع «—» في كل سطر والمالك بيفتكر
@@ -358,6 +362,17 @@ class FieldDaySeeder extends Seeder
     }
 
     /** طلب عميل جديد مستني موافقة المدير */
+    /** الكمية المتاحة من الصنف في العربية — مجموع بنود العهدة (كل باتش سطر) */
+    private function inVan(?Custody $custody, Product $product): int
+    {
+        if ($custody === null) {
+            return 0;
+        }
+
+        return (int) $custody->items()->where('product_id', $product->id)->get()
+            ->sum(fn ($item) => $item->remaining());
+    }
+
     private function seedClientRequest(User $rep): void
     {
         if (ClientRequest::exists()) {

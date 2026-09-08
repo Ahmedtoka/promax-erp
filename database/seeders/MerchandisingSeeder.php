@@ -12,6 +12,7 @@ use App\Models\ReplenishmentRequest;
 use App\Models\ShelfRefill;
 use App\Models\TrackEvent;
 use App\Models\User;
+use Database\Seeders\Concerns\LoadsVanFromWarehouse;
 use Illuminate\Database\Seeder;
 
 /**
@@ -19,6 +20,8 @@ use Illuminate\Database\Seeder;
  */
 class MerchandisingSeeder extends Seeder
 {
+    use LoadsVanFromWarehouse;
+
     public function run(): void
     {
         $promoter = User::where('role', 'promoter')->first();
@@ -42,20 +45,8 @@ class MerchandisingSeeder extends Seeder
             return;
         }
 
-        // عهدة البروموتر (شوية بضاعة معاه للطوارئ)
-        $custody = Custody::firstOrCreate(
-            ['user_id' => $promoter->id, 'date' => today()],
-            ['status' => 'open'],
-        );
-        foreach (['1005' => 24, '1007' => 24, '1017' => 36, '1019' => 36] as $code => $qty) {
-            $product = Product::where('code', (string) $code)->first();
-            if ($product) {
-                $custody->items()->updateOrCreate(
-                    ['product_id' => $product->id],
-                    ['assigned' => $qty, 'sold' => 0, 'returned' => 0],
-                );
-            }
-        }
+        // عهدة البروموتر (شوية بضاعة معاه للطوارئ) — بأمر تجهيز من المعادي (٨/٩)
+        $this->loadVanFromWarehouse($promoter, ['1005' => 24, '1007' => 24, '1017' => 36, '1019' => 36]);
 
         TrackEvent::firstOrCreate(
             ['user_id' => $promoter->id, 'type' => 'start', 'title' => 'بداية اليوم'],

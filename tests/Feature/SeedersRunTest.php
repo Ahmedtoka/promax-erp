@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Custody;
+use App\Models\Invoice;
+use App\Models\PickOrder;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
@@ -81,6 +83,13 @@ class SeedersRunTest extends TestCase
         // ═══ 4. مفيش عهدة مفتوحة بكمية سالبة ═══
         $negative = DB::table('custody_items')->where('assigned', '<', 0)->count();
         $this->assertSame(0, $negative, 'بنود عهدة بكمية سالبة');
+
+        // ═══ 5. العربيات اتحمّلت بأوامر تجهيز من رف حقيقي (٨/٩) — مش من العدم ═══
+        $handed = PickOrder::where('purpose', PickOrder::PURPOSE_VAN_LOAD)->where('status', 'handed')->count();
+        $this->assertGreaterThanOrEqual(3, $handed, 'عهد العربيات التلاتة لازم تكون من أوامر تجهيز مسلَّمة');
+        $this->assertSame(0, DB::table('custody_items')->whereNull('batch_id')->where('source', 'custody')->count(),
+            'بنود عهدة من غير باتش — اتكتبت مباشرة من غير تجهيز');
+        $this->assertGreaterThan(0, Invoice::whereDate('created_at', today())->count(), 'يوم الشغل ما زرعش فواتير');
 
         // ═══ 5. الإعادة مابتكسرش ومابتكرّرش (idempotent) ═══
         $this->seed();

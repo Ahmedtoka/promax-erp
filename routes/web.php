@@ -947,10 +947,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('po.import.one');
         // مستند الأمر للطباعة — الحسابات بتطبع نسختين وتختمهم
         Route::get('/pos/{purchaseOrder}/print', [OpsController::class, 'printPo'])
-            ->middleware('role:admin,manager,accountant')->name('po.print');
+            ->middleware('role:admin,manager,accountant,branch_manager,warehouse_keeper')->name('po.print');
         // طباعة مجمعة: ?ids=1,2,3 — أمر في صفحة (2026-08-06)
         Route::get('/pos-print-batch', [OpsController::class, 'printPoBatch'])
-            ->middleware('role:admin,manager,accountant')->name('po.print.batch');
+            ->middleware('role:admin,manager,accountant,branch_manager,warehouse_keeper')->name('po.print.batch');
         // تنزيل شيت الأمر الأصلي — المرجع المحفوظ وقت الرفع
         Route::get('/pos/{purchaseOrder}/sheet', [OpsController::class, 'downloadPoSheet'])
             ->middleware('role:admin,manager,accountant')->name('po.sheet');

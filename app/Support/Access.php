@@ -118,6 +118,8 @@ class Access
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
             // فكانت بتقع بين الاتنين ومدير الفرع بيفقد قايمة الفواتير.
             'ops.merch', 'ops.invoice', 'ops.invoices', 'ops.tracking', 'ops.rep',
+            // طباعة أمر التوريد قراءة — مفتوحة لمدير الفرع (٨/٩)
+            'ops.po.print',
             'notifications',
             // ⚠️ المرتجعات **عرض بس** لمدير الفرع — الإنشاء بيمس
             // دفتر العميل، وده قرار تجاري (`role:admin,manager,accountant`).
@@ -199,6 +201,8 @@ class Access
             'online.prep', 'online.invoice',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
+            // ورقة الأمر بتتطبع مع التجهيز (٨/٩)
+            'ops.po.print',
             // ⚠️ **بس عرض الأوامر مش إنشاءها ولا تسكينها** (تدقيق
             // ٨/٨/٢٠٢٦). البادئة `ops.pos` كانت بتطابق `ops.pos.store`
             // و`ops.pos.assign` كمان — أمين المخزن مالوش قرار إن أمر
