@@ -1,0 +1,67 @@
+# ═══ الحرّاس الآليين لـPROMAX ═══
+#
+# الـ23 تيست في tests/ بتحرس الدوكترين نفسه (التسعير، السكوب، القيود،
+# الضريبة، العهدة، المرتجعات، تطابق اللغتين). قبل كده كانوا بيقعوا من
+# غير ما حد ياخد باله — 7 منهم فضلوا أحمر لأن محدش شغّل السويت.
+# الوركفلو ده بيخلي ده مستحيل يتكرر في صمت.
+
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        # ⚠️ MariaDB مش MySQL — نفس اللي على الجهاز، والمايجريشنز فيها
+        # `ALTER TABLE ... MODIFY` اللي SQLite مابتفهمهاش (شوف phpunit.xml)
+        image: mariadb:10.4
+        env:
+          MARIADB_ROOT_PASSWORD: ''
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes'
+          MARIADB_DATABASE: promax_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, zip, gd, bcmath
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # ⚠️ الاتنين دول بيمسكوا أخطاء صياغة قبل ما السويت تشتغل أصلاً —
+      # أرخص وأوضح من إنها تقع جوه تيست.
+      - name: Lint PHP
+        run: find app database routes tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Tests
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: promax_test
+          DB_USERNAME: root
+          DB_PASSWORD: ''
+        run: php artisan test
