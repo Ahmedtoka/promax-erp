@@ -298,13 +298,15 @@ class FieldApiController extends Controller
         ];
     }
 
-    public static function zonesPayload($user): array
+    /**
+     * ═══ المناطق اللي المستخدم هيشوفها في الأبلكيشن (ids) ═══
+     *
+     * الجزء المشترك بين `zonesPayload` (الأبلكيشن) و`visibleCounts`
+     * («شوف زي المندوب» في شاشة عملاء المديرين). أي تغيير في قاعدة
+     * الظهور يتعمل هنا مرة واحدة.
+     */
+    private static function visibleZoneIds($user, bool $isManager)
     {
-        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): عملاؤه = المتسكّنين له ═══
-        // نفس مرساة `ownsClient` و`Client::visibleTo` — `manager_id`
-        // مش `rep_id`. المندوب فاضل زي ما هو بالحرف.
-        $isManager = $user->role === 'manager';
-
         // ⚠️ **مناطقه هو وبس.** كانت بترجّع كل مناطق الشركة بكل
         // عملائها — مندوب المعادي كان بيشوف عملاء الإسكندرية بأرصدتهم
         // وخصومهم. المناطق من شاشة التوزيع (`zone_user`)، ولو لسه
@@ -330,48 +332,87 @@ class FieldApiController extends Controller
             ->whereNotNull('zone_id')
             ->distinct()->pluck('zone_id');
 
-        $zoneIds = $zoneIds->merge($clientZoneIds)->unique()->values();
+        return $zoneIds->merge($clientZoneIds)->unique()->values();
+    }
+
+    /** قيد «عملاء المستخدم» جوه منطقة — نفس المنطق للأبلكيشن وللعدّاد */
+    private static function scopeVisibleClients($q, $user, bool $isManager): void
+    {
+        $q->where('status', 'active');
+
+        // المدير: عملاؤه المتسكّنين له وبس — مفيش فولباك يتامى
+        // هنا، اليتيم أصلاً مالوش `manager_id` فمش بتاعه.
+        if ($isManager) {
+            $q->where('manager_id', $user->id);
+
+            return;
+        }
+
+        // ⚠️ **بول الفريق** (١١/٨ مساءً): عملاءه هو + كل عملاء
+        // مديره (مهما كانت قناتهم) — البول المشترك، واللي لسه
+        // من غير مندوب — دول بس بيتفلتروا بقناته لو ليه قناة.
+        // مندوب من غير مدير = السلوك القديم بالحرف.
+        $q->where(function ($w) use ($user) {
+            $w->where('rep_id', $user->id);
+
+            if ($user->manager_id !== null) {
+                $w->orWhere('manager_id', $user->manager_id);
+            }
+
+            $w->orWhere(function ($w2) use ($user) {
+                $w2->whereNull('rep_id');
+                if ($user->channel_id) {
+                    $w2->where('channel_id', $user->channel_id);
+                }
+                // ⚠️ عميل بلا مندوب بس متسكّن لمدير **تاني** =
+                // بول فريق تاني — الفصل بين الفرق هو القاعدة.
+                $w2->where(fn ($w3) => $w3->whereNull('manager_id')
+                    ->when($user->manager_id !== null,
+                        fn ($q3) => $q3->orWhere('manager_id', $user->manager_id)));
+            });
+        });
+    }
+
+    /**
+     * ═══ «المندوب هيشوف كام عميل؟» — عدّاد بس (٩/٩/٢٠٢٦) ═══
+     *
+     * شاشة عملاء المديرين كانت بتشغّل `zonesPayload` كامل لكل مندوب
+     * (تسعير وخصم وآخر زيارة لكل عميل) عشان تعدّ الناتج: ٥٢٠٠ كويري
+     * و١١ ثانية على داتا اللايف. نفس قاعدة الظهور بالحرف، لكن
+     * `withCount` — كويريتين لكل مندوب.
+     *
+     * @return array{zones:int, clients:int}
+     */
+    public static function visibleCounts($user): array
+    {
+        $isManager = $user->role === 'manager';
+        $zoneIds = self::visibleZoneIds($user, $isManager);
+
+        $zones = Zone::whereIn('id', $zoneIds)->where('active', true)
+            ->withCount(['clients as visible_n' => fn ($q) => self::scopeVisibleClients($q, $user, $isManager)])
+            ->get()
+            // نفس فلتر الأبلكيشن: المناطق اللي فيها عملاء له بس
+            ->filter(fn ($z) => (int) $z->visible_n > 0);
+
+        return ['zones' => $zones->count(), 'clients' => (int) $zones->sum('visible_n')];
+    }
+
+    public static function zonesPayload($user): array
+    {
+        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): عملاؤه = المتسكّنين له ═══
+        // نفس مرساة `ownsClient` و`Client::visibleTo` — `manager_id`
+        // مش `rep_id`. المندوب فاضل زي ما هو بالحرف.
+        $isManager = $user->role === 'manager';
+
+        $zoneIds = self::visibleZoneIds($user, $isManager);
 
         $zones = Zone::with([
             'clients' => function ($q) use ($user, $isManager) {
                 // ⚠️ contract و group.contract ضروريين: effectiveDiscount()
                 // بتنادي liveContract() لكل عميل. من غيرهم ~300 كويري زيادة
                 // على /api/home وهو أكتر إندبوينت بيتنادى في الأبلكيشن.
-                $q->where('status', 'active')
-                    ->with(['channel', 'contract', 'group.contract'])
-                    ->orderBy('name');
-
-                // المدير: عملاؤه المتسكّنين له وبس — مفيش فولباك يتامى
-                // هنا، اليتيم أصلاً مالوش `manager_id` فمش بتاعه.
-                if ($isManager) {
-                    $q->where('manager_id', $user->id);
-
-                    return;
-                }
-
-                // ⚠️ **بول الفريق** (١١/٨ مساءً): عملاءه هو + كل عملاء
-                // مديره (مهما كانت قناتهم) — البول المشترك، واللي لسه
-                // من غير مندوب — دول بس بيتفلتروا بقناته لو ليه قناة.
-                // مندوب من غير مدير = السلوك القديم بالحرف.
-                $q->where(function ($w) use ($user) {
-                    $w->where('rep_id', $user->id);
-
-                    if ($user->manager_id !== null) {
-                        $w->orWhere('manager_id', $user->manager_id);
-                    }
-
-                    $w->orWhere(function ($w2) use ($user) {
-                        $w2->whereNull('rep_id');
-                        if ($user->channel_id) {
-                            $w2->where('channel_id', $user->channel_id);
-                        }
-                        // ⚠️ عميل بلا مندوب بس متسكّن لمدير **تاني** =
-                        // بول فريق تاني — الفصل بين الفرق هو القاعدة.
-                        $w2->where(fn ($w3) => $w3->whereNull('manager_id')
-                            ->when($user->manager_id !== null,
-                                fn ($q3) => $q3->orWhere('manager_id', $user->manager_id)));
-                    });
-                });
+                $q->with(['channel', 'contract', 'group.contract'])->orderBy('name');
+                self::scopeVisibleClients($q, $user, $isManager);
             },
         ])->whereIn('id', $zoneIds)->where('active', true)->orderBy('code')->get();
 

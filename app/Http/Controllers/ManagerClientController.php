@@ -110,12 +110,14 @@ class ManagerClientController extends Controller
         $seeAs = [];
 
         foreach ($myTeam->whereIn('role', User::FIELD_WORK_ROLES) as $member) {
-            $payload = \App\Http\Controllers\Api\FieldApiController::zonesPayload($member);
+            // ⚠️ عدّاد بس (٩/٩) — `zonesPayload` كامل لكل مندوب كان
+            // ٥٢٠٠ كويري و١١ ثانية على داتا اللايف. نفس قاعدة الظهور.
+            $counts = \App\Http\Controllers\Api\FieldApiController::visibleCounts($member);
 
             $seeAs[] = [
                 'user' => $member,
-                'clients' => collect($payload)->sum(fn ($z) => count($z['clients'] ?? [])),
-                'zones' => count($payload),
+                'clients' => $counts['clients'],
+                'zones' => $counts['zones'],
                 // ⚠️ الشرط اللي بيفتح البول — من غيره بيشوف عملاءه بس
                 'linked' => (int) $member->manager_id === (int) $manager?->id,
             ];
