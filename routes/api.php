@@ -50,7 +50,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ⚠️ **بره حارس `attendance` عن قصد.** لو الحارس اتحط عليها،
     // الموظف اللي لسه ما حضرش مش هيقدر يسجّل حضور — مصيدة مقفولة
     // على نفسها. ودي الراوتس الوحيدة المسموحة قبل الحضور مع القراءة.
-    Route::get('/attendance', [\App\Http\Controllers\Api\AttendanceApiController::class, 'show']);
+    // ⚠️ `GET /attendance` اتشال (٩/٩/٢٠٢٦) — الأبلكيشن عمره ما ناداها،
+    // الحضور بييجي جوه `/bootstrap` وبيتحدّث من رد `punch`.
     Route::post('/attendance/punch', [\App\Http\Controllers\Api\AttendanceApiController::class, 'punch']);
 
     // ═════════ شغل الشارع — المناديب والسواقين بس ═════════
@@ -226,9 +227,6 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // طلبات البضاعة بتاعتي — شاشة «طلباتي» (2026-08-09). قراءة.
         Route::get('/my-goods-requests', [FieldApiController::class, 'myGoodsRequests']);
 
-        // بينج فتح الأبلكيشن — عدّاد في لوحة الأداء
-        Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
-
         Route::get('/leads/nearby', [\App\Http\Controllers\Api\IncentiveApiController::class, 'nearbyLeads']);
 
         // ═══ تاب العملاء المحتملين (بايبلاين ٢٦/٨) — ليدات المندوب
@@ -239,17 +237,19 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // فتح أكاونت فوري بعد التأكيد — بلا موافقة (فلو الليد المطور ٢٦/٨)
         Route::post('/leads/{lead}/open-account', [\App\Http\Controllers\Api\LeadApiController::class, 'openAccount']);
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
-
-        // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) ═══
-        // ⚠️ المسح بيتنده عند الخروج — تليفون موظف خرج عمره ما ياخد
-        // إشعارات شغل، وخصوصاً لو التليفون اتسلّم لحد تاني.
-        Route::post('/device-token', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'store']);
-        // ⚠️ **مسار POST كمان للمسح** — كلاس `Api` في الأبلكيشن مافيهوش
-        // ميثود DELETE عامة، وإضافة واحدة عشان نداء واحد أكبر من اللزوم.
-        Route::match(['post', 'delete'], '/device-token/forget',
-            [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'destroy']);
-        Route::delete('/device-token', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'destroy']);
     });
+
+    // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) — **لكل اللي عنده توكن** ═══
+    // ⚠️ كانت جوه مجموعة رولز الميدان، فأمين المخزن والمحاسب (بيدخلوا
+    // الأبلكيشن فعلاً) كانوا بياخدوا 403 **في صمت** (`quiet=true` في
+    // الأبلكيشن) وعمرهم ما استلموا إشعار واحد (٩/٩/٢٠٢٦). المسح بيتنده
+    // عند الخروج — تليفون موظف خرج عمره ما ياخد إشعارات شغل.
+    // ⚠️ POST للمسح — كلاس `Api` في الأبلكيشن مافيهوش DELETE عامة،
+    // ومسارات DELETE القديمة اتشالت لأن محدش بيناديها.
+    Route::post('/device-token', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'store']);
+    Route::post('/device-token/forget', [\App\Http\Controllers\Api\DeviceTokenApiController::class, 'destroy']);
+    // بينج فتح الأبلكيشن — عدّاد في لوحة الأداء، لكل الرولز برضو
+    Route::post('/app-open', [\App\Http\Controllers\Api\IncentiveApiController::class, 'appOpen']);
 
     // ⚠️ **العرض بس** — والكنترولر بيفلتر بالمستخدم أصلاً، فالمحاسب
     // بيشوف اللي يخصّه. أمين المخزن بيشوف أوامر التجهيز عشان دي شغله.
@@ -294,7 +294,6 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // الأبلكيشن، وأكشناته متسجّلة بالاسم والوقت على الأمر نفسه.
     Route::prefix('keeper')->middleware('api.role:warehouse_keeper,admin')->group(function () {
         Route::get('/picks', [\App\Http\Controllers\Api\KeeperApiController::class, 'index']);
-        Route::get('/picks/{pick}', [\App\Http\Controllers\Api\KeeperApiController::class, 'show']);
         Route::post('/picks/{pick}/start', [\App\Http\Controllers\Api\KeeperApiController::class, 'start']);
         Route::post('/picks/{pick}/ready', [\App\Http\Controllers\Api\KeeperApiController::class, 'ready']);
     });
@@ -313,8 +312,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/requests/{clientRequest}/decide', [ManagerApiController::class, 'decide'])
             ->middleware('attendance');
 
-        // طلبات الريفيل بتاعت البروموتر — موافقة وتنزيل على مندوب
-        Route::get('/replenishments', [ManagerApiController::class, 'replenishments']);
+        // طلبات الريفيل بتاعت البروموتر — القايمة جوه `/manager/bootstrap`
+        // (`GET /replenishments` اتشال ٩/٩ — محدش كان بيناديه)
         // ⚠️ **`attendance` مطلوب هنا زي `requests/decide`** — الأكشن
         // ده بيعمل PO ويحجز بضاعة، يعني قرار تشغيلي بيتحاسب عليه
         // الفريق. كان الوحيد في المجموعة اللي بلا حارس حضور.

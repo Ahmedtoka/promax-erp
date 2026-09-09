@@ -16,12 +16,6 @@ use Illuminate\Http\Request;
  */
 class AttendanceApiController extends Controller
 {
-    /** GET /api/attendance — حالة النهارده وسجله */
-    public function show(Request $request): JsonResponse
-    {
-        return response()->json(['attendance' => Attendance::payload($request->user())]);
-    }
-
     /** POST /api/attendance/punch — حضور / بريك / رجعت / انصراف */
     public function punch(Request $request): JsonResponse
     {

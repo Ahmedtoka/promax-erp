@@ -2524,9 +2524,12 @@ class FieldApiController extends Controller
             return response()->json(['message' => __('api.order_not_pending')], 422);
         }
 
+        // ⚠️ الإحداثيات كانت بتتقرا خام بلا فاليديشن (٩/٩) — نفس حدود التشيك إن
+        $geo = $request->validate(['lat' => ['nullable', 'numeric', 'between:-90,90'], 'lng' => ['nullable', 'numeric', 'between:-180,180']]);
+
         $purchaseOrder->update(['status' => 'arrived', 'arrived_at' => now()]);
 
-        [$evLat, $evLng] = $this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client);
+        [$evLat, $evLng] = $this->eventPoint($geo, $purchaseOrder->client);
         TrackEvent::log($request->user(), 'check_in',
             __('field.event_arrived', ['client' => $purchaseOrder->client->displayName()]),
             $purchaseOrder->address, $evLat, $evLng);
@@ -2563,6 +2566,8 @@ class FieldApiController extends Controller
             // ⚠️ السبب إجباري — «إلغاء صامت» بيضيّع المعلومة اللي
             // الإدارة محتاجاها عشان تحل المشكلة مع الفرع.
             'reason' => ['required', 'string', 'min:3', 'max:190'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $purchaseOrder->update([
@@ -2571,7 +2576,7 @@ class FieldApiController extends Controller
             'abort_reason' => $data['reason'],
         ]);
 
-        [$evLat, $evLng] = $this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client);
+        [$evLat, $evLng] = $this->eventPoint(['lat' => $data['lat'] ?? null, 'lng' => $data['lng'] ?? null], $purchaseOrder->client);
         TrackEvent::log($user, 'po_abort',
             __('field.event_po_aborted', [
                 'number' => $purchaseOrder->number,
@@ -2626,6 +2631,9 @@ class FieldApiController extends Controller
             'items.*.product_id' => ['required_with:items', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required_with:items', 'integer', 'min:0'],
             'items.*.unit' => ['nullable', 'in:piece,box,case'],
+            // ⚠️ الإحداثيات كانت بتتقرا خام (٩/٩)
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $purchaseOrder->load('items.product');
@@ -2818,6 +2826,8 @@ class FieldApiController extends Controller
             // مرساة الليد (بايبلاين ٢٦/٨) — طلب جاي من تاب المحتملين:
             // الاعتماد بيقفل الليد «كسبناه» أوتوماتيك
             'lead_id' => ['nullable', 'integer', 'exists:leads,id'],
+            // تأكيد التكرار — كان بيتقرا بره الفاليديشن (٩/٩)
+            'confirm_duplicate' => ['nullable', 'boolean'],
         ], [], [
             'name' => __('field.attr_place_name'),
             'photo' => __('field.attr_place_photo'),

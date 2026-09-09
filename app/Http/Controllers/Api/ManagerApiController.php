@@ -396,26 +396,6 @@ class ManagerApiController extends Controller
 
     // ==================== طلبات الريفيل ====================
 
-    /** GET /api/manager/replenishments — الطلبات + المناديب المتاحين للتنزيل */
-    public function replenishments(Request $request): JsonResponse
-    {
-        return response()->json([
-            'replenishments' => $this->replenishmentsPayload($request->user()),
-            // ⚠️ نفس قايمة bootstrap بالحرف: كل رولز الشغل الميداني
-            // **بسكوب الفريق** — القايمة هنا كانت من غير `fieldVisibleTo`
-            // خالص، فمدير قناة بيشوف مناديب الشركة كلها في الاختيار.
-            'drivers' => User::fieldVisibleTo(
-                User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
-                ->where('active', true)->orderBy('name')->get()
-                ->map(fn (User $u) => [
-                    'id' => $u->id,
-                    'name' => $u->displayName(),
-                    'code' => $u->code,
-                    'role_label' => $u->roleLabel(),
-                ])->values()->all(),
-        ]);
-    }
-
     /** POST /api/manager/replenishments/{r}/assign — موافقة + تنزيل على مندوب */
     public function assignReplenishment(Request $request, ReplenishmentRequest $replenishmentRequest): JsonResponse
     {

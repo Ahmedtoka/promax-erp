@@ -121,7 +121,7 @@ class TaskApiController extends Controller
 
         $file = $request->file('file');
         if (trim((string) ($data['body'] ?? '')) === '' && $file === null) {
-            return response()->json(['ok' => false, 'error' => __('tasks.empty_msg')], 422);
+            return response()->json(['ok' => false, 'message' => __('tasks.empty_msg'), 'error' => __('tasks.empty_msg')], 422);
         }
 
         $c = TaskComment::create([
@@ -159,7 +159,7 @@ class TaskApiController extends Controller
         abort_unless($task->assigned_to === $request->user()->id, 403);
 
         if ($task->status !== 'open') {
-            return response()->json(['ok' => false, 'error' => __('tasks.not_open')], 422);
+            return response()->json(['ok' => false, 'message' => __('tasks.not_open'), 'error' => __('tasks.not_open')], 422);
         }
 
         $task->update(['status' => 'submitted', 'submitted_at' => now()]);
@@ -178,7 +178,7 @@ class TaskApiController extends Controller
         $this->guardDecide($request, $task);
 
         if ($task->status !== 'submitted') {
-            return response()->json(['ok' => false, 'error' => __('tasks.not_submitted')], 422);
+            return response()->json(['ok' => false, 'message' => __('tasks.not_submitted'), 'error' => __('tasks.not_submitted')], 422);
         }
 
         $task->update(['status' => 'approved', 'approved_at' => now()]);
@@ -197,10 +197,11 @@ class TaskApiController extends Controller
         $this->guardDecide($request, $task);
 
         if ($task->status !== 'submitted') {
-            return response()->json(['ok' => false, 'error' => __('tasks.not_submitted')], 422);
+            return response()->json(['ok' => false, 'message' => __('tasks.not_submitted'), 'error' => __('tasks.not_submitted')], 422);
         }
 
-        $reason = trim((string) $request->input('reason'));
+        // ⚠️ كان بيتقرا خام بلا فاليديشن (٩/٩)
+        $reason = trim((string) $request->validate(['reason' => ['nullable', 'string', 'max:500']])['reason'] ?? '');
 
         $task->update([
             'status' => 'open',

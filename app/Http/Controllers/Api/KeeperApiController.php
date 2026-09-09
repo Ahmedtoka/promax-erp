@@ -72,19 +72,6 @@ class KeeperApiController extends Controller
         ]);
     }
 
-    /** GET /api/keeper/picks/{pick} */
-    public function show(Request $request, PickOrder $pick): JsonResponse
-    {
-        if ($err = $this->guard($request->user(), $pick)) {
-            return $err;
-        }
-
-        $pick->load(['warehouse', 'rep:id,name,code', 'items.product', 'items.batch', 'items.location',
-            'purchaseOrder:id,client_id,due_at', 'purchaseOrder.client:id,name,name_en']);
-
-        return response()->json(['pick' => $this->payload($pick)]);
-    }
-
     /** POST /api/keeper/picks/{pick}/start — «ابدأ التجهيز» */
     public function start(Request $request, PickOrder $pick): JsonResponse
     {
