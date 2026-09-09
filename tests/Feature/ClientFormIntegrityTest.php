@@ -63,6 +63,8 @@ class ClientFormIntegrityTest extends TestCase
         'erp/client' => [
             'amount', 'date', 'memo',
             'method', 'reference', 'cheque_bank', 'cheque_due',
+            // ⭐ ٩/٩/٢٠٢٦ — إثبات التحويل والضريبة المخصومة (قواعدها في `OpsController::collect`)
+            'proof', 'tax_withheld',
         ],
         'erp/client_form' => ['amount', 'date', 'memo'],
     ];
