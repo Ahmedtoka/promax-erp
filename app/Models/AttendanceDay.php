@@ -79,6 +79,12 @@ class AttendanceDay extends Model
      */
     public function lastPunch(): ?AttendancePunch
     {
+        // ⚠️ لو البانشات محمّلة (`with('punches')`) نرتّب في الذاكرة —
+        // شاشة السجل كانت بتعمل كويري لكل يوم (٢٢٨ كويري على شهر) (٩/٩)
+        if ($this->relationLoaded('punches')) {
+            return $this->punches->sortBy([['at', 'desc'], ['id', 'desc']])->first();
+        }
+
         return $this->punches()
             ->reorder()
             ->orderByDesc('at')

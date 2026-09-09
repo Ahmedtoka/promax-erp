@@ -89,7 +89,7 @@ class AttendanceController extends Controller
         $from = $request->date('from')?->toDateString() ?? today()->startOfMonth()->toDateString();
         $to = $request->date('to')?->toDateString() ?? today()->toDateString();
 
-        $q = AttendanceDay::with(['user:id,name,name_en,code,role', 'approver:id,name,name_en'])
+        $q = AttendanceDay::with(['user:id,name,name_en,code,role', 'approver:id,name,name_en', 'punches'])
             ->whereBetween('date', [$from, $to]);
 
         if ($request->filled('user')) {
@@ -123,7 +123,7 @@ class AttendanceController extends Controller
         $from = $request->date('from')?->toDateString() ?? today()->startOfMonth()->toDateString();
         $to = $request->date('to')?->toDateString() ?? today()->toDateString();
 
-        $rows = AttendanceDay::with(['user:id,name,name_en,code,role', 'approver:id,name,name_en'])
+        $rows = AttendanceDay::with(['user:id,name,name_en,code,role', 'approver:id,name,name_en', 'punches'])
             ->whereBetween('date', [$from, $to])
             ->when($request->filled('user'), fn ($q) => $q->where('user_id', $request->integer('user')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
