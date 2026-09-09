@@ -2607,12 +2607,16 @@ class ErpController extends Controller
     {
         // ⚠️ سكوب الفرع — مدير المعادي بيشوف فريق المعادي بس
         return view('erp.team', [
+            // ⚠️ `withCount('tokens')` — الفيو كان بينده `tokens()->count()`
+            // لكل موظف (٩/٩): كويري لكل صف
             'users' => \App\Models\Branch::scope(
-                User::with(['zone', 'branch']), $request->user(),
+                User::with(['zone', 'branch'])->withCount('tokens'), $request->user(),
             )->orderBy('role')->get(),
             'branches' => \App\Models\Branch::where('active', true)->orderBy('code')->get(),
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('code')->get(),
-            'zones' => \App\Models\Branch::scope(Zone::query(), $request->user())
+            // ⚠️ `withCount('clients')` — جدول المناطق كان بيعمل
+            // `clients()->count()` لكل منطقة: ٧٠٠ كويري على داتا اللايف (٩/٩)
+            'zones' => \App\Models\Branch::scope(Zone::query()->withCount('clients')->with('users'), $request->user())
                 ->orderBy('code')->get(),
             // العربية المخصصة لكل واحد — كويري واحدة مش لوب
             'vehicles' => \App\Models\Vehicle::where('active', true)->get(),

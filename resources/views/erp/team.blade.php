@@ -64,7 +64,7 @@
                     </td>
                     <td>
                         @if ($u->isFieldUser())
-                            <span class="badge b-gold">{{ __('team.token_countable', ['count' => $u->tokens()->count()]) }}</span>
+                            <span class="badge b-gold">{{ __('team.token_countable', ['count' => $u->tokens_count]) }}</span>
                         @else — @endif
                     </td>
                     @if ($canSetPassword)
@@ -123,7 +123,7 @@
                         <td class="num">{{ $z->code }}</td>
                         <td><b>{{ $z->displayName() }}</b></td>
                         <td>{{ $z->day_label ?? '—' }}</td>
-                        <td class="num">{{ $z->clients()->count() }}</td>
+                        <td class="num">{{ $z->clients_count }}</td>
                         <td>{{ $z->users->pluck('name')->join(__('common.list_separator')) ?: '—' }}</td>
                     </tr>
                 @endforeach
