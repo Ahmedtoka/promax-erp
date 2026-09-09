@@ -150,6 +150,12 @@
         @endforeach
     </select>
 
+    {{-- فلتر «من — إلى» على `period_end` (٩/٩/٢٠٢٦) — نهاية فترة الاستحقاق --}}
+    <label class="f" style="margin:0;align-self:center">{{ __('common.from') }}</label>
+    <input type="date" name="from" value="{{ $range->fromValue() }}">
+    <label class="f" style="margin:0;align-self:center">{{ __('common.to') }}</label>
+    <input type="date" name="to" value="{{ $range->toValue() }}">
+
     <button class="btn gold">{{ __('common.search') }}</button>
     <a class="btn" href="{{ route('erp.dues') }}">{{ __('common.clear') }}</a>
 </form>

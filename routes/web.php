@@ -500,6 +500,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ═════ تحصيلات الميدان (2026-08-09) — للمطابقة، عرض بس ═════
         Route::get('/collections', [\App\Http\Controllers\CollectionController::class, 'index'])
             ->middleware('role:admin,manager,accountant')->name('collections');
+        // التحصيلات المباشرة (٩/٩) — تحويل/شيك جه من العميل بلا مندوب،
+        // نفس الشاشة مقفولة على المصدر «مباشر» + عمود الضرايب المخصومة
+        Route::get('/collections/direct', [\App\Http\Controllers\CollectionController::class, 'direct'])
+            ->middleware('role:admin,manager,accountant')->name('collections.direct');
 
         // ═════ تصفية المناديب (2026-08-06) — قفلة الحسابات اليومية ═════
         Route::get('/rep-close', [\App\Http\Controllers\RepSettlementController::class, 'index'])
@@ -1009,6 +1013,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/invoices/renumber', [OpsController::class, 'renumberInvoices'])
             ->middleware('role:admin')->name('invoices.renumber');
         Route::get('/invoices/{invoice}', [OpsController::class, 'invoice'])->name('invoice');
+        // إكسيل الفاتورة الواحدة (٩/٩) — نفس رولز صفحة الفاتورة
+        Route::get('/invoices/{invoice}/export', [OpsController::class, 'exportInvoice'])->name('invoices.export');
         // تحويل فاتورة لعميل تاني (١٨/٨/٢٠٢٦) — مندوب نزّل الفاتورة
         // على فرع غلط من نفس السلسلة. أدمن بس: بتنقل قيود فلوس.
         Route::post('/invoices/{invoice}/reassign', [OpsController::class, 'reassignInvoice'])

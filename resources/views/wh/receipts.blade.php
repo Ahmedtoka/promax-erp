@@ -86,6 +86,12 @@
 <div class="card">
     <h3>📥 {{ __('stock.goods_receipts') }}
         <span class="side">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</span></h3>
+    {{-- فلتر «من — إلى» على تاريخ الاستلام (٩/٩/٢٠٢٦) — المخزن المختار بيتحافظ عليه --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
     <div class="tablewrap">
         <table>
             <tr>

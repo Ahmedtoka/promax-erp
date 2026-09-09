@@ -269,6 +269,11 @@
     {{-- ═════════ الباتشات ═════════ --}}
     <div class="card">
         <h3>{{ __('stock.batches_of') }} <span class="side">{{ $batches->count() }}</span></h3>
+        {{-- فلتر «من — إلى» على `expires_on` (٩/٩/٢٠٢٦): «إيه اللي بينتهي في الفترة دي؟» --}}
+        <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        </form>
         <div class="tablewrap">
             <table>
                 <tr>

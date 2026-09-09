@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -62,6 +63,23 @@ class BatchReportController extends Controller
                 ->contains(fn ($b) => $this->stateOfDays($b['days_left'], $data) === $state));
         }
 
+        // نافذة الصلاحية «من — إلى» (٩/٩/٢٠٢٦) على `expires_on` بتاع
+        // الباتش في الشيت. نفس قاعدة فلتر الحالة فوق: على مستوى
+        // **الباتش** — الصنف بيظهر لو **فيه** باتش بينتهي جوه النافذة.
+        // الباتشات من غير تاريخ مالهاش مكان في سؤال عن فترة.
+        // مقارنة نصّية Y-m-d عن قصد — الملف تواريخه سليمة بالصيغة دي
+        // (اتفكّت وقت التوليد) ومفيش داعي لـCarbon على كل باتش.
+        $range = DateRange::fromRequest($request);
+
+        if (! $range->isOpen()) {
+            $from = $range->fromValue();
+            $to = $range->toValue();
+
+            $items = $items->filter(fn ($i) => collect($i['batches'])->contains(fn ($b) => ! empty($b['expires_on'])
+                && ($from === '' || $b['expires_on'] >= $from)
+                && ($to === '' || $b['expires_on'] <= $to)));
+        }
+
         $items = $items->values();
 
         // ⚠️ الـ KPIs على الكتالوج **كله** مش المفلتر — نفس قاعدة شاشة المخزون.
@@ -72,6 +90,7 @@ class BatchReportController extends Controller
             'items' => $items,
             'all' => $all,
             'filters' => $filters,
+            'range' => $range,
             'families' => $all->groupBy('family')->map(fn ($g) => [
                 'label' => $g->first()['family_ar'],
                 'label_en' => $g->first()['family_en'],

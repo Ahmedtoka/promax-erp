@@ -14,6 +14,7 @@ use App\Models\ReplenishmentRequest;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Visit;
+use App\Support\DateRange;
 use App\Support\Scope;
 use App\Support\VisitOutcomes;
 use Illuminate\Http\Request;
@@ -512,8 +513,15 @@ class ChannelController extends Controller
             $q->where('status', $status);
         }
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `created_at` = لحظة طلب
+        // الريفيل من الميدان — `assigned_at`/`delivered_at` فاضيين
+        // للمستني، وهو اللي المدير بيدور عليه أصلاً.
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($w) => $range->apply($w, 'created_at'));
+
         return view('erp.replenishments', [
             'requests' => $q->latest()->paginate(25)->withQueryString(),
+            'range' => $range,
             // ⚠️ **كل رولز الشغل الميداني** (طلب المالك ١١/٨ مساءً):
             // «نفس المندوب اللي طلبه ولا مندوب تاني» — سيلز وسواق
             // وبروموتر ومدير. `fieldVisibleTo` بتسكّب فريق المدير بس،

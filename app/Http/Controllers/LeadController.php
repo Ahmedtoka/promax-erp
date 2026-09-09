@@ -10,6 +10,7 @@ use App\Models\Lead;
 use App\Models\User;
 use App\Models\Zone;
 use App\Services\Leads;
+use App\Support\DateRange;
 use App\Support\Scope;
 use Illuminate\Http\Request;
 
@@ -90,6 +91,11 @@ class LeadController extends Controller
             ->when($request->boolean('dup'),
                 fn ($x) => $x->whereNotNull('leads.dup_client_id')->where('leads.dup_dismissed', false)
                     ->whereIn('leads.status', Lead::OPEN_STATUSES))
+            // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `leads.created_at` = تاريخ
+            // دخول الليد المحفظة (استيراد أو تسجيل ميداني). هنا مش في
+            // `index` عشان التسكين الجماعي «كل نتايج الفلتر» يشوف نفس
+            // الصفوف اللي الشاشة عارضاها — القاعدة الموثقة فوق.
+            ->tap(fn ($x) => DateRange::fromRequest($request)->apply($x, 'leads.created_at'))
             ->when($request->filled('search'), function ($x) use ($request) {
                 $s = '%'.$request->input('search').'%';
                 $x->where(function ($w) use ($s) {
@@ -261,7 +267,9 @@ class LeadController extends Controller
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
             'sort' => $sort,
-            'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per']),
+            'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per', 'from', 'to']),
+            // نفس المدى اللي `filteredQuery` طبّقته — للخانات وللينكات
+            'range' => DateRange::fromRequest($request),
             // ⚠️ `isManager()` بتشمل مدير الفرع، وكل أكشنات الليدز `role:admin,manager` —
             // الفيو كان بيوريه التحويل والمسح والتوزيع وبيترفض (زحف ٨/٩)
             'canConvert' => \App\Support\Access::action($user, 'act.leads.manage'),

@@ -68,10 +68,13 @@
 </div>
 
 {{-- ═══ الفلاتر ═══ --}}
-<form class="searchbar" method="GET" style="margin-bottom:10px">
+<form class="searchbar" method="GET" style="margin-bottom:10px;align-items:flex-end">
     <input type="text" name="q" value="{{ $q }}" style="flex:1;min-width:200px"
            placeholder="🔍 {{ __('audit.search_ph') }}">
     <input type="hidden" name="show" value="{{ $show }}">
+    {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ المراجعة اللي تحت الاسم --}}
+    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
     <button class="btn gold" type="submit">{{ __('common.search') }}</button>
 </form>
 
@@ -87,7 +90,7 @@
         'unbilled' => '⭕ '.__('audit.f_unbilled'),
     ] as $key => $label)
         <a class="btn sm {{ $show === $key ? 'gold' : '' }}"
-           href="{{ route($isChains ? 'erp.audit.chains' : 'erp.audit.clients', array_filter(['show' => $key, 'q' => $q])) }}">
+           href="{{ route($isChains ? 'erp.audit.chains' : 'erp.audit.clients', array_filter(['show' => $key, 'q' => $q] + $range->query())) }}">
             {{ $label }}
         </a>
     @endforeach

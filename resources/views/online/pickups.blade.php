@@ -14,11 +14,14 @@
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
         <h3 style="margin:0">📋 {{ __('online.pickups_title') }}</h3>
         {{-- بحث شامل: رقم أوردر / اسم عميل / موبايل → البيك ابات اللي فيها --}}
-        <form method="GET" class="searchbar" style="margin:0">
+        <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
             <input name="search" value="{{ $search }}" placeholder="{{ __('online.pu_search_ph') }}"
                    style="min-width:280px">
+            {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ شيت البيك اب --}}
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>
-            @if ($search !== '')
+            @if ($search !== '' || ! $range->isOpen())
                 <a class="btn" href="{{ route('online.pickups') }}">✕</a>
             @endif
         </form>

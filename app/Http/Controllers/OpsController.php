@@ -8,6 +8,8 @@ use App\Models\Client;
 use App\Models\ClientGroup;
 use App\Models\ClientRequest;
 use App\Models\Invoice;
+use App\Support\Csv;
+use App\Support\DateRange;
 use App\Models\InvoiceItem;
 use App\Models\PriceList;
 use App\Models\PickOrder;
@@ -3721,6 +3723,12 @@ class OpsController extends Controller
             $q->where('status', $status);
         }
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `created_at` = تاريخ إرسال
+        // المندوب للطلب — ده اللي المعتمِد بيسأل عنه («طلبات الأسبوع
+        // ده»)، مش تاريخ القرار. مفتوح لو الخانتين فاضيين.
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($w) => $range->apply($w, 'created_at'));
+
         // ═══ فلتر اللوكيشن (١٨ أغسطس ٢٠٢٦) ═══
         //
         // «مين معاه نقطة مسحوبة ومين لأ» — الطلب اللي من غير نقطة
@@ -3768,6 +3776,7 @@ class OpsController extends Controller
             'dupes' => $dupes,
             'zones' => Zone::orderBy('code')->get(['id', 'code', 'name', 'name_en', 'governorate']),
             'filters' => $request->only('status', 'loc'),
+            'range' => $range,
             'withPoint' => $withPoint,
             'withoutPoint' => $withoutPoint,
             // ═══ داتا فورم الاعتماد الغني (١١ أغسطس ٢٠٢٦) ═══
@@ -4569,6 +4578,97 @@ class OpsController extends Controller
             // فالزرار بيتخفي (التعديل محتاج مسرح العملية موجود).
             'editItemsAdd' => $this->editItemsPayload($invoice),
         ]);
+    }
+
+    /**
+     * ═══ إكسيل فاتورة واحدة (٩ سبتمبر ٢٠٢٦) ═══
+     *
+     * xlsx بـ`SheetWriter` زي ليستة الفواتير: رأس المستند (رقم/سيريال/
+     * تاريخ/عميل/مندوب/دفع/قايمة) + صف لكل بند + تجميعة الفاتورة
+     * **المخزّنة** — نفس أرقام الورقة المطبوعة بالحرف (عقيدة الأرقام
+     * التلاتة)، مش إعادة حساب من السطور. الـPDF من طباعة المتصفح
+     * (قرار المالك — مفيش باكدج PDF).
+     */
+    public function exportInvoice(Invoice $invoice)
+    {
+        abort_unless(request()->user()->canSeeBranch($invoice->client->branch_id), 403);
+        abort_unless($invoice->client->visibleBy(request()->user()), 403);
+
+        $invoice->load(['items.product', 'client', 'user']);
+        $hasTax = $invoice->hasTax();
+        $last = $hasTax ? 10 : 8;
+
+        $x = new \App\Services\SheetWriter($invoice->number);
+        foreach ([0 => 6, 1 => 16, 2 => 36, 3 => 12, 4 => 16, 5 => 12, 6 => 10, 7 => 12, 8 => 14, 9 => 12, 10 => 12] as $i => $w) {
+            $x->width($i, $w);
+        }
+
+        $x->row([['v' => ($hasTax ? __('tax.tax_invoice') : __('ops.sales_invoice')).' '.$invoice->number, 'style' => 'title']]);
+        $x->merge(0, $last);
+
+        $head = [
+            [__('ops.paper_ref'), (string) ($invoice->paper_ref ?: '—')],
+            [__('doc.date'), $invoice->created_at?->format('Y-m-d h:i A') ?? '—'],
+            [__('client.client'), ($invoice->client?->displayName() ?? '—').' ('.($invoice->client?->code ?? '—').')'],
+            [__('ops.rep'), ($invoice->user?->displayName() ?? '—').' ('.($invoice->user?->code ?? '—').')'],
+            [__('ops.payment'), $invoice->paymentLabel()],
+            [__('client.price_list'), \App\Services\Pricing::listLabel($invoice->price_list ?? 'new')],
+        ];
+        foreach ($head as [$k, $v]) {
+            $x->row([['v' => $k, 'style' => 'header'], ['v' => $v, 'style' => 'center']]);
+            $x->merge(1, $last);
+        }
+        $x->blank();
+
+        $cols = [
+            __('doc.line_no'), __('stock.barcode'), __('stock.item'), __('common.code'),
+            __('stock.batch'), __('stock.unit'), __('common.qty'), __('common.price'), __('common.total'),
+        ];
+        if ($hasTax) {
+            $cols[] = __('tax.tax');
+            $cols[] = __('tax.tax_rate');
+        }
+        $x->row(array_map(fn ($c) => ['v' => $c, 'style' => 'header'], $cols));
+
+        foreach ($invoice->items->values() as $i => $it) {
+            $row = [
+                ['v' => $i + 1, 'style' => 'center', 'num' => true],
+                ['v' => $it->product?->barcode ?? '—', 'style' => 'center'],
+                ['v' => $it->product?->displayName() ?? '—', 'style' => 'center'],
+                ['v' => $it->product?->code ?? '—', 'style' => 'center'],
+                ['v' => $it->batchLabel(), 'style' => 'center'],
+                ['v' => $it->product?->unitLabel() ?? '—', 'style' => 'center'],
+                ['v' => (int) $it->qty, 'style' => 'center', 'num' => true],
+                ['v' => round((float) $it->price, 2), 'style' => 'money', 'num' => true],
+                ['v' => round((float) $it->total, 2), 'style' => 'money_bold', 'num' => true],
+            ];
+            if ($hasTax) {
+                $row[] = ['v' => round((float) $it->tax, 2), 'style' => 'money', 'num' => true];
+                $row[] = ['v' => (float) $it->tax > 0 ? rtrim(rtrim(number_format((float) $it->tax_rate * 100, 2), '0'), '.').'%' : __('tax.exempt'), 'style' => 'center'];
+            }
+            $x->row($row);
+        }
+
+        // ═══ التجميعة — من قيم الفاتورة المخزّنة ═══
+        $x->blank();
+        $sum = [[__('common.subtotal'), (float) $invoice->subtotal]];
+        if ($invoice->discount > 0) {
+            $sum[] = [__('common.discount').' '.rtrim(rtrim(number_format($invoice->discount_pct * 100, 2), '0'), '.').'%', -(float) $invoice->discount];
+        }
+        $sum[] = [__('doc.net_before_tax'), (float) $invoice->total];
+        if ($hasTax) {
+            $sum[] = [__('tax.vat'), (float) $invoice->tax_total];
+        }
+        $sum[] = [$hasTax ? __('tax.total_due') : __('common.total'), $invoice->payable()];
+        foreach ($sum as [$k, $v]) {
+            $cells = array_fill(0, $last - 1, ['v' => '', 'style' => 'total']);
+            $cells[0] = ['v' => $k, 'style' => 'total'];
+            $cells[] = ['v' => round($v, 2), 'style' => 'total', 'num' => true];
+            $x->row($cells);
+            $x->merge(0, $last - 2);
+        }
+
+        return $x->download('invoice-'.$invoice->number.'.xlsx');
     }
 
     /** أصناف عهدة المندوب المفتوحة — لمودال تعديل بنود الفاتورة */

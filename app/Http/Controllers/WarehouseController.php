@@ -12,6 +12,7 @@ use App\Models\StockTransferItem;
 use App\Models\TrackEvent;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\DateRange;
 use App\Support\Scope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -76,10 +77,17 @@ class WarehouseController extends Controller
     {
         $warehouse = $this->currentWarehouse($request);
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `received_on` — تاريخ الاستلام
+        // الفعلي اللي على الإذن، مش `created_at` (الإذن ممكن يتسجّل بعد
+        // يومين من وصول البضاعة). مفتوح لو الخانتين فاضيتين.
+        $range = DateRange::fromRequest($request);
+
         return view('wh.receipts', [
             'warehouse' => $warehouse,
             'warehouses' => $this->visibleWarehouses($request),
+            'range' => $range,
             'receipts' => GoodsReceipt::where('warehouse_id', $warehouse?->id)
+                ->tap(fn ($q) => $range->apply($q, 'received_on'))
                 ->with(['batches.product', 'creator', 'sourceWarehouse'])
                 ->latest()->paginate(20)->withQueryString(),
             'products' => Product::where('active', true)->orderBy('code')->get(),
@@ -855,6 +863,12 @@ class WarehouseController extends Controller
         $warehouse = $all ? null : $this->currentWarehouse($request);
         $visibleIds = $this->visibleWarehouses($request)->pluck('id');
 
+        // نافذة الصلاحية «من — إلى» (٩/٩/٢٠٢٦) على `expires_on` بتاع
+        // الباتش — «إيه اللي بينتهي بين أول الشهر وآخره؟». الباتشات
+        // من غير تاريخ انتهاء بتختفي لما النافذة تتحدد (whereDate على
+        // null = false) — ده مقصود: مالهاش مكان في سؤال عن فترة.
+        $range = DateRange::fromRequest($request);
+
         // ⚠️ **المصدر الباتشات مش الأرفف** (إصلاح 2026-08-05). التقرير
         // كان بيقرا `batch_locations` بس — يعني بضاعة مستلمة لسه
         // ماترصّفتش، أو رصيد أول مدة من غير أرفف، كانوا بيختفوا من
@@ -864,6 +878,7 @@ class WarehouseController extends Controller
             ->where('qty_remaining', '>', 0)
             ->when(! $all && $warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
             ->when($all, fn ($q) => $q->whereIn('warehouse_id', $visibleIds))
+            ->tap(fn ($q) => $range->apply($q, 'expires_on'))
             ->with(['product', 'locations.location', 'warehouse:id,name,name_en'])
             ->get()
             ->sortBy(fn (Batch $b) => $b->expires_on?->timestamp ?? PHP_INT_MAX)
@@ -909,6 +924,7 @@ class WarehouseController extends Controller
             'buckets' => $buckets,
             'relocations' => $relocations,
             'bucketFilter' => $request->string('bucket')->value(),
+            'range' => $range,
         ]);
     }
 
@@ -917,6 +933,12 @@ class WarehouseController extends Controller
     public function transfers(Request $request)
     {
         $user = $request->user();
+
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `sent_on` — يوم خروج الشحنة،
+        // وهو التاريخ المعروض في الجدول. جوه `$base` عشان الـKPIs
+        // تتحرّك مع الفلتر زي باقي الفلاتر (رقم فوق وجدول تحت من
+        // نطاقين = شاشة بتكدب).
+        $range = DateRange::fromRequest($request);
 
         // ⚠️ **مفلترة بمخزن أمين المخزن.** كانت `latest()` على طول،
         // يعني أمين مخزن المعادي يشوف كل شحنة بين أي مخزنين
@@ -937,7 +959,8 @@ class WarehouseController extends Controller
             ->when(
                 array_key_exists($request->string('kind')->value(), StockTransfer::KINDS),
                 fn ($q) => $q->where('kind', $request->string('kind')->value()),
-            );
+            )
+            ->tap(fn ($q) => $range->apply($q, 'sent_on'));
 
         $q = $base()->with([
             'fromWarehouse', 'toWarehouse', 'items.product', 'sender',
@@ -964,6 +987,7 @@ class WarehouseController extends Controller
             ],
             'warehouses' => $this->visibleWarehouses($request),
             'filters' => $request->only(['q', 'status', 'wh', 'kind']),
+            'range' => $range,
         ]);
     }
 

@@ -229,10 +229,23 @@
 @endif
 
 {{-- ═══════════ الهيستوري — كل التسليمات اللي تمّت ═══════════ --}}
-@if ($done->isNotEmpty())
+{{-- ⚠️ الكارت بيظهر كمان لو الفلتر شغّال والنتيجة فاضية — وإلا الفورم
+     بتختفي مع الجدول ومحدش يقدر يمسح الفلتر (٩/٩/٢٠٢٦) --}}
+@if ($done->isNotEmpty() || ! $range->isOpen())
 <div class="card">
     <h3>📦 {{ __('field.handout_history') }}
         <span class="side">{{ __('field.handout_history_hint') }}</span></h3>
+    {{-- فلتر «من — إلى» على لحظة الاستلام `handed_at` (٩/٩/٢٠٢٦) — المخزن المختار بيتحافظ عليه --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        @if ($warehouse)
+            <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
+        @endif
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
+    @if ($done->isEmpty())
+        <div class="alert"><span>ℹ️</span><span>{{ __('common.no_results') }}</span></div>
+    @else
     <div class="tablewrap">
         <table>
             <tr>
@@ -268,6 +281,7 @@
             @endforeach
         </table>
     </div>
+    @endif
 </div>
 @endif
 

@@ -67,6 +67,9 @@
                 <option value="{{ $w->id }}" @selected($whFilter === (string) $w->id)>{{ $w->displayName() }}</option>
             @endforeach
         </select>
+        {{-- فلتر «من — إلى» على موعد التحميل `pickup_at` (٩/٩/٢٠٢٦) --}}
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.picks') }}">{{ __('common.clear') }}</a>
     </form>

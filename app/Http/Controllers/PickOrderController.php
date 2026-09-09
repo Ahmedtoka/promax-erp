@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\ReplenishmentRequest;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 
 /**
@@ -45,6 +46,13 @@ class PickOrderController extends Controller
             $q->where('warehouse_id', $wh);
         }
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `pickup_at` — موعد وصول المندوب
+        // المخزن، وهو اللي أمين المخزن بيرتّب شغله عليه («إيه اللي
+        // هيتحمّل بكرة؟»)، مش `created_at` بتاع الطلب. الأوامر من غير
+        // موعد بتختفي لما النافذة تتحدد — مقصود، مالهاش يوم تتحسب عليه.
+        $range = DateRange::fromRequest($request);
+        $range->apply($q, 'pickup_at');
+
         return view('wh.picks', [
             'orders' => $q->latest()->paginate(25)->withQueryString(),
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->get(),
@@ -52,6 +60,7 @@ class PickOrderController extends Controller
                 ->orderBy('name')->get(),
             'filters' => $request->only(['status', 'rep', 'warehouse']),
             'openCount' => PickOrder::open()->count(),
+            'range' => $range,
         ]);
     }
 

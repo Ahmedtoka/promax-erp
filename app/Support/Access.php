@@ -463,7 +463,10 @@ class Access
             // مكانها جنب الفواتير لأنها نفس الدفتر بالظبط، بالعكس.
             ['ops.returns', '📥', 'field.returns', 'ops.returns*', null],
             // تحصيلات الميدان — شيكات وتحويلات بصور إثباتها (2026-08-09)
-            ['erp.collections', '🧾', 'nav.collections', 'erp.collections*', null],
+            ['erp.collections', '🧾', 'nav.collections', 'erp.collections', null],
+            // التحصيلات المباشرة (٩/٩) — تحويل/شيك من العميل بلا مندوب،
+            // بعمود الضرايب المخصومة تحت الحساب
+            ['erp.collections.direct', '🏦', 'nav.collections_direct', 'erp.collections.direct*', null],
             // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
             ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
             // قفل اليوم — سامري اليومية الشامل (2026-08-06)

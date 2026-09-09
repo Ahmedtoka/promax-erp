@@ -137,6 +137,9 @@
             <input type="checkbox" name="unassigned" value="1" @checked($filters['unassigned'] ?? false)>
             {{ __('lead.only_unassigned') }}
         </label>
+        {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ دخول الليد المحفظة --}}
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
         <button class="btn gold">{{ __('common.filter') }}</button>
         {{-- مسح كل الفلاتر بضغطة (٦/٩) --}}
         <a class="btn" href="{{ route('erp.leads') }}">🧹 {{ __('lead.clear_filters') }}</a>
@@ -284,7 +287,7 @@
                  مع الفورم عشان السيرفر يعيد بناء نفس الكويري لما
                  all_filtered=1 — أي فلتر جديد في الشاشة يتضاف هنا ═══ --}}
             <input type="hidden" name="all_filtered" id="ldAllFiltered" value="">
-            @foreach (['status', 'zone', 'rep', 'mgr', 'search', 'source', 'cat', 'unassigned', 'dup'] as $fk)
+            @foreach (['status', 'zone', 'rep', 'mgr', 'search', 'source', 'cat', 'unassigned', 'dup', 'from', 'to'] as $fk)
                 @if (($filters[$fk] ?? '') !== '' && $filters[$fk] !== null)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] }}">
                 @endif

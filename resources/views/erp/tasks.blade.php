@@ -89,6 +89,13 @@
         <span id="tkCount" class="badge b-blue" style="display:none"></span>
         <button type="button" id="tkClear" class="btn sm" style="display:none">✕ {{ __('tasks.clear_filters') }}</button>
     </div>
+
+    {{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على **موعد التسليم** — ده من السيرفر
+         مش لايف زي الفلاتر اللي فوقه، لأنه بيقصّ الكويري نفسها --}}
+    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
 </div>
 
 {{-- ═══ مهامي — بورد ٣ أعمدة ═══ --}}

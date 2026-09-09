@@ -7,7 +7,19 @@
 
 @php $fmt = fn ($n) => number_format((float) $n, 2); @endphp
 
-@section('title', __('nav.collections'))
+@php
+    // ⭐ ٩/٩ — نفس الفيو لشاشتين: «تحصيلات الميدان» (كل المصادر بفلتر)
+    // و«التحصيلات المباشرة» (مقفولة على المباشر + عمود الضرايب المخصومة)
+    $direct = ($mode ?? 'all') === 'direct';
+    $titleKey = $direct ? 'nav.collections_direct' : 'nav.collections';
+@endphp
+@section('title', __($titleKey))
+
+@section('actions')
+    {{-- التصدير من نفس الفلتر — الصفحة بتتشال، الملف مرآة الشاشة --}}
+    <a class="btn" href="{{ url()->current().'?'.http_build_query(array_merge(request()->except('page'), ['export' => 1])) }}">📊 {{ __('ops.inv_excel') }}</a>
+    <button class="btn" type="button" onclick="window.print()" title="{{ __('ops.pdf_hint') }}">📄 {{ __('ops.save_pdf') }}</button>
+@endsection
 
 @section('content')
 
@@ -20,13 +32,32 @@
             <div class="sub2">{{ number_format($totals[$m]->cnt ?? 0) }} {{ __('ops.entries') }}</div>
         </div>
     @endforeach
+    @if ($direct)
+        {{-- الضرايب المخصومة تحت الحساب في نفس الفترة — قيود taxded المباشرة --}}
+        <div class="kpi">
+            <div class="lbl">{{ __('ops.tax_withheld_col') }}</div>
+            <div class="val">{{ $fmt($taxTotal) }}</div>
+            <div class="sub2">{{ __('ops.tax_withheld_kpi_sub') }}</div>
+        </div>
+    @endif
 </div>
 
 <div class="card">
-    <h3>🧾 {{ __('nav.collections') }}
-        <span class="side">{{ __('ops.collections_sub') }}</span></h3>
+    <h3>{{ $direct ? '🏦' : '🧾' }} {{ __($titleKey) }}
+        <span class="side">{{ __($direct ? 'ops.collections_direct_sub' : 'ops.collections_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px">
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        @unless ($direct)
+            <div>
+                <label class="f">{{ __('ops.source') }}</label>
+                <select name="source" onchange="this.form.submit()">
+                    <option value="">{{ __('common.all') }}</option>
+                    @foreach (\App\Http\Controllers\CollectionController::SOURCES as $src)
+                        <option value="{{ $src }}" @selected($source === $src)>{{ __('ops.source_'.$src) }}</option>
+                    @endforeach
+                </select>
+            </div>
+        @endunless
         <div>
             <label class="f">{{ __('ops.method') }}</label>
             <select name="method" onchange="this.form.submit()">
@@ -36,15 +67,17 @@
                 @endforeach
             </select>
         </div>
-        <div>
-            <label class="f">{{ __('ops.rep') }}</label>
-            <select name="rep" onchange="this.form.submit()">
-                <option value="0">{{ __('common.all') }}</option>
-                @foreach ($reps as $r)
-                    <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->name }}</option>
-                @endforeach
-            </select>
-        </div>
+        @unless ($direct)
+            <div>
+                <label class="f">{{ __('ops.rep') }}</label>
+                <select name="rep" onchange="this.form.submit()">
+                    <option value="0">{{ __('common.all') }}</option>
+                    @foreach ($reps as $r)
+                        <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+        @endunless
         <div>
             <label class="f">{{ __('common.from') }}</label>
             <input type="date" name="from" value="{{ $from }}" onchange="this.form.submit()">
@@ -65,6 +98,7 @@
                 {{-- ⚠️ data-nosum — رقم التحويل مرجع مش مبلغ، مجموعه غلط (١١/٨) --}}
                 <th data-nosum>{{ __('ops.reference') }}</th>
                 <th>{{ __('settle.proof') }}</th>
+                @if ($direct)<th>{{ __('ops.tax_withheld_col') }}</th>@endif
                 <th>{{ __('common.total') }}</th>
             </tr>
             @forelse ($rows as $t)
@@ -110,10 +144,14 @@
                             <span style="color:var(--muted)">—</span>
                         @endif
                     </td>
+                    @if ($direct)
+                        @php $wt = (float) ($taxByKey->get(\App\Http\Controllers\CollectionController::taxKey($t)) ?? 0); @endphp
+                        <td class="num">{{ $wt > 0 ? $fmt($wt) : '—' }}</td>
+                    @endif
                     <td class="num pos"><b>{{ $fmt($t->credit) }}</b></td>
                 </tr>
             @empty
-                <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:26px">{{ __('ops.no_collections') }}</td></tr>
+                <tr><td colspan="{{ $direct ? 8 : 7 }}" style="text-align:center;color:var(--muted);padding:26px">{{ __('ops.no_collections') }}</td></tr>
             @endforelse
         </table>
     </div>

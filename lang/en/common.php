@@ -19,6 +19,8 @@ return [
     'clear' => 'Clear',
     'filter' => 'Filter',
     'export' => 'Export',
+    'export_screen' => 'Screen to Excel',
+    'export_screen_hint' => 'Exports the tables shown on screen as they are (current page). Screens with their own export button produce the full filtered file from there.',
     'import' => 'Import',
     'upload' => 'Upload',
     'download' => 'Download',

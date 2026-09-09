@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Zone;
 use App\Services\ContractIntake;
+use App\Support\DateRange;
 use App\Support\Governorates;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -846,6 +847,12 @@ class ErpController extends Controller
         // بدل ما الفيو ينادي liveContract() في كل سطر.
         $contract = $client->liveContract();
 
+        // ═══ فلتر «من — إلى» على كشف الحساب (٩/٩/٢٠٢٦) ═══
+        // العمود `transactions.date` — تاريخ القيد التجاري مش `created_at`
+        // (الافتتاحي والقيود المرحّلة بأثر رجعي تاريخها غير يوم الإدخال).
+        // مفتوح لو الخانتين فاضيتين، فالشاشة زي ما كانت بالظبط.
+        $range = DateRange::fromRequest($request);
+
         // آخر ١٠ زيارات على العميل ده — أي مندوب، بأحدث تشيك إن
         $recentVisits = \App\Models\Visit::where('client_id', $client->id)
             ->with('user')
@@ -890,8 +897,11 @@ class ErpController extends Controller
             // — والأول هو اللي بيحكم. النتيجة إن كشف الحساب كان
             // بيفتح على أقدم حركة والصفحة الأولى فيها قيود سنة فاتت،
             // واللي بيدوّر على آخر تحصيل بيروح لآخر صفحة.
+            // ⚠️ `withQueryString()` عشان الفلتر يعيش مع الترقيم (٩/٩/٢٠٢٦)
             'txns' => $client->transactions()->reorder()
-                ->orderByDesc('date')->orderByDesc('id')->paginate(60),
+                ->tap(fn ($q) => $range->apply($q, 'date'))
+                ->orderByDesc('date')->orderByDesc('id')->paginate(60)->withQueryString(),
+            'range' => $range,
             // ⚠️ مسكوبين بالفرع — نفس سبب `clientFormData()`: القوايم دي
             // بتكشف مناطق وفريق فرع تاني، و`exists:` مابيسألش عن الفرع
             // فالتخصيص ليهم كان بيعدّي.
@@ -2026,8 +2036,15 @@ class ErpController extends Controller
 
         // ⚠️ الباتشات بترتيب الصلاحية (FEFO) — الأقرب انتهاءً فوق،
         // لأنها اللي بتتباع الأول واللي بتقلق.
+        // ═══ فلتر «من — إلى» على الباتشات (٩/٩/٢٠٢٦) ═══
+        // القايمة المؤرّخة الوحيدة في الكارت هي الباتشات، والعمود
+        // `expires_on` — السؤال اللي بيتسأل هنا «إيه اللي بينتهي في
+        // الفترة دي؟» مش «إيه اللي اتسجّل». مفتوح لو الخانتين فاضيتين.
+        $range = DateRange::fromRequest($request);
+
         $batches = $product->batches()
             ->with('warehouse')
+            ->tap(fn ($q) => $range->apply($q, 'expires_on'))
             ->orderByRaw('expires_on IS NULL, expires_on')
             ->get();
 
@@ -2049,6 +2066,7 @@ class ErpController extends Controller
         return view('erp.product', [
             'p' => $product,
             'batches' => $batches,
+            'range' => $range,
             'buyers' => $buyers,
             'families' => \App\Models\ProductFamily::options(),
             // ⚠️ سعر الصنف في **كل** قايمة مسمّاة — الفواتير بتتسعّر

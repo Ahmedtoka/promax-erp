@@ -65,6 +65,9 @@ class ClientFormIntegrityTest extends TestCase
             'method', 'reference', 'cheque_bank', 'cheque_due',
             // ⭐ ٩/٩/٢٠٢٦ — إثبات التحويل والضريبة المخصومة (قواعدها في `OpsController::collect`)
             'proof', 'tax_withheld',
+            // ⭐ ٩/٩/٢٠٢٦ — فلتر «من — إلى» على كشف الحساب (فورم GET بـ`data-range-filter`،
+            // بيتقرا بـ`DateRange::fromRequest` مش من قواعد العميل)
+            'from', 'to',
         ],
         'erp/client_form' => ['amount', 'date', 'memo'],
     ];

@@ -9,6 +9,7 @@ use App\Models\SupplierInvoice;
 use App\Models\SupplierOrder;
 use App\Models\SupplierPayment;
 use App\Models\Warehouse;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -48,16 +49,23 @@ class SupplierController extends Controller
         ]);
     }
 
-    public function show(Supplier $supplier)
+    public function show(Request $request, Supplier $supplier)
     {
         $supplier->load(['orders' => fn ($q) => $q->latest()->limit(20)]);
 
+        // ═══ فلتر «من — إلى» على كشف حساب المورد (٩/٩/٢٠٢٦) ═══
+        // العمود `supplier_transactions.date` — تاريخ القيد (الفاتورة/الدفعة)
+        // مش يوم الإدخال. مفتوح لو الخانتين فاضيتين.
+        $range = DateRange::fromRequest($request);
+
         return view('erp.supplier', [
             's' => $supplier,
+            'range' => $range,
             'orderCount' => $supplier->orders()->count(),
             'openCount' => $supplier->orders()->where('status', 'open')->count(),
             'txns' => $supplier->transactions()->with('source')
-                ->orderByDesc('date')->orderByDesc('id')->paginate(50),
+                ->tap(fn ($q) => $range->apply($q, 'date'))
+                ->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
             'invoices' => $supplier->invoices()->latest('invoice_date')->limit(20)->get(),
             'payments' => $supplier->payments()->latest('paid_on')->limit(20)->get(),
         ]);
@@ -175,8 +183,14 @@ class SupplierController extends Controller
             $q->where('supplier_id', $sup);
         }
 
+        // فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر التجاري
+        // اللي المشتريات بتراجع عليه، مش `created_at`. مفتوح لو فاضي.
+        $range = DateRange::fromRequest($request);
+        $range->apply($q, 'ordered_on');
+
         return view('erp.supplier_orders', [
             'orders' => $q->latest()->paginate(30)->withQueryString(),
+            'range' => $range,
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
             'filters' => $request->only(['status', 'supplier']),
             'openCount' => SupplierOrder::where('status', 'open')->count(),

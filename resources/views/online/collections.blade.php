@@ -23,8 +23,11 @@
 <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <h3 style="margin:0">💰 {{ __('online.collections_title') }}</h3>
-        <form method="GET" class="searchbar" style="margin:0">
+        <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
             <input name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}">
+            {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ الشحن --}}
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
         </form>
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.collections_hint') }}</div>

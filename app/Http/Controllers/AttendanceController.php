@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceDay;
 use App\Models\User;
 use App\Services\Attendance;
+use App\Support\DateRange;
 use App\Support\Scope;
 use Illuminate\Http\Request;
 
@@ -166,12 +167,20 @@ class AttendanceController extends Controller
     }
 
     /** قايمة المراجعة — اللي السيستم قفلهم */
-    public function review()
+    public function review(Request $request)
     {
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `date` — نفس عمود شاشة السجل
+        // (`log`) جنبها، عشان المدير اللي بيراجع «أيام الأسبوع اللي
+        // فات» يشوف نفس الحدود في الاتنين. مفتوح لو فاضي = القايمة
+        // كلها زي ما كانت.
+        $range = DateRange::fromRequest($request);
+
         return view('erp.attendance_review', [
             'rows' => AttendanceDay::needsReview()
                 ->with(['user:id,name,name_en,code,role', 'punches'])
+                ->tap(fn ($q) => $range->apply($q, 'date'))
                 ->orderByDesc('date')->get(),
+            'range' => $range,
         ]);
     }
 

@@ -7,6 +7,7 @@ use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\TaskFile;
 use App\Models\User;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -33,13 +34,21 @@ class TaskController extends Controller
      */
     private const FILE_RULES = ['file', 'max:10240', 'mimes:jpg,jpeg,png,webp,heic,xlsx,xls,csv,pdf,doc,docx'];
 
-    public function index()
+    public function index(Request $request)
     {
         $u = auth()->user();
+
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على **`deadline`** مش `created_at`:
+        // ده العمود اللي البورد والجدول بيعرضوه، والسؤال الطبيعي
+        // «إيه اللي مطلوب يخلص الأسبوع ده». مفتوح = الشاشة زي ما هي؛
+        // ولمّا يتحدد، المهام بلا موعد بتختفي عن قصد (مالهاش تاريخ
+        // تتفلتر عليه). بورد الفريق (العدادات) بيفضل على الكل.
+        $range = DateRange::fromRequest($request);
 
         // ═══ بورد الموظف: مهامي — اليوم / متأخرة / خلصت ═══
         $mine = Task::with('creator')
             ->where('assigned_to', $u->id)
+            ->tap(fn ($q) => $range->apply($q, 'deadline'))
             ->orderByRaw('deadline IS NULL')->orderBy('deadline')
             ->get();
 
@@ -52,6 +61,7 @@ class TaskController extends Controller
         $assigned = Task::with('assignee')
             ->where('created_by', $u->id)
             ->where('assigned_to', '!=', $u->id)
+            ->tap(fn ($q) => $range->apply($q, 'deadline'))
             ->orderByRaw("status = 'submitted' DESC")
             ->orderByRaw("status = 'approved' ASC")
             ->latest()->take(100)->get();
@@ -81,6 +91,7 @@ class TaskController extends Controller
             'late' => $late,
             'done' => $done,
             'assigned' => $assigned,
+            'range' => $range,
             // المكلَّفين المتاحين — رولز الداش بورد بس ومن غيري أنا
             'staff' => User::whereIn('role', User::TASK_ROLES)
                 ->where('active', true)->where('id', '!=', $u->id)

@@ -7,6 +7,7 @@ use App\Models\RepSettlement;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Visit;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -30,7 +31,7 @@ use Illuminate\Support\Facades\DB;
 class RepSettlementController extends Controller
 {
     /** المناديب بأرصدتهم وأرقام الفترة المفتوحة — نظرة واحدة */
-    public function index()
+    public function index(Request $request)
     {
         $reps = User::whereIn('role', ['sales_agent', 'driver', 'manager']) // المدير بيتصفّى كمان (١١/٨ مساءً)
             ->where('active', true)->orderBy('name')->get();
@@ -41,10 +42,19 @@ class RepSettlementController extends Controller
             return ['rep' => $rep] + $figures;
         });
 
+        // ═══ فلتر «من — إلى» على سجل التصفيات (٩/٩/٢٠٢٦) ═══
+        // العمود `to_at` — لحظة القفل هي تاريخ التصفية اللي المحاسب
+        // بيدوّر عليه. مفتوح = آخر ١٥ زي ما كان؛ بفترة = كل تصفيات
+        // الفترة (تصفية واحدة للمندوب في اليوم بحد أقصى، فالعدد صغير).
+        $range = DateRange::fromRequest($request);
+
         return view('erp.repclose', [
             'rows' => $rows,
+            'range' => $range,
             'recent' => RepSettlement::with(['user', 'creator'])
-                ->latest('to_at')->limit(15)->get(),
+                ->tap(fn ($q) => $range->apply($q, 'to_at'))
+                ->when($range->isOpen(), fn ($q) => $q->limit(15))
+                ->latest('to_at')->get(),
             // آخر تصفية لكل مندوب — زرار المسح بيظهر عليها بس (سلامة السلسلة)
             'latestIds' => RepSettlement::selectRaw('user_id, MAX(id) as mid')
                 ->groupBy('user_id')->pluck('mid', 'user_id'),

@@ -424,7 +424,8 @@
      وكام عائلة وسحب كام من ده ورجع كام» — الكارت المشترك مع صفحة السلسلة ═══ --}}
 @include('partials._movements_table', [
     'movements' => $movements,
-    'exportUrl' => route('erp.clients.movements', $c),
+    {{-- الفترة المختارة تحت في كشف الحساب بتمشي مع التصدير (٩/٩/٢٠٢٦) --}}
+    'exportUrl' => route('erp.clients.movements', ['client' => $c] + $range->query()),
     'title' => __('client.movements_title'),
     'hint' => __('client.movements_hint_client'),
 ])
@@ -549,6 +550,13 @@
 
 <div class="card">
     <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
+    {{-- ⚠️ فلتر «من — إلى» على `transactions.date` (٩/٩/٢٠٢٦). فورم GET
+         منفصل عن مودالات الفلوس — `data-range-filter` عشان
+         `ClientFormIntegrityTest` يعرف إن الخانتين دول مش خانات عميل. --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint data-range-filter>
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
             {{-- ⚠️ **عمود طريقة التحصيل** (٨/٨/٢٠٢٦). `method` و

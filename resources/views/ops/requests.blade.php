@@ -21,25 +21,38 @@
 @endif
 
 <div class="card" style="padding:10px 12px">
-    {{-- ⚠️ كل مجموعة فلاتر بتحافظ على التانية (status ⇆ loc) —
+    {{-- ⚠️ كل مجموعة فلاتر بتحافظ على التانية (status ⇆ loc ⇆ من/إلى) —
          غير كده الدوسة على «بلوكيشن» كانت بتطيّر فلتر الحالة. --}}
+    @php $keep = $range->query(); @endphp
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['loc' => $filters['loc'] ?? null])) }}">{{ __('common.all') }}</a>
+        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['loc' => $filters['loc'] ?? null] + $keep)) }}">{{ __('common.all') }}</a>
         @foreach (array_keys(\App\Models\ClientRequest::STATUSES) as $k)
-            <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['status' => $k, 'loc' => $filters['loc'] ?? null])) }}">{{ __('enums.request_status.'.$k) }}</a>
+            <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}" href="{{ route('ops.requests', array_filter(['status' => $k, 'loc' => $filters['loc'] ?? null] + $keep)) }}">{{ __('enums.request_status.'.$k) }}</a>
         @endforeach
 
         <span style="width:1px;align-self:stretch;background:var(--border);margin:0 4px"></span>
 
         <a class="btn {{ ($filters['loc'] ?? '') === 'with' ? 'gold' : '' }}"
-           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'with' ? null : 'with'])) }}">
+           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'with' ? null : 'with'] + $keep)) }}">
             📍 {{ __('ops.loc_with') }} <b>({{ $withPoint }})</b>
         </a>
         <a class="btn {{ ($filters['loc'] ?? '') === 'without' ? 'gold' : '' }}"
-           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'without' ? null : 'without'])) }}">
+           href="{{ route('ops.requests', array_filter(['status' => $filters['status'] ?? null, 'loc' => ($filters['loc'] ?? '') === 'without' ? null : 'without'] + $keep)) }}">
             ❌ {{ __('ops.loc_without') }} <b>({{ $withoutPoint }})</b>
         </a>
     </div>
+
+    {{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على تاريخ إرسال الطلب — الحالة
+         واللوكيشن بيتحافظ عليهم كخانات مخفية --}}
+    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
+        @foreach (['status', 'loc'] as $fk)
+            @if (($filters[$fk] ?? '') !== '')
+                <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] }}">
+            @endif
+        @endforeach
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
 </div>
 
 <div class="card">

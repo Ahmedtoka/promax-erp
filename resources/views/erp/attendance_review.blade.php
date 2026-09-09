@@ -25,6 +25,12 @@
     <div class="alert bad" style="margin-bottom:12px"><span>⚠️</span><span>{{ $errors->first() }}</span></div>
 @endif
 
+{{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على يوم الحضور — نفس عمود شاشة السجل --}}
+<form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+</form>
+
 @if ($rows->isEmpty())
     <div class="card"><div class="empty">{{ __('hr.no_review') }}</div></div>
 @else

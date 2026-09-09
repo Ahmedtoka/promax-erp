@@ -13,13 +13,24 @@
 @section('content')
 
 <div class="card" style="padding:10px 12px">
+    {{-- لينكات الحالة بتحافظ على «من/إلى» والعكس (٩/٩/٢٠٢٦) --}}
+    @php $keep = $range->query(); @endphp
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.replenishments') }}">{{ __('common.all') }}</a>
+        <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}" href="{{ route('ops.replenishments', $keep) }}">{{ __('common.all') }}</a>
         @foreach (ReplenishmentRequest::STATUSES as $k => [$lbl, $cls])
             <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}"
-               href="{{ route('ops.replenishments', ['status' => $k]) }}">{{ __('enums.replenishment_status.'.$k) }}</a>
+               href="{{ route('ops.replenishments', ['status' => $k] + $keep) }}">{{ __('enums.replenishment_status.'.$k) }}</a>
         @endforeach
     </div>
+
+    {{-- فلتر «من — إلى» على تاريخ الطلب من الميدان --}}
+    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
+        @if (($filters['status'] ?? '') !== '')
+            <input type="hidden" name="status" value="{{ $filters['status'] }}">
+        @endif
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
 </div>
 
 <div class="card">

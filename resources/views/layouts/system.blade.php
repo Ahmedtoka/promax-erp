@@ -541,6 +541,7 @@ select.ssel-native{display:none!important}
 .sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.42)}
 .sidebar{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent}
 @media print{.sidebar{display:none}.card,.kpi{box-shadow:none}}
+@media print{.scr-x,[data-noprint]{display:none !important}}
 </style>
 {{-- ═══ طي السايد منيو لأيقونات (طلب المالك ٢١/٨) ═══
      الحالة بتتقري قبل الرسم عشان مفيش فلاش، والكونتينر بيتوسع
@@ -737,6 +738,20 @@ html.nav-mini .side-user{display:none}
       <h1>@yield('title')</h1>
       <div class="meta">
         @yield('actions')
+
+        {{-- ⭐ تصدير الشاشة (٩/٩/٢٠٢٦ — طلب المالك: كل شاشة فيها إكسيل وPDF) ═══
+             زرارين على كل شاشة من غير شغل في الصفحة نفسها:
+             • «إكسيل الشاشة» بيصدّر الجداول المعروضة كما هي (CSV بـBOM من
+               الجافاسكربت — الصفحة الحالية بس). الشاشة اللي عندها تصدير
+               سيرفر خاص (لينك export/excel/csv في الأكشنز) الزرار ده بيتخفى
+               عشان مايبقاش فيه إكسيلين، وكذلك لو مافيش جدول على الشاشة.
+             • «حفظ PDF» = نافذة طباعة المتصفح (قرار المالك: مفيش باكدج PDF).
+               بيتخفى لو الشاشة عندها زرار طباعة أصلاً.
+             الإخفاء/الإظهار في السكربت تحت (`scrExportCsv`). --}}
+        <button class="btn scr-x" id="scrExcel" type="button" hidden onclick="scrExportCsv()"
+                title="{{ __('common.export_screen_hint') }}" data-noprint>📊 {{ __('common.export_screen') }}</button>
+        <button class="btn scr-x" id="scrPdf" type="button" hidden onclick="window.print()"
+                title="{{ __('ops.pdf_hint') }}" data-noprint>📄 {{ __('ops.save_pdf') }}</button>
 
         {{-- ═══ شريط الاختصارات (طلب المالك ١١ أغسطس ٢٠٢٦) ═══
              أهم الصفحات في الهيدر على كل شاشة — من غير ما تفتح المنيو.
@@ -1950,6 +1965,56 @@ document.addEventListener('DOMContentLoaded', function () {
       if (current) current.place();
     });
   });
+})();
+</script>
+<script>
+/* ═══ تصدير الشاشة (٩/٩/٢٠٢٦) — انظر الزرارين في الـtopbar ═══ */
+(function () {
+  var meta = document.querySelector('.topbar .meta');
+  if (!meta) return;
+  var xl = document.getElementById('scrExcel'), pdf = document.getElementById('scrPdf');
+  // الشاشة عندها تصدير سيرفر خاص؟ (ليستة الفواتير، السلاسل، التقارير...)
+  var own = meta.querySelectorAll('a[href*="export"],a[href*="excel"],a[href*=".csv"],a[href*=".xlsx"],button[formaction*="export"]');
+  var ownPrint = meta.querySelectorAll('[onclick*="print("]:not(#scrPdf)');
+  var tables = [].slice.call(document.querySelectorAll('main.main table')).filter(function (t) {
+    return !t.closest('dialog') && !t.closest('[data-noprint]') && t.querySelectorAll('tr').length > 1;
+  });
+  if (xl && !own.length && tables.length) xl.hidden = false;
+  if (pdf && !ownPrint.length) pdf.hidden = false;
+
+  function cellText(c) {
+    var v = (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim();
+    // «2,376.00» → 2376.00 عشان إكسيل يجمعه كرقم مش نص
+    if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)) v = v.replace(/,/g, '');
+    return v;
+  }
+  window.scrExportCsv = function () {
+    var title = ((document.querySelector('.topbar h1') || {}).textContent || document.title).trim();
+    var lines = [[title], [new Date().toLocaleString()]];
+    tables.forEach(function (t, i) {
+      lines.push([]);
+      [].slice.call(t.querySelectorAll('tr')).forEach(function (tr) {
+        if (tr.closest('[data-noprint]')) return;
+        var cells = [].slice.call(tr.children).filter(function (c) {
+          return !c.classList.contains('act') && !c.hasAttribute('data-noexport');
+        });
+        if (cells.length) lines.push(cells.map(cellText));
+      });
+    });
+    var csv = lines.map(function (r) {
+      return r.map(function (v) {
+        v = String(v == null ? '' : v);
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      }).join(',');
+    }).join('\r\n');
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = title.replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 60) + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  };
 })();
 </script>
 @yield('scripts')

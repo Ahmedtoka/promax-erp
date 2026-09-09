@@ -81,6 +81,10 @@
             <button class="btn" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('ops.del_invoice') }}</button>
         </form>
     @endif
+    {{-- إكسيل الفاتورة الواحدة + PDF (٩/٩) — الـPDF من نافذة طباعة المتصفح
+         («حفظ كـ PDF») بقرار المالك: مفيش باكدج PDF في المشروع --}}
+    <a class="btn" href="{{ route('ops.invoices.export', $inv) }}">📊 {{ __('ops.inv_excel') }}</a>
+    <button class="btn" type="button" onclick="window.print()" title="{{ __('ops.pdf_hint') }}">📄 {{ __('ops.save_pdf') }}</button>
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
 @endsection
 

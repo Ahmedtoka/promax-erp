@@ -6,6 +6,7 @@ use App\Exceptions\Rejected;
 use App\Models\StockCount;
 use App\Models\Warehouse;
 use App\Services\StockCounting;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 
 /**
@@ -18,9 +19,16 @@ class StockCountController extends Controller
 {
     public function index(Request $request)
     {
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `count_date` — يوم الجرد نفسه
+        // اللي بيتكتب على الورقة، مش `created_at` (الجرد ممكن يتفتح
+        // النهارده بتاريخ أمس). الخانتين GET منفصلتين عن خانة
+        // `count_date` بتاعة فورم فتح جرد جديد (POST).
+        $range = DateRange::fromRequest($request);
+
         $counts = StockCount::with(['warehouse', 'startedBy', 'approvedBy'])
             ->when($request->filled('warehouse'), fn ($q) => $q->where('warehouse_id', $request->input('warehouse')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+            ->tap(fn ($q) => $range->apply($q, 'count_date'))
             ->latest()
             ->paginate(25)
             ->withQueryString();
@@ -33,6 +41,7 @@ class StockCountController extends Controller
                 'warehouse' => $request->input('warehouse'),
                 'status' => $request->input('status'),
             ],
+            'range' => $range,
         ]);
     }
 

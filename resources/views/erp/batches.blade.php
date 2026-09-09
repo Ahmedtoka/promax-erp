@@ -197,6 +197,10 @@
         @endforeach
     </select>
 
+    {{-- نافذة الصلاحية «من — إلى» على `expires_on` بتاع الباتش (٩/٩/٢٠٢٦) --}}
+    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+
     <button class="btn gold">{{ __('common.search') }}</button>
     <a class="btn" href="{{ route('erp.batches') }}">{{ __('common.clear') }}</a>
 </form>

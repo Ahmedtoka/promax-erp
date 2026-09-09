@@ -12,19 +12,24 @@
 
 <div class="card" style="padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        {{-- شيبس الحالة بتحافظ على «من/إلى» (٩/٩/٢٠٢٦) — العدادات بتعدّ جوه الفترة --}}
+        @php $keep = $range->query(); @endphp
         <a class="btn {{ ! ($filters['status'] ?? null) ? 'gold' : '' }}"
-           href="{{ route('online.orders') }}">{{ __('common.all') }}</a>
+           href="{{ route('online.orders', $keep) }}">{{ __('common.all') }}</a>
         @foreach (array_keys(\App\Models\OnlineOrder::STATUSES) as $k)
             <a class="btn {{ ($filters['status'] ?? '') === $k ? 'gold' : '' }}"
-               href="{{ route('online.orders', ['status' => $k]) }}">
+               href="{{ route('online.orders', ['status' => $k] + $keep) }}">
                 {{ __('online.status_'.$k) }} <b>({{ $counts[$k] ?? 0 }})</b></a>
         @endforeach
 
-        <form method="GET" class="searchbar" style="margin:0;margin-inline-start:auto">
+        <form method="GET" class="searchbar" style="margin:0;margin-inline-start:auto;align-items:flex-end">
             @if ($filters['status'] ?? null)
                 <input type="hidden" name="status" value="{{ $filters['status'] }}">
             @endif
             <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}">
+            {{-- «من — إلى» على تاريخ الأوردر في شوبيفاي --}}
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
         </form>
     </div>
 </div>

@@ -6,6 +6,7 @@ use App\Models\PickOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\DateRange;
 use App\Support\Scope;
 use Illuminate\Http\Request;
 
@@ -40,8 +41,15 @@ class CustodyHandoutController extends Controller
             $reps->push($request->user());
         }
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `handed_at` — لحظة استلام
+        // المندوب للعهدة، وهي التاريخ المعروض في جدول الهيستوري.
+        // **على الهيستوري بس**: «تحت التجهيز» و«جاهزة» طوابير شغل
+        // حيّة لازم تبان كلها مهما كان الفلتر.
+        $range = DateRange::fromRequest($request);
+
         return view('ops.handout', [
             'warehouse' => $warehouse,
+            'range' => $range,
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->orderBy('code')->get(),
             'reps' => $reps,
             // ⚠️ **المتاح من الأرفف مش من `stocks`.** أمر التجهيز
@@ -75,6 +83,7 @@ class CustodyHandoutController extends Controller
             // — نفس منطق عرض العهدة في الأبلكيشن.
             'done' => PickOrder::where('purpose', PickOrder::PURPOSE_VAN_LOAD)
                 ->where('status', 'handed')
+                ->tap(fn ($q) => $range->apply($q, 'handed_at'))
                 ->with(['rep', 'warehouse', 'items.product'])
                 ->latest('handed_at')->take(40)->get(),
         ]);

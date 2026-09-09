@@ -13,6 +13,7 @@ use App\Models\ShopifyProductLink;
 use App\Models\Warehouse;
 use App\Services\Pricing;
 use App\Services\ShopifyOnline;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -512,10 +513,17 @@ class OnlineOrderController extends Controller
             });
         });
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `date` = تاريخ شيت البيك اب
+        // نفسه (اللي المندوب استلم فيه) — مش `created_at` لأن الشيت
+        // ممكن يتسجّل بعد يومه.
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($x) => $range->apply($x, 'date'));
+
         return view('online.pickups', [
             'pickups' => $q->orderByDesc('date')->orderByDesc('id')
                 ->paginate(30)->withQueryString(),
             'search' => trim((string) $request->input('search')),
+            'range' => $range,
         ]);
     }
 
@@ -828,8 +836,15 @@ class OnlineOrderController extends Controller
             });
         });
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `shipped_at` = العمود اللي
+        // الجدول بيعرضه، ولحظة خروج البضاعة مع المندوب هي اللي بيبدأ
+        // منها التحصيل. الـKPI «بره» بيفضل على الكل — رقم رصيد مش فترة.
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($x) => $range->apply($x, 'shipped_at'));
+
         return view('online.collections', [
             'orders' => $q->orderByDesc('shipped_at')->paginate(50)->withQueryString(),
+            'range' => $range,
             // بره = تمن البضاعة (− المرتجع) الغير محصّل — الشحن للمندوب
             'outstanding' => round((float) OnlineOrder::status('shipped')
                 ->selectRaw('COALESCE(SUM(subtotal - returned_total - collected_total), 0) as v')->value('v'), 2),
@@ -852,6 +867,12 @@ class OnlineOrderController extends Controller
             });
         });
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `ordered_at` = تاريخ الأوردر في
+        // شوبيفاي (عمود «التاريخ» في الجدول) — مش `created_at` اللي هو
+        // لحظة السينك عندنا. قبل العدادات عشان الشيبس تعدّ جوه الفترة.
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($x) => $range->apply($x, 'ordered_at'));
+
         // ⚠️ العدادات قبل فلتر الحالة — شيبس الحالات بتعدّ جوه البحث
         // بس، وإلا اختيار حالة كان بيصفّر عدادات الباقي
         $counts = (clone $q)->reorder()
@@ -865,6 +886,7 @@ class OnlineOrderController extends Controller
             'orders' => $q->orderByDesc('ordered_at')->paginate(50)->withQueryString(),
             'counts' => $counts,
             'filters' => $request->only(['status', 'search']),
+            'range' => $range,
         ]);
     }
 
@@ -873,8 +895,13 @@ class OnlineOrderController extends Controller
      * بره كام (مشحون لسه ماتحصلش) · اتحصل كام · رجع كام · شحن كام ·
      * تكلفة البضاعة كام · هامش المحصّل.
      */
-    public function accounts()
+    public function accounts(Request $request)
     {
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `date` بتاع البيك اب — لجدول
+        // «البيك ابات المفتوحة» بس. السامريهات فوق أرصدة حية (بره كام /
+        // اتحصل كام) مش فترة، فبتفضل على الكل.
+        $range = DateRange::fromRequest($request);
+
         // كل الأرقام من كويري تجميع واحدة لكل نطاق — مش لوب صفوف
         // ⚠️ «فلوس بره» = تمن البضاعة بس — الشحن للمندوب (٥/٩)
         $sum = OnlineOrder::selectRaw("
@@ -891,13 +918,16 @@ class OnlineOrderController extends Controller
         $counts = OnlineOrder::selectRaw('status, COUNT(*) as n, COALESCE(SUM(total), 0) as v')
             ->groupBy('status')->get()->keyBy('status');
 
-        $openPickups = OnlinePickup::with('orders')->orderByDesc('date')->get()
+        $openPickups = OnlinePickup::with('orders')
+            ->tap(fn ($q) => $range->apply($q, 'date'))
+            ->orderByDesc('date')->get()
             ->filter(fn ($p) => ! $p->isSettled())->values();
 
         return view('online.accounts', [
             'sum' => $sum,
             'counts' => $counts,
             'openPickups' => $openPickups,
+            'range' => $range,
             'statuses' => array_keys(OnlineOrder::STATUSES),
         ]);
     }

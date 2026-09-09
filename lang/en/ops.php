@@ -297,6 +297,16 @@ return [
     'collections_sub' => 'Every collection with its method and proof photo — for reconciliation',
     'collected_by' => 'Collected By',
     'office_entry' => 'Office',
+    'save_pdf' => 'Save PDF',
+    'pdf_hint' => 'Opens the print dialog. Pick "Save as PDF" as the destination.',
+    'source_field' => 'Field (visit)',
+    'source_rep' => 'Office, on behalf of a rep',
+    'source_direct' => 'Direct from the client',
+    'collections_direct_sub' => 'Transfers and cheques that came straight from the client with no rep, with proof and withheld tax',
+    'tax_withheld_col' => 'Tax withheld',
+    'tax_withheld_kpi_sub' => 'Withholding-tax entries on direct collections in the period',
+    'memo' => 'Memo',
+    'export_truncated' => 'Cut at 5000 rows. Narrow the period.',
     'no_collections' => 'No collections in this window.',
 
     // Tracking rebuild - Aug 9, 2026

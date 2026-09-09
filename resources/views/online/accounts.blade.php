@@ -75,6 +75,11 @@
 <div class="card">
     <h3>📋 {{ __('online.open_pickups') }}</h3>
     <div class="dash-hint" style="margin-bottom:8px">{{ __('online.open_pickups_hint') }}</div>
+    {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ البيك اب — للجدول ده بس، السامريهات فوق أرصدة حية --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
     <div class="tablewrap">
         <table>
             <tr>

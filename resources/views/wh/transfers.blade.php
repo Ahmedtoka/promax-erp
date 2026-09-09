@@ -84,6 +84,9 @@
                 </option>
             @endforeach
         </select>
+        {{-- فلتر «من — إلى» على يوم الإرسال `sent_on` (٩/٩/٢٠٢٦) --}}
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.transfers') }}">{{ __('common.clear') }}</a>
     </form>

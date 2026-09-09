@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AccountAudit;
 use App\Models\Client;
 use App\Models\ClientGroup;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -179,6 +180,25 @@ class AccountAuditController extends Controller
             default => $rows,
         };
 
+        // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `reviewed_at` = تاريخ المراجعة
+        // اللي الجدول بيعرضه تحت الاسم («✓ 2026-09-01»). الصفوف هنا
+        // كوليكشن مبنية من السلاسل/العملاء مش كويري، فالفلتر في
+        // الميموري بنفس حدود `DateRange` (بداية يوم `from` → آخر يوم
+        // `to`). لمّا يتحدد، اللي ماتراجعش خالص بيختفي عن قصد —
+        // السؤال هنا «إيه اللي اتراجع في الفترة دي». السامري فوق
+        // بيفضل من الملف كله — نفس قاعدة فلتر الحالة.
+        $range = DateRange::fromRequest($request);
+
+        if (! $range->isOpen()) {
+            $filtered = $filtered->filter(function ($r) use ($range) {
+                $at = $r['audit']?->reviewed_at;
+
+                return $at !== null
+                    && ($range->from === null || $at->gte($range->from))
+                    && ($range->to === null || $at->lte($range->to));
+            });
+        }
+
         if ($s = trim((string) $request->string('q')->value())) {
             // بحث العميل الموحّد (٦/٩) — نفس توحيد Client::search بس على
             // كوليكشن في الميموري: همزات/تاء مربوطة موحّدة وكلمات بأي ترتيب
@@ -201,6 +221,7 @@ class AccountAuditController extends Controller
             'summary' => $summary,
             'show' => $show,
             'q' => $s ?? '',
+            'range' => $range,
         ]);
     }
 

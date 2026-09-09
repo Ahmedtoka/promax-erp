@@ -58,6 +58,11 @@
     {{-- ═══════════ كشف الحساب ═══════════ --}}
     <div class="card">
         <h3>📒 {{ __('supplier.statement') }}</h3>
+        {{-- فلتر «من — إلى» على `supplier_transactions.date` (٩/٩/٢٠٢٦) --}}
+        <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        </form>
         <div class="tablewrap">
             <table>
                 <tr>

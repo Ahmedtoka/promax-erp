@@ -37,6 +37,11 @@
                 <option value="{{ $st }}" @selected(($filters['status'] ?? '') === $st)>{{ __('supplier.status_'.$st) }}</option>
             @endforeach
         </select>
+        {{-- فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر مش يوم الإدخال --}}
+        <label class="f" style="margin:0;align-self:center">{{ __('common.from') }}</label>
+        <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
+        <label class="f" style="margin:0;align-self:center">{{ __('common.to') }}</label>
+        <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
         <a class="btn" href="{{ route('erp.purchasing') }}">{{ __('common.clear') }}</a>
     </form>
 

@@ -46,6 +46,10 @@
                 @endforeach
             </select>
         </div>
+        {{-- فلتر «من — إلى» على يوم الجرد `count_date` (٩/٩/٢٠٢٦) —
+             ده فلتر عرض GET، مش خانة `count_date` بتاعة فتح جرد جديد تحت --}}
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
         <button class="btn">{{ __('common.filter') }}</button>
     </form>
 </div>

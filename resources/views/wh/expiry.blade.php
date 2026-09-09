@@ -45,13 +45,29 @@
 @if ($warehouses->count() > 1)
     <div class="searchbar">
         <span style="font-size:11.5px;font-weight:800;color:var(--muted)">{{ __('stock.warehouses') }}</span>
-        <a class="btn {{ $all ? 'gold' : '' }}" href="{{ route('wh.expiry', ['warehouse' => 'all']) }}">🌐 {{ __('stock.all_warehouses') }}</a>
+        {{-- لينكات المخازن بتحافظ على نافذة الصلاحية المختارة (٩/٩/٢٠٢٦) --}}
+        <a class="btn {{ $all ? 'gold' : '' }}" href="{{ route('wh.expiry', ['warehouse' => 'all'] + $range->query()) }}">🌐 {{ __('stock.all_warehouses') }}</a>
         @foreach ($warehouses as $w)
             <a class="btn {{ ! $all && $warehouse && $w->id === $warehouse->id ? 'gold' : '' }}"
-               href="{{ route('wh.expiry', ['warehouse' => $w->id]) }}">{{ $w->displayName() }}</a>
+               href="{{ route('wh.expiry', ['warehouse' => $w->id] + $range->query()) }}">{{ $w->displayName() }}</a>
         @endforeach
     </div>
 @endif
+
+{{-- نافذة الصلاحية «من — إلى» على `expires_on` بتاع الباتش (٩/٩/٢٠٢٦) —
+     المخزن والكارت المختارين بيتحافظ عليهم --}}
+<form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+    @if ($all)
+        <input type="hidden" name="warehouse" value="all">
+    @elseif ($warehouse)
+        <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
+    @endif
+    @if ($bucketFilter)
+        <input type="hidden" name="bucket" value="{{ $bucketFilter }}">
+    @endif
+    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+</form>
 
 <div class="alert info" style="margin-bottom:14px">
     <span>⏳</span>
@@ -65,7 +81,8 @@
             $bucket = $buckets[$key] ?? collect();
             $active = $bucketFilter === $key;
             $link = route('wh.expiry', ($all ? ['warehouse' => 'all'] : ($warehouse ? ['warehouse' => $warehouse->id] : []))
-                + ($active ? [] : ['bucket' => $key]));
+                + ($active ? [] : ['bucket' => $key])
+                + $range->query());
         @endphp
         <a class="kpi" href="{{ $link }}"
            style="text-decoration:none;color:inherit;{{ $active ? 'outline:2px solid var(--royal-blue)' : '' }}">

@@ -45,7 +45,8 @@
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
     {{-- تصدير فروع السلسلة بإجمالي كشف حساب كل فرع (٨/٩) --}}
-    <a class="btn" href="{{ route('erp.groups.statements', $g) }}">⬇ {{ __('client.export_branches') }}</a>
+    {{-- الفترة المختارة في الصفحة بتمشي مع التصدير (٩/٩/٢٠٢٦) --}}
+    <a class="btn" href="{{ route('erp.groups.statements', ['group' => $g] + $range->query()) }}">⬇ {{ __('client.export_branches') }}</a>
     @if ($canClone)
         <a class="btn gold" href="{{ route('erp.clients.clone', $cloneFrom) }}">+ {{ __('client.new_branch_like_chain') }}</a>
     @endif
@@ -104,7 +105,7 @@
 {{-- ═══ مسحوبات السلسلة بالكمية (٨/٩/٢٠٢٦): كام قطعة من كل صنف، بكام، وإمتى ═══ --}}
 @include('partials._movements_table', [
     'movements' => $movements,
-    'exportUrl' => route('erp.groups.movements', $g),
+    'exportUrl' => route('erp.groups.movements', ['group' => $g] + $range->query()),
     'title' => __('client.movements_title_chain'),
     'hint' => __('client.movements_hint_chain'),
 ])
@@ -127,6 +128,13 @@
 
 <div class="card">
     <h3>🏬 {{ __('client.branches') }} <span class="side">{{ __('client.branch_countable', ['count' => $branches->count()]) }}</span></h3>
+    {{-- ⚠️ فلتر «من — إلى» (٩/٩/٢٠٢٦) — الجدول ده أرقامه مجمّعة مالوش صف
+         بتاريخ، فالفترة بتسوق لينكات التصدير (كشوف الفروع فوق · كشف كل
+         فرع هنا · حركة الأصناف) اللي بتفلتر على `transactions.date`. --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
     {{-- فلاتر + فريز + سورت (2026-08-06) — كله client-side، الداتا محمّلة أصلاً --}}
     <div class="searchbar">
         <input type="text" id="qBr" placeholder="🔍 {{ __('client.search_branch') }}" oninput="filterBranches()">
@@ -221,7 +229,7 @@
                     <td class="num {{ $b->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($b->balance) }}</td>
                     <td class="num">{{ $b->last_activity_at?->format('Y-m-d') ?? '—' }}</td>
                     {{-- كشف حساب الفرع إكسيل (٨/٩) — فرع بفرعه --}}
-                    <td><a class="btn sm" href="{{ route('erp.groups.branch_statement', [$g, $b]) }}" title="{{ __('client.export_branch_statement') }}">📄 {{ __('rpt.export') }}</a></td>
+                    <td><a class="btn sm" href="{{ route('erp.groups.branch_statement', ['group' => $g, 'client' => $b] + $range->query()) }}" title="{{ __('client.export_branch_statement') }}">📄 {{ __('rpt.export') }}</a></td>
                     @if ($manager)
                         <td>
                             <form method="POST" action="{{ route('erp.groups.attach', $g) }}" style="display:inline"

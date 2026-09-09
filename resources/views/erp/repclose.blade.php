@@ -110,6 +110,11 @@
 {{-- ═══ آخر التصفيات — للمراجعة وإعادة طباعة المحضر ═══ --}}
 <div class="card">
     <h3>🗂️ {{ __('settle.recent') }}</h3>
+    {{-- فلتر «من — إلى» على `to_at` لحظة القفل (٩/٩/٢٠٢٦) — فاضي = آخر ١٥ زي ما كان --}}
+    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    </form>
     <div class="tablewrap st-tbl">
         <table>
             <tr>

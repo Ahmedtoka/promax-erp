@@ -9,6 +9,7 @@ use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Support\Csv;
+use App\Support\DateRange;
 use App\Support\Scope;
 use Illuminate\Http\Request;
 
@@ -133,7 +134,14 @@ class GroupController extends Controller
                          SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) as coll")
             ->groupBy('m')->orderBy('m')->get();
 
+        // ═══ فلتر «من — إلى» للصفحة (٩/٩/٢٠٢٦) ═══
+        // جدول الفروع نفسه أرقامه مجمّعة (مالوش صف بتاريخ)، فالفترة هنا
+        // بتسوق **لينكات التصدير** التلاتة (كشوف الفروع · كشف فرع · حركة
+        // الأصناف) اللي بتقرا `from`/`to` أصلاً على عمود `transactions.date`.
+        $range = DateRange::fromRequest($request);
+
         return view('erp.group', [
+            'range' => $range,
             // ⚠️ `contract` في الـload — كارت عقد السلسلة بيقراه،
             // ومن غيره كويري زيادة على كل تحميل للصفحة
             'g' => $group->load(['channel', 'contract']),

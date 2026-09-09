@@ -89,6 +89,7 @@ return [
 
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'collections' => 'Field Collections',
+    'collections_direct' => 'Direct Collections (bank / cheque)',
 
     // ═══ بورد الأونلاين + المجموعة المستقلة (2026-08-09) ═══
     'group_hr' => 'Attendance',

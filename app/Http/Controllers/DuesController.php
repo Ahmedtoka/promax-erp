@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\ContractDue;
 use App\Services\ContractDues;
+use App\Support\DateRange;
 use Illuminate\Http\Request;
 
 /**
@@ -48,6 +49,12 @@ class DuesController extends Controller
             $q->where('kind', $kind);
         }
 
+        // فلتر «من — إلى» على `period_end` (٩/٩/٢٠٢٦) — نهاية فترة الاستحقاق
+        // هي التاريخ اللي بيه الاستحقاق «بيحل»، وهي نفس عمود الترتيب تحت.
+        // على الجدول بس — الـKPIs بتفضل على الكل عشان مايختلفوش عن السايدبار.
+        $range = DateRange::fromRequest($request);
+        $range->apply($q, 'period_end');
+
         $dues = $q->orderBy('status')
             ->orderByDesc('period_end')
             ->orderByDesc('amount')
@@ -69,6 +76,7 @@ class DuesController extends Controller
             // ⚠️ الإسناد مش الجمع: لو status جه فاضي، `+` مابيستبدلوش
             // فالقايمة بتفضل من غير اختيار رغم إن الفلتر شغّال.
             'filters' => array_merge($filters, ['status' => $status]),
+            'range' => $range,
             'kpi' => [
                 'due_count' => (clone $allDue)->count(),
                 'due_amount' => (float) (clone $allDue)->sum('amount'),
