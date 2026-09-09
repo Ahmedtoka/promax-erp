@@ -42,3 +42,7 @@ private/
 *service-account*.json
 *.pem
 *.p12
+
+# بيئة QA المحلية للزحف على الشاشات (٩/٩) — نسخة داتابيز منفصلة، ممنوع تتكومت
+.env.qa
+.claude/

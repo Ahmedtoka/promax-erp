@@ -100,12 +100,6 @@ class I18nCheck extends Command
         $views = File::allFiles(resource_path('views'));
 
         foreach ($views as $view) {
-            // الفيوهات القديمة مش جزء من السيستم الحالي
-            if (str_contains($view->getPathname(), 'dashboard')
-                || str_contains($view->getPathname(), 'appcycle')) {
-                continue;
-            }
-
             foreach (file($view->getPathname()) as $i => $line) {
                 // بنتخطى الكومنتات وملفات اللغة
                 if (preg_match('/^\s*(\/\/|\*|\{\{--|#)/', $line)) {
