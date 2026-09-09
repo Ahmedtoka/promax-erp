@@ -163,12 +163,15 @@ class ManualDocController extends Controller
     }
 
     /** الفاعل + المندوب + العميل + التاريخ — الفحوصات المشتركة */
-    private function anchors(Request $request, array $data): array
+    private function anchors(Request $request, array $data, bool $allowDirect = false): array
     {
-        $rep = User::findOrFail($data['user_id']);
+        // التحصيل المباشر (٩/٩) مالوش مندوب — العميل والتاريخ بس
+        $rep = $allowDirect && empty($data['user_id']) ? null : User::findOrFail($data['user_id']);
         $client = Client::findOrFail($data['client_id']);
 
-        Scope::assertRep($request->user(), $rep);
+        if ($rep !== null) {
+            Scope::assertRep($request->user(), $rep);
+        }
         Scope::assertClient($request->user(), $client);
 
         // ⚠️ نص النهار مش منتصف الليل — فروق التوقيت ماتنقلش
@@ -526,10 +529,20 @@ class ManualDocController extends Controller
      * التحصيل وحقول الشيك بتاعة الأبلكيشن بالحرف، والرصيد بيتعاد
      * حسابه جوه نفس الترانزاكشن (عقيدة القيود).
      */
+    /**
+     * POST /ops/manual/collection
+     *
+     * ⭐ **تحصيل مباشر (٩/٩/٢٠٢٦):** `direct=1` = العميل حوّل على البنك أو
+     * بعت شيك من غير مندوب — مفيش `user_id`، وصورة الإثبات إجبارية لغير
+     * الكاش، ولو خصم ضرايب تحت الحساب بتتسجّل قيد `taxded` منفصل.
+     */
     public function storeCollection(Request $request)
     {
+        $direct = $request->boolean('direct');
+
         $data = $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
+            'direct' => ['nullable', 'boolean'],
+            'user_id' => ['nullable', 'required_unless:direct,1', 'exists:users,id'],
             'client_id' => ['required', 'exists:clients,id'],
             'doc_date' => ['required', 'date', 'before_or_equal:today'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
@@ -542,14 +555,24 @@ class ManualDocController extends Controller
             'cheque_bank' => ['nullable', 'string', 'max:120', 'required_if:method,cheque'],
             'cheque_due' => ['nullable', 'date', 'required_if:method,cheque'],
             'note' => ['nullable', 'string', 'max:200'],
+            // ⚠️ المباشر غير النقدي من غير إثبات مايتسجّلش — مفيش مندوب
+            // يُسأل بعدين، فالصورة هي الشاهد الوحيد (نفس قاعدة تحصيل الأبلكيشن)
+            'proof' => ['nullable', 'file', 'image', 'max:8192',
+                \Illuminate\Validation\Rule::requiredIf(
+                    fn () => $direct && $request->input('method') !== Transaction::METHOD_CASH,
+                )],
+            'tax_withheld' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
         ]);
 
-        [$rep, $client, $date] = $this->anchors($request, $data);
+        [$rep, $client, $date] = $this->anchors($request, $data, allowDirect: $direct);
 
         $amount = round((float) $data['amount'], 2);
+        $proofPath = $request->hasFile('proof')
+            ? $request->file('proof')->store('collection-proofs', 'public')
+            : null;
 
-        // ⚠️ القلب المشترك (٧/٩): نفس السيرفس اللي مساعد بروماكس
-        // بينفذ بيها أكشن التحصيل بموافقة — مصدر واحد للعملية
+        // ⚠️ القلب المشترك (٧/٩): نفس السيرفس اللي مساعد بروماكس وكارت
+        // العميل بينفذوا بيها التحصيل — مصدر واحد للعملية
         \App\Services\ManualCollection::record(
             actor: $request->user(),
             rep: $rep,
@@ -561,6 +584,8 @@ class ManualDocController extends Controller
             chequeBank: $data['cheque_bank'] ?? null,
             chequeDue: $data['cheque_due'] ?? null,
             note: $data['note'] ?? null,
+            proofPath: $proofPath,
+            taxWithheld: (float) ($data['tax_withheld'] ?? 0),
         );
 
         return back()->with('ok', __('flash.md_collect_done', [

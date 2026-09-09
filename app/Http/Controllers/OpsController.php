@@ -5374,34 +5374,35 @@ class OpsController extends Controller
             // بيانات الشيك — إجبارية للشيك بس
             'cheque_bank' => ['nullable', 'required_if:method,cheque', 'string', 'max:120'],
             'cheque_due' => ['nullable', 'required_if:method,cheque', 'date'],
+            // ⭐ إثبات التحويل/الشيك + ضرايب مخصومة تحت الحساب (٩/٩/٢٠٢٦)
+            'proof' => ['nullable', 'file', 'image', 'max:8192'],
+            'tax_withheld' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
         ]);
 
-        // ⚠️ **جوّه ترانزاكشن** (تدقيق ٨/٨/٢٠٢٦). القيد و`recalculate()`
-        // كانوا سطرين مكشوفين — ولو الطلب اتقطع بينهم، القيد بيتكتب
-        // والأعمدة المجمّعة مابتتحدّثش. **ده السبب رقم ١ الموثّق
-        // لـ«رصيد العميل ≠ كشف حسابه»**، وكان بيتصلح بإعادة حساب
-        // يدوية من غير ما حد يعرف مصدره.
-        DB::transaction(function () use ($client, $data) {
-            Transaction::create([
-                'client_id' => $client->id,
-                'date' => $data['date'] ?? today(),
-                'memo' => $data['memo'] ?? __('flash.memo_cash_collection'),
-                'debit' => 0,
-                'credit' => $data['amount'],
-                'kind' => 'collection',
-                // ⚠️ **الشيك قيده زي الكاش بالظبط** (قرار المالك) —
-                // بيدخل حساب العميل فوراً، والفرق في البيانات
-                // المرفقة مش في المحاسبة.
-                'method' => $data['method'],
-                'reference' => $data['reference'] ?? null,
-                'cheque_bank' => $data['method'] === Transaction::METHOD_CHEQUE
-                    ? ($data['cheque_bank'] ?? null) : null,
-                'cheque_due' => $data['method'] === Transaction::METHOD_CHEQUE
-                    ? ($data['cheque_due'] ?? null) : null,
-            ]);
+        // ⚠️ **القلب المشترك** (٩/٩): نفس `ManualCollection::record` بتاع
+        // المستند اليدوي ومساعد بروماكس — قيد + ضريبة مخصومة + `recalculate()`
+        // جوه ترانزاكشن واحدة. القيد هنا بلا مندوب (`rep: null`) = «إدخال
+        // مكتبي» في شاشة التحصيلات، والشيك قيده زي الكاش بالظبط (قرار المالك).
+        $date = ! empty($data['date'])
+            ? \Illuminate\Support\Carbon::parse($data['date'])->setTime(12, 0)
+            : now();
 
-            $client->recalculate();
-        });
+        \App\Services\ManualCollection::record(
+            actor: $request->user(),
+            rep: null,
+            client: $client,
+            date: $date,
+            amount: (float) $data['amount'],
+            method: $data['method'],
+            reference: $data['reference'] ?? null,
+            chequeBank: $data['cheque_bank'] ?? null,
+            chequeDue: $data['cheque_due'] ?? null,
+            note: ($data['memo'] ?? null) ?: __('flash.memo_cash_collection'),
+            proofPath: $request->hasFile('proof')
+                ? $request->file('proof')->store('collection-proofs', 'public')
+                : null,
+            taxWithheld: (float) ($data['tax_withheld'] ?? 0),
+        );
 
         return back()->with('ok', __('flash.collection_recorded'));
     }

@@ -157,6 +157,9 @@ return [
     'export_branch_statement' => 'Branch statement (Excel)',
     'running_balance' => 'Running balance',
     'previous_balance' => 'Balance brought forward',
+    'collect_proof' => 'Proof image (cheque / transfer)',
+    'tax_withheld' => 'Tax withheld at source',
+    'tax_withheld_hint' => 'If the client deducted tax from the transfer, enter the withheld amount. It posts as a separate tax entry that reduces their balance too.',
 
     // ═══ Quantities withdrawn (2026-09-08) ═══
     'movements_title' => 'Quantities withdrawn',

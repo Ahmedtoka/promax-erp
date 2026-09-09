@@ -645,7 +645,8 @@
 </dialog>
 
 <dialog id="dlgCollect">
-    <form class="dlg" method="POST" action="{{ route('erp.clients.collect', $c) }}">
+    {{-- ⚠️ `enctype` لازم عشان صورة الإثبات (٩/٩) — من غيره الملف بيوصل null في صمت --}}
+    <form class="dlg" method="POST" action="{{ route('erp.clients.collect', $c) }}" enctype="multipart/form-data">
         @csrf
         <h4>{{ __('client.record_collection_from', ['client' => $c->displayName()]) }}</h4>
         <div class="frow">
@@ -692,6 +693,18 @@
             </div>
         </div>
 
+        {{-- ⭐ إثبات التحويل/الشيك + ضرايب مخصومة تحت الحساب (٩/٩/٢٠٢٦) — تحصيل مباشر من العميل بلا مندوب --}}
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('client.collect_proof') }}</label>
+                <input type="file" name="proof" accept="image/*" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('client.tax_withheld') }}</label>
+                <input type="number" name="tax_withheld" step="0.01" min="0" value="0" style="width:100%">
+            </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">{{ __('client.tax_withheld_hint') }}</div>
         <div><label class="f">{{ __('client.memo') }}</label><input type="text" name="memo" placeholder="{{ __('client.cash_collection') }}" style="width:100%"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
             <button class="btn" type="button" onclick="closeDlg('dlgCollect')">{{ __('common.cancel') }}</button>

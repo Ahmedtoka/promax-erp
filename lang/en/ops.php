@@ -785,6 +785,14 @@ return [
     'md_collect_memo' => 'Manual collection for :rep — back-office entry by :user',
     'md_collect_notif_title' => 'Non-cash collection recorded from the office',
     'md_collect_notif_body' => ':amount from :client via :method — review and reconcile it.',
+    'md_rep_direct' => 'No rep — direct collection from the client (transfer / cheque)',
+    'md_direct_hint' => 'Direct collection: the client paid by bank transfer or cheque with no rep involved. The entry posts to their account on the collection date; proof is required for non-cash.',
+    'md_proof' => 'Proof image (cheque / transfer receipt)',
+    'md_proof_hint' => 'A photo or screenshot of the transfer or cheque. It shows on the collections screen.',
+    'md_tax_withheld' => 'Tax withheld at source',
+    'md_tax_hint' => 'If the client deducted tax from the transfer, enter the withheld amount. It posts as a separate entry on their account.',
+    'md_direct_memo' => 'Direct collection from the client — office entry by :user',
+    'md_taxded_memo' => 'Tax withheld at source on collection :ref — office entry by :user',
 
     // Invoice line editing (Aug 22)
     'edit_inv_btn' => 'Edit lines',

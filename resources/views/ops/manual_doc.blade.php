@@ -13,6 +13,8 @@
             <label class="f">{{ __('ops.md_rep') }}</label>
             <select id="mdRep" style="width:100%">
                 <option value="">—</option>
+                {{-- ⭐ تحصيل مباشر (٩/٩): العميل حوّل/بعت شيك من غير مندوب — التاب الوحيد المتاح هو التحصيل --}}
+                <option value="direct">💳 {{ __('ops.md_rep_direct') }}</option>
                 @foreach ($reps as $r)
                     <option value="{{ $r->id }}">{{ $r->displayName() }} — {{ $r->roleLabel() }}</option>
                 @endforeach
@@ -139,9 +141,11 @@
     {{-- ═══ تاب التحصيل اليدوي (٦/٩): المبلغ + الطريقة (كاش/فيزا/شيك/
          تحويل) + المرجع وبيانات الشيك حسب الطريقة — التاريخ والعميل
          والمندوب من الهيدر فوق زي باقي التابات بالحرف ═══ --}}
+    {{-- ⚠️ `enctype` لازم — صورة الإثبات ملف، ومن غيره `$request->file()` بترجّع null في صمت --}}
     <form method="POST" action="{{ route('ops.manual.collection') }}" class="md-pane" data-pane="col"
-          style="display:none" onsubmit="return mdSubmitCollect(this)">
+          style="display:none" enctype="multipart/form-data" onsubmit="return mdSubmitCollect(this)">
         @csrf
+        <div id="mdDirectHint" class="alert info" style="display:none;margin-bottom:10px">{{ __('ops.md_direct_hint') }}</div>
         <div class="searchbar" style="align-items:flex-end;row-gap:10px">
             <div>
                 <label class="f">{{ __('ops.md_amount') }}</label>
@@ -171,6 +175,19 @@
             <div style="flex:1;min-width:220px">
                 <label class="f">{{ __('ops.md_note') }}</label>
                 <input type="text" name="note" maxlength="200" style="width:100%">
+            </div>
+        </div>
+        {{-- ⭐ إثبات + ضريبة مخصومة (٩/٩) — الإثبات إجباري للمباشر غير النقدي (النجمة بتتقلب بالجافاسكربت) --}}
+        <div class="searchbar" style="align-items:flex-end;row-gap:10px;margin-top:8px">
+            <div style="min-width:260px">
+                <label class="f">{{ __('ops.md_proof') }} <b class="req-star" id="mdProofStar" style="display:none">*</b></label>
+                <input type="file" name="proof" id="mdProof" accept="image/*" style="width:100%">
+                <div class="dash-hint">{{ __('ops.md_proof_hint') }}</div>
+            </div>
+            <div>
+                <label class="f">{{ __('ops.md_tax_withheld') }}</label>
+                <input type="number" name="tax_withheld" step="0.01" min="0" max="99999999" value="0" style="width:170px">
+                <div class="dash-hint">{{ __('ops.md_tax_hint') }}</div>
             </div>
         </div>
         <div class="dash-hint" style="margin-top:8px">{{ __('ops.md_collect_hint') }}</div>
@@ -301,6 +318,22 @@
         }
 
         hint.style.display = 'none';
+
+        // ⭐ المباشر (٩/٩): مفيش عهدة ولا أصناف — التحصيل بس
+        const direct = rep === 'direct';
+        document.querySelectorAll('.md-tab').forEach(function (b) {
+            b.style.display = (direct && b.dataset.tab !== 'col') ? 'none' : '';
+        });
+        document.getElementById('mdDirectHint').style.display = direct ? '' : 'none';
+        mdColMethodChange();
+
+        if (direct) {
+            card.style.display = '';
+            document.getElementById('mdCustodyWarn').style.display = 'none';
+            document.getElementById('mdDisc').style.display = 'none';
+            document.querySelector('.md-tab[data-tab="col"]').click();
+            return;
+        }
 
         const res = await fetch(DATA_URL + '?user_id=' + rep + '&client_id=' + client, {
             headers: {Accept: 'application/json'},
@@ -519,6 +552,11 @@
         document.querySelectorAll('.md-col-chq').forEach(function (e) {
             e.style.display = m === 'cheque' ? '' : 'none';
         });
+        // المباشر غير النقدي: الإثبات إجباري (نفس قاعدة السيرفر)
+        const direct = document.getElementById('mdRep').value === 'direct';
+        const needProof = direct && m !== 'cash';
+        document.getElementById('mdProof').required = needProof;
+        document.getElementById('mdProofStar').style.display = needProof ? '' : 'none';
     };
 
     // سبمت التحصيل — مفيش أصناف، بس مراسي الهيدر (مندوب/عميل/تاريخ)
@@ -534,7 +572,12 @@
             form.appendChild(i);
         };
 
-        add('user_id', document.getElementById('mdRep').value);
+        const rep = document.getElementById('mdRep').value;
+        if (rep === 'direct') {
+            add('direct', '1');
+        } else {
+            add('user_id', rep);
+        }
         add('client_id', document.getElementById('mdClient').value);
         add('doc_date', document.getElementById('mdDate').value);
 
