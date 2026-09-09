@@ -16,7 +16,6 @@ return [
     'performance_title' => 'Rep Performance Board',
     'performance_hint' => 'All month KPIs: sales, achievement, visits, activity, points and commission',
     'net_sales' => 'Net sales',
-    'achievement' => 'Achievement',
     'visits_done' => 'Visits',
     'avg_visit' => 'Avg. stay',
     'minute_unit' => 'min',
@@ -27,9 +26,7 @@ return [
     'check_outs' => 'Check-outs',
     'km_today' => 'KM today',
     'points' => 'Points',
-    'points_money' => 'Points value',
     'commission' => 'Commission',
-    'commission_rate' => 'Commission rate',
     'add_points' => 'Manual points',
     'points_hint' => 'Positive = reward, negative = deduction - the reason is required and shown to the rep',
     'points_value' => 'Points',
@@ -76,5 +73,4 @@ return [
     'closed_by' => 'Closed by',
     'history' => 'Closed days',
     'no_closes' => 'No closed days yet.',
-    'live_figures' => "Today's live figures",
 ];

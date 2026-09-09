@@ -18,7 +18,6 @@ return [
     'performance_title' => 'لوحة أداء المناديب',
     'performance_hint' => 'كل مؤشرات الشهر: مبيعات وتحقيق وزيارات ونشاط ونقاط وعمولة',
     'net_sales' => 'صافي المبيعات',
-    'achievement' => 'التحقيق',
     'visits_done' => 'زيارات',
     'avg_visit' => 'متوسط القعدة',
     'minute_unit' => 'دقيقة',
@@ -29,9 +28,7 @@ return [
     'check_outs' => 'تشيك أوت',
     'km_today' => 'كم النهارده',
     'points' => 'النقاط',
-    'points_money' => 'قيمة النقاط',
     'commission' => 'العمولة',
-    'commission_rate' => 'نسبة العمولة',
     'add_points' => 'نقاط يدوي',
     'points_hint' => 'موجب = مكافأة · سالب = خصم — والسبب إجباري وبيظهر للمندوب',
     'points_value' => 'النقاط',
@@ -80,5 +77,4 @@ return [
     'closed_by' => 'قفله',
     'history' => 'الأيام المقفولة',
     'no_closes' => 'مفيش أيام مقفولة لسه.',
-    'live_figures' => 'أرقام اليوم لايف',
 ];

@@ -13,6 +13,5 @@ return [
     'attr_email_or_code' => 'الإيميل أو كود الموظف',
     'attr_password' => 'كلمة السر',
 
-    'demo_accounts' => 'حسابات تجريبية',
     'email_or_code_ph' => 'الإيميل أو كود الموظف',
 ];

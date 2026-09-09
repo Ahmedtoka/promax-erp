@@ -38,10 +38,8 @@ return [
     'dry' => 'Dry box',
     'rep' => 'Rep',
     'driver' => 'Driver',
-    'crew' => 'Crew',
     'same_person' => 'The rep drives it themselves',
     'no_vehicles' => 'No vehicles',
-    'plate_taken' => 'This plate number is already on another vehicle',
 
     // ═══ Messages ═══
     'added' => 'Branch added',

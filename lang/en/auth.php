@@ -13,6 +13,5 @@ return [
     'attr_email_or_code' => 'email or employee code',
     'attr_password' => 'password',
 
-    'demo_accounts' => 'Demo accounts',
     'email_or_code_ph' => 'Email or employee code',
 ];

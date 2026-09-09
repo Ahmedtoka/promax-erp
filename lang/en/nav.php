@@ -5,7 +5,6 @@ return [
     'batch_report' => 'Stock & Expiry',
 
 
-    'app_name' => 'PROMAX ERP',
     'tagline' => 'Distribution Management System',
 
     // ---------- Groups ----------
@@ -38,7 +37,6 @@ return [
     'shelves' => 'Shelves',
     'expiry' => 'Expiry Report',
     'transfers' => 'Transfers',
-    'pick_orders' => 'Picking Orders',
     'reports' => 'Reports',
 
     'ops_dashboard' => 'Operations Board',
@@ -61,7 +59,6 @@ return [
     'leads_week' => 'Week follow-up',
 
     'team' => 'Team',
-    'language' => 'Language',
 
     'dues' => 'Contract Dues',
     'repclose' => 'Rep Settlements',
@@ -85,7 +82,6 @@ return [
 
     'audit' => 'Activity Log',
     'app_version' => 'App Version',
-    'attendance' => 'Attendance',
 
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'collections' => 'Field Collections',
@@ -94,7 +90,6 @@ return [
     // ═══ بورد الأونلاين + المجموعة المستقلة (2026-08-09) ═══
     'group_hr' => 'Attendance',
     'vans_board' => 'Van Stock Board',
-    'commitments' => 'Promised vs Available',
     'open_visits' => 'Open Visits',
 
     // ═══ Visits board (Aug 15, 2026) ═══

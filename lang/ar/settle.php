@@ -54,9 +54,7 @@ return [
     'doc_title' => 'محضر تصفية مندوب',
     'sign_rep' => 'توقيع المندوب',
     'sign_accountant' => 'توقيع الحسابات',
-    'sign_warehouse' => 'توقيع أمين المخزن',
     'invoice_count' => ':count فاتورة',
-    'window_from' => 'من',
     'window_to' => 'إلى',
     'by' => 'قفلها',
     'note' => 'ملاحظات',
@@ -66,7 +64,6 @@ return [
 
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'field_collections' => 'تحصيلات الميدان',
-    'non_cash_hint' => 'شيكات وتحويلات — بره النقدية',
     'collections_to_match' => 'تحصيلات الفترة',
     'collections_hint' => 'الكاش داخل «المتوقع» — والشيكات والتحويلات تسليم مستندات',
     'proof' => 'الإثبات',

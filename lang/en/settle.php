@@ -54,9 +54,7 @@ return [
     'doc_title' => 'Rep Settlement Note',
     'sign_rep' => "Rep's signature",
     'sign_accountant' => "Accountant's signature",
-    'sign_warehouse' => "Warehouse keeper's signature",
     'invoice_count' => ':count invoices',
-    'window_from' => 'From',
     'window_to' => 'To',
     'by' => 'Closed by',
     'note' => 'Notes',
@@ -66,7 +64,6 @@ return [
 
     // ═══ أوبشنات الزيارة الجديدة (2026-08-09) ═══
     'field_collections' => 'Field collections',
-    'non_cash_hint' => 'cheques & transfers — outside cash',
     'collections_to_match' => 'Collections in this window',
     'collections_hint' => 'Cash is inside "expected" — cheques and transfers are document handover',
     'proof' => 'Proof',

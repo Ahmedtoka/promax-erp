@@ -3,7 +3,6 @@
 return [
     'governorate' => 'Governorate',
     'govs' => 'Governorates',
-    'govs_hint' => 'Edit Arabic/English names or add a new governorate - changes show everywhere instantly',
     'new_gov' => 'New governorate',
     'edit_gov' => 'Edit governorate',
     'gov_form_hint' => 'Both names are required - a new governorate gets a fixed key from its English name that never changes.',
@@ -17,7 +16,6 @@ return [
     'no_zone_in_governorate' => 'No zones defined in this governorate yet.',
     'location_url' => 'Location link',
     'location_url_hint' => 'A Google Maps link — the rep opens it on their phone.',
-    'location_url_invalid' => 'The link must start with http or https.',
 
     'gov' => [
         'cairo' => 'Cairo',
@@ -49,7 +47,6 @@ return [
         'new_valley' => 'New Valley',
     ],
     // Geographic reference (2026-08-05)
-    'iso' => 'ISO code',
     'capital' => 'Capital',
     'region' => 'Region',
     'coords' => 'Coordinates',
@@ -57,11 +54,6 @@ return [
     'on_map' => 'On the map',
     'search_zones_ph' => 'Search by code or zone name…',
     'zones_visible' => 'zones shown',
-    'coverage_map' => 'Coverage map',
-    'coverage_hint' => 'Every zone shows its active shops - one glance tells you how far the company reaches',
-    'covered_zones' => 'covered zones',
-    'active_shops' => 'active shops',
-    'show_empty_zones' => 'Show empty zones',
     'geo_ref_hint' => 'Data comes from the official geographic reference - ISO 3166-2 with coordinates for every governorate and zone.',
 
     'add_zone' => 'New zone',

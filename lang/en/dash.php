@@ -6,7 +6,6 @@ return [
     'filters_hint' => 'These filters apply to every figure and chart below — and every number is clickable, opening its report with the same filters.',
 
     'k_sales' => 'Period sales',
-    'h_sales' => 'Invoices grand total incl. tax for the period — click for the detailed invoices report.',
 
     // ═══ Equation row (2026-08-26): sales − collections − returns = net movement ═══
     'eq_cash' => 'cash',
@@ -28,8 +27,6 @@ return [
     'h_coll' => 'Everything actually collected: cash with invoices + field collections — click to open collections.',
     'of_sales' => 'of sales',
     'docs' => 'docs',
-    'h_returns' => 'Returns value within the period — click for their documents.',
-    'h_debt' => 'Outstanding receivables right now (not period-filtered — a balance is a balance) — click to open receivables.',
     'h_visits' => 'Rep visits within the period plus gifts handed — click for the visits log.',
     'pending_req' => 'pending requests',
     'h_new' => 'Clients who joined within the period — click to see them.',
@@ -56,16 +53,9 @@ return [
 
     'k_stock' => 'Stock value',
     'h_stock' => 'Warehouse goods at current selling price — click to open inventory.',
-    'k_open_pos' => 'Open sales orders',
-    'h_open_pos' => 'Orders not yet delivered — click for the sales orders report.',
-    'h_inactive' => 'Which clients have not been visited lately — click for the list.',
-    'h_hub' => 'Every system report in one place — 15+ reports with Excel export.',
 
     // V2 (Aug 23)
     'head_title' => 'Company at a glance',
-    'k_pos' => 'Delivered orders',
-    'delivered_n' => 'orders',
-    'h_pos' => 'Sales orders actually delivered within the period with their value - and the still-open count beside it.',
     'k_street' => 'Stock on the street',
     'vans_open' => 'open vans',
     'units' => 'pcs',

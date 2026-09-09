@@ -37,8 +37,6 @@ return [
 
 
     // Chunked upload (Aug 11, 2026)
-    'upload_now' => 'Upload file',
-    'pick_file_first' => 'Pick the APK file first',
     'chunk_of' => 'Uploading… part :x of :y',
     'upload_done' => 'Fully uploaded - refreshing…',
     'upload_failed' => 'Upload failed',
