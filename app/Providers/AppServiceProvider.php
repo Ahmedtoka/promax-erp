@@ -99,7 +99,8 @@ class AppServiceProvider extends ServiceProvider
         // مستخدم ميداني جديد = حساب نقدية جديد (لو الشجرة متولدة)
         \App\Models\User::created(function (\App\Models\User $u) {
             try {
-                if (in_array($u->role, \App\Models\User::FIELD_WORK_ROLES, true)
+                if ($u->active
+                    && in_array($u->role, \App\Models\User::FIELD_WORK_ROLES, true)
                     && \App\Models\Gl\GlAccount::where('system_key', 'rep_cash')->exists()) {
                     \App\Models\Gl\GlAccount::repCash($u);
                 }

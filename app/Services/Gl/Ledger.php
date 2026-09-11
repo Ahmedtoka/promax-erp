@@ -83,8 +83,17 @@ class Ledger
 
     public function repost(Model $source, ?User $by = null): ?GlEntry
     {
-        // unpost+post داخل ترانزاكشن واحد — لو الـpost فشل (مثلاً القاعدة
-        // بقت غير مفعّلة) مايتمسحش القيد القديم من غير بديل
+        // ⚠️ السويتش مقفول = مفيش لمس خالص — أدوات الفاتورة الإدارية
+        // (redate/reprice/...) بتنادي repost() دايماً بعد التعديل حتى
+        // لو الشجرة أصلاً مقفولة، ولو سبنا unpost() يشتغل هنا كانت
+        // هتمسح قيد قديم (لو موجود من قبل ما السويتش يتقفل) من غير
+        // بديل — القيد القديم أولى بالبقاء من غير شجرة (مراجعة الجولة ١)
+        if (Setting::read('gl_enabled') !== '1') {
+            return $this->autoEntryFor($source);
+        }
+
+        // unpost+post داخل ترانزاكشن واحد — لو الـpost فشل (مثلاً تاريخ
+        // المصدر قبل `gl_start_date`) مايتمسحش القيد القديم من غير بديل
         return DB::transaction(function () use ($source, $by) {
             $this->unpost($source);
 

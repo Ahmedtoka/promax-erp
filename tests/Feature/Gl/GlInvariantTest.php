@@ -2,15 +2,23 @@
 // tests/Feature/Gl/GlInvariantTest.php
 namespace Tests\Feature\Gl;
 
+use App\Models\Batch;
+use App\Models\Client;
+use App\Models\Custody;
+use App\Models\CustodyItem;
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlEntry;
+use App\Models\Invoice;
+use App\Models\Product;
 use App\Models\RepSettlement;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\Gl\Ledger;
 use Database\Seeders\GlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 class GlInvariantTest extends TestCase
@@ -76,14 +84,179 @@ class GlInvariantTest extends TestCase
         GlEntry::with('lines')->get()->each(fn ($e) => $this->assertSame($e->totalDebit(), $e->totalCredit(), $e->number));
     }
 
+    /**
+     * ⚠️ مراجعة الجولة ١ (فحص ٣): التيست القديم كان زيف — الـ
+     * `User::created` hook (Task 5) بيعمل حساب المندوب أول ما يتعمل
+     * لوحده، فالأمر مايعملش حاجة والتيست بينجح حتى لو الأمر نفسه اتكسر.
+     * هنا بنمسح الحسابات اللي الهوك عملها الأول عشان نختبر **الأمر**
+     * مش الهوك.
+     */
     public function test_the_sync_command_creates_a_cash_account_for_every_active_field_user(): void
     {
         $this->makeRep();
         $this->makeRep();
-        $this->artisan('promax:gl-sync-reps')->assertSuccessful();
+        GlAccount::whereNotNull('user_id')->delete();
+
+        $this->artisan('promax:gl-sync-reps')
+            ->expectsOutputToContain('2')
+            ->assertSuccessful();
 
         $this->assertSame(2, GlAccount::where('is_system', true)->whereNotNull('user_id')->count());
-        $this->artisan('promax:gl-sync-reps')->assertSuccessful();
+
+        $this->artisan('promax:gl-sync-reps')
+            ->expectsOutputToContain('0')
+            ->assertSuccessful();
+
         $this->assertSame(2, GlAccount::whereNotNull('user_id')->count(), 'idempotent');
     }
+
+    public function test_the_sync_command_fails_when_the_tree_is_not_seeded(): void
+    {
+        GlAccount::whereNotNull('user_id')->delete();
+        GlAccount::where('system_key', 'rep_cash')->delete();
+
+        $this->artisan('promax:gl-sync-reps')->assertFailed();
+    }
+
+    // ═══════════════════════ أدوات الفاتورة الإدارية ═══════════════════════
+
+    /**
+     * راكب مندوب + عميل + صنف + عهدة مفتوحة، جاهز للبيع عبر الـAPI
+     * الحقيقي (نفس مسرح `InvoiceTaxLedgerTest::scene()`) — عشان
+     * القيود اللي بنختبر الأدوات الإدارية عليها تبقى قيود حقيقية
+     * مرحّلة من مسار البيع الفعلي مش قيود مصطنعة.
+     *
+     * @return array{0: User, 1: Client, 2: Product}
+     */
+    private function sceneReadyToSell(): array
+    {
+        $channel = $this->makeChannel(0.0);
+        $zone = $this->makeZone();
+        $rep = $this->makeRep(['zone_id' => $zone->id, 'channel_id' => $channel->id]);
+        $this->punchIn($rep);
+
+        $client = $this->makeClient(['zone_id' => $zone->id, 'channel_id' => $channel->id, 'taxable' => false]);
+        $product = $this->makeProduct(['cost' => 10, 'price_new' => 20]);
+        $warehouse = $this->makeWarehouse();
+
+        $batch = Batch::create([
+            'product_id' => $product->id,
+            'warehouse_id' => $warehouse->id,
+            'batch_no' => 'B-1',
+            'produced_on' => today()->subMonth(),
+            'expires_on' => today()->addMonths(6),
+            'qty_received' => 100,
+            'qty_remaining' => 100,
+            'cost' => 10,
+        ]);
+
+        $custody = Custody::create([
+            'user_id' => $rep->id,
+            'warehouse_id' => $warehouse->id,
+            'date' => today(),
+            'status' => 'open',
+        ]);
+
+        CustodyItem::create([
+            'custody_id' => $custody->id,
+            'product_id' => $product->id,
+            'batch_id' => $batch->id,
+            'assigned' => 50,
+            'sold' => 0,
+        ]);
+
+        return [$rep, $client, $product];
+    }
+
+    /** كل قيود الشجرة المرتبطة بقيود كشف حساب الفاتورة دي (مش بمعرّفها هي) */
+    private function glEntriesForInvoice(Invoice $invoice): Collection
+    {
+        $txIds = Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->pluck('id');
+
+        return GlEntry::where('source_type', Transaction::class)->whereIn('source_id', $txIds)->get();
+    }
+
+    /**
+     * فاتورة كاش حقيقية عبر مسار البيع بالـAPI: قيد بيع + قيد تحصيل
+     * تلقائي مربوطين بالفاتورة، اتنين مرحّلين لأن السويتش شغال من
+     * `setUp()`.
+     */
+    public function test_toggle_invoice_payment_unposts_and_reposts_the_collection_entry(): void
+    {
+        $admin = $this->makeAdmin();
+        [$rep, $client, $product] = $this->sceneReadyToSell();
+        // ⚠️ كاش/آجل من تعريف العميل مش من البوست (قرار المالك ٣/٨) —
+        // حقل `payment` في `/api/invoices` بيتطنش
+        $client->update(['payment_terms' => 'cash']);
+
+        $resp = $this->sellApi($rep, $client, [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'cash']);
+        $resp->assertCreated();
+
+        $invoice = Invoice::latest('id')->first();
+        $this->assertNotNull($invoice);
+        $this->assertSame('cash', $invoice->payment);
+        $this->assertCount(2, $this->glEntriesForInvoice($invoice), 'فاتورة الكاش لازم تولّد قيد بيع + قيد تحصيل');
+
+        // كاش → آجل: قيد التحصيل بيتشال، والفصل بالصف (ruling A) بيخلي
+        // TransactionObserver::deleted يشيل قيده من الشجرة تلقائي
+        $this->actingAs($admin)
+            ->post(route('ops.invoices.payment', $invoice))
+            ->assertRedirect();
+
+        $invoice = $invoice->fresh();
+        $this->assertSame('credit', $invoice->payment);
+        $this->assertCount(1, $this->glEntriesForInvoice($invoice), 'قيد التحصيل لازم يتشال من الشجرة مع الفاتورة');
+        $this->assertTrue(app(Ledger::class)->invariants()['receivables']['ok']);
+
+        // آجل → كاش: قيد تحصيل جديد بيتعمل وبيترحّل من نفسه
+        $this->actingAs($admin)
+            ->post(route('ops.invoices.payment', $invoice))
+            ->assertRedirect();
+
+        $invoice = $invoice->fresh();
+        $this->assertSame('cash', $invoice->payment);
+        $this->assertCount(2, $this->glEntriesForInvoice($invoice), 'رجوعها لكاش لازم يرجّع قيد التحصيل');
+        $this->assertTrue(app(Ledger::class)->invariants()['receivables']['ok']);
+    }
+
+    public function test_redate_invoice_moves_the_gl_entries_to_the_new_date_and_period(): void
+    {
+        $admin = $this->makeAdmin();
+        [$rep, $client, $product] = $this->sceneReadyToSell();
+
+        $resp = $this->sellApi($rep, $client, [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'credit']);
+        $resp->assertCreated();
+
+        $invoice = Invoice::latest('id')->first();
+        $this->assertNotNull($invoice);
+        $entriesBefore = $this->glEntriesForInvoice($invoice);
+        $this->assertGreaterThan(0, $entriesBefore->count());
+
+        $newDate = today()->subDays(3);
+
+        $this->actingAs($admin)
+            ->post(route('ops.invoices.redate', $invoice), ['date' => $newDate->toDateString()])
+            ->assertRedirect();
+
+        $invoice = $invoice->fresh();
+
+        foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $tx) {
+            $this->assertSame($newDate->toDateString(), $tx->date->toDateString());
+        }
+
+        $entriesAfter = $this->glEntriesForInvoice($invoice);
+        $this->assertSame($entriesBefore->count(), $entriesAfter->count(), 'مفيش قيد لازم يضيع أو يتضاعف');
+
+        foreach ($entriesAfter as $e) {
+            $this->assertSame($newDate->toDateString(), $e->date->toDateString());
+            $this->assertSame($newDate->format('Y-m'), $e->period_key);
+        }
+    }
+
+    // ⚠️ `editInvoiceItems` مش متغطي هنا — مسرحه محتاج عهدة مفتوحة
+    // ببند مطابق (نفس الصنف/الباتش) وقفل/فتح على مستوى بيانات دقيق
+    // (custody item lockForUpdate على `sold`)، وده أغلى بكتير من نطاق
+    // مراجعة الجولة دي. الحماية بتاعته (`repostInvoiceGl`) نفس الأربعة
+    // التانية اللي اتغطوا هنا وهناك بالفعل، فمفيش سلوك جديد يستاهل
+    // تيست منفصل غالي.
 }

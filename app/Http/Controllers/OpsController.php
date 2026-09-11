@@ -4537,8 +4537,9 @@ class OpsController extends Controller
         // الشجرة: الترقيم بيلمس كل الفواتير مش دفعة واحدة بس — repost
         // لكل قيد على حدة تكلفته عالية هنا، فبدل كده rebuild كامل من
         // بداية الشجرة. محمي: فشله (فترة مقفولة/فحص ثابت) ماترجّعش
-        // الترقيم اللي خلص فعلاً (٩/٩)
-        if (\App\Models\Setting::read('gl_enabled') === '1') {
+        // الترقيم اللي خلص فعلاً (٩/٩). $count == 0 = مفيش رقم اتغيّر
+        // فعلياً (مفيش memo لقيد اتلمس) — rebuild من غير داعي.
+        if ($count > 0 && \App\Models\Setting::read('gl_enabled') === '1') {
             try {
                 app(\App\Services\Gl\Ledger::class)->rebuild(
                     \Illuminate\Support\Carbon::parse(\App\Models\Setting::read('gl_start_date') ?: '1970-01-01'),
@@ -4720,6 +4721,23 @@ class OpsController extends Controller
     }
 
     /**
+     * الشجرة: القيود اتعدّلت بـwhereKey()->update() (أو مسح/إنشاء مباشر)
+     * فالـobserver ماشافهاش (٩/٩) — أدوات الفاتورة الإدارية كلها بتنادي
+     * دي بعد ما تخلّص تعديلها جوه نفس الـDB::transaction. محمي: مشكلة
+     * في الدفتر لازم تتسجل وميوقفش/يرجّع تعديل الأدمن نفسه.
+     */
+    private function repostInvoiceGl(Invoice $invoice, string $event): void
+    {
+        try {
+            foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                app(\App\Services\Gl\Ledger::class)->repost($glTx);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('gl.repost failed', ['invoice' => $invoice->id, 'event' => $event, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * ═══ تحويل فاتورة لعميل تاني (١٨ أغسطس ٢٠٢٦) ═══
      *
      * طلب المالك: «المندوب عمل فاتورة غلط نزلها على فرع تاني من نفس
@@ -4789,16 +4807,7 @@ class OpsController extends Controller
             $from->recalculate();
             $to->recalculate();
 
-            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
-            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
-            // في الدفتر ماترجّعش تحويل الفاتورة الإداري
-            try {
-                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'reassignInvoice', 'error' => $e->getMessage()]);
-            }
+            $this->repostInvoiceGl($invoice, 'reassignInvoice');
         });
 
         return back()->with('ok', __('ops.invoice_reassigned', [
@@ -4853,16 +4862,7 @@ class OpsController extends Controller
 
             $invoice->client->recalculate();
 
-            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
-            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
-            // في الدفتر ماترجّعش تعديل التاريخ الإداري
-            try {
-                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'redateInvoice', 'error' => $e->getMessage()]);
-            }
+            $this->repostInvoiceGl($invoice, 'redateInvoice');
         });
 
         return back()->with('ok', __('ops.invoice_redated', [
@@ -4915,11 +4915,14 @@ class OpsController extends Controller
 
         DB::transaction(function () use ($invoice, $to) {
             if ($to === 'credit') {
-                // قيد التحصيل **المربوط بالفاتورة دي بس**
+                // قيد التحصيل **المربوط بالفاتورة دي بس** — مسح صف بصف
+                // (مش مسح جماعي) عشان TransactionObserver::deleted يشوفه
+                // ويشيل قيد الشجرة المقابل (ruling A، مراجعة الجولة ١)
                 Transaction::where('source_type', Invoice::class)
                     ->where('source_id', $invoice->id)
                     ->where('kind', 'collection')
-                    ->delete();
+                    ->get()
+                    ->each->delete();
             } else {
                 // ⚠️ حارس التكرار — لو فيه قيد تحصيل مربوط أصلاً
                 // (دوسة مكررة/داتا قديمة) مانضيفش تاني فوقه.
@@ -4950,16 +4953,7 @@ class OpsController extends Controller
             // أشهر باج في رَنبوك الأرقام: تعديل قيود من غير إعادة حساب
             $invoice->client->recalculate();
 
-            // الشجرة: قيد التحصيل اتحذف/اتنشأ وقيد البيع مالوش تعديل
-            // مباشر — لازم repost صريح على كل قيود الفاتورة، ومحمي
-            // عشان مشكلة في الدفتر ماترجّعش تبديل الكاش/الآجل الإداري
-            try {
-                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'toggleInvoicePayment', 'error' => $e->getMessage()]);
-            }
+            $this->repostInvoiceGl($invoice, 'toggleInvoicePayment');
         });
 
         return back()->with('ok', __('ops.pay_toggled', [
@@ -5079,16 +5073,7 @@ class OpsController extends Controller
 
             $client->recalculate();
 
-            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
-            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
-            // في الدفتر ماترجّعش إعادة التسعير الإداري
-            try {
-                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'repriceInvoice', 'error' => $e->getMessage()]);
-            }
+            $this->repostInvoiceGl($invoice, 'repriceInvoice');
         });
 
         $invoice->refresh();
@@ -5373,16 +5358,7 @@ class OpsController extends Controller
 
                 $client->recalculate();
 
-                // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
-                // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
-                // في الدفتر ماترجّعش تعديل بنود الفاتورة الإداري
-                try {
-                    foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                        app(\App\Services\Gl\Ledger::class)->repost($glTx);
-                    }
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'editInvoiceItems', 'error' => $e->getMessage()]);
-                }
+                $this->repostInvoiceGl($invoice, 'editInvoiceItems');
             });
         } catch (\App\Exceptions\Rejected $e) {
             return back()->withErrors(['edit_items' => $e->getMessage()]);
@@ -5508,9 +5484,13 @@ class OpsController extends Controller
                     $row->decrement('sold', (int) $it->qty);
                 }
 
+                // مسح صف بصف — مش مسح جماعي — عشان
+                // TransactionObserver::deleted يشوف كل صف ويشيل قيد
+                // الشجرة المقابل (ruling A، مراجعة الجولة ١)
                 Transaction::where('source_type', Invoice::class)
                     ->where('source_id', $invoice->id)
-                    ->delete();
+                    ->get()
+                    ->each->delete();
 
                 $invoice->items()->delete();
                 $invoice->delete();
