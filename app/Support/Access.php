@@ -486,8 +486,17 @@ class Access
         // إيداع، عهدة نقدية) — شغل المحاسب وحده، وشاشات «الفلوس»
         // فوقيها بيشوفها المدير كمان.
         'nav.group_gl' => [
+            // ⚠️ الترتيب = ترتيب الشغل: الشجرة الأول (هي المرجع)، بعدين
+            // اليومية، بعدين التقارير التلاتة، وبعدين السندات، والإعدادات
+            // آخر حاجة — مش أبجدي ولا بترتيب ما اتكتبوا.
+            ['gl.accounts', '🌳', 'nav.gl_accounts', 'gl.accounts*', null],
+            ['gl.entries', '📒', 'nav.gl_entries', 'gl.entries*', null],
+            ['gl.trial_balance', '⚖️', 'nav.gl_trial_balance', 'gl.trial_balance*', null],
+            ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],
+            ['gl.balance_sheet', '🏛️', 'nav.gl_balance_sheet', 'gl.balance_sheet*', null],
             ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
+            ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],
 
         // ═══ ٦. التقارير — كلها في مكان واحد ═══
@@ -632,8 +641,21 @@ class Access
         // ⚠️ مفتاح واحد لكل الكتابة في الدفتر: سند مصروف، حركة نقدية،
         // وإلغاؤهم. منع المفتاح بيخلي الشاشة **قراءة** من غير ما نخفيها —
         // المحاسب الجديد يشوف السندات قبل ما ياخد حق تسجيلها.
-        // (Task 8 بيزوّد راوتات القيد اليدوي على نفس المفتاح)
-        'act.gl.post' => ['perm.act_gl_post', 'gl.expenses', ['accountant'], ['gl.expenses.store', 'gl.expenses.void', 'gl.cash.store', 'gl.cash.void']],
+        // (١٢/٩) اتزوّد عليه: القيد اليدوي، تحويل حساب السطر (✎)، إضافة
+        // وتعديل حساب في الشجرة، وقفل الفترة — كلها كتابة في نفس الدفتر.
+        'act.gl.post' => ['perm.act_gl_post', 'gl.expenses', ['accountant'], [
+            'gl.expenses.store', 'gl.expenses.void', 'gl.cash.store', 'gl.cash.void',
+            'gl.entries.store', 'gl.entries.override',
+            'gl.accounts.store', 'gl.accounts.update', 'gl.periods.close',
+        ]],
+        // ⚠️ **أدمن بس** (`[]`): القواعد بتحدد كل قيد جاي، وفتح فترة
+        // مقفولة بيرجّع شهر معتمد للتعديل، وإعادة البناء بتمسح كل القيود
+        // الآلية وتولّدها تاني. الشاشة نفسها (`gl.settings`) مفتوحة
+        // للمحاسب يقرا منها — الكتابة هي اللي مقفولة.
+        'act.gl.admin' => ['perm.act_gl_admin', 'gl.settings', [], [
+            'gl.settings.rules', 'gl.settings.general', 'gl.periods.reopen',
+            'gl.rebuild.preview', 'gl.rebuild',
+        ]],
 
         // ═══ الإعدادات ═══
         'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password', 'erp.channels.manager']],

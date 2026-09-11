@@ -81,6 +81,7 @@ return [
     'act_money_dues' => 'Dues: generate, settle, waive',
     'act_money_eta' => 'Tax & ETA export',
     'act_gl_post' => 'Post entries, expenses and cash movements',
+    'act_gl_admin' => 'Posting rules, reopening periods and rebuilding entries',
     'act_team_manage' => 'Team & passwords',
     'act_org_manage' => 'Zones (and quick chain)',
     'act_org_structure' => 'Governorates, branches, vehicles, chains & channels',

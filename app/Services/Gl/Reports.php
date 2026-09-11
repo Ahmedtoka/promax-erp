@@ -35,6 +35,52 @@ class Reports
         return round($a->normal_side === 'debit' ? $d - $c : $c - $d, 2);
     }
 
+    /**
+     * رصيد موقّع لـ**كل** حساب في الشجرة — بما فيهم المجموعات اللي
+     * مافيهاش سطور (`is_postable = false`)، عشان شاشة الشجرة تعرض
+     * رصيد على كل عقدة.
+     *
+     * ⚠️ **كويري واحدة مجمّعة + قراءة واحدة للشجرة.** النداء على
+     * `balanceBetween()` لكل حساب كان معناه كويري لكل عقدة (٣٠+ كويري
+     * على شاشة واحدة، وبتزيد مع كل حساب حر المالك بيضيفه). هنا
+     * بنجمّع الصافي الخام (مدين ناقص دائن) وبنطلّعه لفوق في سلسلة
+     * الآباء، وبعدين بنوقّعه بطبيعة **كل** حساب لوحده — الأب ممكن
+     * تكون طبيعته عكس ابنه (خصم مسموح تحت الإيرادات).
+     *
+     * @return array<int, float>  id ⇒ الرصيد
+     */
+    public function balancesByAccount(?Carbon $from, ?Carbon $to): array
+    {
+        $accounts = GlAccount::orderBy('id')->get(['id', 'parent_id', 'normal_side']);
+        $parent = [];
+        $net = [];
+        foreach ($accounts as $a) {
+            $parent[$a->id] = $a->parent_id;
+            $net[$a->id] = 0.0;
+        }
+
+        foreach ($this->sums($from, $to) as $id => $s) {
+            if (! array_key_exists($id, $net)) {
+                continue;   // سطر على حساب اتمسح — مش بيتحسب على حد
+            }
+            $v = (float) $s->d - (float) $s->c;
+            $node = (int) $id;
+            // ⚠️ حارس العمق: أب بيشاور على نفسه (داتا مكسورة) كان
+            // هيخلي اللوب مالهاش آخر والصفحة تعلّق من غير رسالة
+            for ($depth = 0; $node !== null && $depth < 50; $depth++) {
+                $net[$node] += $v;
+                $node = $parent[$node] ?? null;
+            }
+        }
+
+        $out = [];
+        foreach ($accounts as $a) {
+            $out[$a->id] = round($a->normal_side === 'debit' ? $net[$a->id] : -$net[$a->id], 2);
+        }
+
+        return $out;
+    }
+
     public function trialBalance(?Carbon $from, ?Carbon $to): array
     {
         $period = $this->sums($from, $to);

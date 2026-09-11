@@ -721,6 +721,37 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/expenses', [$g, 'index'])->name('expenses');
         Route::post('/expenses', [$g, 'store'])->name('expenses.store');
         Route::post('/expenses/{expense}/void', [$g, 'void'])->name('expenses.void');
+        // ═══ شجرة الحسابات وكشف الحساب ═══
+        $a = \App\Http\Controllers\Gl\AccountController::class;
+        Route::get('/accounts', [$a, 'index'])->name('accounts');
+        Route::post('/accounts', [$a, 'store'])->name('accounts.store');
+        Route::get('/accounts/{account}', [$a, 'show'])->name('accounts.show');
+        Route::post('/accounts/{account}', [$a, 'update'])->name('accounts.update');
+
+        // ═══ اليومية — القيود وسطورها ═══
+        $e = \App\Http\Controllers\Gl\EntryController::class;
+        Route::get('/entries', [$e, 'index'])->name('entries');
+        Route::post('/entries', [$e, 'store'])->name('entries.store');
+        Route::post('/entries/lines/{line}/override', [$e, 'override'])->name('entries.override');
+
+        // ═══ التقارير المالية ═══
+        $r = \App\Http\Controllers\Gl\ReportController::class;
+        Route::get('/trial-balance', [$r, 'trialBalance'])->name('trial_balance');
+        Route::get('/income', [$r, 'income'])->name('income');
+        Route::get('/balance-sheet', [$r, 'balanceSheet'])->name('balance_sheet');
+
+        // ═══ الإعدادات — الشاشة للمحاسب، والكتابة فيها أدمن بس ═══
+        // ⚠️ قفل الفترة شغل يومي للمحاسب، بس **فتحها تاني** وتغيير
+        // القواعد وإعادة البناء قرارات بتحرّك أرصدة الشركة كلها.
+        $s = \App\Http\Controllers\Gl\SettingsController::class;
+        Route::get('/settings', [$s, 'index'])->name('settings');
+        Route::post('/periods/{key}/close', [$s, 'closePeriod'])->name('periods.close');
+        Route::post('/periods/{key}/reopen', [$s, 'reopenPeriod'])->middleware('role:admin')->name('periods.reopen');
+        Route::post('/settings/rules', [$s, 'saveRules'])->middleware('role:admin')->name('settings.rules');
+        Route::post('/settings/general', [$s, 'saveGeneral'])->middleware('role:admin')->name('settings.general');
+        Route::post('/rebuild/preview', [$s, 'rebuildPreview'])->middleware('role:admin')->name('rebuild.preview');
+        Route::post('/rebuild', [$s, 'rebuild'])->middleware('role:admin')->name('rebuild');
+
         $c = \App\Http\Controllers\Gl\CashMovementController::class;
         Route::get('/cash', [$c, 'index'])->name('cash');
         Route::post('/cash', [$c, 'store'])->name('cash.store');

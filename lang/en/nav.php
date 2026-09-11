@@ -64,8 +64,14 @@ return [
 
     // General ledger (Sep 11, 2026)
     'group_gl' => 'General Ledger',
+    'gl_accounts' => 'Chart of Accounts',
+    'gl_entries' => 'Journal',
+    'gl_trial_balance' => 'Trial Balance',
+    'gl_income' => 'Income Statement',
+    'gl_balance_sheet' => 'Balance Sheet',
     'gl_expenses' => 'Expenses',
     'gl_cash' => 'Cash Movements',
+    'gl_settings' => 'Ledger Settings',
 
     'repclose' => 'Rep Settlements',
     'dayclose' => 'Day Close',

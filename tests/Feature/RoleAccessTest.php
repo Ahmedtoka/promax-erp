@@ -144,7 +144,7 @@ class RoleAccessTest extends TestCase
 
             // شاشات السيستم بس — مش اللوجين ولا تبديل اللغة ولا الـAPI
             // ⚠️ `online.` و`notifications.` اتضافوا (٨/٩) — كانوا بره الفحص
-            if (! preg_match('/^(erp|wh|ops|online|notifications)\./', $name)) {
+            if (! preg_match('/^(erp|wh|ops|online|notifications|gl)\./', $name)) {
                 continue;
             }
 
@@ -507,7 +507,7 @@ class RoleAccessTest extends TestCase
 
     private function isScreenRoute(string $name): bool
     {
-        return preg_match('/^(erp|wh|ops|online|notifications)\./', $name) === 1;
+        return preg_match('/^(erp|wh|ops|online|notifications|gl)\./', $name) === 1;
     }
 
     /** المسار من غير الكويري — `?page=2` و`?status=x` نفس الشاشة */
@@ -661,7 +661,7 @@ class RoleAccessTest extends TestCase
             $known[$this->pathOf($seenUrl)] = true;
         }
 
-        preg_match_all('~["\']((?:https?://[^/"\']+)?/(?:erp|wh|ops|online|notifications)(?:/[^"\'\s<>]*)?)["\']~', $html, $jm);
+        preg_match_all('~["\']((?:https?://[^/"\']+)?/(?:erp|wh|ops|online|notifications|gl)(?:/[^"\'\s<>]*)?)["\']~', $html, $jm);
 
         foreach (array_unique($jm[1]) as $u) {
             $u = html_entity_decode($u);
