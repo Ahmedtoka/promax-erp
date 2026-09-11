@@ -28,10 +28,18 @@ class ExpenseController extends Controller
             ->when($request->filled('account'), fn ($q) => $q->where('account_id', $request->integer('account')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->value()));
 
+        // ⚠️ **المجموع والعدد لازم يكونوا على نفس المجموعة.** المجموع
+        // كان مقفول على `posted` والعدد بياخد من الـpaginator (كل
+        // الحالات) — يعني فلتر «ملغي» كان بيوري ٣ سندات بمجموع صفر،
+        // والمحاسب يفتكر إن فيه سندات مبلغها ضاع. لو فيه فلتر حالة
+        // بنحترمه، وغير كده المرحّل هو الافتراضي.
+        $money = $request->filled('status') ? (clone $q) : (clone $q)->where('status', 'posted');
+
         return view('gl.expenses', [
             'range' => $range,
             'rows' => (clone $q)->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
-            'total' => (float) (clone $q)->where('status', 'posted')->sum('amount'),
+            'total' => (float) (clone $money)->sum('amount'),
+            'count' => (int) (clone $money)->count(),
             'accounts' => GlAccount::where('type', 'expense')->where('is_postable', true)->where('active', true)->orderBy('code')->get(),
             'reps' => User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'code']),
             'employees' => User::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'code']),
@@ -49,7 +57,12 @@ class ExpenseController extends Controller
             'account_id' => ['required', Rule::exists('gl_accounts', 'id')->where('type', 'expense')->where('is_postable', 1)->where('active', 1)],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
             'paid_from' => ['required', Rule::in(Expense::PAID_FROM)],
-            'paid_from_user_id' => ['required_if:paid_from,rep_cash', 'nullable', 'exists:users,id'],
+            // ⚠️ **مش `exists:users,id` وبس.** المفتاح ده بيوصل لـ
+            // `GlAccount::repCash()` اللي بتفتح حساب نقدية جديد لأي
+            // يوزر بيتبعت — يعني ريكوست متظبط كان بيولّد «نقدية مع
+            // المحاسب» تحت أب نقدية المناديب في الشجرة. القايمة
+            // مقفولة على الموظف الميداني النشط زي سيلكت الشاشة بالظبط.
+            'paid_from_user_id' => ['required_if:paid_from,rep_cash', 'nullable', Rule::exists('users', 'id')->whereIn('role', User::FIELD_WORK_ROLES)->where('active', 1)],
             'payee_type' => ['required', Rule::in(Expense::PAYEE_TYPES)],
             'payee_supplier_id' => ['required_if:payee_type,supplier', 'nullable', 'exists:suppliers,id'],
             'payee_user_id' => ['required_if:payee_type,employee', 'nullable', 'exists:users,id'],

@@ -16,6 +16,9 @@ class CashMovement extends Model
 
     public const KINDS = ['deposit', 'withdraw', 'rep_advance', 'rep_return'];
 
+    /** الأنواع اللي ليها مندوب — خانة `user_id` إجبارية فيها بس */
+    public const REP_KINDS = ['rep_advance', 'rep_return'];
+
     protected $fillable = [
         'number', 'date', 'kind', 'amount', 'user_id', 'reference', 'note',
         'attachment_path', 'status', 'voided_at', 'voided_by', 'created_by',

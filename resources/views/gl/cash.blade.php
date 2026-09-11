@@ -11,7 +11,9 @@
 @php
     $fmt = fn ($n) => number_format((float) $n, 2);
     $canPost = \App\Support\Access::action(auth()->user(), 'act.gl.post');
-    $repKinds = \App\Http\Controllers\Gl\CashMovementController::REP_KINDS;
+    $repKinds = \App\Models\CashMovement::REP_KINDS;
+    // عمود الإلغاء بيظهر لصاحب الصلاحية بس — والـcolspan لازم يمشي معاه
+    $cols = $canPost ? 9 : 8;
 @endphp
 
 @section('actions')
@@ -106,7 +108,7 @@
                         <td>
                             @if ($m->status === 'posted')
                                 <form method="POST" action="{{ route('gl.cash.void', $m) }}" style="display:inline"
-                                      onsubmit="return confirm('{{ __('gl.confirm_void') }}')">
+                                      onsubmit="return confirm(@js(__('gl.confirm_void')))">
                                     @csrf
                                     <button class="btn sm" type="submit">✕ {{ __('gl.void') }}</button>
                                 </form>
@@ -115,7 +117,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="9" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
+                <tr><td colspan="{{ $cols }}" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
             @endforelse
         </table>
     </div>

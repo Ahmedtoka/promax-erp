@@ -11,6 +11,8 @@
 @php
     $fmt = fn ($n) => number_format((float) $n, 2);
     $canPost = \App\Support\Access::action(auth()->user(), 'act.gl.post');
+    // عمود الإلغاء بيظهر لصاحب الصلاحية بس — والـcolspan لازم يمشي معاه
+    $cols = $canPost ? 10 : 9;
 @endphp
 
 @section('actions')
@@ -29,7 +31,7 @@
     </div>
     <div class="kpi">
         <div class="lbl">{{ __('gl.count') }}</div>
-        <div class="val">{{ number_format($rows->total()) }}</div>
+        <div class="val">{{ number_format($count) }}</div>
         <div class="sub2">{{ __('gl.expenses_sub') }}</div>
     </div>
 </div>
@@ -111,7 +113,7 @@
                         <td>
                             @if ($x->status === 'posted')
                                 <form method="POST" action="{{ route('gl.expenses.void', $x) }}" style="display:inline"
-                                      onsubmit="return confirm('{{ __('gl.confirm_void') }}')">
+                                      onsubmit="return confirm(@js(__('gl.confirm_void')))">
                                     @csrf
                                     <button class="btn sm" type="submit">✕ {{ __('gl.void') }}</button>
                                 </form>
@@ -120,7 +122,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="10" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
+                <tr><td colspan="{{ $cols }}" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
             @endforelse
         </table>
     </div>

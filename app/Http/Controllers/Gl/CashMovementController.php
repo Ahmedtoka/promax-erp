@@ -18,9 +18,6 @@ use Illuminate\Validation\Rule;
  */
 class CashMovementController extends Controller
 {
-    /** الحركات اللي بتخص مندوب معيّن — الخانة بتظهر ليها بس */
-    public const REP_KINDS = ['rep_advance', 'rep_return'];
-
     public function index(Request $request)
     {
         $range = DateRange::fromRequest($request, 'month');
@@ -49,7 +46,10 @@ class CashMovementController extends Controller
             'date' => ['required', 'date'],
             'kind' => ['required', Rule::in(CashMovement::KINDS)],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
-            'user_id' => ['required_if:kind,rep_advance,rep_return', 'nullable', 'exists:users,id'],
+            // ⚠️ نفس فخ `ExpenseController` — المفتاح بيوصل لـ
+            // `GlAccount::repCash()` اللي بتفتح حساب نقدية لأي يوزر
+            // بيتبعت، فعهدة نقدية لمحاسب كانت بتخلق حساب مندوب وهمي
+            'user_id' => ['required_if:kind,rep_advance,rep_return', 'nullable', Rule::exists('users', 'id')->whereIn('role', User::FIELD_WORK_ROLES)->where('active', 1)],
             'reference' => ['nullable', 'string', 'max:80'],
             'note' => ['nullable', 'string', 'max:250'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
@@ -67,7 +67,7 @@ class CashMovementController extends Controller
             'amount' => round((float) $data['amount'], 2),
             // ⚠️ زي سند المصروف: المندوب بيتصفّر لو النوع مش بتاع مندوب،
             // وإلا الإيداع بيتحفظ منسوب لمندوب والقيد يروح لحسابه
-            'user_id' => in_array($data['kind'], self::REP_KINDS, true) ? $data['user_id'] : null,
+            'user_id' => in_array($data['kind'], CashMovement::REP_KINDS, true) ? $data['user_id'] : null,
             'reference' => $data['reference'] ?? null,
             'note' => $data['note'] ?? null,
             'attachment_path' => $request->hasFile('attachment') ? $request->file('attachment')->store('gl-attachments', 'public') : null,
