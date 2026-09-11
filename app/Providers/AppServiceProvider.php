@@ -96,6 +96,9 @@ class AppServiceProvider extends ServiceProvider
         // تصفية المندوب وقيود الموردين (١١/٩/٢٠٢٦) — نفس مبدأ transactions
         \App\Models\RepSettlement::observe(\App\Observers\Gl\RepSettlementObserver::class);
         \App\Models\SupplierTransaction::observe(\App\Observers\Gl\SupplierTransactionObserver::class);
+        // سندات المصروف وحركة النقدية (١١/٩/٢٠٢٦) — الإلغاء بيشيل القيد
+        \App\Models\Expense::observe(\App\Observers\Gl\ExpenseObserver::class);
+        \App\Models\CashMovement::observe(\App\Observers\Gl\CashMovementObserver::class);
         // مستخدم ميداني جديد = حساب نقدية جديد (لو الشجرة متولدة)
         \App\Models\User::created(function (\App\Models\User $u) {
             try {

@@ -206,6 +206,40 @@
         <div class="st-term due"><span class="t">{{ __('settle.due_total') }}</span><span class="v">{{ $fmt($due_total) }}</span></div>
     </div>
     <div class="sub2" style="font-size:11px;color:var(--muted)">💡 {{ __('settle.due_note') }}</div>
+
+    {{-- ═══ مصروفات معتمدة من نقدية المندوب (١١/٩/٢٠٢٦) — عرض بس ═══
+         ⚠️ **مش في المعادلة عن قصد.** السند بينزّل حساب «نقدية مع
+         المندوب» في الشجرة، فالفرق ماشي هناك؛ لو خصمناه من المتوقع
+         كمان كان هيتخصم مرتين. الصف ده بيفسّر للمحاسب فرق الإيد. --}}
+    @if (($repExpenses ?? collect())->isNotEmpty())
+        <div class="st-eq" style="margin-top:10px">
+            <div class="st-term">
+                <span class="t">{{ __('gl.rep_expenses_row') }}</span>
+                <span class="v">{{ $fmt($repExpenses->sum('amount')) }}</span>
+            </div>
+        </div>
+        <div class="tablewrap" style="margin-top:8px">
+            <table>
+                <tr>
+                    <th data-nosum>{{ __('gl.number') }}</th>
+                    <th>{{ __('common.date') }}</th>
+                    <th style="text-align:start">{{ __('gl.account') }}</th>
+                    <th style="text-align:start">{{ __('gl.payee') }}</th>
+                    <th class="num">{{ __('gl.amount') }}</th>
+                </tr>
+                @foreach ($repExpenses as $rx)
+                    <tr>
+                        <td>{{ $rx->number }}</td>
+                        <td class="num" style="font-size:11px">{{ $rx->date?->format('Y-m-d') }}</td>
+                        <td style="text-align:start">{{ $rx->account?->displayName() ?? '—' }}</td>
+                        <td style="text-align:start">{{ $rx->payeeLabel() }}</td>
+                        <td class="num">{{ $fmt($rx->amount) }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+        <div class="sub2" style="font-size:11px;color:var(--muted)">ℹ️ {{ __('gl.rep_expenses_hint') }}</div>
+    @endif
 </div>
 
 {{-- ═══════════════════════════════════════════════════════════

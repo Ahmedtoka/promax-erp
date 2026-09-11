@@ -713,6 +713,20 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('channels.manager');
     });
 
+    // ═══ الحسابات العامة — الشجرة واليومية والمصروفات (١١/٩/٢٠٢٦) ═══
+    // ⚠️ `role:admin,accountant` على المجموعة كلها — الشجرة والقيود شغل
+    // الحسابات وحده، ومدير القناة مالوش دعوة بحساب مصروف ولا بإيداع بنك.
+    Route::prefix('gl')->name('gl.')->middleware('role:admin,accountant')->group(function () {
+        $g = \App\Http\Controllers\Gl\ExpenseController::class;
+        Route::get('/expenses', [$g, 'index'])->name('expenses');
+        Route::post('/expenses', [$g, 'store'])->name('expenses.store');
+        Route::post('/expenses/{expense}/void', [$g, 'void'])->name('expenses.void');
+        $c = \App\Http\Controllers\Gl\CashMovementController::class;
+        Route::get('/cash', [$c, 'index'])->name('cash');
+        Route::post('/cash', [$c, 'store'])->name('cash.store');
+        Route::post('/cash/{cashMovement}/void', [$c, 'void'])->name('cash.void');
+    });
+
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.
     // عقود موقّعة فيها أسعار وشروط، ممنوع تبقى متاحة بلينك مباشر.
     // ⚠️ **الراوت ده كان مفتوح لأي حد عامل لوجين.** كان جوه `auth` بس

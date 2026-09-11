@@ -80,6 +80,7 @@ return [
     'act_purchasing_receive' => 'Receive supplier goods',
     'act_money_dues' => 'Dues: generate, settle, waive',
     'act_money_eta' => 'Tax & ETA export',
+    'act_gl_post' => 'Post entries, expenses and cash movements',
     'act_team_manage' => 'Team & passwords',
     'act_org_manage' => 'Zones (and quick chain)',
     'act_org_structure' => 'Governorates, branches, vehicles, chains & channels',

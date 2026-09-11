@@ -185,6 +185,11 @@ class Access
             // البورد المدموج (`ops.rep_board`) **مش** هنا عن قصد —
             // ده متابعة ميدان زي «عهد المناديب» (أدمن ومدير بس).
             'ops.sales',
+            // ═══ الحسابات العامة (١١/٩/٢٠٢٦) — بادئة واحدة لكل الموديول ═══
+            // ⚠️ الشجرة واليومية والمصروفات وحركة النقدية شغل المحاسب
+            // وحده، والراوتس كلها `role:admin,accountant` أصلاً — فالبادئة
+            // مابتوسّعش على حد تاني.
+            'gl.',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -285,6 +290,7 @@ class Access
         'nav.group_review' => '🧾',
         'nav.group_field' => '🗺️',
         'nav.group_money' => '💰',
+        'nav.group_gl' => '📒',
         'nav.group_hr' => '🕒',
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
@@ -475,6 +481,15 @@ class Access
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
         ],
 
+        // ═══ ٨ب. الحسابات العامة — دفتر الأستاذ (١١/٩/٢٠٢٦) ═══
+        // ⚠️ مجموعة لوحدها مش تحت «الفلوس»: دي قيود الشجرة (مصروف،
+        // إيداع، عهدة نقدية) — شغل المحاسب وحده، وشاشات «الفلوس»
+        // فوقيها بيشوفها المدير كمان.
+        'nav.group_gl' => [
+            ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
+            ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
+        ],
+
         // ═══ ٦. التقارير — كلها في مكان واحد ═══
         'nav.group_reports' => [
             // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
@@ -613,6 +628,12 @@ class Access
         // ═══ الفلوس ═══
         'act.money.dues' => ['perm.act_money_dues', 'erp.dues', ['manager', 'accountant'], ['erp.dues.generate', 'erp.dues.settle', 'erp.dues.waive']],
         'act.money.eta' => ['perm.act_money_eta', 'erp.eta', ['accountant'], ['erp.eta.export', 'erp.eta.submitted', 'erp.tax.settings.save']],
+        // ═══ الحسابات العامة (١١/٩/٢٠٢٦) ═══
+        // ⚠️ مفتاح واحد لكل الكتابة في الدفتر: سند مصروف، حركة نقدية،
+        // وإلغاؤهم. منع المفتاح بيخلي الشاشة **قراءة** من غير ما نخفيها —
+        // المحاسب الجديد يشوف السندات قبل ما ياخد حق تسجيلها.
+        // (Task 8 بيزوّد راوتات القيد اليدوي على نفس المفتاح)
+        'act.gl.post' => ['perm.act_gl_post', 'gl.expenses', ['accountant'], ['gl.expenses.store', 'gl.expenses.void', 'gl.cash.store', 'gl.cash.void']],
 
         // ═══ الإعدادات ═══
         'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password', 'erp.channels.manager']],

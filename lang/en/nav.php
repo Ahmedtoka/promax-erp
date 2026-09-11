@@ -61,6 +61,12 @@ return [
     'team' => 'Team',
 
     'dues' => 'Contract Dues',
+
+    // General ledger (Sep 11, 2026)
+    'group_gl' => 'General Ledger',
+    'gl_expenses' => 'Expenses',
+    'gl_cash' => 'Cash Movements',
+
     'repclose' => 'Rep Settlements',
     'dayclose' => 'Day Close',
     'targets' => 'Targets',

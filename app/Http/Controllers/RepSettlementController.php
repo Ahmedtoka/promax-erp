@@ -71,6 +71,26 @@ class RepSettlementController extends Controller
 
         return view('erp.repclose_show', [
             'rep' => $user,
+            // ═══ مصروفات معتمدة من نقدية المندوب (١١/٩/٢٠٢٦) ═══
+            //
+            // ⚠️ **عرض بس — الحساب مااتغيّرش.** المحاسب كان بيشوف فرق
+            // في إيد المندوب من غير ما يعرف إن جزء منه مصروف معتمد
+            // (بنزين، صيانة). السندات دي بتنزّل حساب «نقدية مع المندوب»
+            // في الشجرة، فالفرق بيمشي هناك — لو دخلناها في `expected`
+            // كنا هنخصم المبلغ مرتين.
+            //
+            // ⚠️ العمود `date` تاريخ (مش وقت) والنافذة وقت — فالمقارنة
+            // بـ`whereDate`. أول تصفية للمندوب (`from_at = null`) معناها
+            // «من البداية»، والـ`when` بتشيل الحد السفلي بدل ما
+            // `whereBetween` ترمي على null.
+            'repExpenses' => \App\Models\Expense::where('paid_from', 'rep_cash')
+                ->where('paid_from_user_id', $user->id)
+                ->where('status', 'posted')
+                ->when($figures['from_at'], fn ($q, $from) => $q->whereDate('date', '>=', $from))
+                ->whereDate('date', '<=', $figures['to_at'])
+                ->with('account')
+                ->orderBy('date')
+                ->get(),
             // ⚠️ حالة العهدة للسامري (١٢/٨) — عرض بس، مفيش حساب:
             // «مفتوحة/مقفولة» بتتقرا من العهدة الحية نفسها، لأن
             // النافذة ممكن تكون فيها عهد قديمة اتقفلت خلاص.
