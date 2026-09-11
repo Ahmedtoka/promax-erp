@@ -4534,6 +4534,21 @@ class OpsController extends Controller
             }
         });
 
+        // الشجرة: الترقيم بيلمس كل الفواتير مش دفعة واحدة بس — repost
+        // لكل قيد على حدة تكلفته عالية هنا، فبدل كده rebuild كامل من
+        // بداية الشجرة. محمي: فشله (فترة مقفولة/فحص ثابت) ماترجّعش
+        // الترقيم اللي خلص فعلاً (٩/٩)
+        if (\App\Models\Setting::read('gl_enabled') === '1') {
+            try {
+                app(\App\Services\Gl\Ledger::class)->rebuild(
+                    \Illuminate\Support\Carbon::parse(\App\Models\Setting::read('gl_start_date') ?: '1970-01-01'),
+                    true, false, $request->user(),
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['event' => 'renumberInvoices', 'error' => $e->getMessage()]);
+            }
+        }
+
         return back()->with('ok', __('ops.renumber_done', [
             'count' => number_format($count),
             'first' => $first,
@@ -4773,6 +4788,17 @@ class OpsController extends Controller
             // ⚠️ جوه نفس الترانزاكشن — عقيدة الأرقام
             $from->recalculate();
             $to->recalculate();
+
+            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
+            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
+            // في الدفتر ماترجّعش تحويل الفاتورة الإداري
+            try {
+                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'reassignInvoice', 'error' => $e->getMessage()]);
+            }
         });
 
         return back()->with('ok', __('ops.invoice_reassigned', [
@@ -4826,6 +4852,17 @@ class OpsController extends Controller
                 ->update(['date' => $new->toDateString()]);
 
             $invoice->client->recalculate();
+
+            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
+            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
+            // في الدفتر ماترجّعش تعديل التاريخ الإداري
+            try {
+                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'redateInvoice', 'error' => $e->getMessage()]);
+            }
         });
 
         return back()->with('ok', __('ops.invoice_redated', [
@@ -4912,6 +4949,17 @@ class OpsController extends Controller
 
             // أشهر باج في رَنبوك الأرقام: تعديل قيود من غير إعادة حساب
             $invoice->client->recalculate();
+
+            // الشجرة: قيد التحصيل اتحذف/اتنشأ وقيد البيع مالوش تعديل
+            // مباشر — لازم repost صريح على كل قيود الفاتورة، ومحمي
+            // عشان مشكلة في الدفتر ماترجّعش تبديل الكاش/الآجل الإداري
+            try {
+                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'toggleInvoicePayment', 'error' => $e->getMessage()]);
+            }
         });
 
         return back()->with('ok', __('ops.pay_toggled', [
@@ -5030,6 +5078,17 @@ class OpsController extends Controller
                 ->update(['credit' => $grandTotal, 'tax' => $taxTotal]);
 
             $client->recalculate();
+
+            // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
+            // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
+            // في الدفتر ماترجّعش إعادة التسعير الإداري
+            try {
+                foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                    app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'repriceInvoice', 'error' => $e->getMessage()]);
+            }
         });
 
         $invoice->refresh();
@@ -5313,6 +5372,17 @@ class OpsController extends Controller
                     ->update(['credit' => $grand, 'tax' => $taxTotal]);
 
                 $client->recalculate();
+
+                // الشجرة: القيود اتعدّلت بـwhereKey()->update() فالـobserver
+                // ماشافهاش (٩/٩) — لازم repost صريح، ومحمي عشان مشكلة
+                // في الدفتر ماترجّعش تعديل بنود الفاتورة الإداري
+                try {
+                    foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
+                        app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('gl.observer failed', ['invoice' => $invoice->id, 'event' => 'editInvoiceItems', 'error' => $e->getMessage()]);
+                }
             });
         } catch (\App\Exceptions\Rejected $e) {
             return back()->withErrors(['edit_items' => $e->getMessage()]);

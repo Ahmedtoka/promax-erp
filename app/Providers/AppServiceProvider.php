@@ -93,5 +93,19 @@ class AppServiceProvider extends ServiceProvider
 
         // دفتر الأستاذ العام (١١/٩/٢٠٢٦) — كل صف في transactions بيترحّل تلقائياً
         \App\Models\Transaction::observe(\App\Observers\Gl\TransactionObserver::class);
+        // تصفية المندوب وقيود الموردين (١١/٩/٢٠٢٦) — نفس مبدأ transactions
+        \App\Models\RepSettlement::observe(\App\Observers\Gl\RepSettlementObserver::class);
+        \App\Models\SupplierTransaction::observe(\App\Observers\Gl\SupplierTransactionObserver::class);
+        // مستخدم ميداني جديد = حساب نقدية جديد (لو الشجرة متولدة)
+        \App\Models\User::created(function (\App\Models\User $u) {
+            try {
+                if (in_array($u->role, \App\Models\User::FIELD_WORK_ROLES, true)
+                    && \App\Models\Gl\GlAccount::where('system_key', 'rep_cash')->exists()) {
+                    \App\Models\Gl\GlAccount::repCash($u);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['user' => $u->id, 'event' => 'user.created', 'error' => $e->getMessage()]);
+            }
+        });
     }
 }
