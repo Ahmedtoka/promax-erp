@@ -146,15 +146,33 @@ class Ledger
         }
     }
 
-    /** قيد يدوي — سطور حرة، لازم تتوازن، الفترة لازم تكون مفتوحة */
-    public function manual(Carbon $date, string $memo, array $lines, User $by, string $origin = 'manual', ?int $reversesId = null): GlEntry
+    /** شكل سطور القيد اليدوي: سطرين على الأقل، حساب صحيح، مبالغ رقمية */
+    private function validateLines(array $lines): void
     {
-        $this->assertOpen($date);
+        if (count($lines) < 2) {
+            throw new \InvalidArgumentException('Manual entry needs at least two lines.');
+        }
+        foreach ($lines as $l) {
+            if (! is_array($l) || ! isset($l['account_id']) || ! is_int($l['account_id'])) {
+                throw new \InvalidArgumentException('Manual entry lines: account_id is required and must be an integer.');
+            }
+            foreach (['debit', 'credit'] as $k) {
+                if (isset($l[$k]) && ! is_numeric($l[$k])) {
+                    throw new \InvalidArgumentException("Manual entry lines: {$k} must be numeric.");
+                }
+            }
+        }
+    }
 
-        // الحارس على السطور اللي المستخدم كتبها بنفسه بس (قيد يدوي/افتتاحي
-        // جديد) — مش على نسخة التصحيح الداخلية اللي بتمرّر reversesId
-        // (شايفة سطور القيد الأصلي زي ما هي وممكن تحتوي على العملاء/الموردين شرعاً)
-        if (in_array($origin, ['manual', 'opening'], true) && $reversesId === null) {
+    /**
+     * كتابة قيد فعلياً — رأس + سطور داخل ترانزاكشن. حارس حسابات التحكم
+     * اختياري (`$guardControl`) عشان `reverse()` والتصحيح الداخلي في
+     * `overrideAccount()` بيعملوا نسخ من قيود آلية معتمدة أصلاً — ماينفعش
+     * نرفضهم بنفس حارس القيد اليدوي الطازج.
+     */
+    private function writeEntry(Carbon $date, string $memo, array $lines, User $by, string $origin, ?int $reversesId, bool $guardControl): GlEntry
+    {
+        if ($guardControl) {
             $this->assertNotControl(array_column($lines, 'account_id'));
         }
 
@@ -173,37 +191,58 @@ class Ledger
                 'debit' => (float) ($l['debit'] ?? 0),
                 'credit' => (float) ($l['credit'] ?? 0),
                 'memo' => $l['memo'] ?? null,
+                'slot' => $l['slot'] ?? null,
+                'rule_account_id' => isset($l['rule_account_id']) ? (int) $l['rule_account_id'] : null,
+                'overridden' => $l['overridden'] ?? false,
             ], array_values($lines)));
 
             return $entry->load('lines');
         });
     }
 
+    /** قيد يدوي — سطور حرة، لازم تتوازن، الفترة لازم تكون مفتوحة */
+    public function manual(Carbon $date, string $memo, array $lines, User $by, string $origin = 'manual'): GlEntry
+    {
+        if (! in_array($origin, ['manual', 'opening'], true)) {
+            throw new \InvalidArgumentException("Invalid manual entry origin: {$origin}");
+        }
+        $this->validateLines($lines);
+        $this->assertOpen($date);
+
+        return $this->writeEntry($date, $memo, $lines, $by, $origin, null, true);
+    }
+
     /** قيد عكسي بتاريخ النهاردة (أو تاريخ مفتوح تختاره) */
     public function reverse(GlEntry $entry, User $by, ?Carbon $date = null, ?string $memo = null): GlEntry
     {
         $date ??= today();
+        $this->assertOpen($date);
         $lines = $entry->lines->map(fn (GlLine $l) => [
             'account_id' => $l->account_id, 'debit' => (float) $l->credit, 'credit' => (float) $l->debit,
         ])->all();
 
-        return $this->manual($date, $memo ?? __('gl.reversal_of', ['number' => $entry->number]), $lines, $by, 'reversal', $entry->id);
+        return $this->writeEntry($date, $memo ?? __('gl.reversal_of', ['number' => $entry->number]), $lines, $by, 'reversal', $entry->id, false);
     }
 
     /**
      * تغيير حساب سطر: في الفترة المفتوحة تعديل في مكانه بسجل تدقيق؛ في
-     * الفترة المقفولة قيد عكسي + قيد صحيح بتاريخ النهاردة. بيرجّع القيد
-     * اللي فيه الترحيل الصحيح دلوقتي.
+     * الفترة المقفولة قيد عكسي + قيد صحيح بتاريخ النهاردة، وبنفس أثر
+     * التدقيق (سجل `gl_line_overrides` على السطر الأصلي + السطر المصحَّح
+     * في القيد الجديد `overridden=true` و`rule_account_id` = الحساب
+     * الأصلي). الأصل مايتلمسش خالص. بيرجّع القيد اللي فيه الترحيل الصحيح دلوقتي.
      */
     public function overrideAccount(GlLine $line, GlAccount $to, User $by, ?string $note = null): GlEntry
     {
         $entry = $line->entry;
-        if ($line->account_id === $to->id) {
-            return $entry;
-        }
-        $this->assertNotControl([$to->id]);
+
         if (! $to->is_postable || ! $to->active) {
             throw new \InvalidArgumentException(__('gl.account_not_postable'));
+        }
+        // المصدر والهدف مع بعض — نقل من أو إلى حساب تحكم ممنوع بالتساوي
+        $this->assertNotControl([$line->account_id, $to->id]);
+
+        if ($line->account_id === $to->id) {
+            return $entry->load('lines');
         }
 
         if (! GlPeriod::isClosed($entry->date)) {
@@ -221,12 +260,23 @@ class Ledger
 
         return DB::transaction(function () use ($line, $to, $by, $note, $entry) {
             $this->reverse($entry, $by);
+
+            // نفس أثر التدقيق اللي بيحصل في الفترة المفتوحة — على السطر
+            // الأصلي (اللي فضل زي ما هو) مش على أي سطر في القيد الجديد
+            GlLineOverride::create([
+                'line_id' => $line->id, 'from_account_id' => $line->account_id, 'to_account_id' => $to->id,
+                'user_id' => $by->id, 'at' => now(), 'note' => $note,
+            ]);
+
             $lines = $entry->lines->map(fn (GlLine $l) => [
                 'account_id' => $l->id === $line->id ? $to->id : $l->account_id,
-                'debit' => (float) $l->debit, 'credit' => (float) $l->credit,
+                'debit' => (float) $l->debit,
+                'credit' => (float) $l->credit,
+                'rule_account_id' => $l->id === $line->id ? $l->account_id : null,
+                'overridden' => $l->id === $line->id,
             ])->all();
 
-            return $this->manual(today(), __('gl.correction_of', ['number' => $entry->number]).($note ? ' — '.$note : ''), $lines, $by, 'manual', $entry->id);
+            return $this->writeEntry(today(), __('gl.correction_of', ['number' => $entry->number]).($note ? ' — '.$note : ''), $lines, $by, 'manual', $entry->id, false);
         });
     }
 }
