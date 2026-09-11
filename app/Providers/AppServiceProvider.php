@@ -90,5 +90,8 @@ class AppServiceProvider extends ServiceProvider
                 ]);
             }
         });
+
+        // دفتر الأستاذ العام (١١/٩/٢٠٢٦) — كل صف في transactions بيترحّل تلقائياً
+        \App\Models\Transaction::observe(\App\Observers\Gl\TransactionObserver::class);
     }
 }
