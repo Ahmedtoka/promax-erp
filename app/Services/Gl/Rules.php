@@ -95,16 +95,12 @@ class Rules
             return GlAccount::findKey($k)->id;
         };
 
-        // الاتجاه بالإشارة: debit>0 → المدين هو debit_key، وإلا القيد معكوس
-        // (opening/transfer ممكن يبقوا دائن)
-        $isDebit = (float) $tx->debit > 0;
-        $drKey = $isDebit ? $rule->debit_key : $rule->credit_key;
-        $crKey = $isDebit ? $rule->credit_key : $rule->debit_key;
-        // ⚠️ القاعدة اللي مكتوبة أصلاً كقيد دائن (collection/return/...) الإشارة
-        // بتاعتها credit>0 وهي الطبيعي — فمانقلبش إلا لو النوع ثنائي الاتجاه
-        if (! in_array($tx->kind, ['opening', 'transfer'], true)) {
-            $drKey = $rule->debit_key;
-            $crKey = $rule->credit_key;
+        // opening/transfer بس هما ثنائيو الاتجاه: لو اتسجلوا بـcredit
+        // بدل debit الاتجاه بينعكس؛ باقي الأنواع مالهاش إلا اتجاه طبيعي واحد
+        $drKey = $rule->debit_key;
+        $crKey = $rule->credit_key;
+        if (in_array($tx->kind, ['opening', 'transfer'], true) && (float) $tx->credit > 0) {
+            [$drKey, $crKey] = [$crKey, $drKey];
         }
 
         $lines = [['slot' => 'dr', 'account_id' => $resolve($drKey), 'debit' => $amount, 'credit' => 0.0]];

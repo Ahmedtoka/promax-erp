@@ -48,7 +48,7 @@ class Ledger
         }
         $existing = $this->autoEntryFor($source);
         if ($existing) {
-            return $existing;
+            return $existing->load('lines');
         }
         $spec = $this->rules->linesFor($source);
         if ($spec['lines'] === []) {
@@ -81,9 +81,13 @@ class Ledger
 
     public function repost(Model $source, ?User $by = null): ?GlEntry
     {
-        $this->unpost($source);
+        // unpost+post داخل ترانزاكشن واحد — لو الـpost فشل (مثلاً القاعدة
+        // بقت غير مفعّلة) مايتمسحش القيد القديم من غير بديل
+        return DB::transaction(function () use ($source, $by) {
+            $this->unpost($source);
 
-        return $this->post($source, $by);
+            return $this->post($source, $by);
+        });
     }
 
     public function autoEntryFor(Model $source): ?GlEntry
@@ -97,7 +101,10 @@ class Ledger
     {
         $dr = round(array_sum(array_column($lines, 'debit')), 2);
         $cr = round(array_sum(array_column($lines, 'credit')), 2);
-        if ($dr !== $cr || $dr <= 0) {
+        if ($dr <= 0) {
+            throw new UnbalancedEntry("Entry {$entry->number} has no amount");
+        }
+        if ($dr !== $cr) {
             throw new UnbalancedEntry("Entry {$entry->number}: debit {$dr} != credit {$cr}");
         }
         foreach ($lines as $l) {

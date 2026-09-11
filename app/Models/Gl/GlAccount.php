@@ -92,9 +92,12 @@ class GlAccount extends Model
             return $existing;
         }
         $parent = static::findKey('rep_cash');
+        // لو مفيش كود للمستخدم (users.code nullable) منستخدمش سلسلة فاضية
+        // بعد النقطة — بتعمل كود مكرر لأكتر من مندوب من غير كود
+        $suffix = $user->code ?: 'U'.$user->id;
 
         return static::create([
-            'code' => $parent->code.'.'.$user->code,
+            'code' => $parent->code.'.'.$suffix,
             'name' => 'نقدية مع '.$user->name,
             'name_en' => 'Cash with '.($user->name_en ?: $user->name),
             'parent_id' => $parent->id,

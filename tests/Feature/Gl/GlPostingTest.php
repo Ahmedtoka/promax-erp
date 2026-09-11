@@ -139,4 +139,56 @@ class GlPostingTest extends TestCase
         $tx->delete();
         $this->assertSame(0, GlEntry::count());
     }
+
+    public function test_updating_the_credit_on_a_posted_office_cash_collection_reposts_the_entry(): void
+    {
+        $client = $this->makeClient();
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'كاش مكتب', 'debit' => 0, 'credit' => 300, 'kind' => 'collection', 'method' => 'cash']);
+        $e1 = $this->entryFor($tx);
+        $this->assertSame([300.0, 0.0], $this->lineOn($e1, 'cash_main'));
+
+        $tx->update(['credit' => 450]);
+
+        // نفس القيد اتعاد بناءه بمبلغ جديد — مش قيد تاني
+        $this->assertSame(1, GlEntry::count());
+        $e2 = $this->entryFor($tx);
+        $this->assertSame([450.0, 0.0], $this->lineOn($e2, 'cash_main'));
+        $this->assertSame([0.0, 450.0], $this->lineOn($e2, 'receivables'));
+    }
+
+    public function test_updating_only_the_proof_path_does_not_repost_the_entry(): void
+    {
+        $client = $this->makeClient();
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'كاش مكتب', 'debit' => 0, 'credit' => 300, 'kind' => 'collection', 'method' => 'cash']);
+        $before = $this->entryFor($tx);
+        $beforeId = $before->id;
+        $beforeLines = $before->lines->map(fn ($l) => [$l->id, $l->account_id, (float) $l->debit, (float) $l->credit])->all();
+
+        $tx->update(['proof_path' => 'proofs/x.jpg']);
+
+        // proof_path مش في لستة الأعمدة اللي بتستدعي repost
+        $this->assertSame(1, GlEntry::count());
+        $after = $this->entryFor($tx);
+        $this->assertSame($beforeId, $after->id);
+        $afterLines = $after->lines->map(fn ($l) => [$l->id, $l->account_id, (float) $l->debit, (float) $l->credit])->all();
+        $this->assertSame($beforeLines, $afterLines);
+    }
+
+    public function test_opening_and_transfer_flip_sides_when_posted_as_credit(): void
+    {
+        $client = $this->makeClient();
+        $mk = fn (array $a) => Transaction::create(array_merge(['client_id' => $client->id, 'date' => today(), 'memo' => 'x', 'debit' => 0, 'credit' => 0, 'tax' => 0], $a));
+
+        $openCredit = $this->entryFor($mk(['kind' => 'opening', 'credit' => 900]));
+        $this->assertSame([900.0, 0.0], $this->lineOn($openCredit, 'opening_equity'));
+        $this->assertSame([0.0, 900.0], $this->lineOn($openCredit, 'receivables'));
+
+        $transferCredit = $this->entryFor($mk(['kind' => 'transfer', 'credit' => 100]));
+        $this->assertSame([100.0, 0.0], $this->lineOn($transferCredit, 'suspense'));
+        $this->assertSame([0.0, 100.0], $this->lineOn($transferCredit, 'receivables'));
+
+        $transferDebit = $this->entryFor($mk(['kind' => 'transfer', 'debit' => 100]));
+        $this->assertSame([100.0, 0.0], $this->lineOn($transferDebit, 'receivables'));
+        $this->assertSame([0.0, 100.0], $this->lineOn($transferDebit, 'suspense'));
+    }
 }

@@ -16,7 +16,7 @@ return new class extends Migration
         if (! Schema::hasTable('gl_accounts')) {
             Schema::create('gl_accounts', function (Blueprint $t) {
                 $t->id();
-                $t->string('code', 20)->unique();
+                $t->string('code', 40)->unique();
                 $t->string('name', 120);
                 $t->string('name_en', 120)->nullable();
                 $t->foreignId('parent_id')->nullable()->constrained('gl_accounts')->nullOnDelete();
