@@ -279,4 +279,118 @@ class Ledger
             return $this->writeEntry(today(), __('gl.correction_of', ['number' => $entry->number]).($note ? ' — '.$note : ''), $lines, $by, 'manual', $entry->id, false);
         });
     }
+
+    /** المستندات اللي بتولّد قيود، بترتيب التاريخ */
+    public function sources(Carbon $from): \Generator
+    {
+        $d = $from->toDateString();
+        $all = collect()
+            ->concat(\App\Models\Transaction::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
+            ->concat(\App\Models\RepSettlement::whereDate('to_at', '>=', $d)->orderBy('to_at')->cursor())
+            ->concat(\App\Models\SupplierTransaction::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
+            ->concat(\App\Models\Expense::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
+            ->concat(\App\Models\CashMovement::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
+            ->sortBy(fn ($m) => self::dateOf($m)->format('Y-m-d').'-'.str_pad((string) $m->getKey(), 10, '0', STR_PAD_LEFT));
+        foreach ($all as $m) {
+            yield $m;
+        }
+    }
+
+    /** الفحص الثابت: عملاء الشجرة = صافي قيود العملاء من تاريخ البداية · موردون كذلك */
+    public function invariants(): array
+    {
+        $start = Setting::read('gl_start_date') ?: '1970-01-01';
+        $recvGl = GlAccount::findKey('receivables')->balanceBetween(null, null);
+        $recvExp = round((float) DB::table('transactions')->whereDate('date', '>=', $start)
+            ->where('kind', '!=', 'consignment')->selectRaw('COALESCE(SUM(debit - credit),0) v')->value('v'), 2);
+        $payGl = GlAccount::findKey('payables')->balanceBetween(null, null);
+        $payExp = round((float) DB::table('supplier_transactions')->whereDate('date', '>=', $start)
+            ->selectRaw('COALESCE(SUM(credit - debit),0) v')->value('v'), 2);
+
+        return [
+            'receivables' => ['gl' => $recvGl, 'expected' => $recvExp, 'ok' => abs($recvGl - $recvExp) < 0.005],
+            'payables' => ['gl' => $payGl, 'expected' => $payExp, 'ok' => abs($payGl - $payExp) < 0.005],
+        ];
+    }
+
+    /**
+     * إعادة البناء: مسح القيود الآلية من التاريخ، توليدها تاني بالقواعد الحالية،
+     * إعادة تطبيق التعديلات اليدوية (بالمصدر + الخانة)، ثم الفحص. dryRun = rollback في الآخر.
+     */
+    public function rebuild(Carbon $from, bool $keepOverrides = true, bool $dryRun = false, ?User $by = null): RebuildReport
+    {
+        $report = new RebuildReport;
+        $report->dryRun = $dryRun;
+        $snapshot = fn () => GlAccount::where('is_postable', true)->get()
+            ->mapWithKeys(fn ($a) => [$a->code => $a->balanceBetween(null, null)])->all();
+
+        DB::beginTransaction();
+        try {
+            $before = $snapshot();
+
+            // 1. التعديلات اليدوية على القيود الآلية اللي هتتمسح
+            $overrides = [];
+            $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString());
+            foreach ((clone $autoQ)->with('lines')->cursor() as $e) {
+                foreach ($e->lines as $l) {
+                    if ($l->overridden) {
+                        $overrides[$e->source_type.'|'.$e->source_id.'|'.$l->slot] = ['to' => $l->account_id, 'from' => $l->rule_account_id];
+                    }
+                }
+            }
+            $report->deleted = (clone $autoQ)->count();
+            (clone $autoQ)->delete(); // gl_lines cascade
+
+            // 2. التوليد
+            foreach ($this->sources($from) as $src) {
+                $entry = $this->post($src, $by);
+                if ($entry === null) {
+                    continue;
+                }
+                $report->created++;
+                foreach ($entry->lines as $l) {
+                    $k = $entry->source_type.'|'.$entry->source_id.'|'.$l->slot;
+                    if (! isset($overrides[$k])) {
+                        continue;
+                    }
+                    if ($keepOverrides) {
+                        $l->update(['account_id' => $overrides[$k]['to'], 'overridden' => true, 'rule_account_id' => $l->account_id]);
+                        $report->overridesKept++;
+                    } else {
+                        $report->overridesDropped++;
+                    }
+                    unset($overrides[$k]);
+                }
+            }
+            $report->overridesDropped += count($overrides); // مصدر اتشال
+
+            // 3. الفحص
+            $after = $snapshot();
+            foreach ($after as $code => $v) {
+                if (round(($before[$code] ?? 0.0), 2) !== round($v, 2)) {
+                    $report->accountDiff[$code] = ['before' => round($before[$code] ?? 0.0, 2), 'after' => round($v, 2)];
+                }
+            }
+            $report->invariants = $this->invariants();
+            $report->ok = collect($report->invariants)->every(fn ($i) => $i['ok']);
+
+            if ($dryRun || ! $report->ok) {
+                DB::rollBack();
+                if (! $report->ok) {
+                    $e = new RebuildFailed(__('gl.rebuild_invariant_failed'));
+                    $e->report = $report;
+                    throw $e;
+                }
+            } else {
+                DB::commit();
+            }
+        } catch (\Throwable $t) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            throw $t;
+        }
+
+        return $report;
+    }
 }

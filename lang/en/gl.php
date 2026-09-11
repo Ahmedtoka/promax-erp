@@ -6,4 +6,5 @@ return [
     'correction_of' => 'Correction of :number',
     'account_not_postable' => 'This account is a group or inactive — pick a postable sub-account.',
     'control_account' => 'Receivables and payables move only through their documents, not manual entries.',
+    'rebuild_invariant_failed' => 'Rebuild rolled back: the GL receivables or payables balance does not match the ledger.',
 ];
