@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
 /** قراءة بس — كل التقارير من gl_lines × gl_entries بفترة */
 class Reports
 {
-    /** مجاميع مدين/دائن لكل حساب (بالأحفاد) على فترة */
+    /** مجاميع مدين/دائن مجمّعة بـ`account_id` نفسه بس — بدون لمّ الأحفاد
+     * (يعني حسابات postable الأوراق فقط)، على فترة */
     private function sums(?Carbon $from, ?Carbon $to): array
     {
         $q = DB::table('gl_lines')->join('gl_entries', 'gl_entries.id', '=', 'gl_lines.entry_id');
@@ -28,6 +29,9 @@ class Reports
 
     private function signed(GlAccount $a, float $d, float $c): float
     {
+        // حساب المدين طبيعته موجب بالمدين (زيادة الأصول/المصروفات)،
+        // وحساب الدائن طبيعته موجب بالدائن — عشان كده بنعكس الطرح
+        // حسب `normal_side` مش نطرح دايماً بنفس الاتجاه
         return round($a->normal_side === 'debit' ? $d - $c : $c - $d, 2);
     }
 
@@ -115,6 +119,10 @@ class Reports
             $out[$a->type === 'asset' ? 'assets' : ($a->type === 'liability' ? 'liabilities' : 'equity')][] = ['account' => $a, 'amount' => $amount];
             $tot[$a->type] += $amount;
         }
+        // صافي الدخل مش قيد فعلي على حساب حقوق ملكية — هو رقم مشتق من
+        // الإيرادات والمصروفات لحد النهاردة، وميزانية بلا قفل سنوي محتاجة
+        // تضيفه لحقوق الملكية يدوياً في التقرير عشان الأصول تتوازن مع
+        // الخصوم+الملكية (زي الأرباح المحتجزة قبل التوزيع/الإقفال)
         $retained = $this->income(Carbon::parse('1970-01-01'), $asOf)['net'];
         $tle = round($tot['liability'] + $tot['equity'] + $retained, 2);
 

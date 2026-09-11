@@ -5,6 +5,7 @@ namespace Tests\Feature\Gl;
 use App\Models\Gl\GlAccount;
 use App\Models\Setting;
 use App\Models\Transaction;
+use App\Models\Visit;
 use App\Services\Gl\Ledger;
 use App\Services\Gl\Reports;
 use Database\Seeders\GlSeeder;
@@ -70,5 +71,40 @@ class GlReportsTest extends TestCase
         $this->assertTrue($bs['balanced'], json_encode([$bs['total_assets'], $bs['total_liabilities_equity']]));
         $this->assertSame(700.0, $bs['retained']);
         $this->assertSame(10200.0 + 640.0, $bs['total_assets']); // خزنة 10200 + عملاء 640
+    }
+
+    public function test_the_statement_rolls_up_a_non_postable_parent_over_its_subtree(): void
+    {
+        // `rep_cash` (1110) نفسه مش postable — الحساب الفعلي اللي بيتحرك
+        // هو ابنه الديناميكي `1110.{code}` بتاع المندوب؛ الكشف على الأب
+        // لازم يلمّ حركة الابن عن طريق subtreeIds()
+        $this->seed(GlSeeder::class);
+        Setting::write('gl_enabled', '1');
+        Setting::flushCache();
+        $rep = $this->makeRep();
+        $client = $this->makeClient(['rep_id' => $rep->id]);
+        $visit = Visit::create(['user_id' => $rep->id, 'client_id' => $client->id, 'checked_in_at' => now()]);
+        Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'تحصيل', 'debit' => 0, 'credit' => 500, 'kind' => 'collection', 'method' => 'cash', 'source_type' => Visit::class, 'source_id' => $visit->id]);
+
+        $st = app(Reports::class)->statement(GlAccount::findKey('rep_cash'), null, null);
+        $this->assertSame([500.0], array_map(fn ($r) => $r['running'], $st['rows']));
+        $this->assertSame(500.0, $st['closing']);
+
+        $tb = app(Reports::class)->trialBalance(null, null);
+        $this->assertNull(collect($tb['rows'])->first(fn ($r) => $r['account']->system_key === 'rep_cash'), 'non-postable parent must not appear in the trial balance');
+    }
+
+    public function test_income_shows_contra_revenue_as_negative_and_leaves_the_tax_line_out(): void
+    {
+        $this->world();
+        $client = $this->makeClient();
+        Transaction::create(['client_id' => $client->id, 'date' => '2026-09-10', 'memo' => 'مرتجع', 'debit' => 0, 'credit' => 228, 'tax' => 28, 'kind' => 'return']);
+
+        $inc = app(Reports::class)->income(Carbon::parse('2026-08-01'), Carbon::parse('2026-09-30'));
+        $returns = collect($inc['revenue'])->first(fn ($r) => $r['account']->system_key === 'sales_returns');
+        $this->assertNotNull($returns);
+        $this->assertSame(-200.0, $returns['amount']);
+        $this->assertNull(collect($inc['revenue'])->first(fn ($r) => $r['account']->system_key === 'vat_output'), 'vat_output is a liability, not revenue');
+        $this->assertSame(800.0, $inc['total_revenue']); // مبيعات 1000 - مرتجع 200
     }
 }
