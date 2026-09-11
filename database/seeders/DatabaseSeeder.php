@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             ChannelSeeder::class,       // القنوات الأربعة + تصنيف العملاء عليها
             ClientGroupSeeder::class,   // السلاسل (Circle K...) + إحداثيات العملاء
             TeamSeeder::class,          // فريق العمل بالرولز والقنوات
+            GlSeeder::class,            // شجرة الحسابات وقواعد الترحيل (دفتر الأستاذ العام)
             Gs1CatalogueSeeder::class,  // باركود GS1 + الأسماء الرسمية + مدة الصلاحية
             BatchSeeder::class,         // باتشات افتتاحية بتواريخ صلاحية من المخزون الحالي
             WarehouseSeeder::class,     // المصنع + فرع المعادي + الأرفف + ترصيف الباتشات
