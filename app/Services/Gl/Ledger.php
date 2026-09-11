@@ -286,7 +286,11 @@ class Ledger
         $d = $from->toDateString();
         $all = collect()
             ->concat(\App\Models\Transaction::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
-            ->concat(\App\Models\RepSettlement::whereDate('to_at', '>=', $d)->orderBy('to_at')->cursor())
+            // ⚠️ `to_at` ممكن يكون فاضي — `dateOf()` بترجع لـ`created_at` في الحالة دي،
+            // فلازم الكويري هنا تطابقها بنفس الـCOALESCE، وإلا تصفية من غير `to_at`
+            // بتختفي من إعادة البناء من غير ما حد يحس (مش هي اللي بتتعد في الفحص الثابت)
+            ->concat(\App\Models\RepSettlement::whereRaw('DATE(COALESCE(to_at, created_at)) >= ?', [$d])
+                ->orderByRaw('DATE(COALESCE(to_at, created_at))')->cursor())
             ->concat(\App\Models\SupplierTransaction::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
             ->concat(\App\Models\Expense::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
             ->concat(\App\Models\CashMovement::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
@@ -315,31 +319,61 @@ class Ledger
 
     /**
      * إعادة البناء: مسح القيود الآلية من التاريخ، توليدها تاني بالقواعد الحالية،
-     * إعادة تطبيق التعديلات اليدوية (بالمصدر + الخانة)، ثم الفحص. dryRun = rollback في الآخر.
+     * إعادة تطبيق التعديلات اليدوية (بالمصدر + الخانة)، ثم الفحص. dryRun = rollback
+     * في الآخر وبيرجّع التقرير من غير رمي — القيد اليدوي/الافتتاحي مايتلمسش
+     * (origin != auto). فشل الفحص في تشغيل حقيقي = rollback + رمي `RebuildFailed`.
      */
     public function rebuild(Carbon $from, bool $keepOverrides = true, bool $dryRun = false, ?User $by = null): RebuildReport
     {
+        // حارس الفترة المقفولة — قبل ما نفتح ترانزاكشن نلغيها بعدين. أي شهر
+        // من `$from` لحد النهاردة لازم يكون مفتوح، وإلا القيود الآلية اللي
+        // هتتمسح فيه مش هينفع تتبدّل
+        $fromKey = $from->format('Y-m');
+        $closedPeriod = GlPeriod::where('status', 'closed')->where('key', '>=', $fromKey)->orderBy('key')->first();
+        if ($closedPeriod) {
+            throw new ClosedPeriod(__('gl.rebuild_closed_period', ['period' => $closedPeriod->key]));
+        }
+
         $report = new RebuildReport;
         $report->dryRun = $dryRun;
         $snapshot = fn () => GlAccount::where('is_postable', true)->get()
             ->mapWithKeys(fn ($a) => [$a->code => $a->balanceBetween(null, null)])->all();
 
+        // ⚠️ المستوى قبل ما نفتح ترانزاكشنّا احنا — لو `rebuild()` اتنادت من
+        // جوه ترانزاكشن تاني، الـrollback بتاعنا لازم يوقف عند مستوانا بس
+        // ومايلمسش ترانزاكشن اللي نادانا (كان بيحصل double rollback قبل كده)
+        $level = DB::transactionLevel();
         DB::beginTransaction();
         try {
             $before = $snapshot();
 
-            // 1. التعديلات اليدوية على القيود الآلية اللي هتتمسح
+            // 1. التعديلات اليدوية على القيود الآلية اللي هتتمسح — بما فيها
+            // مين عملها وإمتى وليه، عشان لو اتحفظت لازم يتسجل نفس أثر
+            // التدقيق على السطر الجديد (الأصلي هيتمسح مع القيد بالكاسكيد)
             $overrides = [];
             $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString());
+            $overriddenLines = []; // line_id => ['key' => source|slot, 'to' => account_id]
             foreach ((clone $autoQ)->with('lines')->cursor() as $e) {
                 foreach ($e->lines as $l) {
                     if ($l->overridden) {
-                        $overrides[$e->source_type.'|'.$e->source_id.'|'.$l->slot] = ['to' => $l->account_id, 'from' => $l->rule_account_id];
+                        $overriddenLines[$l->id] = ['key' => $e->source_type.'|'.$e->source_id.'|'.$l->slot, 'to' => $l->account_id];
                     }
                 }
             }
+            $latestOverrideByLine = GlLineOverride::whereIn('line_id', array_keys($overriddenLines))
+                ->orderByDesc('id')->get()->groupBy('line_id')->map(fn ($g) => $g->first());
+            foreach ($overriddenLines as $lineId => $info) {
+                $ov = $latestOverrideByLine->get($lineId);
+                $overrides[$info['key']] = [
+                    'to' => $info['to'],
+                    'user_id' => $ov?->user_id,
+                    'at' => $ov?->at,
+                    'note' => $ov?->note,
+                ];
+            }
+
             $report->deleted = (clone $autoQ)->count();
-            (clone $autoQ)->delete(); // gl_lines cascade
+            (clone $autoQ)->delete(); // gl_lines + gl_line_overrides cascade
 
             // 2. التوليد
             foreach ($this->sources($from) as $src) {
@@ -354,7 +388,16 @@ class Ledger
                         continue;
                     }
                     if ($keepOverrides) {
-                        $l->update(['account_id' => $overrides[$k]['to'], 'overridden' => true, 'rule_account_id' => $l->account_id]);
+                        $ruleAccountId = $l->account_id;
+                        $l->update(['account_id' => $overrides[$k]['to'], 'overridden' => true, 'rule_account_id' => $ruleAccountId]);
+                        GlLineOverride::create([
+                            'line_id' => $l->id,
+                            'from_account_id' => $ruleAccountId,
+                            'to_account_id' => $overrides[$k]['to'],
+                            'user_id' => $overrides[$k]['user_id'],
+                            'at' => $overrides[$k]['at'] ?? now(),
+                            'note' => $overrides[$k]['note'],
+                        ]);
                         $report->overridesKept++;
                     } else {
                         $report->overridesDropped++;
@@ -372,20 +415,38 @@ class Ledger
                 }
             }
             $report->invariants = $this->invariants();
+            // عدد القيود اللي اتمسحت لازم يساوي اللي اتولدت تاني — لو مصدر
+            // ضاع (باگ ترتيب/فلترة زي مصدر تاريخه من غير COALESCE) الفحوصات
+            // التانية ممكن تعدّي من غيره، ده اللي بيمسكها
+            $report->invariants['entries'] = [
+                'deleted' => $report->deleted,
+                'created' => $report->created,
+                'ok' => $report->deleted === $report->created,
+            ];
             $report->ok = collect($report->invariants)->every(fn ($i) => $i['ok']);
 
-            if ($dryRun || ! $report->ok) {
-                DB::rollBack();
-                if (! $report->ok) {
-                    $e = new RebuildFailed(__('gl.rebuild_invariant_failed'));
-                    $e->report = $report;
-                    throw $e;
+            if ($dryRun) {
+                // dry run مايرميش أبداً — بيرجّع التقرير زي ما هو حتى لو
+                // الفحص فشل، عشان اللي بينادي يقدر يعرض النتيجة المتوقعة
+                if (DB::transactionLevel() > $level) {
+                    DB::rollBack();
                 }
-            } else {
-                DB::commit();
+
+                return $report;
             }
+
+            if (! $report->ok) {
+                if (DB::transactionLevel() > $level) {
+                    DB::rollBack();
+                }
+                $e = new RebuildFailed(__('gl.rebuild_invariant_failed'));
+                $e->report = $report;
+                throw $e;
+            }
+
+            DB::commit();
         } catch (\Throwable $t) {
-            if (DB::transactionLevel() > 0) {
+            if (DB::transactionLevel() > $level) {
                 DB::rollBack();
             }
             throw $t;
