@@ -51,7 +51,7 @@ class EntryController extends Controller
                 $q->where(fn ($w) => $w->where('number', 'like', $term)->orWhere('memo', 'like', $term));
             });
 
-        $rows = (clone $q)->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString();
+        $rows = $q->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString();
 
         return view('gl.entries', [
             'range' => $range,
@@ -71,6 +71,10 @@ class EntryController extends Controller
             'lines.*.account_id' => ['required', 'exists:gl_accounts,id'],
             'lines.*.debit' => ['nullable', 'numeric', 'min:0'],
             'lines.*.credit' => ['nullable', 'numeric', 'min:0'],
+        ], [
+            // رسالة السطور بلغة المحاسب مش «The lines must have at least 2 items»
+            'lines.required' => __('gl.lines_min'),
+            'lines.min' => __('gl.lines_min'),
         ]);
 
         $lines = array_map(fn ($l) => [
@@ -106,9 +110,10 @@ class EntryController extends Controller
                 $request->user(),
                 $data['note'] ?? null,
             );
-        } catch (\InvalidArgumentException $e) {
-            return back()->withErrors(['account_id' => $e->getMessage()])->withInput();
-        } catch (ClosedPeriod $e) {
+        } catch (\InvalidArgumentException|ClosedPeriod $e) {
+            // حساب مش فرعي/موقوف أو حساب تحكم (`InvalidArgumentException`)،
+            // وكمان الفترة المقفولة اللي بترميها `reverse()` جوه التصحيح —
+            // الاتنين رسالتهم على نفس الخانة (`account_id`)
             return back()->withErrors(['account_id' => $e->getMessage()])->withInput();
         }
 

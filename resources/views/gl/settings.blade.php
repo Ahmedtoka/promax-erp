@@ -69,7 +69,7 @@
     </div>
 
     <div class="tablewrap">
-        <table>
+        <table id="glRebuildDiff">
             <tr>
                 {{-- ⚠️ data-nosum — كود الحساب نص مش مبلغ --}}
                 <th data-nosum>{{ __('gl.code') }}</th>
@@ -99,10 +99,15 @@
                 <th>{{ __('gl.status') }}</th>
             </tr>
             @foreach ($report->invariants as $key => $inv)
+                @php
+                    // ⚠️ `entries` بيعدّ قيود مش فلوس — `2.00 قيد` رقم
+                    // بيخلّي القارئ يدوّر على مليم مش موجود
+                    $isMoney = array_key_exists('gl', $inv);
+                @endphp
                 <tr>
                     <td style="text-align:start">{{ $key }}</td>
-                    <td class="num">{{ $fmt($inv['gl'] ?? $inv['deleted'] ?? 0) }}</td>
-                    <td class="num">{{ $fmt($inv['expected'] ?? $inv['created'] ?? 0) }}</td>
+                    <td class="num">{{ $isMoney ? $fmt($inv['gl']) : number_format((int) ($inv['deleted'] ?? 0)) }}</td>
+                    <td class="num">{{ $isMoney ? $fmt($inv['expected']) : number_format((int) ($inv['created'] ?? 0)) }}</td>
                     <td><span class="badge {{ $inv['ok'] ? 'b-green' : 'b-red' }}">{{ $inv['ok'] ? '✓' : '✕' }}</span></td>
                 </tr>
             @endforeach

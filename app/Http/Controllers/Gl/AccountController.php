@@ -107,12 +107,42 @@ class AccountController extends Controller
                 return back()->withErrors(['active' => __('gl.system_account_stays')])->withInput();
             }
         } else {
-            if (! empty($data['code'])) {
-                $attrs['code'] = $data['code'];
+            $code = ($data['code'] ?? '') !== '' ? $data['code'] : $account->code;
+
+            // ⚠️ **رقم الجذر مايتغيّرش أبداً.** النوع (`type`) بيتحدد من أول
+            // رقم في الكود، والسطور المترحّلة على الحساب ده اتكتبت وهو
+            // «مصروف» — تغيير الكود لـ`1108` كان بيحوّله «أصل» وكل قيد
+            // قديم فيه بيهاجر من قائمة الدخل للميزانية في نفس اللحظة
+            // من غير أي قيد تصحيح.
+            if ($code[0] !== $account->code[0]) {
+                return back()->withErrors(['code' => __('gl.code_root_locked', ['root' => $account->code[0]])])->withInput();
             }
-            if (! empty($data['parent_id']) && (int) $data['parent_id'] !== $account->id) {
-                $attrs['parent_id'] = (int) $data['parent_id'];
+
+            if (! empty($data['parent_id'])) {
+                $parent = GlAccount::findOrFail((int) $data['parent_id']);
+
+                if ($parent->is_postable) {
+                    return back()->withErrors(['parent_id' => __('gl.parent_must_be_group')])->withInput();
+                }
+                if ($parent->code[0] !== $code[0]) {
+                    return back()->withErrors(['parent_id' => __('gl.code_root_mismatch', ['root' => $code[0]])])->withInput();
+                }
+                // ⚠️ الأب جوه شجرة الحساب نفسه (أو هو هو) = حلقة —
+                // `subtreeIds()` و`balanceBetween()` بيلفّوا للأبد والشاشة
+                // بتعلّق من غير رسالة
+                if (in_array($parent->id, $account->subtreeIds(), true)) {
+                    return back()->withErrors(['parent_id' => __('gl.parent_cycle')])->withInput();
+                }
+
+                $attrs['parent_id'] = $parent->id;
             }
+
+            // الجذر متقفل فوق، فالنوع مايتغيّرش عملياً — بنحسبه تاني
+            // عشان صف قديم بنوع مش متسق مع كوده يتصلّح وهو بيتعدّل
+            $type = GlAccount::ROOT_TYPES[$code[0]];
+            $attrs['code'] = $code;
+            $attrs['type'] = $type;
+            $attrs['normal_side'] = GlAccount::normalSideFor($type);
             $attrs['active'] = $request->boolean('active');
         }
 

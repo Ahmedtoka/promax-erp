@@ -53,6 +53,11 @@
 <dialog id="dlgAccount">
     <form class="dlg" method="POST" id="accForm" action="{{ route('gl.accounts.store') }}">
         @csrf
+        {{-- ⚠️ الفورم بيخدم الإضافة والتعديل، والـaction بيتكتب من
+             الجافاسكربت — فبعد فاليديشن راجعة لازم نعرف كنا بنعدّل مين
+             (وهل هو حساب نظام) عشان الديالوج مايرجعش «حساب جديد» --}}
+        <input type="hidden" name="_edit_id" id="accEditId" value="{{ old('_edit_id') }}">
+        <input type="hidden" name="_is_system" id="accIsSystem" value="{{ old('_is_system') }}">
         <h4 id="accTitle">＋ {{ __('gl.new_account') }}</h4>
 
         <div class="alert info" id="accSysHint" hidden style="margin-bottom:12px">
@@ -64,7 +69,9 @@
             <select name="parent_id" id="accParent" required style="width:100%">
                 <option value="">— {{ __('common.pick') }} —</option>
                 @foreach ($parents as $p)
-                    <option value="{{ $p->id }}" @selected(old('parent_id') == $p->id)>{{ $p->code }} · {{ $p->displayName() }}</option>
+                    {{-- data-root = رقم الجذر، والجافاسكربت بيخفي غير بتاع
+                         الحساب اللي بيتعدّل (نقل بين الجذور مرفوض في السيرفر) --}}
+                    <option value="{{ $p->id }}" data-root="{{ $p->code[0] }}" @selected(old('parent_id') == $p->id)>{{ $p->code }} · {{ $p->displayName() }}</option>
                 @endforeach
             </select>
         </div>
@@ -107,51 +114,75 @@ const ACC_UPDATE = @js($canPost ? route('gl.accounts.update', ['account' => '__I
 const ACC_NEW = @js('＋ '.__('gl.new_account'));
 const ACC_EDIT = @js(__('gl.edit_account'));
 
-// حساب جديد — الأب والكود مفتوحين، والإيقاف مالوش معنى قبل ما يتولد
-function glNewAccount() {
+// ⚠️ **فورم واحد للإضافة والتعديل.** حساب النظام: الأب والكود
+// **بيتقفلوا** (`disabled` مش بيتبعت أصلاً) — السيرفر بيتجاهلهم برضه،
+// بس الشاشة لازم تقول ليه قبل ما المحاسب يكتب كود جديد ويلاقيه ما
+// اتغيّرش من غير رسالة.
+// ⚠️ الأب في التعديل بيتفلتر على **نفس الجذر** — نقل حساب مصروف تحت
+// الأصول بيرفضه السيرفر، فماينفعش نعرضه كخيار من الأصل.
+function glOpenAccount(a) {
     const form = document.getElementById('accForm');
     if (!form) return;
-    form.action = ACC_STORE;
-    document.getElementById('accTitle').textContent = ACC_NEW;
-    document.getElementById('accSysHint').hidden = true;
-    document.getElementById('accActiveWrap').hidden = true;
-    document.getElementById('accParent').disabled = false;
-    document.getElementById('accCode').disabled = false;
-    document.getElementById('accParent').value = '';
-    document.getElementById('accCode').value = '';
-    document.getElementById('accName').value = '';
-    document.getElementById('accNameEn').value = '';
-    openDlg('dlgAccount');
-}
 
-// ⚠️ حساب النظام: الأب والكود **بيتقفلوا** (`disabled` مش بيتبعت
-// أصلاً) — السيرفر بيتجاهلهم برضه، بس الشاشة لازم تقول ليه قبل ما
-// المحاسب يكتب كود جديد ويلاقيه ما اتغيّرش من غير رسالة
-function glEditAccount(a) {
-    const form = document.getElementById('accForm');
-    if (!form) return;
-    form.action = ACC_UPDATE.replace('__ID__', a.id);
-    document.getElementById('accTitle').textContent = ACC_EDIT + ' — ' + a.code;
-    document.getElementById('accSysHint').hidden = !a.is_system;
-    document.getElementById('accActiveWrap').hidden = !!a.is_system;
-    document.getElementById('accParent').disabled = !!a.is_system;
-    document.getElementById('accCode').disabled = !!a.is_system;
-    document.getElementById('accParent').value = a.parent_id || '';
-    document.getElementById('accCode').value = a.code || '';
-    document.getElementById('accName').value = a.name || '';
-    document.getElementById('accNameEn').value = a.name_en || '';
-    document.getElementById('accActive').checked = !!a.active;
+    const data = a || {};
+    const editing = !!data.id;
+    const sys = !!data.is_system;
+    const root = (data.code || '').charAt(0);
+
+    form.action = editing ? ACC_UPDATE.replace('__ID__', data.id) : ACC_STORE;
+    document.getElementById('accEditId').value = editing ? String(data.id) : '';
+    document.getElementById('accIsSystem').value = sys ? '1' : '';
+    document.getElementById('accTitle').textContent = editing ? ACC_EDIT + ' — ' + (data.code || '') : ACC_NEW;
+    document.getElementById('accSysHint').hidden = !sys;
+    document.getElementById('accActiveWrap').hidden = !editing || sys;
+    document.getElementById('accParent').disabled = sys;
+    document.getElementById('accCode').disabled = sys;
+
+    glFilterParents(editing ? root : '');
+
+    document.getElementById('accParent').value = data.parent_id || '';
+    document.getElementById('accCode').value = data.code || '';
+    document.getElementById('accName').value = data.name || '';
+    document.getElementById('accNameEn').value = data.name_en || '';
+    document.getElementById('accActive').checked = editing ? !!data.active : true;
+
     openDlg('dlgAccount');
     document.getElementById('accName').focus();
 }
 
-@if ($canPost)
-{{-- الفاليديشن رفضت الحساب الجديد؟ افتح الديالوج تاني باللي اتكتب --}}
-@if ($errors->any() && old('code') !== null)
+// قايمة الآباء: في التعديل جذر واحد بس، وفي الإضافة كلهم
+function glFilterParents(root) {
+    const sel = document.getElementById('accParent');
+    if (!sel) return;
+    Array.prototype.forEach.call(sel.options, function (opt) {
+        if (!opt.value) return;
+        opt.hidden = !!root && opt.dataset.root !== root;
+        opt.disabled = opt.hidden;
+    });
+}
+
+function glNewAccount() {
+    glOpenAccount(null);
+}
+
+function glEditAccount(a) {
+    glOpenAccount(a);
+}
+
+@if ($canPost && $errors->any() && old('name') !== null)
+{{-- الفاليديشن رفضت؟ افتح الديالوج تاني على **نفس** الحاجة اللي كانت
+     مفتوحة (تعديل ولا إضافة) باللي المحاسب كتبه --}}
 document.addEventListener('DOMContentLoaded', function () {
-    openDlg('dlgAccount');
+    glOpenAccount(@js([
+        'id' => old('_edit_id') ? (int) old('_edit_id') : null,
+        'code' => old('code'),
+        'name' => old('name'),
+        'name_en' => old('name_en'),
+        'parent_id' => old('parent_id'),
+        'is_system' => (bool) old('_is_system'),
+        'active' => (bool) old('active'),
+    ]));
 });
-@endif
 @endif
 </script>
 

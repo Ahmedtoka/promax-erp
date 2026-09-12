@@ -111,8 +111,13 @@
                                     <span class="badge b-orange">{{ __('gl.override') }}</span>
                                 @endif
                                 @if ($canPost)
-                                    <button class="btn sm" type="button" title="{{ __('gl.override') }}"
-                                            onclick="glOverride({{ $l->id }}, {{ (int) $l->account_id }})">✎</button>
+                                    @if (in_array($l->account?->system_key, ['receivables', 'payables'], true))
+                                        {{-- حساب تحكم — الخدمة بترفض تحويله أصلاً، فالزرار قفل مش زرار بيرمي --}}
+                                        <span style="opacity:.5;cursor:not-allowed" title="{{ __('gl.control_account') }}">🔒</span>
+                                    @else
+                                        <button class="btn sm" type="button" title="{{ __('gl.override') }}"
+                                                onclick="glOverride({{ $l->id }}, {{ (int) $l->account_id }})">✎</button>
+                                    @endif
                                 @endif
                             </div>
                         @endforeach
@@ -151,6 +156,17 @@
             </div>
         </div>
 
+        @php
+            // ⚠️ **السطور بترجع باللي المحاسب كتبه.** القيد اللي اترفض
+            // (مش متوازن / فترة مقفولة / حساب تحكم) كان بيرجع بديالوج
+            // فاضي — يعني ١٠ سطور اتكتبت تاني من الأول عشان رسالة واحدة.
+            $oldLines = old('lines');
+            $entryLines = is_array($oldLines) ? array_values($oldLines) : [];
+            while (count($entryLines) < 2) {
+                $entryLines[] = [];
+            }
+        @endphp
+
         <div class="tablewrap" style="margin-top:10px">
             <table id="glLines">
                 <tr>
@@ -159,21 +175,21 @@
                     <th class="num">{{ __('gl.credit') }}</th>
                     <th></th>
                 </tr>
-                @for ($i = 0; $i < 2; $i++)
+                @foreach ($entryLines as $i => $ln)
                     <tr class="gl-line">
                         <td style="text-align:start">
                             <select name="lines[{{ $i }}][account_id]" required style="width:100%">
                                 <option value="">— {{ __('common.pick') }} —</option>
                                 @foreach ($accounts as $a)
-                                    <option value="{{ $a->id }}">{{ $a->code }} · {{ $a->displayName() }}</option>
+                                    <option value="{{ $a->id }}" @selected(($ln['account_id'] ?? null) == $a->id)>{{ $a->code }} · {{ $a->displayName() }}</option>
                                 @endforeach
                             </select>
                         </td>
-                        <td><input type="number" name="lines[{{ $i }}][debit]" step="0.01" min="0" dir="ltr" oninput="glRecalc()" style="width:100%"></td>
-                        <td><input type="number" name="lines[{{ $i }}][credit]" step="0.01" min="0" dir="ltr" oninput="glRecalc()" style="width:100%"></td>
+                        <td><input type="number" name="lines[{{ $i }}][debit]" step="0.01" min="0" dir="ltr" value="{{ $ln['debit'] ?? '' }}" oninput="glRecalc()" style="width:100%"></td>
+                        <td><input type="number" name="lines[{{ $i }}][credit]" step="0.01" min="0" dir="ltr" value="{{ $ln['credit'] ?? '' }}" oninput="glRecalc()" style="width:100%"></td>
                         <td></td>
                     </tr>
-                @endfor
+                @endforeach
             </table>
         </div>
 
@@ -227,7 +243,9 @@
 
 <script>
 const GL_OVERRIDE_URL = @js($canPost ? route('gl.entries.override', ['line' => '__ID__']) : '');
-let glLineIndex = 2;
+// الفهرس بيبدأ بعد آخر سطر مرسوم — القيد اللي رجع بأربع سطور لازم
+// السطر الجديد ياخد 4 مش 2 وإلا بيدوس على سطر موجود
+let glLineIndex = {{ $canPost ? count($entryLines) : 2 }};
 
 function glOpenEntry() {
     glRecalc();
@@ -298,6 +316,14 @@ function glOverride(lineId, accountId) {
     document.getElementById('ovNote').value = '';
     openDlg('dlgOverride');
 }
+
+@if ($canPost && $errors->has('lines'))
+{{-- القيد اترفض — افتح الديالوج تاني على السطور اللي رجعت مع الرسالة --}}
+document.addEventListener('DOMContentLoaded', function () {
+    glRecalc();
+    openDlg('dlgEntry');
+});
+@endif
 </script>
 
 @endsection
