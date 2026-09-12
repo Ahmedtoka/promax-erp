@@ -21,6 +21,10 @@
     <h3>📦 {{ $title }}
         <span class="side">
             @if (! empty($hint))<span style="margin-inline-end:10px">{{ $hint }}</span>@endif
+            @if (! empty($range) && ! $range->isOpen())
+                {{-- الفترة المطبّقة — عشان «كل الفترة» في سطر الشرح مايكدبش لما الفلتر شغّال --}}
+                <span class="badge b-blue" style="margin-inline-end:10px" dir="ltr">{{ $range->fromValue() ?: '…' }} → {{ $range->toValue() ?: '…' }}</span>
+            @endif
             <a class="btn sm" href="{{ $exportUrl }}">⬇ {{ __('client.export_movements') }}</a>
             <a class="btn sm" href="{{ $exportUrl.(str_contains($exportUrl, '?') ? '&' : '?') }}view=summary">⬇ {{ __('client.export_movements_summary') }}</a>
         </span>
