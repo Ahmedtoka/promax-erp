@@ -20,6 +20,21 @@
     <div class="alert bad" style="margin-bottom:12px"><span>⛔</span><span>{{ $rebuildError }}</span></div>
 @endif
 
+{{-- ═══════════ قواعد واقفة — الترحيل هيقف وإعادة البناء هترفض ═══════════ --}}
+@if (! empty($brokenRules))
+    <div class="alert warn" style="margin-bottom:12px">
+        <span>⚠️</span>
+        <span>
+            <b>{{ __('gl.rules_broken_warn') }}</b>
+            <div style="font-size:11.5px;margin-top:4px">
+                @foreach ($brokenRules as $b)
+                    <div>• {{ $b['label'] }} <span dir="ltr" style="color:var(--muted)">({{ $b['key'] }})</span> — {{ $b['why'] }}</div>
+                @endforeach
+            </div>
+        </span>
+    </div>
+@endif
+
 {{-- ═══════════ الفحص الثابت — الشجرة مقابل الدفتر ═══════════ --}}
 <div class="kpis">
     @if ($invariants === null)
@@ -190,10 +205,24 @@
                                 <div style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $r->key }}</div>
                             </td>
                             @foreach (['debit_key', 'credit_key', 'tax_key'] as $slot)
+                                @php
+                                    // الطرف المدين في قواعد المصروفات جاي من السند نفسه —
+                                    // غير كده الطرفين مطلوبين، فخيار «—» بيتشال من القايمة
+                                    // بدل ما المحاسب يحفظ قاعدة نص ويكتشف بعدين إن الترحيل واقف
+                                    $required = $slot !== 'tax_key' && ! ($slot === 'debit_key' && str_starts_with($r->key, 'expense.'));
+                                    // حسابات الترحيل بس + `rep_cash` في الخانات اللي بتفهمه؛
+                                    // والقيمة المحفوظة دايماً موجودة عشان الحفظ مايغيّرش
+                                    // مفتاح قديم من غير ما المحاسب يقصد
+                                    $opts = $keys->filter(fn ($k) => $k->is_postable
+                                        || $r->{$slot} === $k->system_key
+                                        || ($k->system_key === 'rep_cash' && in_array($slot, $repCashSlots[$r->key] ?? [], true)));
+                                @endphp
                                 <td>
-                                    <select name="rules[{{ $r->key }}][{{ $slot }}]" style="width:100%">
-                                        <option value="">—</option>
-                                        @foreach ($keys as $k)
+                                    <select name="rules[{{ $r->key }}][{{ $slot }}]" style="width:100%" @required($required)>
+                                        @unless ($required)
+                                            <option value="">—</option>
+                                        @endunless
+                                        @foreach ($opts as $k)
                                             <option value="{{ $k->system_key }}" @selected($r->{$slot} === $k->system_key)>{{ $k->code }} · {{ $k->displayName() }}</option>
                                         @endforeach
                                     </select>

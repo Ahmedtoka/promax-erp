@@ -148,6 +148,41 @@ class GlRebuildTest extends TestCase
         $this->assertSame(600.0, GlAccount::findKey('cash_main')->balanceBetween(null, null));
     }
 
+    /**
+     * ⚠️ **repost كان بيرمي التحويل اليدوي.** تعديل تاريخ فاتورة أو
+     * إعادة ترقيمها بتنادي `repost()` — وكانت بتمسح القيد وتولّده
+     * بالقاعدة، يعني السطر اللي المحاسب حوّله للبنك بيرجع للخزنة من
+     * غير أي أثر. نفس التقاط `rebuild()` بالظبط (نفس الهيلبرز).
+     */
+    public function test_repost_keeps_a_manual_override_and_writes_its_audit_row_again(): void
+    {
+        [$admin, , $coll] = $this->world();
+        $ledger = app(Ledger::class);
+        $cash = GlAccount::findKey('cash_main');
+        $bank = GlAccount::findKey('bank');
+
+        $line = $ledger->autoEntryFor($coll)->lines->firstWhere('account_id', $cash->id);
+        $ledger->overrideAccount($line, $bank, $admin, 'اتفاق مع العميل');
+
+        $entry = $ledger->repost($coll, $admin);
+
+        $this->assertNotNull($entry);
+        $newLine = $entry->lines->firstWhere('slot', 'dr');
+        $this->assertSame($bank->id, $newLine->account_id, 'التحويل اليدوي لازم يعيش الـrepost');
+        $this->assertTrue($newLine->overridden);
+        $this->assertSame($cash->id, $newLine->rule_account_id, 'حساب القاعدة الأصلي متسجّل على السطر');
+        $this->assertSame(600.0, $bank->balanceBetween(null, null));
+        $this->assertSame(0.0, $cash->balanceBetween(null, null));
+
+        // وأثر التدقيق (مين/إمتى/ليه) اتكتب تاني على السطر الجديد
+        $ov = GlLineOverride::where('line_id', $newLine->id)->latest('id')->first();
+        $this->assertNotNull($ov, 'صف التدقيق لازم يتكتب على السطر الجديد');
+        $this->assertSame($admin->id, $ov->user_id);
+        $this->assertSame('اتفاق مع العميل', $ov->note);
+        $this->assertSame($cash->id, $ov->from_account_id);
+        $this->assertSame($bank->id, $ov->to_account_id);
+    }
+
     public function test_overrides_dropped_when_the_source_no_longer_posts_at_all(): void
     {
         [$admin, , $coll] = $this->world();

@@ -118,6 +118,37 @@ class GlInvariantTest extends TestCase
         $this->artisan('promax:gl-sync-reps')->assertFailed();
     }
 
+    /**
+     * ⚠️ **تاريخ البداية لما يتحرك لقدام.** المستندات القديمة بتخرج من
+     * الفحص الثابت فوراً، فالقيود اللي اتولدت وهي البداية أقدم لازم
+     * تتشال معاها — وإلا الشجرة بتفضل شايلة فترة برّه الدفتر والفحص
+     * بيقع ويمنع أي إعادة بناء بعد كده.
+     */
+    public function test_moving_the_start_date_forward_purges_the_earlier_automatic_entries(): void
+    {
+        $admin = $this->makeAdmin();
+        Setting::write('gl_start_date', '2026-01-01');
+        $client = $this->makeClient();
+        $mk = fn (array $a) => Transaction::create(array_merge(['client_id' => $client->id, 'memo' => 'x', 'debit' => 0, 'credit' => 0, 'tax' => 0], $a));
+        $mk(['date' => '2026-02-10', 'kind' => 'sale', 'debit' => 500]);
+        $mk(['date' => '2026-09-01', 'kind' => 'sale', 'debit' => 300]);
+        $client->recalculate();
+        $this->assertSame(2, GlEntry::count());
+
+        $res = $this->actingAs($admin)->post(route('gl.settings.general'), [
+            'gl_start_date' => '2026-08-01', 'gl_enabled' => '1',
+        ]);
+        $res->assertRedirect(route('gl.settings'));
+
+        $this->assertSame(1, GlEntry::where('origin', 'auto')->count(), 'قيد فبراير لازم يتشال');
+        $this->assertStringContainsString(__('gl.start_moved_purged', ['n' => 1]), (string) session('ok'));
+
+        // والفحص الثابت بيقارن الطرفين من نفس التاريخ — ٣٠٠ مقابل ٣٠٠
+        $inv = app(Ledger::class)->invariants();
+        $this->assertTrue($inv['receivables']['ok'], json_encode($inv));
+        $this->assertSame(300.0, $inv['receivables']['gl']);
+    }
+
     // ═══════════════════════ أدوات الفاتورة الإدارية ═══════════════════════
 
     /**
@@ -251,6 +282,53 @@ class GlInvariantTest extends TestCase
             $this->assertSame($newDate->toDateString(), $e->date->toDateString());
             $this->assertSame($newDate->format('Y-m'), $e->period_key);
         }
+    }
+
+    /**
+     * ⚠️ **إعادة الترقيم بقت repost لكل فاتورة اتغيّر رقمها** بدل إعادة
+     * بناء كاملة للدفتر. لو الترحيل نفسه وقع (قاعدة موقوفة هنا) الترقيم
+     * بيكمّل — بس الشاشة لازم تقول إن الدفتر ورا، مش تقول «تمام» وبس.
+     */
+    public function test_renumber_reposts_each_invoice_and_warns_when_the_ledger_could_not_follow(): void
+    {
+        $admin = $this->makeAdmin();
+        [$rep, $client, $product] = $this->sceneReadyToSell();
+        $this->sellApi($rep, $client, [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'credit'])->assertCreated();
+
+        $invoice = Invoice::latest('id')->first();
+        // رقم مختلف عن اللي الترقيم هيديه (INV-1001) عشان الفاتورة
+        // تتعدّ «اتغيّر رقمها» فعلاً
+        $invoice->update(['number' => 'INV-9977']);
+        $this->assertCount(1, $this->glEntriesForInvoice($invoice));
+
+        // القاعدة اتوقفت — القيد هيتمسح من غير بديل وقت الـrepost
+        \App\Models\Gl\GlPostingRule::where('key', 'tx.sale')->update(['active' => false]);
+        \App\Models\Gl\GlPostingRule::flush();
+
+        $res = $this->actingAs($admin)->post(route('ops.invoices.renumber'));
+
+        $res->assertRedirect();
+        $res->assertSessionHasErrors('gl');
+        $this->assertSame(__('gl.repost_failed_n', ['n' => 1]), session('errors')->first('gl'));
+        $this->assertSame('INV-1001', $invoice->fresh()->number, 'الترقيم نفسه كمّل');
+        $this->assertCount(0, $this->glEntriesForInvoice($invoice->fresh()));
+    }
+
+    /** الترقيم والشجرة ماشيين مع بعض لما القواعد سليمة — مفيش تحذير */
+    public function test_renumber_keeps_the_entries_when_the_rules_are_healthy(): void
+    {
+        $admin = $this->makeAdmin();
+        [$rep, $client, $product] = $this->sceneReadyToSell();
+        $this->sellApi($rep, $client, [['product_id' => $product->id, 'qty' => 5]], ['payment' => 'credit'])->assertCreated();
+
+        $invoice = Invoice::latest('id')->first();
+        $invoice->update(['number' => 'INV-9977']);
+
+        $this->actingAs($admin)->post(route('ops.invoices.renumber'))->assertSessionHasNoErrors();
+
+        $this->assertSame('INV-1001', $invoice->fresh()->number);
+        $this->assertCount(1, $this->glEntriesForInvoice($invoice->fresh()), 'القيد لازم يفضل موجود بعد الترقيم');
+        $this->assertTrue(app(Ledger::class)->invariants()['receivables']['ok']);
     }
 
     // ⚠️ `editInvoiceItems` مش متغطي هنا — مسرحه محتاج عهدة مفتوحة

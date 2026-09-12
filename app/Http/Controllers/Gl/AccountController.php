@@ -53,7 +53,7 @@ class AccountController extends Controller
         $data = $request->validate([
             'parent_id' => ['required', 'exists:gl_accounts,id'],
             // كود رقمي، وممكن لاحقة بعد نقطة (زي نقدية مندوب `1110.SLS-1`)
-            'code' => ['required', 'string', 'max:20', 'regex:/^[0-9]{1,6}(\.[A-Z0-9-]{1,12})?$/', 'unique:gl_accounts,code'],
+            'code' => ['required', 'string', 'max:40', 'regex:/^[0-9]{1,6}(\.[A-Z0-9-]{1,12})?$/', 'unique:gl_accounts,code'],
             'name' => ['required', 'string', 'max:120'],
             'name_en' => ['nullable', 'string', 'max:120'],
         ]);
@@ -94,7 +94,7 @@ class AccountController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'name_en' => ['nullable', 'string', 'max:120'],
             'active' => ['nullable', 'boolean'],
-            'code' => ['nullable', 'string', 'max:20', 'regex:/^[0-9]{1,6}(\.[A-Z0-9-]{1,12})?$/', Rule::unique('gl_accounts', 'code')->ignore($account->id)],
+            'code' => ['nullable', 'string', 'max:40', 'regex:/^[0-9]{1,6}(\.[A-Z0-9-]{1,12})?$/', Rule::unique('gl_accounts', 'code')->ignore($account->id)],
             'parent_id' => ['nullable', 'exists:gl_accounts,id'],
         ]);
 

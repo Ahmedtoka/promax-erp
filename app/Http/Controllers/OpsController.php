@@ -4490,8 +4490,9 @@ class OpsController extends Controller
         $count = 0;
         $first = '';
         $last = '';
+        $changed = [];   // الفواتير اللي رقمها اتغيّر فعلاً — قيودها بس هي اللي بتتعاد
 
-        DB::transaction(function () use (&$count, &$first, &$last) {
+        DB::transaction(function () use (&$count, &$first, &$last, &$changed) {
             // ١. الأرقام القديمة قبل ما نلمسها
             $olds = DB::table('invoices')->pluck('number', 'id');
 
@@ -4523,6 +4524,7 @@ class OpsController extends Controller
                         ->update(['memo' => DB::raw("REPLACE(memo, '$safeOld', '$safeNew')")]);
 
                     $count++;
+                    $changed[] = $id;
                 }
 
                 if ($first === '') {
@@ -4534,27 +4536,34 @@ class OpsController extends Controller
             }
         });
 
-        // الشجرة: الترقيم بيلمس كل الفواتير مش دفعة واحدة بس — repost
-        // لكل قيد على حدة تكلفته عالية هنا، فبدل كده rebuild كامل من
-        // بداية الشجرة. محمي: فشله (فترة مقفولة/فحص ثابت) ماترجّعش
-        // الترقيم اللي خلص فعلاً (٩/٩). $count == 0 = مفيش رقم اتغيّر
-        // فعلياً (مفيش memo لقيد اتلمس) — rebuild من غير داعي.
-        if ($count > 0 && \App\Models\Setting::read('gl_enabled') === '1') {
-            try {
-                app(\App\Services\Gl\Ledger::class)->rebuild(
-                    \Illuminate\Support\Carbon::parse(\App\Models\Setting::read('gl_start_date') ?: '1970-01-01'),
-                    true, false, $request->user(),
-                );
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('gl.observer failed', ['event' => 'renumberInvoices', 'error' => $e->getMessage()]);
+        // ═══ الشجرة ═══
+        // ⚠️ **إعادة بناء كاملة كانت مبالغة خطيرة هنا.** الترقيم بيغيّر
+        // نص البيان بس (`memo`) — الحسابات والمبالغ والتواريخ زي ما هي —
+        // لكن `rebuild()` بتمسح **كل** القيود الآلية من بداية الدفتر
+        // وتولّدها تاني بالقواعد الحالية: أي قاعدة اتغيّرت من ساعة
+        // الترحيل الأصلي بتتطبق بأثر رجعي على الدفتر كله، وأي فترة
+        // مقفولة بترفض العملية كلها. repost لكل فاتورة اتغيّر رقمها
+        // بيلمس قيودها هي بس، وبيحافظ على تحويلات الحسابات اليدوية.
+        $failed = 0;
+        if ($changed !== [] && \App\Models\Setting::read('gl_enabled') === '1') {
+            foreach (Invoice::whereIn('id', $changed)->get() as $inv) {
+                if (! $this->repostInvoiceGl($inv, 'renumber')) {
+                    $failed++;
+                }
             }
         }
 
-        return back()->with('ok', __('ops.renumber_done', [
+        $res = back()->with('ok', __('ops.renumber_done', [
             'count' => number_format($count),
             'first' => $first,
             'last' => $last,
         ]));
+
+        // الترقيم نفسه نجح — الشجرة هي اللي ورا. الرسالة لازم تبان
+        // عشان محدش يفتكر إن الدفتر اتحدّث وهو واقف على قاعدة موقوفة.
+        return $failed > 0
+            ? $res->withErrors(['gl' => __('gl.repost_failed_n', ['n' => number_format($failed)])])
+            : $res;
     }
 
     public function invoice(Invoice $invoice)
@@ -4726,14 +4735,26 @@ class OpsController extends Controller
      * دي بعد ما تخلّص تعديلها جوه نفس الـDB::transaction. محمي: مشكلة
      * في الدفتر لازم تتسجل وميوقفش/يرجّع تعديل الأدمن نفسه.
      */
-    private function repostInvoiceGl(Invoice $invoice, string $event): void
+    private function repostInvoiceGl(Invoice $invoice, string $event): bool
     {
         try {
+            $ok = true;
+            $ledger = app(\App\Services\Gl\Ledger::class);
             foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                app(\App\Services\Gl\Ledger::class)->repost($glTx);
+                // ⚠️ قيد كان موجود ورجع null = القاعدة اتوقفت أو مفتاحها
+                // اتشال، والقيد اتمسح من غير بديل. مافيش استثناء بيترمي
+                // في الحالة دي فالصمت كان بيبلع اختفاء قيد من الدفتر.
+                $had = $ledger->autoEntryFor($glTx) !== null;
+                if ($ledger->repost($glTx) === null && $had) {
+                    $ok = false;
+                }
             }
+
+            return $ok;
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('gl.repost failed', ['invoice' => $invoice->id, 'event' => $event, 'error' => $e->getMessage()]);
+
+            return false;
         }
     }
 

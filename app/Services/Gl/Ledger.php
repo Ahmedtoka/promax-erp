@@ -67,7 +67,12 @@ class Ledger
                 'source_type' => $source->getMorphClass(),
                 'source_id' => $source->getKey(),
                 'rule_key' => $spec['rule'],
-                'needs_review' => $spec['needs_review'],
+                // ⚠️ القيد الآلي **مش ممنوع** في فترة مقفولة — الطبقة دي
+                // مشتقة من المستند، ولو منعناها كان المستند هيعدّي من غير
+                // قيد والفحص الثابت يقع. بدل المنع بيتعلّم `needs_review`
+                // عشان المحاسب يشوفه في اليومية ويقرر (قيد تسوية في شهر
+                // مفتوح غالباً).
+                'needs_review' => $spec['needs_review'] || GlPeriod::isClosed($date),
                 'created_by' => $by?->id,
             ]);
             $this->writeLines($entry, $spec['lines']);
@@ -95,10 +100,85 @@ class Ledger
         // unpost+post داخل ترانزاكشن واحد — لو الـpost فشل (مثلاً تاريخ
         // المصدر قبل `gl_start_date`) مايتمسحش القيد القديم من غير بديل
         return DB::transaction(function () use ($source, $by) {
-            $this->unpost($source);
+            // ⚠️ التحويلات اليدوية على القيد القديم لازم تعيش الـrepost
+            // زي ما بتعيش `rebuild()` بالظبط — تعديل تاريخ فاتورة أو
+            // إعادة ترقيمها ماينفعش يرجّع سطر المحاسب حوّله للبنك تاني
+            // للخزنة من غير ما حد يعرف
+            $existing = $this->autoEntryFor($source);
+            $overrides = $existing ? $this->captureOverrides($existing) : [];
 
-            return $this->post($source, $by);
+            $this->unpost($source);
+            $entry = $this->post($source, $by);
+
+            if ($entry !== null && $overrides !== []) {
+                $this->reapplyOverrides($entry, $overrides);
+                $entry->load('lines');
+            }
+
+            return $entry;
         });
+    }
+
+    /**
+     * التحويلات اليدوية على قيد آلي، بمفتاح الخانة (`slot`) — ومعاها
+     * مين عملها وإمتى وليه، عشان صف التدقيق يتكتب تاني على السطر الجديد
+     * (السطر القديم بيتمسح بالكاسكيد مع القيد).
+     *
+     * @return array<string, array{to:int, user_id:?int, at:mixed, note:?string}>
+     */
+    private function captureOverrides(GlEntry $entry): array
+    {
+        $lines = $entry->relationLoaded('lines') ? $entry->lines : $entry->lines()->get();
+        $overridden = $lines->where('overridden', true);
+        if ($overridden->isEmpty()) {
+            return [];
+        }
+
+        $latest = GlLineOverride::whereIn('line_id', $overridden->pluck('id'))
+            ->orderByDesc('id')->get()->groupBy('line_id')->map(fn ($g) => $g->first());
+
+        $out = [];
+        foreach ($overridden as $l) {
+            $ov = $latest->get($l->id);
+            $out[(string) $l->slot] = [
+                'to' => $l->account_id,
+                'user_id' => $ov?->user_id,
+                'at' => $ov?->at,
+                'note' => $ov?->note,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * إعادة تطبيق تحويلات محفوظة على قيد اتولّد من جديد — بيرجّع عدد
+     * السطور اللي اتطبق عليها فعلاً (خانة ماعادش ليها سطر = التحويل اتشال).
+     *
+     * @param  array<string, array{to:int, user_id:?int, at:mixed, note:?string}>  $overrides
+     */
+    private function reapplyOverrides(GlEntry $entry, array $overrides): int
+    {
+        $applied = 0;
+        foreach ($entry->lines as $l) {
+            $k = (string) $l->slot;
+            if (! isset($overrides[$k])) {
+                continue;
+            }
+            $ruleAccountId = $l->account_id;
+            $l->update(['account_id' => $overrides[$k]['to'], 'overridden' => true, 'rule_account_id' => $ruleAccountId]);
+            GlLineOverride::create([
+                'line_id' => $l->id,
+                'from_account_id' => $ruleAccountId,
+                'to_account_id' => $overrides[$k]['to'],
+                'user_id' => $overrides[$k]['user_id'],
+                'at' => $overrides[$k]['at'] ?? now(),
+                'note' => $overrides[$k]['note'],
+            ]);
+            $applied++;
+        }
+
+        return $applied;
     }
 
     public function autoEntryFor(Model $source): ?GlEntry
@@ -312,11 +392,17 @@ class Ledger
     /** الفحص الثابت: عملاء الشجرة = صافي قيود العملاء من تاريخ البداية · موردون كذلك */
     public function invariants(): array
     {
+        // ⚠️ **الطرفين من نفس التاريخ.** طرف الدفتر كان بيتحسب من غير
+        // فترة (كل القيود من أولها) وطرف المستندات من `gl_start_date` —
+        // مطابقين طول ما مفيش قيد آلي أقدم من البداية، لكن أول ما تاريخ
+        // البداية يتحرك لقدام (أو يتسجّل قيد يدوي على العملاء بتاريخ قديم)
+        // الفحص كان بيقع من غير سبب حقيقي.
         $start = Setting::read('gl_start_date') ?: '1970-01-01';
-        $recvGl = GlAccount::findKey('receivables')->balanceBetween(null, null);
+        $from = Carbon::parse($start);
+        $recvGl = GlAccount::findKey('receivables')->balanceBetween($from, null);
         $recvExp = round((float) DB::table('transactions')->whereDate('date', '>=', $start)
             ->where('kind', '!=', 'consignment')->selectRaw('COALESCE(SUM(debit - credit),0) v')->value('v'), 2);
-        $payGl = GlAccount::findKey('payables')->balanceBetween(null, null);
+        $payGl = GlAccount::findKey('payables')->balanceBetween($from, null);
         $payExp = round((float) DB::table('supplier_transactions')->whereDate('date', '>=', $start)
             ->selectRaw('COALESCE(SUM(credit - debit),0) v')->value('v'), 2);
 
@@ -361,29 +447,16 @@ class Ledger
             // التدقيق على السطر الجديد (الأصلي هيتمسح مع القيد بالكاسكيد)
             $overrides = [];
             $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString());
-            $overriddenLines = []; // line_id => ['key' => source|slot, 'to' => account_id]
             // مفاتيح المصادر اللي هتتمسح — عشان نتأكد بعد التوليد إن كل واحد
             // فيهم رجع تاني (مش عدد بس، عشان أول إعادة بناء على شجرة فاضية
             // deleted=0 و created=N طبيعي وصحيح، مش عطل)
             $deletedKeys = [];
             foreach ((clone $autoQ)->with('lines')->cursor() as $e) {
                 $deletedKeys[$e->source_type.'|'.$e->source_id] = true;
-                foreach ($e->lines as $l) {
-                    if ($l->overridden) {
-                        $overriddenLines[$l->id] = ['key' => $e->source_type.'|'.$e->source_id.'|'.$l->slot, 'to' => $l->account_id];
-                    }
+                // نفس الالتقاط اللي `repost()` بيستعمله — بالمصدر + الخانة
+                foreach ($this->captureOverrides($e) as $slot => $info) {
+                    $overrides[$e->source_type.'|'.$e->source_id.'|'.$slot] = $info;
                 }
-            }
-            $latestOverrideByLine = GlLineOverride::whereIn('line_id', array_keys($overriddenLines))
-                ->orderByDesc('id')->get()->groupBy('line_id')->map(fn ($g) => $g->first());
-            foreach ($overriddenLines as $lineId => $info) {
-                $ov = $latestOverrideByLine->get($lineId);
-                $overrides[$info['key']] = [
-                    'to' => $info['to'],
-                    'user_id' => $ov?->user_id,
-                    'at' => $ov?->at,
-                    'note' => $ov?->note,
-                ];
             }
 
             $report->deleted = (clone $autoQ)->count();
@@ -398,27 +471,27 @@ class Ledger
                 }
                 $report->created++;
                 $createdSourceKeys[$entry->source_type.'|'.$entry->source_id] = true;
-                foreach ($entry->lines as $l) {
-                    $k = $entry->source_type.'|'.$entry->source_id.'|'.$l->slot;
-                    if (! isset($overrides[$k])) {
-                        continue;
+
+                // تحويلات المصدر ده لوحدها، بمفتاح الخانة — الباقي بيفضل
+                // في `$overrides` وبيتعدّ «اتشال» في الآخر (مصدر ماولّدش قيد)
+                $prefix = $entry->source_type.'|'.$entry->source_id.'|';
+                $mine = [];
+                foreach ($overrides as $k => $info) {
+                    if (str_starts_with($k, $prefix)) {
+                        $mine[substr($k, strlen($prefix))] = $info;
+                        unset($overrides[$k]);
                     }
-                    if ($keepOverrides) {
-                        $ruleAccountId = $l->account_id;
-                        $l->update(['account_id' => $overrides[$k]['to'], 'overridden' => true, 'rule_account_id' => $ruleAccountId]);
-                        GlLineOverride::create([
-                            'line_id' => $l->id,
-                            'from_account_id' => $ruleAccountId,
-                            'to_account_id' => $overrides[$k]['to'],
-                            'user_id' => $overrides[$k]['user_id'],
-                            'at' => $overrides[$k]['at'] ?? now(),
-                            'note' => $overrides[$k]['note'],
-                        ]);
-                        $report->overridesKept++;
-                    } else {
-                        $report->overridesDropped++;
-                    }
-                    unset($overrides[$k]);
+                }
+                if ($mine === []) {
+                    continue;
+                }
+                if ($keepOverrides) {
+                    $applied = $this->reapplyOverrides($entry, $mine);
+                    $report->overridesKept += $applied;
+                    // خانة ماعادش ليها سطر في القيد الجديد = التحويل اتشال
+                    $report->overridesDropped += count($mine) - $applied;
+                } else {
+                    $report->overridesDropped += count($mine);
                 }
             }
             $report->overridesDropped += count($overrides); // مصدر اتشال

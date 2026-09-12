@@ -174,6 +174,57 @@ class GlPostingTest extends TestCase
         $this->assertSame($beforeLines, $afterLines);
     }
 
+    /**
+     * ⚠️ **الإشارة مش حكر على opening/transfer.** أي نوع ممكن يتسجّل على
+     * الطرف المعاكس (تسوية بمدين لما التسوية تكون لصالحنا، فاتورة بدائن
+     * في تصحيح) — والقاعدة مكتوبة على الاتجاه الطبيعي بس. القلب بيمشي
+     * على كل السطور بما فيها سطر الضريبة.
+     */
+    public function test_a_debit_side_settlement_mirrors_the_rule_and_stays_balanced(): void
+    {
+        $client = $this->makeClient();
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'تسوية لصالحنا', 'debit' => 100, 'credit' => 0, 'kind' => 'settlement']);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame([100.0, 0.0], $this->lineOn($e, 'receivables'));
+        $this->assertSame([0.0, 100.0], $this->lineOn($e, 'discounts_allowed'));
+        $this->assertSame(100.0, $e->totalDebit());
+    }
+
+    public function test_a_credit_side_sale_mirrors_every_line_including_the_tax_line(): void
+    {
+        $client = $this->makeClient();
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'عكس فاتورة', 'debit' => 0, 'credit' => 1140, 'tax' => 140, 'kind' => 'sale']);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame([0.0, 1140.0], $this->lineOn($e, 'receivables'));
+        $this->assertSame([1000.0, 0.0], $this->lineOn($e, 'sales'));
+        // ⚠️ سطر الضريبة كان بيفضل دائن مع القلب القديم (اللي بيبدّل
+        // مفتاحين بس) — قيد ضريبة بالعكس على مستند رسمي
+        $this->assertSame([140.0, 0.0], $this->lineOn($e, 'vat_output'));
+    }
+
+    /**
+     * القيد الآلي طبقة مشتقة من المستند — قفل الشهر مايمنعوش (وإلا
+     * المستند يعدي من غير قيد والفحص الثابت يقع)، بس بيتعلّم للمراجعة.
+     */
+    public function test_a_collection_inside_a_closed_period_still_posts_but_is_flagged(): void
+    {
+        $admin = $this->makeAdmin();
+        $client = $this->makeClient();
+        \App\Models\Gl\GlPeriod::close(today()->format('Y-m'), $admin);
+
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'تحصيل في شهر مقفول', 'debit' => 0, 'credit' => 300, 'kind' => 'collection', 'method' => 'cash']);
+
+        $e = $this->entryFor($tx);
+        $this->assertTrue($e->needs_review, 'قيد آلي في فترة مقفولة لازم يتعلّم');
+        $this->assertSame([300.0, 0.0], $this->lineOn($e, 'cash_main'));
+
+        // والشاشة بتقول السبب باسمه مش «محتاج مراجعة» العادية
+        $this->actingAs($this->makeAdmin(['email' => 'acc.closed@test.local', 'role' => 'accountant']))
+            ->get(route('gl.entries'))->assertOk()->assertSee(__('gl.needs_review_closed'));
+    }
+
     public function test_opening_and_transfer_flip_sides_when_posted_as_credit(): void
     {
         $client = $this->makeClient();

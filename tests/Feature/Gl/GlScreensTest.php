@@ -150,6 +150,25 @@ class GlScreensTest extends TestCase
 
         $lines[1]['credit'] = 999;
         $this->actingAs($this->acc)->post(route('gl.entries.store'), ['date' => today()->toDateString(), 'memo' => 'x', 'lines' => $lines])->assertSessionHasErrors('lines');
+
+        // سطر بمدين ودائن مع بعض بيتوازن مع نفسه ويعدّي من حارس الميزان —
+        // لكنه قيد مالوش معنى محاسبي
+        $both = [
+            ['account_id' => GlAccount::findKey('expense_rent')->id, 'debit' => 50, 'credit' => 50],
+            ['account_id' => GlAccount::findKey('cash_main')->id, 'debit' => 0, 'credit' => 0],
+        ];
+        $this->actingAs($this->acc)->post(route('gl.entries.store'), ['date' => today()->toDateString(), 'memo' => 'الاتنين', 'lines' => $both])
+            ->assertSessionHasErrors('lines');
+
+        // ومبلغ أكبر من سعة العمود مرفوض بالفاليديشن مش بالقص الصامت
+        $big = [
+            ['account_id' => GlAccount::findKey('expense_rent')->id, 'debit' => 100000000, 'credit' => 0],
+            ['account_id' => GlAccount::findKey('cash_main')->id, 'debit' => 0, 'credit' => 100000000],
+        ];
+        $this->actingAs($this->acc)->post(route('gl.entries.store'), ['date' => today()->toDateString(), 'memo' => 'كبير', 'lines' => $big])
+            ->assertSessionHasErrors('lines.0.debit');
+
+        $this->assertSame(1, GlEntry::where('origin', 'manual')->count(), 'القيد السليم بس هو اللي اتسجّل');
     }
 
     /**
@@ -329,6 +348,63 @@ class GlScreensTest extends TestCase
             ['account_id' => GlAccount::findKey('expense_rent')->id, 'debit' => 1, 'credit' => 0],
             ['account_id' => GlAccount::findKey('cash_main')->id, 'debit' => 0, 'credit' => 1],
         ]])->assertSessionHasErrors('lines');
+    }
+
+    /**
+     * ⚠️ **قاعدة نص ماتتحفظش.** القاعدة من غير طرفها بتخلي الترحيل
+     * يرمي/يروح حساب معلّق، وإعادة البناء بعدها بترفض — والمحاسب
+     * مابيكتشفش ده غير لما فاتورة تعدي من غير قيد. الحارس هنا.
+     */
+    public function test_a_rule_cannot_be_saved_without_the_side_it_needs(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->post(route('gl.settings.rules'), [
+            'rules' => ['tx.sale' => ['debit_key' => '', 'credit_key' => 'sales', 'tax_key' => 'vat_output', 'active' => 1]],
+        ])->assertSessionHasErrors('rules.tx.sale.debit_key');
+
+        $rule = GlPostingRule::where('key', 'tx.sale')->first();
+        $this->assertSame('receivables', $rule->debit_key, 'الرفض معناه إن القاعدة مالمستهاش');
+    }
+
+    /**
+     * `rep_cash` مفتاح مجموعة بيتحل لحساب المندوب — والريزولفر بتاع
+     * «تصفية مندوب» بيستنتج المندوب للطرف الدائن بس. حطّه على المدين
+     * كان معناه سطر على حساب مجموعة (رصيد بيتعدّ مرتين في الشجرة).
+     */
+    public function test_the_rep_cash_group_key_is_only_allowed_where_a_resolver_understands_it(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->post(route('gl.settings.rules'), [
+            'rules' => ['settle.received' => ['debit_key' => 'rep_cash', 'credit_key' => 'rep_cash', 'active' => 1]],
+        ])->assertSessionHasErrors('rules.settle.received.debit_key');
+        $this->assertSame('cash_main', GlPostingRule::where('key', 'settle.received')->value('debit_key'));
+
+        // نفس المفتاح على القاعدة اللي ريزولفرها بيفهمه — يعدّي عادي
+        $this->actingAs($admin)->post(route('gl.settings.rules'), [
+            'rules' => ['tx.collection.rep_cash' => ['debit_key' => 'rep_cash', 'credit_key' => 'receivables', 'active' => 1]],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('rep_cash', GlPostingRule::where('key', 'tx.collection.rep_cash')->value('debit_key'));
+
+        // وحساب مجموعة عادي (مش بيقبل ترحيل) مرفوض على أي طرف
+        $this->actingAs($admin)->post(route('gl.settings.rules'), [
+            'rules' => ['tx.rebate' => ['debit_key' => 'discounts_allowed', 'credit_key' => 'rep_cash', 'active' => 1]],
+        ])->assertSessionHasErrors('rules.tx.rebate.credit_key');
+    }
+
+    public function test_the_settings_screen_warns_about_a_rule_that_would_stop_posting(): void
+    {
+        $this->actingAs($this->acc)->get(route('gl.settings'))
+            ->assertOk()->assertDontSee(__('gl.rules_broken_warn'));
+
+        $rule = GlPostingRule::where('key', 'tx.sale')->first();
+        $rule->update(['active' => false]);
+
+        $page = $this->actingAs($this->acc)->get(route('gl.settings'));
+        $page->assertOk()
+            ->assertSee(__('gl.rules_broken_warn'))
+            ->assertSee(__('gl.rule_inactive'));
     }
 
     public function test_the_accountant_cannot_touch_the_admin_only_settings(): void

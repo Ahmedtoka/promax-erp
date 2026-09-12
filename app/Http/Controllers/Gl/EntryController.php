@@ -57,6 +57,10 @@ class EntryController extends Controller
             'range' => $range,
             'rows' => $rows,
             'links' => $this->linksFor($rows->getCollection()),
+            // القيد الآلي مابيتمنعش في فترة مقفولة (طبقة مشتقة) — بيتعلّم
+            // `needs_review`؛ الشاشة بتفرّق بين «محتاج مراجعة» العادي
+            // و«قيد آلي في فترة مقفولة» عشان ده اللي محتاج قرار محاسب
+            'closedPeriods' => \App\Models\Gl\GlPeriod::where('status', 'closed')->pluck('key')->all(),
             'accounts' => $this->postableAccounts(),
             'filterAccounts' => GlAccount::where('is_postable', true)->orderBy('code')->get(),
         ]);
@@ -69,8 +73,11 @@ class EntryController extends Controller
             'memo' => ['required', 'string', 'max:250'],
             'lines' => ['required', 'array', 'min:2'],
             'lines.*.account_id' => ['required', 'exists:gl_accounts,id'],
-            'lines.*.debit' => ['nullable', 'numeric', 'min:0'],
-            'lines.*.credit' => ['nullable', 'numeric', 'min:0'],
+            // السقف: تمن خانات قبل العلامة العشرية — نفس حدود عمود المبلغ
+            // في `gl_lines`، ومن غيره الرقم الأكبر بيتقصّ صامت في الداتابيز
+            // ويطلّع قيد «متوازن» في الفورم ومش متوازن في الدفتر
+            'lines.*.debit' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            'lines.*.credit' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
         ], [
             // رسالة السطور بلغة المحاسب مش «The lines must have at least 2 items»
             'lines.required' => __('gl.lines_min'),
@@ -82,6 +89,15 @@ class EntryController extends Controller
             'debit' => round((float) ($l['debit'] ?? 0), 2),
             'credit' => round((float) ($l['credit'] ?? 0), 2),
         ], array_values($data['lines']));
+
+        // ⚠️ سطر بمدين ودائن مع بعض بيتوازن مع نفسه ويعدّي من حارس
+        // الميزان، وبيطلّع سطرين في كشف الحساب على نفس الحساب بنفس
+        // المبلغ ورصيد جاري مايتحركش — قيد مالوش معنى محاسبي
+        foreach ($lines as $l) {
+            if ($l['debit'] > 0 && $l['credit'] > 0) {
+                return back()->withErrors(['lines' => __('gl.line_one_side')])->withInput();
+            }
+        }
 
         try {
             $this->ledger->manual(Carbon::parse($data['date']), $data['memo'], $lines, $request->user());
