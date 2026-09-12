@@ -108,6 +108,7 @@
     'exportUrl' => route('erp.groups.movements', ['group' => $g] + $range->query()),
     'title' => __('client.movements_title_chain'),
     'hint' => __('client.movements_hint_chain'),
+    'range' => $range,
 ])
 
 <div class="grid2">

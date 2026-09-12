@@ -185,6 +185,26 @@ class ProductMovementsTest extends TestCase
             ->assertSee(route('erp.groups.movements', $group), false);
     }
 
+    /** فلتر «من — إلى» على كارت المسحوبات نفسه (١٢/٩/٢٠٢٦ — طلب المالك) */
+    public function test_the_chain_page_movements_follow_the_period_filter(): void
+    {
+        ['group' => $group] = $this->clientWithMovements();
+        $admin = $this->makeAdmin();
+
+        // كل الحركة النهارده: فترة بتنتهي امبارح = صفر
+        $this->actingAs($admin)
+            ->get(route('erp.groups.show', ['group' => $group, 'from' => today()->subDays(30)->toDateString(), 'to' => today()->subDay()->toDateString()]))
+            ->assertOk()
+            ->assertSee('data-range-filter', false)
+            ->assertViewHas('movements', fn ($m) => (int) $m['totals']['sold_qty'] === 0);
+
+        // فترة تشمل النهارده = 15 بار + 2 سبريد
+        $this->actingAs($admin)
+            ->get(route('erp.groups.show', ['group' => $group, 'from' => today()->toDateString()]))
+            ->assertOk()
+            ->assertViewHas('movements', fn ($m) => (int) $m['totals']['sold_qty'] === 17);
+    }
+
     // ═══════════════ 3. التصدير ═══════════════
 
     public function test_the_detail_export_lists_every_movement_and_the_summary_export_every_product(): void

@@ -5,6 +5,8 @@
      $exportUrl  ⇐ راوت التصدير التفصيلي (بيتضاف عليه ?view=summary للملخص)
      $title      ⇐ عنوان الكارت
      $hint       ⇐ سطر الشرح تحت العنوان (اختياري)
+     $range      ⇐ App\Support\DateRange (اختياري) — لو موجود بيرسم فورم «من — إلى»
+                   جوه الكارت (١٢/٩/٢٠٢٦ — طلب المالك)، والكنترولر بيمرّره للـsummary
 
      ⚠️ الأرقام هنا كميات من المستندات — مش فلوس من القيود. «قيمة المسحوب»
      للاسترشاد بمتوسط السعر بس؛ الرصيد والمشتريات من كشف الحساب.
@@ -23,6 +25,17 @@
             <a class="btn sm" href="{{ $exportUrl.(str_contains($exportUrl, '?') ? '&' : '?') }}view=summary">⬇ {{ __('client.export_movements_summary') }}</a>
         </span>
     </h3>
+    @if (! empty($range))
+        {{-- فلتر الفترة على الكارت نفسه — الفورم GET بيعيد تحميل الصفحة بنفس
+             `from`/`to` اللي باقي الصفحة (الكشف/التصديرات) بتقراهم --}}
+        <form method="GET" class="frow" style="margin-bottom:12px" data-noprint data-range-filter>
+            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
+            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+            @if (! $range->isOpen())
+                <div style="align-self:end"><a class="btn sm" href="{{ url()->current() }}#movements">✕ {{ __('common.all') }}</a></div>
+            @endif
+        </form>
+    @endif
 
     @if ($movements['families'] === [])
         <div style="text-align:center;color:var(--muted);padding:22px">{{ __('client.no_movements') }}</div>

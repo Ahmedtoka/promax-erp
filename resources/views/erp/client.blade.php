@@ -428,6 +428,7 @@
     'exportUrl' => route('erp.clients.movements', ['client' => $c] + $range->query()),
     'title' => __('client.movements_title'),
     'hint' => __('client.movements_hint_client'),
+    'range' => $range,
 ])
 
 <div class="card"><h3>{{ __('client.monthly_movement') }}</h3><div class="chartbox"><canvas id="chM"></canvas></div></div>

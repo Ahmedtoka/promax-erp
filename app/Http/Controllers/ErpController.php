@@ -885,7 +885,8 @@ class ErpController extends Controller
             'overdue' => $client->overdue(),
             'split' => $client->familySplit(),
             // حركة الأصناف بالكمية (٨/٩): كام قطعة من كل صنف وعائلة، سحب ومرتجع وهدايا
-            'movements' => \App\Services\ProductMovements::summary([$client->id]),
+            // بالفترة (١٢/٩) — نفس فلتر الكشف بيسوق حركة الأصناف على الكارت
+            'movements' => \App\Services\ProductMovements::summary([$client->id], $range->from, $range->to),
             'monthly' => $client->transactions()
                 ->selectRaw("DATE_FORMAT(date, '%Y-%m') as m,
                              SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) as sales,

@@ -151,8 +151,10 @@ class GroupController extends Controller
                 ->whereDate('created_at', today())->sum('total'),
             'contracts' => $branches->filter(fn ($b) => $b->contract !== null),
             'zones' => \App\Models\Zone::orderBy('code')->get(),
-            // حركة أصناف السلسلة بالكمية (٨/٩) — كل الفروع اللي الفاعل شايفها
-            'movements' => \App\Services\ProductMovements::summary($ids->all()),
+            // حركة أصناف السلسلة بالكمية (٨/٩) — كل الفروع اللي الفاعل شايفها.
+            // ⚠️ بالفترة (١٢/٩ — طلب المالك): «مسحوبات السلسلة من — إلى» على
+            // الشاشة نفسها، مش في التصدير بس. الفلتر على تاريخ المستند.
+            'movements' => \App\Services\ProductMovements::summary($ids->all(), $range->from, $range->to),
         ]);
     }
 
