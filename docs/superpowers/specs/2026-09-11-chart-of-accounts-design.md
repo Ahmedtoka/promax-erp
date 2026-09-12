@@ -33,7 +33,7 @@
 | عمود | نوع | ملاحظة |
 |---|---|---|
 | `id` | | |
-| `code` | string(20) unique | هرمي: `1`, `11`, `1101`, `1110`, `1110.SLS-001` |
+| `code` | string(40) unique | هرمي: `1`, `11`, `1101`, `1110`, `1110.SLS-001` — **٤٠ حرف مش ٢٠**: كود المندوب لوحده ممكن يوصل ٢٠ حرف فحساب `1110.{code}` بيعدّي الحد |
 | `name`, `name_en` | | `HasBilingualName` |
 | `parent_id` | nullable FK self | |
 | `type` | enum asset/liability/equity/revenue/expense | يُشتق من الجذر ويُخزَّن |
@@ -46,7 +46,10 @@
 
 **الجذور الخمسة ثابتة**: `1` أصول · `2` خصوم · `3` حقوق ملكية · `4` إيرادات · `5` مصروفات.
 حسابات النظام تتولد بـ`GlSeeder` (idempotent، آمن يتعاد) وبأمر `promax:gl-sync-reps`
-اللي بيضيف حساب `1110.{code}` لكل مستخدم ميداني نشط جديد (وبيتنادى من إنشاء المستخدم).
+اللي بيضيف حساب `1110.{code}` لكل مستخدم ميداني نشط جديد (وبيتنادى من إنشاء المستخدم)؛
+المستخدم اللي مالوش `code` بياخد `1110.U{id}`. الحسابات الحرة (مش نظام) مسموح
+تغيّر الكود أو الأب **جوه نفس الجذر بس** — نقل حساب من جذر لجذر مرفوض عشان
+`type`/`normal_side` المخزّنين مايبقوش كدب.
 
 ### 3.2 `gl_entries`
 | عمود | ملاحظة |
@@ -127,10 +130,38 @@ rep_advance(خزنة→مندوب)/rep_return(مندوب→خزنة), `amount`, 
 ## 5. الخدمات
 
 - **`App\Services\Gl\Ledger`** — المكان الوحيد للكتابة:
-  `post(Model $source): ?GlEntry` (idempotent بالمصدر) · `repost($source)` ·
-  `unpost($source)` · `manual(array $lines, ...)` · `reverse(GlEntry)` ·
-  `overrideAccount(GlLine, GlAccount, ?note)` (مباشر لو الفترة مفتوحة، وإلا
-  عكسي + صحيح بتاريخ النهاردة) · `rebuild(Carbon $from, bool $keepOverrides, bool $dryRun)`.
+  `post(Model $source, ?User $by): ?GlEntry` (idempotent بالمصدر) · `repost($source)` ·
+  `unpost($source)` · `manual(Carbon $date, string $memo, array $lines, User $by, string $origin = 'manual')` ·
+  `reverse(GlEntry, User, ?Carbon, ?string)` ·
+  `overrideAccount(GlLine, GlAccount, User, ?string $note)` (مباشر لو الفترة مفتوحة، وإلا
+  عكسي + صحيح بتاريخ النهاردة) · `rebuild(Carbon $from, bool $keepOverrides, bool $dryRun, ?User $by): RebuildReport`.
+
+  **التنفيذ خرج عن النص في النقط دي:**
+  - `manual()` **بترفض حسابات المراقبة** (`receivables` / `payables`) على أي
+    سطر — المديونية مصدرها `transactions` وبس، فقيد يدوي عليها كان هيكسر
+    الفحص الثابت. الرفض على مستوى السيرفس ومغطّى بتيست، مش تحقّق فورم.
+  - `overrideAccount()` بترفض حساب مراقبة **على الطرفين** (لا تنقل منه ولا إليه).
+  - التصحيح في **فترة مقفولة** بيكتب صف `gl_line_overrides` على السطر الأصلي
+    وبيعلّم النسخة المصحّحة `overridden` — يعني سجل التدقيق بيفضل على السطر
+    اللي اتغيّر فعلاً مش على القيد العكسي.
+  - `rebuild()` بتعيد بناء صفوف التدقيق (`gl_line_overrides`) مش بس الحسابات،
+    وبترفض لو فيه فترة مقفولة (`ClosedPeriod`) تاريخها ≥ `from`، وفيها **فحص
+    ثالث `entries`** = عدد المتمسوح == عدد المتولّد (بيمسك مصدر ضاع من غير ما
+    يبان في فحص العملاء/الموردين). المعاينة (`dryRun`) **مابترميش أبداً** —
+    بترجّع التقرير بـ`ok=false` لو الفحص فشل؛ التنفيذ الحقيقي بيرمي
+    `RebuildFailed($report)` وبيعمل rollback.
+    ⚠️ **نتيجة معروفة:** أول إعادة بناء على دفتر فاضي بيبقى فيها
+    `deleted=0` و`created=N` فالفحص `entries` بيسقط — شوف الرنبوك.
+- **الأوبزرفرز معزولة**: كل هوك جوه `try/catch` + `Log::error` — طبقة الشجرة
+  **مابتوقّعش كتابة بيزنس أبداً** (بيع/تحصيل/مرتجع بيعدّي حتى لو الترحيل وقع).
+  `repost()` برضه no-op طول ما `gl_enabled !== '1'`.
+- **أدوات الفاتورة في الأدمن** (`OpsController`) بتنادي `repostInvoiceGl()`
+  وحذف لكل موديل على حدة بدل `whereKey()->update()` الصامت؛ و`renumberInvoices`
+  بتشغّل **إعادة بناء واحدة محروسة** بدل ترحيل قيد قيد.
+- **المصروفات والنقدية** بتقبل **مستخدمين ميدانيين نشطين بس** في نقدية المندوب.
+- `App\Services\Gl\Reports::balancesByAccount` هي مصدر أرصدة الشجرة والميزان.
+- **١٥ راوت `gl.*`**؛ الصلاحيات: `act.gl.post` (أدمن + محاسب) و`act.gl.admin`
+  (أدمن بس).
 - **`App\Services\Gl\Rules`** — يقرأ `gl_posting_rules` ويحوّل مصدر إلى سطور.
 - **`App\Services\Gl\Reports`** — ميزان المراجعة · كشف حساب · قائمة الدخل ·
   الميزانية، كلها من `gl_lines` بفترة.
