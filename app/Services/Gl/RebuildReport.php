@@ -17,12 +17,19 @@ class RebuildReport
 
     /**
      * `receivables`/`payables` شكلهم `{gl: float, expected: float, ok: bool}` من
-     * `Ledger::invariants()`؛ `entries` شكله `{deleted: int, created: int, ok: bool}`
-     * وبيتحسب جوه `rebuild()` — بيمسك مصدر ضاع من غير ما يظهر في فحص العملاء/الموردين.
+     * `Ledger::invariants()`؛ `entries` شكله
+     * `{deleted: int, created: int, missing: int, ok: bool}` وبيتحسب جوه
+     * `rebuild()` — فحص بالمفتاح (source_type|source_id) مش بمقارنة عددين:
+     * كل مصدر اتمسح قيده لازم يرجّع قيد جديد. أول إعادة بناء على شجرة فاضية
+     * (deleted=0, created=N) بتعدي عادي؛ مصدر ضاع فعلاً أو قاعدة اتقفلت
+     * بيظهر في `missing` حتى لو الأعداد اتصادفت بالمصادفة.
      *
-     * @var array<string, array{gl?: float, expected?: float, deleted?: int, created?: int, ok: bool}>
+     * @var array<string, array{gl?: float, expected?: float, deleted?: int, created?: int, missing?: int, ok: bool}>
      */
     public array $invariants = [];
+
+    /** أول 50 مفتاح مصدر (source_type|source_id) اتمسح ولم يرجّع له قيد جديد */
+    public array $missingSources = [];
 
     public bool $ok = false;
 

@@ -57,9 +57,45 @@ class GlRebuildTest extends TestCase
         $this->assertTrue($report->ok);
         $this->assertSame(3, $report->deleted);
         $this->assertSame(3, $report->created);
+        $this->assertSame(0, $report->invariants['entries']['missing']);
         $this->assertSame($before, $this->balances());
         $this->assertTrue($report->invariants['receivables']['ok']);
         $this->assertSame(1140.0 - 600.0 - 114.0, $report->invariants['receivables']['gl']);
+    }
+
+    /**
+     * أول إعادة بناء بعد تفعيل الدفتر على شجرة فاضية — deleted=0, created=N —
+     * لازم تعدّي: فحص `entries` بقى بالمفتاح (source_type|source_id) مش
+     * بمقارنة الأعداد، فمفيش مصدر "ضاع" هنا أصلاً (مفيش حاجة اتمسحت).
+     */
+    public function test_the_first_rebuild_on_virgin_books_succeeds(): void
+    {
+        $this->seed(GlSeeder::class);
+        Setting::write('gl_enabled', '0');
+        Setting::write('gl_start_date', '2026-08-01');
+        Setting::flushCache();
+        $admin = $this->makeAdmin();
+        $client = $this->makeClient();
+        $mk = fn (array $a) => Transaction::create(array_merge(['client_id' => $client->id, 'memo' => 'x', 'debit' => 0, 'credit' => 0, 'tax' => 0], $a));
+        $mk(['date' => '2026-08-05', 'kind' => 'sale', 'debit' => 1140, 'tax' => 140]);
+        $mk(['date' => '2026-08-20', 'kind' => 'collection', 'credit' => 600, 'method' => 'cash']);
+        $mk(['date' => '2026-09-02', 'kind' => 'return', 'credit' => 114, 'tax' => 14]);
+        $client->recalculate();
+
+        $this->assertSame(0, GlEntry::count(), 'switch was off — nothing auto-posted');
+
+        Setting::write('gl_enabled', '1');
+        Setting::flushCache();
+
+        $report = app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'), true, false, $admin);
+
+        $this->assertTrue($report->ok);
+        $this->assertSame(0, $report->deleted);
+        $this->assertSame(3, $report->created);
+        $this->assertSame(0, $report->invariants['entries']['missing']);
+        $this->assertTrue($report->invariants['entries']['ok']);
+        $this->assertSame(3, GlEntry::count());
+        $this->assertTrue($report->invariants['receivables']['ok']);
     }
 
     public function test_dry_run_reports_the_effect_of_a_changed_rule_without_writing(): void
@@ -130,6 +166,8 @@ class GlRebuildTest extends TestCase
         $this->assertSame(0, $report->overridesKept);
         $this->assertSame(1, $report->overridesDropped);
         $this->assertFalse($report->invariants['entries']['ok'], 'a source that stopped posting must trip the entries invariant');
+        $this->assertSame(1, $report->invariants['entries']['missing']);
+        $this->assertCount(1, $report->missingSources);
     }
 
     public function test_manual_and_opening_entries_survive_a_rebuild(): void
@@ -168,7 +206,11 @@ class GlRebuildTest extends TestCase
             $this->assertFalse($e->report->ok);
             $this->assertFalse($e->report->invariants['receivables']['ok']);
             $this->assertFalse($e->report->invariants['entries']['ok']);
+            $this->assertSame(1, $e->report->invariants['entries']['missing']);
             $this->assertTrue($e->report->invariants['payables']['ok'], 'payables untouched by this break');
+            // الرسالة مبنية من أسماء الفحوصات اللي فشلت — entries وreceivables هنا
+            $this->assertStringContainsString('entries', $e->getMessage());
+            $this->assertStringContainsString('receivables', $e->getMessage());
         }
 
         $this->assertSame($before, $this->balances(), 'rolled back — balances unchanged');
@@ -188,6 +230,7 @@ class GlRebuildTest extends TestCase
         $this->assertFalse($report->ok);
         $this->assertFalse($report->invariants['receivables']['ok']);
         $this->assertFalse($report->invariants['entries']['ok']);
+        $this->assertSame(1, $report->invariants['entries']['missing']);
         $this->assertTrue($report->invariants['payables']['ok']);
         $this->assertSame($before, $this->balances(), 'dry run never writes, even on failure');
     }

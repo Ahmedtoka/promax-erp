@@ -105,7 +105,14 @@
                     $isMoney = array_key_exists('gl', $inv);
                 @endphp
                 <tr>
-                    <td style="text-align:start">{{ $key }}</td>
+                    <td style="text-align:start">
+                        {{ $key }}
+                        @if ($key === 'entries')
+                            <div style="font-size:10.5px;color:var(--muted)">
+                                {{ __('gl.rebuild_missing') }}: {{ number_format((int) ($inv['missing'] ?? 0)) }}
+                            </div>
+                        @endif
+                    </td>
                     <td class="num">{{ $isMoney ? $fmt($inv['gl']) : number_format((int) ($inv['deleted'] ?? 0)) }}</td>
                     <td class="num">{{ $isMoney ? $fmt($inv['expected']) : number_format((int) ($inv['created'] ?? 0)) }}</td>
                     <td><span class="badge {{ $inv['ok'] ? 'b-green' : 'b-red' }}">{{ $inv['ok'] ? '✓' : '✕' }}</span></td>
@@ -113,6 +120,12 @@
             @endforeach
         </table>
     </div>
+
+    @if (! empty($report->missingSources))
+        <div style="font-size:11px;color:var(--muted);margin-top:8px" dir="ltr">
+            {{ __('gl.rebuild_missing_sources') }}: {{ implode(', ', $report->missingSources) }}
+        </div>
+    @endif
 </div>
 @endif
 

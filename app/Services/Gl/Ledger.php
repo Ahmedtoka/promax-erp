@@ -362,7 +362,12 @@ class Ledger
             $overrides = [];
             $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString());
             $overriddenLines = []; // line_id => ['key' => source|slot, 'to' => account_id]
+            // مفاتيح المصادر اللي هتتمسح — عشان نتأكد بعد التوليد إن كل واحد
+            // فيهم رجع تاني (مش عدد بس، عشان أول إعادة بناء على شجرة فاضية
+            // deleted=0 و created=N طبيعي وصحيح، مش عطل)
+            $deletedKeys = [];
             foreach ((clone $autoQ)->with('lines')->cursor() as $e) {
+                $deletedKeys[$e->source_type.'|'.$e->source_id] = true;
                 foreach ($e->lines as $l) {
                     if ($l->overridden) {
                         $overriddenLines[$l->id] = ['key' => $e->source_type.'|'.$e->source_id.'|'.$l->slot, 'to' => $l->account_id];
@@ -385,12 +390,14 @@ class Ledger
             (clone $autoQ)->delete(); // gl_lines + gl_line_overrides cascade
 
             // 2. التوليد
+            $createdSourceKeys = [];
             foreach ($this->sources($from) as $src) {
                 $entry = $this->post($src, $by);
                 if ($entry === null) {
                     continue;
                 }
                 $report->created++;
+                $createdSourceKeys[$entry->source_type.'|'.$entry->source_id] = true;
                 foreach ($entry->lines as $l) {
                     $k = $entry->source_type.'|'.$entry->source_id.'|'.$l->slot;
                     if (! isset($overrides[$k])) {
@@ -424,13 +431,18 @@ class Ledger
                 }
             }
             $report->invariants = $this->invariants();
-            // عدد القيود اللي اتمسحت لازم يساوي اللي اتولدت تاني — لو مصدر
-            // ضاع (باگ ترتيب/فلترة زي مصدر تاريخه من غير COALESCE) الفحوصات
-            // التانية ممكن تعدّي من غيره، ده اللي بيمسكها
+            // كل مصدر اتمسح قيده لازم يبقى له قيد جديد بعد التوليد — فحص
+            // بالمفتاح (source_type|source_id) مش بالعدد: أول إعادة بناء على
+            // شجرة فاضية deleted=0 و created=N طبيعي فيها ومايبقاش عطل، لكن
+            // مصدر ضاع (باگ ترتيب/فلترة زي مصدر تاريخه من غير COALESCE) أو
+            // قاعدة اتقفلت بيفضل ظاهر في $missing حتى لو الأعداد اتصادفت
+            $missing = array_diff_key($deletedKeys, $createdSourceKeys);
+            $report->missingSources = array_slice(array_keys($missing), 0, 50);
             $report->invariants['entries'] = [
                 'deleted' => $report->deleted,
                 'created' => $report->created,
-                'ok' => $report->deleted === $report->created,
+                'missing' => count($missing),
+                'ok' => count($missing) === 0,
             ];
             $report->ok = collect($report->invariants)->every(fn ($i) => $i['ok']);
 
@@ -448,7 +460,11 @@ class Ledger
                 if (DB::transactionLevel() > $level) {
                     DB::rollBack();
                 }
-                $e = new RebuildFailed(__('gl.rebuild_invariant_failed'));
+                // اسم الفحص اللي فشل في الرسالة — مش نص ثابت عن رصيد العملاء/
+                // الموردين، عشان فشل `entries` (مصدر ضاع) كان بيظهر برسالة
+                // مضلِّلة تقول إن الرصيد مش متطابق مع إنه فعلاً متطابق
+                $failing = collect($report->invariants)->filter(fn ($i) => ! $i['ok'])->keys()->implode(', ');
+                $e = new RebuildFailed(__('gl.rebuild_invariant_failed_named', ['names' => $failing]));
                 $e->report = $report;
                 throw $e;
             }

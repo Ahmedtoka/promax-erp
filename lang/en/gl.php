@@ -7,6 +7,7 @@ return [
     'account_not_postable' => 'This account is a group or inactive — pick a postable sub-account.',
     'control_account' => 'Receivables and payables move only through their documents, not manual entries.',
     'rebuild_invariant_failed' => 'Rebuild rolled back: the GL receivables or payables balance does not match the ledger.',
+    'rebuild_invariant_failed_named' => 'Rebuild rolled back — failed checks: :names',
     'rebuild_closed_period' => 'Period :period is closed — reopen it before rebuilding.',
 
     // ═══ Expense & cash-movement vouchers (Sep 11, 2026) ═══
@@ -181,6 +182,8 @@ return [
     'rebuild_diff' => 'Difference',
     'rebuild_no_diff' => 'No balance changed.',
     'rebuild_ok' => 'Rebuild finished and the invariants passed.',
+    'rebuild_missing' => 'Missing sources',
+    'rebuild_missing_sources' => 'Sources whose entry was deleted and never came back (source_type|source_id)',
     'confirm_rebuild' => 'Rebuild every automatic entry? Look at the preview first.',
 
     'invariants' => 'Invariants',
