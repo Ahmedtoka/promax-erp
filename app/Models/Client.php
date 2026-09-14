@@ -1217,17 +1217,10 @@ public function zone(): BelongsTo
         }
 
         $today = now();
-        // نمشي من الأحدث للأقدم ونوزّع الرصيد على الفواتير غير المسددة
-        // (لو الحركات محمّلة مسبقاً بنستخدمها من غير كويري جديد)
-        $sales = $this->relationLoaded('transactions')
-            ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortByDesc('date')
-            : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->orderByDesc('date')->get();
 
-        foreach ($sales as $t) {
-            if ($balance <= 0) {
-                break;
-            }
-            $take = min($balance, (float) $t->debit);
+        // التوزيع FIFO الموحّد (`openDebts()`) — نفس الحركات بنفس الترتيب
+        // اللي بتستخدمه `overdue()` وشاشة الكاش المتوقع (١٥/٩/٢٠٢٦)
+        foreach ($this->openDebts() as ['tx' => $t, 'open' => $take]) {
             $days = abs((int) $today->diffInDays($t->date));
             $key = match (true) {
                 $days <= 30 => 'a30',
@@ -1237,10 +1230,97 @@ public function zone(): BelongsTo
                 default => 'a180p',
             };
             $buckets[$key] += $take;
-            $balance -= $take;
         }
 
         return $buckets;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * المديونية المفتوحة موزّعة على حركاتها — التوزيع الوحيد في السيستم
+     * (١٥ سبتمبر ٢٠٢٦)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * الرصيد الحالي بيتوزّع على قيود المديونية (`DEBT_KINDS`) **من
+     * الأحدث للأقدم**: يعني اللي اتحصّل بيسدّد الأقدم أولاً (FIFO)،
+     * واللي فاضل مفتوح هو الأحدث. `aging()` و`overdue()` وشاشة
+     * الكاش المتوقع كلهم بيقروا من هنا — عشان مايبقاش فيه شاشتين
+     * بيوصفوا نفس الفلوس برقمين.
+     *
+     * لو الحركات محمّلة مسبقاً (`setRelation('transactions', ...)`)
+     * بنستخدمها من غير كويري — ده اللي بيخلّي الشاشات المجمّعة على
+     * مئات العملاء تشتغل بكويري واحد.
+     *
+     * @return list<array{tx: Transaction, open: float}>
+     */
+    public function openDebts(): array
+    {
+        $balance = (float) $this->balance;
+        if ($balance <= 0) {
+            return [];
+        }
+
+        // ⚠️ **`reorder()` مش زخرفة** (اكتشاف ١٥/٩/٢٠٢٦): العلاقة
+        // `transactions()` معرّفة بـ`orderBy('date')` تصاعدي، و`orderByDesc`
+        // كان بيضيف ترتيب **تاني** بعده فالتصاعدي بيكسب. النتيجة إن
+        // `aging()`/`overdue()` كانوا بيوزّعوا الرصيد على **الأقدم** لما
+        // الحركات مش محمّلة، وعلى **الأحدث** لما تكون محمّلة — نفس العميل
+        // بأعمار مختلفة حسب الشاشة. `reorder` بيمسح ترتيب العلاقة الأول.
+        $sales = $this->relationLoaded('transactions')
+            ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortBy([['date', 'desc'], ['id', 'desc']])
+            : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->reorder('date', 'desc')->orderByDesc('id')->get();
+
+        $out = [];
+        foreach ($sales as $t) {
+            if ($balance <= 0) {
+                break;
+            }
+            $take = min($balance, (float) $t->debit);
+            if ($take <= 0) {
+                continue;
+            }
+            $out[] = ['tx' => $t, 'open' => round($take, 2)];
+            $balance -= $take;
+        }
+
+        return $out;
+    }
+
+    /**
+     * ميعاد استحقاق حركة مديونية بعينها — حسب أساس العدّ.
+     *
+     * `null` = مفيش شروط سداد (أو مفيش أول توريد لسه على أساس
+     * `first_supply`). الحسبة هي نفس اللي كانت جوه `overdue()`:
+     * من الفاتورة = تاريخها + الأيام · من أول توريد = حد الدورة اللي
+     * بعد الحركة (`أول_توريد + days × ceil((T − أول_توريد) / days)`).
+     */
+    public function dueDateOf(Transaction $t): ?\Illuminate\Support\Carbon
+    {
+        $days = $this->paymentDays();
+        if ($days === null || ! $this->allowsCredit()) {
+            return null;
+        }
+
+        // صفر يوم = مستحق يوم الحركة نفسها، في الأساسين
+        if ($days <= 0) {
+            return $t->date->copy();
+        }
+
+        if ($this->paymentBasis() === Contract::DAYS_FROM_INVOICE) {
+            return $t->date->copy()->addDays($days);
+        }
+
+        $anchor = $this->first_activity_at?->copy()->startOfDay();
+        if ($anchor === null) {
+            return null;
+        }
+
+        // ⚠️ `max(1, ...)` — حركة في نفس يوم أول توريد (أو قبله في
+        // الداتا المستوردة) لازم تاخد دورة كاملة، مش تستحق فوراً.
+        $elapsed = (int) round($anchor->diffInDays($t->date->copy()->startOfDay(), false));
+        $cycles = max(1, (int) ceil($elapsed / $days));
+
+        return $anchor->copy()->addDays($days * $cycles);
     }
 
     /**
@@ -1315,51 +1395,20 @@ public function zone(): BelongsTo
         // وفاتورة بقالها دورتين بتبان متأخرة بدورة كاملة. والفرق بين
         // الأساسين بقى **في الميعاد بس** — التوزيع FIFO واحد للاتنين
         // زي `aging()` بالظبط.
-        $byInvoice = $this->paymentBasis() === Contract::DAYS_FROM_INVOICE;
-        $anchor = $byInvoice ? null : $this->first_activity_at?->copy()->startOfDay();
-
         // ⚠️ مفيش أول توريد لسه = مفيش ميعاد. الافتراض إن النهارده هو
         // أول توريد كان بيدي ميعاد بيتحرك كل يوم.
-        if (! $byInvoice && $anchor === null) {
+        if ($this->paymentBasis() !== Contract::DAYS_FROM_INVOICE && $this->first_activity_at === null) {
             return $out;
         }
 
-        $dueOf = function (Transaction $t) use ($byInvoice, $anchor, $days) {
-            // صفر يوم = مستحق يوم الحركة نفسها، في الأساسين
-            if ($days <= 0) {
-                return $t->date->copy();
-            }
-
-            if ($byInvoice) {
-                return $t->date->copy()->addDays($days);
-            }
-
-            // ⚠️ `max(1, ...)` — حركة في نفس يوم أول توريد (أو قبله في
-            // الداتا المستوردة) لازم تاخد دورة كاملة، مش تستحق فوراً.
-            $elapsed = (int) round($anchor->diffInDays($t->date->copy()->startOfDay(), false));
-            $cycles = max(1, (int) ceil($elapsed / $days));
-
-            return $anchor->copy()->addDays($days * $cycles);
-        };
-
-        // ═══ التوزيع FIFO — نفس ترتيب `aging()` بالظبط ═══
-        $sales = $this->relationLoaded('transactions')
-            ? $this->transactions->whereIn('kind', Transaction::DEBT_KINDS)->sortByDesc('date')
-            : $this->transactions()->whereIn('kind', Transaction::DEBT_KINDS)->orderByDesc('date')->get();
-
+        // ═══ التوزيع FIFO والميعاد — من `openDebts()` و`dueDateOf()`
+        // (١٥/٩/٢٠٢٦) — نفس المصدر اللي بتقرا منه شاشة الكاش المتوقع ═══
         $oldest = null;
 
-        foreach ($sales as $t) {
-            if ($balance <= 0) {
-                break;
-            }
+        foreach ($this->openDebts() as ['tx' => $t, 'open' => $take]) {
+            $due = $this->dueDateOf($t);
 
-            $take = min($balance, (float) $t->debit);
-            $balance -= $take;
-
-            $due = $dueOf($t);
-
-            if (! $due->isPast()) {
+            if ($due === null || ! $due->isPast()) {
                 continue;
             }
 

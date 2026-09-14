@@ -505,6 +505,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/collections/direct', [\App\Http\Controllers\CollectionController::class, 'direct'])
             ->middleware('role:admin,manager,accountant')->name('collections.direct');
 
+        // الكاش المتوقع (١٥/٩) — كالندر استحقاق مديونية العملاء الآجل:
+        // «لو كل عميل سدّد في ميعاده، هيدخل كام وإمتى؟». نفس رولز التحصيلات.
+        Route::get('/cash-forecast', [\App\Http\Controllers\CashForecastController::class, 'index'])
+            ->middleware('role:admin,manager,accountant')->name('cashflow');
+
         // ═════ تصفية المناديب (2026-08-06) — قفلة الحسابات اليومية ═════
         Route::get('/rep-close', [\App\Http\Controllers\RepSettlementController::class, 'index'])
             ->middleware('role:admin,accountant')->name('repclose');

@@ -64,6 +64,8 @@ class Access
             'erp.clauses',
             // جرس الإشعارات + تحصيلات الميدان (2026-08-09)
             'notifications', 'erp.collections',
+            // الكاش المتوقع (١٥/٩) — كالندر استحقاق مديونية فريقه
+            'erp.cashflow',
             // إدارة المهام (٢٦/٨) — البادئة بتغطي show/comment/submit...
             'erp.tasks',
             'wh.', 'ops.',
@@ -180,6 +182,8 @@ class Access
             '!erp.clients.deactivate',
             // جرس الإشعارات + تحصيلات الميدان بصور الإثبات (2026-08-09)
             'notifications', 'erp.collections',
+            // الكاش المتوقع (١٥/٩) — شاشة فلوس زي التحصيلات بالظبط
+            'erp.cashflow',
             // ⚠️ بورد مبيعات المناديب (١٢/٨) — شاشة فلوس زي التحصيلات
             // بالظبط، والراوت نفسه `role:admin,manager,accountant`.
             // البورد المدموج (`ops.rep_board`) **مش** هنا عن قصد —
@@ -473,6 +477,8 @@ class Access
             // التحصيلات المباشرة (٩/٩) — تحويل/شيك من العميل بلا مندوب،
             // بعمود الضرايب المخصومة تحت الحساب
             ['erp.collections.direct', '🏦', 'nav.collections_direct', 'erp.collections.direct*', null],
+            // الكاش المتوقع (١٥/٩) — كالندر استحقاق المديونية: كام هيدخل وإمتى
+            ['erp.cashflow', '📆', 'nav.cashflow', 'erp.cashflow', null],
             // تصفية المناديب — قفلة الحسابات اليومية (2026-08-06)
             ['erp.repclose', '🤝', 'nav.repclose', 'erp.repclose*', null],
             // قفل اليوم — سامري اليومية الشامل (2026-08-06)
