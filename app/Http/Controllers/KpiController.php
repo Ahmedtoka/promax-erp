@@ -190,6 +190,8 @@ class KpiController extends Controller
                 KpiBand::create(['kind' => 'rate', 'kpi_channel_id' => $b['channel_id'],
                     'from_value' => $b['from'], 'value' => $b['value']]);
             }
+            // الكاش في الذاكرة (١٥/٩) — المسح بالكويري مابيفيّرش أحداث الموديل
+            KpiBand::flush();
 
             // أصناف التركيز
             Product::where('is_focus', true)->update(['is_focus' => false]);

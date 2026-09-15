@@ -66,9 +66,19 @@ class Batch extends Model
         return $this->hasMany(BatchLocation::class);
     }
 
-    /** الكمية المترصّفة فعلاً على أرفف */
+    /**
+     * الكمية المترصّفة فعلاً على أرفف.
+     *
+     * ⚠️ لو الكويري جابت `shelved_qty` بـ`withSum('locations as shelved_qty', 'qty')`
+     * بنقراها من غير كويري — شاشة المخزن كانت بتعمل كويري لكل باتش مرتين
+     * (الكنترولر والبليد) = 103 كويري (تدقيق الأداء ١٥/٩).
+     */
     public function shelvedQty(): int
     {
+        if (array_key_exists('shelved_qty', $this->attributes)) {
+            return (int) $this->attributes['shelved_qty'];
+        }
+
         return (int) $this->locations()->sum('qty');
     }
 

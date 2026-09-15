@@ -35,6 +35,8 @@ class WarehouseController extends Controller
         // البضاعة المستلمة اللي لسه مترصّفتش — دي أهم حاجة أمين المخزن يشوفها
         $pending = $warehouse->batches()
             ->with(['product', 'receipt'])
+            // المترصّف في نفس الكويري — `Batch::shelvedQty()` بتقراه من غير N+1
+            ->withSum('locations as shelved_qty', 'qty')
             ->where('qty_remaining', '>', 0)
             ->get()
             ->filter(fn (Batch $b) => $b->unshelvedQty() > 0)

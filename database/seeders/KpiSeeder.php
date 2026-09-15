@@ -71,6 +71,8 @@ class KpiSeeder extends Seeder
             }
         }
 
+        KpiBand::flush();
+
         // ═══ مؤشرات المندوب (١٣) — Setup!A11:F23 · Σ = 100 ═══
         // [key, ar, en, weight, direction, specialtyTarget, convenienceTarget]
         $repMetrics = [
