@@ -435,7 +435,10 @@ final class Attendance
             'break_minutes' => $day->break_minutes,
             // ⚠️ الليبل لحظي — لأي حاجة بتعرضه من غير حساب
             'worked_label' => AttendanceDay::hhmm($live),
-            'break_label' => AttendanceDay::hhmm($day->break_minutes),
+            // ⚠️ `(int) (… ?? 0)` — اليوم غير المحفوظ (موظف مالوش صف
+            // النهارده: سواق/أمين مخزن/محاسب) بيرجّع null و`hhmm(int)`
+            // كانت بترمي TypeError = 500 على البوت ستراب كله (١٥/٩)
+            'break_label' => AttendanceDay::hhmm((int) ($day->break_minutes ?? 0)),
             // ⚠️ الأبلكيشن بيعدّ من الوقت ده محلياً — من غيره العدّاد
             // بيفضل واقف لحد الريكوست الجاي
             'open_since' => $day->openSince()?->toIso8601String(),

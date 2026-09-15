@@ -86,6 +86,7 @@ return [
     'reverse_failed' => 'No address found for this point — type it manually',
     'need_point_first' => 'Enter latitude and longitude first',
     'bad_point' => 'This point is outside Egypt',
+    'already_confirmed' => 'This client location is confirmed by the office - changes go through the dashboard',
     'confirmed_ok' => 'Location confirmed for :client',
     'none_here' => 'No clients in this filter',
     'f_done' => 'Confirmed',

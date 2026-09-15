@@ -91,7 +91,8 @@
         </form>
     @endif
     {{-- ═══ إلغاء الأمر (٢١/٨) — للأوامر اللي لسه ماتسلمتش ═══ --}}
-    @if (! in_array($po->status, ['delivered', 'cancelled'], true))
+    {{-- ⚠️ الزرار متحرس بنفس مفتاح الراوت (تدقيق ١٥/٩) — أمين المخزن ومدير الفرع بيشوفوا الصفحة بس --}}
+    @if (! in_array($po->status, ['delivered', 'cancelled'], true) && \App\Support\Access::allows(auth()->user(), 'ops.pos.cancel'))
         <button type="button" class="btn red" onclick="openDlg('dlgCancelPo')">
             🚫 {{ __('ops.po_cancel_btn') }}
         </button>
@@ -314,6 +315,7 @@
         }
     </script>
 
+    @if (\App\Support\Access::allows(auth()->user(), 'ops.pos.cancel'))
     <dialog id="dlgCancelPo">
         <form class="dlg" method="POST" action="{{ route('ops.pos.cancel', $po) }}">
             @csrf
@@ -351,6 +353,7 @@
             </div>
         </form>
     </dialog>
+    @endif
 @endif
 
 @endsection

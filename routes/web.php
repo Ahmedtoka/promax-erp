@@ -977,8 +977,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/pos/{purchaseOrder}', [OpsController::class, 'showPo'])->name('pos.show');
         // إلغاء أمر توريد (٢١/٨) — بضاعته ترجع المخزن بمستند تحويل
         // أو تفضل عهدة المندوب يبيع منها. سبب إجباري.
+        // ⚠️ قرار إدارة (تدقيق ١٥/٩): كان بلا حارس رول — أمين المخزن
+        // ومدير الفرع (عندهم `ops.pos` للعرض) كانوا يقدروا يلغوا أمر ويعكسوا عهدة
         Route::post('/pos/{purchaseOrder}/cancel', [OpsController::class, 'cancelPo'])
-            ->name('pos.cancel');
+            ->middleware('role:admin,manager')->name('pos.cancel');
         // تحويل الأمر لعميل تاني (٢٤/٨) — قبل التسليم بس (مفيش قيود لسه)
         Route::post('/pos/{purchaseOrder}/reassign', [OpsController::class, 'reassignPo'])
             ->middleware('role:admin,manager')->name('pos.reassign');

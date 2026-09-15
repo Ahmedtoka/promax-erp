@@ -380,6 +380,12 @@ class ChannelController extends Controller
                     'short' => $m->outOfStockCount(),
                     'refills' => $m->refills,
                     'visit_id' => null,
+                    // بُعد نقطة التشيك إن عن الفرع بالمتر (تدقيق ١٥/٩) — `null`
+                    // لو الزيارة أو الفرع بلا إحداثيات. صفر بالظبط غالباً فولباك
+                    // عنوان الفرع (أبلكيشن قديم بلا GPS).
+                    'gps' => ($m->lat !== null && $m->client?->lat !== null)
+                        ? (int) round(\App\Services\RepKpis::haversine((float) $m->lat, (float) $m->lng, (float) $m->client->lat, (float) $m->client->lng) * 1000)
+                        : null,
                 ]);
             }
         }
@@ -414,6 +420,7 @@ class ChannelController extends Controller
                     'short' => null,
                     'refills' => collect(),
                     'visit_id' => $v->id,
+                    'gps' => null,
                 ]);
             }
         }

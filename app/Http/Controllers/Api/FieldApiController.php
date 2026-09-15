@@ -119,7 +119,7 @@ class FieldApiController extends Controller
     {
         $user = $request->user();
         $custody = $user->currentCustody();
-        $custody?->load('items.product');
+        $custody?->load(['items.product', 'items.batch']);
 
         // ⚠️ **مرة واحدة** — بتتستخدم في حتتين تحت (حالة الزيارة
         // وسامري النهارده)، ونداءين كانوا كويريين على كل بوت ستراب.
@@ -461,7 +461,7 @@ class FieldApiController extends Controller
             // واللابل للعرض.
             'gov' => $z->governorate,
             'gov_label' => $z->governorateLabel(),
-            'clients' => $z->clients->map(function ($c) use ($todayVisits, $lastVisits) {
+            'clients' => $z->clients->map(function ($c) use ($z, $todayVisits, $lastVisits) {
                 $v = $todayVisits->get($c->id);
 
                 // ⚠️ الاسم الكامل «السلسلة — الفرع» زي الـERP بالظبط —
@@ -518,7 +518,9 @@ class FieldApiController extends Controller
                     // (2026-08-08). العنوان لوحده «7 شارع 9» مالوش معنى
                     // على ورقة بتتبعت واتساب — العميل لازم يشوف الفرع
                     // اللي الفاتورة دي بتاعته.
-                    'zone' => $c->zone?->displayName(),
+                    // ⚠️ `$z` مش `$c->zone` (١٥/٩): العميل جوه المنطقة أصلاً،
+                    // و`$c->zone` كانت كويري لكل عميل — 637 كويري في كل بوت ستراب
+                    'zone' => $z->displayName(),
                     'governorate' => $c->governorateLabel(),
                     'cash_only' => $c->cashOnly(),
                     // كاش/آجل — قرار الأدمن؛ الأبلكيشن بيعرضها ومابيسألش
@@ -798,6 +800,14 @@ class FieldApiController extends Controller
      */
     private function ownsClient(User $user, Client $client): bool
     {
+        // ═══ البروموتر (تدقيق ١٥/٩): نفس قاعدة بدء زيارة الرف بالحرف —
+        // القناة + الزون أو فروع خطة النهارده. القاعدة القديمة تحت (البول
+        // والزون بالـpivot) كانت بترفض «تأكيد عنوان الفرع» على محطة خطة
+        // البروموتر واقف فيها فعلاً.
+        if ($user->role === 'promoter' && \App\Support\MerchAccess::allows($user, $client)) {
+            return true;
+        }
+
         // بيغطي rep_id **وبول الفريق** مع بعض — مندوب بلا مدير بيرجع
         // لفحص rep_id القديم بالحرف جوه `inPoolOf`.
         if ($client->inPoolOf($user)) {
@@ -1731,6 +1741,14 @@ class FieldApiController extends Controller
 
         if ($err = $this->guardClient($user, $client)) {
             return $err;
+        }
+
+        // ⚠️ **العميل المؤكَّد من الداشبورد مايتكتبش عليه من الميدان** (١٥/٩).
+        // الأبلكيشن بيخبّي الزرار، بس أي مسار وصل هنا (نسخة قديمة، زرار
+        // البروموتر) كان بيدوس على نقطة الأدمن **من غير ما يرجّع العميل
+        // للطابور** — نقطة جديدة بختم «مؤكَّد» قديم ومحدش يراجعها.
+        if ($client->location_confirmed_at !== null) {
+            return response()->json(['message' => __('geo.already_confirmed')], 409);
         }
 
         [$lat, $lng] = $this->egyptPoint($data);

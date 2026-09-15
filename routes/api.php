@@ -131,6 +131,16 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/clients/{client}/geocode', [FieldApiController::class, 'geocodeClient']);
         Route::post('/clients/{client}/location', [FieldApiController::class, 'saveClientLocation']);
 
+        // ═══ الهدايا — المندوب بيسجّل اداها لمين (نقل ١٥/٩ من المستوى الأعلى) ═══
+        // ⚠️ من غير التسجيل ده، «صرفنا 200 عينة» رقم مالوش تفصيل.
+        Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store']);
+
+        // ═══ كتابة الليدات — تأكيد البيانات من الميدان + الحالة + فتح
+        // أكاونت فوري بعد التأكيد بلا موافقة (فلو الليد المطور ٢٦/٨) ═══
+        Route::post('/leads/{lead}/confirm', [\App\Http\Controllers\Api\LeadApiController::class, 'confirm']);
+        Route::post('/leads/{lead}/status', [\App\Http\Controllers\Api\LeadApiController::class, 'setStatus']);
+        Route::post('/leads/{lead}/open-account', [\App\Http\Controllers\Api\LeadApiController::class, 'openAccount']);
+
         // المحافظات والمناطق من غير نقطة — شاشة اللوكيشن بتحمّلها
         // أول ما تفتح عشان المندوب يقدر يختار يدوي حتى قبل السحب
         // أو لو السحب فشل (إصلاح ١٥/٨).
@@ -232,10 +242,9 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // ═══ تاب العملاء المحتملين (بايبلاين ٢٦/٨) — ليدات المندوب
         // بالمناطق + تأكيد البيانات من الميدان + تحديث الحالة ═══
         Route::get('/leads/mine', [\App\Http\Controllers\Api\LeadApiController::class, 'mine']);
-        Route::post('/leads/{lead}/confirm', [\App\Http\Controllers\Api\LeadApiController::class, 'confirm']);
-        Route::post('/leads/{lead}/status', [\App\Http\Controllers\Api\LeadApiController::class, 'setStatus']);
-        // فتح أكاونت فوري بعد التأكيد — بلا موافقة (فلو الليد المطور ٢٦/٨)
-        Route::post('/leads/{lead}/open-account', [\App\Http\Controllers\Api\LeadApiController::class, 'openAccount']);
+        // ⚠️ كتابة الليدات (confirm/status/open-account) اتنقلت لمجموعة
+        // شغل الشارع فوق (تدقيق ١٥/٩): `open-account` بيعمل عميل، ومكانها
+        // مع حارس الحضور ورولز الميدان زي `leads/{lead}/action` بالحرف.
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
     });
 
@@ -257,8 +266,8 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // ═══ الهدايا — المندوب بيسجّل اداها لمين ═══
     // ⚠️ من غير التسجيل ده، «صرفنا 200 عينة» رقم مالوش تفصيل.
     Route::get('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'index']);
-    Route::post('/gifts', [\App\Http\Controllers\Api\GiftApiController::class, 'store'])
-        ->middleware('attendance');
+    // ⚠️ `POST /gifts` اتنقل لمجموعة رولز الميدان (تدقيق ١٥/٩) — كان هنا
+    // بحارس الحضور بس، فتوكن محاسب/أمين مخزن كان بيوصل للكنترولر.
 
     // ═══ البلس — بصمة الحالة، الأبلكيشن بينده عليها كل 10 ثواني ═══
     // ⚠️ لازم تفضل رخيصة. أي حاجة تتضاف هنا بتتضرب في عدد المناديب

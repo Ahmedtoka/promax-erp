@@ -32,7 +32,7 @@ class PromoterApiController extends Controller
         // عليه هو، الأمر لازم يبان في أبلكيشنه: عهدة + أوامر + مخازن،
         // من **نفس البيلدرز المشتركة** بالحرف (زي بوت ستراب المدير).
         $custody = $user->currentCustody();
-        $custody?->load('items.product');
+        $custody?->load(['items.product', 'items.batch']);
         $openWh = \App\Services\WarehouseVisits::open($user);
 
         // فروع الكي أكاونت اللي في زون البروموتر
@@ -200,6 +200,9 @@ class PromoterApiController extends Controller
         return [
             'id' => $visit->id,
             'client_id' => $visit->client_id,
+            // ⚠️ الأبلكيشن بيخبّي «تأكيد عنوان الفرع» على العميل المؤكَّد
+            // (نفس قاعدة زرار المندوب) — والسيرفر بيرفض 409 كمان (١٥/٩)
+            'location_confirmed' => $visit->client->location_confirmed_at !== null,
             'client' => $visit->client->displayName(),
             'address' => $visit->client->address,
             'checked_in_at' => $visit->checked_in_at?->toIso8601String(),
@@ -248,23 +251,11 @@ class PromoterApiController extends Controller
         // الداتابيز. الفلتر ده **نسخة طبق الأصل** من فلتر `bootstrap`
         // فوق — القايمة اللي البروموتر بيشوفها هي اللي مسموح له بيها.
         // (لو الفلتر فوق اتغيّر، غيّر الاتنين مع بعض.)
-        $allowed = $user->channel_id === null
-            ? $client->channel?->code === Channel::KEY_ACCOUNT
-            : (int) $client->channel_id === (int) $user->channel_id;
-
-        if ($user->zone_id !== null && (int) $client->zone_id !== (int) $user->zone_id) {
-            $allowed = false;
-        }
-
-        // ⚠️ **وفروع خطة النهارده كمان** (٢٨/٨ — الفخ اللي الكومنت
-        // فوق محذّر منه بالحرف): البوت ستراب بقى بيضم عملاء الخطة
-        // للقايمة، والحارس هنا فضل على الزون بس — فالمحطة بتظهر
-        // و«ابدأ الزيارة» بترمي «مش مسكّن عليك». المالك اللي حطه
-        // في الخطة، فهو مسموح له بالزيارة.
-        if (! $allowed) {
-            $allowed = \App\Services\Journeys::forDay($user)
-                ->contains(fn ($r) => (int) $r['client']->id === (int) $client->id);
-        }
+        // ⭐ القاعدة اتنقلت لـ`MerchAccess::allows` (تدقيق ١٥/٩) عشان
+        // `saveClientLocation` (زرار «تأكيد عنوان الفرع» جوه الزيارة)
+        // يحكم بنفس القاعدة — كان بيحكم بقاعدة المندوب فبيرمي 403 على
+        // فرع من خطة النهارده البروموتر واقف فيه فعلاً.
+        $allowed = \App\Support\MerchAccess::allows($user, $client);
 
         if (! $allowed || $client->status !== 'active') {
             return response()->json(['message' => __('api.not_your_client')], 403);

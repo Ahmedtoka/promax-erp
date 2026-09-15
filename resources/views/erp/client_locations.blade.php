@@ -178,6 +178,8 @@
                              الأبلكيشن بيفضل `rep_app` (الكنترولر بيحافظ عليه
                              لما المراجع مايختارش)، مش `visit`. --}}
                         @php $pending = $c->locationPending(); @endphp
+                        {{-- الزرار متحرس بمفتاح راوت التأكيد (تدقيق ١٥/٩) — المحاسب بيشوف الطابور بس --}}
+                        @if (\App\Support\Access::allows(auth()->user(), 'erp.client_locations.confirm'))
                         <button type="button" class="btn sm {{ $c->locationTrusted() ? '' : 'gold' }}"
                                 data-id="{{ $c->id }}"
                                 data-name="{{ $c->fullName() }}"
@@ -191,6 +193,7 @@
                                 onclick="openGeo(this)">
                             {{ $c->locationTrusted() ? '✏️ '.__('common.edit') : '✔ '.__('geo.confirm') }}
                         </button>
+                        @endif
                     </td>
                 </tr>
             @empty

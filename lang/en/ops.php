@@ -552,6 +552,10 @@ return [
     // ═══ Unified shelf photos on the merchandising screen (Aug 15, 2026) ═══
     'sv_hint' => 'Shelf photos from both sources in one list - merchandiser refill visits and rep visits',
     'sv_source' => 'Source',
+    'sv_gps' => 'Check-in distance from branch',
+    'sv_no_gps' => 'No GPS',
+    'sv_m' => 'm',
+    'sv_gps_far_hint' => 'Check-in point is more than 300 m from the recorded branch address',
     'sv_src_promoter' => 'Merchandiser',
     'sv_src_rep' => 'Rep',
     'sv_all_sources' => 'All sources',

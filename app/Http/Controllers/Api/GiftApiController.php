@@ -30,7 +30,7 @@ class GiftApiController extends Controller
             return response()->json(['items' => [], 'handouts' => []]);
         }
 
-        $custody->load(['items.product']);
+        $custody->load(['items.product', 'items.batch']);
 
         return response()->json([
             'custody_id' => $custody->id,

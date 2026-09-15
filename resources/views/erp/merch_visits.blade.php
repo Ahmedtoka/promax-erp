@@ -87,6 +87,7 @@
                 <th>{{ __('client.branch') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th data-nosum>{{ __('ops.checked_in') }}</th>
+                <th data-nosum>{{ __('ops.sv_gps') }}</th>
                 <th data-nosum>{{ __('ops.duration') }}</th>
                 <th>{{ __('ops.moved_to_shelf') }}</th>
                 <th>{{ __('ops.short') }}</th>
@@ -113,6 +114,17 @@
                     </td>
                     <td>{{ $v['user']?->displayName() ?? '—' }}</td>
                     <td class="num" dir="ltr">{{ $hia($v['at']) ?? '—' }}</td>
+                    <td class="num">
+                        @if ($v['source'] !== 'promoter')
+                            —
+                        @elseif ($v['gps'] === null)
+                            <span class="badge b-gray">{{ __('ops.sv_no_gps') }}</span>
+                        @elseif ($v['gps'] > 300)
+                            <span class="badge b-red" title="{{ __('ops.sv_gps_far_hint') }}">📍 {{ number_format($v['gps']) }} {{ __('ops.sv_m') }}</span>
+                        @else
+                            <span class="badge b-green">📍 {{ number_format($v['gps']) }} {{ __('ops.sv_m') }}</span>
+                        @endif
+                    </td>
                     <td class="num">{{ $v['minutes'] !== null ? __('ops.minutes', ['count' => $v['minutes']]) : __('ops.in_progress') }}</td>
                     <td class="num pos"><b>{{ $v['moved'] !== null ? $v['moved'] : '—' }}</b></td>
                     <td class="num {{ ($v['short'] ?? 0) > 0 ? 'neg' : '' }}">{{ $v['short'] !== null ? $v['short'] : '—' }}</td>

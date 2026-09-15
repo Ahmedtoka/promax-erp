@@ -88,8 +88,10 @@ class Access
         'branch_manager' => [
             // الديفيجنز **قراءة** — الإعداد الجماعي مش هنا عن قصد:
             // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
-            'erp.divisions',
+            'erp.divisions', '!erp.divisions.assign',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
+            // عقد السلسلة `role:admin,manager` (تدقيق ١٥/٩)
+            '!erp.groups.contract',
             // ⚠️ **محفظة الليدز قراءة بس.** الجدولة وخط السير والحصاد
             // كلهم `role:admin,manager` على الراوت — والبادئة الواسعة
             // `erp.leads` كانت بتوريهم في سايدبار مدير الفرع وبترفضه
@@ -128,6 +130,8 @@ class Access
             'ops.returns', '!ops.returns.new', '!ops.returns.store',
             // إعادة تسعير أوامر التوريد `role:admin,manager` (٨/٩)
             '!ops.pos.reprice',
+            // وإلغاء الأمر `role:admin,manager` (تدقيق ١٥/٩)
+            '!ops.pos.cancel',
         ],
 
         // ═══ المحاسب — الفلوس بس ═══
@@ -136,6 +140,9 @@ class Access
         // هيدوس عليه يوم ويطلّع بضاعة محدش طلبها.
         'accountant' => [
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
+            // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
+            // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
+            '!erp.client_locations.confirm', '!erp.groups.contract',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
             // إدارة المهام (٢٦/٨)
             'erp.tasks',
@@ -217,6 +224,8 @@ class Access
             // و`ops.pos.assign` كمان — أمين المخزن مالوش قرار إن أمر
             // ينزل على مين، ده قرار تجاري.
             '!ops.pos.store', '!ops.pos.assign',
+            // وإلغاء الأمر قرار إدارة كمان (تدقيق ١٥/٩) — بيعكس عهدة مسلّمة
+            '!ops.pos.cancel',
             // إعادة التسعير والتحويل لعميل تاني قرار إدارة (٨/٩)
             '!ops.pos.reprice', '!ops.pos.reassign',
             // بيستلم بضاعة الموردين — عرض الأوامر والاستلام بس،
@@ -291,6 +300,8 @@ class Access
         'nav.group_purchasing' => '🤝',
         'nav.group_online' => '🛒',
         'nav.group_clients' => '👥',
+        'nav.group_leads' => '🧲',
+        'nav.group_tasks' => '✅',
         'nav.group_review' => '🧾',
         'nav.group_field' => '🗺️',
         'nav.group_money' => '💰',
@@ -591,7 +602,7 @@ class Access
         'act.clients.edit' => ['perm.act_clients_edit', 'erp.clients', ['manager', 'branch_manager'], ['erp.clients.edit', 'erp.clients.update']],
         'act.clients.collect' => ['perm.act_clients_collect', 'erp.clients', ['manager', 'branch_manager', 'accountant'], ['erp.clients.collect', 'erp.clients.opening']],
         'act.clients.activate' => ['perm.act_clients_activate', 'erp.clients.activate', ['manager'], ['erp.clients.activate.do', 'erp.clients.deactivate']],
-        'act.contracts.manage' => ['perm.act_contracts_manage', 'erp.contracts', ['manager'], ['erp.contracts.store', 'erp.contracts.link', 'erp.contracts.destroy', 'erp.clauses.store', 'erp.clauses.destroy']],
+        'act.contracts.manage' => ['perm.act_contracts_manage', 'erp.contracts', ['manager'], ['erp.contracts.store', 'erp.contracts.link', 'erp.contracts.destroy', 'erp.clauses.store', 'erp.clauses.destroy', 'erp.groups.contract']],
         // ⚠️ `null` كان بيوري مدير الفرع زراير التحويل والمسح والتوزيع
         // وكلها `role:admin,manager` — 403 أول ما يدوس (زحف ٨/٩)
         'act.leads.manage' => ['perm.act_leads_manage', 'erp.leads', ['manager'], ['erp.leads.store', 'erp.leads.update', 'erp.leads.convert', 'erp.leads.delete', 'erp.leads.dupcheck', 'erp.leads.dupdecide', 'erp.leads.bulkset', 'erp.leads.bulk']],
@@ -627,7 +638,7 @@ class Access
         // تصحيح إداري للعهدة (١٢/٨) — `[]` = أدمن بس، والأدمن يقدر
         // يمنحه لحد بعينه. بيحرّك العهدة والأرفف مع بعض.
         'act.custody.adjust' => ['perm.act_custody_adjust', 'ops.vans', [], ['ops.rep.adjust']],
-        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.pos.reassign', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
+        'act.ka.create' => ['perm.act_ka_create', 'ops.po.handout', ['manager'], ['ops.pos.store', 'ops.pos.assign', 'ops.pos.reassign', 'ops.pos.cancel', 'ops.po.import', 'ops.po.import.preview', 'ops.po.import.store', 'ops.po.import.one']],
         'act.ka.decide' => ['perm.act_ka_decide', 'ops.po.approvals', ['accountant'], ['ops.po.decide', 'ops.po.decide.all']],
         'act.ka.edit' => ['perm.act_ka_edit', 'ops.po.approvals', ['manager', 'accountant'], ['ops.po.edit', 'ops.po.update']],
 

@@ -154,6 +154,7 @@
                         <td class="num">{{ number_format((float) $c->purchases) }}</td>
                         <td class="num {{ (float) $c->balance > 0 ? 'neg' : '' }}">{{ number_format((float) $c->balance) }}</td>
                         <td>
+                            @if (\App\Support\Access::allows(auth()->user(), 'erp.divisions.assign'))
                             <form method="POST" action="{{ route('erp.divisions.assign', $c) }}"
                                   style="display:flex;gap:6px;align-items:center">
                                 @csrf
@@ -165,6 +166,9 @@
                                 </select>
                                 <button class="btn sm" type="submit">💾</button>
                             </form>
+                            @else
+                                <span style="color:var(--muted)">{{ $c->division ?: '—' }}</span>
+                            @endif
                         </td>
                     </tr>
                 @empty

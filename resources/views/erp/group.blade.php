@@ -292,6 +292,8 @@
         </div>
     @endif
 
+    {{-- الفورم متحرس بمفتاح الراوت (تدقيق ١٥/٩) — المحاسب ومدير الفرع بيشوفوا السلسلة بس --}}
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.groups.contract'))
     <form method="POST" action="{{ route('erp.groups.contract', $g) }}">
         @csrf
         <div class="frow">
@@ -348,6 +350,7 @@
         </div>
         <button class="btn primary">💾 {{ $gct ? __('common.save') : __('client.chain_contract_create') }}</button>
     </form>
+    @endif
 </div>
 
 @if ($contracts->isNotEmpty())

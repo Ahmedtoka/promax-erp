@@ -35,7 +35,7 @@ class ManagerApiController extends Controller
         // عهدته الحالية + خط سيره — بنفس بيلدرز bootstrap الميدان
         // بالظبط (شوف المفاتيح الإضافية آخر الرد).
         $custody = $user->currentCustody();
-        $custody?->load('items.product');
+        $custody?->load(['items.product', 'items.batch']);
         $journey = FieldApiController::journeyPayload($user);
 
         return response()->json([
@@ -152,7 +152,7 @@ class ManagerApiController extends Controller
             ->get()
             ->map(function (User $u) {
                 $custody = $u->currentCustody();
-                $custody?->load('items.product');
+                $custody?->load(['items.product', 'items.batch']);
                 $mode = $u->isDriver() ? 'old' : 'new';
                 $openVisit = $u->openVisit();
                 $lastEvent = $u->trackEvents()->whereDate('happened_at', today())->first();
@@ -246,7 +246,7 @@ class ManagerApiController extends Controller
         \App\Support\Scope::assertRep($request->user(), $user);
 
         $custody = $user->currentCustody();
-        $custody?->load('items.product');
+        $custody?->load(['items.product', 'items.batch']);
         $mode = $user->isDriver() ? 'old' : 'new';
 
         return response()->json([
