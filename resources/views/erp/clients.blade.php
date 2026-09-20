@@ -79,6 +79,41 @@
     </a>
 </div>
 
+{{-- كروت المبيعات (٢٠ سبتمبر ٢٠٢٦): صف مستقل عن كروت العدّ اللي فوق —
+     ده بيتغيّر مع كل فلتر ومع الفترة، ودول ثابتين. نطاق واحد في الصف. --}}
+@php
+    $periodOn = ! $range->isOpen();
+    $periodLabel = $periodOn ? trim(($range->fromValue() ?: '…').' → '.($range->toValue() ?: '…')) : __('client.period_all');
+    $net = (float) $salesKpi->s - (float) $salesKpi->r;
+@endphp
+<div class="kpis" style="margin-top:12px">
+    <div class="kpi" style="{{ $periodOn ? 'outline:2px solid var(--royal-blue)' : '' }}">
+        <div class="lbl">🧾 {{ __('client.sales_kpi_sales') }} · <span class="num">{{ $periodLabel }}</span></div>
+        <div class="val num">{{ $fmt($salesKpi->s) }}</div>
+        <div class="sub2">{{ __('client.sales_kpi_scope') }}@if ($periodOn) • <b class="num">{{ $fmt($salesKpi->d) }}</b> {{ __('client.sales_kpi_docs') }} @endif</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">🛒 {{ __('client.sales_kpi_buyers') }}</div>
+        <div class="val num">{{ $fmt($salesKpi->buyers) }}</div>
+        <div class="sub2">{{ __('client.sales_kpi_of', ['count' => $fmt($salesKpi->n)]) }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">↩️ {{ __('client.sales_kpi_returns') }}</div>
+        <div class="val num mid">{{ $fmt($salesKpi->r) }}</div>
+        <div class="sub2">{{ $periodLabel }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">✅ {{ __('client.sales_kpi_net') }}</div>
+        <div class="val num {{ $net < 0 ? 'neg' : '' }}">{{ $fmt($net) }}</div>
+        <div class="sub2">{{ __('client.sales_kpi_net_hint') }}</div>
+    </div>
+    <div class="kpi">
+        <div class="lbl">💵 {{ __('client.sales_kpi_collected') }}</div>
+        <div class="val num pos">{{ $fmt($salesKpi->c) }}</div>
+        <div class="sub2">{{ $periodLabel }}</div>
+    </div>
+</div>
+
 <div class="card">
     {{-- ملحوظة: الفلاتر هنا لازم تطابق اللي ErpController::clients() بيقراه بالظبط
          الترتيب (2026-08-05): بحث ← الحالة ← القناة ← القسم ← التصنيف
@@ -149,10 +184,27 @@
             <option value="">{{ __('client.assignment_all') }}</option>
             <option value="norep" @selected(($filters['flag'] ?? '') === 'norep')>{{ __('client.no_rep') }}</option>
         </select>
+        {{-- الفترة: بتغيّر أرقام المشتريات/التحصيل/المرتجعات والكروت والتصدير --}}
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">{{ __('client.period_from') }}
+            <input type="date" name="from" value="{{ $range->fromValue() }}"></label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">{{ __('client.period_to') }}
+            <input type="date" name="to" value="{{ $range->toValue() }}"></label>
+        @php
+            $lm = today()->startOfMonth()->subMonthNoOverflow();
+            $qs = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]);
+        @endphp
+        <a class="btn sm" href="{{ $qs(['from' => today()->startOfMonth()->toDateString(), 'to' => today()->toDateString()]) }}">{{ __('client.period_this_month') }}</a>
+        <a class="btn sm" href="{{ $qs(['from' => $lm->toDateString(), 'to' => $lm->copy()->endOfMonth()->toDateString()]) }}">{{ __('client.period_last_month') }}</a>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.clients') }}">{{ __('common.clear') }}</a>
+        <a class="btn green" href="{{ request()->fullUrlWithQuery(['export' => 'summary', 'page' => null]) }}">⬇ {{ __('client.export_sales_summary') }}</a>
+        <a class="btn" href="{{ request()->fullUrlWithQuery(['export' => 'full', 'page' => null]) }}">⬇ {{ __('client.export_sales_full') }}</a>
         <span class="badge b-gray">{{ __('client.client_countable', ['count' => $clients->total()]) }}</span>
     </form>
+
+    @if ($periodOn)
+        <div class="alert info" style="margin:10px 0">{{ __('client.period_note', ['period' => $periodLabel]) }}</div>
+    @endif
 
     {{-- الهيدر ثابت — الجدول طويل والأعمدة بتضيع وانت نازل --}}
     <div class="tablewrap" style="max-height:65vh;overflow-y:auto">
@@ -280,11 +332,12 @@
                         <b>{{ number_format($c->effectiveDiscount() * 100, 1) }}%</b>
                         <br><span class="badge {{ $srcClass }}" style="font-size:9.5px">{{ $c->discountSource() }}</span>
                     </td>
-                    <td class="num">{{ $fmt($c->purchases) }}</td>
-                    <td class="num pos">{{ $fmt($c->collections) }}</td>
-                    <td class="num mid">{{ $fmt($c->returns) }}</td>
+                    <td class="num">{{ $fmt($c->p_sales) }}</td>
+                    <td class="num pos">{{ $fmt($c->p_coll) }}</td>
+                    <td class="num mid">{{ $fmt($c->p_ret) }}</td>
                     <td class="num {{ $c->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($c->balance) }}</td>
-                    <td class="num">{{ number_format($c->collectionRate() * 100, 1) }}%</td>
+                    {{-- مع الفترة: نسبة تحصيل الفترة نفسها، مش المجمّعة جنب أرقام فترة --}}
+                    <td class="num">{{ number_format(($periodOn ? ((float) $c->p_sales > 0 ? (float) $c->p_coll / (float) $c->p_sales : 0) : $c->collectionRate()) * 100, 1) }}%</td>
                     <td class="num">{{ $c->last_payment_at?->format('Y-m-d') ?? '—' }}</td>
                     @if ($manager)
                         {{-- ⚠️ `stopPropagation` — الصف كله كليكابل، ومن غيرها

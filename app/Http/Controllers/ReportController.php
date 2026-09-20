@@ -283,20 +283,32 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $inv = Invoice::whereBetween('created_at', [$a, $b])
-            ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')))
-            ->selectRaw('client_id, COUNT(*) c, SUM(grand_total) g')
+        // ⚠️ **المصدر كشف الحساب مش جدول الفواتير** (إصلاح ٢٠ سبتمبر ٢٠٢٦).
+        // النسخة القديمة كانت بتجمع `invoices` بس، فأوامر التوريد المسلّمة
+        // — ومعظم مبيعات الكي أكاونت منها — ماكانتش بتتحسب، ورقم الشهر
+        // بيطلع أقل من الحقيقي. دلوقتي نفس تعريف `Client::recalculate()`
+        // (sale.debit · return.credit · collection.credit) وعلى عمود `date`،
+        // فالرقم هنا = الرقم في صفحة العملاء بفلتر الفترة = كشف الحساب.
+        $day = [$a->toDateString(), $b->toDateString()];
+        $repId = $r->filled('user_id') ? $r->integer('user_id') : null;
+
+        $inv = Transaction::where('kind', 'sale')->whereBetween('date', $day)
+            // فلتر المندوب على صاحب المستند: فاتورته هو، أو أمر توريد متسلّمله
+            ->when($repId, fn ($w) => $w->where(fn ($x) => $x
+                ->whereHasMorph('source', [Invoice::class], fn ($m) => $m->where('user_id', $repId))
+                ->orWhereHasMorph('source', [PurchaseOrder::class], fn ($m) => $m->where('assigned_to', $repId))))
+            ->selectRaw('client_id, COUNT(*) c, SUM(debit) g')
             ->groupBy('client_id')->get()->keyBy('client_id');
 
-        $rets = ClientReturn::whereBetween('created_at', [$a, $b])
-            ->selectRaw('client_id, SUM(grand_total) g')->groupBy('client_id')->pluck('g', 'client_id');
-
-        $colls = Transaction::where('kind', 'collection')
-            ->whereBetween('created_at', [$a, $b])
+        $rets = Transaction::where('kind', 'return')->whereBetween('date', $day)
             ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
 
-        $clients = Client::with(['group', 'channel'])
-            ->whereIn('id', $inv->keys()->merge($rets->keys())->merge($colls->keys())->unique())
+        $colls = Transaction::where('kind', 'collection')->whereBetween('date', $day)
+            ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
+
+        // ⚠️ `visibleTo` — التقرير كان بيعرض عملاء كل الفرق لأي مدير
+        $clients = Client::visibleTo(Client::query()->with(['group', 'channel']), $r->user())
+            ->whereIn('clients.id', $inv->keys()->merge($rets->keys())->merge($colls->keys())->unique())
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
             ->get()
             ->sortByDesc(fn ($c) => (float) ($inv->get($c->id)->g ?? 0))

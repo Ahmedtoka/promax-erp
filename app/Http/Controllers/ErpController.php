@@ -463,6 +463,51 @@ class ErpController extends Controller
             $q->whereNull('rep_id');
         }
 
+        // ═══ فلتر الفترة (طلب المالك ٢٠ سبتمبر ٢٠٢٦) ═══
+        //
+        // «مبيعات عملائي في شهر ٨ كام، وكل عميل لوحده؟» — الأعمدة
+        // المجمّعة على `clients` من أول يوم، فماكانش فيه طريقة تتسأل
+        // عن فترة. مع الفترة، أرقام الصف (مشتريات/تحصيل/مرتجعات)
+        // بتتحسب من `transactions` بنفس تعريف `Client::recalculate()`
+        // بالحرف (sale.debit · collection.credit · return.credit) وعلى
+        // عمود `date` — تاريخ القيد في كشف الحساب، مش `created_at`
+        // (المستند اليدوي بتاريخ رجعي لازم يتحسب في شهره).
+        // ⚠️ الرصيد بيفضل الحالي — رصيد «فترة» مالوش معنى محاسبي.
+        $range = DateRange::fromRequest($request);
+
+        if (! $range->isOpen()) {
+            $agg = $range->apply(DB::table('transactions'), 'date')
+                ->selectRaw("client_id,
+                    SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) AS p_sales,
+                    SUM(CASE WHEN kind = 'sale' THEN 1 ELSE 0 END) AS p_docs,
+                    SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) AS p_coll,
+                    SUM(CASE WHEN kind = 'return' THEN credit ELSE 0 END) AS p_ret")
+                ->groupBy('client_id');
+
+            $q->leftJoinSub($agg, 'pa', 'pa.client_id', '=', 'clients.id')
+                ->select('clients.*')
+                ->selectRaw('COALESCE(pa.p_sales, 0) AS p_sales, COALESCE(pa.p_docs, 0) AS p_docs,
+                    COALESCE(pa.p_coll, 0) AS p_coll, COALESCE(pa.p_ret, 0) AS p_ret');
+        } else {
+            // من غير فترة: نفس الأعمدة المجمّعة، بنفس الأسماء، عشان
+            // الكروت والتصدير يقروا مصدر واحد في الحالتين.
+            $q->select('clients.*')->selectRaw('clients.purchases AS p_sales, NULL AS p_docs,
+                clients.collections AS p_coll, clients.`returns` AS p_ret');
+        }
+
+        // ═══ تصدير المبيعات عميل عميل — بكل الفلاتر، من غير صفحات ═══
+        if (in_array($request->query('export'), ['summary', 'full'], true)) {
+            return $this->exportClientSales($q, $range, $request->query('export') === 'full');
+        }
+
+        // كروت المبيعات — **نفس نطاق الجدول بالظبط** (الفلاتر + الفترة).
+        // صف مستقل عن كروت العدّ اللي فوق عشان مايتخلطش نطاقين في صف.
+        $salesKpi = DB::query()->fromSub((clone $q)->toBase(), 'x')
+            ->selectRaw('COUNT(*) AS n, COALESCE(SUM(p_sales > 0), 0) AS buyers,
+                COALESCE(SUM(p_sales), 0) AS s, COALESCE(SUM(p_docs), 0) AS d,
+                COALESCE(SUM(p_coll), 0) AS c, COALESCE(SUM(p_ret), 0) AS r')
+            ->first();
+
         // ═══ KPIs بمعنى (قرار المالك 2026-08-05): بدل كروت التصنيف
         // التجاري اللي محدش فاهمها — كام عميل، كام سلسلة، كام في كل
         // قناة، ومين عليه فلوس ومين ليه. كلها بنفس سكوب الفرع والمدير.
@@ -508,8 +553,16 @@ class ErpController extends Controller
             // حد يستخدمهم.
             // ⚠️ ترتيب ثانوي بالـid — من غيره الصفوف المتساوية بتتنطط
             // بين الصفحات والعميل بيظهر مرتين أو ولا مرة.
-            'clients' => $q->with('channel')->orderBy($sort, $dir)->orderBy('id')
+            // ⚠️ مع الفترة، سورت «المشتريات/التحصيل/المرتجعات» بيبقى على
+            // رقم الفترة المعروض — مش المجمّع اللي المستخدم مش شايفه.
+            // الأعمدة متأهّلة بـ`clients.` عشان الجوين مايعملش التباس.
+            'clients' => $q->with('channel')
+                ->orderBy(['purchases' => 'p_sales', 'collections' => 'p_coll', 'returns' => 'p_ret'][$sort]
+                    ?? 'clients.'.$sort, $dir)
+                ->orderBy('clients.id')
                 ->paginate(40)->withQueryString(),
+            'range' => $range,
+            'salesKpi' => $salesKpi,
             'sort' => $sort,
             'dir' => $dir,
             'chainsByChannel' => $chainsByChannel,
@@ -548,6 +601,115 @@ class ErpController extends Controller
                 ->selectRaw('status, COUNT(*) as n')
                 ->groupBy('status')->pluck('n', 'status')->all(),
         ]);
+    }
+
+    /**
+     * تصدير مبيعات العملاء — إجماليات عميل عميل، وبعدها التفصيلي (٢٠ سبتمبر ٢٠٢٦).
+     *
+     * `$q` هو نفس كويري القايمة بكل فلاترها وسكوبها (`visibleTo` +
+     * `Branch::scope`) وعليه أعمدة `p_*` — فالملف هو الشاشة بالظبط من
+     * غير صفحات. مع الفترة بيطلع اللي عليه حركة فيها بس؛ 800 صف بأصفار
+     * بتدفن الرقم اللي المستخدم فتح الملف عشانه.
+     *
+     * ⚠️ التفصيلي بيتجاب من **مصدر قيد البيع نفسه** (`source_type/id`)
+     * مش من تاريخ المستند — فمجموع بنود العميل هو نفس رقم إجماليه،
+     * والمستند اللي اتغيّر تاريخ قيده مايقعش بين الملفين. والقيد اللي
+     * مالوش مستند (استيراد/قيد يدوي) بينزل سطر واحد ببيانه بدل ما يختفي.
+     */
+    private function exportClientSales($q, DateRange $range, bool $withDetail)
+    {
+        $rows = (clone $q)->with(['channel', 'rep'])
+            ->when(! $range->isOpen(), fn ($w) => $w->where(fn ($x) => $x
+                ->where('pa.p_sales', '>', 0)->orWhere('pa.p_coll', '>', 0)->orWhere('pa.p_ret', '>', 0)))
+            ->orderByDesc('p_sales')->orderBy('clients.id')
+            ->get();
+
+        $period = $range->isOpen()
+            ? __('client.period_all')
+            : trim(($range->fromValue() ?: '…').' → '.($range->toValue() ?: '…'));
+        $n2 = fn ($v) => number_format((float) $v, 2, '.', '');
+        $name = 'client-sales-'.($range->fromValue() ?: 'all').'_'.($range->toValue() ?: 'all').'.csv';
+
+        return response()->streamDownload(function () use ($rows, $range, $withDetail, $period, $n2) {
+            $out = fopen('php://output', 'w');
+            // BOM — من غيره إكسيل بيفتح العربي طلاسم
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, [__('client.exp_title'), $period]);
+            fputcsv($out, []);
+            fputcsv($out, [
+                __('client.exp_code'), __('client.client'), __('client.chain'), __('client.channel'),
+                __('client.zone'), __('geo.governorate'), __('client.exp_rep'), __('client.channel_manager'),
+                __('common.status'), __('client.exp_docs'), __('client.exp_sales'), __('client.returns'),
+                __('client.exp_net'), __('client.collected'), __('client.exp_balance_now'),
+            ]);
+
+            $t = ['d' => 0, 's' => 0.0, 'r' => 0.0, 'c' => 0.0, 'b' => 0.0];
+
+            foreach ($rows as $c) {
+                $t['d'] += (int) $c->p_docs; $t['s'] += (float) $c->p_sales; $t['r'] += (float) $c->p_ret;
+                $t['c'] += (float) $c->p_coll; $t['b'] += (float) $c->balance;
+
+                fputcsv($out, [
+                    $c->code, $c->fullName(), $c->group?->displayName() ?? '', $c->channel?->displayName() ?? '',
+                    $c->zone?->displayName() ?? '', $c->governorate ?? '', $c->rep?->displayName() ?? '',
+                    $c->manager?->displayName() ?? '', $c->status,
+                    $c->p_docs === null ? '' : (int) $c->p_docs,
+                    $n2($c->p_sales), $n2($c->p_ret), $n2($c->p_sales - $c->p_ret), $n2($c->p_coll), $n2($c->balance),
+                ]);
+            }
+
+            fputcsv($out, [__('common.total'), $rows->count(), '', '', '', '', '', '', '',
+                $range->isOpen() ? '' : $t['d'], $n2($t['s']), $n2($t['r']), $n2($t['s'] - $t['r']), $n2($t['c']), $n2($t['b'])]);
+
+            if ($withDetail) {
+                fputcsv($out, []);
+                fputcsv($out, [__('client.exp_detail_title'), $period]);
+                fputcsv($out, [
+                    __('common.date'), __('client.exp_doc'), __('client.exp_doc_type'), __('client.exp_code'),
+                    __('client.client'), __('client.exp_item'), __('client.exp_qty'), __('client.exp_unit_price'),
+                    __('client.exp_line_total'), __('client.exp_line_tax'),
+                ]);
+
+                $names = $rows->mapWithKeys(fn ($c) => [$c->id => [$c->code, $c->fullName()]]);
+
+                foreach ($rows->pluck('id')->chunk(200) as $ids) {
+                    $sales = $range->apply(Transaction::query(), 'date')
+                        ->where('kind', 'sale')->whereIn('client_id', $ids)
+                        ->orderBy('client_id')->orderBy('date')->orderBy('id')
+                        ->with(['source' => fn ($m) => $m->morphWith([
+                            Invoice::class => ['items.product'],
+                            PurchaseOrder::class => ['items.product'],
+                        ])])->get();
+
+                    foreach ($sales as $tx) {
+                        [$code, $client] = $names[$tx->client_id] ?? ['', ''];
+                        $src = $tx->source;
+                        $isDoc = $src instanceof Invoice || $src instanceof PurchaseOrder;
+
+                        if (! $isDoc || $src->items->isEmpty()) {
+                            fputcsv($out, [$tx->date?->toDateString(), $src->number ?? '', __('client.exp_type_entry'),
+                                $code, $client, $tx->memo, '', '', $n2($tx->debit - $tx->tax), $n2($tx->tax)]);
+
+                            continue;
+                        }
+
+                        $type = $src instanceof Invoice ? __('client.exp_type_invoice') : __('client.exp_type_po');
+
+                        foreach ($src->items as $it) {
+                            // أمر التوريد بيتحاسب على اللي اتسلّم فعلاً مش المطلوب
+                            $qty = $src instanceof PurchaseOrder ? ($it->delivered_qty ?? $it->qty) : $it->qty;
+
+                            fputcsv($out, [$tx->date?->toDateString(), $src->number, $type, $code, $client,
+                                $it->product?->displayName() ?? '#'.$it->product_id, $qty + 0,
+                                $n2($it->price), $n2($it->total), $n2($it->tax)]);
+                        }
+                    }
+                }
+            }
+
+            fclose($out);
+        }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /**
