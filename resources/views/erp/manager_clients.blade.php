@@ -19,15 +19,19 @@
     @endif
 
     <form method="GET" class="searchbar">
-        <label class="f" style="margin:0">{{ __('perm.pick_manager') }}</label>
-        <select name="manager" onchange="this.form.submit()" style="min-width:240px">
+        <label class="fl wide"><span>{{ __('perm.pick_manager') }}</span>
+        <select name="manager" onchange="this.form.submit()">
             @foreach ($managers as $m)
                 <option value="{{ $m->id }}" @selected($manager?->id === $m->id)>
                     {{ $m->name }} @if($m->code) ({{ $m->code }}) @endif
                 </option>
             @endforeach
-        </select>
-        <span class="badge b-purple">{{ __('perm.his_clients') }}: {{ $mine->count() }}</span>
+        </select></label>
+        @if ($manager)
+            <a class="badge b-purple" href="{{ route('erp.clients', ['manager' => $manager->id]) }}">{{ __('perm.his_clients') }}: {{ $mine->count() }} ↗</a>
+        @else
+            <span class="badge b-purple">{{ __('perm.his_clients') }}: {{ $mine->count() }}</span>
+        @endif
     </form>
 
     @if ($managers->isEmpty())
@@ -43,7 +47,7 @@
         <h3>📱 {{ __('perm.sa_title') }} <span class="side">{{ __('perm.sa_sub') }}</span></h3>
         <div class="kpis" style="margin:0">
             @foreach ($seeAs as $s)
-                <div class="kpi" style="{{ $s['clients'] < $mine->count() ? 'border-color:var(--red)' : '' }}">
+                <a class="kpi" href="{{ route('ops.rep', $s['user']) }}" style="{{ $s['clients'] < $mine->count() ? 'border-color:var(--red)' : '' }}">
                     <div class="lbl">{{ $s['user']->displayName() }}</div>
                     <div class="val {{ $s['clients'] < $mine->count() ? 'neg' : 'pos' }}">
                         {{ number_format($s['clients']) }}
@@ -55,7 +59,7 @@
                             <br><span class="badge b-red" style="font-size:9.5px">⚠️ {{ __('perm.sa_unlinked') }}</span>
                         @endif
                     </div>
-                </div>
+                </a>
             @endforeach
         </div>
         @php $broken = collect($seeAs)->firstWhere('linked', false); @endphp
@@ -106,7 +110,7 @@
                 @foreach ($blockers as $b)
                     <tr>
                         <td class="num" dir="ltr">{{ $b['client']->code }}</td>
-                        <td style="text-align:start"><b>{{ $b['client']->fullName() }}</b></td>
+                        <td style="text-align:start"><a href="{{ route('erp.clients.show', $b['client']) }}"><b>{{ $b['client']->fullName() }}</b></a></td>
                         <td>{{ $b['client']->zone?->displayName() ?? '—' }}</td>
                         <td style="text-align:start;color:var(--red);font-weight:800">
                             {{ $vizReasons[$b['why']] ?? $b['why'] }}
@@ -148,7 +152,7 @@
                 <tbody>
                     @forelse ($mine as $c)
                         <tr>
-                            <td><b>{{ $c->fullName() }}</b>
+                            <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</div></td>
                             <td>{{ $c->channel?->displayName() ?? '—' }}</td>
                             <td>
@@ -175,13 +179,15 @@
 
         <form method="GET" class="searchbar">
             <input type="hidden" name="manager" value="{{ $manager->id }}">
-            <input type="text" name="q" value="{{ request('q') }}" placeholder="🔍 {{ __('stock.search_item') }}">
+            <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+                <input type="text" name="q" value="{{ request('q') }}" placeholder="🔍 {{ __('client.search_client') }}"></label>
+            <label class="fl"><span>{{ __('ui.l_channel') }}</span>
             <select name="channel">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('client.all_channels') }}</option>
                 @foreach ($channels as $ch)
                     <option value="{{ $ch->id }}" @selected(request('channel') == $ch->id)>{{ $ch->displayName() }}</option>
                 @endforeach
-            </select>
+            </select></label>
             <button class="btn" type="submit">{{ __('common.search') }}</button>
         </form>
 
@@ -203,7 +209,7 @@
                         @forelse ($pool as $c)
                             <tr>
                                 <td><input type="checkbox" class="pickc" name="client_ids[]" value="{{ $c->id }}"></td>
-                                <td><b>{{ $c->fullName() }}</b>
+                                <td><a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a>
                                     <div style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</div></td>
                                 <td>{{ $c->channel?->displayName() ?? '—' }}</td>
                             </tr>
@@ -239,7 +245,7 @@
                 <tbody>
                     @forelse ($myTeam as $u2)
                         <tr>
-                            <td><b>{{ $u2->displayName() }}</b>
+                            <td><a href="{{ route('ops.rep', $u2) }}"><b>{{ $u2->displayName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $u2->code }}</div></td>
                             <td><span class="badge b-purple">{{ $u2->roleLabel() }}</span></td>
                             <td>
@@ -280,7 +286,7 @@
                         @forelse ($teamPool as $u2)
                             <tr>
                                 <td><input type="checkbox" class="pickt" name="user_ids[]" value="{{ $u2->id }}"></td>
-                                <td><b>{{ $u2->displayName() }}</b>
+                                <td><a href="{{ route('ops.rep', $u2) }}"><b>{{ $u2->displayName() }}</b></a>
                                     <div style="font-size:10.5px;color:var(--muted)">{{ $u2->code }}</div></td>
                                 <td><span class="badge b-purple">{{ $u2->roleLabel() }}</span></td>
                             </tr>

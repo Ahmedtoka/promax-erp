@@ -56,7 +56,7 @@
 
 {{-- نافذة الصلاحية «من — إلى» على `expires_on` بتاع الباتش (٩/٩/٢٠٢٦) —
      المخزن والكارت المختارين بيتحافظ عليهم --}}
-<form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+<form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
     @if ($all)
         <input type="hidden" name="warehouse" value="all">
     @elseif ($warehouse)
@@ -65,8 +65,7 @@
     @if ($bucketFilter)
         <input type="hidden" name="bucket" value="{{ $bucketFilter }}">
     @endif
-    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
 </form>
 
 <div class="alert info" style="margin-bottom:14px">
@@ -84,8 +83,7 @@
                 + ($active ? [] : ['bucket' => $key])
                 + $range->query());
         @endphp
-        <a class="kpi" href="{{ $link }}"
-           style="text-decoration:none;color:inherit;{{ $active ? 'outline:2px solid var(--royal-blue)' : '' }}">
+        <a class="kpi {{ $active ? 'on' : '' }}" href="{{ $link }}" title="{{ __('ui.click_to_filter') }}">
             <div class="lbl">{{ $meta['icon'] }} {{ $meta['label'] }}</div>
             <div class="val {{ $meta['val'] }}">{{ $fmt($bucket->sum('qty_remaining')) }}</div>
             <div class="sub2">{{ __('stock.units') }} • {{ __('stock.batch_countable', ['count' => $bucket->count()]) }}</div>
@@ -114,7 +112,8 @@
                     <th>{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>
                     @if ($all)<th>{{ __('stock.warehouse') }}</th>@endif
-                    <th>{{ __('stock.life_left') }}</th>
+                    {{-- ⚠️ أيام فاضلة — مجموعها رقم مالوش معنى (٢٢/٩) --}}
+                    <th data-nosum>{{ __('stock.life_left') }}</th>
                     <th>{{ __('stock.location') }}</th>
                     <th>{{ __('stock.suggested_block') }}</th>
                     <th class="num">{{ __('common.qty') }}</th>
@@ -123,9 +122,9 @@
                 @foreach ($relocations as $r)
                     @php $bl = $r['bl']; $b = $r['batch']; @endphp
                     <tr>
-                        <td style="text-align:start"><b>{{ $b->product?->displayName() ?? '—' }}</b></td>
-                        <td class="num">{{ $b->batch_no }}</td>
-                        @if ($all)<td class="s">{{ $b->warehouse?->displayName() ?? '—' }}</td>@endif
+                        <td style="text-align:start">@if ($b->product)<a href="{{ route('erp.products.show', $b->product) }}"><b>{{ $b->product->displayName() }}</b></a>@else<b>—</b>@endif</td>
+                        <td class="num">@if ($b->goods_receipt_id)<a href="{{ route('wh.receipt', $b->goods_receipt_id) }}">{{ $b->batch_no }}</a>@else{{ $b->batch_no }}@endif</td>
+                        @if ($all)<td class="s">@if ($b->warehouse)<a href="{{ route('erp.warehouses.stock', $b->warehouse) }}">{{ $b->warehouse->displayName() }}</a>@else — @endif</td>@endif
                         <td class="num">{{ max($b->daysLeft(), 0) }} {{ __('stock.day_unit') }}</td>
                         <td>
                             <span class="badge {{ $bl->location?->bandBadge() }}">{{ $bl->location?->code }} — {{ $bl->location?->bandLabel() }}</span>
@@ -171,8 +170,8 @@
                             <th style="text-align:start">{{ __('stock.item') }}</th>
                             @if ($all)<th>{{ __('stock.warehouse') }}</th>@endif
                             <th>{{ __('stock.batch_no') }}</th>
-                            <th>{{ __('stock.expires_on') }}</th>
-                            <th style="width:190px">{{ __('stock.life_left') }}</th>
+                            <th data-nosum>{{ __('stock.expires_on') }}</th>
+                            <th style="width:190px" data-nosum>{{ __('stock.life_left') }}</th>
                             <th class="num">{{ __('common.qty') }}</th>
                             <th>{{ __('stock.locations') }}</th>
                         </tr>
@@ -195,15 +194,15 @@
                                         <div style="width:100px;height:100px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                     @endif
                                     <div>
-                                        <b style="font-size:12.5px">{{ $b->product?->displayName() ?? '—' }}</b>
+                                        @if ($b->product)<a href="{{ route('erp.products.show', $b->product) }}"><b style="font-size:12.5px">{{ $b->product->displayName() }}</b></a>@else<b style="font-size:12.5px">—</b>@endif
                                         @if ($b->product)
                                             <div style="font-size:10.5px;color:var(--muted)">{{ $b->product->code }} • {{ $b->product->unitLabel() }}</div>
                                         @endif
                                     </div>
                                 </div>
                             </td>
-                            @if ($all)<td class="s">{{ $b->warehouse?->displayName() ?? '—' }}</td>@endif
-                            <td class="num"><b>{{ $b->batch_no }}</b></td>
+                            @if ($all)<td class="s">@if ($b->warehouse)<a href="{{ route('erp.warehouses.stock', $b->warehouse) }}">{{ $b->warehouse->displayName() }}</a>@else — @endif</td>@endif
+                            <td class="num">@if ($b->goods_receipt_id)<a href="{{ route('wh.receipt', $b->goods_receipt_id) }}"><b>{{ $b->batch_no }}</b></a>@else<b>{{ $b->batch_no }}</b>@endif</td>
                             <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
                             {{-- بار العمر: النسبة الفاضلة من عمر الباتش --}}
                             <td>

@@ -30,27 +30,28 @@
     $totalPts = $rows->sum(fn ($r) => intdiv((int) $r->confirmed, $perPoint) * $ptsPer);
 @endphp
 
+{{-- الكروت بتنزّل على الجدول اللي بيفصّلها مندوب مندوب — والمتأكد بيفتح أرشيف العناوين (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#creditsTable">
         <div class="lbl">{{ __('geo.sent_total') }}</div>
         <div class="val">{{ number_format($totalSent) }}</div>
         <div class="sub2">{{ __('geo.sent_total_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.client_locations', ['show' => 'done']) }}">
         <div class="lbl">{{ __('geo.confirmed_total') }}</div>
         <div class="val pos">{{ number_format($totalOk) }}</div>
         <div class="sub2">{{ __('geo.confirmed_total_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#creditsTable">
         <div class="lbl">{{ __('geo.points_earned') }}</div>
         <div class="val">{{ number_format($totalPts) }}</div>
         <div class="sub2">{{ __('geo.points_rule', ['n' => $perPoint, 'p' => $ptsPer]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#creditsTable">
         <div class="lbl">{{ __('incent.point_value') }}</div>
         <div class="val">{{ number_format($totalPts * $pointValue, 2) }}</div>
         <div class="sub2">{{ __('geo.points_money_hint') }}</div>
-    </div>
+    </a>
 </div>
 
 @if ($repId === 0)
@@ -59,7 +60,7 @@
         <h3>🧭 {{ __('geo.rep_credits') }}
             <span class="side">{{ __('geo.reps_countable', ['count' => $rows->count()]) }}</span></h3>
 
-        <div class="tablewrap">
+        <div class="tablewrap" id="creditsTable">
             <table>
                 <thead>
                 <tr>
@@ -70,7 +71,7 @@
                     <th class="num">{{ __('geo.confirmed') }}</th>
                     <th class="num">{{ __('geo.pending_review') }}</th>
                     <th class="num">{{ __('geo.points') }}</th>
-                    <th>{{ __('geo.last_sent') }}</th>
+                    <th data-nosum>{{ __('geo.last_sent') }}</th>
                     <th></th>
                 </tr>
                 </thead>
@@ -87,7 +88,7 @@
                     @endphp
                     <tr class="clickable"
                         onclick="location.href='{{ route('erp.client_locations.credits', ['rep' => $r->uid]) }}'">
-                        <td><b>{{ $u?->displayName() ?? '#'.$r->uid }}</b>
+                        <td>@if ($u)<a href="{{ route('ops.rep', $u) }}" onclick="event.stopPropagation()"><b>{{ $u->displayName() }}</b></a>@else<b>#{{ $r->uid }}</b>@endif
                             @if ($u?->code)
                                 <span style="color:var(--muted);font-size:11px"> · {{ $u->code }}</span>
                             @endif
@@ -120,17 +121,17 @@
 @else
     {{-- ═══════════ المستوى الثاني: عملاء المندوب ═══════════ --}}
     <div class="card">
-        <h3>🧭 {{ $rep?->displayName() ?? '#'.$repId }}
+        <h3>🧭 @if ($rep)<a href="{{ route('ops.rep', $rep) }}">{{ $rep->displayName() }}</a>@else #{{ $repId }} @endif
             <span class="side">{{ __('client.client_countable', ['count' => $clients->count()]) }}</span></h3>
 
-        <div class="tablewrap">
+        <div class="tablewrap" id="creditsTable">
             <table>
                 <thead>
                 <tr>
                     <th>{{ __('client.client') }}</th>
                     <th>{{ __('client.zone') }}</th>
-                    <th>{{ __('geo.current_point') }}</th>
-                    <th>{{ __('geo.sent_at') }}</th>
+                    <th data-nosum>{{ __('geo.current_point') }}</th>
+                    <th data-nosum>{{ __('geo.sent_at') }}</th>
                     <th>{{ __('geo.state') }}</th>
                 </tr>
                 </thead>
@@ -139,7 +140,7 @@
                     <tr class="clickable"
                         onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                         <td>
-                            <b>{{ $c->fullName() }}</b>
+                            <a href="{{ route('erp.clients.show', $c) }}" onclick="event.stopPropagation()"><b>{{ $c->fullName() }}</b></a>
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->displayAddress() ?: '—' }}</span>
                         </td>
                         <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>

@@ -30,7 +30,7 @@
             <div>
                 <label class="f">{{ __('supplier.supplier') }} *</label>
                 <select name="supplier_id" required style="width:100%">
-                    <option value="">— {{ __('common.pick') }} —</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_supplier')]) }}</option>
                     @foreach ($suppliers as $sup)
                         <option value="{{ $sup->id }}" @selected((int) old('supplier_id', $preSupplier) === $sup->id)>
                             {{ $sup->displayName() }}
@@ -41,6 +41,8 @@
             <div>
                 <label class="f">{{ __('supplier.deliver_to') }} *</label>
                 <select name="warehouse_id" required style="width:100%">
+                    {{-- ⚠️ من غير مخزن جاهز (٢٢/٩): أول مخزن كان بينزل لوحده والبضاعة تتسجّل على مخزن غلط --}}
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected((int) old('warehouse_id') === $w->id)>{{ $w->displayName() }}</option>
                     @endforeach
@@ -67,11 +69,12 @@
     <div class="card">
         <h3>{{ __('supplier.order_lines') }} <span class="side">{{ __('supplier.order_lines_hint') }}</span></h3>
         <div class="tablewrap">
-            <table>
+            {{-- جدول إدخال — من غير إكسيل --}}
+            <table data-noxl>
                 <tr>
                     <th>{{ __('common.code') }}</th>
                     <th>{{ __('stock.product') }}</th>
-                    <th class="num">{{ __('supplier.last_cost') }}</th>
+                    <th class="num" data-nosum>{{ __('supplier.last_cost') }}</th>
                     <th style="width:120px">{{ __('common.qty') }}</th>
                     <th style="width:140px">{{ __('supplier.unit_cost') }}</th>
                 </tr>

@@ -23,35 +23,32 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi">
+    {{-- (٢٢/٩) المدين والدائن بيفتحوا قيود اليومية لنفس الفترة، والاتزان مفرود في الجدول تحت --}}
+    <a class="kpi" href="{{ route('gl.entries', ['from' => $range->fromValue(), 'to' => $range->toValue()]) }}">
         <div class="lbl">{{ __('gl.debit') }}</div>
         <div class="val">{{ $fmt($data['totals']['debit']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $range->fromValue() }} → {{ $range->toValue() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('gl.entries', ['from' => $range->fromValue(), 'to' => $range->toValue()]) }}">
         <div class="lbl">{{ __('gl.credit') }}</div>
         <div class="val">{{ $fmt($data['totals']['credit']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('gl.accounts_with_moves', ['n' => count($data['rows'])]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.balanced') }}</div>
         <div class="val {{ $balanced ? '' : 'neg' }}">{{ $balanced ? '✓' : '✕' }}</div>
         <div class="sub2">{{ $balanced ? __('gl.balanced') : __('gl.not_balanced') }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="gl-table">
     <h3>⚖️ {{ __('gl.trial_balance') }} <span class="side">{{ __('gl.trial_balance_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
+    <form method="GET" class="searchbar" data-noprint>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.trial_balance') }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -83,12 +80,13 @@
             @empty
                 <tr><td colspan="7" style="color:var(--muted);font-size:12px">{{ __('gl.no_lines') }}</td></tr>
             @endforelse
-            <tr>
+            {{-- الإجمالي في tfoot (٢٢/٩) عشان الجمع الأوتوماتيك مايضيفش صف إجمالي تاني فوقه --}}
+            <tfoot><tr>
                 <td colspan="4" style="text-align:start"><b>{{ __('common.total') }}</b></td>
                 <td class="num"><b>{{ $fmt($data['totals']['debit']) }}</b></td>
                 <td class="num"><b>{{ $fmt($data['totals']['credit']) }}</b></td>
                 <td></td>
-            </tr>
+            </tr></tfoot>
         </table>
     </div>
 </div>

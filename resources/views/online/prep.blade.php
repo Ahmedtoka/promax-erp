@@ -58,7 +58,8 @@
                     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                 @endphp
                 <tr style="cursor:pointer" onclick='openPrep({{ $pick->id }}, {!! $payload !!})'>
-                    <td class="num s"><b>{{ $o !== null ? '#'.$o->number : $pick->number }}</b></td>
+                    {{-- رقم الأوردر بيفتح فاتورته — والصف نفسه بيفتح التجهيز (٢٢/٩) --}}
+                    <td class="num s">@if ($o !== null)<a href="{{ route('online.invoice', $o) }}" onclick="event.stopPropagation()"><b>#{{ $o->number }}</b></a>@else<b>{{ $pick->number }}</b>@endif</td>
                     <td>{{ $o?->customer_name ?: '—' }}</td>
                     <td class="num s" dir="ltr">{{ $o?->phone ?: '—' }}</td>
                     <td class="s">{{ $o?->area ?: '—' }}</td>

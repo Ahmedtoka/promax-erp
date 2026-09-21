@@ -44,7 +44,7 @@
                 <th>{{ __('client.collected') }}</th>
                 <th>{{ __('client.balance') }}</th>
                 <th>{{ __('report.sales_today') }}</th>
-                <th>{{ __('channel.discount_spread') }}</th>
+                <th data-nosum>{{ __('channel.discount_spread') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
             @foreach ($channels as $ch)
@@ -62,7 +62,7 @@
                 @endphp
                 <tr>
                     <td>
-                        <span class="badge {{ $ch->badgeClass() }}">{{ $ch->displayName() }}</span>
+                        <a class="badge {{ $ch->badgeClass() }}" href="{{ route('erp.clients', ['channel' => $ch->id]) }}">{{ $ch->displayName() }}</a>
                         @if (! $ch->active)<span class="badge b-gray">{{ __('client.suspended') }}</span>@endif
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $ch->code }}</span>
                         @if ($s['team'])
@@ -163,7 +163,7 @@
                 <tr><th>{{ __('client.segment') }}</th><th>{{ __('client.client_count') }}</th></tr>
                 @foreach (Channel::SUB_CHANNELS as $code => $label)
                     <tr>
-                        <td><b>{{ __('enums.sub_channel.'.$code) }}</b></td>
+                        <td><a href="{{ route('erp.clients', ['sub' => $code]) }}"><b>{{ __('enums.sub_channel.'.$code) }}</b></a></td>
                         <td class="num">{{ $subCounts[$code] ?? 0 }}</td>
                     </tr>
                 @endforeach
@@ -185,10 +185,10 @@
                         ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                     @endphp
                     <tr>
-                        <td><b>{{ $m->name }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $m->code }}</span></td>
+                        <td><a href="{{ route('ops.rep', $m) }}"><b>{{ $m->displayName() }}</b></a><br><span style="font-size:10.5px;color:var(--muted)">{{ $m->code }}</span></td>
                         <td>
                             @forelse ($m->channels as $c)
-                                <span class="badge {{ $c->badgeClass() }}">{{ $c->displayName() }}</span>
+                                <a class="badge {{ $c->badgeClass() }}" href="{{ route('erp.clients', ['channel' => $c->id, 'manager' => $m->id]) }}">{{ $c->displayName() }}</a>
                             @empty
                                 <span class="badge b-gray">{{ __('client.no_channels') }}</span>
                             @endforelse

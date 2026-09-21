@@ -22,10 +22,8 @@
 {{-- ═══ الأسبوع ═══ --}}
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
     <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div style="flex:0 1 190px">
-            <label class="f">{{ __('lead.week_of') }}</label>
-            <input type="date" name="week" value="{{ $start->toDateString() }}" onchange="this.form.submit()">
-        </div>
+        <label class="fl"><span>{{ __('lead.week_of') }}</span>
+            <input type="date" name="week" value="{{ $start->toDateString() }}" onchange="this.form.submit()"></label>
         <a class="btn" href="{{ route('erp.leads.week', ['week' => $start->copy()->subWeek()->toDateString()]) }}">→</a>
         <a class="btn" href="{{ route('erp.leads.week', ['week' => $start->copy()->addWeek()->toDateString()]) }}">←</a>
         <span style="font-size:12px;color:var(--muted)" dir="ltr">
@@ -42,8 +40,8 @@
     {{-- ═══ سطر المندوب — الأرقام الأربعة ═══ --}}
     <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         @include('partials._avatar', ['u' => $row['user'], 'size' => 34])
-        <b style="font-size:14px">{{ $row['user']->name }}</b>
-        <span class="badge b-blue">📅 {{ $row['planned'] }} {{ __('lead.w_planned') }}</span>
+        <a href="{{ route('ops.rep', $row['user']) }}"><b style="font-size:14px">{{ $row['user']->displayName() }}</b></a>
+        <a class="badge b-blue" href="{{ route('erp.leads', ['rep' => $row['user']->id]) }}">📅 {{ $row['planned'] }} {{ __('lead.w_planned') }}</a>
         <span class="badge b-green">✓ {{ $row['visited'] }} {{ __('lead.w_visited') }}</span>
         @if ($row['missed'] > 0)
             <span class="badge b-red">⚠️ {{ $row['missed'] }} {{ __('lead.w_missed') }}</span>

@@ -40,24 +40,34 @@
 
 @section('content')
 
+{{-- الكروت: التحويل على القايمة بحالته، والطرفين على صفحتهم (مخزن أو مندوب)، والكمية على البنود (٢٢/٩).
+     ⚠️ الطرف من fromLabel/toLabel — التحويل الميداني طرفه مندوب مش مخزن، وكان بيبان «—». --}}
+@php
+    $fromUrl = $t->isVan()
+        ? ($t->fromUser ? route('ops.rep', $t->fromUser) : '#trItems')
+        : ($t->fromWarehouse ? route('wh.index', ['warehouse' => $t->from_warehouse_id]) : '#trItems');
+    $toUrl = $t->kindKey() === 'rep_rep'
+        ? ($t->toUser ? route('ops.rep', $t->toUser) : '#trItems')
+        : ($t->toWarehouse ? route('wh.index', ['warehouse' => $t->to_warehouse_id]) : '#trItems');
+@endphp
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('wh.transfers', ['status' => $t->status]) }}">
         <div class="lbl">{{ __('stock.transfer') }}</div>
         <div class="val">{{ $t->number }}</div>
         <div class="sub2"><span class="badge {{ $t->statusClass() }}">{{ $t->statusLabel() }}</span></div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ $fromUrl }}">
         <div class="lbl">{{ __('stock.from_warehouse') }}</div>
-        <div class="val" style="font-size:16px">{{ $t->fromWarehouse?->displayName() ?? '—' }}</div>
+        <div class="val" style="font-size:16px">{{ $t->fromLabel() }}</div>
         <div class="sub2">{{ __('stock.sent_by') }}: {{ $t->sender?->displayName() ?? '—' }}
             · {{ $t->sent_on?->format('Y-m-d') ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ $toUrl }}">
         <div class="lbl">{{ __('stock.to_warehouse') }}</div>
-        <div class="val" style="font-size:16px">{{ $t->toWarehouse?->displayName() ?? '—' }}</div>
+        <div class="val" style="font-size:16px">{{ $t->toLabel() }}</div>
         @if ($t->carrier_name)<div class="sub2">{{ __('stock.carrier') }}: {{ $t->carrier_name }}</div>@endif
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#trItems">
         <div class="lbl">{{ __('stock.qty_sent') }}</div>
         <div class="val">{{ $fmt($t->qtySent()) }}</div>
         @if ($t->status === 'received')
@@ -68,7 +78,7 @@
                 @endif
             </div>
         @endif
-    </div>
+    </a>
 </div>
 
 @if ($canReceive)
@@ -80,7 +90,7 @@
     </div>
 @endif
 
-<div class="card">
+<div class="card" id="trItems">
     <h3>📦 {{ __('stock.transfer_items') }}</h3>
 
     <form method="POST" action="{{ route('wh.transfers.receive', $t) }}">
@@ -94,12 +104,13 @@
         @endif
 
         <div class="tablewrap">
-            <table>
+            {{-- وقت الاستلام «المستلم» خانات إدخال — إكسيل الجدول بيقرا النص بس فبيتقفل لحد ما يتستلم --}}
+            <table @if ($canReceive) data-noxl @endif>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>
-                    <th>{{ __('stock.produced_on') }}</th>
-                    <th>{{ __('stock.expires_on') }}</th>
+                    <th data-nosum>{{ __('stock.produced_on') }}</th>
+                    <th data-nosum>{{ __('stock.expires_on') }}</th>
                     <th class="num">{{ __('stock.qty_sent') }}</th>
                     <th class="num">{{ __('stock.qty_received') }}</th>
                     <th class="num">{{ __('stock.variance') }}</th>
@@ -108,7 +119,7 @@
                     @php $v = (int) ($it->qty_received ?? $it->qty_sent) - (int) $it->qty_sent; @endphp
                     <tr>
                         <td>
-                            <b>{{ $it->product?->displayName() ?? '—' }}</b>
+                            @if ($it->product)<a href="{{ route('erp.products.show', $it->product) }}"><b>{{ $it->product->displayName() }}</b></a>@else<b>—</b>@endif
                             <div style="font-size:10.5px;color:var(--muted)">
                                 {{ $it->product?->code }} · {{ $it->product?->unitLabel() }}
                             </div>

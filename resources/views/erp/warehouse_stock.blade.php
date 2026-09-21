@@ -32,14 +32,16 @@
 
 <div class="card">
     <form class="searchbar" method="GET" style="margin-bottom:12px">
-        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
-               placeholder="{{ __('stock.search_item') }}" style="flex:1;min-width:180px">
-        <select name="family" style="min-width:150px">
-            <option value="">— {{ __('stock.family') }} —</option>
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
+                   placeholder="{{ __('stock.search_item') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_family') }}</span>
+        <select name="family">
+            <option value="">{{ __('stock.all_families') }}</option>
             @foreach ($families as $k => $lbl)
-                <option value="{{ $k }}" @selected(($filters['family'] ?? '') === $k)>{{ __('enums.family.'.$k) }}</option>
+                <option value="{{ $k }}" @selected(($filters['family'] ?? '') === $k)>{{ $lbl }}</option>
             @endforeach
-        </select>
+        </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.warehouses.stock', $w) }}">{{ __('common.clear') }}</a>
     </form>
@@ -59,7 +61,8 @@
         @endif
 
         <div class="tablewrap">
-            <table>
+            {{-- ⚠️ جدول إدخال: الكمية والهولد خانات، وإكسيل الجدول بيقرا النص بس فكان هيطلّعهم فاضيين (٢٢/٩) --}}
+            <table data-noxl>
                 <tr>
                     <th style="width:40px"></th>
                     <th>{{ __('common.code') }}</th><th>{{ __('stock.item') }}</th>
@@ -67,7 +70,7 @@
                     <th style="width:110px">{{ __('stock.qty') }}</th>
                     <th style="width:110px">{{ __('stock.hold') }}</th>
                     <th>{{ __('stock.good_stock') }}</th>
-                    <th>{{ __('stock.last_count') }}</th>
+                    <th data-nosum>{{ __('stock.last_count') }}</th>
                 </tr>
                 @forelse ($products as $p)
                     @php
@@ -96,7 +99,7 @@
                         <td class="num">
                             <a href="{{ route('erp.products.show', $p) }}">{{ $p->code }}</a>
                         </td>
-                        <td><b>{{ $p->displayName() }}</b></td>
+                        <td><a href="{{ route('erp.products.show', $p) }}"><b>{{ $p->displayName() }}</b></a></td>
                         <td><span class="badge b-gray">{{ $p->familyLabel() }}</span></td>
                         <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                         <td>

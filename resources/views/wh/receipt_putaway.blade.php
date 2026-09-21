@@ -46,13 +46,14 @@
         <form method="POST" action="{{ route('wh.receipt.putaway.save', $receipt) }}">
             @csrf
             <div class="tablewrap">
-                <table>
+                {{-- جدول إدخال (رف وكمية لكل باتش) — من غير إكسيل --}}
+                <table data-noxl>
                     <thead>
                         <tr>
                             <th>{{ __('stock.batch') }}</th>
                             <th>{{ __('stock.product') }}</th>
-                            <th>{{ __('stock.produced_on') }}</th>
-                            <th>{{ __('stock.expires_on') }}</th>
+                            <th data-nosum>{{ __('stock.produced_on') }}</th>
+                            <th data-nosum>{{ __('stock.expires_on') }}</th>
                             <th>{{ __('stock.pa_left') }}</th>
                             <th>{{ __('stock.pa_on') }}</th>
                             <th>{{ __('stock.location') }}</th>
@@ -63,7 +64,7 @@
                         @foreach ($pending as $b)
                             <tr>
                                 <td class="num"><b>{{ $b->batch_no }}</b></td>
-                                <td>{{ $b->product?->displayName() ?? '—' }}</td>
+                                <td>@if ($b->product)<a href="{{ route('erp.products.show', $b->product) }}" target="_blank" rel="noopener">{{ $b->product->displayName() }}</a>@else — @endif</td>
                                 <td class="num">{{ $b->produced_on?->format('Y-m-d') ?? '—' }}</td>
                                 <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
                                 <td class="num"><b>{{ $fmt($b->unshelvedQty()) }}</b></td>
@@ -75,7 +76,7 @@
                                     @endforelse
                                 </td>
                                 <td>
-                                    <select name="rows[{{ $b->id }}][location_id]" @disabled(! $canAct)>
+                                    <select name="rows[{{ $b->id }}][location_id]" aria-label="{{ __('stock.location') }}" @disabled(! $canAct)>
                                         <option value="">{{ __('stock.pa_choose') }}</option>
                                         @foreach ($locations as $loc)
                                             <option value="{{ $loc->id }}">{{ $loc->code }}</option>

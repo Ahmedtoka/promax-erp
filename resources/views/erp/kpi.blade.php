@@ -25,11 +25,9 @@
 {{-- ═══ اختيار الشهر + فحوصات النموذج ═══ --}}
 <div class="card" style="padding:12px 14px">
     <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div>
-            <label class="f">{{ __('kpi.period') }}</label>
-            <input type="month" name="period" value="{{ $period }}">
-        </div>
-        <button class="btn gold" type="submit">🔍 {{ __('rpt.apply') }}</button>
+        <label class="fl"><span>{{ __('ui.l_month') }}</span>
+            <input type="month" name="period" value="{{ $period }}" onchange="this.form.submit()"></label>
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <div style="margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap">
             @foreach ($checks as $c)
                 <span class="badge {{ $c['pass'] ? 'b-green' : 'b-red' }}"
@@ -52,20 +50,62 @@
 @endphp
 
 {{-- ═══ النتائج الرئيسية — صف Dashboard ═══ --}}
+{{-- (٢٢/٩) الكروت بتفسّر رقمها: دوسة تفتح نفس الأرقام مفرودة بالقناة --}}
 <div class="kpis">
-    <div class="kpi"><div class="lbl">💰 {{ __('kpi.total_collections') }}</div>
+    <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">💰 {{ __('kpi.total_collections') }}</div>
         <div class="val">{{ $fmt($totColl) }}</div>
         <div class="sub2">{{ __('kpi.h_collections') }}</div></div>
-    <div class="kpi"><div class="lbl">🧑‍💼 {{ __('kpi.rep_due') }}</div>
+    <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">🧑‍💼 {{ __('kpi.rep_due') }}</div>
         <div class="val pos">{{ $f2($totRep) }}</div></div>
-    <div class="kpi"><div class="lbl">👔 {{ __('kpi.manager_due') }}</div>
+    <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">👔 {{ __('kpi.manager_due') }}</div>
         <div class="val pos">{{ $f2($totMgr) }}</div></div>
-    <div class="kpi"><div class="lbl">🎖️ {{ __('kpi.director_due') }}</div>
+    <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">🎖️ {{ __('kpi.director_due') }}</div>
         <div class="val pos">{{ $f2($totDir) }}</div></div>
-    <div class="kpi"><div class="lbl">Σ {{ __('kpi.grand_due') }}</div>
+    <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">Σ {{ __('kpi.grand_due') }}</div>
         <div class="val pos"><b>{{ $f2($totRep + $totMgr + $totDir) }}</b></div>
         <div class="sub2">{{ $totColl > 0 ? $pct(($totRep + $totMgr + $totDir) / $totColl, 2) : '0%' }} {{ __('kpi.of_collections') }}</div></div>
 </div>
+
+<dialog id="kpiExplain" style="max-width:760px">
+    <h3>{{ __('kpi.grand_due') }} <span class="side">{{ __('ui.explain') }} · {{ $period }}</span></h3>
+    <div class="tablewrap">
+        <table data-noxl>
+            <thead><tr>
+                <th style="text-align:start">{{ __('ui.l_channel') }}</th>
+                <th class="num">{{ __('kpi.total_collections') }}</th>
+                <th class="num">{{ __('kpi.rep_due') }}</th>
+                <th class="num">{{ __('kpi.manager_due') }}</th>
+                <th class="num">{{ __('kpi.director_due') }}</th>
+                <th class="num">{{ __('kpi.grand_due') }}</th>
+            </tr></thead>
+            <tbody>
+            @foreach ($result['channels'] as $xc)
+                @php
+                    $xColl = collect($xc['reps'])->sum(fn ($r) => $r['data']['collections']);
+                    $xRep = collect($xc['reps'])->sum('final');
+                @endphp
+                <tr>
+                    <td style="text-align:start">{{ $xc['channel']->displayName() }}</td>
+                    <td class="num" dir="ltr">{{ $fmt($xColl) }}</td>
+                    <td class="num" dir="ltr">{{ $f2($xRep) }}</td>
+                    <td class="num" dir="ltr">{{ $f2($xc['manager']['final']) }}</td>
+                    <td class="num" dir="ltr">{{ $f2($xc['director']['final']) }}</td>
+                    <td class="num" dir="ltr"><b>{{ $f2($xRep + $xc['manager']['final'] + $xc['director']['final']) }}</b></td>
+                </tr>
+            @endforeach
+            </tbody>
+            <tfoot><tr>
+                <td style="text-align:start">{{ __('common.total') }}</td>
+                <td class="num" dir="ltr">{{ $fmt($totColl) }}</td>
+                <td class="num" dir="ltr">{{ $f2($totRep) }}</td>
+                <td class="num" dir="ltr">{{ $f2($totMgr) }}</td>
+                <td class="num" dir="ltr">{{ $f2($totDir) }}</td>
+                <td class="num" dir="ltr"><b>{{ $f2($totRep + $totMgr + $totDir) }}</b></td>
+            </tr></tfoot>
+        </table>
+    </div>
+    <div style="text-align:end;margin-top:10px"><button class="btn" type="button" onclick="closeDlg('kpiExplain')">{{ __('common.close') }}</button></div>
+</dialog>
 
 {{-- ═══ المدخلات اليدوية الشهرية ═══ --}}
 <div class="card">
@@ -149,7 +189,7 @@
                             'name' => $m->displayName(), 'weight' => (float) $m->weight,
                             'target' => $m->targetFor($ch->id), 'dir' => $m->direction]]),
                     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) }})">
-                        <td style="text-align:start"><b>{{ $r['rep']->displayName() }}</b>
+                        <td style="text-align:start"><a href="{{ route('ops.rep', $r['rep']->id) }}" onclick="event.stopPropagation()"><b>{{ $r['rep']->displayName() }}</b></a>
                             <div class="s" style="color:var(--muted)">{{ $r['rep']->roleLabel() }}</div></td>
                         <td class="num" dir="ltr">{{ $fmt($r['data']['collections']) }}</td>
                         <td class="num" dir="ltr">{{ $pct($r['achievement']) }}</td>

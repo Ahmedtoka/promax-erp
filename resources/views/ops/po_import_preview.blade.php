@@ -40,7 +40,7 @@
     <input type="hidden" id="piDue" value="{{ $batch['due_at'] }}">
 
     <div class="tablewrap" style="max-height:65vh;overflow-y:auto">
-        <table>
+        <table data-noxl>
             <thead>
                 <tr>
                     <th style="width:34px"></th>

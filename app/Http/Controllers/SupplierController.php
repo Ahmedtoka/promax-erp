@@ -38,13 +38,19 @@ class SupplierController extends Controller
                 ->orWhere('phone', 'like', "%$s%"));
         }
 
+        // كارت «علينا لهم» بيفلتر بيه — نفس شرط مجموع الكارت (٢٢/٩)
+        if ($request->boolean('owed')) {
+            $q->where('balance', '>', 0);
+        }
+
         $suppliers = $q->withCount(['orders as open_orders' => fn ($w) => $w->whereIn('status', ['open'])])
             ->orderByDesc('balance')->orderBy('name')
             ->get();
 
         return view('erp.suppliers', [
             'suppliers' => $suppliers,
-            'filters' => $request->only(['q']),
+            'filters' => $request->only(['q', 'owed']),
+            'supplierCount' => Supplier::count(),
             'totalOwed' => (float) Supplier::where('balance', '>', 0)->sum('balance'),
         ]);
     }
@@ -58,17 +64,43 @@ class SupplierController extends Controller
         // مش يوم الإدخال. مفتوح لو الخانتين فاضيتين.
         $range = DateRange::fromRequest($request);
 
+        // ═══ أساس واحد للكشف (٢٢/٩) ═══ الجدول والإجمالي والتصدير من نفس
+        // الكويري — الكشف صفحات، فمجموع الصفحة مش مجموع الفترة.
+        $txnBase = fn () => $supplier->transactions()->tap(fn ($q) => $range->apply($q, 'date'));
+
+        if ($request->boolean('export')) {
+            return $this->exportStatement($supplier, $txnBase(), $range);
+        }
+
         return view('erp.supplier', [
             's' => $supplier,
             'range' => $range,
             'orderCount' => $supplier->orders()->count(),
             'openCount' => $supplier->orders()->where('status', 'open')->count(),
-            'txns' => $supplier->transactions()->with('source')
-                ->tap(fn ($q) => $range->apply($q, 'date'))
+            'txnTotals' => $txnBase()->selectRaw('COALESCE(SUM(debit),0) as debit, COALESCE(SUM(credit),0) as credit')->toBase()->first(),
+            'txns' => $txnBase()->with('source')
                 ->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
             'invoices' => $supplier->invoices()->latest('invoice_date')->limit(20)->get(),
             'payments' => $supplier->payments()->latest('paid_on')->limit(20)->get(),
         ]);
+    }
+
+    /** كشف حساب المورد إكسيل — كل قيود الفترة، بنفس كويري الشاشة */
+    private function exportStatement(Supplier $supplier, $q, DateRange $range)
+    {
+        $txns = $q->orderBy('date')->orderBy('id')->get();
+
+        return \App\Support\Csv::download(
+            'supplier-'.$supplier->code.'-statement.csv',
+            [__('common.date'), __('supplier.txn_kind'), __('common.notes'), __('supplier.debit'), __('supplier.credit')],
+            $txns->map(fn ($t) => [
+                $t->date->format('Y-m-d'), $t->kindLabel(), (string) $t->memo,
+                \App\Support\Csv::money($t->debit), \App\Support\Csv::money($t->credit),
+            ]),
+            [__('common.total'), $txns->count(), '', \App\Support\Csv::money($txns->sum('debit')), \App\Support\Csv::money($txns->sum('credit'))],
+            \App\Support\Csv::meta(__('supplier.statement').' — '.$supplier->displayName(),
+                $range->fromValue() ?: null, $range->toValue() ?: null),
+        );
     }
 
     /** قواعد فورم المورد — مصدر واحد للإضافة والتعديل */
@@ -188,7 +220,26 @@ class SupplierController extends Controller
         $range = DateRange::fromRequest($request);
         $range->apply($q, 'ordered_on');
 
+        // التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩)
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('ordered_on')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'purchase-orders.csv',
+                [__('common.number'), __('supplier.supplier'), __('stock.warehouse'), __('supplier.ordered_on'),
+                    __('supplier.expected_on'), __('common.total'), __('common.status')],
+                $all->map(fn ($o) => [
+                    $o->number, $o->supplier?->displayName() ?? '', $o->warehouse?->displayName() ?? '',
+                    $o->ordered_on->format('Y-m-d'), $o->expected_on?->format('Y-m-d') ?? '',
+                    \App\Support\Csv::money($o->total), $o->statusLabel(),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', \App\Support\Csv::money($all->sum('total')), ''],
+                \App\Support\Csv::meta(__('supplier.purchase_orders'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
         return view('erp.supplier_orders', [
+            'ordersTotal' => (float) (clone $q)->sum('total'),
             'orders' => $q->latest()->paginate(30)->withQueryString(),
             'range' => $range,
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),

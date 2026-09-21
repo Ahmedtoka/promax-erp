@@ -180,7 +180,9 @@ class RepSettlementController extends Controller
                 // ⚠️ لقطة التحصيلات — الشيك اللي المندوب مضى إنه
                 // سلّمه لازم يفضل على الورقة بنفس أرقام لحظتها
                 'collections_json' => $f['collection_rows']->map(fn ($t) => [
-                    'client' => $t->client?->fullName() ?? '—',
+                    // `client_id` (٢٢/٩) — اسم العميل في تفاصيل التصفية بقى لينك
+                    'client_id' => $t->client_id,
+                    'client' =>$t->client?->fullName() ?? '—',
                     'amount' => (float) $t->credit,
                     'method' => $t->method,
                     'method_label' => $t->methodLabel(),
@@ -319,7 +321,8 @@ class RepSettlementController extends Controller
         $collections = $collectionsFromSnapshot
             ? collect($snapCollections)
             : $f['collection_rows']->map(fn ($t) => [
-                'client' => $t->client?->fullName() ?? '—',
+                'client_id' => $t->client_id,
+                'client' =>$t->client?->fullName() ?? '—',
                 'amount' => (float) $t->credit,
                 'method' => $t->method,
                 'method_label' => $t->methodLabel(),

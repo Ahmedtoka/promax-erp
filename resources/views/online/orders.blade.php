@@ -26,15 +26,19 @@
             @if ($filters['status'] ?? null)
                 <input type="hidden" name="status" value="{{ $filters['status'] }}">
             @endif
-            <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}">
+            <label class="fl"><span>{{ __('ui.l_search') }}</span>
+                <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
             {{-- «من — إلى» على تاريخ الأوردر في شوبيفاي --}}
-            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+            @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+            <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+            {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+            <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         </form>
     </div>
 </div>
 
 <div class="card">
+    <h3>🛒 {{ __('online.orders_title') }}</h3>
     <div class="tablewrap">
         <table>
             <tr>
@@ -47,11 +51,12 @@
                 <th class="num">{{ __('online.collected') }}</th>
                 <th>{{ __('online.pickup_no') }}</th>
                 <th>{{ __('common.status') }}</th>
-                <th>{{ __('common.date') }}</th>
+                <th data-nosum>{{ __('common.date') }}</th>
             </tr>
             @forelse ($orders as $o)
                 <tr>
-                    <td class="num s"><b>#{{ $o->number }}</b></td>
+                    {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
+                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td>{{ $o->customer_name ?: '—' }}
                         @if ($o->cancel_reason)
                             <br><span style="font-size:10.5px;color:var(--muted)">✖ {{ $o->cancel_reason }}</span>
@@ -83,6 +88,16 @@
                     {{ __('online.orders_empty') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($orders->total() > 0)
+                <tfoot><tr>
+                    <td colspan="4"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $orders->total()]) }})</span></td>
+                    <td></td>
+                    <td class="num"><b>{{ $money($totals->total) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->collected) }}</b></td>
+                    <td colspan="3"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 

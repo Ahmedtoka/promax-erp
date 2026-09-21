@@ -24,12 +24,13 @@
     </div>
 
     {{-- فلتر «من — إلى» على تاريخ الطلب من الميدان --}}
-    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
+    <form method="GET" class="searchbar" style="margin:10px 0 0" data-noprint>
         @if (($filters['status'] ?? '') !== '')
             <input type="hidden" name="status" value="{{ $filters['status'] }}">
         @endif
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        {{-- الجدول صفحات — التصدير ده بياخد نتيجة الفلتر كلها (صف لكل بند) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 </div>
 
@@ -60,9 +61,15 @@
                 <tr>
                     <td class="num"><b>{{ $r->number }}</b><br>
                         <span style="font-size:10.5px;color:var(--muted)">{{ $r->created_at->format('m-d h:i A') }}</span></td>
-                    <td><b>{{ $r->client->displayName() }}</b></td>
                     <td>
-                        {{ $r->promoter?->displayName() ?? '—' }}
+                        @if ($r->client)
+                            <a href="{{ route('erp.clients.show', $r->client) }}"><b>{{ $r->client->displayName() }}</b></a>
+                        @else — @endif
+                    </td>
+                    <td>
+                        @if ($r->promoter)
+                            <a href="{{ route('ops.rep', $r->promoter) }}">{{ $r->promoter->displayName() }}</a>
+                        @else — @endif
                         {{-- مصدر الطلب (2026-08-09): مندوب واقف عند
                              العميل ولا بروموتر من زيارة رف --}}
                         <br><span class="badge {{ $r->origin() === 'rep' ? 'b-blue' : 'b-gray' }}"
@@ -70,7 +77,11 @@
                     </td>
                     <td style="white-space:normal;max-width:260px;font-size:11.5px">
                         @foreach ($r->items as $i)
-                            <div>{{ $i->product->displayName() }} — <b>{{ $i->qty }}</b></div>
+                            <div>
+                                @if ($i->product)
+                                    <a href="{{ route('erp.products.show', $i->product) }}" style="color:inherit">{{ $i->product->displayName() }}</a>
+                                @else #{{ $i->product_id }} @endif
+                                — <b>{{ $i->qty }}</b></div>
                         @endforeach
                     </td>
                     <td class="num"><b>{{ $r->qtyTotal() }}</b></td>
@@ -92,7 +103,10 @@
                                    title="{{ __('ops.rpl_legacy_po') }}">{{ $r->purchaseOrder->number }}</a>
                         @endif
                     </td>
-                    <td>{{ $r->assignee?->displayName() ?? '—' }}
+                    <td>
+                        @if ($r->assignee)
+                            <a href="{{ route('ops.rep', $r->assignee) }}">{{ $r->assignee->displayName() }}</a>
+                        @else — @endif
                         {{-- مين وافق — كان مابيتسجّلش خالص قبل ١٥/٨ --}}
                         @if ($r->approver)
                             <div style="font-size:9.5px;color:var(--muted)">🔏 {{ $r->approver->displayName() }}</div>
@@ -118,6 +132,16 @@
             @empty
                 <tr><td colspan="{{ $manager ? 9 : 8 }}" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_replenishments') }}</td></tr>
             @endforelse
+            @if ($requests->total() > 0)
+                <tfoot>
+                <tr style="background:var(--card2);font-weight:900">
+                    <td>Σ</td>
+                    <td colspan="3">{{ __('ops.request_countable', ['count' => $requests->total()]) }}</td>
+                    <td class="num">{{ number_format($sumQty) }}</td>
+                    <td colspan="{{ $manager ? 4 : 3 }}"></td>
+                </tr>
+                </tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $requests->links('pagination::simple-default') }}</div>
@@ -136,6 +160,7 @@
                 {{-- بحث + سيلكت: القايمة كل رولز الشغل الميداني وممكن تطول --}}
                 <input type="text" id="rplWho" placeholder="{{ __('common.search') }}"
                        autocomplete="off" style="width:100%;margin-bottom:6px">
+                {{-- قايمة مفتوحة (size=5) — مفيش اختيار افتراضي، و`required` بيجبر الاختيار --}}
                 <select name="assigned_to" id="rplAssignee" required size="5" style="width:100%">
                     @foreach ($drivers as $d)
                         <option value="{{ $d->id }}">{{ $d->displayName() }} ({{ $d->roleLabel() }})</option>

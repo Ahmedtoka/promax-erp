@@ -307,11 +307,15 @@ class Access
         'nav.group_money' => '💰',
         'nav.group_gl' => '📒',
         'nav.group_hr' => '🕒',
+        'nav.group_targets' => '🎯',
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
     ];
 
     public const NAV = [
+        // ⚠️ **الترتيب هنا هو ترتيب السايدبار** (٢٢/٩): بسير الشغل — العميل، الميدان،
+        // العهدة والتوريد، الفلوس، البضاعة، وبعدين المتابعة والإعدادات.
+
         // ⚠️ **الترتيب هو سايكل الشغل نفسه (قرار المالك 2026-08-04).**
         // الصنف يتعرّف بوحداته ويتسعّر → يتشري من المورد → يدخل
         // المخزن ويترصّف → العميل يتفتح له حساب وعقد → البضاعة تطلع
@@ -323,85 +327,6 @@ class Access
         // ═══ الرئيسية ═══
         'nav.group_home' => [
             ['erp.overview', '📊', 'nav.overview', 'erp.overview', null],
-        ],
-
-        // ═══ ١. المنتجات والتسعير — أول السايكل: تعريف الصنف ═══
-        'nav.group_products' => [
-            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
-            // العائلات والصلاحية (2026-08-06) — بتحكم مدة انتهاء منتجاتها
-            ['erp.families', '🧬', 'nav.families', 'erp.families*', null],
-            ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
-            // عروض الأسعار (نقل ٢٢/٨ بطلب المالك) — مكانها الطبيعي مع
-            // المنتجات والتسعير: العرض بيتبني من الكتالوج والأسعار
-            ['erp.reports.quotations', '📄', 'nav.quotations', 'erp.reports.quotation*', null],
-        ],
-
-        // ═══ ٢. المخزن — بترتيب دخول البضاعة ═══
-        'nav.group_wh' => [
-            ['wh.index', '🏭', 'nav.warehouse', 'wh.index', null],
-            ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
-            ['wh.locations', '🗄️', 'nav.shelves', 'wh.locations', null],
-            ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
-            ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', 'transfers'],
-            ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
-        ],
-
-        // ═══ ٣. العهدة — فلو تحميل العربيات كامل في مكان واحد ═══
-        // (قرار المالك 2026-08-03): طلب التسليم ← تجهيز الطلبات ←
-        // تأكيد ← إشعار المندوب ← استلام من الأبلكيشن
-        'nav.group_custody' => [
-            // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
-            ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
-            // «الموعود مقابل المتاح» اتشالت (قرار المالك ٢٢/٨) — فلو
-            // الريفيل الجديد بيرفع أمر تجهيز فوراً فمفيش «وعود» معلقة
-            // بورد فلوس المناديب (١٢/٨) — كاش/آجل/تحصيلات لكل مندوب.
-            // المحاسب شايفه من `ops.sales` في خريطته — مش من بادئة `ops.`
-            ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],
-            // البورد المدموج (١٢/٨): عهدة + مبيعات + حضور + حركة في صف واحد
-            ['ops.rep_board', '📊', 'nav.rep_board', 'ops.rep_board', null],
-            ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
-            ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
-        ],
-
-        // ═══ ٤. توريد الكي أكاونت — السايكل كامل في مكان واحد ═══
-        // (ترتيب المالك 2026-08-06): القايمة ← PO للمندوب ← PO إكسيل
-        // ← موافقات الحسابات (اللي بتعمل أمر التجهيز).
-        'nav.group_ka' => [
-            ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
-            ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
-            ['ops.po.import', '📊', 'nav.po_import', 'ops.po.import*', null],
-            ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
-        ],
-
-        // ═══ ٥. المشتريات — البضاعة داخلة ═══
-        'nav.group_purchasing' => [
-            ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
-            ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
-        ],
-
-        // ═══ الأونلاين — أوردرات شوبيفاي (٣/٩): الترتيب هو الفلو
-        // نفسه: سينك ← تجهيز ← جاهز ← بيك اب ← تحصيل ← الكل ←
-        // حسابات ← ربط المنتجات ═══
-        'nav.group_online' => [
-            ['online.sync', '🔄', 'online.nav_sync', 'online.sync*', null],
-            ['online.prep', '📦', 'online.nav_prep', 'online.prep*', null],
-            ['online.ready', '🚚', 'online.nav_ready', 'online.ready', null],
-            ['online.pickups', '📋', 'online.nav_pickups', 'online.pickup*', null],
-            ['online.collections', '💰', 'online.nav_collections', 'online.collections', null],
-            ['online.orders', '🧾', 'online.nav_orders', 'online.orders', null],
-            ['online.accounts', '🧮', 'online.nav_accounts', 'online.accounts', null],
-            ['online.products', '🔗', 'online.nav_products', 'online.products*', null],
-        ],
-
-        // ═══ سكشن العملاء المحتملين (٢٦/٨ — طلب المالك): المحفظة ←
-        // الجدولة ← المتابعة. اتفصل من مجموعة العملاء لما بقى
-        // بايبلاين كامل بخطة أسبوعية وحصاد. ═══
-        'nav.group_leads' => [
-            ['erp.leads', '✨', 'nav.leads_portfolio', 'erp.leads', null],
-            // راسم خط السير التفاعلي (٦/٩) — ترقيم المحطات على الخريطة
-            ['erp.leads.route', '🧭', 'nav.leads_route', 'erp.leads.route', null],
-            ['erp.leads.planner', '📅', 'nav.leads_planner', 'erp.leads.planner', null],
-            ['erp.leads.week', '👁', 'nav.leads_week', 'erp.leads.week', null],
         ],
 
         // ═══ ٦. البيع والعملاء — عميل ← تفعيل ← عقد ═══
@@ -442,8 +367,21 @@ class Access
             ['erp.audit.report', '📊', 'audit.report_title', 'erp.audit.report', null],
         ],
 
+        // ═══ سكشن العملاء المحتملين (٢٦/٨ — طلب المالك): المحفظة ←
+        // الجدولة ← المتابعة. اتفصل من مجموعة العملاء لما بقى
+        // بايبلاين كامل بخطة أسبوعية وحصاد. ═══
+        'nav.group_leads' => [
+            ['erp.leads', '✨', 'nav.leads_portfolio', 'erp.leads', null],
+            // راسم خط السير التفاعلي (٦/٩) — ترقيم المحطات على الخريطة
+            ['erp.leads.route', '🧭', 'nav.leads_route', 'erp.leads.route', null],
+            ['erp.leads.planner', '📅', 'nav.leads_planner', 'erp.leads.planner', null],
+            ['erp.leads.week', '👁', 'nav.leads_week', 'erp.leads.week', null],
+        ],
+
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══
         'nav.group_field' => [
+            ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
+            ['ops.live', '📡', 'nav.live', 'ops.live', null],
             // ⚠️ **«الزيارات» جنب «الزيارات المفتوحة» عن قصد** (١٥/٨):
             // دي اللي حصلت، ودي اللي لسه مفتوحة — والمالك بيدور
             // عليهم في نفس اللحظة. النمط بالظبط `ops.visits` عشان
@@ -458,19 +396,38 @@ class Access
             // عشان `ops.geo.zone/plan/unplan` مايلوّنوش اللينك لوحدهم.
             ['ops.geo', '🧭', 'nav.geo_planner', 'ops.geo', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
-            ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
-            ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
-            ['ops.live', '📡', 'nav.live', 'ops.live', null],
-            // الحوافز (2026-08-06): التارجتات الشهرية + لوحة الأداء
-            // ⚠️ النمط بقى بالظبط مش `erp.targets*` — عشان صفحات
-            // التارجيت السنوي (`erp.targets.annual.*`) ماتنوّرش
-            // اللينكين مع بعض. راوتات POST بتاعة الشاشة دي
-            // (`targets.save`/`targets.copy`) مش صفحات أصلاً.
-            ['erp.targets', '🎯', 'nav.targets', 'erp.targets', null],
-            // التارجيت السنوي الهرمي (١١/٨): شركة ← مديرين ← مناديب ← عملاء
-            ['erp.targets.annual', '📈', 'nav.targets_annual', 'erp.targets.annual*', null],
-            ['erp.performance', '🏆', 'nav.performance', 'erp.performance*', null],
+            ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
+            // أجهزة تتبع العربيات — iTrack (٢٦/٨)
+            ['ops.gps', '🛰️', 'nav.gps', 'ops.gps', null],
+        ],
+
+        // ═══ ٣. العهدة — فلو تحميل العربيات كامل في مكان واحد ═══
+        // (قرار المالك 2026-08-03): طلب التسليم ← تجهيز الطلبات ←
+        // تأكيد ← إشعار المندوب ← استلام من الأبلكيشن
+        'nav.group_custody' => [
+            // بورد المراجعة بنظرة واحدة (١٠/٨) — كل مندوب وعهدته وباقيه
+            ['ops.vans', '🚐', 'nav.vans_board', 'ops.vans', null],
+            // «الموعود مقابل المتاح» اتشالت (قرار المالك ٢٢/٨) — فلو
+            // الريفيل الجديد بيرفع أمر تجهيز فوراً فمفيش «وعود» معلقة
+            // بورد فلوس المناديب (١٢/٨) — كاش/آجل/تحصيلات لكل مندوب.
+            // المحاسب شايفه من `ops.sales` في خريطته — مش من بادئة `ops.`
+            ['ops.sales', '💵', 'nav.rep_sales', 'ops.sales', null],
+            // البورد المدموج (١٢/٨): عهدة + مبيعات + حضور + حركة في صف واحد
+            ['ops.rep_board', '📊', 'nav.rep_board', 'ops.rep_board', null],
+            ['ops.handout', '📤', 'field.handout', 'ops.handout*', null],
+            ['wh.picks', '📋', 'nav.prep_orders', 'wh.picks*', 'picks'],
+            ['ops.replenishments', '📦', 'nav.replenishments', 'ops.replenishments', 'replenishments'],
+        ],
+
+        // ═══ ٤. توريد الكي أكاونت — السايكل كامل في مكان واحد ═══
+        // (ترتيب المالك 2026-08-06): القايمة ← PO للمندوب ← PO إكسيل
+        // ← موافقات الحسابات (اللي بتعمل أمر التجهيز).
+        'nav.group_ka' => [
+            ['ops.pos', '🚚', 'nav.purchase_orders', 'ops.pos', null],
+            ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
+            ['ops.po.import', '📊', 'nav.po_import', 'ops.po.import*', null],
+            ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
         ],
 
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══
@@ -496,6 +453,9 @@ class Access
             ['erp.dayclose', '📅', 'nav.dayclose', 'erp.dayclose*', null],
             ['erp.dues', '💸', 'nav.dues', 'erp.dues', 'dues'],
             ['erp.eta', '🏛️', 'nav.eta', 'erp.eta*', null],
+            // عروض الأسعار (نقل ٢٢/٨ بطلب المالك) — مكانها الطبيعي مع
+            // المنتجات والتسعير: العرض بيتبني من الكتالوج والأسعار
+            ['erp.reports.quotations', '📄', 'nav.quotations', 'erp.reports.quotation*', null],
         ],
 
         // ═══ ٨ب. الحسابات العامة — دفتر الأستاذ (١١/٩/٢٠٢٦) ═══
@@ -521,22 +481,71 @@ class Access
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],
 
-        // ═══ ٦. التقارير — كلها في مكان واحد ═══
-        'nav.group_reports' => [
+        // ═══ ١. المنتجات والتسعير — أول السايكل: تعريف الصنف ═══
+        'nav.group_products' => [
+            ['erp.stock', '📦', 'nav.inventory', 'erp.stock', null],
+            // العائلات والصلاحية (2026-08-06) — بتحكم مدة انتهاء منتجاتها
+            ['erp.families', '🧬', 'nav.families', 'erp.families*', null],
+            ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
+        ],
+
+        // ═══ ٢. المخزن — بترتيب دخول البضاعة ═══
+        'nav.group_wh' => [
+            ['wh.index', '🏭', 'nav.warehouse', 'wh.index', null],
+            ['wh.receipts', '📥', 'nav.receipts', 'wh.receipt*', null],
+            ['wh.locations', '🗄️', 'nav.shelves', 'wh.locations', null],
+            ['erp.warehouses', '🏢', 'stock.warehouses', 'erp.warehouses*', null],
+            ['wh.transfers', '🔁', 'nav.transfers', 'wh.transfers', 'transfers'],
+            ['wh.counts', '📊', 'nav.stock_counts', 'wh.count*', null],
+            // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
+            ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
+            ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
+        ],
+
+        // ═══ ٥. المشتريات — البضاعة داخلة ═══
+        'nav.group_purchasing' => [
+            ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
+            ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
+        ],
+
+        // ═══ الأونلاين — أوردرات شوبيفاي (٣/٩): الترتيب هو الفلو
+        // نفسه: سينك ← تجهيز ← جاهز ← بيك اب ← تحصيل ← الكل ←
+        // حسابات ← ربط المنتجات ═══
+        'nav.group_online' => [
+            ['online.sync', '🔄', 'online.nav_sync', 'online.sync*', null],
+            ['online.prep', '📦', 'online.nav_prep', 'online.prep*', null],
+            ['online.ready', '🚚', 'online.nav_ready', 'online.ready', null],
+            ['online.pickups', '📋', 'online.nav_pickups', 'online.pickup*', null],
+            ['online.collections', '💰', 'online.nav_collections', 'online.collections', null],
+            ['online.orders', '🧾', 'online.nav_orders', 'online.orders', null],
+            ['online.accounts', '🧮', 'online.nav_accounts', 'online.accounts', null],
+            ['online.products', '🔗', 'online.nav_products', 'online.products*', null],
+        ],
+
+        // ═══ التارجت والحوافز (ترتيب المنيو ٢٢/٩) ═══
+        // كانوا متفرقين: التارجت ولوحة الأداء تحت «الميدان»، الـKPI تحت «التقارير»،
+        // وإعدادات الحوافز تحت «الإعدادات» — اللي بيظبط تارجت بيلفّ على 3 أقسام.
+        'nav.group_targets' => [
+            // الحوافز (2026-08-06): التارجتات الشهرية + لوحة الأداء
+            // ⚠️ النمط بقى بالظبط مش `erp.targets*` — عشان صفحات
+            // التارجيت السنوي (`erp.targets.annual.*`) ماتنوّرش
+            // اللينكين مع بعض. راوتات POST بتاعة الشاشة دي
+            // (`targets.save`/`targets.copy`) مش صفحات أصلاً.
+            ['erp.targets', '🎯', 'nav.targets', 'erp.targets', null],
+            // التارجيت السنوي الهرمي (١١/٨): شركة ← مديرين ← مناديب ← عملاء
+            ['erp.targets.annual', '📈', 'nav.targets_annual', 'erp.targets.annual*', null],
+            ['erp.performance', '🏆', 'nav.performance', 'erp.performance*', null],
             // مركز التقارير الجديد (٢١/٨) هو المدخل — والمالية القديمة
             // (الأعمار وسيركل كيه...) لينكات جواه
             // العمولات والـKPI (٢٣/٨) — حاسبة الشهر + إعدادات النسب
             ['erp.kpi', '🎯', 'nav.kpi', 'erp.kpi*', null],
+            // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
+            ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
+        ],
+
+        // ═══ ٦. التقارير — كلها في مكان واحد ═══
+        'nav.group_reports' => [
             ['erp.reports.hub', '📑', 'nav.reports', 'erp.reports*', null],
-            // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
-            ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
-            ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
-            ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
-            // أجهزة تتبع العربيات — iTrack (٢٦/٨)
-            ['ops.gps', '🛰️', 'nav.gps', 'ops.gps', null],
-            // مراجعة مساعد بروماكس (٧/٩) — أدمن بس (الراوت role:admin
-            // والرؤية بتختفي لباقي الرولز من SCREENS تلقائياً)
-            ['erp.agent.runs', '🤖', 'nav.agent_runs', 'erp.agent*', null],
         ],
 
         // ═══ إدارة المهام (٢٦/٨) — تاب مستقل (طلب المالك)، رولز
@@ -564,15 +573,17 @@ class Access
             ['erp.vehicles', '🚚', 'nav.vehicles', 'erp.vehicles*', null],
             ['erp.import', '📥', 'nav.import', 'erp.import*', null],
             ['erp.tax.settings', '⚙️', 'nav.tax', 'erp.tax*', null],
-            // إعدادات الحوافز: شرايح العمولة وقيم النقاط ونطاق الليد
-            ['erp.incentives', '🏅', 'nav.incentives', 'erp.incentives*', null],
             // ⚠️ الحضور والانصراف اتنقل لمجموعته المستقلة `group_hr`
             // (قرار المالك ٩/٨) — متحطهوش هنا تاني.
             // إصدار الأبلكيشن: رفع APK وإجبار التحديث
             ['erp.app_version', '📲', 'nav.app_version', 'erp.app_version*', null],
             ['erp.perms', '🔐', 'perm.permissions', 'erp.perms*', null],
-            // سجل الحركة: مين عمل إيه وإمتى — أدمن بس
-            ['erp.audit', '🧾', 'nav.audit', 'erp.audit*', null],
+            // مراجعة مساعد بروماكس (٧/٩) — أدمن بس (الراوت role:admin
+            // والرؤية بتختفي لباقي الرولز من SCREENS تلقائياً)
+            ['erp.agent.runs', '🤖', 'nav.agent_runs', 'erp.agent*', null],
+            // (٢٢/٩) مركز نشاط المستخدمين — بدل «سجل الحركة» القديم. `erp.audit` لسه
+            // راوت شغال بيحوّل هنا، ومش في المنيو عشان بادئته ماتمسكش `erp.audit.chains`
+            ['erp.activity', '🟢', 'activity.page', 'erp.activity*', null],
         ],
     ];
 

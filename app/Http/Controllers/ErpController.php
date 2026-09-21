@@ -134,6 +134,20 @@ class ErpController extends Controller
         $rets = \App\Services\SalesSource::returns($a, $b, $repIds)
             ->selectRaw('COUNT(*) n, COALESCE(SUM(amount),0) g')->first();
 
+        // ═══ صافي حركة المديونية = Σ مدين − Σ دائن لكل قيود الفترة (٢٢/٩) ═══
+        // الكارت كان «مبيعات − تحصيل − مرتجعات» بس، فقيود رد النقدية (`refund`)
+        // وأي قيد تاني كانت بره — والرقم مايساويش حركة كشوف الحسابات.
+        // `$otherNet` = القيود اللي مش بيع/تحصيل/مرتجع، بنفس نطاق باقي الكروت:
+        // مع فلتر مندوب/مدير القيد بيتنسب لصاحب زيارته وإلا لمندوب العميل.
+        $otherNet = (float) DB::table('transactions as t')
+            ->join('clients as c', 'c.id', '=', 't.client_id')
+            ->leftJoin('visits as v', fn ($j) => $j->on('v.id', '=', 't.source_id')
+                ->where('t.source_type', '=', \App\Models\Visit::class))
+            ->whereNotIn('t.kind', ['sale', 'collection', 'return'])
+            ->whereBetween('t.date', [$a->toDateString(), $b->toDateString()])
+            ->when($repIds, fn ($q) => $q->whereIn(DB::raw('COALESCE(v.user_id, c.rep_id)'), $repIds))
+            ->selectRaw('COALESCE(SUM(t.debit - t.credit), 0) v')->value('v');
+
         $visitsN = \App\Models\Visit::whereBetween('created_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))->count();
 
@@ -171,10 +185,19 @@ class ErpController extends Controller
         }
 
         // ═══ الدواير والتوزيعات ═══
+        // ⚠️ (٢٢/٩) **من غير join على channels** — الـinner join كان بيرمي مبيعات
+        // العملاء اللي مالهمش قناة، فالدونات أقل من كارت المبيعات (أغسطس: 859 ألف
+        // قصاد 941 ألف). نفس تجميع `ReportController::rSalesByChannel` بالحرف:
+        // على `clients.channel_id`، واللي مالوش قناة بيبان شريحة «بدون قناة».
+        $channelNames = \App\Models\Channel::all()->keyBy('id');
         $byChannel = $sales()->join('clients', 'clients.id', '=', 's.client_id')
-            ->join('channels', 'channels.id', '=', 'clients.channel_id')
-            ->selectRaw('channels.id cid, channels.name cname, SUM(s.grand_total) v')
-            ->groupBy('cid', 'cname')->orderByDesc('v')->get();
+            ->selectRaw('clients.channel_id cid, SUM(s.grand_total) v')
+            ->groupBy('clients.channel_id')->orderByDesc('v')->get()
+            ->map(function ($r) use ($channelNames) {
+                $r->cname = $channelNames->get($r->cid)?->displayName() ?? __('uic.no_channel');
+
+                return $r;
+            });
 
         $byFamily = $saleLines()
             ->join('products', 'products.id', '=', 's.product_id')
@@ -215,20 +238,20 @@ class ErpController extends Controller
             ->join('products', 'products.id', '=', 'custody_items.product_id')
             ->where('custodies.status', '!=', 'closed')
             ->when($repIds, fn ($q) => $q->whereIn('custodies.user_id', $repIds))
+            // ⚠️ (٢٢/٩) المتبقي **للبيع** بس — نفس `CustodyItem::remaining()` اللي بورد
+            // العهد بيجمعه. الهدايا مش بضاعة بسعر بيع، وكانت مخلّية الكارت أكبر من البورد.
             ->selectRaw('COUNT(DISTINCT custodies.id) vans,
-                COALESCE(SUM(custody_items.assigned + custody_items.gift_assigned
-                    - custody_items.sold - custody_items.returned
-                    - custody_items.transferred_out - custody_items.gift_given), 0) units,
-                COALESCE(SUM((custody_items.assigned + custody_items.gift_assigned
-                    - custody_items.sold - custody_items.returned
-                    - custody_items.transferred_out - custody_items.gift_given)
+                COALESCE(SUM(custody_items.assigned - custody_items.sold
+                    - custody_items.returned - custody_items.transferred_out), 0) units,
+                COALESCE(SUM((custody_items.assigned - custody_items.sold
+                    - custody_items.returned - custody_items.transferred_out)
                     * products.price_new), 0) val')
             ->first();
 
         // فليفار بار المنتجات: أفضل الأصناف بالقطع وبالفلوس
         $topProducts = $saleLines()
             ->join('products', 'products.id', '=', 's.product_id')
-            ->selectRaw('products.name pname, products.name_en pname_en,
+            ->selectRaw('products.id pid, products.name pname, products.name_en pname_en,
                 SUM(s.qty) q, SUM(s.total) v')
             ->groupBy('products.id', 'pname', 'pname_en')
             ->orderByDesc('v')->take(8)->get();
@@ -286,6 +309,7 @@ class ErpController extends Controller
             'coll' => (float) $coll,
             'collSplit' => $collSplit,
             'rets' => $rets,
+            'otherNet' => round($otherNet, 2),
             'visitsN' => $visitsN,
             'giftsQ' => (int) $giftsQ,
             'newClientsN' => $newClientsN,
@@ -312,17 +336,25 @@ class ErpController extends Controller
         ]);
     }
 
-    /** أعمار المديونية إجمالاً (تقديري FIFO) */
-    private function agingTotals(): array
+    /**
+     * أعمار المديونية إجمالاً (تقديري FIFO).
+     * `$bucket` + `$hits` (٢٢/٩): كروت الأعمار بقت فلتر — نفس اللفّة بترجّع
+     * `client_id => مبلغه` في الشريحة المطلوبة، فمجموعهم = رقم الكارت.
+     */
+    private function agingTotals(?string $bucket = null, array &$hits = []): array
     {
         $t = ['a30' => 0.0, 'a60' => 0.0, 'a90' => 0.0, 'a180' => 0.0, 'a180p' => 0.0];
 
         Client::visibleTo(Client::where('balance', '>', 0))
             ->with(['transactions' => fn ($q) => $q->where('debit', '>', 0)])
-            ->chunk(200, function ($chunk) use (&$t) {
+            ->chunk(200, function ($chunk) use (&$t, $bucket, &$hits) {
                 foreach ($chunk as $client) {
                     foreach ($client->aging() as $k => $v) {
                         $t[$k] += $v;
+
+                        if ($k === $bucket && $v > 0) {
+                            $hits[$client->id] = $v;
+                        }
                     }
                 }
             });
@@ -446,6 +478,25 @@ class ErpController extends Controller
             $q->whereNull('rep_id');
         }
 
+        // «مستقلين» — كارت شاشة السلاسل بيفتح قايمته هنا بنفس تعريفه (من غير سلسلة ومش داخلي) (٢٢/٩)
+        if ($request->string('flag')->value() === 'indep') {
+            $q->whereNull('clients.group_id')->where('clients.category', '!=', 'internal');
+        }
+
+        // حالة الرصيد — كارتين «علينا/لينا» بقوا فلتر بنفس حدّ الكروت بالظبط (٢٢/٩)
+        $balFilter = $request->string('bal')->value();
+
+        if ($balFilter === 'debt') {
+            $q->where('clients.balance', '>', 0.009);
+        } elseif ($balFilter === 'credit') {
+            $q->where('clients.balance', '<', -0.009);
+        }
+
+        // ريفرنس التحصيل (رقم التحويل/الشيك) ← العملاء اللي عليهم قيد بيه (٢٢/٩)
+        if ($ref = $request->string('ref')->trim()->value()) {
+            $q->whereIn('clients.id', Transaction::where('reference', 'like', '%'.$ref.'%')->select('client_id'));
+        }
+
         // ═══ فلتر الفترة (طلب المالك ٢٠ سبتمبر ٢٠٢٦) ═══
         //
         // «مبيعات عملائي في شهر ٨ كام، وكل عميل لوحده؟» — الأعمدة
@@ -471,11 +522,20 @@ class ErpController extends Controller
                 ->select('clients.*')
                 ->selectRaw('COALESCE(pa.p_sales, 0) AS p_sales, COALESCE(pa.p_docs, 0) AS p_docs,
                     COALESCE(pa.p_coll, 0) AS p_coll, COALESCE(pa.p_ret, 0) AS p_ret');
+
+            // «اشتروا في الفترة» — كارت المشترين بقى فلتر (٢٢/٩)
+            if ($request->string('flag')->value() === 'buyers') {
+                $q->where('pa.p_sales', '>', 0);
+            }
         } else {
             // من غير فترة: نفس الأعمدة المجمّعة، بنفس الأسماء، عشان
             // الكروت والتصدير يقروا مصدر واحد في الحالتين.
             $q->select('clients.*')->selectRaw('clients.purchases AS p_sales, NULL AS p_docs,
                 clients.collections AS p_coll, clients.`returns` AS p_ret');
+
+            if ($request->string('flag')->value() === 'buyers') {
+                $q->where('clients.purchases', '>', 0);
+            }
         }
 
         // ═══ تصدير المبيعات عميل عميل — بكل الفلاتر، من غير صفحات ═══
@@ -488,7 +548,8 @@ class ErpController extends Controller
         $salesKpi = DB::query()->fromSub((clone $q)->toBase(), 'x')
             ->selectRaw('COUNT(*) AS n, COALESCE(SUM(p_sales > 0), 0) AS buyers,
                 COALESCE(SUM(p_sales), 0) AS s, COALESCE(SUM(p_docs), 0) AS d,
-                COALESCE(SUM(p_coll), 0) AS c, COALESCE(SUM(p_ret), 0) AS r')
+                COALESCE(SUM(p_coll), 0) AS c, COALESCE(SUM(p_ret), 0) AS r,
+                COALESCE(SUM(balance), 0) AS b')
             ->first();
 
         // ═══ KPIs بمعنى (قرار المالك 2026-08-05): بدل كروت التصنيف
@@ -577,7 +638,7 @@ class ErpController extends Controller
             // ⚠️ أي مفتاح جديد هنا لازم يكون له `<select>` في الفيو —
             // فلتر بيتقرا ومالوش خانة معناه رابط شغّال ومحدش يعرف يلغيه.
             'filters' => $request->only(['q', 'cat', 'zone', 'gov', 'contract', 'channel',
-                'sub', 'status', 'manager', 'disc', 'flag']),
+                'sub', 'status', 'manager', 'disc', 'flag', 'bal', 'ref']),
             // ⚠️ بنفس سكوب الفرع بتاع القايمة — عداد بيقول 455 وقايمة
             // بتوري 80 بيخلّي مدير الفرع يفتكر في حاجة مخفية عنه.
             'statusCounts' => Client::visibleTo(\App\Models\Branch::scope(Client::query()))
@@ -607,13 +668,22 @@ class ErpController extends Controller
             ->orderByDesc('p_sales')->orderBy('clients.id')
             ->get();
 
+        // (٢٢/٩) العملاء اللي مالهمش حركة في الفترة مش بينزلوا صفوف — لكن رصيدهم جزء من
+        // إجمالي الرصيد اللي على الشاشة. بينزلوا سطر واحد تحت الإجمالي عشان الملف يقفل
+        // على نفس رقم الشاشة (كان 739 ألف في الملف و1.35 مليون على الشاشة).
+        $quiet = $range->isOpen() ? null : (clone $q)
+            ->where(fn ($x) => $x->where(fn ($y) => $y->whereNull('pa.p_sales')->orWhere('pa.p_sales', '<=', 0))
+                ->where(fn ($y) => $y->whereNull('pa.p_coll')->orWhere('pa.p_coll', '<=', 0))
+                ->where(fn ($y) => $y->whereNull('pa.p_ret')->orWhere('pa.p_ret', '<=', 0)))
+            ->reorder()->toBase()->select(DB::raw('COUNT(*) n, COALESCE(SUM(clients.balance), 0) b'))->first();
+
         $period = $range->isOpen()
             ? __('client.period_all')
             : trim(($range->fromValue() ?: '…').' → '.($range->toValue() ?: '…'));
         $n2 = fn ($v) => number_format((float) $v, 2, '.', '');
         $name = 'client-sales-'.($range->fromValue() ?: 'all').'_'.($range->toValue() ?: 'all').'.csv';
 
-        return response()->streamDownload(function () use ($rows, $range, $withDetail, $period, $n2) {
+        return response()->streamDownload(function () use ($rows, $range, $withDetail, $period, $n2, $quiet) {
             $out = fopen('php://output', 'w');
             // BOM — من غيره إكسيل بيفتح العربي طلاسم
             fwrite($out, "\xEF\xBB\xBF");
@@ -644,6 +714,12 @@ class ErpController extends Controller
 
             fputcsv($out, [__('common.total'), $rows->count(), '', '', '', '', '', '', '',
                 $range->isOpen() ? '' : $t['d'], $n2($t['s']), $n2($t['r']), $n2($t['s'] - $t['r']), $n2($t['c']), $n2($t['b'])]);
+
+            if ($quiet && (int) $quiet->n > 0) {
+                fputcsv($out, [__('client.exp_quiet'), (int) $quiet->n, '', '', '', '', '', '', '', '', '', '', '', '', $n2($quiet->b)]);
+                fputcsv($out, [__('client.exp_balance_all'), $rows->count() + (int) $quiet->n, '', '', '', '', '', '', '', '', '', '', '', '',
+                    $n2($t['b'] + (float) $quiet->b)]);
+            }
 
             if ($withDetail) {
                 fputcsv($out, []);
@@ -683,9 +759,22 @@ class ErpController extends Controller
                             // أمر التوريد بيتحاسب على اللي اتسلّم فعلاً مش المطلوب
                             $qty = $src instanceof PurchaseOrder ? ($it->delivered_qty ?? $it->qty) : $it->qty;
 
+                            // ⚠️ **التسليم الجزئي** (٢٢/٩): نفس قاعدة `SalesSource::lines()` بالحرف —
+                            // السطر كامل لو `delivered_qty` فاضي أو = المطلوب، وإلا الإجمالي
+                            // = المتسلّم × السعر والضريبة عليه. كان بينزل إجمالي السطر المطلوب كله،
+                            // فمجموع التفصيلي في أغسطس كان 954,370 قصاد 941,090 في الملخّص والكشف.
+                            $lineTotal = (float) $it->total;
+                            $lineTax = (float) $it->tax;
+
+                            if ($src instanceof PurchaseOrder && $it->delivered_qty !== null
+                                && (float) $it->delivered_qty != (float) $it->qty) {
+                                $lineTotal = round((float) $it->delivered_qty * (float) $it->price, 2);
+                                $lineTax = round($lineTotal * (float) ($it->tax_rate ?? 0), 2);
+                            }
+
                             fputcsv($out, [$tx->date?->toDateString(), $src->number, $type, $code, $client,
                                 $it->product?->displayName() ?? '#'.$it->product_id, $qty + 0,
-                                $n2($it->price), $n2($it->total), $n2($it->tax)]);
+                                $n2($it->price), $n2($lineTotal), $n2($lineTax)]);
                         }
                     }
                 }
@@ -1081,6 +1170,8 @@ class ErpController extends Controller
             'zone', 'channel', 'rep',
             'contract.contractClauses', 'group.contract.contractClauses',
             'invoices.items.product', 'invoices.items.batch',
+            // المندوب والمدير بقوا لينكات في الكارت (٢٢/٩) — من غيرهم كويري لكل فاتورة
+            'invoices.user', 'manager',
         ]);
 
         // ⚠️ العقد الفعّال ممكن يكون موروث من السلسلة — بنحسبه هنا مرة واحدة
@@ -1092,6 +1183,18 @@ class ErpController extends Controller
         // (الافتتاحي والقيود المرحّلة بأثر رجعي تاريخها غير يوم الإدخال).
         // مفتوح لو الخانتين فاضيتين، فالشاشة زي ما كانت بالظبط.
         $range = DateRange::fromRequest($request);
+
+        // ═══ فلتر نوع القيد والريفرنس على الكشف (٢٢/٩/٢٠٢٦) ═══
+        // كروت الملخّص (مشتريات/محصَّل/مرتجعات) بقت بتفلتر الكشف بنوع القيد،
+        // والريفرنس بيتداس فبيجيب قيوده. الاتنين على نفس كويري الصفوف والإجمالي.
+        $kind = $request->string('kind')->value();
+        $kind = array_key_exists($kind, Transaction::KINDS) ? $kind : '';
+        $ref = $request->string('ref')->trim()->value();
+        $stmt = fn () => $client->transactions()->reorder()
+            ->tap(fn ($q) => $range->apply($q, 'date'))
+            ->when($kind !== '', fn ($q) => $q->where('kind', $kind))
+            ->when($ref !== '', fn ($q) => $q->where('reference', 'like', '%'.$ref.'%'));
+        $stmtTotals = $stmt()->selectRaw('COALESCE(SUM(debit), 0) AS d, COALESCE(SUM(credit), 0) AS c')->first();
 
         // آخر ١٠ زيارات على العميل ده — أي مندوب، بأحدث تشيك إن
         $recentVisits = \App\Models\Visit::where('client_id', $client->id)
@@ -1139,10 +1242,17 @@ class ErpController extends Controller
             // بيفتح على أقدم حركة والصفحة الأولى فيها قيود سنة فاتت،
             // واللي بيدوّر على آخر تحصيل بيروح لآخر صفحة.
             // ⚠️ `withQueryString()` عشان الفلتر يعيش مع الترقيم (٩/٩/٢٠٢٦)
-            'txns' => $client->transactions()->reorder()
-                ->tap(fn ($q) => $range->apply($q, 'date'))
+            'txns' => $stmt()
                 ->orderByDesc('date')->orderByDesc('id')->paginate(60)->withQueryString(),
             'range' => $range,
+            'kind' => $kind,
+            'ref' => $ref,
+            'kinds' => array_keys(Transaction::KINDS),
+            'txnTotals' => ['debit' => (float) $stmtTotals->d, 'credit' => (float) $stmtTotals->c],
+            // تفسير كارت الرصيد: كل نوع قيد عمل كام مدين وكام دائن — مجموعهم هو الرصيد
+            'balanceBreak' => $client->transactions()->reorder()
+                ->selectRaw('kind, COUNT(*) AS n, COALESCE(SUM(debit), 0) AS d, COALESCE(SUM(credit), 0) AS c')
+                ->groupBy('kind')->orderByRaw('SUM(debit) + SUM(credit) DESC')->get(),
             // ⚠️ مسكوبين بالفرع — نفس سبب `clientFormData()`: القوايم دي
             // بتكشف مناطق وفريق فرع تاني، و`exists:` مابيسألش عن الفرع
             // فالتخصيص ليهم كان بيعدّي.
@@ -2121,6 +2231,9 @@ class ErpController extends Controller
                 'qty' => $g->sum(fn ($p) => $p->qtyTotal()),
                 'val' => $g->sum(fn ($p) => $p->qtyTotal() * $priceOf($p)),
                 'hold' => $g->sum(fn ($p) => $p->holdTotal() * $priceOf($p)),
+                // تفصيل كروت التكلفة والسليم بالعائلة — نفس معادلة الكارت (٢٢/٩)
+                'cost' => $g->sum(fn ($p) => $p->qtyTotal() * (float) $p->cost),
+                'good' => $g->sum(fn ($p) => $p->goodTotal() * $priceOf($p)),
             ])->all(),
             // توزيع المخازن — للشارت (وحدات + قيمة لكل مخزن)
             'whStats' => $warehouses->map(fn ($wh) => [
@@ -2560,15 +2673,25 @@ class ErpController extends Controller
         // ⚠️ سكوب التشانل مانجر (2026-08-05): كل جداول التقارير من عملائه بس
         $vis = fn ($q) => Client::visibleTo($q);
 
+        // كارت شريحة العمر = فلتر (٢٢/٩): `?bucket=a90` بيعرض **كل** أصحاب الشريحة
+        // مرتبين بمبلغهم فيها بدل أكبر 25 رصيد — ومجموع العمود = رقم الكارت.
+        $bucket = in_array($request->query('bucket'), ['a30', 'a60', 'a90', 'a180', 'a180p'], true)
+            ? $request->query('bucket') : null;
+        $hits = [];
+        $aging = $this->agingTotals($bucket, $hits);
+
         return view('erp.reports', [
             'tab' => $tab,
-            'aging' => $this->agingTotals(),
+            'aging' => $aging,
+            'bucket' => $bucket,
             // ⚠️ `contract` و`group.contract` لازم eager — `overdue()` بتنادي
             // `liveContract()` لكل صف، والـ25 صف كانوا بيعملوا 50 كويري.
             'topDebt' => $vis(Client::with([
                 'transactions' => fn ($q) => $q->where('debit', '>', 0),
                 'contract', 'group.contract',
-            ]))->orderByDesc('balance')->take(25)->get(),
+            ]))->when($bucket !== null, fn ($q) => $q->whereIn('clients.id', array_keys($hits)))
+                ->orderByDesc('balance')->when($bucket === null, fn ($q) => $q->take(25))->get()
+                ->when($bucket !== null, fn ($c) => $c->sortByDesc(fn ($x) => $hits[$x->id] ?? 0)->values()),
             'returns' => $vis(Client::where('returns', '>', 0))->orderByDesc('returns')->get(),
             'rebates' => $vis(Client::whereRaw('(rebates + settlements) > 0'))
                 ->orderByRaw('(rebates + settlements) DESC')->get(),

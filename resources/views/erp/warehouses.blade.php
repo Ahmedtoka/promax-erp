@@ -17,30 +17,31 @@
 
 @section('content')
 
+{{-- الكروت مجموع أعمدة جدول المخازن تحت — فبتودّي عليه، و«في الطريق» على التحويلات المبعوتة (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#whList">
         <div class="lbl">{{ __('stock.warehouses') }}</div>
         <div class="val">{{ $warehouses->count() }}</div>
         <div class="sub2">{{ $warehouses->where('active', true)->count() }} {{ __('common.active') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#whList">
         <div class="lbl">{{ __('stock.total_units') }}</div>
         <div class="val">{{ $fmt($warehouses->sum('qty_total')) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#whList">
         <div class="lbl">{{ __('stock.hold') }}</div>
         <div class="val mid">{{ $fmt($warehouses->sum('hold_total')) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.transfers', ['status' => 'sent', 'kind' => 'wh_wh']) }}">
         <div class="lbl">{{ __('stock.in_transit') }}</div>
         <div class="val">{{ $fmt(array_sum($transit)) }}</div>
         <div class="sub2">{{ __('stock.in_transit_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#whList">
         <div class="lbl">💰 {{ __('stock.wh_value') }}</div>
         <div class="val pos">{{ $fmt($values->sum('val')) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('stock.wh_value_hint') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══ التحليل البصري (2026-08-06): فين البضاعة وفين الفلوس بنظرة ═══ --}}
@@ -62,7 +63,7 @@
     </div>
 </div>
 
-<div class="card">
+<div class="card" id="whList">
     <h3>{{ __('stock.warehouses') }}</h3>
     <div class="tablewrap">
         <table>
@@ -89,9 +90,9 @@
                     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                 @endphp
                 <tr>
-                    <td class="num"><b>{{ $w->code }}</b></td>
+                    <td class="num"><a href="{{ route('erp.warehouses.stock', $w) }}"><b>{{ $w->code }}</b></a></td>
                     <td>
-                        <b>{{ $w->displayName() }}</b>
+                        <a href="{{ route('erp.warehouses.stock', $w) }}"><b>{{ $w->displayName() }}</b></a>
                         @if ($w->address)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $w->address }}</span>
                         @endif
@@ -109,7 +110,7 @@
                     <td class="num">
                         @php $tr = $transit[$w->id] ?? 0; @endphp
                         @if ($tr > 0)
-                            <a href="{{ route('wh.transfers') }}"><b>{{ $fmt($tr) }}</b></a>
+                            <a href="{{ route('wh.transfers', ['wh' => $w->id, 'status' => 'sent', 'kind' => 'wh_wh']) }}"><b>{{ $fmt($tr) }}</b></a>
                         @else
                             <span class="muted">—</span>
                         @endif

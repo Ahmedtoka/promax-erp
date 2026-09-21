@@ -171,6 +171,15 @@ class OpsController extends Controller
         $poAgg = (clone $poQ)->selectRaw('COUNT(*) AS n, COALESCE(SUM(grand_total), 0) AS grand')->first();
         $pos = (clone $poQ)->with('client')->orderByDesc('delivered_at')->take(self::REP_ROWS)->get();
 
+        // ═══ كارت المبيعات من كشف الحساب (٢٢/٩ — عقيدة ٢١/٩) ═══
+        // الرئيسية بتفتح الصفحة دي من «أفضل المناديب» بنفس الفترة، ورقمها من
+        // `SalesSource` (قيد البيع بتاريخ القيد، والتوريد بقيمة المسلَّم فعلاً).
+        // الجداول تحت لسه مستندات الفترة؛ لو مجموعها غير الكارت الفيو بيقول ليه.
+        $ledgerSales = \App\Services\SalesSource::docs($from, $to, [$user->id])
+            ->selectRaw("COALESCE(SUM(grand_total), 0) AS total,
+                COALESCE(SUM(CASE WHEN kind = 'po' THEN grand_total ELSE 0 END), 0) AS po")
+            ->first();
+
         // التحصيلات الميدانية — قيود `collection` بمرساة زيارات المندوب
         // (عقيدة ٩/٨: المرساة `source_type = Visit` مش عمود على القيد)
         $collQ = Transaction::where('kind', 'collection')
@@ -241,6 +250,7 @@ class OpsController extends Controller
             'invAgg' => $invAgg,
             'pos' => $pos,
             'poAgg' => $poAgg,
+            'ledgerSales' => $ledgerSales,
             'collections' => $collections,
             'collAgg' => $collAgg,
             'returns' => $returns,
@@ -953,6 +963,7 @@ class OpsController extends Controller
                 'pct' => $assigned > 0 ? (int) round(($assigned - $remaining) / $assigned * 100) : 0,
                 'expiring' => $c?->expiringItems(30)->count() ?? 0,
                 'active_client' => $openVisit?->client?->displayName(),
+                'active_client_id' => $openVisit?->client_id,
                 'att' => \App\Services\Attendance::state($u),
                 // فواتيره + أوامره المسلَّمة — من الكويريز المجمّعة فوق
                 'sales_today' => round((float) ($invToday[$u->id] ?? 0)
@@ -960,8 +971,24 @@ class OpsController extends Controller
             ];
         });
 
+        // ═══ (٢٢/٩) عهدة مفتوحة زيادة ═══
+        // البورد صف لكل مندوب بـ`currentCustody()` — لو مندوب عنده عهدة قديمة لسه
+        // مفتوحة جنب الحالية، بضاعتها بره البورد وجوه كارت «بضاعة في الشارع» في
+        // الرئيسية، فالرقمين يختلفوا من غير سبب ظاهر. بنطلّعها تنبيه بدل ما تستخبى.
+        $shown = $rows->pluck('custody')->filter()->pluck('id');
+        $extraOpen = \App\Models\Custody::with(['user', 'items'])
+            ->whereIn('user_id', $reps->pluck('id'))
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+            ->whereNotIn('id', $shown)->orderBy('date')->get();
+
+        // الكروت فلاتر: ?state=open|none بيضيّق الجدول بس — الكروت نفسها من الكل
+        $state = in_array($request->query('state'), ['open', 'none', 'closed'], true) ? $request->query('state') : null;
+
         return view('ops.vans', [
-            'rows' => $rows,
+            'state' => $state,
+            'extraOpen' => $extraOpen,
+            'allCount' => $rows->count(),
+            'rows' => $state ? $rows->where('state', $state)->values() : $rows,
             'openCount' => $rows->where('state', 'open')->count(),
             'noneCount' => $rows->where('state', 'none')->count(),
             'streetValue' => $rows->where('state', 'open')->sum('remaining_value'),
@@ -1733,7 +1760,7 @@ class OpsController extends Controller
         // ⚠️ `items.product` مش `items` (٢٨/٨): الصف بيوري أنهي صنف
         // طابق البحث — من غير المنتج ده N+1 على كل أمر في الصفحة
         $q = $base()->with([
-            'client.channel', 'courier', 'items.product', 'creator', 'approvedBy', 'editor',
+            'client.channel', 'client.group', 'courier', 'items.product', 'creator', 'approvedBy', 'editor',
             'replenishmentRequest.requester',
         ]);
 
@@ -1747,7 +1774,15 @@ class OpsController extends Controller
             $lateScope($q);
         }
 
+        // ═══ قيمة الأوامر — أساس واحد للكارت والصفوف والفوتر والإكسيل (٢٢/٩) ═══
+        // `grand_total` (اللي الفرع بيدفعه)، والمرفوض والملغي **بره القيمة** —
+        // بيفضلوا في القايمة مشطوبين. `PO_COUNTED_SQL` هو التعريف الوحيد.
+        $sum = (clone $q)->reorder()->selectRaw('COUNT(*) as n,
+            COALESCE(SUM(CASE WHEN '.self::PO_COUNTED_SQL.' THEN grand_total ELSE 0 END), 0) as total,
+            COALESCE(SUM(CASE WHEN '.self::PO_COUNTED_SQL.' THEN 0 ELSE 1 END), 0) as excluded')->first();
+
         return view('ops.pos', [
+            'sum' => $sum,
             'pos' => $q->latest()->paginate(30)->withQueryString(),
             // ⚠️ كل الأرقام من نفس الأساس المفلتر — رقم فوق وجدول تحت
             // من نطاقين = شاشة بتكدب
@@ -1758,15 +1793,26 @@ class OpsController extends Controller
                 'rejected' => $base()->where('approval_status', 'rejected')->count(),
                 'delivered' => $base()->where('status', 'delivered')->count(),
                 'late' => $lateScope($base())->count(),
-                'value' => (float) $base()->where(fn ($w) => $w->whereNull('approval_status')
-                    ->orWhere('approval_status', '!=', 'rejected'))->sum('grand_total'),
+                'value' => (float) $base()->whereRaw(self::PO_COUNTED_SQL)->sum('grand_total'),
             ],
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::whereHas('clients')->orderBy('name')->get(['id', 'name', 'name_en']),
             // دايالوج الأساين بس — دايالوج الإنشاء اليدوي اتشال (2026-08-06)
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
-            'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'from', 'to']),
+            'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->orderBy('name')->get(),
+            'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'rep', 'from', 'to']),
         ]);
+    }
+
+    /**
+     * الأمر اللي قيمته بتتحسب: مش مرفوض من الحسابات ومش ملغي. نفس الشرط
+     * بـPHP في `poCounted()` — الاتنين لازم يفضلوا متطابقين.
+     */
+    private const PO_COUNTED_SQL = "(approval_status IS NULL OR approval_status <> 'rejected') AND status <> 'cancelled'";
+
+    public static function poCounted(PurchaseOrder $po): bool
+    {
+        return $po->approval_status !== 'rejected' && $po->status !== 'cancelled';
     }
 
     /**
@@ -1799,6 +1845,8 @@ class OpsController extends Controller
                 fn ($q2, $ch) => $q2->whereHas('client', fn ($c) => $c->where('channel_id', $ch)))
             ->when($request->integer('group'),
                 fn ($q2, $g) => $q2->whereHas('client', fn ($c) => $c->where('group_id', $g)))
+            // (٢٢/٩) فلتر المندوب — صفحة المندوب بتفتح «كل أوامره» من هنا
+            ->when($request->integer('rep'), fn ($q2, $r) => $q2->where('assigned_to', $r))
             ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '>=', $d))
             ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d));
     }
@@ -1905,10 +1953,15 @@ class OpsController extends Controller
             ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
             ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
             ['v' => $pos->sum(fn ($p) => $p->items->sum('qty')), 'num' => true, 'style' => 'total'],
-            ['v' => round($pos->sum(fn ($p) => (float) $p->grand_total), 2), 'num' => true, 'style' => 'total'],
+            // ⚠️ نفس إجمالي الشاشة: المرفوض والملغي في الصفوف بس بره الإجمالي
+            ['v' => round($pos->filter(fn ($p) => self::poCounted($p))->sum(fn ($p) => (float) $p->grand_total), 2), 'num' => true, 'style' => 'total'],
             ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
             ['v' => '', 'style' => 'total'], ['v' => '', 'style' => 'total'],
         ]);
+
+        if (($skipped = $pos->reject(fn ($p) => self::poCounted($p))->count()) > 0) {
+            $x->row([['v' => __('uic.po_excluded_note', ['n' => $skipped]), 'style' => 'muted']]);
+        }
 
         return $x->download('purchase-orders-'.now()->format('Y-m-d').'.xlsx');
     }
@@ -3747,6 +3800,21 @@ class OpsController extends Controller
                 : $q->where(fn ($w) => $w->whereNull('lat')->orWhereNull('lng'));
         }
 
+        // ═══ تصدير كل النتيجة (٢٢/٩) — نفس `$q` بكل فلاترها قبل الباجينيشن ═══
+        if ($request->boolean('export')) {
+            return \App\Support\Csv::download('client-requests-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('ops.request'), __('common.date'), __('ops.place'), __('ops.submitted_by'), __('team.zone'),
+                __('common.address'), __('ops.loc_col'), __('common.phone'), __('common.status'),
+                __('ops.decision'), __('ui.l_client'),
+            ], (clone $q)->latest()->limit(5000)->get()->map(fn ($r) => [
+                $r->number, $r->created_at?->format('Y-m-d h:i A'), $r->name, $r->rep?->displayName() ?? '—',
+                $r->zone?->displayName() ?? '', (string) ($r->address_ar ?: $r->address),
+                $r->lat !== null && $r->lng !== null ? $r->lat.','.$r->lng : '',
+                (string) $r->phone, __('enums.request_status.'.$r->status),
+                $r->decider?->displayName() ?? '', $r->client?->code ?? '',
+            ])->all(), null, \App\Support\Csv::meta(__('ops.requests'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         $requests = $q->latest()->paginate(30)->withQueryString();
 
         // ═══ تشابه مع عملاء موجودين (١٥ أغسطس ٢٠٢٦) ═══
@@ -4307,6 +4375,18 @@ class OpsController extends Controller
                 ->orWhereHas('client', fn ($c) => Client::search($c, $paper)));
         }
 
+        // (٢٢/٩) تفسير الكروت: نفس الفلتر مقسوم كاش/آجل — قبل فلتر
+        // الدفع نفسه، فصفّين التفسير دايماً مجموعهم = الكارت من غير فلتر دفع
+        $byPay = (clone $q)->reorder()->selectRaw("
+            (payment = 'cash') as is_cash, COUNT(*) as n,
+            COALESCE(SUM(subtotal), 0) as subtotal, COALESCE(SUM(discount), 0) as discount,
+            COALESCE(SUM(total), 0) as total, COALESCE(SUM(tax_total), 0) as tax,
+            COALESCE(SUM(grand_total), 0) as grand
+        ")->groupBy('is_cash')->get()->keyBy(fn ($r) => (int) $r->is_cash ? 'cash' : 'credit');
+        if (in_array($pay = $request->string('pay')->value(), ['cash', 'credit'], true)) {
+            $pay === 'cash' ? $q->where('payment', 'cash') : $q->where('payment', '<>', 'cash');
+        }
+
         // ═══ سامري + إجماليات (١٩ أغسطس ٢٠٢٦) ═══
         //
         // كل الأرقام من **نفس الكويري المفلترة** — مش من صفوف الصفحة
@@ -4339,8 +4419,9 @@ class OpsController extends Controller
             'invoices' => $q->with(['client.group', 'client.channel'])
                 ->latest()->paginate(40)->withQueryString(),
             'field' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->get(),
-            'filters' => $request->only(['user', 'from', 'to', 'paper']),
+            'filters' => $request->only(['user', 'from', 'to', 'paper', 'pay']),
             'stats' => $stats,
+            'byPay' => $byPay,
         ]);
     }
 
@@ -4391,6 +4472,8 @@ class OpsController extends Controller
                 : __('ops.inv_all_period'),
             $rep ? __('rpt.c_rep').': '.$rep : null,
             $request->string('paper')->value() ? __('ops.paper_ref').': '.$request->string('paper')->value() : null,
+            in_array($request->string('pay')->value(), ['cash', 'credit'], true)
+                ? __('ui.l_payment').': '.__('ops.'.$request->string('pay')->value()) : null,
         ]);
 
         $x->row([['v' => implode('   •   ', $scope), 'style' => 'muted']]);

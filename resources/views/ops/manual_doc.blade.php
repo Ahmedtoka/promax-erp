@@ -12,7 +12,7 @@
         <div style="min-width:240px">
             <label class="f">{{ __('ops.md_rep') }}</label>
             <select id="mdRep" style="width:100%">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                 {{-- ⭐ تحصيل مباشر (٩/٩): العميل حوّل/بعت شيك من غير مندوب — التاب الوحيد المتاح هو التحصيل --}}
                 <option value="direct">💳 {{ __('ops.md_rep_direct') }}</option>
                 @foreach ($reps as $r)

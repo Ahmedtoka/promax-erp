@@ -27,32 +27,33 @@
     </div>
 @endif
 
+{{-- كل كارت بيودّي على الشاشة اللي بتفصّل رقمه: رصيد المخزن / الأرفف / اللي مستني ترصيف / الصلاحية (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ \App\Support\Access::allows(auth()->user(), 'erp.warehouses.stock') ? route('erp.warehouses.stock', $warehouse) : route('wh.locations', ['warehouse' => $warehouse->id]).'#slList' }}">
         <div class="lbl">{{ __('stock.total_in_wh') }}</div>
         <div class="val">{{ $fmt($stockUnits) }}</div>
         <div class="sub2">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}#slList">
         <div class="lbl">{{ __('stock.available_units') }}</div>
         <div class="val pos">{{ $fmt($availableUnits) }}</div>
         <div class="sub2">{{ __('stock.available_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">
         <div class="lbl">{{ __('stock.shelf_count') }}</div>
         <div class="val">{{ $fmt($locationCount) }}</div>
         <div class="sub2">{{ __('stock.shelf_map') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#whPending">
         <div class="lbl">{{ __('stock.awaiting_putaway') }}</div>
         <div class="val {{ $awaiting > 0 ? 'mid' : 'pos' }}">{{ $fmt($awaiting) }}</div>
         <div class="sub2">{{ __('stock.batch_countable', ['count' => $pending->count()]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.expiry', ['warehouse' => $warehouse->id]) }}">
         <div class="lbl">{{ __('stock.expiry_warn') }}</div>
         <div class="val {{ $expiring->count() > 0 ? 'mid' : 'pos' }}">{{ $fmt($expiring->count()) }}</div>
         <div class="sub2">{{ __('stock.expiring_soon_count', ['count' => $expiring->count()]) }}</div>
-    </div>
+    </a>
 </div>
 
 @if ($expired->isNotEmpty())
@@ -66,7 +67,7 @@
     </div>
 @endif
 
-<div class="card">
+<div class="card" id="whPending">
     <h3>📦 {{ __('stock.awaiting_putaway') }}
         <span class="side">{{ __('stock.awaiting_putaway_hint') }}</span></h3>
 
@@ -113,8 +114,8 @@
                             </th>
                             <th>{{ __('stock.item') }}</th>
                             <th style="width:105px">{{ __('stock.batch_no') }}</th>
-                            <th style="width:100px">{{ __('stock.expires_on') }}</th>
-                            <th style="width:110px">{{ __('stock.expiry') }}</th>
+                            <th style="width:100px" data-nosum>{{ __('stock.expires_on') }}</th>
+                            <th style="width:110px" data-nosum>{{ __('stock.expiry') }}</th>
                             <th class="num" style="width:90px">{{ __('stock.unshelved') }}</th>
                             <th class="num" style="width:95px">{{ __('common.qty') }}</th>
                             <th style="width:115px">{{ __('stock.shelf_code') }}</th>
@@ -142,7 +143,7 @@
                                             <div style="width:110px;height:110px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                         @endif
                                         <div>
-                                            <b>{{ $b->product?->displayName() ?? __('stock.product_hash', ['id' => $b->product_id]) }}</b>
+                                            @if ($b->product)<a href="{{ route('erp.products.show', $b->product) }}"><b>{{ $b->product->displayName() }}</b></a>@else<b>{{ __('stock.product_hash', ['id' => $b->product_id]) }}</b>@endif
                                             @if ($b->product)
                                                 <div style="font-size:10.5px;color:var(--muted)">{{ $b->product->code }} • {{ $b->product->unitLabel() }}</div>
                                             @endif
@@ -219,15 +220,15 @@
             <tr>
                 <th>{{ __('stock.transfer') }}</th>
                 <th>{{ __('stock.from_warehouse') }}</th>
-                <th>{{ __('stock.sent_on') }}</th>
+                <th data-nosum>{{ __('stock.sent_on') }}</th>
                 <th>{{ __('stock.qty_sent') }}</th>
                 <th>{{ __('common.status') }}</th>
                 <th></th>
             </tr>
             @forelse ($incoming as $t)
                 <tr>
-                    <td class="num"><b>{{ $t->number }}</b></td>
-                    <td>{{ $t->fromWarehouse?->displayName() ?? '—' }}</td>
+                    <td class="num"><a href="{{ route('wh.transfers.show', $t) }}"><b>{{ $t->number }}</b></a></td>
+                    <td>@if ($t->fromWarehouse)<a href="{{ route('erp.warehouses.stock', $t->fromWarehouse) }}">{{ $t->fromWarehouse->displayName() }}</a>@else — @endif</td>
                     <td class="num">{{ $t->sent_on?->format('Y-m-d') ?? '—' }}</td>
                     <td class="num">{{ $fmt($t->qtySent()) }}</td>
                     <td><span class="badge {{ $t->statusClass() }}">{{ $t->statusLabel() }}</span></td>
@@ -249,7 +250,7 @@
         <table>
             <tr>
                 <th>{{ __('stock.receipt_number') }}</th>
-                <th>{{ __('stock.received_on') }}</th>
+                <th data-nosum>{{ __('stock.received_on') }}</th>
                 <th>{{ __('stock.supplier') }}</th>
                 <th>{{ __('stock.batches') }}</th>
                 <th>{{ __('stock.total_units') }}</th>
@@ -257,7 +258,7 @@
             </tr>
             @forelse ($receipts as $r)
                 <tr class="clickable" onclick="location.href='{{ route('wh.receipt', $r) }}'">
-                    <td class="num"><b>{{ $r->number }}</b></td>
+                    <td class="num"><a href="{{ route('wh.receipt', $r) }}"><b>{{ $r->number }}</b></a></td>
                     <td class="num">{{ $r->received_on?->format('Y-m-d') ?? '—' }}</td>
                     <td>{{ $r->supplier ?: '—' }}</td>
                     <td class="num">{{ $r->batches->count() }}</td>

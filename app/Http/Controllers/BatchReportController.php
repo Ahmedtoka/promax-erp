@@ -98,7 +98,12 @@ class BatchReportController extends Controller
                 'qty' => $g->sum('qty'),
                 'value' => $g->sum('value'),
                 'batches' => $g->sum('batch_count'),
+                // تفصيل كروت «قابل للبيع / محجوز» بالعائلة (٢٢/٩)
+                'qty_live' => $g->sum('qty_live'),
+                'qty_hold' => $g->sum('qty_hold'),
             ])->all(),
+            // الملف فيه كود الصنف بس — الـid عشان اسم الصنف يفتح كارته
+            'productIds' => \App\Models\Product::pluck('id', 'code')->all(),
             'kpi' => [
                 'skus' => $all->count(),
                 'batches' => $all->sum('batch_count'),

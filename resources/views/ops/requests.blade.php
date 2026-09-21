@@ -44,14 +44,15 @@
 
     {{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على تاريخ إرسال الطلب — الحالة
          واللوكيشن بيتحافظ عليهم كخانات مخفية --}}
-    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
+    <form method="GET" class="searchbar" style="margin:10px 0 0" data-noprint>
         @foreach (['status', 'loc'] as $fk)
             @if (($filters[$fk] ?? '') !== '')
                 <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] }}">
             @endif
         @endforeach
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        {{-- الجدول صفحات — التصدير ده بياخد نتيجة الفلتر كلها --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 </div>
 
@@ -63,7 +64,7 @@
                 <th>{{ __('ops.request') }}</th><th>{{ __('ops.place') }}</th><th>{{ __('ops.submitted_by') }}</th>
                 <th>{{ __('team.zone') }}</th><th>{{ __('common.address') }}</th>
                 <th data-nosum>{{ __('ops.loc_col') }}</th>
-                <th>{{ __('common.phone') }}</th><th>{{ __('ops.photo') }}</th><th>{{ __('ops.documents') }}</th>
+                <th data-nosum>{{ __('common.phone') }}</th><th data-nosum>{{ __('ops.photo') }}</th><th data-nosum>{{ __('ops.documents') }}</th>
                 <th>{{ __('common.status') }}</th>@if ($manager)<th>{{ __('ops.decision') }}</th>@endif
             </tr>
             @forelse ($requests as $r)

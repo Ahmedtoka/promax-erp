@@ -236,7 +236,7 @@ class ContractDues
      * الصافي = (مبيعات + أي مدين تجاري) − (مرتجعات + قيود التحويل العكسية).
      * ⚠️ التحصيل والضرايب والخصومات نفسها **مستبعدة** — دي مش مسحوبات.
      */
-    private static function purchasesIn(Client $client, Carbon $start, Carbon $end): float
+    public static function purchasesIn(Client $client, Carbon $start, Carbon $end): float
     {
         // ⚠️ **الضريبة بتتطرح.** القيد بيتسجّل بالإجمالي شامل الضريبة
         // (وده صح للمديونية)، بس أساس العمولة هو **صافي المبيعات**.

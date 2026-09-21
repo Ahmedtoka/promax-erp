@@ -226,34 +226,32 @@ a.src-ref:hover{text-decoration-style:solid}
 
 {{-- ═══════════════════ ٢. الفلتر + الـKPIs ═══════════════════ --}}
 <form class="searchbar" method="GET">
-    <div>
-        <label class="f">{{ __('ops.vb_from') }}</label>
-        <input type="date" name="from" value="{{ $from }}">
-    </div>
-    <div>
-        <label class="f">{{ __('ops.vb_to') }}</label>
-        <input type="date" name="to" value="{{ $to }}">
-    </div>
+    {{-- ⚠️ الفاضي هنا = النهارده (boardWindow) — فمفيش اختصار «كل الفترات» --}}
+    @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false])
     <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
     <a class="btn" href="{{ route('ops.rep', $u) }}">{{ __('common.clear') }}</a>
     <span class="badge b-gray">{{ __('ops.rc_range_hint') }}</span>
 </form>
 
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcCustody')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">📦 {{ __('ops.van_stock_left') }}</div>
         <div class="val">{{ $fm($T['remaining']) }}</div>
         <div class="sub2">@include('partials._list_values', ['totals' => $custodyValues])</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcInvoices')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">💰 {{ __('ops.rc_k_sales') }}</div>
-        <div class="val pos">{{ $fm2($salesTotal) }} {{ $cur }}</div>
+        {{-- (٢٢/٩) الرقم من كشف الحساب — نفس رقم المندوب في الرئيسية والتقارير --}}
+        <div class="val pos">{{ $fm2($ledgerSales->total) }} {{ $cur }}</div>
         <div class="sub2">{{ __('ops.rc_k_sales_sub', [
-            'inv' => $fm2($invAgg->grand ?? 0),
-            'po' => $fm2($poAgg->grand ?? 0),
+            'inv' => $fm2($ledgerSales->total - $ledgerSales->po),
+            'po' => $fm2($ledgerSales->po),
         ]) }}</div>
+        @if (abs($salesTotal - (float) $ledgerSales->total) >= 0.01)
+            <div class="sub2" title="{{ __('uic.docs_vs_ledger_hint') }}">{{ __('uic.docs_vs_ledger', ['v' => $fm2($salesTotal)]) }}</div>
+        @endif
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcColl')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">💵 {{ __('ops.rc_k_collect') }}</div>
         <div class="val">{{ $fm2($collTotal) }} {{ $cur }}</div>
         <div class="sub2">{{ __('ops.rc_k_collect_sub', [
@@ -261,7 +259,7 @@ a.src-ref:hover{text-decoration-style:solid}
             'other' => $fm2(round($collTotal - $collCash, 2)),
         ]) }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcRet')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">↩️ {{ __('ops.rc_k_returns') }}</div>
         <div class="val {{ (float) ($retAgg->grand ?? 0) > 0 ? 'neg' : '' }}">{{ $fm2($retAgg->grand ?? 0) }} {{ $cur }}</div>
         <div class="sub2">{{ __('ops.rc_k_returns_sub', [
@@ -269,17 +267,17 @@ a.src-ref:hover{text-decoration-style:solid}
             'damaged' => (int) ($retAgg->damaged ?? 0),
         ]) }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcVisits')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">🚪 {{ __('ops.visits') }}</div>
         <div class="val">{{ $visitsDone }}/{{ $visitsAll }}</div>
         <div class="sub2">{{ __('ops.rc_k_plan', ['done' => $plan['done'], 'planned' => $plan['planned']]) }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.tracking', ['user' => $u->id, 'date' => $to]) }}'" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">🛣️ {{ __('ops.rc_k_km') }}</div>
         <div class="val">{{ $fm2($km) }}</div>
         <div class="sub2">{{ __('ops.rc_k_km_hint') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rcGo('rcSettle')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">🧮 {{ __('ops.rc_k_balance') }}</div>
         <div class="val {{ (float) ($lastSettle->balance ?? 0) > 0 ? 'neg' : 'pos' }}">
             {{ $fm2($lastSettle->balance ?? 0) }} {{ $cur }}</div>
@@ -289,7 +287,7 @@ a.src-ref:hover{text-decoration-style:solid}
 
 {{-- ═══════════════════ ٣. العهدة + الدريل داون ═══════════════════ --}}
 @if ($custody)
-<div class="card">
+<div class="card" id="rcCustody">
     <h3>📦 {{ __('ops.van_stock') }}
         <span class="side">{{ __('ops.rc_click_hint') }}</span>
     </h3>
@@ -510,7 +508,7 @@ a.src-ref:hover{text-decoration-style:solid}
     @endif
 </div>
 @else
-    <div class="card">
+    <div class="card" id="rcCustody">
         <h3>📦 {{ __('ops.van_stock') }}</h3>
         <div style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.rc_no_custody') }}</div>
     </div>
@@ -520,7 +518,7 @@ a.src-ref:hover{text-decoration-style:solid}
 <div class="grid2">
 
     @if ($showInvoices)
-    <div class="card">
+    <div class="card" id="rcInvoices">
         <h3>🧾 {{ __('ops.rc_m_invoices') }}
             <span class="side">{{ __('ops.rc_count_value', [
                 'n' => (int) ($invAgg->n ?? 0), 'v' => $fm2($invAgg->grand ?? 0),
@@ -541,8 +539,8 @@ a.src-ref:hover{text-decoration-style:solid}
                 <tbody>
                 @forelse ($invoices as $inv)
                     <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                        <td><b>{{ $inv->number }}</b></td>
-                        <td style="text-align:start">{{ $inv->client?->displayName() ?? '—' }}</td>
+                        <td><a href="{{ route('ops.invoice', $inv) }}" onclick="event.stopPropagation()"><b>{{ $inv->number }}</b></a></td>
+                        <td style="text-align:start">@if ($inv->client)<a href="{{ route('erp.clients.show', $inv->client_id) }}" onclick="event.stopPropagation()">{{ $inv->client->displayName() }}</a>@else — @endif</td>
                         <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                         <td class="num pos">{{ $fm2($inv->grand_total) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($inv->created_at) }}</td>
@@ -584,8 +582,8 @@ a.src-ref:hover{text-decoration-style:solid}
                 <tbody>
                 @forelse ($pos as $po)
                     <tr class="clickable" onclick="location.href='{{ route('ops.pos.show', $po) }}'">
-                        <td><b>{{ $po->number }}</b></td>
-                        <td style="text-align:start">{{ $po->client?->displayName() ?? '—' }}</td>
+                        <td><a href="{{ route('ops.pos.show', $po) }}" onclick="event.stopPropagation()"><b>{{ $po->number }}</b></a></td>
+                        <td style="text-align:start">@if ($po->client)<a href="{{ route('erp.clients.show', $po->client_id) }}" onclick="event.stopPropagation()">{{ $po->client->displayName() }}</a>@else — @endif</td>
                         <td class="num">{{ $fm($po->deliveredQtyTotal()) }}</td>
                         <td class="num pos">{{ $fm2($po->grand_total) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($po->delivered_at) }}</td>
@@ -598,13 +596,14 @@ a.src-ref:hover{text-decoration-style:solid}
             </table>
         </div>
         <div style="margin-top:8px">
-            <a class="btn sm" href="{{ route('ops.pos') }}">{{ __('ops.rc_all') }}</a>
+            {{-- (٢٢/٩) «الكل» كان بيفتح أوامر كل الناس — بقى بفلتر المندوب ده وبنفس الفترة --}}
+            <a class="btn sm" href="{{ route('ops.pos', ['rep' => $u->id, 'from' => $from, 'to' => $to]) }}">{{ __('ops.rc_all') }}</a>
         </div>
     </div>
     @endif
 
     @if ($showColl)
-    <div class="card">
+    <div class="card" id="rcColl">
         <h3>💵 {{ __('ops.rc_m_collections') }}
             <span class="side">{{ __('ops.rc_count_value', [
                 'n' => (int) ($collAgg->n ?? 0), 'v' => $fm2($collTotal),
@@ -653,7 +652,7 @@ a.src-ref:hover{text-decoration-style:solid}
     @endif
 
     @if ($showReturns)
-    <div class="card">
+    <div class="card" id="rcRet">
         <h3>↩️ {{ __('ops.rc_m_returns') }}
             <span class="side">{{ __('ops.rc_count_value', [
                 'n' => (int) ($retAgg->n ?? 0), 'v' => $fm2($retAgg->grand ?? 0),
@@ -675,8 +674,8 @@ a.src-ref:hover{text-decoration-style:solid}
                 <tbody>
                 @forelse ($returns as $d)
                     <tr class="clickable" onclick="location.href='{{ route('ops.returns.show', $d) }}'">
-                        <td><b>{{ $d->number }}</b></td>
-                        <td style="text-align:start">{{ $d->client?->displayName() ?? '—' }}</td>
+                        <td><a href="{{ route('ops.returns.show', $d) }}" onclick="event.stopPropagation()"><b>{{ $d->number }}</b></a></td>
+                        <td style="text-align:start">@if ($d->client)<a href="{{ route('erp.clients.show', $d->client_id) }}" onclick="event.stopPropagation()">{{ $d->client->displayName() }}</a>@else — @endif</td>
                         <td class="num">{{ $fm($d->good_units) }}</td>
                         <td class="num neg">{{ $fm($d->damaged_units) }}</td>
                         <td class="num">{{ $fm2($d->grand_total) }}</td>
@@ -756,10 +755,10 @@ a.src-ref:hover{text-decoration-style:solid}
                     <tr>
                         <td><b>{{ $g->number }}</b>
                             @if ($g->purchaseOrder)
-                                <div style="font-size:10px;color:var(--muted)" dir="ltr">{{ $g->purchaseOrder->number }}</div>
+                                <div style="font-size:10px" dir="ltr"><a href="{{ route('ops.pos.show', $g->purchaseOrder) }}">{{ $g->purchaseOrder->number }}</a></div>
                             @endif
                         </td>
-                        <td style="text-align:start">{{ $g->client?->displayName() ?? '—' }}</td>
+                        <td style="text-align:start">@if ($g->client)<a href="{{ route('erp.clients.show', $g->client_id) }}">{{ $g->client->displayName() }}</a>@else — @endif</td>
                         <td><span class="badge {{ $g->statusClass() }}">{{ $g->statusLabel() }}</span></td>
                         <td class="num">{{ $fm($g->qtyTotal()) }}</td>
                         <td class="num" dir="ltr">{{ $dtm($g->created_at) }}</td>
@@ -787,7 +786,7 @@ a.src-ref:hover{text-decoration-style:solid}
 
 {{-- ═══════════════════ ٥. الميدان ═══════════════════ --}}
 <div class="grid2">
-    <div class="card">
+    <div class="card" id="rcVisits">
         <h3>🚪 {{ __('ops.rc_f_visits') }}
             <span class="side">{{ $visitsDone }}/{{ $visitsAll }}</span>
         </h3>
@@ -917,7 +916,7 @@ a.src-ref:hover{text-decoration-style:solid}
             <tbody>
             @forelse ($merch as $mv)
                 <tr>
-                    <td style="text-align:start">{{ $mv->client?->displayName() ?? '—' }}</td>
+                    <td style="text-align:start">@if ($mv->client)<a href="{{ route('erp.clients.show', $mv->client_id) }}">{{ $mv->client->displayName() }}</a>@else — @endif</td>
                     <td class="num" dir="ltr">{{ $dtm($mv->checked_in_at ?? $mv->created_at) }}</td>
                     <td class="num">{{ $fm($mv->movedTotal()) }}</td>
                     <td class="num {{ $mv->outOfStockCount() > 0 ? 'neg' : '' }}">{{ $fm($mv->outOfStockCount()) }}</td>
@@ -956,35 +955,35 @@ a.src-ref:hover{text-decoration-style:solid}
         <span class="side">{{ __('ops.rc_p_month', ['m' => $perfMonth]) }}</span>
     </h3>
     <div class="kpis">
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="location.href='{{ route('erp.performance') }}'" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">🎯 {{ __('ops.rc_p_target') }}</div>
             <div class="val">{{ $fm2($perf['target']->money_target ?? 0) }} {{ $cur }}</div>
             <div class="sub2">{{ __('ops.rc_p_achieved') }}: {{ $fm2($perf['net_sales']) }} {{ $cur }}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="location.href='{{ route('erp.performance') }}'" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">📈 {{ __('ops.rc_p_pct') }}</div>
             <div class="val {{ $perf['money_pct'] >= 100 ? 'pos' : ($perf['money_pct'] >= 60 ? 'mid' : 'neg') }}">
                 {{ number_format((float) $perf['money_pct'], 1) }}%</div>
             <div class="sub2">{{ __('ops.rc_p_commission') }}: {{ $fm2($perf['commission']) }} {{ $cur }}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="rcGo('rcCustody')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">📤 {{ __('ops.rc_p_drain') }}</div>
             <div class="val">{{ $drainPct }}%</div>
             <div class="sub2">{{ __('ops.rc_p_drain_hint') }}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="rcGo('rcInvoices')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">🧾 {{ __('ops.rc_p_avg_invoice') }}</div>
             <div class="val">{{ $fm2($avgInvoice) }} {{ $cur }}</div>
             <div class="sub2">{{ __('ops.rc_count_value', [
                 'n' => (int) ($invAgg->n ?? 0), 'v' => $fm2($invAgg->grand ?? 0),
             ]) }}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="rcGo('rcVisits')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">🏬 {{ __('ops.rc_p_clients_seen') }}</div>
             <div class="val">{{ $fm($clientsSeen) }}</div>
             <div class="sub2">{{ __('ops.rc_p_clients_missed', ['n' => $fm($clientsMissed)]) }}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-explain onclick="location.href='{{ route('erp.performance') }}'" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">⭐ {{ __('ops.rc_p_points') }}</div>
             <div class="val">{{ $fm($perf['points']) }}</div>
             <div class="sub2">{{ __('ops.rc_p_new_clients', ['n' => $perf['new_clients']]) }}</div>
@@ -995,7 +994,7 @@ a.src-ref:hover{text-decoration-style:solid}
 {{-- ═══════════════════ ٧. التصفيات + الفريق ═══════════════════ --}}
 <div class="grid2">
     @if ($showSettle)
-    <div class="card">
+    <div class="card" id="rcSettle">
         <h3>🧮 {{ __('ops.rc_s_title') }}</h3>
         <div class="tablewrap">
             <table>
@@ -1606,6 +1605,13 @@ a.src-ref:hover{text-decoration-style:solid}
     /* ═══ فتح مودال الدريل داون مفلتر على صنف واحد (أو الكل) ═══
        كل الصفوف موجودة في الصفحة أصلاً — الفلترة عرض بس، فمفيش
        نداء سيرفر ولا انتظار. */
+    /* (٢٢/٩) الكروت بتنزل على الجدول اللي بيفصّل رقمها — ولو القسم مش ظاهر
+       للمستخدم ده (صلاحيات) الدوسة مابتعملش حاجة */
+    window.rcGo = function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+
     window.repDrill = function (kind, pid, title) {
         var dlg = document.getElementById('dlgD_' + kind);
         if (!dlg) { return; }

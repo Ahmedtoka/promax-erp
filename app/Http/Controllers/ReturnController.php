@@ -112,6 +112,11 @@ class ReturnController extends Controller
 
         $sumValue = (float) (clone $q)->sum('grand_total');
 
+        // (٢٢/٩) تفسير كارت القيمة: نفس الكويري مقسومة بالسياسة — مجموعها = الكارت
+        $byPolicy = (clone $q)->setEagerLoads([])->reorder()
+            ->selectRaw('policy, COUNT(*) n, SUM(good_units) g, SUM(damaged_units) d, SUM(grand_total) v')
+            ->groupBy('policy')->orderByDesc('v')->get();
+
         // نسبة المرتجعات من مبيعات نفس الفترة — من كشف الحساب، ومن غير فلاتر الشاشة
         $periodSales = $range->isOpen() ? null
             : (float) \App\Services\SalesSource::docs($range->from ?? now()->subYears(20), $range->to ?? now())
@@ -128,6 +133,8 @@ class ReturnController extends Controller
             'byProduct' => $byProduct,
             'byRep' => $byRep,
             'byClient' => $byClient,
+            'byPolicy' => $byPolicy,
+            'pickedClient' => $request->integer('client') ? Client::with('group')->find($request->integer('client')) : null,
             'repNames' => \App\Models\User::whereIn('id', $byRep->pluck('user_id')->filter())->get()->keyBy('id'),
             'clientNames' => Client::with('group')->whereIn('id', $byClient->pluck('client_id'))->get()->keyBy('id'),
             'policies' => ClientReturn::POLICIES,

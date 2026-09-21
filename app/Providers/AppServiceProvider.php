@@ -53,6 +53,25 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Custody::class,
         \App\Models\Warehouse::class,
         \App\Models\Setting::class,
+        // (٢٢/٩) مركز النشاط — مستندات بتتعمل وتتعدّل بالإيد وكانت بتعدّي من غير أثر
+        \App\Models\ClientReturn::class,
+        \App\Models\StockTransfer::class,
+        \App\Models\SupplierOrder::class,
+        \App\Models\Supplier::class,
+        \App\Models\GoodsReceipt::class,
+        \App\Models\PriceList::class,
+        \App\Models\Target::class,
+        \App\Models\RepTarget::class,
+        \App\Models\Task::class,
+        \App\Models\Expense::class,
+        \App\Models\Quotation::class,
+        \App\Models\Vehicle::class,
+        \App\Models\Branch::class,
+        \App\Models\ProductFamily::class,
+        \App\Models\RepSettlement::class,
+        \App\Models\DayClose::class,
+        \App\Models\StockCount::class,
+        \App\Models\PickOrder::class,
     ];
 
     public function boot(): void

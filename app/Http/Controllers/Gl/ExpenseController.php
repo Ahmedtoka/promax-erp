@@ -35,6 +35,22 @@ class ExpenseController extends Controller
         // بنحترمه، وغير كده المرحّل هو الافتراضي.
         $money = $request->filled('status') ? (clone $q) : (clone $q)->where('status', 'posted');
 
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩) — نفس الكويري قبل الباجينيشن، وإجماليه = كارت الإجمالي ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderByDesc('date')->orderByDesc('id')->limit(5000)->get();
+
+            return \App\Support\Csv::download('expenses-'.now()->format('Y-m-d-Hi').'.csv',
+                [__('gl.number'), __('common.date'), __('gl.code'), __('gl.account'), __('gl.payee'), __('gl.paid_from'),
+                    __('gl.reference'), __('gl.status'), __('gl.amount'), __('gl.note')],
+                $all->map(fn ($x) => [
+                    $x->number, $x->date?->format('Y-m-d'), (string) $x->account?->code, $x->account?->displayName() ?? '',
+                    $x->payeeLabel(), __('gl.paid_'.$x->paid_from).($x->paidFromUser ? ' — '.$x->paidFromUser->displayName() : ''),
+                    (string) $x->reference, __('gl.status_'.$x->status), \App\Support\Csv::money($x->amount), (string) $x->note,
+                ]),
+                [__('gl.total_posted'), '', '', '', '', '', '', '', \App\Support\Csv::money((clone $money)->sum('amount')), ''],
+                \App\Support\Csv::meta(__('gl.expenses'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         return view('gl.expenses', [
             'range' => $range,
             'rows' => (clone $q)->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),

@@ -31,6 +31,14 @@ Schedule::command('promax:attendance-close')
     ->withoutOverlapping();
 
 // تنضيف سجل حركة اليوزرات — بيكبر بسرعة (فتح الصفحات كمان)
+// ═══ مستحقات العقود (٢٢/٩/٢٠٢٦) ═══
+// الأمر كان موجود ومحدش بيشغّله — فجدول `contract_dues` فاضي وخانة «خصومات العقود»
+// عند كل العملاء صفر. بيولّد **استحقاق مقترح** بس (حالة «مستحق») للفترات اللي
+// اكتملت؛ القيد على كشف الحساب لسه بزرار «ترحيل» من شاشة المستحقات. idempotent.
+Schedule::command('contracts:dues')
+    ->dailyAt('01:10')
+    ->withoutOverlapping();
+
 Schedule::command('promax:prune-activity')->weeklyOn(5, '03:00');
 
 // ═══ بولينج أجهزة تتبع العربيات — iTrack (٢٦/٨) ═══

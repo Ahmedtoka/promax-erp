@@ -73,7 +73,9 @@
                                        style="font-weight:800" dir="ltr">{{ $po->number }}</a>
                                 </td>
                                 <td style="text-align:start">
-                                    <b>{{ $po->client?->fullName() ?? '—' }}</b>
+                                    @if ($po->client)
+                                        <a href="{{ route('erp.clients.show', $po->client) }}" onclick="event.stopPropagation()"><b>{{ $po->client->fullName() }}</b></a>
+                                    @else <b>—</b> @endif
                                 </td>
                                 <td>
                                     <span class="badge {{ $po->statusColor() }}">{{ $po->statusLabel() }}</span>

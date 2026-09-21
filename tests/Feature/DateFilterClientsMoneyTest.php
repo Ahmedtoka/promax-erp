@@ -97,9 +97,12 @@ class DateFilterClientsMoneyTest extends TestCase
             $res->assertSee($url);
         }
 
-        // من غير فترة — اللينكات نظيفة زي ما كانت
+        // من غير فترة — لينكات التصدير نظيفة زي ما كانت. (٢٢/٩) الصفحة نفسها بقى فيها
+        // اختصارات الفترة (`partials._range`) وهي لينكات بـ`from=`، فالفحص على لينك التصدير بعينه.
         $this->actingAs($admin)->get(route('erp.groups.show', $group))
-            ->assertOk()->assertDontSee('from=', false);
+            ->assertOk()
+            ->assertSee('href="'.route('erp.groups.statements', $group).'"', false)
+            ->assertSee('href="'.route('erp.groups.movements', $group).'"', false);
 
         $this->actingAs($admin)->get(route('erp.groups.show', ['group' => $group, 'from' => 'garbage']))->assertOk();
     }

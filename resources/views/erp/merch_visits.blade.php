@@ -31,16 +31,13 @@
         <span class="side">{{ __('ops.sv_hint') }}</span></h3>
 
     <form class="searchbar" method="GET">
-        <div>
-            <label class="f">{{ __('ops.sv_source') }}</label>
+        <label class="fl"><span>{{ __('ops.sv_source') }}</span>
             <select name="source">
                 <option value="">{{ __('ops.sv_all_sources') }}</option>
                 <option value="promoter" @selected($filters['source'] === 'promoter')>{{ __('ops.sv_src_promoter') }}</option>
                 <option value="rep" @selected($filters['source'] === 'rep')>{{ __('ops.sv_src_rep') }}</option>
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('ops.rep') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_rep') }}</span>
             <select name="user">
                 <option value="">{{ __('ops.sv_all_reps') }}</option>
                 @foreach ($reps as $r)
@@ -48,32 +45,22 @@
                         {{ $r->displayName() }} — {{ $r->roleLabel() }}
                     </option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('ops.vb_from') }}</label>
-            <input type="date" name="from" value="{{ $filters['from'] }}">
-        </div>
-        <div>
-            <label class="f">{{ __('ops.vb_to') }}</label>
-            <input type="date" name="to" value="{{ $filters['to'] }}">
-        </div>
-        <div>
-            <label class="f">{{ __('client.client') }}</label>
-            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('common.search') }}">
-        </div>
-        <div>
-            <label class="f">{{ __('ops.sv_completeness') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_client') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('common.search') }}"></label>
+        <label class="fl"><span>{{ __('ops.sv_completeness') }}</span>
             <select name="shots">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uic.statuses')]) }}</option>
                 <option value="full" @selected($filters['shots'] === 'full')>{{ __('ops.sv_full') }}</option>
                 <option value="partial" @selected($filters['shots'] === 'partial')>{{ __('ops.sv_partial') }}</option>
                 <option value="none" @selected($filters['shots'] === 'none')>{{ __('ops.sv_no_photos') }}</option>
                 <option value="counted" @selected($filters['shots'] === 'counted')>{{ __('ops.sv_counted') }}</option>
-            </select>
-        </div>
+            </select></label>
+        @include('partials._range', ['from' => $filters['from'], 'to' => $filters['to']])
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.merch') }}">{{ __('common.clear') }}</a>
+        {{-- الجدول صفحات — التصدير ده بياخد نتيجة الفلتر كلها --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         <span class="badge b-gray">{{ __('ops.visit_countable', ['count' => $visits->total()]) }}</span>
     </form>
 
@@ -123,7 +110,11 @@
                             <b>—</b>
                         @endif
                     </td>
-                    <td>{{ $v['user']?->displayName() ?? '—' }}</td>
+                    <td>
+                        @if ($v['user'])
+                            <a href="{{ route('ops.rep', $v['user']->id) }}">{{ $v['user']->displayName() }}</a>
+                        @else — @endif
+                    </td>
                     <td class="num" dir="ltr">{{ $hia($v['at']) ?? '—' }}</td>
                     <td class="num">
                         @if ($v['source'] !== 'promoter')
@@ -175,7 +166,7 @@
                     <td style="white-space:normal;max-width:300px;font-size:11px">
                         @forelse ($v['refills'] as $r)
                             <div style="color:{{ $r->out_of_stock ? 'var(--red)' : 'inherit' }}">
-                                {{ $r->product?->displayName() }}:
+                                @if ($r->product)<a href="{{ route('erp.products.show', $r->product_id) }}" style="color:inherit">{{ $r->product->displayName() }}</a>@endif:
                                 @if ($r->out_of_stock)
                                     {{ __('ops.out_of_stock') }}
                                 @else
@@ -197,7 +188,7 @@
                         @forelse ($v['counts'] as $c)
                             @php $d = $c->daysToExpiry(); @endphp
                             <div style="color:{{ $d !== null && $d < 0 ? 'var(--red)' : ($d !== null && $d <= 30 ? 'var(--orange)' : 'inherit') }}">
-                                {{ $c->product?->displayName() }}:
+                                @if ($c->product)<a href="{{ route('erp.products.show', $c->product_id) }}" style="color:inherit">{{ $c->product->displayName() }}</a>@endif:
                                 <b class="num">{{ rtrim(rtrim(number_format((float) $c->qty, 2), '0'), '.') }}</b> {{ __('stock.unit_'.$c->unit) }}
                                 @if ($c->unit !== 'piece') <span style="color:var(--muted)">(<span class="num">{{ number_format($c->pieces) }}</span> {{ __('stock.unit_piece') }})</span> @endif
                                 @if ($c->production_date) · {{ __('ops.sv_prod') }} <span class="num">{{ $c->production_date->format('Y-m-d') }}</span> @endif
@@ -213,6 +204,18 @@
                 <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.sv_no_rows') }}</td></tr>
             @endforelse
             </tbody>
+            {{-- (٢٢/٩) الإجمالي من نتيجة الفلتر كلها — نفس أرقام ملف التصدير --}}
+            @if ($visits->total() > 0)
+                <tfoot>
+                <tr style="background:var(--card2);font-weight:900">
+                    <td>Σ</td>
+                    <td colspan="5">{{ __('ops.visit_countable', ['count' => $visits->total()]) }}</td>
+                    <td class="num">{{ number_format($sumMoved) }}</td>
+                    <td class="num">{{ number_format($sumShort) }}</td>
+                    <td colspan="3"></td>
+                </tr>
+                </tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $visits->links('pagination::simple-default') }}</div>

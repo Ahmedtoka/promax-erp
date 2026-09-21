@@ -32,12 +32,9 @@
     @if (! empty($range))
         {{-- فلتر الفترة على الكارت نفسه — الفورم GET بيعيد تحميل الصفحة بنفس
              `from`/`to` اللي باقي الصفحة (الكشف/التصديرات) بتقراهم --}}
-        <form method="GET" class="frow" style="margin-bottom:12px" data-noprint data-range-filter>
-            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
-            @if (! $range->isOpen())
-                <div style="align-self:end"><a class="btn sm" href="{{ url()->current() }}#movements">✕ {{ __('common.all') }}</a></div>
-            @endif
+        <form method="GET" action="{{ url()->current() }}#movements" class="searchbar" style="margin-bottom:12px" data-noprint data-range-filter>
+            {{-- نفس شكل فلتر الفترة في كل الشاشات (٢٢/٩) — «كل الفترات» في الاختصارات بدل زرار ✕ --}}
+            @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
         </form>
     @endif
 
@@ -45,14 +42,15 @@
         <div style="text-align:center;color:var(--muted);padding:22px">{{ __('client.no_movements') }}</div>
     @else
         <div class="kpis" style="margin-bottom:10px">
-            <div class="kpi"><div class="lbl">{{ __('client.sold_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['sold_qty']) }}</div></div>
-            <div class="kpi"><div class="lbl">{{ __('client.returned_qty') }}</div><div class="val neg">{{ $mvFmt($mvTotals['returned_qty']) }}</div></div>
-            <div class="kpi"><div class="lbl">{{ __('client.gift_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['gift_qty']) }}</div></div>
-            <div class="kpi"><div class="lbl">{{ __('client.net_qty') }}</div><div class="val pos">{{ $mvFmt($mvTotals['net_qty']) }}</div></div>
-            <div class="kpi"><div class="lbl">{{ __('client.families_count') }}</div><div class="val">{{ count($movements['families']) }}</div></div>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.sold_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['sold_qty']) }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.returned_qty') }}</div><div class="val neg">{{ $mvFmt($mvTotals['returned_qty']) }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.gift_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['gift_qty']) }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.net_qty') }}</div><div class="val pos">{{ $mvFmt($mvTotals['net_qty']) }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.families_count') }}</div><div class="val">{{ count($movements['families']) }}</div></a>
         </div>
 
-        <div class="tablewrap">
+        {{-- الكروت فوق بتنزل على الجدول ده — هو اللي بيفصّل الرقم صنف صنف --}}
+        <div class="tablewrap" id="mvTable">
             <table>
                 <thead>
                 <tr>

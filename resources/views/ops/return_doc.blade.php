@@ -25,27 +25,27 @@
 
     <div class="frow">
         <div class="f"><span>{{ __('client.client') }}</span>
-            <b>{{ $r->client?->fullName() ?? '—' }}</b></div>
+            @if ($r->client)<a href="{{ route('erp.clients.show', $r->client) }}"><b>{{ $r->client->fullName() }}</b></a>@else <b>—</b> @endif</div>
         <div class="f"><span>{{ __('ops.rep') }}</span>
-            <b>{{ $r->rep?->displayName() ?? __('common.office') }}</b></div>
+            @if ($r->rep)<a href="{{ route('ops.rep', $r->rep) }}"><b>{{ $r->rep->displayName() }}</b></a>@else <b>{{ __('common.office') }}</b> @endif</div>
         <div class="f"><span>{{ __('field.return_policy') }}</span>
             <span class="badge b-purple">{{ $r->policyLabel() }}</span></div>
     </div>
 
     <div class="kpis">
-        <div class="kpi"><div class="lbl">{{ __('field.return_good_units') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('field.return_good_units') }}</div>
             <div class="val pos">{{ number_format($r->good_units) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('field.return_damaged_units') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('field.return_damaged_units') }}</div>
             <div class="val {{ $r->damaged_units > 0 ? 'neg' : '' }}">{{ number_format($r->damaged_units) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('common.subtotal') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('common.subtotal') }}</div>
             <div class="val">{{ $fmt($r->subtotal) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('common.discount') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('common.discount') }}</div>
             <div class="val mid">{{ $fmt($r->discount) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('tax.tax') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('tax.tax') }}</div>
             <div class="val">{{ $fmt($r->tax_total) }}</div></div>
         {{-- ⚠️ **ده الرقم اللي اتقيّد في الليدجر** — شامل الضريبة،
              زي `grand_total` بتاع الفاتورة بالظبط. --}}
-        <div class="kpi"><div class="lbl">{{ __('common.total') }}</div>
+        <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('common.total') }}</div>
             <div class="val neg"><b>{{ $fmt($r->grand_total) }}</b></div></div>
     </div>
 
@@ -53,7 +53,7 @@
         <div class="alert info">{{ $r->note }}</div>
     @endif
 
-    <div class="tablewrap">
+    <div class="tablewrap" id="retItems">
         <table>
             <tr>
                 <th>{{ __('stock.product') }}</th>
@@ -65,10 +65,10 @@
             </tr>
             @foreach ($r->items as $it)
                 <tr>
-                    <td><b>{{ $it->product?->displayName() ?? '—' }}</b></td>
+                    <td>@if ($it->product)<a href="{{ route('erp.products.show', $it->product) }}"><b>{{ $it->product->displayName() }}</b></a>@else <b>—</b> @endif</td>
                     {{-- ⚠️ **الفاتورة الأصلية جنب كل بند** — دي الحاجة
                          اللي بتخلّي المراجعة ممكنة: السعر جه منين. --}}
-                    <td style="color:var(--muted)">{{ $it->invoiceItem?->invoice?->number ?? '—' }}</td>
+                    <td>@if ($it->invoiceItem?->invoice)<a href="{{ route('ops.invoice', $it->invoiceItem->invoice) }}">{{ $it->invoiceItem->invoice->number }}</a>@else <span style="color:var(--muted)">—</span> @endif</td>
                     <td class="num">{{ number_format($it->qty) }}</td>
                     <td>
                         <span class="badge {{ $it->isDamaged() ? 'b-red' : 'b-green' }}">

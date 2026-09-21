@@ -36,9 +36,9 @@
         <span class="side">{{ __('incent.performance_hint') }}</span></h3>
 
     <div class="searchbar" style="margin-bottom:12px">
-        <form method="GET" style="display:flex;gap:8px;align-items:center">
-            <label class="f" style="margin:0">{{ __('incent.month') }}</label>
-            <input type="month" name="month" value="{{ $month->format('Y-m') }}" onchange="this.form.submit()">
+        <form method="GET" style="display:flex;gap:8px;align-items:flex-end">
+            <label class="fl"><span>{{ __('ui.l_month') }}</span>
+                <input type="month" name="month" value="{{ $month->format('Y-m') }}" onchange="this.form.submit()"></label>
         </form>
         @if ($canPoints)
             <button class="btn gold" style="margin-inline-start:auto" onclick="openDlg('dlgPts')">➕ {{ __('incent.add_points') }}</button>
@@ -55,8 +55,9 @@
                     <th style="width:130px">🏪 {{ __('incent.new_clients') }}</th>
                     <th style="width:150px">📦 {{ __('incent.pieces_sold') }}</th>
                     <th>{{ __('incent.app_opens') }}</th>
-                    <th>{{ __('incent.check_ins') }}/{{ __('incent.check_outs') }}</th>
-                    <th>{{ __('incent.avg_visit') }}</th>
+                    {{-- متوسط مدة الزيارة مابيتجمعش (٢٢/٩) --}}
+                    <th data-nosum>{{ __('incent.check_ins') }}/{{ __('incent.check_outs') }}</th>
+                    <th data-nosum>{{ __('incent.avg_visit') }}</th>
                     <th>{{ __('incent.km_today') }}</th>
                     <th>⭐ {{ __('incent.points') }}</th>
                     <th>💵 {{ __('incent.commission') }}</th>
@@ -67,7 +68,7 @@
                     @php $k = $r['kpi']; $t = $k['target']; @endphp
                     <tr>
                         <td style="text-align:start">
-                            <b>{{ $r['rep']->displayName() }}</b>
+                            <a href="{{ route('ops.rep', $r['rep']->id) }}"><b>{{ $r['rep']->displayName() }}</b></a>
                             <div style="font-size:10px;color:var(--muted)">{{ $r['rep']->code }}</div>
                         </td>
                         {{-- فلوس: الرقم + بار التحقيق من التارجت --}}
@@ -129,7 +130,7 @@
             <tr><th>{{ __('settle.rep') }}</th><th>{{ __('incent.points_value') }}</th><th style="text-align:start">{{ __('incent.reason') }}</th><th>{{ __('common.date') }}</th><th>{{ __('settle.by') }}</th></tr>
             @forelse ($recentPoints as $p)
                 <tr>
-                    <td>{{ $p->user?->displayName() ?? '—' }}</td>
+                    <td>@if ($p->user)<a href="{{ route('ops.rep', $p->user->id) }}">{{ $p->user->displayName() }}</a>@else — @endif</td>
                     <td class="num"><b class="{{ $p->points > 0 ? 'pos' : 'neg' }}">{{ $p->points > 0 ? '+' : '' }}{{ $p->points }}</b></td>
                     <td style="text-align:start">{{ $p->reason }}</td>
                     <td class="num" style="font-size:11px">{{ $p->date->format('Y-m-d') }}</td>
@@ -152,6 +153,7 @@
             <div>
                 <label class="f">{{ __('settle.rep') }} <b class="req-star">*</b></label>
                 <select name="user_id" required style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($rows as $r)
                         <option value="{{ $r['rep']->id }}">{{ $r['rep']->displayName() }}</option>
                     @endforeach

@@ -85,13 +85,14 @@
 
 @section('content')
 
+{{-- الكروت: الأمر والحالة بيرجّعوا للقايمة مفلترة، المخزن والمندوب بيفتحوا صفحتهم، والكميات على قايمة التجهيز (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('wh.picks') }}">
         <div class="lbl">{{ __('stock.pick_order') }}</div>
         <div class="val">{{ $o->number }}</div>
         <div class="sub2">{{ $o->created_at?->format('Y-m-d h:i A') ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.picks', ['status' => $o->status]) }}">
         <div class="lbl">{{ __('common.status') }}</div>
         <div class="val" style="font-size:17px">
             <span class="badge {{ $o->statusClass() }}">{{ $o->statusLabel() }}</span>
@@ -100,12 +101,12 @@
             {{ __('stock.pick_purpose') }}:
             @if ($o->purpose) {{ $o->purposeLabel() }} @else — @endif
         </div>
-    </div>
+    </a>
     {{-- ⚠️ **مدة التجهيز بتتعرض** (قرار المالك ٨/٨/٢٠٢٦) — الرقم ده
          هو اللي بيقيس أداء المخزن وبيفسّر ليه المندوب اتأخر قدام
          الفرع. من غير عرضه، القياس اتسجّل ومحدش شافه. --}}
     @if ($o->prepMinutes() !== null)
-        <div class="kpi">
+        <a class="kpi" href="#pickList">
             <div class="lbl">{{ __('stock.prep_duration') }}</div>
             <div class="val">{{ $o->prepMinutes() }}</div>
             <div class="sub2">
@@ -113,28 +114,28 @@
                 @if ($o->started_at) · {{ $o->started_at->format('h:i A') }} @endif
                 @if ($o->ready_at) → {{ $o->ready_at->format('h:i A') }} @endif
             </div>
-        </div>
+        </a>
     @endif
-    <div class="kpi">
+    <a class="kpi" href="{{ $o->warehouse ? route('wh.index', ['warehouse' => $o->warehouse_id]) : '#pickList' }}">
         <div class="lbl">{{ __('stock.warehouse') }}</div>
         <div class="val" style="font-size:17px">{{ $o->warehouse?->displayName() ?? '—' }}</div>
         <div class="sub2">{{ $o->warehouse?->typeLabel() ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ $o->rep ? route('ops.rep', $o->rep) : '#pickList' }}">
         <div class="lbl">{{ __('ops.rep') }}</div>
-        <div class="val" style="font-size:17px">{{ $o->rep?->name ?? '—' }}</div>
+        <div class="val" style="font-size:17px">{{ $o->rep?->displayName() ?? '—' }}</div>
         <div class="sub2">{{ $o->rep?->roleLabel() ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#pickList">
         <div class="lbl">{{ __('stock.qty_requested') }}</div>
         <div class="val">{{ $fmt($requested) }}</div>
         <div class="sub2">{{ __('stock.units') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#pickList">
         <div class="lbl">{{ __('stock.qty_picked') }}</div>
         <div class="val pos">{{ $fmt($picked) }}</div>
         <div class="sub2">{{ __('stock.qty_received_col') }}: {{ $fmt($received) }}</div>
-    </div>
+    </a>
 </div>
 
 @if ($o->has_variance)
@@ -214,7 +215,7 @@
     @endif
 </div>
 
-<div class="card">
+<div class="card" id="pickList">
     <h3>🧺 {{ __('stock.pick_list') }}
         <span class="side">{{ __('stock.pick_list_hint') }}</span></h3>
     <div class="tablewrap">
@@ -222,8 +223,8 @@
             <tr>
                 <th>{{ __('stock.item') }}</th>
                 <th>{{ __('stock.batch_no') }}</th>
-                <th>{{ __('stock.expires_on') }}</th>
-                <th>{{ __('stock.expiry') }}</th>
+                <th data-nosum>{{ __('stock.expires_on') }}</th>
+                <th data-nosum>{{ __('stock.expiry') }}</th>
                 <th>{{ __('stock.location') }}</th>
                 <th>{{ __('stock.qty_requested') }}</th>
                 <th>{{ __('stock.qty_picked') }}</th>
@@ -239,7 +240,7 @@
                                      style="width:110px;height:110px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                             @endif
                             <div>
-                                <b>{{ $item->product?->displayName() ?? __('stock.product_hash', ['id' => $item->product_id]) }}</b>
+                                @if ($item->product)<a href="{{ route('erp.products.show', $item->product) }}"><b>{{ $item->product->displayName() }}</b></a>@else<b>{{ __('stock.product_hash', ['id' => $item->product_id]) }}</b>@endif
                                 @if ($item->product)
                                     <br><span style="font-size:10.5px;color:var(--muted)">{{ $item->product->code }} • {{ $item->product->unitLabel() }}</span>
                                 @endif

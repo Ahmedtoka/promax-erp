@@ -20,13 +20,15 @@
 </div>
 
 {{-- ═══════════ إيه الموجود دلوقتي ═══════════ --}}
+{{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي فيها الصفوف دي --}}
+@php $kindScreen = ['products' => 'erp.stock', 'clients' => 'erp.clients', 'team' => 'erp.team', 'stock' => 'erp.stock', 'leads' => 'erp.leads']; @endphp
 <div class="kpis">
     @foreach ($kinds as $kind)
-        <div class="kpi">
+        <a class="kpi" href="{{ route($kindScreen[$kind] ?? 'erp.import') }}">
             <div class="lbl">{{ $order[$kind] }}. {{ __('import.kind_'.$kind) }}</div>
             <div class="val {{ ($counts[$kind] ?? 0) > 0 ? 'pos' : 'neg' }}">{{ $fmt($counts[$kind] ?? 0) }}</div>
             <div class="sub2">{{ __('import.rows_in_system') }}</div>
-        </div>
+        </a>
     @endforeach
 </div>
 
@@ -40,6 +42,7 @@
             <div>
                 <label class="f">{{ __('import.data_kind') }}</label>
                 <select name="kind" id="kindSel" required style="width:100%" onchange="showCols(this.value)">
+                    <option value="">{{ __('ui.choose', ['x' => __('import.data_kind')]) }}</option>
                     @foreach ($kinds as $kind)
                         <option value="{{ $kind }}">{{ $order[$kind] }}. {{ __('import.kind_'.$kind) }}</option>
                     @endforeach
@@ -63,7 +66,7 @@
 
 {{-- ═══════════ الأعمدة المتوقّعة لكل نوع ═══════════ --}}
 @foreach ($kinds as $kind)
-    <div class="card colBox" id="cols-{{ $kind }}" @if (! $loop->first) style="display:none" @endif>
+    <div class="card colBox" id="cols-{{ $kind }}" style="display:none">
         <h3>📋 {{ __('import.expected_columns') }} — {{ __('import.kind_'.$kind) }}
             <span class="side">{{ __('import.name_match_hint') }}</span>
         </h3>
@@ -109,8 +112,8 @@
                 <th class="num">{{ __('import.accepted') }}</th>
                 <th class="num">{{ __('import.rejected') }}</th>
                 <th>{{ __('common.status') }}</th>
-                <th>{{ __('import.result') }}</th>
-                <th></th>
+                <th data-nosum>{{ __('import.result') }}</th>
+                <th data-nosum></th>
             </tr>
 
             @forelse ($history as $h)

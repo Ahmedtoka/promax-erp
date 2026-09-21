@@ -107,6 +107,20 @@ class VisitBoardController extends Controller
             }
         }
 
+        // (٢٢/٩) «بلا نتيجة» بقى فلتر — كارت الـKPI بيدوس عليه. نفس تعريف الكارت بالحرف.
+        if ($request->boolean('wasted')) {
+            $q->whereNotNull('checked_out_at');
+
+            foreach (VisitOutcomes::idSources() as $src) {
+                $q->whereNotIn('id', $src);
+            }
+        }
+
+        // ═══ تصدير كل النتيجة (٢٢/٩) — نفس `$q` قبل الباجينيشن ═══
+        if ($request->boolean('export')) {
+            return $this->export(clone $q, $from, $to);
+        }
+
         // ═══════════ الـKPIs — على الكويري المفلترة كلها ═══════════
         // ⚠️ **مش على الصفحة.** «٣ زيارات بلا نتيجة» في صفحة من ٢٥
         // رقم مالوش معنى؛ المالك بيسأل عن اليوم كله.
@@ -218,8 +232,63 @@ class VisitBoardController extends Controller
                 'has_invoice' => $request->boolean('has_invoice'),
                 'has_collection' => $request->boolean('has_collection'),
                 'has_return' => $request->boolean('has_return'),
+                'wasted' => $request->boolean('wasted'),
             ],
         ]);
+    }
+
+    /**
+     * إكسيل (CSV) بكل زيارات الفلتر — الجدول على الشاشة صفحة واحدة بس.
+     * النتايج بتتحسب على دفعات عشان `VisitOutcomes::map` مايشيلش آلاف الزيارات مرة واحدة.
+     */
+    private function export($q, Carbon $from, Carbon $to)
+    {
+        $tz = 'Africa/Cairo';
+        $at = fn (?Carbon $d) => $d?->copy()->timezone($tz)->format('Y-m-d h:i A') ?? '';
+
+        $visits = $q->with(['user', 'client.zone', 'client.group'])
+            ->orderByDesc('checked_in_at')->orderByDesc('id')->limit(5000)->get();
+
+        $rows = [];
+        $sum = ['inv' => 0.0, 'coll' => 0.0, 'ret' => 0.0];
+
+        foreach ($visits->chunk(300) as $chunk) {
+            $out = VisitOutcomes::map($chunk->pluck('id')->all());
+
+            foreach ($chunk as $v) {
+                $o = $out[$v->id] ?? VisitOutcomes::blank();
+                $inv = (float) $o['invoices']->sum('grand_total');
+                $sum['inv'] += $inv;
+                $sum['coll'] += (float) $o['coll_total'];
+                $sum['ret'] += (float) $o['ret_total'];
+
+                $rows[] = [
+                    $v->user?->displayName() ?? '—',
+                    $v->client?->fullName() ?? '—',
+                    $v->client?->zone?->displayName() ?? '',
+                    $at($v->checked_in_at),
+                    $at($v->checked_out_at),
+                    $v->minutes() ?? '',
+                    $o['invoices']->pluck('number')->join(' / '),
+                    \App\Support\Csv::money($inv),
+                    \App\Support\Csv::money($o['coll_total']),
+                    \App\Support\Csv::money($o['ret_total']),
+                    $o['photo_count'],
+                    $o['gift_qty'],
+                    $o['goods_count'],
+                    (string) $v->note,
+                ];
+            }
+        }
+
+        return \App\Support\Csv::download('visits-'.$from->toDateString().'_'.$to->toDateString().'.csv', [
+            __('ops.rep'), __('client.client'), __('client.zone'), __('ops.check_in'), __('ops.check_out'),
+            __('ops.vb_duration'), __('ops.vb_invoices'), __('uic.x_inv_value'), __('ops.vb_collections'),
+            __('ops.vb_returns'), __('field.shelf_photos'), __('ops.vb_gifts'), __('ops.vb_goods'), __('ops.vb_note'),
+        ], $rows, [
+            __('common.total'), count($rows), '', '', '', '', '',
+            \App\Support\Csv::money($sum['inv']), \App\Support\Csv::money($sum['coll']), \App\Support\Csv::money($sum['ret']),
+        ], \App\Support\Csv::meta(__('nav.visits'), $from->toDateString(), $to->toDateString()));
     }
 
     /** تاريخ من الريكوست — والافتراضي لو فاضي أو بايظ */

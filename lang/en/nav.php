@@ -120,4 +120,8 @@ return [
     'kpi' => 'Commission & KPI',
     // مراجعة مساعد بروماكس (٧/٩)
     'agent_runs' => 'Promax Assistant',
+
+    // ترتيب المنيو (٢٢/٩) — مجموعة لوحدها للتارجت والأداء والحوافز
+    'group_targets' => 'Targets & incentives',
+    'zones' => 'Zones',
 ];

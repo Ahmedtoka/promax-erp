@@ -493,8 +493,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('app_version.chunk');
 
         // ═════ سجل حركة اليوزرات (2026-08-07) — أدمن بس، قراءة فقط ═════
+        // ⚠️ (٢٢/٩) الشاشة القديمة اتنقلت لمركز النشاط — اللينكات المحفوظة
+        // والإشعارات القديمة بتتحوّل لتاب «السجل الكامل» بنفس فلاترها
         Route::get('/audit', [\App\Http\Controllers\AuditController::class, 'index'])
             ->middleware('role:admin')->name('audit');
+
+        // ═════ مركز نشاط المستخدمين (٢٢/٩/٢٠٢٦) — أدمن بس، قراءة فقط ═════
+        Route::get('/activity', [\App\Http\Controllers\ActivityController::class, 'index'])
+            ->middleware('role:admin')->name('activity');
+        Route::get('/activity/user/{user}', [\App\Http\Controllers\ActivityController::class, 'user'])
+            ->middleware('role:admin')->name('activity.user');
 
         // ═════ قفل اليوم — يومية الحسابات (2026-08-06) ═════
         Route::get('/day-close', [\App\Http\Controllers\DayCloseController::class, 'index'])

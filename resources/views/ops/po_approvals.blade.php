@@ -57,24 +57,27 @@
 
     {{-- ═══ الفلاتر والترتيب — سيرفر سايد ═══ --}}
     <form method="GET" action="{{ route('ops.po.approvals') }}" class="searchbar" style="margin-bottom:12px">
-        <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
-               placeholder="🔍 {{ __('ops.search_po_ph') }}" style="flex:1;min-width:200px">
-        <select name="group" style="min-width:150px">
-            <option value="">— {{ __('nav.chains') }} —</option>
-            @foreach ($groups as $g)
-                <option value="{{ $g->id }}" @selected(($f['group'] ?? '') == $g->id)>{{ $g->displayName() }}</option>
-            @endforeach
-        </select>
-        <input type="date" name="from" value="{{ $f['from'] ?? '' }}" style="width:135px" title="{{ __('common.from') }}">
-        <input type="date" name="to" value="{{ $f['to'] ?? '' }}" style="width:135px" title="{{ __('common.to') }}">
-        <select name="sort">
-            <option value="" @selected(($f['sort'] ?? '') === '')>⏰ {{ __('ops.sort_due') }}</option>
-            <option value="value" @selected(($f['sort'] ?? '') === 'value')>💰 {{ __('ops.sort_value') }}</option>
-            <option value="newest" @selected(($f['sort'] ?? '') === 'newest')>🕐 {{ __('ops.sort_newest') }}</option>
-        </select>
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('ops.search_po_ph') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_group') }}</span>
+            <select name="group">
+                <option value="">{{ __('ui.all_of', ['x' => __('nav.chains')]) }}</option>
+                @foreach ($groups as $g)
+                    <option value="{{ $g->id }}" @selected(($f['group'] ?? '') == $g->id)>{{ $g->displayName() }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_sort') }}</span>
+            <select name="sort">
+                <option value="" @selected(($f['sort'] ?? '') === '')>⏰ {{ __('ops.sort_due') }}</option>
+                <option value="value" @selected(($f['sort'] ?? '') === 'value')>💰 {{ __('ops.sort_value') }}</option>
+                <option value="newest" @selected(($f['sort'] ?? '') === 'newest')>🕐 {{ __('ops.sort_newest') }}</option>
+            </select></label>
+        {{-- ⚠️ الفترة هنا على **معاد التوريد** مش تاريخ الإنشاء (الكنترولر بيفلتر due_at) --}}
+        @include('partials._range', ['from' => $f['from'] ?? '', 'to' => $f['to'] ?? ''])
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('ops.po.approvals') }}">{{ __('common.clear') }}</a>
     </form>
+    <div style="font-size:11px;color:var(--muted);margin:-6px 0 10px">{{ __('uic.range_is_due') }}</div>
 
     @if ($pending->isEmpty())
         <div class="alert"><span>✅</span><span>{{ __('ops.po_no_pending') }}</span></div>
@@ -91,10 +94,10 @@
                     <th>{{ __('ops.branch_client') }}</th>
                     <th>{{ __('ops.rep') }}</th>
                     <th>{{ __('stock.warehouse') }}</th>
-                    <th>{{ __('ops.due_at') }}</th>
-                    <th class="num">{{ __('ops.items') }}</th>
+                    <th data-nosum>{{ __('ops.due_at') }}</th>
+                    <th class="num" data-nosum>{{ __('ops.items') }}</th>
                     <th class="num">{{ __('ops.po_amount') }}</th>
-                    <th class="num">{{ __('ops.branch_balance') }}</th>
+                    <th class="num" data-nosum>{{ __('ops.branch_balance') }}</th>
                     <th style="width:170px"></th>
                 </tr>
             </thead>
@@ -109,7 +112,7 @@
                     {{-- الصف الرئيسي — الضغط عليه بيفتح التفاصيل --}}
                     <tr onclick="poToggle({{ $po->id }})" style="cursor:pointer" id="poRow{{ $po->id }}">
                         <td>
-                            <b>{{ $po->number }}</b>
+                            <a href="{{ route('ops.pos.show', $po) }}" onclick="event.stopPropagation()"><b>{{ $po->number }}</b></a>
                             {{-- الأصل بدل كلمة «replenishment» — نفس إصلاح ١٥/٨ --}}
                             @php $orig = $po->origin(); @endphp
                             @if ($orig)
@@ -121,10 +124,19 @@
                             @endif
                         </td>
                         <td>
-                            <b style="font-size:12.5px">{{ $client?->fullName() ?? '—' }}</b>
+                            @if ($client)
+                                @if ($client->group)
+                                    <a href="{{ route('erp.groups.show', $client->group) }}" onclick="event.stopPropagation()" style="font-size:10.5px;color:var(--muted)">{{ $client->group->displayName() }}</a><br>
+                                @endif
+                                <a href="{{ route('erp.clients.show', $client) }}" onclick="event.stopPropagation()"><b style="font-size:12.5px">{{ $client->displayName() }}</b></a>
+                            @else — @endif
                             @if ($client?->channel)<div style="font-size:10px;color:var(--muted)">{{ $client->channel->displayName() }}</div>@endif
                         </td>
-                        <td class="s">{{ $po->courier?->name ?? '—' }}</td>
+                        <td class="s">
+                            @if ($po->courier)
+                                <a href="{{ route('ops.rep', $po->courier) }}" onclick="event.stopPropagation()">{{ $po->courier->displayName() }}</a>
+                            @else — @endif
+                        </td>
                         <td class="s">{{ $po->warehouse?->displayName() ?? '—' }}</td>
                         <td class="s">
                             {{ $po->due_at?->format('Y-m-d h:i A') ?? '—' }}
@@ -186,7 +198,7 @@
                                   id="poForm{{ $po->id }}" onsubmit="return poCheckNote(event, {{ $po->id }})">
                                 @csrf
                                 <div class="tablewrap">
-                                    <table>
+                                    <table data-noxl>
                                         <thead>
                                             <tr>
                                                 <th>{{ __('stock.item') }}</th>
@@ -200,7 +212,11 @@
                                         <tbody>
                                             @foreach ($po->items as $it)
                                                 <tr>
-                                                    <td><b>{{ $it->product?->displayName() ?? '—' }}</b></td>
+                                                    <td>
+                                                        @if ($it->product)
+                                                            <a href="{{ route('erp.products.show', $it->product) }}"><b>{{ $it->product->displayName() }}</b></a>
+                                                        @else — @endif
+                                                    </td>
                                                     <td class="num">{{ $fmt($it->qty) }}
                                                         @if ($bd = $it->product?->packBreakdown((int) $it->qty))
                                                             <div style="font-size:10px;color:var(--muted)">{{ $bd }}</div>

@@ -49,7 +49,7 @@
                     <th class="num">{{ __('client.balance') }}</th>
                     <th class="num">{{ __('client.sales_today') }}</th>
                     <th class="num">{{ __('client.qty_sold') }}</th>
-                    <th class="num">{{ __('client.discount_range') }}</th>
+                    <th class="num" data-nosum>{{ __('client.discount_range') }}</th>
                     <th></th>
                 </tr>
                 </thead>
@@ -67,7 +67,7 @@
                     @endphp
                     <tr class="clickable"
                         onclick="location.href='{{ route('erp.divisions', ['division' => $key]) }}'">
-                        <td><b>{{ Divisions::label($key) }}</b></td>
+                        <td><a href="{{ route('erp.divisions', ['division' => $key]) }}" onclick="event.stopPropagation()"><b>{{ Divisions::label($key) }}</b></a></td>
                         <td><span class="badge {{ Divisions::fulfillmentBadge($key) }}">
                             {{ Divisions::fulfillmentLabel($key) }}</span></td>
                         <td class="num"><b>{{ number_format($r->n ?? 0) }}</b></td>
@@ -149,7 +149,7 @@
                             <a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a>
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->displayAddress() ?: '—' }}</span>
                         </td>
-                        <td style="color:var(--muted)">{{ $c->group?->displayName() ?? '—' }}</td>
+                        <td>@if ($c->group)<a href="{{ route('erp.groups.show', $c->group) }}">{{ $c->group->displayName() }}</a>@else <span style="color:var(--muted)">—</span> @endif</td>
                         <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>
                         <td class="num">{{ number_format((float) $c->purchases) }}</td>
                         <td class="num {{ (float) $c->balance > 0 ? 'neg' : '' }}">{{ number_format((float) $c->balance) }}</td>
@@ -167,7 +167,7 @@
                                 <button class="btn sm" type="submit">💾</button>
                             </form>
                             @else
-                                <span style="color:var(--muted)">{{ $c->division ?: '—' }}</span>
+                                <span style="color:var(--muted)">{{ $c->division ? Divisions::label($c->division) : '—' }}</span>
                             @endif
                         </td>
                     </tr>

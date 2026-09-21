@@ -67,33 +67,34 @@
         $remSum = round($tgSum - $grid['achieved_total'], 2);
     @endphp
 
+    {{-- (٢٢/٩) التارجت/المتبقي/النسبة مفرودين شهر بشهر في الجدول اللي تحت، والمحقق في تقرير «التارجت مقابل المحقق» --}}
     <div class="kpis" style="margin-top:12px">
-        <div class="kpi">
+        <a class="kpi" href="#tg-months">
             <div class="lbl">{{ __('targets.kpi_target') }}</div>
             <div class="val num">{{ $fmt($grid['annual']) }}</div>
             <div class="sub2">{{ $year }}</div>
-        </div>
-        <div class="kpi">
+        </a>
+        <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'target_vs_actual', 'from' => $year.'-01-01', 'to' => $year.'-12-31']) }}">
             <div class="lbl">{{ __('targets.kpi_achieved') }}</div>
             <div class="val num pos">{{ $fmt($grid['achieved_total']) }}</div>
-        </div>
-        <div class="kpi">
+        </a>
+        <a class="kpi" href="#tg-months">
             <div class="lbl">{{ __('targets.kpi_remaining') }}</div>
             <div class="val num {{ $gridRemaining > 0 ? 'mid' : 'pos' }}">{{ $fmt(max($gridRemaining, 0)) }}</div>
             @if ($pace !== null)
                 <div class="sub2">⚡ {{ __('targets.need_monthly', ['amount' => $fmt($pace)]) }}</div>
             @endif
-        </div>
-        <div class="kpi">
+        </a>
+        <a class="kpi" href="#tg-months">
             <div class="lbl">{{ __('targets.kpi_pct') }}</div>
             <div class="val num">{{ $gridPct }}%</div>
             <div style="background:var(--card2);border:1px solid var(--border);border-radius:6px;height:9px;overflow:hidden;margin-top:6px">
                 <div style="height:100%;width:{{ $gridPct > 0 ? max(min($gridPct, 100), 2) : 0 }}%;min-width:{{ $gridPct > 0 ? 2 : 0 }}px;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
             </div>
-        </div>
+        </a>
     </div>
 
-    <div class="card" style="margin-top:12px">
+    <div class="card" style="margin-top:12px" id="tg-months">
         <h3>🗓️ {{ __('targets.months_title') }}
             <span class="side">{{ $isAdmin ? __('targets.months_hint_admin') : __('targets.months_hint_manager') }}</span></h3>
 
@@ -256,7 +257,7 @@
                         <tr>
                             <td style="text-align:start">
                                 @include('partials._avatar', ['u' => $row['user'], 'size' => 28])
-                                <b style="margin-inline-start:6px">{{ $row['user']->displayName() }}</b>
+                                <a href="{{ route('ops.rep', $row['user']->id) }}"><b style="margin-inline-start:6px">{{ $row['user']->displayName() }}</b></a>
                             </td>
                             <td><input class="sp-pct" type="number" step="0.1" min="0" dir="ltr"
                                        value="{{ $mgPct !== null ? $mgPct : '' }}"
@@ -461,7 +462,7 @@
                         <tr>
                             <td style="text-align:start">
                                 @include('partials._avatar', ['u' => $row['user'], 'size' => 28])
-                                <b style="margin-inline-start:6px">{{ $row['user']->displayName() }}</b>
+                                <a href="{{ route('ops.rep', $row['user']->id) }}"><b style="margin-inline-start:6px">{{ $row['user']->displayName() }}</b></a>
                                 <span class="badge b-gray" style="margin-inline-start:6px">{{ __('enums.role.'.$row['user']->role) }}</span>
                             </td>
                             <td><input class="sp-amt" type="number" name="rows[{{ $row['user']->id }}]"

@@ -56,7 +56,17 @@ class ChainExportTest extends TestCase
     {
         $this->assertStringStartsWith("\xEF\xBB\xBF", $csv, 'الـBOM ناقص — إكسيل هيفتح العربي طلاسم');
 
-        $lines = array_filter(explode("\n", trim(substr($csv, 3))), fn ($l) => $l !== '');
+        $lines = explode("\n", trim(substr($csv, 3)));
+
+        // (٢٢/٩) الملفات بقى أولها سطور التعريف (العنوان، الفترة، وقت السحب) وبعدها
+        // سطر فاضي — التيست ده عن الجدول نفسه، فبيبدأ من بعد السطر الفاضي.
+        $blank = array_search('', array_map('trim', $lines), true);
+
+        if ($blank !== false) {
+            $lines = array_slice($lines, $blank + 1);
+        }
+
+        $lines = array_filter($lines, fn ($l) => trim($l) !== '');
 
         return array_map(fn ($l) => str_getcsv($l), array_values($lines));
     }

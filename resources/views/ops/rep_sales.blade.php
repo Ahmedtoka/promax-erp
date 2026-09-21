@@ -29,28 +29,31 @@
 @php $fmt = fn ($n) => number_format((float) $n, 2); @endphp
 
 {{-- ═══ السامري — من نفس صفوف الجدول (نطاق واحد) ═══ --}}
+{{-- (٢٢/٩) كل كارت هو مجموع عمود في الجدول تحت — الدوسة بتنزل على تفصيلته بالمندوب --}}
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">💵 {{ __('field.sales_kpi_cash') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['cash']) }}</div></div>
-    <div class="kpi"><div class="lbl">🧾 {{ __('field.sales_kpi_credit') }}</div><div class="val">{{ $fmt($kpi['credit']) }}</div></div>
-    <div class="kpi"><div class="lbl">🪙 {{ __('field.sales_kpi_cash_coll') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['coll_cash']) }}</div></div>
-    <div class="kpi">
+    <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_cash')]) }}"><div class="lbl">💵 {{ __('field.sales_kpi_cash') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['cash']) }}</div>
+        <div class="sub2">{{ __('uic.sum_of_col', ['col' => __('field.sales_cash')]) }}</div></a>
+    <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_credit')]) }}"><div class="lbl">🧾 {{ __('field.sales_kpi_credit') }}</div><div class="val">{{ $fmt($kpi['credit']) }}</div>
+        <div class="sub2">{{ __('uic.sum_of_col', ['col' => __('field.sales_credit')]) }}</div></a>
+    <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_coll_cash')]) }}"><div class="lbl">🪙 {{ __('field.sales_kpi_cash_coll') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['coll_cash']) }}</div>
+        <div class="sub2">{{ __('uic.sum_of_col', ['col' => __('field.sales_coll_cash')]) }}</div></a>
+    <a class="kpi" href="#salesTable">
         <div class="lbl">🏦 {{ __('field.sales_kpi_other_coll') }}</div>
         <div class="val">{{ $fmt($kpi['coll_other']) }}</div>
         <div class="sub2">{{ __('field.sales_kpi_other_coll_hint') }}</div>
-    </div>
-    <div class="kpi"><div class="lbl">📥 {{ __('field.sales_kpi_refunds') }}</div><div class="val" style="color:#B00020">{{ $fmt($kpi['refunds']) }}</div></div>
+    </a>
+    <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_refunds')]) }}"><div class="lbl">📥 {{ __('field.sales_kpi_refunds') }}</div><div class="val" style="color:#B00020">{{ $fmt($kpi['refunds']) }}</div>
+        <div class="sub2">{{ __('uic.sum_of_col', ['col' => __('field.sales_refunds')]) }}</div></a>
 </div>
 
-<div class="card">
+<div class="card" id="salesTable">
     <h3>💵 {{ __('nav.rep_sales') }}
         <span class="side">{{ __('field.sales_sub') }}</span>
     </h3>
 
     <form class="searchbar" method="GET">
-        <label class="f">{{ __('common.from') }}</label>
-        <input type="date" name="from" value="{{ $from }}">
-        <label class="f">{{ __('common.to') }}</label>
-        <input type="date" name="to" value="{{ $to }}">
+        {{-- ⚠️ الفاضي هنا = النهارده (boardWindow) مش كل الفترات — فمفيش اختصار «كل الفترات» --}}
+        @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false])
         <button class="btn gold" type="submit">🔍 {{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.sales') }}">{{ __('common.clear') }}</a>
     </form>
@@ -79,7 +82,7 @@
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 34])
                             <div>
-                                <b>{{ $u->displayName() }}</b>
+                                <a href="{{ route('ops.rep', ['user' => $u->id, 'from' => $from, 'to' => $to]) }}"><b>{{ $u->displayName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">
                                     {{ $u->roleLabel() }} · <span dir="ltr">{{ $u->code }}</span>
                                 </div>

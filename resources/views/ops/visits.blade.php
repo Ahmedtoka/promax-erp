@@ -48,50 +48,46 @@
 
 {{-- ═══════════ KPIs — كلها من نفس الكويري المفلترة ═══════════ --}}
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi">
+    {{-- (٢٢/٩) الكروت فلاتر على نفس القايمة: الأول بيشيل فلاتر النتيجة، والباقي كل واحد بفلتره --}}
+    @php
+        $vReset = ['status' => null, 'has_photos' => null, 'has_invoice' => null, 'has_collection' => null, 'has_return' => null, 'wasted' => null];
+        $vAny = $filters['status'] || $filters['has_photos'] || $filters['has_invoice'] || $filters['has_collection'] || $filters['has_return'] || $filters['wasted'];
+    @endphp
+    <a @class(['kpi', 'on' => ! $vAny]) href="{{ request()->fullUrlWithQuery($vReset + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚪 {{ __('ops.vb_kpi_visits') }}</div>
         <div class="val">{{ number_format($kpi['visits']) }}</div>
         <div class="sub2">{{ __('ops.vb_kpi_open', ['count' => $kpi['open']]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#visitsTable">
         <div class="lbl">🏬 {{ __('ops.vb_kpi_clients') }}</div>
         <div class="val">{{ number_format($kpi['clients']) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => $filters['status'] === 'closed']) href="{{ request()->fullUrlWithQuery(['status' => $filters['status'] === 'closed' ? null : 'closed'] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">⏱️ {{ __('ops.vb_kpi_avg') }}</div>
         <div class="val">{{ __('ops.minutes', ['count' => $kpi['avg_min']]) }}</div>
         <div class="sub2">{{ __('ops.vb_kpi_avg_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => $filters['has_photos']]) href="{{ request()->fullUrlWithQuery(['has_photos' => $filters['has_photos'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">📸 {{ __('ops.vb_kpi_photos') }}</div>
         <div class="val {{ $kpi['photos'] > 0 ? 'pos' : '' }}">{{ number_format($kpi['photos']) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => $filters['has_invoice']]) href="{{ request()->fullUrlWithQuery(['has_invoice' => $filters['has_invoice'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🧾 {{ __('ops.vb_kpi_invoiced') }}</div>
         <div class="val pos">{{ number_format($kpi['invoiced']) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => $filters['wasted']]) href="{{ request()->fullUrlWithQuery(['wasted' => $filters['wasted'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚫 {{ __('ops.vb_kpi_wasted') }}</div>
         <div class="val {{ $kpi['wasted'] > 0 ? 'neg' : 'pos' }}">{{ number_format($kpi['wasted']) }}</div>
         <div class="sub2">{{ __('ops.vb_kpi_wasted_hint') }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="visitsTable">
     <h3>🚪 {{ __('nav.visits') }}
         <span class="side">{{ __('ops.vb_hint') }}</span></h3>
 
     <form class="searchbar" method="GET">
-        <div>
-            <label class="f">{{ __('ops.vb_from') }}</label>
-            <input type="date" name="from" value="{{ $from->toDateString() }}">
-        </div>
-        <div>
-            <label class="f">{{ __('ops.vb_to') }}</label>
-            <input type="date" name="to" value="{{ $to->toDateString() }}">
-        </div>
-        <div>
-            <label class="f">{{ __('ops.rep') }}</label>
+        <label class="fl"><span>{{ __('ui.l_rep') }}</span>
             <select name="user">
                 <option value="">{{ __('ops.vb_all_reps') }}</option>
                 @foreach ($reps as $r)
@@ -99,14 +95,10 @@
                         {{ $r->displayName() }} — {{ $r->roleLabel() }}
                     </option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('client.client') }}</label>
-            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('common.search') }}">
-        </div>
-        <div>
-            <label class="f">{{ __('client.zone') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_client') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('common.search') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_zone') }}</span>
             <select name="zone">
                 <option value="">{{ __('ops.vb_all_zones') }}</option>
                 @foreach ($zones as $z)
@@ -114,16 +106,13 @@
                         {{ $z->displayName() }}
                     </option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('common.status') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
             <select name="status">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uic.statuses')]) }}</option>
                 <option value="closed" @selected($filters['status'] === 'closed')>{{ __('ops.vb_st_closed') }}</option>
                 <option value="open" @selected($filters['status'] === 'open')>{{ __('ops.vb_st_open') }}</option>
-            </select>
-        </div>
+            </select></label>
         <label class="f" style="display:flex;gap:5px;align-items:center">
             <input type="checkbox" name="has_photos" value="1" @checked($filters['has_photos'])>
             📸 {{ __('ops.vb_f_photos') }}
@@ -140,8 +129,13 @@
             <input type="checkbox" name="has_return" value="1" @checked($filters['has_return'])>
             ↩️ {{ __('ops.vb_f_return') }}
         </label>
+        @if ($filters['wasted'])<input type="hidden" name="wasted" value="1">@endif
+        {{-- ⚠️ الفاضي هنا = النهارده — فمفيش اختصار «كل الفترات» --}}
+        @include('partials._range', ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'all' => false])
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.visits') }}">{{ __('common.clear') }}</a>
+        {{-- الجدول صفحات — التصدير ده بياخد نتيجة الفلتر كلها --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         <span class="badge b-gray">{{ __('ops.visit_countable', ['count' => $visits->total()]) }}</span>
     </form>
 
@@ -170,7 +164,9 @@
                                 @include('partials._avatar', ['u' => $v->user, 'size' => 30])
                             @endif
                             <div>
-                                <b>{{ $v->user?->displayName() ?? '—' }}</b>
+                                @if ($v->user)
+                                    <a href="{{ route('ops.rep', ['user' => $v->user_id, 'from' => $from->toDateString(), 'to' => $to->toDateString()]) }}"><b>{{ $v->user->displayName() }}</b></a>
+                                @else <b>—</b> @endif
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $v->user?->roleLabel() }}</div>
                             </div>
                         </div>
@@ -184,7 +180,7 @@
                             <b>—</b>
                         @endif
                         @if ($v->client?->group)
-                            <div style="font-size:10.5px;color:var(--muted)">🏬 {{ $v->client->group->displayName() }}</div>
+                            <div style="font-size:10.5px">🏬 <a href="{{ route('erp.groups.show', $v->client->group) }}" style="color:var(--muted)">{{ $v->client->group->displayName() }}</a></div>
                         @endif
                     </td>
                     <td class="s">{{ $v->client?->zone?->displayName() ?: '—' }}</td>

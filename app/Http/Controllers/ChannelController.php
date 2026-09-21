@@ -452,6 +452,34 @@ class ChannelController extends Controller
         // نفس عدّاد، فترتيب بالـid كان هيخلط اليومين.
         $rows = $rows->sortByDesc(fn ($r) => $r['at']?->getTimestamp() ?? 0)->values();
 
+        // ═══ تصدير كل النتيجة (٢٢/٩) — نفس `$rows` المفلترة قبل التقطيع لصفحات ═══
+        if ($request->boolean('export')) {
+            $src = ['promoter' => __('ops.sv_src_promoter'), 'rep' => __('ops.sv_src_rep')];
+
+            return \App\Support\Csv::download('shelf-visits-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('ops.sv_source'), __('client.branch'), __('client.channel'), __('ops.rep'), __('ops.checked_in'),
+                __('ops.sv_gps'), __('ops.duration'), __('ops.moved_to_shelf'), __('ops.short'),
+                __('field.shelf_before'), __('field.shelf_after'), __('ops.sv_count'), __('uic.x_no_photo_reason'),
+            ], $rows->map(fn ($r) => [
+                $src[$r['source']] ?? $r['source'],
+                $r['client']?->fullName() ?? '—',
+                $r['client']?->channel?->displayName() ?? '',
+                $r['user']?->displayName() ?? '—',
+                $r['at']?->copy()->timezone('Africa/Cairo')->format('Y-m-d h:i A') ?? '',
+                $r['gps'] ?? '',
+                $r['minutes'] ?? '',
+                $r['moved'] ?? '',
+                $r['short'] ?? '',
+                count($r['before']),
+                count($r['after']),
+                $r['counts']->count(),
+                $r['no_photos'] ? (string) $r['no_photo_reason'] : '',
+            ])->all(), [
+                __('common.total'), $rows->count(), '', '', '', '', '',
+                (int) $rows->sum('moved'), (int) $rows->sum('short'),
+            ], \App\Support\Csv::meta(__('ops.merch_visits'), $from?->toDateString(), $to?->toDateString()));
+        }
+
         $page = max(1, (int) $request->integer('page'));
         $perPage = 25;
 
@@ -479,6 +507,9 @@ class ChannelController extends Controller
                 ->where('active', true)->orderBy('name')->get(),
             'capped' => $capped,
             'cap' => self::SHELF_CAP,
+            // (٢٢/٩) فوتر الجدول من النتيجة كلها مش الصفحة
+            'sumMoved' => (int) $rows->sum('moved'),
+            'sumShort' => (int) $rows->sum('short'),
             'filters' => [
                 'user' => $repId,
                 'from' => $from?->toDateString() ?? '',
@@ -546,7 +577,38 @@ class ChannelController extends Controller
         $range = DateRange::fromRequest($request);
         $q->tap(fn ($w) => $range->apply($w, 'created_at'));
 
+        // ═══ تصدير كل النتيجة (٢٢/٩) — نفس `$q` قبل الباجينيشن، صف لكل بند ═══
+        if ($request->boolean('export')) {
+            $rows = [];
+            $qty = 0;
+
+            foreach ((clone $q)->latest()->limit(5000)->get() as $r) {
+                foreach ($r->items as $i) {
+                    $qty += (int) $i->qty;
+                    $rows[] = [
+                        $r->number, $r->created_at?->format('Y-m-d h:i A'), $r->client?->fullName() ?? '—',
+                        $r->promoter?->displayName() ?? '—', $r->originLabel(),
+                        $i->product?->code ?? '', $i->product?->displayName() ?? '#'.$i->product_id, (int) $i->qty,
+                        $r->statusLabel(), $r->pickOrder?->number ?? ($r->purchaseOrder?->number ?? ''),
+                        $r->assignee?->displayName() ?? '', $r->approver?->displayName() ?? '', (string) $r->note,
+                    ];
+                }
+            }
+
+            return \App\Support\Csv::download('goods-requests-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('ops.request'), __('common.date'), __('client.branch'), __('ops.requester'), __('ui.l_type'),
+                __('common.code'), __('stock.item'), __('common.qty'), __('common.status'), __('stock.pick_order'),
+                __('ops.rep'), __('uic.x_approver'), __('common.notes'),
+            ], $rows, [__('common.total'), '', '', '', '', '', '', $qty],
+                \App\Support\Csv::meta(__('ops.replenishments'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
+        // (٢٢/٩) إجمالي الكمية للفوتر — من الفلتر كله مش الصفحة
+        $sumQty = (int) \Illuminate\Support\Facades\DB::table('replenishment_items')
+            ->whereIn('replenishment_request_id', (clone $q)->reorder()->select('replenishment_requests.id'))->sum('qty');
+
         return view('erp.replenishments', [
+            'sumQty' => $sumQty,
             'requests' => $q->latest()->paginate(25)->withQueryString(),
             'range' => $range,
             // ⚠️ **كل رولز الشغل الميداني** (طلب المالك ١١/٨ مساءً):

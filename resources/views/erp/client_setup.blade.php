@@ -109,7 +109,7 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
         <div style="min-width:160px;flex:1">
             <label class="f">{{ __('client.division') }}</label>
             <select id="aaDiv" style="width:100%">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_division')]) }}</option>
                 @foreach (Divisions::options() as $k => $lbl)
                     <option value="{{ $k }}">{{ $lbl }}</option>
                 @endforeach
@@ -127,7 +127,7 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
         <div style="min-width:140px;flex:1">
             <label class="f">{{ __('client.price_list') }}</label>
             <select id="aaPl" style="width:100%">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_price_list')]) }}</option>
                 @foreach ($lists as $pl)
                     <option value="{{ $pl->id }}">{{ $pl->displayName() }}</option>
                 @endforeach
@@ -150,7 +150,7 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
     </div>
 
     <div class="tablewrap">
-        <table data-page="50">
+        <table data-page="50" data-noxl>
             <thead>
             <tr>
                 {{-- ⚠️ «علّم على الكل» بيعلّم على **المطابق للفلتر**

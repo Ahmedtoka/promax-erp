@@ -92,7 +92,7 @@
             <div>
                 <label class="f">{{ __('client.channel') }} <b class="req-star">*</b></label>
                 <select id="poChannel" required style="width:100%" onchange="poFilterChains()">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_channel')]) }}</option>
                     @foreach ($channels as $ch)
                         <option value="{{ $ch->id }}">{{ $ch->displayName() }}</option>
                     @endforeach
@@ -101,7 +101,7 @@
             <div>
                 <label class="f">{{ __('nav.chains') }}</label>
                 <select id="poChain" style="width:100%" onchange="poFilterBranches()">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('nav.chains')]) }}</option>
                 </select>
             </div>
             <div>
@@ -113,7 +113,7 @@
                        placeholder="🔍 {{ __('ops.po_search_client') }}"
                        style="width:100%;margin-bottom:5px" oninput="poFilterBranches()">
                 <select name="client_id" id="poBranch" required style="width:100%" onchange="poShowBalance()">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_branch')]) }}</option>
                 </select>
                 {{-- رصيد الفرع قدام مدير القناة من دلوقتي — قبل ما الحسابات ترفض --}}
                 <div id="poBalance" style="font-size:11px;font-weight:800;margin-top:5px"></div>
@@ -149,7 +149,7 @@
             <div>
                 <label class="f">{{ __('ops.rep') }} <b class="req-star">*</b></label>
                 <select name="assigned_to" required style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected(old('assigned_to', $edit?->assigned_to) == $r->id)>{{ $r->name }}</option>
                     @endforeach
@@ -196,7 +196,7 @@
 
         {{-- الهيدر ثابت + الصورة جوه خانة الصنف — نفس نمط تسليم العهدة --}}
         <div class="tablewrap" style="margin-top:12px;max-height:56vh;overflow-y:auto">
-            <table>
+            <table data-noxl>
                 <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>
@@ -262,7 +262,7 @@ function poFilterChains() {
     const sel = document.getElementById('poChain');
     const current = sel.value;
 
-    sel.innerHTML = '<option value="">—</option>'
+    sel.innerHTML = '<option value="">' + esc(@json(__('ui.all_of', ['x' => __('nav.chains')]))) + '</option>'
         + '<option value="solo">🧍 ' + esc(@json(__('ops.po_solo_client'))) + '</option>';
     CHAINS.filter(g => !ch || (g.channels || []).includes(ch)).forEach(g => {
         const opt = document.createElement('option');
@@ -285,7 +285,7 @@ function poFilterBranches() {
     const sel = document.getElementById('poBranch');
     const current = sel.value;
 
-    sel.innerHTML = '<option value="">—</option>';
+    sel.innerHTML = '<option value="">' + esc(@json(__('ui.choose', ['x' => __('ui.l_branch')]))) + '</option>';
     BRANCHES.filter(b => (!ch || b.channel === ch)
             && (chain === -1 ? !b.group : (!chain || b.group === chain))
             && (!s || String(b.name || '').toLowerCase().includes(s)))

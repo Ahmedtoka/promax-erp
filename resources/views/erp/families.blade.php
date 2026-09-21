@@ -46,11 +46,12 @@
     <form method="POST" action="{{ route('erp.families.save') }}">
         @csrf
         <div class="tablewrap fam-tbl">
-            <table>
+            {{-- جدول إدخال مش داتا — من غير زرار الإكسيل (٢٢/٩) --}}
+            <table data-noxl>
                 <tr>
                     <th>{{ __('stock.family') }} (AR)</th>
                     <th>{{ __('stock.family') }} (EN)</th>
-                    <th style="width:140px">{{ __('stock.shelf_life_months') }}</th>
+                    <th style="width:140px" data-nosum>{{ __('stock.shelf_life_months') }}</th>
                     <th style="width:110px">{{ __('stock.equals_years') }}</th>
                     <th class="num" style="width:90px">{{ __('stock.skus') }}</th>
                 </tr>
@@ -65,7 +66,7 @@
                         </td>
                         {{-- «= سنة ونص» — عرض بس عشان الرقم يتفهم بالعين --}}
                         <td class="s" data-fam-years style="color:var(--muted);font-size:11px">—</td>
-                        <td class="num">{{ $fmt($f->products_count) }}</td>
+                        <td class="num"><a href="{{ route('erp.stock', ['family' => $f->key]) }}">{{ $fmt($f->products_count) }}</a></td>
                     </tr>
                 @endforeach
                 {{-- صف الإضافة — عائلة جديدة بمفتاح ثابت من الاسم الإنجليزي --}}
@@ -94,20 +95,22 @@
     <form method="POST" action="{{ route('erp.families.assign') }}">
         @csrf
         <div class="searchbar" style="margin-bottom:10px">
-            <input type="search" id="fpFilter" placeholder="🔍 {{ __('field.search_product_ph') }}"
-                   oninput="fpApply()" style="flex:1;min-width:220px">
-            <select id="fpFam" onchange="fpApply()" style="min-width:160px">
-                <option value="">{{ __('stock.family') }}: {{ __('common.all') }}</option>
+            <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+                <input type="search" id="fpFilter" placeholder="🔍 {{ __('field.search_product_ph') }}"
+                       oninput="fpApply()"></label>
+            <label class="fl"><span>{{ __('ui.l_family') }}</span>
+            <select id="fpFam" onchange="fpApply()">
+                <option value="">{{ __('stock.all_families') }}</option>
                 @foreach ($families as $f)
                     <option value="{{ $f->key }}">{{ $f->displayName() }}</option>
                 @endforeach
-            </select>
+            </select></label>
             <span class="s" style="color:var(--muted)"><b id="fpCount">{{ $products->count() }}</b> {{ __('stock.rows_visible') }}</span>
             <button class="btn gold" type="submit">💾 {{ __('stock.save_assignment') }}</button>
         </div>
 
         <div class="tablewrap fam-tbl" style="max-height:62vh;overflow-y:auto">
-            <table>
+            <table data-noxl>
                 <thead>
                     <tr>
                         <th style="text-align:start">{{ __('stock.item') }}</th>
@@ -129,7 +132,8 @@
                                         <div style="width:88px;height:88px;border-radius:8px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                     @endif
                                     <div>
-                                        <b style="font-size:12.5px">{{ $p->displayName() }}</b>
+                                        {{-- تاب جديد عشان اللي لسه متسيّفش في الفورم مايضيعش --}}
+                                        <a href="{{ route('erp.products.show', $p) }}" target="_blank" rel="noopener"><b style="font-size:12.5px">{{ $p->displayName() }}</b></a>
                                         <div style="font-size:10px;color:var(--muted)">{{ $p->code }}</div>
                                     </div>
                                 </div>

@@ -16,18 +16,22 @@
     <div class="alert good" style="margin-bottom:12px">{{ session('ok') }}</div>
 @endif
 
+{{-- الكارت رصيد كل المشحون (مش فترة) = مجموع عمود «الباقي» من غير فلاتر — فبيرجّع الجدول للكل (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi"><b class="num neg">{{ $money($outstanding) }}</b><span>{{ __('online.k_outstanding') }}</span></div>
+    <a class="kpi {{ ! request()->filled('search') && $range->isOpen() ? 'on' : '' }}" href="{{ route('online.collections') }}"><b class="num neg">{{ $money($outstanding) }}</b><span>{{ __('online.k_outstanding') }}</span></a>
 </div>
 
 <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <h3 style="margin:0">💰 {{ __('online.collections_title') }}</h3>
         <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
-            <input name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}">
+            <label class="fl"><span>{{ __('ui.l_search') }}</span>
+                <input name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}"></label>
             {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ الشحن --}}
-            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+            @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+            <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+            {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+            <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         </form>
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.collections_hint') }}</div>
@@ -46,12 +50,13 @@
                 <th class="num">{{ __('common.total') }}</th>
                 <th class="num">{{ __('online.collected') }}</th>
                 <th class="num">{{ __('online.remaining') }}</th>
-                <th>{{ __('online.shipped_at') }}</th>
+                <th data-nosum>{{ __('online.shipped_at') }}</th>
                 <th></th>
             </tr>
             @forelse ($orders as $o)
                 <tr>
-                    <td class="num s"><b>#{{ $o->number }}</b></td>
+                    {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
+                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td class="num s">
                         @if ($o->pickup)
                             <a href="{{ route('online.pickup', $o->pickup) }}"
@@ -82,6 +87,18 @@
                     {{ __('online.collections_empty') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($orders->total() > 0)
+                <tfoot><tr>
+                    <td colspan="5"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $orders->total()]) }})</span></td>
+                    <td class="num"><b>{{ $money($totals->goods) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->ship) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->total) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->collected) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->remaining) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 

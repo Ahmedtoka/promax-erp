@@ -37,8 +37,9 @@
     </h3>
 
     <div class="searchbar" style="margin-bottom:12px">
-        <form method="GET" style="display:flex;gap:8px;align-items:center">
-            <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()">
+        <form method="GET" style="display:flex;gap:8px;align-items:flex-end">
+            <label class="fl"><span>{{ __('ui.l_day') }}</span>
+                <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()"></label>
         </form>
         @if (! $close)
             <form method="POST" action="{{ route('erp.dayclose.store') }}" style="margin-inline-start:auto;display:flex;gap:8px;align-items:center"
@@ -53,15 +54,17 @@
 
     {{-- المقفول بيعرض السنابشوت المجمد — والمفتوح بيعرض اللايف --}}
     @php $s = $close ?? null; $v = fn ($key) => $s ? $s->{$key} : $g[$key]; @endphp
+    {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتفرد رقمه لنفس اليوم --}}
+    @php $dq = ['from' => $date->toDateString(), 'to' => $date->toDateString()]; @endphp
     <div class="kpis">
-        <div class="kpi"><div class="lbl">🧾 {{ __('incent.invoices_count') }}</div><div class="val">{{ $fmtI($v('invoices_count')) }}</div><div class="sub2">{{ $fmtI($v('clients_count')) }} {{ __('incent.clients_count') }}</div></div>
-        <div class="kpi"><div class="lbl">💵 {{ __('incent.sales_cash') }}</div><div class="val pos">{{ $fmt($v('sales_cash')) }}</div></div>
-        <div class="kpi"><div class="lbl">📒 {{ __('incent.sales_credit') }}</div><div class="val mid">{{ $fmt($v('sales_credit')) }}</div></div>
-        <div class="kpi"><div class="lbl">📈 {{ __('incent.sales_net') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($v('sales_net')) }}</div></div>
-        <div class="kpi"><div class="lbl">↩️ {{ __('incent.returns_total') }}</div><div class="val neg">{{ $fmt($v('returns_total')) }}</div></div>
-        <div class="kpi"><div class="lbl">💰 {{ __('incent.collections_total') }}</div><div class="val pos">{{ $fmt($v('collections_total')) }}</div></div>
-        <div class="kpi"><div class="lbl">🚚 {{ __('incent.pos_delivered') }}</div><div class="val">{{ $fmtI($v('pos_delivered_count')) }}</div><div class="sub2">{{ $fmt($v('pos_delivered_value')) }} {{ __('common.currency') }}</div></div>
-        <div class="kpi"><div class="lbl">🤝 {{ __('incent.settlements') }}</div><div class="val">{{ $fmtI($v('settlements_count')) }}</div><div class="sub2">{{ __('incent.received_total') }}: {{ $fmt($v('settlements_received')) }} · {{ __('incent.carried_total') }}: {{ $fmt($v('settlements_balance')) }}</div></div>
+        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">🧾 {{ __('incent.invoices_count') }}</div><div class="val">{{ $fmtI($v('invoices_count')) }}</div><div class="sub2">{{ $fmtI($v('clients_count')) }} {{ __('incent.clients_count') }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'cash']) }}"><div class="lbl">💵 {{ __('incent.sales_cash') }}</div><div class="val pos">{{ $fmt($v('sales_cash')) }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'credit']) }}"><div class="lbl">📒 {{ __('incent.sales_credit') }}</div><div class="val mid">{{ $fmt($v('sales_credit')) }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">📈 {{ __('incent.sales_net') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($v('sales_net')) }}</div></a>
+        <a class="kpi" href="{{ route('ops.returns', $dq) }}"><div class="lbl">↩️ {{ __('incent.returns_total') }}</div><div class="val neg">{{ $fmt($v('returns_total')) }}</div></a>
+        <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'collections'] + $dq) }}"><div class="lbl">💰 {{ __('incent.collections_total') }}</div><div class="val pos">{{ $fmt($v('collections_total')) }}</div></a>
+        <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'pos_status', 'status' => 'delivered'] + $dq) }}"><div class="lbl">🚚 {{ __('incent.pos_delivered') }}</div><div class="val">{{ $fmtI($v('pos_delivered_count')) }}</div><div class="sub2">{{ $fmt($v('pos_delivered_value')) }} {{ __('common.currency') }}</div></a>
+        <a class="kpi" href="{{ route('erp.repclose', $dq) }}"><div class="lbl">🤝 {{ __('incent.settlements') }}</div><div class="val">{{ $fmtI($v('settlements_count')) }}</div><div class="sub2">{{ __('incent.received_total') }}: {{ $fmt($v('settlements_received')) }} · {{ __('incent.carried_total') }}: {{ $fmt($v('settlements_balance')) }}</div></a>
     </div>
 
     @if ($close)
@@ -78,6 +81,7 @@
     <h3>🗂️ {{ __('incent.history') }}</h3>
     <div class="tablewrap dc-tbl">
         <table>
+            <thead>
             <tr>
                 <th>{{ __('common.date') }}</th>
                 <th>{{ __('incent.invoices_count') }}</th>
@@ -88,8 +92,10 @@
                 <th>{{ __('incent.collections_total') }}</th>
                 <th>{{ __('incent.pos_delivered') }}</th>
                 <th>{{ __('incent.received_total') }}</th>
-                <th>{{ __('incent.closed_by') }}</th>
+                <th data-nosum>{{ __('incent.closed_by') }}</th>
             </tr>
+            </thead>
+            <tbody>
             @forelse ($history as $h)
                 <tr>
                     <td class="num"><a href="{{ route('erp.dayclose', ['date' => $h->date->toDateString()]) }}"><b>{{ $h->date->format('Y-m-d') }}</b></a></td>
@@ -106,6 +112,7 @@
             @empty
                 <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">{{ __('incent.no_closes') }}</td></tr>
             @endforelse
+            </tbody>
         </table>
     </div>
 </div>

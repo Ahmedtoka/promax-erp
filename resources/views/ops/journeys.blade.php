@@ -63,8 +63,11 @@
         {{-- محافظة ← منطقة، بالأعداد (طلب المالك ٢٨/٨) — المنطقة
              بتتفلتر بالمحافظة المختارة، والأعداد بتتحدث مع بعض --}}
         <div class="jb-geo">
-            <select id="jbGov" onchange="setGov(this.value)"></select>
-            <select id="jbZone" onchange="setZone(this.value)"></select>
+            {{-- (٢٢/٩) عنوان فوق كل قايمة — الاختيار الأول «كل …» بيتبني في renderGeo() --}}
+            <label class="fl"><span>{{ __('ui.l_gov') }}</span>
+                <select id="jbGov" onchange="setGov(this.value)"></select></label>
+            <label class="fl"><span>{{ __('ui.l_zone') }}</span>
+                <select id="jbZone" onchange="setZone(this.value)"></select></label>
         </div>
 
         <div class="jb-filters" id="jbFilters"></div>
@@ -83,13 +86,15 @@
             <div class="jb-toprow">
                 <form method="GET" action="{{ route('ops.journeys') }}" style="display:inline-flex">
                     <input type="hidden" name="week" value="{{ $weekStart->toDateString() }}">
+                    {{-- البورد دايماً على مندوب واحد — فمفيش اختيار «الكل»، العنوان بس --}}
+                    <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
                     <select name="rep" onchange="this.form.submit()">
                         @foreach ($reps as $r)
                             <option value="{{ $r->id }}" @selected($rep->id === $r->id)>
                                 {{ $r->displayName() }} — {{ $r->roleLabel() }}{{ $r->zone ? ' · '.$r->zone->displayName() : '' }}
                             </option>
                         @endforeach
-                    </select>
+                    </select></label>
                 </form>
 
                 <span class="jb-weeknav">
@@ -156,7 +161,9 @@
         <input type="hidden" name="user_id" value="{{ $rep->id }}">
         <h4>{{ __('journey.copy_title') }}</h4>
         <div class="s" style="margin-bottom:10px">{{ __('journey.copy_hint') }}</div>
+        <label class="f">{{ __('ui.l_rep') }}</label>
         <select name="from_id" style="width:100%" required>
+            <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
             @foreach ($reps as $r)
                 @continue($r->id === $rep->id)
                 <option value="{{ $r->id }}">{{ $r->displayName() }} — {{ $r->roleLabel() }}</option>
@@ -772,6 +779,7 @@
   border-radius:12px;padding:5px}
 /* محافظة ← منطقة (٢٨/٨) */
 .jb-geo{display:flex;gap:6px;margin:6px 0}
+.jb-geo .fl{flex:1;min-width:0}
 .jb-geo select{flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);
     border-radius:9px;font-size:11.5px;background:#fff}
 /* سكشنات فصل البول (٢٨/٨): السلاسل فوق والكاش فان تحت */

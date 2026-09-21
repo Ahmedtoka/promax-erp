@@ -48,26 +48,27 @@
     </h3>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         @include('partials._avatar', ['u' => $rep, 'size' => 44])
+        {{-- (٢٢/٩) التارجت والمتبقي والنسبة مفرودين بالعميل تحت، والمحقق في «المبيعات بالعميل» للمندوب والسنة --}}
         <div class="kpis" style="flex:1;margin:0">
-            <div class="kpi">
+            <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_target') }}</div>
                 <div class="val num">{{ $fmt($annual) }}</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'sales_by_client', 'user_id' => $rep->id, 'from' => $year.'-01-01', 'to' => $year.'-12-31']) }}">
                 <div class="lbl">{{ __('targets.kpi_achieved') }}</div>
                 <div class="val num pos">{{ $fmt($repAchieved) }}</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_remaining') }}</div>
                 <div class="val num {{ $repRemaining > 0 ? 'mid' : 'pos' }}">{{ $fmt(max($repRemaining, 0)) }}</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_pct') }}</div>
                 <div class="val num">{{ $repPct }}%</div>
                 <div style="background:var(--card2);border:1px solid var(--border);border-radius:6px;height:9px;overflow:hidden;margin-top:6px">
                     <div style="height:100%;width:{{ $repPct > 0 ? max(min($repPct, 100), 2) : 0 }}%;min-width:{{ $repPct > 0 ? 2 : 0 }}px;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 </div>
@@ -78,7 +79,7 @@
     </div>
 @else
     {{-- ═══ توزيع العملاء ═══ --}}
-    <div class="card" style="margin-top:12px">
+    <div class="card" style="margin-top:12px" id="tg-clients">
         <h3>🏪 {{ __('targets.clients_split') }}
             <span class="side">{{ __('targets.managers_hint') }}</span></h3>
 
@@ -111,7 +112,7 @@
                         @endphp
                         <tr data-name="{{ $needle }}">
                             <td style="text-align:start">
-                                <b>{{ $c->fullName() }}</b>
+                                <a href="{{ route('erp.clients.show', $c->id) }}"><b>{{ $c->fullName() }}</b></a>
                                 @if ($c->group_id !== null)
                                     <span class="badge b-purple" style="margin-inline-start:6px">🏬 {{ __('targets.chain') }}</span>
                                 @endif

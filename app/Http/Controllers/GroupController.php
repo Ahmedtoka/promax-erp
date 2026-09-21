@@ -140,7 +140,25 @@ class GroupController extends Controller
         // الأصناف) اللي بتقرا `from`/`to` أصلاً على عمود `transactions.date`.
         $range = DateRange::fromRequest($request);
 
+        // ═══ قيود السلسلة على الشاشة (٢٢/٩/٢٠٢٦) ═══
+        // نفس فلاتر كشف العميل (نوع القيد · الريفرنس · الفترة) على قيود كل
+        // الفروع اللي الفاعل شايفها. الصفوف آخر ٥٠٠، والإجمالي من نفس الكويري
+        // على **كل** النتيجة — فالفوتر مايكدبش لو القيود أكتر من المعروض.
+        $kind = $request->string('kind')->value();
+        $kind = array_key_exists($kind, Transaction::KINDS) ? $kind : '';
+        $ref = $request->string('ref')->trim()->value();
+        $stmt = fn () => Transaction::whereIn('client_id', $ids)
+            ->tap(fn ($q) => $range->apply($q, 'date'))
+            ->when($kind !== '', fn ($q) => $q->where('kind', $kind))
+            ->when($ref !== '', fn ($q) => $q->where('reference', 'like', '%'.$ref.'%'));
+        $stmtTotals = $stmt()->selectRaw('COUNT(*) AS n, COALESCE(SUM(debit), 0) AS d, COALESCE(SUM(credit), 0) AS c')->first();
+
         return view('erp.group', [
+            'kind' => $kind,
+            'ref' => $ref,
+            'kinds' => array_keys(Transaction::KINDS),
+            'txns' => $stmt()->with('client')->orderByDesc('date')->orderByDesc('id')->limit(500)->get(),
+            'txnTotals' => ['n' => (int) $stmtTotals->n, 'debit' => (float) $stmtTotals->d, 'credit' => (float) $stmtTotals->c],
             'range' => $range,
             // ⚠️ `contract` في الـload — كارت عقد السلسلة بيقراه،
             // ومن غيره كويري زيادة على كل تحميل للصفحة
@@ -169,6 +187,27 @@ class GroupController extends Controller
         $branches = $this->branchesOf($group, $request);
         $rows = [];
 
+        // ⚠️ **مع الفترة الأرقام بتبقى أرقام الفترة فعلاً** (٢٢/٩). الملف كان بيكتب
+        // الفترة في اسمه وينزّل الأعمدة المجمّعة من أول يوم. نفس تعريف قايمة
+        // العملاء بالحرف: sale.debit · collection.credit · return.credit على
+        // `transactions.date`. الرصيد بيفضل الحالي — رصيد «فترة» مالوش معنى.
+        $range = DateRange::fromRequest($request);
+
+        if (! $range->isOpen()) {
+            $agg = $range->apply(Transaction::whereIn('client_id', $branches->pluck('id')), 'date')
+                ->selectRaw("client_id,
+                    SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) AS p,
+                    SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) AS c,
+                    SUM(CASE WHEN kind = 'return' THEN credit ELSE 0 END) AS r")
+                ->groupBy('client_id')->get()->keyBy('client_id');
+
+            foreach ($branches as $b) {
+                $b->purchases = (float) ($agg->get($b->id)->p ?? 0);
+                $b->collections = (float) ($agg->get($b->id)->c ?? 0);
+                $b->returns = (float) ($agg->get($b->id)->r ?? 0);
+            }
+        }
+
         foreach ($branches as $b) {
             $rows[] = [
                 $group->displayName().' — '.$b->displayName(), $b->code,
@@ -179,7 +218,6 @@ class GroupController extends Controller
         }
 
         // اسم الملف فيه الفترة — الرقم اللي جواه رقم الفترة مش المجمّع
-        $range = DateRange::fromRequest($request);
         $tag = $range->isOpen() ? 'all' : ($range->fromValue() ?: 'start').'_'.($range->toValue() ?: 'today');
 
         return Csv::download('chain-'.$group->code.'-branches-'.$tag.'-'.now()->format('Y-m-d-Hi').'.csv', [
@@ -190,7 +228,8 @@ class GroupController extends Controller
             __('common.total'), '', '', '', '',
             Csv::money($branches->sum('purchases')), Csv::money($branches->sum('collections')),
             Csv::money($branches->sum('returns')), Csv::money($branches->sum('balance')), '',
-        ]);
+        // سطور التعريف فوق الملف: العنوان والفترة ووقت السحب (٢٢/٩) — زي باقي التصديرات
+        ], Csv::meta(__('client.export_branches').' — '.$group->displayName(), $range->fromValue() ?: null, $range->toValue() ?: null));
     }
 
     /**

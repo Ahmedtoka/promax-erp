@@ -118,7 +118,7 @@
         {{-- ⚠️ الهيدر ثابت (sticky) — القايمة بتطول والمستخدم لازم
              يفضل شايف أسماء الأعمدة وهو نازل (قرار المالك 2026-08-04) --}}
         <div class="tablewrap" style="margin-top:12px;max-height:56vh;overflow-y:auto">
-            <table>
+            <table data-noxl>
                 <thead>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
@@ -177,8 +177,8 @@
             </tr>
             @foreach ($preparing as $o)
                 <tr>
-                    <td class="num"><b>{{ $o->number }}</b></td>
-                    <td>{{ $o->rep?->displayName() ?? '—' }}</td>
+                    <td class="num"><a href="{{ route('wh.picks.show', $o) }}"><b>{{ $o->number }}</b></a></td>
+                    <td>@if ($o->rep)<a href="{{ route('ops.rep', $o->rep) }}">{{ $o->rep->displayName() }}</a>@else — @endif</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
                     <td class="num" style="font-size:11.5px">{{ $o->created_at?->format('Y-m-d h:i A') }}</td>
                     <td class="num">{{ $fmt($o->items->sum('qty_requested')) }}</td>
@@ -212,8 +212,8 @@
             </tr>
             @foreach ($open as $o)
                 <tr>
-                    <td class="num"><b>{{ $o->number }}</b></td>
-                    <td>{{ $o->rep?->displayName() ?? '—' }}</td>
+                    <td class="num"><a href="{{ route('wh.picks.show', $o) }}"><b>{{ $o->number }}</b></a></td>
+                    <td>@if ($o->rep)<a href="{{ route('ops.rep', $o->rep) }}">{{ $o->rep->displayName() }}</a>@else — @endif</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
                     <td class="num" style="font-size:11.5px">{{ ($o->issued_at ?? $o->ready_at)?->format('Y-m-d h:i A') ?? '—' }}</td>
                     <td class="num">{{ $fmt($o->items->sum('qty_picked')) }}</td>
@@ -236,12 +236,11 @@
     <h3>📦 {{ __('field.handout_history') }}
         <span class="side">{{ __('field.handout_history_hint') }}</span></h3>
     {{-- فلتر «من — إلى» على لحظة الاستلام `handed_at` (٩/٩/٢٠٢٦) — المخزن المختار بيتحافظ عليه --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+    <form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
         @if ($warehouse)
             <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
         @endif
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
     </form>
     @if ($done->isEmpty())
         <div class="alert"><span>ℹ️</span><span>{{ __('common.no_results') }}</span></div>
@@ -252,7 +251,7 @@
                 <th>{{ __('stock.pick_order') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th>{{ __('stock.warehouse') }}</th>
-                <th>{{ __('field.handed_at') }}</th>
+                <th data-nosum>{{ __('field.handed_at') }}</th>
                 <th class="num">{{ __('common.total') }}</th>
                 <th class="num">🎁</th>
                 <th class="num">{{ __('field.handout_value') }}</th>
@@ -266,8 +265,8 @@
                         * (float) ($i->product?->priceFor($mode) ?? 0));
                 @endphp
                 <tr>
-                    <td class="num"><b>{{ $o->number }}</b></td>
-                    <td>{{ $o->rep?->displayName() ?? '—' }}</td>
+                    <td class="num"><a href="{{ route('wh.picks.show', $o) }}"><b>{{ $o->number }}</b></a></td>
+                    <td>@if ($o->rep)<a href="{{ route('ops.rep', $o->rep) }}">{{ $o->rep->displayName() }}</a>@else — @endif</td>
                     <td style="font-size:11.5px">{{ $o->warehouse?->displayName() ?? '—' }}</td>
                     <td class="num" style="font-size:11.5px">{{ $o->handed_at?->format('Y-m-d h:i A') ?? '—' }}</td>
                     <td class="num">{{ $fmt($o->items->sum(fn ($i) => (int) ($i->qty_received ?? $i->qty_picked))) }}</td>

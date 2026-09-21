@@ -56,7 +56,7 @@
             <div>
                 <label class="f">{{ __('ops.rep') }} <b class="req-star">*</b></label>
                 <select name="assigned_to" required style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected(old('assigned_to') == $r->id)>{{ $r->name }}</option>
                     @endforeach

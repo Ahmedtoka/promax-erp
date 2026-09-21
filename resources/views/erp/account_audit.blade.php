@@ -25,23 +25,24 @@
     $saveUrl = route('erp.audit.save', $isChains ? 'chains' : 'clients');
 
     // مربع سامري: رقم فوق + عنوان + **وصف بيقول السؤال اللي بيجاوبه**
-    $box = function (string $title, $val, string $hint, string $cls = '') use ($fmt0) {
-        return ['t' => $title, 'v' => $fmt0($val), 'h' => $hint, 'c' => $cls];
+    // كل مربع بيفلتر الجدول تحت بحالته (٢٢/٩) — `$key` هو قيمة `show`
+    $box = function (string $title, $val, string $hint, string $cls = '', string $key = 'all') use ($fmt0) {
+        return ['t' => $title, 'v' => $fmt0($val), 'h' => $hint, 'c' => $cls, 'k' => $key];
     };
 
     $boxes = [
-        $box($isChains ? __('audit.k_chains') : __('audit.k_clients'), $summary['total'], __('audit.k_total_hint'), 'mid'),
-        $box('⏳ '.__('audit.k_pending'), $summary['pending'], __('audit.k_pending_hint'), $summary['pending'] > 0 ? 'neg' : ''),
-        $box('✅ '.__('audit.k_has_account'), $summary['has_account'], __('audit.k_has_account_hint'), 'pos'),
-        $box('❌ '.__('audit.k_no_account'), $summary['no_account'], __('audit.k_no_account_hint'), ''),
-        $box('📄 '.__('audit.k_has_statement'), $summary['has_statement'], __('audit.k_has_statement_hint'), 'pos'),
-        $box('🚫 '.__('audit.k_no_statement'), $summary['no_statement'], __('audit.k_no_statement_hint'), 'neg'),
-        $box('🧾 '.__('audit.k_has_receipt'), $summary['has_receipt'], __('audit.k_has_receipt_hint'), 'pos'),
-        $box('📭 '.__('audit.k_no_receipt'), $summary['no_receipt'], __('audit.k_no_receipt_hint'), 'neg'),
-        $box('🏆 '.__('audit.k_full'), $summary['full'], __('audit.k_full_hint'), 'pos'),
-        $box('💠 '.__('audit.k_billed'), $summary['billed'], __('audit.k_billed_hint'), 'pos'),
-        $box('⭕ '.__('audit.k_unbilled'), $summary['unbilled'], __('audit.k_unbilled_hint'), 'neg'),
-        $box('🎯 '.__('audit.k_ready'), $summary['ready_to_bill'], __('audit.k_ready_hint'), 'mid'),
+        $box($isChains ? __('audit.k_chains') : __('audit.k_clients'), $summary['total'], __('audit.k_total_hint'), 'mid', 'all'),
+        $box('⏳ '.__('audit.k_pending'), $summary['pending'], __('audit.k_pending_hint'), $summary['pending'] > 0 ? 'neg' : '', 'pending'),
+        $box('✅ '.__('audit.k_has_account'), $summary['has_account'], __('audit.k_has_account_hint'), 'pos', 'has_account'),
+        $box('❌ '.__('audit.k_no_account'), $summary['no_account'], __('audit.k_no_account_hint'), '', 'no_account'),
+        $box('📄 '.__('audit.k_has_statement'), $summary['has_statement'], __('audit.k_has_statement_hint'), 'pos', 'has_statement'),
+        $box('🚫 '.__('audit.k_no_statement'), $summary['no_statement'], __('audit.k_no_statement_hint'), 'neg', 'no_statement'),
+        $box('🧾 '.__('audit.k_has_receipt'), $summary['has_receipt'], __('audit.k_has_receipt_hint'), 'pos', 'has_receipt'),
+        $box('📭 '.__('audit.k_no_receipt'), $summary['no_receipt'], __('audit.k_no_receipt_hint'), 'neg', 'no_receipt'),
+        $box('🏆 '.__('audit.k_full'), $summary['full'], __('audit.k_full_hint'), 'pos', 'full'),
+        $box('💠 '.__('audit.k_billed'), $summary['billed'], __('audit.k_billed_hint'), 'pos', 'billed'),
+        $box('⭕ '.__('audit.k_unbilled'), $summary['unbilled'], __('audit.k_unbilled_hint'), 'neg', 'unbilled'),
+        $box('🎯 '.__('audit.k_ready'), $summary['ready_to_bill'], __('audit.k_ready_hint'), 'mid', 'ready_to_bill'),
     ];
 @endphp
 
@@ -59,23 +60,24 @@
      السؤال اللي بيجاوب عليه ═══ --}}
 <div class="kpis">
     @foreach ($boxes as $b)
-        <div class="kpi">
+        <a @class(['kpi', 'on' => $show === $b['k']])
+           href="{{ route($isChains ? 'erp.audit.chains' : 'erp.audit.clients', array_filter(['show' => $b['k'], 'q' => $q] + $range->query())) }}#auditForm">
             <div class="lbl">{{ $b['t'] }}</div>
             <div class="val {{ $b['c'] }}">{{ $b['v'] }}</div>
             <div class="sub2">{{ $b['h'] }}</div>
-        </div>
+        </a>
     @endforeach
 </div>
 
 {{-- ═══ الفلاتر ═══ --}}
 <form class="searchbar" method="GET" style="margin-bottom:10px;align-items:flex-end">
-    <input type="text" name="q" value="{{ $q }}" style="flex:1;min-width:200px"
-           placeholder="🔍 {{ __('audit.search_ph') }}">
+    <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+        <input type="text" name="q" value="{{ $q }}" placeholder="🔍 {{ __('audit.search_ph') }}"></label>
     <input type="hidden" name="show" value="{{ $show }}">
     {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ المراجعة اللي تحت الاسم --}}
-    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
     <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+    <a class="btn" href="{{ route($isChains ? 'erp.audit.chains' : 'erp.audit.clients') }}">{{ __('common.clear') }}</a>
 </form>
 
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
@@ -142,7 +144,7 @@
                     </td>
 
                     <td>
-                        <b>{{ $r['title'] }}</b>
+                        <a href="{{ route($isChains ? 'erp.groups.show' : 'erp.clients.show', $r['id']) }}"><b>{{ $r['title'] }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $r['sub'] }}</span>
                         @if ($a?->reviewed_at)
                             <br><span style="font-size:9.5px;color:var(--muted)">

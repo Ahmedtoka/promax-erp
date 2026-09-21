@@ -27,7 +27,7 @@
     <div class="card">
         <h3>🎯 {{ __('kpi.channels_title') }} <span class="side">{{ __('kpi.channels_sub') }}</span></h3>
         <div class="tablewrap">
-            <table>
+            <table data-noxl>
                 <thead><tr>
                     <th style="text-align:start">{{ __('kpi.c_channel') }}</th>
                     <th>{{ __('kpi.ch_manager') }}</th>
@@ -46,7 +46,7 @@
                             <input type="hidden" name="channels[{{ $i }}][id]" value="{{ $ch->id }}"></td>
                         <td>
                             <select name="channels[{{ $i }}][manager_id]">
-                                <option value="">—</option>
+                                <option value="">{{ __('ui.choose', ['x' => __('ui.l_manager')]) }}</option>
                                 @foreach ($managers as $m)
                                     <option value="{{ $m->id }}" @selected($ch->manager_id === $m->id)>{{ $m->displayName() }}</option>
                                 @endforeach
@@ -96,7 +96,7 @@
                 <input type="number" step="1" min="0" max="100" dir="ltr" class="pctIn" style="width:90px"
                        data-name="policy[gate]" value="{{ $p100($policy['gate']) }}"></div>
             <div><label class="f">{{ __('kpi.p_require_gate') }}</label>
-                <select name="policy[require_gate]" style="width:120px">
+                <select name="policy[require_gate]">
                     <option value="1" @selected($policy['require_gate'])>{{ __('common.yes') }}</option>
                     <option value="0" @selected(! $policy['require_gate'])>{{ __('common.no') }}</option>
                 </select></div>
@@ -153,7 +153,7 @@
                 <span class="side">{{ __('kpi.weights_sum') }}:
                     <span class="badge b-green" id="wsum_{{ $scope }}">100</span> / 100</span></h3>
             <div class="tablewrap">
-                <table>
+                <table data-noxl>
                     <thead><tr>
                         <th style="text-align:start">{{ __('kpi.c_metric') }}</th>
                         <th class="num">{{ __('kpi.c_weight') }}</th>
@@ -176,7 +176,7 @@
                                 class="wIn" data-scope="{{ $scope }}"
                                 name="metrics[{{ $mi }}][weight]" value="{{ 0 + $m->weight }}"></td>
                             <td>
-                                <select name="metrics[{{ $mi }}][direction]" style="width:120px">
+                                <select name="metrics[{{ $mi }}][direction]">
                                     <option value="higher" @selected($m->direction === 'higher')>{{ __('kpi.dir_higher') }}</option>
                                     <option value="lower" @selected($m->direction === 'lower')>{{ __('kpi.dir_lower') }}</option>
                                 </select>

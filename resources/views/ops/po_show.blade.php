@@ -102,13 +102,13 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.pos', ['q' => $po->number]) }}'">
         <div class="lbl">{{ __('ops.order') }}</div>
         <div class="val">{{ $po->number }}</div>
         <div class="sub2">{{ $po->created_at->format('Y-m-d h:i A') }}
             @if ($po->source) · {{ $po->sourceLabel() }}@endif</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.pos', ['status' => $po->status]) }}'">
         <div class="lbl">{{ __('common.status') }}</div>
         <div class="val" style="font-size:17px"><span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span></div>
         <div class="sub2">
@@ -118,7 +118,7 @@
             @if ($po->isLate())<span class="badge b-red" style="font-size:10px">⏰ {{ __('ops.po_late') }}</span>@endif
         </div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="@if ($po->client)location.href='{{ route('erp.clients.show', $po->client) }}'@endif">
         <div class="lbl">{{ __('ops.branch_client') }}</div>
         <div class="val" style="font-size:16px">
             @if ($po->client && \App\Support\Access::allows(auth()->user(), 'erp.clients.show'))<a href="{{ route('erp.clients.show', $po->client) }}" style="color:inherit">{{ $po->client->fullName() }}</a>@else{{ $po->client?->fullName() ?? '—' }}@endif
@@ -128,17 +128,17 @@
             {{ $po->address ?: $po->client?->address }}
         </div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="@if ($po->courier)location.href='{{ route('ops.rep', $po->courier) }}'@endif">
         <div class="lbl">{{ __('ops.rep') }}</div>
         <div class="val" style="font-size:16px">{{ $po->courier?->displayName() ?? '—' }}</div>
         <div class="sub2">{{ $po->warehouse ? __('stock.warehouse').': '.$po->warehouse->displayName() : '—' }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.pos', array_filter(['rep' => $po->assigned_to, 'status' => 'pending'])) }}'">
         <div class="lbl">{{ __('ops.due_at') }}</div>
         <div class="val" style="font-size:15px">{{ $po->due_at?->format('m-d h:i A') ?? $po->due_date?->format('Y-m-d') ?? '—' }}</div>
         <div class="sub2">@if ($po->pickup_at){{ __('ops.pickup_at') }}: {{ $po->pickup_at->format('m-d h:i A') }}@endif</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="document.getElementById('poItems').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('ops.units') }}</div>
         <div class="val">{{ $fmt0($po->qtyTotal()) }}</div>
         {{-- بعد التسليم: المسلَّم فعلاً والفرق --}}
@@ -146,7 +146,7 @@
             <div class="sub2" style="color:#B86E00;font-weight:800">{{ __('ops.po_delivered_qty') }} {{ $fmt0($po->deliveredQtyTotal()) }} · {{ __('ops.po_variance') }} {{ $fmt0($po->qtyTotal() - $po->deliveredQtyTotal()) }}</div>
         @endif
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="document.getElementById('poItems').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('doc.total_with_tax') }}</div>
         <div class="val pos">{{ $fmt0($po->grand_total) }}</div>
         <div class="sub2">{{ __('doc.net_before_tax') }}: {{ $fmt0($po->total) }} · {{ __('tax.tax') }}: {{ $fmt0($po->tax_total) }}</div>
@@ -161,7 +161,7 @@
 
 <div class="grid2">
     {{-- ═══ البنود — الأرقام المخزّنة على السطور، مفيش إعادة حساب ═══ --}}
-    <div class="card">
+    <div class="card" id="poItems">
         <h3>🧺 {{ __('ops.items') }} <span class="side">{{ $po->items->count() }}</span></h3>
         <div class="tablewrap">
             <table>
@@ -178,7 +178,9 @@
                 @foreach ($po->items as $item)
                     <tr>
                         <td>
-                            <b>{{ $item->product?->displayName() ?? '#'.$item->product_id }}</b>
+                            @if ($item->product)
+                                <a href="{{ route('erp.products.show', $item->product) }}"><b>{{ $item->product->displayName() }}</b></a>
+                            @else <b>#{{ $item->product_id }}</b> @endif
                             @if ($item->product)
                                 <br><span style="font-size:10.5px;color:var(--muted)">{{ $item->product->code }}
                                     @if ($bd = $item->product->packBreakdown((int) $item->qty)) · {{ $bd }} @endif

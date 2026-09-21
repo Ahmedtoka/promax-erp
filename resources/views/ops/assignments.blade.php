@@ -128,7 +128,7 @@
                            style="flex:1;min-width:220px" oninput="asgRenderClients()">
                 </div>
                 <div class="tablewrap" style="max-height:52vh;overflow-y:auto">
-                    <table>
+                    <table data-noxl>
                         <thead>
                             <tr>
                                 <th style="width:34px"></th>

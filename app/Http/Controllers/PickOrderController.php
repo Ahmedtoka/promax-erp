@@ -53,7 +53,34 @@ class PickOrderController extends Controller
         $range = DateRange::fromRequest($request);
         $range->apply($q, 'pickup_at');
 
+        // ═══ التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩) ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'pick-orders.csv',
+                [__('stock.pick_order'), __('common.date'), __('stock.warehouse'), __('ops.rep'), __('stock.pick_purpose'),
+                    __('stock.pickup_at'), __('stock.qty_requested'), __('stock.qty_picked'), __('stock.qty_received_col'), __('common.status')],
+                $all->map(fn ($o) => [
+                    $o->number, $o->created_at?->format('Y-m-d') ?? '', $o->warehouse?->displayName() ?? '', $o->rep?->displayName() ?? '',
+                    $o->purchase_order_id
+                        ? __('stock.pick_purpose_customer_po').' '.($o->purchaseOrder?->number ?? '')
+                        : __('stock.pick_purpose_van_load'),
+                    $o->pickup_at?->format('Y-m-d H:i') ?? '',
+                    $o->qtyRequested(), $o->qtyPicked(), $o->qtyReceived(), $o->statusLabel(),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', '', $all->sum(fn ($o) => $o->qtyRequested()),
+                    $all->sum(fn ($o) => $o->qtyPicked()), $all->sum(fn ($o) => $o->qtyReceived()), ''],
+                \App\Support\Csv::meta(__('stock.pick_orders'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        $totals = \App\Models\PickOrderItem::whereIn('pick_order_id', (clone $q)->select('pick_orders.id'))
+            ->selectRaw('COALESCE(SUM(qty_requested),0) as requested, COALESCE(SUM(qty_picked),0) as picked, COALESCE(SUM(qty_received),0) as received')
+            ->toBase()->first();
+
         return view('wh.picks', [
+            'totals' => $totals,
             'orders' => $q->latest()->paginate(25)->withQueryString(),
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->get(),
             'reps' => User::whereIn('role', User::FIELD_ROLES)->where('active', true)

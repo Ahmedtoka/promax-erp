@@ -42,6 +42,13 @@
 
 @section('actions')
     <a class="btn" href="{{ route('ops.invoices') }}">← {{ __('ops.all_invoices') }}</a>
+    {{-- (٢٢/٩) المستند ورقة رسمية فمفيش لينكات جواه — العميل والمندوب بيتفتحوا من هنا --}}
+    @if ($inv->client)
+        <a class="btn" href="{{ route('erp.clients.show', $inv->client) }}">👤 {{ __('client.client_card') }}</a>
+    @endif
+    @if ($inv->user)
+        <a class="btn" href="{{ route('ops.rep', $inv->user) }}">🚚 {{ $inv->user->displayName() }}</a>
+    @endif
     @if (auth()->user()?->role === 'admin' && $reassignClients->isNotEmpty())
         {{-- المندوب نزّل الفاتورة على فرع غلط؟ — تحويل كامل بقيودها --}}
         <button class="btn" type="button" onclick="openDlg('dlgReassign')">🔁 {{ __('ops.reassign_invoice') }}</button>
@@ -310,7 +317,7 @@
         <div>
             <label class="f">{{ __('client.client') }}</label>
             <select name="client_id" required style="width:100%">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_client')]) }}</option>
                 @foreach ($reassignClients as $rc)
                     <option value="{{ $rc->id }}">{{ $rc->fullName() }} ({{ $rc->code }})</option>
                 @endforeach

@@ -59,14 +59,12 @@
     </h3>
 
     <form method="GET" action="{{ route('ops.rep_day', $rep) }}" class="searchbar">
-        <div>
-            <label class="f">{{ __('common.date') }}</label>
-            <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('journey.rep') }}</label>
+        <label class="fl"><span>{{ __('ui.l_day') }}</span>
+            <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()"></label>
+        <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
             {{-- التنقل بين أيام الفريق — القايمة فيها المدير الميداني كمان،
-                 ومصفّاة بالحارس فمفيش أوبشن بيفتح على 403 --}}
+                 ومصفّاة بالحارس فمفيش أوبشن بيفتح على 403.
+                 دي قايمة تنقّل مش فلتر: المندوب الحالي متعلّم دايماً فمفيش اختيار فاضي --}}
             <select onchange="if (this.value) location.href = this.value">
                 @foreach ($repOptions as $o)
                     <option value="{{ route('ops.rep_day', $o) }}?date={{ $date->toDateString() }}"
@@ -74,8 +72,7 @@
                         {{ $o->displayName() }} — {{ $o->roleLabel() }}
                     </option>
                 @endforeach
-            </select>
-        </div>
+            </select></label>
     </form>
 </div>
 
@@ -87,22 +84,22 @@
 
     @if ($hasAtt)
         <div class="kpis">
-            <div class="kpi">
+            <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">🟢 {{ __('journey.rd_att_in') }}</div>
                 <div class="val {{ $att['in'] !== null ? 'pos' : '' }}">{{ $att['in'] ?? '—' }}</div>
             </div>
-            <div class="kpi">
+            <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">⏸️ {{ __('journey.rd_att_break') }}</div>
                 <div class="val">{{ $att['break_at'] ?? '—' }}</div>
                 @if ($att['break_min'] > 0)
                     <div class="sub2">{{ __('journey.dur_min', ['count' => $att['break_min']]) }}</div>
                 @endif
             </div>
-            <div class="kpi">
+            <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">🔴 {{ __('journey.rd_att_out') }}</div>
                 <div class="val {{ $att['out'] !== null ? '' : 'mid' }}">{{ $att['out'] ?? '—' }}</div>
             </div>
-            <div class="kpi">
+            <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">⏱️ {{ __('journey.rd_att_worked') }}</div>
                 <div class="val">{{ $att['worked'] ?? '—' }}</div>
             </div>
@@ -116,22 +113,22 @@
 
 {{-- ═══════════ خط السير — مخطط / اتعمل / لسه / بره الخطة ═══════════ --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rdGo('rdPlan')">
         <div class="lbl">{{ __('journey.planned') }}</div>
         <div class="val">{{ $fmt($summary['planned']) }}</div>
         <div class="sub2">{{ __('journey.plan') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.visits', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">{{ __('journey.done') }}</div>
         <div class="val pos">{{ $fmt($summary['done']) }}</div>
         <div class="sub2">{{ __('journey.completion') }}: {{ $summary['pct'] }}%</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rdGo('rdPlan')">
         <div class="lbl">{{ __('journey.pending') }}</div>
         <div class="val {{ $summary['pending'] > 0 ? 'mid' : 'pos' }}">{{ $fmt($summary['pending']) }}</div>
         <div class="sub2">{{ __('journey.plan') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="rdGo('rdOff')">
         <div class="lbl">{{ __('journey.off_plan') }}</div>
         <div class="val">{{ $fmt($summary['off_plan']) }}</div>
         <div class="sub2">{{ __('journey.off_plan_hint') }}</div>
@@ -140,7 +137,7 @@
 
 {{-- ═══════════ فلوس وحركة اليوم — العقيدة الموحّدة ═══════════ --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">💵 {{ __('journey.sales_today') }}</div>
         <div class="val pos">{{ $fm2($money['sales']) }}</div>
         <div class="sub2">
@@ -150,12 +147,12 @@
             @endif
         </div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">🧾 {{ __('journey.rd_collections') }}</div>
         <div class="val">{{ $fm2($money['coll_total']) }}</div>
         <div class="sub2">{{ __('journey.rd_coll_sub', ['cash' => $fm2($money['coll_cash']), 'other' => $fm2($money['coll_other'])]) }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">📦 {{ __('journey.rd_custody_left') }}</div>
         <div class="val">{{ $fm2($custodyValue) }}</div>
         <div class="sub2">
@@ -165,7 +162,7 @@
             @endif
         </div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="location.href='{{ route('ops.tracking', ['user' => $rep->id, 'date' => $date->toDateString()]) }}'">
         <div class="lbl">🛣️ {{ __('journey.rd_km_today') }}</div>
         <div class="val">{{ number_format($km, 1) }} <span style="font-size:12px">{{ __('journey.km_unit') }}</span></div>
         <div class="sub2">{{ __('journey.rd_km_hint') }}</div>
@@ -173,18 +170,18 @@
 </div>
 
 {{-- ═══════════ خطة السير ═══════════ --}}
-<div class="card">
+<div class="card" id="rdPlan">
     <h3>📋 {{ __('journey.plan') }} <span class="side">{{ $rows->count() }}</span></h3>
 
     <div class="tablewrap">
         <table>
             <tr>
-                <th class="num">#</th>
+                <th class="num" data-nosum>#</th>
                 <th>{{ __('client.client') }}</th>
                 <th>{{ __('client.zone') }}</th>
                 <th>{{ __('journey.frequency') }}</th>
-                <th>{{ __('ops.check_in') }}</th>
-                <th>{{ __('ops.check_out') }}</th>
+                <th data-nosum>{{ __('ops.check_in') }}</th>
+                <th data-nosum>{{ __('ops.check_out') }}</th>
                 <th data-nosum>{{ __('journey.rd_duration') }}</th>
                 {{-- الناتج + الصور (١٥/٨) — الصف كان بيقول «تمت» بس --}}
                 <th data-nosum>{{ __('ops.vb_outcome') }}</th>
@@ -236,7 +233,7 @@
 
 {{-- ═══════════ بره الخطة — شغل حقيقي بس مش في خطة اليوم ═══════════ --}}
 @if ($offPlan->isNotEmpty())
-<div class="card">
+<div class="card" id="rdOff">
     <h3>➕ {{ __('journey.off_plan') }} <span class="side">{{ $offPlan->count() }}</span></h3>
     <div class="alert info">{{ __('journey.off_plan_hint') }}</div>
 
@@ -244,8 +241,8 @@
         <table>
             <tr>
                 <th>{{ __('client.client') }}</th>
-                <th>{{ __('ops.check_in') }}</th>
-                <th>{{ __('ops.check_out') }}</th>
+                <th data-nosum>{{ __('ops.check_in') }}</th>
+                <th data-nosum>{{ __('ops.check_out') }}</th>
                 <th data-nosum>{{ __('journey.rd_duration') }}</th>
                 <th data-nosum>{{ __('ops.vb_outcome') }}</th>
                 <th></th>
@@ -340,4 +337,14 @@
 </div>
 @endif
 
+@endsection
+
+@section('scripts')
+<script>
+/* (٢٢/٩) كروت خط السير بتنزل على جدولها في نفس الصفحة */
+function rdGo(id) {
+    var el = document.getElementById(id);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+}
+</script>
 @endsection

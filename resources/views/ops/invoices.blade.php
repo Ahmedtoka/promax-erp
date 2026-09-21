@@ -28,28 +28,29 @@
 @section('content')
 
 {{-- ═══ السامري — نتيجة الفلتر كله مش الصفحة (١٩ أغسطس ٢٠٢٦) ═══ --}}
+{{-- (٢٢/٩) الكروت بقت بتفسّر رقمها: دوسة تفتح تقسيمة كاش/آجل لنفس الفلتر --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('ops.inv_count') }}</div>
         <div class="val mid">{{ $fmt($stats->n) }}</div>
         <div class="sub2">💵 {{ $fmt($stats->cash_n) }} {{ __('ops.cash') }} · 🕐 {{ $fmt($stats->credit_n) }} {{ __('ops.credit') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('common.subtotal') }}</div>
         <div class="val">{{ $fmt($stats->subtotal) }}</div>
         <div class="sub2">{{ __('ops.before_discount_hint') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('common.discount') }}</div>
         <div class="val mid">{{ $fmt($stats->discount) }}</div>
         <div class="sub2">{{ $stats->subtotal > 0 ? number_format($stats->discount / $stats->subtotal * 100, 1) : 0 }}%</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('ops.inv_net') }}</div>
         <div class="val pos">{{ $fmt($stats->total) }}</div>
         <div class="sub2">{{ __('ops.net_hint') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('ops.inv_grand') }}</div>
         <div class="val pos">{{ $fmt($stats->grand) }}</div>
         <div class="sub2">{{ __('tax.tax') }}: {{ $fmt($stats->tax) }}</div>
@@ -58,19 +59,26 @@
 
 <div class="card">
     <form class="searchbar" method="GET">
-        <select name="user">
-            <option value="">{{ __('ops.all_reps') }}</option>
-            @foreach ($field as $f)
-                <option value="{{ $f->id }}" @selected((int) ($filters['user'] ?? 0) === $f->id)>{{ $f->name }}</option>
-            @endforeach
-        </select>
-        <input type="date" name="from" value="{{ $filters['from'] ?? '' }}">
-        <input type="date" name="to" value="{{ $filters['to'] ?? '' }}">
+        <label class="fl"><span>{{ __('ui.l_rep') }}</span>
+            <select name="user">
+                <option value="">{{ __('ops.all_reps') }}</option>
+                @foreach ($field as $f)
+                    <option value="{{ $f->id }}" @selected((int) ($filters['user'] ?? 0) === $f->id)>{{ $f->name }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_payment') }}</span>
+            <select name="pay">
+                <option value="">{{ __('ui.all_of', ['x' => __('uic.pay_kinds')]) }}</option>
+                <option value="cash" @selected(($filters['pay'] ?? '') === 'cash')>{{ __('ops.cash') }}</option>
+                <option value="credit" @selected(($filters['pay'] ?? '') === 'credit')>{{ __('ops.credit') }}</option>
+            </select></label>
         {{-- فلتر السيريال الورقي (٢٢/٨) — بيمسك رقم الفاتورة كمان،
              و(٦/٩) اسم العميل بالبحث الموحّد المتسامح مع الأخطاء.
              dir=auto عشان اسم العميل عربي والسيريال إنجليزي --}}
-        <input type="search" name="paper" value="{{ $filters['paper'] ?? '' }}"
-               placeholder="🧾 {{ __('ops.paper_filter_ph') }}" dir="auto" style="width:240px">
+        <label class="fl wide"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" name="paper" value="{{ $filters['paper'] ?? '' }}"
+                   placeholder="🧾 {{ __('ops.paper_filter_ph') }}" dir="auto"></label>
+        @include('partials._range', ['from' => $filters['from'] ?? '', 'to' => $filters['to'] ?? ''])
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.invoices') }}">{{ __('common.clear') }}</a>
     </form>
@@ -93,19 +101,27 @@
             <tbody>
             @forelse ($invoices as $inv)
                 <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                    <td><b>{{ $inv->number }}</b></td>
+                    <td><a href="{{ route('ops.invoice', $inv) }}" onclick="event.stopPropagation()"><b>{{ $inv->number }}</b></a></td>
                     {{-- سيريال الورقية المختومة — عمود مستقل (٢٢/٨) --}}
                     <td class="num" dir="ltr">
                         @if ($inv->paper_ref)
-                            <b>{{ $inv->paper_ref }}</b>
+                            <a href="{{ route('ops.invoices', ['paper' => $inv->paper_ref]) }}" onclick="event.stopPropagation()"><b>{{ $inv->paper_ref }}</b></a>
                         @else
                             <span class="badge b-orange" style="font-size:9.5px">{{ __('ops.paper_missing') }}</span>
                         @endif
                     </td>
                     {{-- الاسم المركّب بعقيدتنا: السلسلة — الفرع --}}
-                    <td style="white-space:normal;max-width:240px"><b>{{ $inv->client->fullName() }}</b></td>
-                    <td><span class="badge b-purple">{{ $inv->client->channel?->displayName() ?? '—' }}</span></td>
-                    <td style="color:var(--muted)">{{ $inv->user->displayName() }}</td>
+                    <td style="white-space:normal;max-width:240px">
+                        @if ($inv->client)
+                            <a href="{{ route('erp.clients.show', $inv->client) }}" onclick="event.stopPropagation()"><b>{{ $inv->client->fullName() }}</b></a>
+                        @else — @endif
+                    </td>
+                    <td><span class="badge b-purple">{{ $inv->client?->channel?->displayName() ?? '—' }}</span></td>
+                    <td>
+                        @if ($inv->user)
+                            <a href="{{ route('ops.rep', $inv->user) }}" onclick="event.stopPropagation()">{{ $inv->user->displayName() }}</a>
+                        @else — @endif
+                    </td>
                     <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                     <td class="num">{{ $fmt($inv->subtotal) }}</td>
                     <td class="num mid">{{ $fmt($inv->discount) }}</td>
@@ -138,5 +154,39 @@
     </div>
     <div class="pag">{{ $invoices->links('pagination::simple-default') }}</div>
 </div>
+
+{{-- ═══ تفسير الكروت (٢٢/٩): نفس الفلتر مقسوم كاش / آجل — الصفين مجموعهم
+     هو رقم الكارت (من غير فلتر الدفع)، والصف نفسه لينك بيفلتر بيه ═══ --}}
+<dialog id="invExplain" class="wide">
+    <div>
+        <h3>{{ __('uic.inv_explain_title') }}</h3>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:10px">{{ __('uic.inv_explain_hint') }}</p>
+        <div class="tablewrap">
+            <table>
+                <thead><tr>
+                    <th>{{ __('ui.l_payment') }}</th><th>{{ __('ops.inv_count') }}</th>
+                    <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th>
+                    <th>{{ __('ops.inv_net') }}</th><th>{{ __('tax.tax') }}</th><th>{{ __('ops.inv_grand') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach (['cash' => __('ops.cash'), 'credit' => __('ops.credit')] as $pk => $pl)
+                    @php $pr = $byPay[$pk] ?? null; @endphp
+                    <tr>
+                        <td><a href="{{ request()->fullUrlWithQuery(['pay' => $pk, 'page' => null, 'export' => null]) }}"><b>{{ $pl }}</b></a></td>
+                        <td class="num">{{ $fmt($pr->n ?? 0) }}</td>
+                        <td class="num">{{ $fmt($pr->subtotal ?? 0) }}</td>
+                        <td class="num mid">{{ $fmt($pr->discount ?? 0) }}</td>
+                        <td class="num pos">{{ $fmt($pr->total ?? 0) }}</td>
+                        <td class="num">{{ $fmt($pr->tax ?? 0) }}</td>
+                        <td class="num pos"><b>{{ $fmt($pr->grand ?? 0) }}</b></td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div class="formbar"><span class="formbar-sp"></span>
+            <button class="btn" type="button" onclick="this.closest('dialog').close()">{{ __('common.close') }}</button></div>
+    </div>
+</dialog>
 
 @endsection

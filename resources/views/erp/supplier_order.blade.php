@@ -40,7 +40,7 @@
             @else
                 <b>{{ $o->supplier->displayName() }}</b>
             @endif
-            → {{ $o->warehouse->displayName() }}
+            → <a href="{{ route('erp.warehouses.stock', $o->warehouse) }}">{{ $o->warehouse->displayName() }}</a>
         </span>
     </h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -84,20 +84,20 @@
                 <tr>
                     <th>{{ __('stock.product') }}</th>
                     <th class="num">{{ __('supplier.qty_ordered') }}</th>
-                    <th class="num">{{ __('supplier.unit_cost') }}</th>
+                    <th class="num" data-nosum>{{ __('supplier.unit_cost') }}</th>
                     <th class="num">{{ __('supplier.qty_received') }}</th>
                     <th class="num">{{ __('supplier.qty_left') }}</th>
                     @if ($canReceive && $outstanding !== [])
                         <th style="width:110px">{{ __('supplier.receive_now') }}</th>
                         <th style="width:130px">{{ __('stock.batch_no') }}</th>
-                        <th style="width:140px">{{ __('stock.produced_on') }}</th>
-                        <th style="width:140px">{{ __('stock.expires_on') }}</th>
+                        <th style="width:140px" data-nosum>{{ __('stock.produced_on') }}</th>
+                        <th style="width:140px" data-nosum>{{ __('stock.expires_on') }}</th>
                     @endif
                 </tr>
                 @foreach ($o->items as $it)
                     @php $left = max(0, $it->qty - $it->received_qty); @endphp
                     <tr>
-                        <td><b>{{ $it->product->displayName() }}</b>
+                        <td><a href="{{ route('erp.products.show', $it->product) }}"><b>{{ $it->product->displayName() }}</b></a>
                             <span class="s" style="color:var(--muted)">· {{ $it->product->code }}</span></td>
                         <td class="num">{{ $fmt($it->qty) }}</td>
                         <td class="num">{{ $money($it->unit_cost) }}</td>
@@ -138,10 +138,10 @@
         <h3>📄 {{ __('nav.receipts') }} <span class="side">{{ $o->receipts->count() }}</span></h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('common.number') }}</th><th>{{ __('common.date') }}</th></tr>
+                <tr><th>{{ __('common.number') }}</th><th data-nosum>{{ __('common.date') }}</th></tr>
                 @forelse ($o->receipts as $r)
                     <tr class="clickable" onclick="location.href='{{ route('wh.receipt', $r) }}'">
-                        <td class="num"><b>{{ $r->number }}</b></td>
+                        <td class="num"><a href="{{ route('wh.receipt', $r) }}"><b>{{ $r->number }}</b></a></td>
                         <td class="num s">{{ $r->received_on->format('Y-m-d') }}</td>
                     </tr>
                 @empty

@@ -11,84 +11,77 @@
 
 @section('content')
 
-{{-- ═══ الفلاتر ═══ --}}
+{{-- ═══ الفلاتر (٢٢/٩) — كل دروب داون بعنوانه وأول اختيار «الكل»، والفترة آخر حاجة من `_range` ═══ --}}
 <div class="card" style="padding:12px 14px">
-    <form method="GET" action="{{ route('erp.reports.show', $key) }}"
-          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-
-        @if (in_array('range', $filters))
-            <div>
-                <label class="f">{{ __('rpt.f_from') }}</label>
-                <input type="date" name="from" value="{{ request('from', today()->startOfMonth()->toDateString()) }}">
-            </div>
-            <div>
-                <label class="f">{{ __('rpt.f_to') }}</label>
-                <input type="date" name="to" value="{{ request('to', today()->toDateString()) }}">
-            </div>
-        @endif
+    <form class="searchbar" method="GET" action="{{ route('erp.reports.show', $key) }}" style="margin-bottom:0">
 
         @if (in_array('rep', $filters))
-            <div style="min-width:180px">
-                <label class="f">{{ __('rpt.f_rep') }}</label>
+            <label class="fl"><span>{{ __('ui.l_rep') }}</span>
                 <select name="user_id">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.reps')]) }}</option>
                     @foreach ($repOptions as $u)
                         <option value="{{ $u->id }}" @selected(request('user_id') == $u->id)>{{ $u->displayName() }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
 
         @if (in_array('channel', $filters))
-            <div style="min-width:160px">
-                <label class="f">{{ __('rpt.f_channel') }}</label>
+            <label class="fl"><span>{{ __('ui.l_channel') }}</span>
                 <select name="channel_id">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.channels')]) }}</option>
                     @foreach ($channelOptions as $ch)
                         <option value="{{ $ch->id }}" @selected(request('channel_id') == $ch->id)>{{ $ch->displayName() }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
 
         @if (in_array('payment', $filters))
-            <div>
-                <label class="f">{{ __('rpt.f_payment') }}</label>
+            <label class="fl"><span>{{ __('ui.l_payment') }}</span>
                 <select name="payment">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.pay_kinds')]) }}</option>
                     <option value="cash" @selected(request('payment') === 'cash')>{{ __('rpt.cash') }}</option>
                     <option value="credit" @selected(request('payment') === 'credit')>{{ __('rpt.credit') }}</option>
-                </select>
-            </div>
+                </select></label>
         @endif
 
         @if (in_array('status', $filters))
-            <div>
-                <label class="f">{{ __('common.status') }}</label>
+            <label class="fl"><span>{{ __('ui.l_status') }}</span>
                 <select name="status">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.statuses')]) }}</option>
                     @foreach (\App\Models\PurchaseOrder::STATUSES as $sk => $sv)
                         <option value="{{ $sk }}" @selected(request('status') === $sk)>{{ __('enums.po_status.'.$sk) }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
 
+        {{-- فلاتر خاصة بتقرير واحد: الكنترولر بيبعتها `name => [caption, all, options]` --}}
+        @foreach ($extraSelects ?? [] as $selName => [$selCaption, $selAll, $selOptions])
+            <label class="fl"><span>{{ $selCaption }}</span>
+                <select name="{{ $selName }}">
+                    <option value="">{{ $selAll }}</option>
+                    @foreach ($selOptions as $ov => $ol)
+                        <option value="{{ $ov }}" @selected((string) request($selName) === (string) $ov)>{{ $ol }}</option>
+                    @endforeach
+                </select></label>
+        @endforeach
+
         @if (in_array('days', $filters))
-            <div>
-                <label class="f">{{ $daysLabel ?? __('rpt.f_days') }}</label>
-                <input type="number" name="days" min="1" max="365" value="{{ request('days', $daysDefault ?? 14) }}" style="width:90px">
-            </div>
+            <label class="fl"><span>{{ $daysLabel ?? __('rpt.f_days') }}</span>
+                <input type="number" name="days" min="1" max="365" value="{{ request('days', $daysDefault ?? 14) }}"></label>
         @endif
 
         @if (in_array('q', $filters))
-            <div style="flex:1;min-width:180px">
-                <label class="f">{{ __('common.search') }}</label>
-                <input type="search" name="q" value="{{ request('q') }}" style="width:100%">
-            </div>
+            <label class="fl wide grow"><span>{{ __('ui.l_search') }}</span>
+                <input type="search" name="q" value="{{ request('q') }}" dir="auto"></label>
         @endif
 
-        <button class="btn gold" type="submit">🔍 {{ __('rpt.apply') }}</button>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي مش «كل الفترات» (`ReportController::range`) --}}
+        @if (in_array('range', $filters))
+            @include('partials._range', ['from' => $periodFrom, 'to' => $periodTo, 'all' => false])
+        @endif
+
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('erp.reports.show', $key) }}">{{ __('common.clear') }}</a>
     </form>
 </div>
 
@@ -101,11 +94,20 @@
 </div>
 
 <div class="kpis">
-    @foreach ($kpis as [$lbl, $val, $cls])
-        <div class="kpi">
-            <div class="lbl">{{ $lbl }}</div>
-            <div class="val {{ $cls }}">{{ $val }}</div>
-        </div>
+    {{-- (٢٢/٩) الكارت إما فلتر على نفس التقرير (`on` لما يبقى شغال) أو لينك للشاشة اللي بتفرد رقمه --}}
+    @foreach ($kpis as $k)
+        @php [$lbl, $val, $cls] = $k; $kUrl = $k[3] ?? null; @endphp
+        @if ($kUrl)
+            <a @class(['kpi', 'on' => ! empty($k[4])]) href="{{ $kUrl }}">
+                <div class="lbl">{{ $lbl }}</div>
+                <div class="val {{ $cls }}">{{ $val }}</div>
+            </a>
+        @else
+            <div class="kpi">
+                <div class="lbl">{{ $lbl }}</div>
+                <div class="val {{ $cls }}">{{ $val }}</div>
+            </div>
+        @endif
     @endforeach
 </div>
 
@@ -120,7 +122,9 @@
             <thead>
             <tr>
                 @foreach ($columns as $c)
-                    <th @if (($c[1] ?? null) === 'num') class="num" @endif>{{ $c[0] }}</th>
+                    {{-- ⚠️ `data-nosum` على كل الأعمدة: إجمالي التقرير من السيرفر بس (`totals`) —
+                         الجمع الأوتوماتيك كان هيجمع أيام ودقايق ونِسب في التقارير اللي من غير صف إجمالي --}}
+                    <th data-nosum @if (($c[1] ?? null) === 'num') class="num" @endif>{{ $c[0] }}</th>
                 @endforeach
             </tr>
             </thead>
@@ -128,7 +132,8 @@
             @forelse ($rows as $row)
                 <tr>
                     @foreach ($row as $i => $cell)
-                        <td @if (($columns[$i][1] ?? null) === 'num') class="num" dir="ltr" @endif>{{ $cell }}</td>
+                        {{-- الخلية نص عادي أو `['text' => …, 'url' => …]` — اللي بيسمّي سجل بيفتحه --}}
+                        <td @if (($columns[$i][1] ?? null) === 'num') class="num" dir="ltr" @endif>@if (is_array($cell) && ! empty($cell['url']))<a href="{{ $cell['url'] }}">{{ $cell['text'] }}</a>@else{{ is_array($cell) ? ($cell['text'] ?? '') : $cell }}@endif</td>
                     @endforeach
                 </tr>
             @empty

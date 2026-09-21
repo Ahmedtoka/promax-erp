@@ -47,6 +47,8 @@
             <div>
                 <label class="f">{{ __('stock.warehouse') }} <b class="req-star">*</b></label>
                 <select name="warehouse_id" required style="width:100%">
+                    {{-- المخزن المفتوح متعلّم عن قصد — والاختيار الفاضي أول القايمة (٢٢/٩) --}}
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected($warehouse && $warehouse->id === $w->id)>{{ $w->displayName() }}</option>
                     @endforeach
@@ -87,16 +89,17 @@
     <h3>📥 {{ __('stock.goods_receipts') }}
         <span class="side">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</span></h3>
     {{-- فلتر «من — إلى» على تاريخ الاستلام (٩/٩/٢٠٢٦) — المخزن المختار بيتحافظ عليه --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
+    <form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
         <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        {{-- القايمة صفحات — ده بينزّل كل أذون الفترة (٢٢/٩) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
     <div class="tablewrap">
         <table>
             <tr>
                 <th>{{ __('stock.receipt_number') }}</th>
-                <th>{{ __('stock.received_on') }}</th>
+                <th data-nosum>{{ __('stock.received_on') }}</th>
                 <th>{{ __('stock.supplier') }}</th>
                 <th>{{ __('stock.batches') }}</th>
                 <th>{{ __('stock.total_units') }}</th>
@@ -105,7 +108,7 @@
             </tr>
             @forelse ($receipts as $r)
                 <tr class="clickable" onclick="location.href='{{ route('wh.receipt', $r) }}'">
-                    <td class="num"><b>{{ $r->number }}</b>
+                    <td class="num"><a href="{{ route('wh.receipt', $r) }}"><b>{{ $r->number }}</b></a>
                         @if ($r->reference)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $r->reference }}</span>
                         @endif
@@ -113,7 +116,9 @@
                     <td class="num">{{ $r->received_on?->format('Y-m-d') ?? '—' }}</td>
                     <td>
                         @if ($r->sourceWarehouse)
-                            <span class="badge b-blue">🔁 {{ $r->sourceWarehouse->displayName() }}</span>
+                            <a class="badge b-blue" href="{{ route('erp.warehouses.stock', $r->sourceWarehouse) }}" onclick="event.stopPropagation()">🔁 {{ $r->sourceWarehouse->displayName() }}</a>
+                        @elseif ($r->supplier_id && \App\Support\Access::allows(auth()->user(), 'erp.suppliers'))
+                            <a href="{{ route('erp.suppliers.show', $r->supplier_id) }}" onclick="event.stopPropagation()">{{ $r->supplier ?: '—' }}</a>
                         @else
                             {{ $r->supplier ?: '—' }}
                         @endif
@@ -134,6 +139,15 @@
                     {{ __('stock.no_receipts') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل أذون الفترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($receipts->total() > 0)
+                <tfoot><tr>
+                    <td colspan="3"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $receipts->total()]) }})</span></td>
+                    <td class="num"><b>{{ $fmt($totals->batches) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totals->qty) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $receipts->links('pagination::simple-default') }}</div>
@@ -152,6 +166,8 @@
             <div>
                 <label class="f">{{ __('stock.warehouse') }}</label>
                 <select name="warehouse_id" required style="width:100%">
+                    {{-- المخزن المفتوح متعلّم عن قصد — والاختيار الفاضي أول القايمة (٢٢/٩) --}}
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected($warehouse && $w->id === $warehouse->id)>
                             {{ $w->displayName() }} — {{ $w->typeLabel() }}
@@ -194,7 +210,7 @@
         ])
 
         <div class="tablewrap" style="margin-top:10px;max-height:44vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
-            <table id="grnTbl">
+            <table id="grnTbl" data-noxl>
                 <thead>
                     <tr>
                         <th style="width:34px">#</th>

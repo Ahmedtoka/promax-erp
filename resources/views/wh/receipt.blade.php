@@ -39,37 +39,45 @@
     </div>
 @endif
 
+{{-- الكروت: الإذن على قايمة الأذون، المخزن على نظرته، المورد على صفحته/أمر الشراء، والكميات على بنود الإذن (٢٢/٩) --}}
+@php
+    $supUrl = $receipt->supplier_order_id && \App\Support\Access::allows(auth()->user(), 'erp.purchasing')
+        ? route('erp.purchasing.show', $receipt->supplier_order_id)
+        : ($receipt->supplier_id && \App\Support\Access::allows(auth()->user(), 'erp.suppliers')
+            ? route('erp.suppliers.show', $receipt->supplier_id)
+            : ($receipt->sourceWarehouse ? route('wh.index', ['warehouse' => $receipt->source_warehouse_id]) : '#grnLines'));
+@endphp
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('wh.receipts', ['warehouse' => $receipt->warehouse_id]) }}">
         <div class="lbl">{{ __('stock.receipt_number') }}</div>
         <div class="val">{{ $receipt->number }}</div>
         <div class="sub2">{{ __('stock.received_on') }}: {{ $receipt->received_on?->format('Y-m-d') ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('wh.index', ['warehouse' => $receipt->warehouse_id]) }}">
         <div class="lbl">{{ __('stock.warehouse') }}</div>
         <div class="val" style="font-size:17px">{{ $receipt->warehouse?->displayName() ?? '—' }}</div>
         <div class="sub2">{{ $receipt->warehouse?->typeLabel() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ $supUrl }}">
         <div class="lbl">{{ __('stock.supplier') }}</div>
         <div class="val" style="font-size:17px">
             {{ $receipt->sourceWarehouse?->displayName() ?? ($receipt->supplier ?: '—') }}
         </div>
         <div class="sub2">
             {{ __('stock.reference') }}: {{ $receipt->reference ?: '—' }}
-            @if ($receipt->creator) • {{ __('stock.created_by') }}: {{ $receipt->creator->name }} @endif
+            @if ($receipt->creator) • {{ __('stock.created_by') }}: {{ $receipt->creator->displayName() }} @endif
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#grnLines">
         <div class="lbl">{{ __('stock.total_units') }}</div>
         <div class="val">{{ $fmt($totalQty) }}</div>
         <div class="sub2">{{ __('stock.batch_countable', ['count' => $receipt->batches->count()]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#grnLines">
         <div class="lbl">{{ __('stock.shelved') }}</div>
         <div class="val pos">{{ $fmt($shelved) }}</div>
         <div class="sub2">{{ __('stock.unshelved') }}: {{ $fmt($unshelved) }}</div>
-    </div>
+    </a>
 </div>
 
 @if ($unshelved > 0)
@@ -84,7 +92,7 @@
     </div>
 @endif
 
-<div class="card">
+<div class="card" id="grnLines">
     <h3>📦 {{ __('stock.receipt_lines') }}
         <span class="side">{{ __('stock.put_away_hint') }}</span></h3>
     <div class="tablewrap">
@@ -92,9 +100,9 @@
             <tr>
                 <th>{{ __('stock.item') }}</th>
                 <th>{{ __('stock.batch_no') }}</th>
-                <th>{{ __('stock.produced_on') }}</th>
-                <th>{{ __('stock.expires_on') }}</th>
-                <th>{{ __('stock.expiry') }}</th>
+                <th data-nosum>{{ __('stock.produced_on') }}</th>
+                <th data-nosum>{{ __('stock.expires_on') }}</th>
+                <th data-nosum>{{ __('stock.expiry') }}</th>
                 <th>{{ __('stock.qty_received') }}</th>
                 <th>{{ __('stock.shelved') }}</th>
                 <th>{{ __('stock.unshelved') }}</th>
@@ -105,7 +113,7 @@
                 @php $left = $b->unshelvedQty(); @endphp
                 <tr>
                     <td>
-                        <b>{{ $b->product?->displayName() ?? __('stock.product_hash', ['id' => $b->product_id]) }}</b>
+                        @if ($b->product)<a href="{{ route('erp.products.show', $b->product) }}"><b>{{ $b->product->displayName() }}</b></a>@else<b>{{ __('stock.product_hash', ['id' => $b->product_id]) }}</b>@endif
                         @if ($b->product)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $b->product->code }} • {{ $b->product->unitLabel() }}</span>
                         @endif

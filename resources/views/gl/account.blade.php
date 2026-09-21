@@ -22,35 +22,32 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi">
+    {{-- (٢٢/٩) الرصيدين مفرودين في الكشف تحت، وعدد الحركات بيفتح قيود الحساب ده في اليومية --}}
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.opening') }}</div>
         <div class="val">{{ $fmt($statement['opening']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $range->fromValue() }} → {{ $range->toValue() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.closing') }}</div>
         <div class="val">{{ $fmt($statement['closing']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('gl.normal_'.$account->normal_side) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('gl.entries', ['account' => $account->id] + ['from' => $range->fromValue(), 'to' => $range->toValue()]) }}">
         <div class="lbl">{{ __('gl.lines_count') }}</div>
         <div class="val">{{ number_format(count($statement['rows'])) }}</div>
         <div class="sub2">{{ __('gl.type_'.$account->type) }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="gl-table">
     <h3>📄 {{ __('gl.statement') }} <span class="side">{{ $account->code }} · {{ $account->displayName() }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
+    <form method="GET" class="searchbar" data-noprint>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.accounts.show', $account) }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -72,7 +69,7 @@
             @forelse ($statement['rows'] as $r)
                 <tr>
                     <td class="num" style="font-size:11px">{{ $r['entry']?->date?->format('Y-m-d') }}</td>
-                    <td><b>{{ $r['entry']?->number }}</b></td>
+                    <td>@if ($r['entry'])<a href="{{ route('gl.entries', ['q' => $r['entry']->number, 'from' => $r['entry']->date?->toDateString(), 'to' => $r['entry']->date?->toDateString()]) }}"><b>{{ $r['entry']->number }}</b></a>@endif</td>
                     <td style="text-align:start">
                         {{ $r['entry']?->memo }}
                         @if ($r['line']->overridden)

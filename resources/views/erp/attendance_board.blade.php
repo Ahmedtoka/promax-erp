@@ -25,10 +25,8 @@
 
 {{-- ═══ الفلتر + السامري ═══ --}}
 <form method="GET" class="filters" style="margin-bottom:14px">
-    <div style="flex:0 1 210px">
-        <label class="f">{{ __('hr.date') }}</label>
-        <input type="date" name="date" value="{{ $date }}" onchange="this.form.submit()">
-    </div>
+    <label class="fl" style="flex:0 1 210px"><span>{{ __('ui.l_day') }}</span>
+        <input type="date" name="date" value="{{ $date }}" onchange="this.form.submit()"></label>
     <div style="flex:1"></div>
     <div style="flex:0 0 auto;font-size:11px;color:var(--muted);align-self:center">
         🔄 {{ __('hr.auto_refresh') }}
@@ -119,14 +117,15 @@
                 <th>{{ __('hr.last_out') }}</th>
                 <th>{{ __('hr.worked') }}</th>
                 <th>{{ __('hr.breaks') }}</th>
-                <th>{{ __('hr.sessions') }}</th>
+                <th data-nosum>{{ __('hr.sessions') }}</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($filtered as $r)
                 <tr>
                     <td>
-                        <strong>{{ $r['user']->displayName() }}</strong>
+                        {{-- الموظف بيفتح سجل حضوره للشهر --}}
+                        <a href="{{ route('erp.attendance.log', ['user' => $r['user']->id]) }}"><strong>{{ $r['user']->displayName() }}</strong></a>
                         <div class="side" style="font-size:11px" dir="ltr">{{ $r['user']->code }}</div>
                     </td>
                     <td>{{ $r['user']->roleLabel() }}</td>

@@ -13,11 +13,12 @@
 
 @php
     /** سيلكت التلات حالات — وراثة / إظهار / إخفاء */
-    $sel = function (string $name, ?bool $override, bool $default) {
+    // `$label` = اسم القسم/الصفحة/الزرار — بيتحط aria-label عشان السيلكت مايبقاش من غير اسم (٢٢/٩)
+    $sel = function (string $name, ?bool $override, bool $default, string $label = '') {
         $inheritLabel = __('perm.inherit').' — '.($default ? __('perm.state_shown') : __('perm.state_hidden'));
         $o = fn ($v, $t, $on) => '<option value="'.$v.'"'.($on ? ' selected' : '').'>'.e($t).'</option>';
 
-        return '<select name="perm['.e($name).']" style="width:100%;max-width:210px">'
+        return '<select name="perm['.e($name).']" aria-label="'.e(__('perm.setting').' — '.$label).'" style="width:100%;min-width:190px">'
             .$o('', $inheritLabel, $override === null)
             .$o('1', '👁️ '.__('perm.show'), $override === true)
             .$o('0', '🚫 '.__('perm.hide'), $override === false)
@@ -48,10 +49,10 @@
     {{-- ═══ الاختيار: رول كامل أو موظف بعينه ═══ --}}
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end">
         <form method="GET">
-            <label class="f">👥 {{ __('perm.pick_role') }}</label>
-            <select name="role" onchange="this.form.submit()"
+            <label class="f" for="permRole">👥 {{ __('perm.pick_role') }}</label>
+            <select name="role" id="permRole" onchange="this.form.submit()"
                     style="min-width:240px{{ $role !== null ? ';border-color:var(--blue,#12399B);font-weight:800' : '' }}">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('uid.l_role')]) }}</option>
                 @foreach ($roles as $r)
                     <option value="{{ $r }}" @selected($role === $r)>{{ __('enums.role.'.$r) }}</option>
                 @endforeach
@@ -60,11 +61,11 @@
         </form>
 
         <form method="GET">
-            <label class="f">🧍 {{ __('perm.pick_user') }}</label>
-            <select name="user" onchange="this.form.submit()"
+            <label class="f" for="permUser">🧍 {{ __('perm.pick_user') }}</label>
+            <select name="user" id="permUser" onchange="this.form.submit()"
                     style="min-width:260px{{ $role === null ? ';border-color:var(--blue,#12399B);font-weight:800' : '' }}">
                 @if ($role !== null)
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_user')]) }}</option>
                 @endif
                 @foreach ($users as $u2)
                     <option value="{{ $u2->id }}" @selected($role === null && $user?->id === $u2->id)>
@@ -98,11 +99,14 @@
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
                 <h3 style="margin:0">{{ __($group) }} {!! $badge($g['override'], $g['default']) !!}
                     <span class="side">{{ __('perm.group_hint') }}</span></h3>
-                {!! $sel($group, $g['override'], $g['default']) !!}
+                {{-- سيلكت القسم كله — عنوانه فوقه باسم القسم (٢٢/٩) --}}
+                <label class="fl wide"><span>{{ __('uid.perm_group_setting', ['x' => __($group)]) }}</span>
+                    {!! $sel($group, $g['override'], $g['default'], __($group)) !!}</label>
             </div>
 
             <div class="tablewrap" style="margin-top:10px">
-                <table>
+                {{-- جدول إعدادات مش داتا — من غير إكسيل --}}
+                <table data-noxl>
                     <thead>
                         <tr>
                             <th>{{ __('perm.screen_or_action') }}</th>
@@ -115,14 +119,14 @@
                             <tr>
                                 <td><b>{{ $p['icon'] }} {{ __($p['label']) }}</b></td>
                                 <td>{!! $badge($p['override'], $p['default']) !!}</td>
-                                <td>{!! $sel($p['route'], $p['override'], $p['default']) !!}</td>
+                                <td>{!! $sel($p['route'], $p['override'], $p['default'], __($p['label'])) !!}</td>
                             </tr>
                             @foreach ($p['actions'] as $a)
                                 <tr>
                                     <td style="padding-inline-start:34px;color:var(--muted)">
                                         🔘 {{ __($a['label']) }}</td>
                                     <td>{!! $badge($a['override'], $a['default']) !!}</td>
-                                    <td>{!! $sel($a['key'], $a['override'], $a['default']) !!}</td>
+                                    <td>{!! $sel($a['key'], $a['override'], $a['default'], __($p['label']).' · '.__($a['label'])) !!}</td>
                                 </tr>
                             @endforeach
                         @endforeach

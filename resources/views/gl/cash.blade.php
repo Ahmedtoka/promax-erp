@@ -17,6 +17,7 @@
 @endphp
 
 @section('actions')
+    <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     @if ($canPost)
         <button class="btn gold" type="button" onclick="openDlg('dlgCash')">＋ {{ __('gl.new_cash') }}</button>
     @endif
@@ -26,43 +27,36 @@
 
 <div class="kpis">
     @foreach ($kinds as $k)
-        <div class="kpi">
+        {{-- (٢٢/٩) كل كارت فلتر على نوع الحركة — دوسة تانية بتشيله --}}
+        <a class="kpi" href="{{ request()->fullUrlWithQuery(['kind' => request('kind') === $k ? null : $k, 'page' => null]) }}#gl-table" title="{{ __('ui.click_to_filter') }}">
             <div class="lbl">{{ __('gl.kind_'.$k) }}</div>
             <div class="val">{{ $fmt($byKind[$k] ?? 0) }}</div>
             <div class="sub2">{{ __('common.currency') }}</div>
-        </div>
+        </a>
     @endforeach
 </div>
 
-<div class="card">
+<div class="card" id="gl-table">
     <h3>🏦 {{ __('gl.cash') }} <span class="side">{{ __('gl.cash_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('gl.kind') }}</label>
+    <form method="GET" class="searchbar" data-noprint>
+        <label class="fl"><span>{{ __('gl.kind') }}</span>
             <select name="kind" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.kinds')]) }}</option>
                 @foreach ($kinds as $k)
                     <option value="{{ $k }}" @selected(request('kind') === $k)>{{ __('gl.kind_'.$k) }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('gl.status') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('gl.status') }}</span>
             <select name="status" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.statuses')]) }}</option>
                 <option value="posted" @selected(request('status') === 'posted')>{{ __('gl.status_posted') }}</option>
                 <option value="void" @selected(request('status') === 'void')>{{ __('gl.status_void') }}</option>
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
+            </select></label>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.cash') }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -90,7 +84,7 @@
                     </td>
                     <td style="text-align:start">
                         @if ($m->user)
-                            {{ $m->user->displayName() }}
+                            <a href="{{ route('ops.rep', $m->user->id) }}">{{ $m->user->displayName() }}</a>
                             <div style="font-size:10px;color:var(--muted)">{{ $m->user->code }}</div>
                         @else — @endif
                     </td>
@@ -119,13 +113,18 @@
             @empty
                 <tr><td colspan="{{ $cols }}" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
             @endforelse
+            {{-- الجدول مقسم صفحات — الإجمالي من السيرفر على الفلتر كله (المرحّل بس) = إجمالي ملف الإكسيل --}}
+            @if ($rows->total() > 0)
+                <tfoot><tr>
+                    <td colspan="7" style="text-align:start">{{ __('gl.total_posted') }} · {{ __('ui.rows_n', ['n' => number_format($rows->total())]) }}</td>
+                    <td class="num">{{ $fmt($total) }}</td>
+                    @if ($canPost)<td></td>@endif
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 
     <div style="margin-top:12px">{{ $rows->links() }}</div>
-    <div class="sub2" style="font-size:11px;color:var(--muted)">
-        {{ __('gl.total_posted') }}: <b>{{ $fmt($total) }}</b> {{ __('common.currency') }}
-    </div>
 </div>
 
 {{-- ═══════════ سند حركة نقدية — الديالوج جوه content عن قصد ═══════════ --}}
@@ -158,7 +157,7 @@
             <div id="cmRepBox" hidden>
                 <label class="f">{{ __('gl.rep') }} <b class="req-star">*</b></label>
                 <select name="user_id" data-req-repkind style="width:100%">
-                    <option value="">— {{ __('common.pick') }} —</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected(old('user_id') == $r->id)>{{ $r->displayName() }} ({{ $r->code }})</option>
                     @endforeach

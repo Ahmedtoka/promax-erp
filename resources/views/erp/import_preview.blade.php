@@ -31,22 +31,23 @@
     @endif
 </div>
 
+{{-- (٢٢/٩) المقبول بيودّي لعيّنة الصفوف، والمرفوض لجدول الأخطاء --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#imp-sample">
         <div class="lbl">{{ __('import.rows') }}</div>
         <div class="val">{{ $fmt($import->rows_total) }}</div>
         <div class="sub2">{{ __('import.in_sheet') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#imp-sample">
         <div class="lbl">{{ __('import.accepted') }}</div>
         <div class="val pos">{{ $fmt($import->rows_ok) }}</div>
         <div class="sub2">{{ __('import.will_be_imported') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#imp-errors">
         <div class="lbl">{{ __('import.rejected') }}</div>
         <div class="val {{ $import->rows_failed > 0 ? 'neg' : '' }}">{{ $fmt($import->rows_failed) }}</div>
         <div class="sub2">{{ __('import.will_be_skipped') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ مطابقة الأعمدة ═══════════ --}}
@@ -65,7 +66,7 @@
 
 {{-- ═══════════ الأخطاء ═══════════ --}}
 @if (count($rowErrors) > 0)
-<div class="card">
+<div class="card" id="imp-errors">
     <h3>⚠️ {{ __('import.errors') }} <span class="side">{{ count($rowErrors) }}</span></h3>
     <div class="alert warn">{{ __('import.errors_hint') }}</div>
     <ol style="margin-inline-start:20px;font-size:12.5px;line-height:1.9;max-height:340px;overflow:auto">
@@ -78,14 +79,15 @@
 
 {{-- ═══════════ معاينة الصفوف ═══════════ --}}
 @if (count($sample) > 0)
-<div class="card">
+<div class="card" id="imp-sample">
     <h3>👁️ {{ __('import.sample') }} <span class="side">{{ __('import.first_rows') }}</span></h3>
     <div class="tablewrap">
         <table>
             <tr>
                 <th class="num">#</th>
                 @foreach ($columns as $key)
-                    <th>{{ $key }}</th>
+                    {{-- عيّنة من الملف — أعمدتها (أسعار/تليفونات/أكواد) مابتتجمعش --}}
+                    <th data-nosum>{{ $key }}</th>
                 @endforeach
             </tr>
             @foreach ($sample as $i => $row)

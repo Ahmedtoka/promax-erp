@@ -25,29 +25,27 @@
 
 {{-- ═══ الفلتر ═══ --}}
 <form class="filters" method="GET" style="margin-bottom:14px">
-    <div style="flex:0 1 260px">
-        <label class="f">{{ __('hr.employee') }}</label>
+    <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
         <select name="user" onchange="this.form.submit()">
             <option value="">{{ __('ops.all_reps') }}</option>
             @foreach ($field as $f)
                 <option value="{{ $f->id }}" @selected($userId === $f->id)>{{ $f->displayName() }} ({{ $f->code }})</option>
             @endforeach
-        </select>
-    </div>
-    <div style="flex:0 1 190px">
-        <label class="f">{{ __('hr.date') }}</label>
-        <input type="date" name="date" value="{{ $date }}" onchange="this.form.submit()">
-    </div>
+        </select></label>
+    <label class="fl"><span>{{ __('ui.l_day') }}</span>
+        <input type="date" name="date" value="{{ $date }}" onchange="this.form.submit()"></label>
     <button class="btn gold" type="submit">{{ __('ops.show') }}</button>
 </form>
 
 {{-- ═══ سامري اليوم ═══ --}}
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">🧑‍💼 {{ __('ops.trk_reps') }}</div><div class="val">{{ $repCount }}</div></div>
-    <div class="kpi"><div class="lbl">⚡ {{ __('ops.trk_events') }}</div><div class="val">{{ $events->count() }}</div></div>
-    <div class="kpi"><div class="lbl">📍 {{ __('ops.trk_visits') }}</div><div class="val">{{ $events->where('type', 'check_in')->count() }}</div></div>
-    <div class="kpi"><div class="lbl">💰 {{ __('ops.trk_sales') }}</div><div class="val pos">{{ $events->where('type', 'sale')->count() }}</div></div>
-    <div class="kpi"><div class="lbl">🧾 {{ __('ops.trk_collects') }}</div><div class="val">{{ $events->where('type', 'collect')->count() }}</div></div>
+    {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتعدّ نفس الحاجة لنفس اليوم والمندوب --}}
+    @php $trkQ = array_filter(['user' => $userId ?: null, 'from' => $date, 'to' => $date]); @endphp
+    <a class="kpi" href="{{ route('ops.rep_board', ['from' => $date, 'to' => $date]) }}"><div class="lbl">🧑‍💼 {{ __('ops.trk_reps') }}</div><div class="val">{{ $repCount }}</div></a>
+    <a class="kpi" href="#trkTimeline"><div class="lbl">⚡ {{ __('ops.trk_events') }}</div><div class="val">{{ $events->count() }}</div></a>
+    <a class="kpi" href="{{ route('ops.visits', $trkQ) }}"><div class="lbl">📍 {{ __('ops.trk_visits') }}</div><div class="val">{{ $events->where('type', 'check_in')->count() }}</div></a>
+    <a class="kpi" href="{{ route('ops.invoices', $trkQ) }}"><div class="lbl">💰 {{ __('ops.trk_sales') }}</div><div class="val pos">{{ $events->where('type', 'sale')->count() }}</div></a>
+    <a class="kpi" href="{{ route('ops.visits', $trkQ + ['has_collection' => 1]) }}"><div class="lbl">🧾 {{ __('ops.trk_collects') }}</div><div class="val">{{ $events->where('type', 'collect')->count() }}</div></a>
 </div>
 
 {{-- ═══ شيبس المناديب — إخفاء/إظهار بضغطة ═══ --}}

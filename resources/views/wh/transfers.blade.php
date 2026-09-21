@@ -33,25 +33,28 @@
 
 @section('content')
 
+{{-- الكروت بتفلتر بالحالة على نفس باقي الفلاتر — الرقم = عدد صفوف الجدول بعد الدوسة (٢٢/٩).
+     ⚠️ كارت «الميداني» نوعين (مندوب←مخزن + مندوب←مندوب) والفلتر بياخد نوع واحد، فبيودّي على الجدول. --}}
+@php $kUrl = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]); @endphp
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi {{ ($f['status'] ?? '') === '' ? 'on' : '' }}" href="{{ $kUrl(['status' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚚 {{ __('stock.transfers_total') }}</div>
         <div class="val">{{ $fmt($kpi['total']) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi {{ ($f['status'] ?? '') === 'sent' ? 'on' : '' }}" href="{{ $kUrl(['status' => 'sent']) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">📦 {{ __('stock.in_transit') }}</div>
         <div class="val mid">{{ $fmt($kpi['sent']) }}</div>
         <div class="sub2">{{ $fmt($kpi['transit_units']) }} {{ __('stock.units') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi {{ ($f['status'] ?? '') === 'received' ? 'on' : '' }}" href="{{ $kUrl(['status' => 'received']) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">✅ {{ __('stock.received_count') }}</div>
         <div class="val pos">{{ $fmt($kpi['received']) }}</div>
-    </div>
+    </a>
     {{-- التحويلات الميدانية (١٤/٨) — من نفس الأساس المفلتر --}}
-    <div class="kpi">
+    <a class="kpi {{ ($f['kind'] ?? '') === 'van' ? 'on' : '' }}" href="{{ $kUrl(['kind' => 'van', 'status' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚐 {{ __('stock.van_transfers_count') }}</div>
         <div class="val">{{ $fmt($kpi['van']) }}</div>
-    </div>
+    </a>
 </div>
 
 <div class="card">
@@ -63,32 +66,39 @@
     @endif
 
     <form class="searchbar" method="GET" style="margin-bottom:12px">
-        <input type="search" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('stock.transfer') }}…" style="max-width:220px">
-        <select name="wh" style="min-width:160px">
+        <label class="fl"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('stock.transfer') }}…"></label>
+        <label class="fl"><span>{{ __('ui.l_warehouse') }}</span>
+        <select name="wh">
             <option value="">{{ __('stock.all_warehouses') }}</option>
             @foreach ($warehouses as $w)
                 <option value="{{ $w->id }}" @selected((int) ($f['wh'] ?? 0) === $w->id)>{{ $w->displayName() }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status">
-            <option value="">{{ __('common.status') }}: {{ __('common.all') }}</option>
+            <option value="">{{ __('stock.all_statuses') }}</option>
             <option value="sent" @selected(($f['status'] ?? '') === 'sent')>{{ __('stock.in_transit') }}</option>
             <option value="received" @selected(($f['status'] ?? '') === 'received')>{{ __('stock.received_count') }}</option>
-        </select>
+        </select></label>
         {{-- فلتر الاتجاه (١٤/٨) --}}
-        <select name="kind" style="min-width:170px">
+        <label class="fl wide"><span>{{ __('ui.l_direction') }}</span>
+        <select name="kind">
             <option value="">{{ __('stock.all_kinds') }}</option>
+            {{-- «ميداني» = النوعين اللي من عربية مع بعض — ده اللي كارت الميداني بيعدّه (٢٢/٩) --}}
+            <option value="van" @selected(($f['kind'] ?? '') === 'van')>🚐 {{ __('stock.van_transfers_count') }}</option>
             @foreach (\App\Models\StockTransfer::KINDS as $kCode => $kMeta)
                 <option value="{{ $kCode }}" @selected(($f['kind'] ?? '') === $kCode)>
                     {{ $kMeta[0] }} {{ __('stock.kind_'.$kCode) }}
                 </option>
             @endforeach
-        </select>
+        </select></label>
         {{-- فلتر «من — إلى» على يوم الإرسال `sent_on` (٩/٩/٢٠٢٦) --}}
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.transfers') }}">{{ __('common.clear') }}</a>
+        {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 
     <div class="tablewrap" style="max-height:64vh;overflow-y:auto">
@@ -99,7 +109,7 @@
                 <th>{{ __('stock.kind') }}</th>
                 <th>{{ __('stock.from_warehouse') }}</th>
                 <th>{{ __('stock.to_warehouse') }}</th>
-                <th>{{ __('stock.sent_on') }}</th>
+                <th data-nosum>{{ __('stock.sent_on') }}</th>
                 <th class="num">{{ __('stock.qty_sent') }}</th>
                 <th class="num">{{ __('stock.qty_received') }}</th>
                 <th>{{ __('common.status') }}</th>
@@ -119,8 +129,17 @@
                     {{-- شارة الاتجاه (١٤/٨) — 🏭→🏭 / 🚐→🏭 / 🚐→🚐 --}}
                     <td><span class="badge {{ $t->kindClass() }}" style="white-space:nowrap">
                         {{ $t->kindArrow() }} {{ $t->kindLabel() }}</span></td>
-                    <td>{{ $t->fromLabel() }}</td>
-                    <td>{{ $t->toLabel() }}</td>
+                    {{-- الطرف بيفتح صفحته: المخزن على رصيده والمندوب على كارته (٢٢/٩) --}}
+                    <td>
+                        @if ($t->isVan() && $t->fromUser)<a href="{{ route('ops.rep', $t->fromUser) }}">{{ $t->fromLabel() }}</a>
+                        @elseif (! $t->isVan() && $t->fromWarehouse)<a href="{{ route('erp.warehouses.stock', $t->fromWarehouse) }}">{{ $t->fromLabel() }}</a>
+                        @else{{ $t->fromLabel() }}@endif
+                    </td>
+                    <td>
+                        @if ($t->kindKey() === 'rep_rep' && $t->toUser)<a href="{{ route('ops.rep', $t->toUser) }}">{{ $t->toLabel() }}</a>
+                        @elseif ($t->kindKey() !== 'rep_rep' && $t->toWarehouse)<a href="{{ route('erp.warehouses.stock', $t->toWarehouse) }}">{{ $t->toLabel() }}</a>
+                        @else{{ $t->toLabel() }}@endif
+                    </td>
                     <td>{{ $t->sent_on?->format('Y-m-d') ?? '—' }}</td>
                     <td class="num">{{ $fmt($t->qtySent()) }}</td>
                     <td class="num">
@@ -169,7 +188,7 @@
                         @endif
                         @foreach ($t->items as $it)
                             <span class="badge b-gray" style="margin:2px 2px 0 0;display:inline-block">
-                                {{ $it->product?->displayName() ?? '—' }}
+                                @if ($it->product)<a href="{{ route('erp.products.show', $it->product) }}">{{ $it->product->displayName() }}</a>@else — @endif
                                 · {{ $it->batch_no }}
                                 · {{ $fmt($it->qty_sent) }}
                                 @if ($it->expires_on)
@@ -189,6 +208,15 @@
                 </td></tr>
             @endforelse
             </tbody>
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($transfers->total() > 0)
+                <tfoot><tr>
+                    <td colspan="5"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $transfers->total()]) }})</span></td>
+                    <td class="num"><b>{{ $fmt($totals->sent) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totals->received) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 

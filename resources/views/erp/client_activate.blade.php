@@ -43,14 +43,12 @@
 
 {{-- الكروت نفسها فلاتر — «مستني» و«شغّال» بضغطة --}}
 <div class="kpis">
-    <a class="kpi" href="{{ route('erp.clients.activate', ['status' => 'waiting']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['status'] ?? 'waiting') === 'waiting' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['status'] ?? 'waiting') === 'waiting']) href="{{ route('erp.clients.activate', ['status' => 'waiting']) }}">
         <div class="lbl">{{ __('client.waiting_activation') }}</div>
         <div class="val mid">{{ $fmt($waiting) }}</div>
         <div class="sub2">{{ __('client.waiting_hint') }}</div>
     </a>
-    <a class="kpi" href="{{ route('erp.clients.activate', ['status' => 'active']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['status'] ?? '') === 'active' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['status'] ?? '') === 'active']) href="{{ route('erp.clients.activate', ['status' => 'active']) }}">
         <div class="lbl">{{ __('client.live_clients') }}</div>
         <div class="val pos">{{ $fmt($live) }}</div>
         <div class="sub2">{{ __('client.tap_to_review') }}</div>
@@ -60,30 +58,34 @@
 <div class="card">
     {{-- ترتيب الفلاتر (2026-08-05): بحث ← الحالة ← السلسلة ← المحافظة ← الناقص --}}
     <form class="searchbar" method="GET">
-        <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
-               placeholder="{{ __('client.search_ph') }}" style="flex:1;min-width:200px">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="{{ __('client.search_ph') }}"></label>
 
-        <select name="status" style="min-width:130px">
+        {{-- ⚠️ من غير اختيار فاضي عن قصد: الافتراضي هنا «مستني التفعيل» (الكنترولر)، و«الكل» قيمته `all` --}}
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
+        <select name="status">
             <option value="waiting" @selected(($f['status'] ?? 'waiting') === 'waiting')>{{ __('client.status_waiting') }}</option>
             <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('client.status_active') }}</option>
             <option value="all" @selected(($f['status'] ?? '') === 'all')>{{ __('client.status_all') }}</option>
-        </select>
+        </select></label>
 
-        <select name="group" style="min-width:180px">
-            <option value="">— {{ __('nav.chains') }} —</option>
+        <label class="fl wide"><span>{{ __('ui.l_group') }}</span>
+        <select name="group">
+            <option value="">{{ __('ui.all_of', ['x' => __('nav.chains')]) }}</option>
             @foreach ($groups as $g)
                 <option value="{{ $g->id }}" @selected((int) ($f['group'] ?? 0) === $g->id)>
                     {{ $g->displayName() }} ({{ $g->off_count }})
                 </option>
             @endforeach
-        </select>
+        </select></label>
 
-        <select name="gov" style="min-width:150px">
-            <option value="">— {{ __('geo.governorate') }} —</option>
+        <label class="fl"><span>{{ __('ui.l_gov') }}</span>
+        <select name="gov">
+            <option value="">{{ __('ui.all_of', ['x' => __('uia.x_govs')]) }}</option>
             @foreach (Governorates::keys() as $k)
                 <option value="{{ $k }}" @selected(($f['gov'] ?? '') === $k)>{{ Governorates::label($k) }}</option>
             @endforeach
-        </select>
+        </select></label>
 
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;white-space:nowrap">
             <input type="checkbox" name="incomplete" value="1" @checked($f['incomplete'] ?? false)>
@@ -186,7 +188,8 @@
         </div>
 
         <div class="tablewrap">
-            <table>
+            {{-- جدول إدخال (محافظة/زون في كل صف) — التصدير الكامل من قايمة العملاء بفلتر الحالة --}}
+            <table data-noxl>
                 <tr>
                     <th style="width:34px">
                         {{-- الشغّال بقى بيتعلّم عليه برضو — للتوزيع
@@ -199,7 +202,7 @@
                     <th>{!! $sortLink('gov', __('geo.governorate')) !!}</th>
                     <th>{!! $sortLink('zone', __('client.zone')) !!}</th>
                     <th>{{ __('common.address') }}</th>
-                    <th>{{ __('common.phone') }}</th>
+                    <th data-nosum>{{ __('common.phone') }}</th>
                     @if ($showingActive)
                         <th>{!! $sortLink('status', __('common.status')) !!}</th>
                     @endif
@@ -230,7 +233,7 @@
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $c->name }}</div>
                             @endif
                         </td>
-                        <td><span class="badge b-purple">{{ $c->group?->displayName() ?? '—' }}</span></td>
+                        <td>@if ($c->group)<a class="badge b-purple" href="{{ route('erp.groups.show', $c->group) }}">{{ $c->group->displayName() }}</a>@else <span class="badge b-gray">—</span> @endif</td>
                         {{-- ═══ تسكين إنلاين (طلب المالك ١٨/٨ مساءً) ═══
                              «عمودين جداد: محافظة أدوس عليها أختار قاهرة،
                              يظهرلي مناطق القاهرة في العمود التاني،

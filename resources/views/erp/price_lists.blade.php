@@ -31,8 +31,8 @@
             <tr>
                 <th>{{ __('common.code') }}</th>
                 <th>{{ __('price.list') }}</th>
-                <th class="num">{{ __('price.priced') }}</th>
-                <th class="num">{{ __('price.missing') }}</th>
+                <th class="num" data-nosum>{{ __('price.priced') }}</th>
+                <th class="num" data-nosum>{{ __('price.missing') }}</th>
                 <th class="num">{{ __('client.live_clients') }}</th>
                 <th>{{ __('common.status') }}</th>
                 <th></th>

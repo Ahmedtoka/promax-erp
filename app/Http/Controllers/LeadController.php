@@ -91,6 +91,19 @@ class LeadController extends Controller
             ->when($request->boolean('dup'),
                 fn ($x) => $x->whereNotNull('leads.dup_client_id')->where('leads.dup_dismissed', false)
                     ->whereIn('leads.status', Lead::OPEN_STATUSES))
+            // ═══ «المتابعة» (٢٢/٩) — كروت الملخّص بقت فلاتر ═══
+            // نفس تعريف كل كارت في `index` بالحرف، عشان عدد الصفوف = رقم الكارت.
+            ->when($request->input('focus') === 'open',
+                fn ($x) => $x->whereIn('leads.status', Lead::OPEN_STATUSES))
+            ->when($request->input('focus') === 'strong',
+                fn ($x) => $x->whereIn('leads.status', Lead::OPEN_STATUSES)
+                    ->where('leads.score', '>=', \App\Support\LeadScore::STRONG))
+            ->when($request->input('focus') === 'overdue',
+                fn ($x) => $x->whereIn('leads.status', Lead::OPEN_STATUSES)
+                    ->whereNotNull('leads.next_action_on')
+                    ->whereDate('leads.next_action_on', '<', today()))
+            ->when($request->input('focus') === 'assigned',
+                fn ($x) => $x->whereNotNull('leads.assigned_to'))
             // فلتر «من — إلى» (٩/٩/٢٠٢٦) على `leads.created_at` = تاريخ
             // دخول الليد المحفظة (استيراد أو تسجيل ميداني). هنا مش في
             // `index` عشان التسكين الجماعي «كل نتايج الفلتر» يشوف نفس
@@ -152,6 +165,29 @@ class LeadController extends Controller
 
         $q->when($sort === 'score', fn ($x) => $x->orderByDesc('score')->orderByDesc('id'))
             ->when($sort === 'recent', fn ($x) => $x->orderByDesc('id'));
+
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩/٢٠٢٦) ═══
+        // القايمة صفحات، وزرار «إكسيل الجدول» بيطلّع الصفحة المعروضة بس.
+        // نفس الكويري ونفس الترتيب — والإجمالي هو رقم كارت «قيمة الفرص» لنفس الفلتر.
+        if ($request->boolean('export')) {
+            $rows = (clone $q)->get();
+            $range = DateRange::fromRequest($request);
+
+            return \App\Support\Csv::download('leads-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('common.code'), __('lead.score'), __('common.name'), __('common.phone'), __('client.zone'),
+                __('lead.f_cat'), __('lead.f_source'), __('lead.assigned_to'), __('lead.expected_monthly'),
+                __('lead.next_action'), __('common.status'), __('common.date'),
+            ], $rows->map(fn (Lead $l) => [
+                $l->number, $l->score, $l->displayName(), $l->phone ?? '', $l->zone?->displayName() ?? '',
+                $l->category_raw ?? '', $l->source ? __('lead.source_'.$l->source) : '',
+                $l->assignee?->displayName() ?? '', \App\Support\Csv::money($l->expected_monthly),
+                $l->next_action_on?->format('Y-m-d') ?? '',
+                __('lead.status_'.$l->status), $l->created_at?->format('Y-m-d') ?? '',
+            ]), [
+                __('common.total'), '', $rows->count(), '', '', '', '', '',
+                \App\Support\Csv::money($rows->sum('expected_monthly')), '', '', '',
+            ], \App\Support\Csv::meta(__('lead.page'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
 
         // ═══ المحفظة (بايبلاين ٢٦/٨) — الخريطة وتوزيعة المناطق ═══
         //
@@ -243,6 +279,8 @@ class LeadController extends Controller
             'zoneReps' => $zoneReps,
             'cats' => $cats,
             'dist' => $dist,
+            // إجمالي «المتوقع شهرياً» على كل النتيجة المفلترة — لفوتر الجدول (القايمة صفحات) ونفس رقم التصدير
+            'listValue' => (float) $counts->sum('v'),
             'dupPending' => $dupPending,
             // ⚠️ **كل** الزونز والمناديب، مش النشطين بس. لو زون
             // اتوقّف، الليد المرتبط بيه كان بيلاقي الاختيار مش موجود
@@ -267,7 +305,7 @@ class LeadController extends Controller
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
             ],
             'sort' => $sort,
-            'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per', 'from', 'to']),
+            'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per', 'from', 'to', 'focus']),
             // نفس المدى اللي `filteredQuery` طبّقته — للخانات وللينكات
             'range' => DateRange::fromRequest($request),
             // ⚠️ `isManager()` بتشمل مدير الفرع، وكل أكشنات الليدز `role:admin,manager` —

@@ -22,18 +22,18 @@
 {{-- ═══ المندوب والأسبوع ═══ --}}
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
     <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div style="flex:0 1 260px">
-            <label class="f">{{ __('ops.rep') }}</label>
+        {{-- ⚠️ من غير اختيار فاضي عن قصد — الجدولة دايماً لمندوب محدّد، والكنترولر بيفتح على أول واحد --}}
+        <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
             <select name="rep" onchange="this.form.submit()">
                 @foreach ($reps as $r)
-                    <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->name }} ({{ $r->code }})</option>
+                    <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->displayName() }} ({{ $r->code }})</option>
                 @endforeach
-            </select>
-        </div>
-        <div style="flex:0 1 190px">
-            <label class="f">{{ __('lead.week_of') }}</label>
-            <input type="date" name="week" value="{{ $start->toDateString() }}" onchange="this.form.submit()">
-        </div>
+            </select></label>
+        <label class="fl"><span>{{ __('lead.week_of') }}</span>
+            <input type="date" name="week" value="{{ $start->toDateString() }}" onchange="this.form.submit()"></label>
+        @if ($repId)
+            <a class="btn sm" href="{{ route('ops.rep', $repId) }}">👤 {{ __('ui.l_rep') }} ↗</a>
+        @endif
         <a class="btn" href="{{ route('erp.leads.planner', ['rep' => $repId, 'week' => $start->copy()->subWeek()->toDateString()]) }}">→</a>
         <a class="btn" href="{{ route('erp.leads.planner', ['rep' => $repId, 'week' => $start->copy()->addWeek()->toDateString()]) }}">←</a>
     </form>

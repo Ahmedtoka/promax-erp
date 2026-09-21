@@ -56,52 +56,54 @@
 </div>
 
 {{-- ═══════════ الأرقام ═══════════ --}}
+{{-- الكروت ملخّص ورقة العد اللي تحت — بتودّي عليها (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.lines') }}</div>
         <div class="val">{{ $fmt($items->count()) }}</div>
         <div class="sub2">{{ $count->warehouse->displayName() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.pending_lines') }}</div>
         <div class="val {{ $pending > 0 ? 'mid' : 'pos' }}">{{ $fmt($pending) }}</div>
         <div class="sub2">{{ __('count.not_counted') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.diff_lines') }}</div>
         <div class="val {{ $diffs > 0 ? 'neg' : 'pos' }}">{{ $fmt($diffs) }}</div>
         <div class="sub2">{{ __('count.difference') }}</div>
-    </div>
+    </a>
     @if (! $open)
-        <div class="kpi">
+        <a class="kpi" href="#cntSheet">
             <div class="lbl">{{ __('count.qty_diff') }}</div>
             <div class="val num {{ $count->qty_diff < 0 ? 'neg' : ($count->qty_diff > 0 ? 'pos' : '') }}">
                 {{ $count->qty_diff > 0 ? '+' : '' }}{{ $fmt($count->qty_diff) }}
             </div>
             <div class="sub2">{{ __('common.qty') }}</div>
-        </div>
-        <div class="kpi">
+        </a>
+        <a class="kpi" href="#cntSheet">
             <div class="lbl">{{ __('count.value_diff') }}</div>
             <div class="val num {{ $count->value_diff < 0 ? 'neg' : ($count->value_diff > 0 ? 'pos' : '') }}">
                 {{ $money($count->value_diff) }}
             </div>
             <div class="sub2">{{ __('common.currency') }}</div>
-        </div>
+        </a>
     @endif
 </div>
 
 {{-- ═══════════ ورقة العد ═══════════ --}}
 <form method="POST" action="{{ route('wh.count.record', $count) }}">
     @csrf
-    <div class="card">
+    <div class="card" id="cntSheet">
         <h3>📝 {{ __('count.sheet') }} <span class="side">{{ $items->count() }}</span></h3>
 
         <div class="tablewrap">
-            <table>
+            {{-- ⚠️ وهي مفتوحة للعد «المعدود» خانات إدخال، وإكسيل الجدول بيقرا النص بس — فبيتقفل لحد ما تتقفل الورقة --}}
+            <table @if ($editable) data-noxl @endif>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>
-                    <th>{{ __('stock.expiry') }}</th>
+                    <th data-nosum>{{ __('stock.expiry') }}</th>
                     <th class="num">{{ __('count.expected') }}</th>
                     @if (! $open)
                         <th class="num">{{ __('count.system_now') }}</th>
@@ -124,7 +126,7 @@
                                          style="width:110px;height:110px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#fff;flex-shrink:0">
                                 @endif
                                 <div>
-                                    <b>{{ $it->product->displayName() }}</b>
+                                    <a href="{{ route('erp.products.show', $it->product) }}" target="_blank" rel="noopener"><b>{{ $it->product->displayName() }}</b></a>
                                     <br><span style="font-size:10.5px;color:var(--muted)">{{ $it->product->code }}</span>
                                 </div>
                             </div>
@@ -161,8 +163,8 @@
 
                         <td>
                             @if ($editable)
-                                <select name="reason[{{ $it->id }}]" style="width:130px">
-                                    <option value="">—</option>
+                                <select name="reason[{{ $it->id }}]" style="min-width:150px" aria-label="{{ __('count.reason') }}">
+                                    <option value="">{{ __('ui.choose', ['x' => __('count.reason')]) }}</option>
                                     @foreach ($reasons as $r)
                                         <option value="{{ $r }}" @selected($it->reason === $r)>{{ __('count.reason_'.$r) }}</option>
                                     @endforeach

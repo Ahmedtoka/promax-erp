@@ -22,31 +22,30 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi">
+    {{-- (٢٢/٩) الأصول والخصوم مفرودين في الجدول تحت، والاتزان بيتراجع من ميزان المراجعة --}}
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.assets') }}</div>
         <div class="val">{{ $fmt($data['total_assets']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $asOf->format('Y-m-d') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.liabilities') }} + {{ __('gl.equity') }}</div>
         <div class="val">{{ $fmt($data['total_liabilities_equity']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('gl.retained_earnings') }}: {{ $fmt($data['retained']) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('gl.trial_balance', ['to' => $asOf->toDateString()]) }}">
         <div class="lbl">{{ __('gl.balanced') }}</div>
         <div class="val {{ $data['balanced'] ? '' : 'neg' }}">{{ $data['balanced'] ? '✓' : '✕' }}</div>
         <div class="sub2">{{ $data['balanced'] ? __('gl.balanced') : __('gl.not_balanced') }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="gl-table">
     <h3>🏛️ {{ __('gl.balance_sheet') }}</h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('gl.as_of') }}</label>
-            <input type="date" name="to" value="{{ $asOf->toDateString() }}" onchange="this.form.submit()">
-        </div>
+    <form method="GET" class="searchbar" data-noprint>
+        <label class="fl"><span>{{ __('gl.as_of') }}</span>
+            <input type="date" name="to" value="{{ $asOf->toDateString() }}" onchange="this.form.submit()"></label>
     </form>
 
     <div class="tablewrap">
@@ -55,7 +54,8 @@
                 {{-- ⚠️ data-nosum — كود الحساب نص مش مبلغ --}}
                 <th data-nosum>{{ __('gl.code') }}</th>
                 <th style="text-align:start">{{ __('gl.name') }}</th>
-                <th class="num">{{ __('gl.amount') }}</th>
+                {{-- ⚠️ data-nosum (٢٢/٩) — الأقسام ليها إجمالياتها جوه الجدول؛ جمع العمود كله (أصول + خصوم / إيراد + مصروف) رقم مالوش معنى --}}
+                <th class="num" data-nosum>{{ __('gl.amount') }}</th>
             </tr>
 
             <tr><td colspan="3" style="text-align:start"><b>{{ __('gl.assets') }}</b></td></tr>

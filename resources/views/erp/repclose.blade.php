@@ -46,7 +46,7 @@
                 @php $rep = $r['rep']; @endphp
                 <tr>
                     <td style="text-align:start">
-                        <b>{{ $rep->displayName() }}</b>
+                        <a href="{{ route('ops.rep', $rep->id) }}"><b>{{ $rep->displayName() }}</b></a>
                         <div style="font-size:10px;color:var(--muted)">{{ $rep->code }}</div>
                     </td>
                     <td class="s">
@@ -111,9 +111,11 @@
 <div class="card">
     <h3>🗂️ {{ __('settle.recent') }}</h3>
     {{-- فلتر «من — إلى» على `to_at` لحظة القفل (٩/٩/٢٠٢٦) — فاضي = آخر ١٥ زي ما كان --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    {{-- ⚠️ `all => false`: الفترة الفاضية هنا = آخر ١٥ تصفية مش «كل الفترات» — «مسح» بيرجّعلها --}}
+    <form method="GET" class="searchbar" data-noprint>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('erp.repclose') }}">{{ __('common.clear') }}</a>
     </form>
     <div class="tablewrap st-tbl">
         <table>
@@ -133,8 +135,8 @@
             </tr>
             @forelse ($recent as $s)
                 <tr>
-                    <td class="num"><b>{{ $s->number }}</b></td>
-                    <td>{{ $s->user?->displayName() ?? '—' }}</td>
+                    <td class="num"><a href="{{ route('erp.repclose.details', $s) }}"><b>{{ $s->number }}</b></a></td>
+                    <td>@if ($s->user)<a href="{{ route('ops.rep', $s->user->id) }}">{{ $s->user->displayName() }}</a>@else — @endif</td>
                     <td class="num" style="font-size:10.5px" dir="ltr">
                         {{ $s->from_at?->format('m-d h:i A') ?? __('settle.since_start') }}
                         ← {{ $s->to_at->format('m-d h:i A') }}

@@ -19,36 +19,41 @@
 
 @section('content')
 
+{{-- الكروت بترتّب الجدول تحت على رقمها (٢٢/٩) — والمستقلين بيفتحوا قايمة العملاء --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#chainsTbl" onclick="sortChainsBy('branches')">
         <div class="lbl">{{ __('client.chain_count') }}</div>
         <div class="val">{{ $groups->count() }}</div>
         <div class="sub2">{{ __('client.linked_branches', ['count' => $groups->sum('clients_count')]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#chainsTbl" onclick="sortChainsBy('purchases')">
         <div class="lbl">{{ __('client.chains_purchases') }}</div>
         <div class="val" style="color:var(--primary)">{{ $fmt($stats->sum('purchases')) }} {{ __('common.currency') }}</div>
-    </div>
-    <div class="kpi">
+        <div class="sub2">{{ __('uia.by_chain') }}</div>
+    </a>
+    <a class="kpi" href="#chainsTbl" onclick="sortChainsBy('balance')">
         <div class="lbl">{{ __('client.chains_balance') }}</div>
         <div class="val {{ $stats->sum('balance') > 0 ? 'neg' : 'pos' }}">{{ $fmt($stats->sum('balance')) }} {{ __('common.currency') }}</div>
-    </div>
-    <div class="kpi">
+        <div class="sub2">{{ __('uia.by_chain') }}</div>
+    </a>
+    <a class="kpi" href="{{ route('erp.clients', ['flag' => 'indep']) }}">
         <div class="lbl">{{ __('client.independent_clients') }}</div>
         <div class="val">{{ $ungrouped }}</div>
         <div class="sub2">{{ __('client.no_chain') }}</div>
-    </div>
+    </a>
 </div>
 
 <div class="card">
     <form class="searchbar" method="GET">
-        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('client.search_chain') }}">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('client.search_chain') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_channel') }}</span>
         <select name="channel">
             <option value="">{{ __('client.all_channels') }}</option>
             @foreach ($channels as $ch)
                 <option value="{{ $ch->id }}" @selected((int) ($filters['channel'] ?? 0) === $ch->id)>{{ $ch->displayName() }}</option>
             @endforeach
-        </select>
+        </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.groups') }}">{{ __('common.clear') }}</a>
         <span class="badge b-gray">{{ __('client.chain_countable', ['count' => $groups->count()]) }}</span>
@@ -67,7 +72,7 @@
                 <th class="srt" data-k="purchases" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
                 <th class="srt" data-k="collected" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
                 <th class="srt" data-k="balance" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
-                <th class="srt" data-k="rate" data-t="n">{{ __('client.collection_rate') }}<span class="arw"></span></th>
+                <th class="srt" data-k="rate" data-t="n" data-nosum>{{ __('client.collection_rate') }}<span class="arw"></span></th>
             </tr>
             </thead>
             <tbody>
@@ -87,13 +92,13 @@
                     data-purchases="{{ $p }}" data-collected="{{ $c }}"
                     data-balance="{{ $b }}" data-rate="{{ round($rate, 2) }}">
                     <td>
-                        <b>{{ $g->displayName() }}</b>
+                        <a href="{{ route('erp.groups.show', $g) }}" onclick="event.stopPropagation()"><b>{{ $g->displayName() }}</b></a>
                         @if (! $g->active)<span class="badge b-gray">{{ __('client.suspended') }}</span>@endif
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $g->code }}</span>
                     </td>
                     <td>
                         @if ($g->channel)
-                            <span class="badge {{ $g->channel->badgeClass() }}">{{ $g->channel->displayName() }}</span>
+                            <a class="badge {{ $g->channel->badgeClass() }}" href="{{ route('erp.groups', ['channel' => $g->channel_id]) }}" onclick="event.stopPropagation()">{{ $g->channel->displayName() }}</a>
                         @else — @endif
                     </td>
                     <td style="color:var(--muted);font-size:11.5px">{{ $g->subChannelLabel() ?? '—' }}</td>
@@ -120,6 +125,12 @@
 </style>
 
 <script>
+// كروت الملخّص بتنادي دي — بترتّب الجدول تنازلي على عمود الكارت
+function sortChainsBy(k) {
+    const th = document.querySelector('#chainsTbl th.srt[data-k="' + k + '"]');
+    if (th) th.click();
+}
+
 (function () {
     'use strict';
     const tbl = document.getElementById('chainsTbl');

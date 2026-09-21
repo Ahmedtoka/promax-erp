@@ -28,32 +28,26 @@
 {{-- ═══ الفلاتر — بليبلات ═══ --}}
 <div class="card" style="margin-bottom:12px">
     <form method="GET" action="{{ route('erp.leads.route') }}" class="searchbar" style="align-items:flex-end;row-gap:10px">
-        <div style="flex:1;min-width:180px">
-            <label class="f">🔎 {{ __('common.search') }}</label>
-            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" style="width:100%">
-        </div>
-        <div>
-            <label class="f">{{ __('client.zone') }}</label>
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
+        <label class="fl wide"><span>{{ __('ui.l_zone') }}</span>
             {{-- الزون بعدد ليداته (٦/٩) — الأكتر فوق، واللي مفيهوش برة --}}
-            <select name="zone" style="min-width:200px">
-                <option value="">{{ __('common.all') }}</option>
+            <select name="zone">
+                <option value="">{{ __('client.all_zones') }}</option>
                 @foreach ($zones->filter(fn ($z) => ($zoneCounts[$z->id] ?? 0) > 0)
                     ->sortByDesc(fn ($z) => $zoneCounts[$z->id]) as $z)
                     <option value="{{ $z->id }}" @selected(($filters['zone'] ?? '') == $z->id)>
                         {{ $z->displayName() }} ({{ $zoneCounts[$z->id] }})</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('lead.f_cat') }}</label>
-            <select name="cat" style="min-width:180px">
+            </select></label>
+        <label class="fl wide"><span>{{ __('lead.f_cat') }}</span>
+            <select name="cat">
                 <option value="">{{ __('lead.all_cats') }}</option>
                 @foreach ($cats as $c)
                     <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
                         {{ $c->category_raw }} ({{ $c->n }})</option>
                 @endforeach
-            </select>
-        </div>
+            </select></label>
         <button class="btn gold">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('erp.leads.route') }}">🧹 {{ __('lead.clear_filters') }}</a>
         <span class="badge b-blue" style="align-self:center">{{ $leads->count() }} 📍</span>
@@ -71,7 +65,7 @@
         <div style="flex:0 1 280px;min-width:230px">
             <label class="f">{{ __('ops.rep') }}</label>
             <select name="rep_id" required style="width:100%">
-                <option value="">—</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                 @foreach ($reps as $r)
                     <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
                 @endforeach

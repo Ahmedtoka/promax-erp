@@ -36,7 +36,14 @@
 {{-- ═══════════ الرأس ═══════════ --}}
 <div class="card">
     <h3>
-        📜 {{ $name }}
+        📜
+        @if ($ct->client)
+            <a href="{{ route('erp.clients.show', $ct->client) }}">{{ $name }}</a>
+        @elseif ($ct->group)
+            <a href="{{ route('erp.groups.show', $ct->group) }}">{{ $name }}</a>
+        @else
+            {{ $name }}
+        @endif
         <span class="side">
             {{ $ct->number }} · {{ $ct->typeLabel() }}
             @if ($ct->group_id) · {{ __('client.from_chain') }}@endif
@@ -49,7 +56,7 @@
         @if ($ct->auto_renew)<span class="badge b-orange">{{ __('client.auto_renew') }}</span>@endif
         @if (! $ct->signed_ok)<span class="badge b-red">{{ __('client.contract_unsigned') }}</span>@endif
         @if ($branches->count() > 1)
-            <span class="badge b-blue">{{ __('client.covered_branches') }}: {{ $branches->count() }}</span>
+            <a class="badge b-blue" href="#coveredCard">{{ __('client.covered_branches') }}: {{ $branches->count() }}</a>
         @endif
     </div>
 </div>
@@ -68,7 +75,7 @@
                 <label class="f">{{ __('client.chain') }}</label>
                 <select name="group_id" id="linkGroup" style="width:100%"
                         onchange="if (this.value) document.getElementById('linkClient').value = ''">
-                    <option value="">— {{ __('common.pick') }} —</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_group')]) }}</option>
                     @foreach ($linkGroups as $g)
                         <option value="{{ $g->id }}">{{ $g->displayName() }}</option>
                     @endforeach
@@ -114,13 +121,14 @@
 @endif
 
 {{-- ═══════════ النِسَب الأساسية ═══════════ --}}
+{{-- كل كارت بينزّل على الجدول اللي رقمه جاي منه (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#clauseTables">
         <div class="lbl">{{ __('client.invoice_discount') }}</div>
         <div class="val" style="color:var(--primary)">{{ $pct($ct->discount) }}</div>
         <div class="sub2">{{ __('client.what_reaches_invoice') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#clauseTables">
         <div class="lbl">{{ __('client.total_deduction') }}</div>
         <div class="val {{ $ct->totalDeduction() > 0.3 ? 'neg' : 'mid' }}">{{ $pct($ct->totalDeduction()) }}</div>
         <div class="sub2">
@@ -130,9 +138,9 @@
                 {{ __('client.all_on_invoice') }}
             @endif
         </div>
-    </div>
+    </a>
     @if ($ct->withholding_pct > 0)
-        <div class="kpi">
+        <a class="kpi" href="{{ route('erp.dues') }}#withheldCard">
             <div class="lbl">{{ __('client.withholding') }}</div>
             <div class="val neg">{{ $pct($ct->withholding_pct) }}</div>
             <div class="sub2">
@@ -140,9 +148,9 @@
                     ≈ {{ $fmt($ct->client->withheldAmount()) }} {{ __('common.currency') }}
                 @endif
             </div>
-        </div>
+        </a>
     @endif
-    <div class="kpi">
+    <a class="kpi" href="#clauseTables">
         <div class="lbl">{{ __('client.annual_commitment') }}</div>
         <div class="val">{{ $fmt($ct->annualCommitment()) }} {{ __('common.currency') }}</div>
         <div class="sub2">
@@ -152,18 +160,18 @@
                 {{ __('client.annual_commitment_hint') }}
             @endif
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#keyTerms">
         <div class="lbl">{{ __('client.days_to_expiry') }}</div>
         <div class="val {{ $days === null ? '' : ($days < 0 ? 'neg' : ($days <= 90 ? 'mid' : 'pos')) }}">
             {{ $days === null ? '—' : $fmt($days) }}
         </div>
         <div class="sub2">{{ $ct->ends_at?->format('Y-m-d') ?? __('client.undated_contract') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ الشروط الأساسية ═══════════ --}}
-<div class="card">
+<div class="card" id="keyTerms">
     <h3>📋 {{ __('client.key_terms') }}</h3>
     <div class="frow">
         <div>
@@ -203,6 +211,7 @@
 </div>
 
 {{-- ═══════════ النِسَب والفلوس — أهم جدول ═══════════ --}}
+<span id="clauseTables"></span>
 @foreach ([
     ['money', $money, '💰', 'client.money_clauses', true],
     ['fees', $fees, '🧾', 'client.fee_clauses', true],
@@ -216,7 +225,8 @@
                 <table>
                     <tr>
                         <th>{{ __('client.clause') }}</th>
-                        <th class="num">{{ __('client.clause_value') }}</th>
+                        {{-- نِسَب ومبالغ على أسس مختلفة — جمعها مالوش معنى --}}
+                        <th class="num" data-nosum>{{ __('client.clause_value') }}</th>
                         <th>{{ __('client.clause_basis') }}</th>
                         <th>{{ __('client.clause_kind') }}</th>
                         @if ($manager)<th></th>@endif
@@ -262,7 +272,7 @@
 {{-- ═══════════ الفروع المغطاة ═══════════ --}}
 @if ($branches->count() > 1)
 <div class="card">
-    <h3>🏬 {{ __('client.covered_branches') }} <span class="side">{{ $branches->count() }}</span></h3>
+    <h3 id="coveredCard">🏬 {{ __('client.covered_branches') }} <span class="side">{{ $branches->count() }}</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:6px">
         @foreach ($branches as $b)
             <a class="badge b-gray" style="text-decoration:none"
@@ -329,6 +339,7 @@
             <div>
                 <label class="f">{{ __('client.clause_kind') }}</label>
                 <select name="kind" id="clauseKind" required style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('client.clause_kind')]) }}</option>
                     @foreach (array_keys(\App\Models\ContractClause::KINDS) as $k)
                         <option value="{{ $k }}">{{ __('client.clause_kind_'.$k) }}</option>
                     @endforeach
@@ -337,6 +348,7 @@
             <div>
                 <label class="f">{{ __('client.clause_basis') }}</label>
                 <select name="basis" id="clauseBasis" required style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('client.clause_basis')]) }}</option>
                     @foreach (\App\Models\ContractClause::BASES as $b)
                         <option value="{{ $b }}">{{ __('client.clause_basis_'.$b) }}</option>
                     @endforeach

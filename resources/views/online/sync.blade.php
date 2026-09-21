@@ -58,7 +58,7 @@
                 <div>
                     <label class="f">{{ __('online.warehouse') }}</label>
                     <select name="online_warehouse_id">
-                        <option value="">—</option>
+                        <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                         @foreach ($warehouses as $w)
                             <option value="{{ $w->id }}" @selected((string) $w->id === ($settings['online_warehouse_id'] ?? ''))>
                                 {{ $w->displayName() }}</option>
@@ -87,13 +87,14 @@
 
 {{-- ═══ الهيدر: العدادات + زرار السينك ═══ --}}
 <div class="kpis">
-    <div class="kpi"><b class="num">{{ $counts['new'] }}</b><span>{{ __('online.k_new') }}</span></div>
-    <div class="kpi"><b class="num">{{ $counts['postponed'] }}</b><span>{{ __('online.k_postponed') }}</span></div>
-    <div class="kpi"><b class="num {{ $counts['due_today'] > 0 ? 'mid' : '' }}">{{ $counts['due_today'] }}</b>
-        <span>{{ __('online.k_due_today') }}</span></div>
+    {{-- العدادات بتفتح «كل الأوردرات» بنفس الحالة — والمؤجل اللي جه يومه طافي فوق في الجدول تحت (٢٢/٩) --}}
+    <a class="kpi" href="{{ route('online.orders', ['status' => 'new']) }}"><b class="num">{{ $counts['new'] }}</b><span>{{ __('online.k_new') }}</span></a>
+    <a class="kpi" href="{{ route('online.orders', ['status' => 'postponed']) }}"><b class="num">{{ $counts['postponed'] }}</b><span>{{ __('online.k_postponed') }}</span></a>
+    <a class="kpi" href="#syncList"><b class="num {{ $counts['due_today'] > 0 ? 'mid' : '' }}">{{ $counts['due_today'] }}</b>
+        <span>{{ __('online.k_due_today') }}</span></a>
 </div>
 
-<div class="card">
+<div class="card" id="syncList">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <h3 style="margin:0">🔄 {{ __('online.sync_title') }}</h3>
         @if ($canAct)
@@ -123,7 +124,7 @@
             </tr>
             @forelse ($orders as $o)
                 <tr @if ($o->status === 'postponed' && $o->postponed_to?->lte(today())) style="background:#FFF8EC" @endif>
-                    <td class="num s"><b>#{{ $o->number }}</b>
+                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a>
                         @if ($o->ordered_at)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $o->ordered_at->format('d/m h:i A') }}</span>
                         @endif

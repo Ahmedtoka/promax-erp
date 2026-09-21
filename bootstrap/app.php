@@ -30,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             App\Http\Middleware\SetLocale::class,
             App\Http\Middleware\TrackVisit::class,
+            // (٢٢/٩) اللينك اللي اليوزر مايقدرش يفتحه بيتحوّل نص — انظر LinkGuard
+            App\Http\Middleware\GuardLinks::class,
         ]);
 
         // نفس الحكاية للـ API — رسايل الأبلكيشن لازم تطلع بلغة اليوزر.
@@ -38,6 +40,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // ياخد users.locale نفسه.
         $middleware->api(append: [
             App\Http\Middleware\SetLocale::class,
+            // أكشنات الأبلكيشن (٢٢/٩) — الـGET بتاعه متسابة بره جوه الميدلوير
+            App\Http\Middleware\TrackVisit::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

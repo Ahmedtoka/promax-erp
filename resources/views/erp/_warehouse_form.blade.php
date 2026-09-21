@@ -51,6 +51,8 @@
                     {{-- ⚠️ `old()` هنا كمان — من غيره النوع كان بيرجع
                          «مصنع» بعد أي فشل تحقّق بينما كل خانات النص
                          بترجع مليانة، فالمستخدم يبعت تاني ويعمل مصنع. --}}
+                    {{-- من غير اختيار جاهز — النوع كان بينزل «مصنع» لوحده (٢٢/٩) --}}
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_type')]) }}</option>
                     <option value="{{ Warehouse::TYPE_FACTORY }}" @selected($o('type') === Warehouse::TYPE_FACTORY)>{{ __('stock.type_factory') }}</option>
                     <option value="{{ Warehouse::TYPE_BRANCH }}" @selected($o('type') === Warehouse::TYPE_BRANCH)>{{ __('stock.type_branch') }}</option>
                 </select>

@@ -177,6 +177,15 @@ class AccountAuditController extends Controller
             'ready_to_bill' => $rows->filter(fn ($r) => $state($r) === 'full'
                 && $r['audit']?->tax_invoice !== true),
             'unbilled' => $rows->filter(fn ($r) => $r['audit']?->tax_invoice === false),
+            // كروت السامري بقت فلاتر (٢٢/٩) — نفس تعريف `summarize()` بالحرف عشان عدد الصفوف = رقم الكارت
+            'has_account' => $rows->filter(fn ($r) => $r['audit']?->has_account === true),
+            'has_statement' => $rows->filter(fn ($r) => $r['audit']?->has_statement === true),
+            'has_receipt' => $rows->filter(fn ($r) => $r['audit']?->has_receipt === true),
+            'billed' => $rows->filter(fn ($r) => $r['audit']?->tax_invoice === true),
+            // مربعات التقرير (`erp.audit.report`) بتفتح القايمة على الحالات دي
+            'files' => $rows->filter(fn ($r) => $r['audit']?->statement_path !== null),
+            'billing_pending' => $rows->filter(fn ($r) => $r['audit']?->tax_invoice === null),
+            'confirmed' => $rows->filter(fn ($r) => $r['audit']?->confirmed_at !== null),
             default => $rows,
         };
 

@@ -74,7 +74,7 @@
 <div class="st-sec">📋 {{ __('settle.sec_summary') }}</div>
 
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('ops.rep', $rep->id) }}">
         <div class="lbl">{{ __('settle.rep') }}</div>
         <div class="val" style="font-size:17px">{{ $rep->displayName() }}</div>
         <div class="sub2">
@@ -82,8 +82,8 @@
             {{ $from_at ? __('settle.since_last').' '.$from_at->format('Y-m-d h:i A') : __('settle.since_start') }}
             ← {{ __('settle.now') }}
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#sx-goods">
         <div class="lbl">🚚 {{ __('settle.custody_state') }}</div>
         <div class="val" style="font-size:17px">
             @if ($custody === null)
@@ -97,87 +97,87 @@
         <div class="sub2">{{ __('settle.still_on_van') }}: {{ number_format($goods['remaining_qty']) }} {{ __('common.piece') }}</div>
         {{-- قيمة الباقي بكل قايمة — استرشادي، التصفية بالقطع (١٢/٨) --}}
         <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div>
-    </div>
+    </a>
 </div>
 
 <div class="st-sec">💰 {{ __('settle.sec_money') }}</div>
 
 <div class="kpis">
-    <div class="kpi {{ (float) $cash_sales == 0.0 ? 'st-zero' : '' }}">
+    <a href="#sx-sales" class="kpi {{ (float) $cash_sales == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">💵 {{ __('settle.cash_sales') }}</div>
         <div class="val">{{ $fmt($cash_sales) }}</div>
         {{-- التفصيلة اللي لخبطت مرتين: الرقم = فواتير + أوامر توريد --}}
         <div class="sub2">{{ __('settle.split_line', ['inv' => $fmt($inv_cash), 'po' => $fmt($po_cash)]) }}</div>
         <div class="sub2">{{ __('settle.invoice_count', ['count' => $invCashCount]) }}</div>
-    </div>
-    <div class="kpi {{ (float) $credit_sales == 0.0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-sales" class="kpi {{ (float) $credit_sales == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">📒 {{ __('settle.credit_sales') }}</div>
         <div class="val" style="color:var(--muted)">{{ $fmt($credit_sales) }}</div>
         <div class="sub2">{{ __('settle.split_line', ['inv' => $fmt($inv_credit), 'po' => $fmt($po_credit)]) }}</div>
         <div class="sub2">{{ __('settle.invoice_count', ['count' => $invCreditCount]) }}</div>
-    </div>
-    <div class="kpi {{ (float) $cash_collections == 0.0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-coll" class="kpi {{ (float) $cash_collections == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">🧾 {{ __('settle.field_collections') }}</div>
         <div class="val pos">{{ $fmt($cash_collections) }}</div>
         <div class="sub2">{{ __('settle.in_expected') }} · {{ __('settle.entry_count', ['count' => $collCashCount]) }}</div>
-    </div>
-    <div class="kpi {{ (float) $other_collections_value == 0.0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-coll" class="kpi {{ (float) $other_collections_value == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">📄 {{ __('settle.noncash_collections') }}</div>
         <div class="val" style="color:var(--blue, #2470E3)">{{ $fmt($other_collections_value) }}</div>
         <div class="sub2">{{ __('settle.noncash_docs_hint') }} · {{ __('settle.doc_count', ['count' => $collOtherCount]) }}</div>
-    </div>
-    <div class="kpi {{ (float) $cash_refunds == 0.0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-ret" class="kpi {{ (float) $cash_refunds == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">↩️ {{ __('settle.cash_refunds') }}</div>
         <div class="val mid">{{ $fmt($cash_refunds) }}</div>
         <div class="sub2">{{ __('settle.entry_count', ['count' => $refundRows->count()]) }}</div>
-    </div>
-    <div class="kpi {{ (float) $returns_value == 0.0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-ret" class="kpi {{ (float) $returns_value == 0.0 ? 'st-zero' : '' }}">
         <div class="lbl">📥 {{ __('settle.returns_value_lbl') }}</div>
         <div class="val" style="color:var(--purple-heart, #602D90)">{{ $fmt($returns_value) }}</div>
         <div class="sub2">
             {{ __('settle.good_damaged', ['good' => number_format($returns_good), 'damaged' => number_format($returns_damaged)]) }}
             · {{ __('settle.doc_count', ['count' => $returns->count()]) }}
         </div>
-    </div>
+    </a>
 </div>
 
 <div class="st-sec">📦 {{ __('settle.sec_goods') }}</div>
 
 <div class="kpis">
-    <div class="kpi {{ $goods['assigned'] == 0 ? 'st-zero' : '' }}">
+    <a href="#sx-goods" class="kpi {{ $goods['assigned'] == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.loaded') }}</div>
         <div class="val">{{ number_format($goods['assigned']) }}</div>
         <div class="sub2">{{ __('settle.of_which_gift') }} {{ number_format($goods['gift_assigned']) }}</div>
-    </div>
-    <div class="kpi {{ $spentQty == 0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-goods" class="kpi {{ $spentQty == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.spent') }}</div>
         <div class="val">{{ number_format($spentQty) }}</div>
         <div class="sub2">{{ __('settle.spent_split', ['sold' => number_format($soldQty), 'po' => number_format($goods['po_qty']), 'gift' => number_format($goods['gift_qty'])]) }}</div>
-    </div>
-    <div class="kpi {{ ($goods['returned_wh_qty'] + $transferOutQty) == 0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-goods" class="kpi {{ ($goods['returned_wh_qty'] + $transferOutQty) == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.returned_wh') }}</div>
         <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div>
         {{-- حدّ مستقل في المعادلة (١٤/٨): اتحوّل لعربية زميل بمستند
              تحويل — مش مباع ومش راجع المخزن، وبيتحاسب عليه هو --}}
         <div class="sub2">{{ __('settle.transfer_out') }}: {{ number_format($transferOutQty) }}</div>
-    </div>
-    <div class="kpi {{ $vanLeftQty == 0 ? 'st-zero' : '' }}">
+    </a>
+    <a href="#sx-goods" class="kpi {{ $vanLeftQty == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.still_on_van') }}</div>
         <div class="val" style="color:var(--primary)">{{ number_format($vanLeftQty) }}</div>
         <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div>
         {{-- القيمة بكل قايمة — عرض فقط (١٢/٨) --}}
         <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div>
-    </div>
+    </a>
     {{-- بره المعادلة بقصد — بضاعة العملاء اللي بتتسلّم مع التصفية --}}
-    <div class="kpi {{ ($goods['returned_qty'] + $goods['damaged_qty']) == 0 ? 'st-zero' : '' }}">
+    <a href="#sx-ret" class="kpi {{ ($goods['returned_qty'] + $goods['damaged_qty']) == 0 ? 'st-zero' : '' }}">
         <div class="lbl">{{ __('settle.returned_in') }}</div>
         <div class="val" style="color:var(--purple-heart, #602D90)">{{ number_format($goods['returned_qty']) }}</div>
         <div class="sub2">
             {{ __('settle.returned_in_hint') }} ·
             {{ __('field.return_damaged_units') }}: {{ number_format($goods['damaged_qty']) }}
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#sx-goods">
         <div class="lbl">{{ __('settle.shortage') }}</div>
         <div class="val {{ $goods['diff_qty'] == 0 ? 'pos' : 'neg' }}">
             {{ $goods['diff_qty'] == 0 ? '0 ✓' : number_format($goods['diff_qty']) }}
@@ -185,7 +185,7 @@
         @if ($goods['diff_qty'] != 0)
             <div class="sub2" style="color:var(--red)">{{ __('settle.shortage_hint') }}</div>
         @endif
-    </div>
+    </a>
 </div>
 
 {{-- المعادلة الكبيرة — بتنتهي بالرقم اللي المحاسب هيقبضه --}}
@@ -303,7 +303,7 @@
 
 {{-- 3.1 — الفلوس دي لمين؟ كاش وآجل بالعميل (فواتير بس — الأوامر
      ليها البوكس اللي بعده، وده سبب أي فرق عن كروت السامري) --}}
-<details class="stx" open>
+<details class="stx" open id="sx-sales">
     <summary>💵 {{ __('settle.sales_by_client') }}
         <span class="sside">
             {{ __('settle.cash_invoices') }} {{ $fmt($inv_cash) }} ·
@@ -334,7 +334,7 @@
                             @forelse ($box['rows'] as $r)
                                 <tr class="clickable"
                                     onclick="location.href='{{ route('erp.clients.show', $r['client']) }}'">
-                                    <td><b>{{ $r['client']?->fullName() ?? '—' }}</b></td>
+                                    <td>@if ($r['client'])<a href="{{ route('erp.clients.show', $r['client']->id) }}"><b>{{ $r['client']->fullName() }}</b></a>@else — @endif</td>
                                     <td class="num">{{ $r['count'] }}</td>
                                     {{-- القطع مجموع بنود الفاتورة — بالقطعة دايماً،
                                          مهما كانت الوحدة اللي المندوب كتب بيها --}}
@@ -360,7 +360,7 @@
 
 {{-- 3.2 — أوامر التوريد المسلَّمة: تفصيلة الآجل الناقصة (١١/٨).
      الكاش والآجل في السامري بيجمعوا الفواتير + الأوامر دي --}}
-<details class="stx" open>
+<details class="stx" open id="sx-po">
     <summary>🚚 {{ __('settle.po_delivered') }}
         <span class="sside">
             {{ __('settle.order_count', ['count' => $poRows->count()]) }} · {{ $fmt($poDeliveredValue) }}
@@ -386,8 +386,8 @@
                     <tbody>
                     @forelse ($poRows as $po)
                         <tr>
-                            <td style="text-align:start"><b>{{ $po->number }}</b></td>
-                            <td>{{ $po->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start"><a href="{{ route('ops.pos.show', $po->id) }}"><b>{{ $po->number }}</b></a></td>
+                            <td>@if ($po->client)<a href="{{ route('erp.clients.show', $po->client_id) }}">{{ $po->client->fullName() }}</a>@else — @endif</td>
                             <td class="num" style="font-size:11px" dir="ltr">{{ $po->delivered_at?->format('m-d h:i A') ?? '—' }}</td>
                             <td class="num">{{ number_format((int) $po->items->sum('delivered_qty')) }}</td>
                             @php $poCashClient = $po->client?->paymentTerms() === 'cash'; @endphp
@@ -423,7 +423,7 @@
 </details>
 
 {{-- 3.3 — الفواتير للمطابقة: المحاسب بيراجعها مع المندوب ورقة ورقة --}}
-<details class="stx" open>
+<details class="stx" open id="sx-inv">
     <summary>🧾 {{ __('settle.invoices_to_match') }}
         <span class="sside">{{ __('settle.invoice_count', ['count' => $invoices->count()]) }}</span>
     </summary>
@@ -446,8 +446,8 @@
                     <tbody>
                         @forelse ($invoices as $inv)
                             <tr>
-                                <td class="num"><b>{{ $inv->number }}</b></td>
-                                <td style="text-align:start">{{ $inv->client?->fullName() ?? '—' }}</td>
+                                <td class="num"><a href="{{ route('ops.invoice', $inv->id) }}"><b>{{ $inv->number }}</b></a></td>
+                                <td style="text-align:start">@if ($inv->client)<a href="{{ route('erp.clients.show', $inv->client_id) }}">{{ $inv->client->fullName() }}</a>@else — @endif</td>
                                 <td class="num" style="font-size:11px">{{ $inv->created_at->format('m-d h:i A') }}</td>
                                 <td>
                                     @if ($inv->payment === 'cash')
@@ -474,7 +474,7 @@
 
 {{-- 3.4 — تحصيلات الفترة: الكاش داخل «المتوقع» فوق، وغير الكاش
      تسليم مستندات — المحاسب بيستلم الشيك ويطابق التحويل على الصورة --}}
-<details class="stx" open>
+<details class="stx" open id="sx-coll">
     <summary>💳 {{ __('settle.collections_to_match') }}
         <span class="sside">
             {{ __('settle.field_collections') }} {{ $fmt($cash_collections) }} ·
@@ -498,7 +498,7 @@
                     </tr>
                     @forelse ($collection_rows as $t)
                         <tr>
-                            <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start">@if ($t->client)<a href="{{ route('erp.clients.show', $t->client_id) }}">{{ $t->client->fullName() }}</a>@else — @endif</td>
                             <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d h:i A') }}</td>
                             <td>
                                 <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
@@ -508,7 +508,7 @@
                                         {{ $t->cheque_bank }} · {{ $t->cheque_due->format('Y-m-d') }}</div>
                                 @endif
                             </td>
-                            <td class="num" style="font-size:11px">{{ $t->reference ?: '—' }}</td>
+                            <td class="num" style="font-size:11px">@if ($t->reference)<a href="{{ route('erp.collections', ['ref' => $t->reference]) }}">{{ $t->reference }}</a>@else — @endif</td>
                             <td>
                                 @if ($t->proofUrl())
                                     <a class="btn sm" href="{{ $t->proofUrl() }}" target="_blank">📷</a>
@@ -530,7 +530,7 @@
 
 {{-- 3.5 — مرتجعات الفترة: مستندات المرتجع (سليم/تالف/قيمة)
      + مرتجعات الكاش اللي اتردّت نقدي وبتتخصم من المتوقع --}}
-<details class="stx" open>
+<details class="stx" open id="sx-ret">
     <summary>📥 {{ __('field.returns') }}
         <span class="sside">
             {{ __('settle.doc_count', ['count' => $returns->count()]) }} · {{ $fmt($returns_value) }} ·
@@ -558,8 +558,8 @@
                     </tr>
                     @forelse ($returns as $r)
                         <tr>
-                            <td style="text-align:start"><b>{{ $r->number }}</b></td>
-                            <td style="text-align:start">{{ $r->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start"><a href="{{ route('ops.returns.show', $r->id) }}"><b>{{ $r->number }}</b></a></td>
+                            <td style="text-align:start">@if ($r->client)<a href="{{ route('erp.clients.show', $r->client_id) }}">{{ $r->client->fullName() }}</a>@else — @endif</td>
                             <td><span class="badge b-purple">{{ $r->policyLabel() }}</span></td>
                             <td class="num">{{ number_format($r->good_units) }}</td>
                             <td class="num {{ $r->damaged_units > 0 ? 'neg' : '' }}">
@@ -586,7 +586,7 @@
                     </tr>
                     @forelse ($refundRows as $t)
                         <tr>
-                            <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start">@if ($t->client)<a href="{{ route('erp.clients.show', $t->client_id) }}">{{ $t->client->fullName() }}</a>@else — @endif</td>
                             <td class="num" style="font-size:11px">{{ $t->created_at->format('m-d h:i A') }}</td>
                             <td class="num neg"><b>{{ $fmt($t->debit) }}</b></td>
                         </tr>
@@ -604,7 +604,7 @@
      التصفية كانت بتقفل الفلوس وتسيب البضاعة: المحاسب بيستلم كاش
      ويمضي، والعربية فيها بضاعة محدش عدّها — فالعجز مابيظهرش غير
      في الجرد الشهري، وساعتها محدش يعرف حصل إمتى ولا مع مين --}}
-<details class="stx" open>
+<details class="stx" open id="sx-goods">
     <summary>📦 {{ __('settle.goods_match') }}
         <span class="sside {{ $goods['diff_qty'] == 0 ? 'pos' : 'neg' }}">
             {{ __('settle.shortage') }}: {{ $goods['diff_qty'] == 0 ? '0 ✓' : number_format($goods['diff_qty']) }}
@@ -615,43 +615,44 @@
             <h3>📦 {{ __('settle.goods_match') }}
                 <span class="side">{{ __('settle.goods_formula') }}</span></h3>
 
+            {{-- (٢٢/٩) كل كارت = إجمالي عموده في جدول الأصناف اللي تحت --}}
             <div class="kpis">
-                <div class="kpi"><div class="lbl">{{ __('settle.loaded') }}</div>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.loaded') }}</div>
                     <div class="val">{{ number_format($goods['assigned']) }}</div>
-                    <div class="sub2">{{ __('common.piece') }}</div></div>
-                <div class="kpi"><div class="lbl">{{ __('settle.sold_cash') }}</div>
+                    <div class="sub2">{{ __('common.piece') }}</div></a>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.sold_cash') }}</div>
                     <div class="val pos">{{ number_format($goods['cash_qty']) }}</div>
-                    <div class="sub2">{{ number_format($goods['cash_value'], 2) }}</div></div>
-                <div class="kpi"><div class="lbl">{{ __('settle.sold_credit') }}</div>
+                    <div class="sub2">{{ number_format($goods['cash_value'], 2) }}</div></a>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.sold_credit') }}</div>
                     <div class="val mid">{{ number_format($goods['credit_qty']) }}</div>
-                    <div class="sub2">{{ number_format($goods['credit_value'], 2) }}</div></div>
+                    <div class="sub2">{{ number_format($goods['credit_value'], 2) }}</div></a>
                 {{-- حد ناقص كان بيبلع القطع (تدقيق ٨/٨) — المسلَّم
                      بأوامر التوريد بيخصم من العهدة من غير فاتورة --}}
-                <div class="kpi"><div class="lbl">{{ __('settle.delivered_pos') }}</div>
-                    <div class="val mid">{{ number_format($goods['po_qty']) }}</div></div>
-                <div class="kpi"><div class="lbl">{{ __('settle.gifts') }}</div>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.delivered_pos') }}</div>
+                    <div class="val mid">{{ number_format($goods['po_qty']) }}</div></a>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.gifts') }}</div>
                     <div class="val">{{ number_format($goods['gift_qty']) }}</div>
-                    <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div></div>
-                <div class="kpi"><div class="lbl">{{ __('settle.returned_wh') }}</div>
-                    <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div></div>
+                    <div class="sub2">{{ __('settle.gift_left') }}: {{ number_format($goods['gift_left_qty']) }}</div></a>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.returned_wh') }}</div>
+                    <div class="val">{{ number_format($goods['returned_wh_qty']) }}</div></a>
                 {{-- حد التحويل لمندوب تاني (١٤/٨) — جوه المعادلة --}}
-                <div class="kpi"><div class="lbl">{{ __('settle.transfer_out') }}</div>
-                    <div class="val">{{ number_format($transferOutQty) }}</div></div>
-                <div class="kpi"><div class="lbl">{{ __('settle.still_on_van') }}</div>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.transfer_out') }}</div>
+                    <div class="val">{{ number_format($transferOutQty) }}</div></a>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.still_on_van') }}</div>
                     <div class="val" style="color:var(--primary)">{{ number_format($goods['remaining_qty']) }}</div>
                     {{-- القيمة بكل قايمة — عرض فقط، المعادلة بالقطع (١٢/٨) --}}
-                    <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div></div>
+                    <div class="sub2">@include('partials._list_values', ['totals' => $vanValues])</div></a>
                 {{-- بره المعادلة بقصد: بضاعة العملاء اللي في العربية
                      ومالهاش أصل في المحمَّل — لازم تتسلّم مع التصفية --}}
-                <div class="kpi"><div class="lbl">{{ __('settle.returned_in') }}</div>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('settle.returned_in') }}</div>
                     <div class="val" style="color:var(--purple-heart)">{{ number_format($goods['returned_qty']) }}</div>
-                    <div class="sub2">{{ __('settle.returned_in_hint') }}</div></div>
+                    <div class="sub2">{{ __('settle.returned_in_hint') }}</div></a>
                 {{-- التالف منفصل — بيتسلّم للمخزن لوحده ومابيرجعش للبيع --}}
-                <div class="kpi"><div class="lbl">{{ __('field.return_damaged_units') }}</div>
-                    <div class="val {{ $goods['damaged_qty'] > 0 ? 'neg' : '' }}">{{ number_format($goods['damaged_qty']) }}</div></div>
+                <a class="kpi" href="#sx-goods-tbl"><div class="lbl">{{ __('field.return_damaged_units') }}</div>
+                    <div class="val {{ $goods['damaged_qty'] > 0 ? 'neg' : '' }}">{{ number_format($goods['damaged_qty']) }}</div></a>
                 {{-- الفرق مش خطأ حسابي: فرق ≠ صفر معناه بضاعة خرجت من
                      العربية من غير فاتورة ولا هدية ولا مرتجع — عجز حقيقي --}}
-                <div class="kpi">
+                <a class="kpi" href="#sx-goods-tbl">
                     <div class="lbl">{{ __('settle.shortage') }}</div>
                     <div class="val {{ $goods['diff_qty'] == 0 ? 'pos' : 'neg' }}">
                         {{ $goods['diff_qty'] == 0 ? '0 ✓' : number_format($goods['diff_qty']) }}
@@ -659,10 +660,10 @@
                     @if ($goods['diff_qty'] != 0)
                         <div class="sub2" style="color:var(--red)">{{ __('settle.shortage_hint') }}</div>
                     @endif
-                </div>
+                </a>
             </div>
 
-            <div class="tablewrap">
+            <div class="tablewrap" id="sx-goods-tbl">
                 <table>
                     <thead>
                     <tr>

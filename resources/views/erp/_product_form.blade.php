@@ -95,7 +95,7 @@
                 <div>
                     <label class="f">{{ __('stock.family') }} <b class="req-star">*</b></label>
                     <select name="family" required style="width:100%">
-                        <option value="">— {{ __('stock.family') }} —</option>
+                        <option value="">{{ __('ui.choose', ['x' => __('ui.l_family')]) }}</option>
                         {{-- المسمى من جدول العائلات — العائلات الجديدة مالهاش مفتاح lang --}}
                         @foreach ($families as $k => $lbl)
                             <option value="{{ $k }}" @selected(old('family') === $k)>{{ $lbl }}</option>
@@ -221,7 +221,7 @@
             <div>
                 <label class="f">{{ __('stock.net_uom') }}</label>
                 <select name="net_uom" style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('stock.net_uom')]) }}</option>
                     @foreach (['g' => 'g', 'ml' => 'ml', 'pc' => 'pc'] as $k => $lbl)
                         <option value="{{ $k }}" @selected($v('net_uom') === $k)>{{ $lbl }}</option>
                     @endforeach

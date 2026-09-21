@@ -29,32 +29,33 @@
 
 {{-- ⚠️ **الكروت بقت أربعة بدل اتنين** (طلب المالك ٨/٨/٢٠٢٦):
      «مستنية» لوحدها كانت بتجمع شغل جاهز مع شغل ميدان في رقم واحد. --}}
+{{-- كل كارت هو نفس فلتر الزرار اللي تحت (٢٢/٩) --}}
 <div class="kpis">
     {{-- 🚩 **الطابور الأهم أول كارت** (١٧/٨). دي نقط المندوب سحبها
          وهو واقف قدام المحل ومستنية مراجعة — أدق مصدر عندنا، والوحيد
          اللي بيتعمّر يومياً من الميدان. --}}
-    <div class="kpi"><div class="lbl">🚩 {{ __('geo.f_requests') }}</div>
+    <a @class(['kpi', 'on' => $filter === 'requests']) href="{{ route('erp.client_locations', ['show' => 'requests']) }}#locList"><div class="lbl">🚩 {{ __('geo.f_requests') }}</div>
         <div class="val {{ ($counts['requests'] ?? 0) > 0 ? 'mid' : '' }}">{{ number_format($counts['requests'] ?? 0) }}</div>
-        <div class="sub2">{{ __('geo.f_requests_hint') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('geo.f_from_visit') }}</div>
+        <div class="sub2">{{ __('geo.f_requests_hint') }}</div></a>
+    <a @class(['kpi', 'on' => $filter === 'from_visit']) href="{{ route('erp.client_locations', ['show' => 'from_visit']) }}#locList"><div class="lbl">{{ __('geo.f_from_visit') }}</div>
         <div class="val pos">{{ number_format($counts['from_visit']) }}</div>
-        <div class="sub2">{{ __('geo.f_from_visit_hint') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('geo.f_unconfirmed') }}</div>
+        <div class="sub2">{{ __('geo.f_from_visit_hint') }}</div></a>
+    <a @class(['kpi', 'on' => $filter === 'unconfirmed']) href="{{ route('erp.client_locations', ['show' => 'unconfirmed']) }}#locList"><div class="lbl">{{ __('geo.f_unconfirmed') }}</div>
         <div class="val mid">{{ number_format($counts['unconfirmed']) }}</div>
-        <div class="sub2">{{ __('geo.f_unconfirmed_hint') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('geo.f_no_location') }}</div>
+        <div class="sub2">{{ __('geo.f_unconfirmed_hint') }}</div></a>
+    <a @class(['kpi', 'on' => $filter === 'no_location']) href="{{ route('erp.client_locations', ['show' => 'no_location']) }}#locList"><div class="lbl">{{ __('geo.f_no_location') }}</div>
         <div class="val neg">{{ number_format($counts['no_location']) }}</div>
-        <div class="sub2">{{ __('geo.f_no_location_hint') }}</div></div>
+        <div class="sub2">{{ __('geo.f_no_location_hint') }}</div></a>
     {{-- 📱 المندوب بيسحب النقطة قدام المحل من الأبلكيشن (١٤/٨) —
          الكارت ده بيقول الميدان شغّال قد إيه من غير ما تفتح الفلتر --}}
-    <div class="kpi"><div class="lbl">{{ __('geo.f_from_app') }}</div>
+    <a @class(['kpi', 'on' => $filter === 'from_app']) href="{{ route('erp.client_locations', ['show' => 'from_app']) }}#locList"><div class="lbl">{{ __('geo.f_from_app') }}</div>
         <div class="val">{{ number_format($counts['from_app']) }}</div>
-        <div class="sub2">{{ __('geo.f_from_app_hint') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('geo.confirmed') }}</div>
-        <div class="val">{{ number_format($counts['done']) }}</div></div>
+        <div class="sub2">{{ __('geo.f_from_app_hint') }}</div></a>
+    <a @class(['kpi', 'on' => $filter === 'done']) href="{{ route('erp.client_locations', ['show' => 'done']) }}#locList"><div class="lbl">{{ __('geo.confirmed') }}</div>
+        <div class="val">{{ number_format($counts['done']) }}</div></a>
 </div>
 
-<div class="card">
+<div class="card" id="locList">
     <h3>📍 {{ __('geo.confirm_locations') }}
         <span class="side">{{ __('client.client_countable', ['count' => $rows->count()]) }}</span></h3>
 
@@ -87,8 +88,8 @@
             <tr>
                 <th>{{ __('client.client') }}</th>
                 <th>{{ __('client.zone') }}</th>
-                <th>{{ __('geo.current_point') }}</th>
-                <th>{{ __('geo.from_visit') }}</th>
+                <th data-nosum>{{ __('geo.current_point') }}</th>
+                <th data-nosum>{{ __('geo.from_visit') }}</th>
                 <th>{{ __('geo.state') }}</th>
                 <th></th>
             </tr>
@@ -98,7 +99,7 @@
                 @php $c = $r['client']; $v = $r['visit']; @endphp
                 <tr>
                     <td>
-                        <b>{{ $c->fullName() }}</b>
+                        <a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->fullName() }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->displayAddress() ?: '—' }}</span>
                     </td>
                     <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>
@@ -113,7 +114,7 @@
                         @if ($v)
                             <span dir="ltr">{{ number_format((float) $v->lat, 5) }}, {{ number_format((float) $v->lng, 5) }}</span>
                             <br><span style="font-size:10px;color:var(--muted)">
-                                {{ $v->user?->displayName() }} · {{ $v->checked_in_at?->format('m-d h:i A') }}
+                                @if ($v->user)<a href="{{ route('ops.rep', $v->user) }}">{{ $v->user->displayName() }}</a>@endif · {{ $v->checked_in_at?->format('m-d h:i A') }}
                             </span>
                         @else
                             {{-- ⚠️ **مفيش زيارة ≠ مفيش حل.** اللي بيراجع لسه
@@ -250,14 +251,14 @@
             <div>
                 <label class="f">{{ __('geo.governorate') }}</label>
                 <select name="governorate" id="geoGov" style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_gov')]) }}</option>
                     {!! $govOptions !!}
                 </select>
             </div>
             <div>
                 <label class="f">{{ __('client.zone') }}</label>
                 <select name="zone_id" id="geoZone" style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_zone')]) }}</option>
                     {!! $zoneOptions !!}
                 </select>
             </div>

@@ -381,6 +381,34 @@ label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:v
 .filters input,.filters select{width:100%}
 .filters button{flex:0 0 auto}
 
+/* ═══ عناصر الفلاتر الموحّدة (مراجعة ٢٢/٩/٢٠٢٦) ═══
+   بلاغ المالك: «مفيش دروب داون مش مكتوب فوقيها اسمها» + «التاريخ من في
+   مكان وإلى في مكان». `.fl` = خانة فلتر بعنوانها فوقها، بتشتغل جوه
+   `.searchbar` و`.filters` وأي فورم. `.rng` = `partials/_range`. */
+.fl{display:inline-flex;flex-direction:column;gap:4px;min-width:150px;max-width:100%;vertical-align:bottom;margin:0}
+.fl>span{font-size:11px;font-weight:800;color:var(--muted);white-space:nowrap;padding-inline-start:3px}
+.fl select,.fl input,.fl .ssel{width:100%}
+.fl.wide{min-width:230px}
+.fl.grow{flex:1 1 230px}
+.filters>.fl{flex:1 1 165px}
+.searchbar{align-items:flex-end}
+.searchbar>.btn,.searchbar>button,.searchbar>a.btn{align-self:flex-end}
+.rng{display:inline-flex;flex-wrap:wrap;align-items:flex-end;gap:8px 10px;vertical-align:bottom}
+.rng .fl{min-width:142px}
+.rng-q{display:flex;flex-wrap:wrap;gap:5px;align-self:flex-end;padding-bottom:3px}
+.rng-q a{font-size:11.5px;font-weight:700;text-decoration:none;color:var(--muted);background:var(--card2);border:1px solid var(--border);border-radius:99px;padding:5px 11px;white-space:nowrap;transition:.12s}
+.rng-q a:hover{color:var(--royal-blue);border-color:var(--royal-blue)}
+.rng-q a.on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff}
+.tbl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.tbl-bar input[type=search]{flex:0 1 320px;margin:0!important}
+.tbl-xl{margin-inline-start:auto;font-size:11.5px;font-weight:800;color:var(--green,#1F8A4C);background:transparent;border:1px solid var(--border);border-radius:9px;padding:6px 11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.tbl-xl:hover{border-color:currentColor;background:var(--card2)}
+/* الكارت اللي بيفسّر رقمه: سهم صغير في الركن بيقول «ده بيتداس» */
+a.kpi::after,.kpi[data-explain]::after{content:"↗";position:absolute;inset-block-start:9px;inset-inline-end:11px;font-size:11px;color:var(--muted);opacity:.55}
+.kpi[data-explain]{cursor:pointer}
+.kpi[data-explain]:hover{box-shadow:var(--shadow-lift)}
+@media print{.rng-q,.tbl-xl{display:none!important}}
+
 .pill{
   display:inline-block;padding:3px 10px;border-radius:99px;
   font-size:11px;font-weight:700;line-height:1.7;
@@ -501,7 +529,8 @@ dialog .formbar-sp{flex:1}
    بييجي بعد قاعدة [hidden] بتاعة المتصفح فكان بيغلبها واللوحة
    تفضل مفتوحة على طول. */
 select.ssel-native{display:none!important}
-.ssel{position:relative;display:inline-block;max-width:100%;vertical-align:middle}
+.ssel{position:relative;display:inline-block;min-width:150px;max-width:100%;vertical-align:middle}
+td .ssel,.dlg .ssel{min-width:0}
 .filters .ssel{width:100%}
 .ssel-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;color:var(--text);cursor:pointer;text-align:start;transition:.15s}
 .ssel-btn:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14);outline:none}
@@ -1136,6 +1165,7 @@ document.addEventListener('DOMContentLoaded', function () {
     view:   {!! json_encode(__('common.view'), JSON_UNESCAPED_UNICODE) !!},
     all:    {!! json_encode(__('common.all'), JSON_UNESCAPED_UNICODE) !!},
     zoom:   {!! json_encode(__('common.close'), JSON_UNESCAPED_UNICODE) !!},
+    xl:     {!! json_encode(__('ui.export_table'), JSON_UNESCAPED_UNICODE) !!},
   };
 
   /* ══════════════════════════════════════════════════════════════
@@ -1632,6 +1662,30 @@ document.addEventListener('DOMContentLoaded', function () {
     const hasSearch = card && (card.querySelector('.searchbar')
       || card.querySelector('input[type="text"], input[type="search"]'));
 
+    /* ═══ 6-ب) إكسيل الجدول (٢٢/٩/٢٠٢٦) ═══
+       بلاغ المالك: «زرار الإكسبورت موجود في جداول ومش موجود في جداول».
+       أي جدول فيه صفوف بياخد زرار بيصدّر **اللي على الشاشة بالظبط**
+       (المفلتر، بكل صفحاته المحلية، بصف الإجماليات) وأول سطوره اسم
+       الشاشة والفترة ووقت السحب — فالملف مطابق للشاشة دايماً.
+       ⚠️ الجدول اللي ترقيمه من السيرفر بيصدّر الصفحة الحالية بس؛ التصدير
+       الكامل بتاعه هو زرار السيرفر اللي في الشاشة. `data-noxl` بيوقّفه. */
+    const bar = document.createElement('div');
+    bar.className = 'tbl-bar';
+    bar.setAttribute('data-noprint', '');
+
+    if (rows0.length > 0 && !table.hasAttribute('data-noxl')) {
+      const xb = document.createElement('button');
+      xb.type = 'button';
+      xb.className = 'tbl-xl';
+      xb.textContent = '⬇ ' + T.xl;
+      xb.addEventListener('click', function () {
+        const cardTitle = card && card.querySelector('h3');
+        const name = (cardTitle ? cardTitle.childNodes[0].textContent : '').trim();
+        window.tblExportCsv(table, filtered(), name);
+      });
+      bar.appendChild(xb);
+    }
+
     if (!hasSearch && rows0.length > 12) {
       const inp = document.createElement('input');
       inp.type = 'search';
@@ -1644,8 +1698,11 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         applyPage(1);
       });
-      wrap.parentNode.insertBefore(inp, wrap);
+      inp.style.cssText = '';
+      bar.insertBefore(inp, bar.firstChild);
     }
+
+    if (bar.children.length) wrap.parentNode.insertBefore(bar, wrap);
 
     applyPage(1);
   });
@@ -1889,7 +1946,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // مزنوق جوه الشاشة، وبيتقلب لفوق لو المساحة تحت مش كفاية.
     function place() {
       var r = btn.getBoundingClientRect();
-      var w = Math.min(Math.max(r.width, 230), window.innerWidth - 16);
+      // ⚠️ (٢٢/٩) العرض = أطول اختيار، مش عرض الزرار — الاسم الطويل
+      // (عميل/سلسلة/مندوب بكوده) كان بيتقص بـ«…» ومحدش عارف يختار.
+      panel.style.width = 'max-content';
+      var w = Math.min(Math.max(r.width, 230, Math.min(panel.offsetWidth + 6, 480)), window.innerWidth - 16);
       panel.style.width = w + 'px';
       var left = IS_RTL ? r.right - w : r.left;
       left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
@@ -2000,10 +2060,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function cellText(c) {
     var v = (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim();
+    // (٢٢/٩) الخانة اللي فيها إدخال بتتصدّر بقيمتها — كانت بتنزل فاضية في جداول الجرد والتحويل
+    var ctl = c.querySelector('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea');
+    if (ctl && !v) {
+      v = ctl.tagName === 'SELECT'
+        ? ((ctl.options[ctl.selectedIndex] || {}).text || '').trim()
+        : String(ctl.value || '').trim();
+    }
     // «2,376.00» → 2376.00 عشان إكسيل يجمعه كرقم مش نص
     if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)) v = v.replace(/,/g, '');
     return v;
   }
+  function csvSave(lines, name) {
+    var csv = lines.map(function (r) {
+      return r.map(function (v) {
+        v = String(v == null ? '' : v);
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      }).join(',');
+    }).join('\r\n');
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 70) + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  // جدول واحد: الصفوف المفلترة (كل الصفحات المحلية) + الهيدر + صف الإجماليات
+  window.tblExportCsv = function (table, rows, name) {
+    var title = ((document.querySelector('.topbar h1') || {}).textContent || document.title).trim();
+    if (name) title += ' — ' + name;
+    var qs = new URLSearchParams(location.search);
+    var lines = [[title]];
+    if (qs.get('from') || qs.get('to')) lines.push([{!! json_encode(__('common.exp_period'), JSON_UNESCAPED_UNICODE) !!}, (qs.get('from') || '…') + ' → ' + (qs.get('to') || '…')]);
+    lines.push([{!! json_encode(__('common.exp_generated'), JSON_UNESCAPED_UNICODE) !!}, new Date().toLocaleString(), {!! json_encode(auth()->user()?->name ?? '', JSON_UNESCAPED_UNICODE) !!}]);
+    lines.push([]);
+    var pick = function (tr) {
+      return [].slice.call(tr.children).filter(function (c) {
+        return !c.classList.contains('act') && !c.hasAttribute('data-noexport');
+      }).map(cellText);
+    };
+    var head = table.tHead ? table.tHead.rows[table.tHead.rows.length - 1] : table.querySelector('tr');
+    if (head) lines.push(pick(head));
+    rows.forEach(function (tr) { lines.push(pick(tr)); });
+    if (table.tFoot) [].slice.call(table.tFoot.rows).forEach(function (tr) { lines.push(pick(tr)); });
+    csvSave(lines, title);
+  };
   window.scrExportCsv = function () {
     var title = ((document.querySelector('.topbar h1') || {}).textContent || document.title).trim();
     var lines = [[title], [new Date().toLocaleString()]];

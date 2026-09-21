@@ -11,7 +11,8 @@
 
     // ⚠️ نفس القايمة للمندوب والسواق: في عربيات المندوب فيها بيسوق
     // بنفسه، وقصر القايمة على رول واحد بيمنع الحالة دي.
-    $crewOptions = '<option value="">—</option>';
+    // الاختيار الفاضي مكتوب بالكلام — «—» لوحدها ماكانتش مفهومة (٢٢/٩)
+    $crewOptions = '<option value="">— '.e(__('common.none')).' —</option>';
     foreach ($crew as $c) {
         $crewOptions .= '<option value="'.(int) $c->id.'">'
             .e($c->displayName().' — '.$c->roleLabel()).'</option>';
@@ -54,12 +55,12 @@
                         </span>
                     </td>
                     <td class="s">{{ $v->branch?->displayName() ?: __('branch.central') }}</td>
-                    <td class="s">{{ $v->rep?->displayName() ?: '—' }}</td>
+                    <td class="s">@if ($v->rep)<a href="{{ route('ops.rep', $v->rep) }}">{{ $v->rep->displayName() }}</a>@else — @endif</td>
                     <td class="s">
                         @if ($v->driver_id && $v->driver_id === $v->rep_id)
                             <span style="color:var(--muted)">{{ __('branch.same_person') }}</span>
                         @else
-                            {{ $v->driver?->displayName() ?: '—' }}
+                            @if ($v->driver)<a href="{{ route('ops.rep', $v->driver) }}">{{ $v->driver->displayName() }}</a>@else — @endif
                         @endif
                     </td>
                     <td>

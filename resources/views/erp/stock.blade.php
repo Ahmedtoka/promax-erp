@@ -43,13 +43,14 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('stock.stock_value_new') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($totalVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.sku_countable', ['count' => $skuCount]) }}</div></div>
+    {{-- الكروت على المخزن كله: القيمة والوحدات بيرتّبوا الجدول، والباقي بيفتح تفصيل العائلات (٢٢/٩) --}}
+    <a class="kpi {{ ($f['sort'] ?? '') === 'value' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'value']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.stock_value_new') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($totalVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.sku_countable', ['count' => $skuCount]) }}</div></a>
     @if ($seeCost)
-        <div class="kpi"><div class="lbl">{{ __('stock.stock_value_cost') }}</div><div class="val">{{ $fmt($costVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.margin') }} {{ number_format(($totalVal - $costVal) / max($totalVal, 1) * 100, 1) }}%</div></div>
+        <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.stock_value_cost') }}</div><div class="val">{{ $fmt($costVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.margin') }} {{ number_format(($totalVal - $costVal) / max($totalVal, 1) * 100, 1) }}%</div></div>
     @endif
-    <div class="kpi"><div class="lbl">{{ __('stock.total_units') }}</div><div class="val">{{ $fmt($totalQty) }}</div><div class="sub2">{{ __('stock.finished_goods') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('stock.good_stock_value') }}</div><div class="val pos">{{ $fmt($goodVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ number_format($goodVal / max($totalVal, 1) * 100, 1) }}%</div></div>
-    <div class="kpi"><div class="lbl">{{ __('stock.hold_value') }}</div><div class="val mid">{{ $fmt($holdVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.pct_on_hold', ['pct' => number_format($holdVal / max($totalVal, 1) * 100, 1)]) }}</div></div>
+    <a class="kpi {{ ($f['sort'] ?? '') === 'qty' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'qty']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.total_units') }}</div><div class="val">{{ $fmt($totalQty) }}</div><div class="sub2">{{ __('stock.finished_goods') }}</div></a>
+    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.good_stock_value') }}</div><div class="val pos">{{ $fmt($goodVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ number_format($goodVal / max($totalVal, 1) * 100, 1) }}%</div></div>
+    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.hold_value') }}</div><div class="val mid">{{ $fmt($holdVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.pct_on_hold', ['pct' => number_format($holdVal / max($totalVal, 1) * 100, 1)]) }}</div></div>
 </div>
 
 {{-- ═══ الشارتات: القيمة والوحدات بالعائلة + توزيع المخازن ═══ --}}
@@ -76,11 +77,11 @@
     <h3>🧬 {{ __('stock.family_summary') }}</h3>
     <div class="tablewrap prod-tbl">
         <table>
-            <tr><th style="text-align:start">{{ __('stock.family') }}</th><th>{{ __('stock.skus') }}</th><th>{{ __('stock.units') }}</th><th>{{ __('stock.value') }}</th><th style="width:200px">{{ __('stock.value_share') }}</th><th>{{ __('stock.of_which_hold') }}</th></tr>
+            <tr><th style="text-align:start">{{ __('stock.family') }}</th><th>{{ __('stock.skus') }}</th><th>{{ __('stock.units') }}</th><th>{{ __('stock.value') }}</th><th style="width:200px" data-nosum>{{ __('stock.value_share') }}</th><th>{{ __('stock.of_which_hold') }}</th></tr>
             @foreach ($famStats as $fam => $fs)
                 @php $share = (int) round($fs['val'] / max($totalVal, 1) * 100); @endphp
                 <tr>
-                    <td style="text-align:start"><b>{{ \App\Models\ProductFamily::label($fam) }}</b></td>
+                    <td style="text-align:start"><a href="{{ route('erp.stock', ['family' => $fam]) }}#stockTable"><b>{{ \App\Models\ProductFamily::label($fam) }}</b></a></td>
                     <td class="num">{{ $fs['n'] }}</td>
                     <td class="num">{{ $fmt($fs['qty']) }}</td>
                     <td class="num"><b>{{ $fmt($fs['val']) }}</b></td>
@@ -102,28 +103,32 @@
 <div class="card">
     <h3>📦 {{ __('stock.finished_goods_inventory') }}
         <span class="side">{{ __('stock.price_from_default_list') }}@if ($defaultList) — {{ $defaultList->displayName() }}@endif</span></h3>
-    <form class="searchbar" method="GET">
-        <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('stock.search_item') }}">
+    <form class="searchbar" method="GET" id="stockTable">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('stock.search_item') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_family') }}</span>
         <select name="family">
             <option value="">{{ __('stock.all_families') }}</option>
             @foreach ($families as $k => $v)<option value="{{ $k }}" @selected(($f['family'] ?? '') === $k)>{{ $v }}</option>@endforeach
-        </select>
+        </select></label>
         {{-- ⚠️ **فلتر الحالة** (١٧/٨) — الشاشة ماكانتش بتفرّق بين
              المفعّل والدرافت: مفيش فلتر ولا شارة ولا عمود. المالك
              أوقف صنف ومالقاش طريقة يلاقيه تاني غير إنه يفتح المنتجات
              واحد واحد. --}}
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status">
             <option value="" @selected(($f['status'] ?? '') === '')>{{ __('stock.all_statuses') }}</option>
             <option value="active" @selected(($f['status'] ?? '') === 'active')>{{ __('common.active') }}</option>
             <option value="draft" @selected(($f['status'] ?? '') === 'draft')>
                 {{ __('stock.draft_only') }}@if (($draftCount ?? 0) > 0) ({{ $draftCount }})@endif
             </option>
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_sort') }}</span>
         <select name="sort">
             <option value="" @selected(($f['sort'] ?? '') === '')>{{ __('stock.sort_code') }}</option>
             <option value="qty" @selected(($f['sort'] ?? '') === 'qty')>{{ __('stock.sort_qty') }}</option>
             <option value="value" @selected(($f['sort'] ?? '') === 'value')>{{ __('stock.sort_value') }}</option>
-        </select>
+        </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.stock') }}">{{ __('common.clear') }}</a>
     </form>
@@ -133,15 +138,15 @@
             <tr>
                 <th style="width:44px"></th>
                 <th>{{ __('common.code') }}</th><th style="text-align:start">{{ __('stock.item') }}</th><th>{{ __('stock.family') }}</th><th>{{ __('stock.unit') }}</th>
-                @if ($seeCost)<th>{{ __('stock.cost') }}</th>@endif
+                @if ($seeCost)<th data-nosum>{{ __('stock.cost') }}</th>@endif
                 {{-- سعر واحد بس — سعر القايمة الافتراضية (قرار المالك 2026-08-06) --}}
-                <th>{{ __('stock.price_one') }}</th>
-                @if ($seeCost)<th>{{ __('stock.margin_pct') }}</th>@endif
+                <th data-nosum>{{ __('stock.price_one') }}</th>
+                @if ($seeCost)<th data-nosum>{{ __('stock.margin_pct') }}</th>@endif
                 <th style="min-width:150px">{{ __('stock.qty') }}</th>
                 {{-- ⚠️ **عمود لكل مخزن.** «عندنا كام؟» مالهاش معنى من
                      غير «فين؟» --}}
                 @foreach ($warehouses as $wh)
-                    <th style="white-space:nowrap">{{ $wh->displayName() }}</th>
+                    <th style="white-space:nowrap"><a href="{{ route('erp.warehouses.stock', $wh) }}">{{ $wh->displayName() }}</a></th>
                 @endforeach
                 <th>{{ __('stock.hold') }}</th><th>{{ __('stock.good_stock') }}</th><th>{{ __('stock.value') }}</th>
                 @if ($manager)<th></th>@endif
@@ -175,7 +180,7 @@
                         <a href="{{ route('erp.products.show', $p) }}" style="font-weight:700">{{ $p->code }}</a>
                     </td>
                     <td style="text-align:start">
-                        <b>{{ $p->displayName() }}</b>
+                        <a href="{{ route('erp.products.show', $p) }}"><b>{{ $p->displayName() }}</b></a>
                         {{-- ⚠️ **الشارة كانت موجودة في كارت المنتج بس**
                              — يعني عشان تعرف إن صنف موقوف كنت لازم
                              تفتحه. في القايمة كان شكله زي المفعّل
@@ -185,7 +190,7 @@
                                 ⏸ {{ __('stock.draft') }}</span>
                         @endunless
                     </td>
-                    <td><span class="badge b-gray">{{ $p->familyLabel() }}</span></td>
+                    <td><a class="badge b-gray" href="{{ route('erp.stock', ['family' => $p->family]) }}#stockTable">{{ $p->familyLabel() }}</a></td>
                     <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                     @if ($seeCost)<td class="num" style="color:var(--muted)">{{ number_format($p->cost, 2) }}</td>@endif
                     <td class="num"><span style="color:var(--primary);font-weight:800;font-size:13.5px">{{ number_format($price, 2) }}</span></td>
@@ -220,6 +225,10 @@
                     @endif
                 </tr>
             @endforeach
+            </tbody>
+            {{-- ⚠️ الإجمالي في tfoot (٢٢/٩): وهو صف عادي كانت أدوات الجدول بتحسبه صف بيانات
+                 فيتجمع على نفسه ويدخل في الترتيب والتصدير كأنه صنف. --}}
+            <tfoot>
             <tr>
                 {{-- ⚠️ **5 مش 4** — عمود الصورة على الشمال. --}}
                 <td colspan="5"><b>{{ __('common.total') }}</b></td>
@@ -240,10 +249,50 @@
                 <td class="num pos"><b>{{ $fmt($newValF) }}</b></td>
                 @if ($manager)<td></td>@endif
             </tr>
-            </tbody>
+            </tfoot>
         </table>
     </div>
 </div>
+
+{{-- تفصيل أرقام الكروت بالعائلة — الصفوف مجموعها = الكارت (٢٢/٩) --}}
+<dialog id="dlgFamBreak" class="wide">
+    <div class="dlg">
+        <h4>{{ __('uid.fam_breakdown') }}</h4>
+        <div class="tablewrap">
+            <table>
+                <thead><tr>
+                    <th style="text-align:start">{{ __('stock.family') }}</th><th>{{ __('stock.units') }}</th>
+                    <th>{{ __('stock.stock_value_new') }}</th>
+                    @if ($seeCost)<th>{{ __('stock.stock_value_cost') }}</th>@endif
+                    <th>{{ __('stock.good_stock_value') }}</th><th>{{ __('stock.hold_value') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($famStats as $fam => $fs)
+                    <tr>
+                        <td style="text-align:start"><a href="{{ route('erp.stock', ['family' => $fam]) }}#stockTable">{{ \App\Models\ProductFamily::label($fam) }}</a></td>
+                        <td class="num">{{ $fmt($fs['qty']) }}</td>
+                        <td class="num">{{ $fmt($fs['val']) }}</td>
+                        @if ($seeCost)<td class="num">{{ $fmt($fs['cost'] ?? 0) }}</td>@endif
+                        <td class="num pos">{{ $fmt($fs['good'] ?? 0) }}</td>
+                        <td class="num mid">{{ $fmt($fs['hold']) }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+                <tfoot><tr>
+                    <td><b>{{ __('common.total') }}</b></td>
+                    <td class="num"><b>{{ $fmt($totalQty) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totalVal) }}</b></td>
+                    @if ($seeCost)<td class="num"><b>{{ $fmt($costVal) }}</b></td>@endif
+                    <td class="num"><b>{{ $fmt($goodVal) }}</b></td>
+                    <td class="num"><b>{{ $fmt($holdVal) }}</b></td>
+                </tr></tfoot>
+            </table>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgFamBreak')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
 
 {{-- ⚠️ **الفورم بقى partial مشترك** — التعريف كامل في مكان واحد --}}
 @if ($manager)

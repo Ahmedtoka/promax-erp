@@ -118,17 +118,17 @@
 
 {{-- ═══════════════════════ شريط الأرقام ═══════════════════════ --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="document.getElementById('geoTree').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('journey.geo_kpi_clients') }}</div>
         <div class="val num">{{ $fmt($total) }}</div>
         <div class="sub2">{{ $picked?->displayName() ?? __('journey.geo_all_teams') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="document.getElementById('geoTree').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('journey.geo_kpi_govs') }}</div>
         <div class="val num">{{ $fmt($govCount) }}</div>
         <div class="sub2">{{ __('journey.geo_kpi_zones') }}: {{ $fmt($zoneCount) }}</div>
     </div>
-    <div class="kpi {{ $noPlanTotal > 0 ? 'mid' : 'pos' }}">
+    <div class="kpi {{ $noPlanTotal > 0 ? 'mid' : 'pos' }}" data-explain onclick="document.getElementById('geoTree').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('journey.geo_kpi_noplan') }}</div>
         <div class="val num">{{ $fmt($noPlanTotal) }}</div>
         <div class="sub2">{{ __('journey.geo_unplanned') }}</div>
@@ -282,7 +282,7 @@
 @endif
 
 {{-- ═══════════════════════ الشجرة الجغرافية ═══════════════════════ --}}
-<div class="card">
+<div class="card" id="geoTree">
     <h3>🧭 {{ __('journey.geo_tree') }} <span class="side">{{ $fmt($total) }} {{ __('journey.geo_shops') }}</span></h3>
     <div class="alert info">{{ __('journey.geo_tree_hint') }}</div>
 

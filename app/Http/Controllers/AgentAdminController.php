@@ -40,6 +40,32 @@ class AgentAdminController extends Controller
             COALESCE(AVG(duration_ms), 0) avg_ms
         ")->first();
 
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩) — الجدول مقسم صفحات فزرار الجدول بياخد صفحة واحدة ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->latest('id')->limit(5000)->get();
+
+            return \App\Support\Csv::download('agent-runs-'.now()->format('Y-m-d-Hi').'.csv',
+                [__('common.date'), __('agent.r_user'), __('agent.r_message'), __('agent.r_domain'), __('agent.r_tools'),
+                    __('agent.r_tokens'), '⏱ (s)', __('common.status')],
+                $all->map(fn ($run) => [
+                    $run->created_at->format('Y-m-d h:i A'),
+                    $run->conversation?->user?->name ?? '—',
+                    (string) $run->user_message,
+                    $run->agent_name,
+                    collect($run->tools_called ?? [])->pluck('name')->implode('، '),
+                    $run->tokens_in + $run->tokens_out,
+                    number_format($run->duration_ms / 1000, 1, '.', ''),
+                    __('agent.st_'.$run->status),
+                ]),
+                [__('common.total'), '', '', '', '', $all->sum('tokens_in') + $all->sum('tokens_out'), '', ''],
+                \App\Support\Csv::meta(__('agent.runs_title'), $from ?: null, $to ?: null));
+        }
+
+        // تفسير كروت التوكنز والتكلفة والمتوسط: نفس الأرقام مفرودة بالمجال
+        $byDomain = (clone $q)->selectRaw('agent_name, COUNT(*) n, COALESCE(SUM(tokens_in), 0) tin,
+            COALESCE(SUM(tokens_out), 0) tout, COALESCE(AVG(duration_ms), 0) avg_ms')
+            ->groupBy('agent_name')->orderByDesc('n')->get();
+
         // تكلفة تقريبية بالدولار — أسعار الموديل من الكونفيج
         $cost = ($stats->tin / 1000000) * (float) config('agents.price_in')
             + ($stats->tout / 1000000) * (float) config('agents.price_out');
@@ -47,6 +73,7 @@ class AgentAdminController extends Controller
         return view('erp.agent_runs', [
             'rows' => $q->latest('id')->paginate(50)->withQueryString(),
             'stats' => $stats,
+            'byDomain' => $byDomain,
             'cost' => $cost,
             'domains' => AgentRun::select('agent_name')->distinct()->orderBy('agent_name')
                 ->pluck('agent_name'),

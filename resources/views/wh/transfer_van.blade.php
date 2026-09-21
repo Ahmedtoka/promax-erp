@@ -58,7 +58,10 @@
             <div>
                 <label class="f">{{ __('stock.from_rep') }} <b class="req-star">*</b></label>
                 {{-- جاي من كارت المندوب أو بورد العربيات بـ`?rep=` — بيتفتح عليه --}}
+                {{-- ⚠️ من غير مندوب جاهز (٢٢/٩): أول اسم كان بينزل لوحده، والمستند ده بيسحب
+                     من عهدة حقيقية. اللي جاي بـ`?rep=` بيفضل متعلّم — ده اختيار مقصود. --}}
                 <select name="from_user_id" id="vtFrom" required style="width:100%" onchange="vtSourceChanged()">
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}"
                             @selected((int) old('from_user_id', request()->integer('rep')) === (int) $r->id)>
@@ -70,6 +73,7 @@
             <div id="vtWhBox">
                 <label class="f">{{ __('stock.to_warehouse') }} <b class="req-star">*</b></label>
                 <select name="to_warehouse_id" id="vtWh" style="width:100%" onchange="vtSourceChanged()">
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}" @selected((int) old('to_warehouse_id') === (int) $w->id)>
                             {{ $w->displayName() }} — {{ $w->typeLabel() }}
@@ -80,6 +84,7 @@
             <div id="vtRepBox" style="display:none">
                 <label class="f">{{ __('stock.to_rep') }} <b class="req-star">*</b></label>
                 <select name="to_user_id" id="vtToRep" style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected((int) old('to_user_id') === (int) $r->id)>
                             {{ $r->displayName() }} — {{ $r->roleLabel() }}
@@ -103,15 +108,16 @@
 
         {{-- ═══ ملخصات لايف ═══ --}}
         <div class="kpis" style="margin-top:12px">
-            <div class="kpi">
+            {{-- عدادات لايف للسطور اللي تحت — بتودّي على جدول السطور --}}
+            <a class="kpi" href="#vtLines">
                 <div class="lbl">{{ __('stock.transfer_lines') }}</div>
                 <div class="val" id="vtKpiLines">0</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="#vtLines">
                 <div class="lbl">{{ __('stock.total_pieces') }}</div>
                 <div class="val pos" id="vtKpiPieces">0</div>
                 <div class="sub2">{{ __('stock.units') }}</div>
-            </div>
+            </a>
         </div>
 
         {{-- ═══ منتقي بنود العهدة — نفس «علّم وضيف» المشترك ═══ --}}
@@ -131,8 +137,9 @@
             ])
         </div>
 
-        <div class="tablewrap" style="margin-top:12px;max-height:52vh;overflow-y:auto">
-            <table>
+        <div class="tablewrap" id="vtLines" style="margin-top:12px;max-height:52vh;overflow-y:auto">
+            {{-- جدول إدخال — من غير إكسيل --}}
+            <table data-noxl>
                 <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>
@@ -357,16 +364,15 @@
         const toRep = document.getElementById('vtToRep');
         if (!from || !toRep) return;
 
-        let firstOther = null;
-
+        // ⚠️ (٢٢/٩) الاختيار الفاضي «اختار المندوب» عمره مايتخبّى، ولو الوجهة بقت
+        // هي المصدر بنرجّعها فاضية — مش لأول اسم تاني، عشان محدش يتحوّل له بالغلط.
         Array.from(toRep.options).forEach(function (o) {
-            const same = o.value === from.value;
+            const same = o.value !== '' && o.value === from.value;
             o.hidden = same;
             o.disabled = same;
-            if (!same && firstOther === null) firstOther = o.value;
         });
 
-        if (toRep.value === from.value && firstOther !== null) toRep.value = firstOther;
+        if (toRep.value !== '' && toRep.value === from.value) toRep.value = '';
 
         // نفس السبب: الزرار البديل لازم يعرف إن الاختيار اتغيّر
         toRep.dispatchEvent(new Event('change', { bubbles: false }));

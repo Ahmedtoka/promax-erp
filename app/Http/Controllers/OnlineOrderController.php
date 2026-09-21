@@ -519,7 +519,38 @@ class OnlineOrderController extends Controller
         $range = DateRange::fromRequest($request);
         $q->tap(fn ($x) => $range->apply($x, 'date'));
 
+        // ═══ الإجمالي والتصدير من نفس الكويري وبنفس `totals()` بتاعة الصف (٢٢/٩) ═══
+        // القايمة صفحات — فالمجموع بيتحسب على كل النتيجة مش الصفحة.
+        $all = (clone $q)->orderBy('date')->orderBy('id')->get();
+        $rows = $all->map(fn ($p) => ['p' => $p, 't' => $p->totals()]);
+        $keys = ['orders', 'pieces', 'goods', 'ship', 'amount', 'collected', 'remaining'];
+        $sum = [];
+        foreach ($keys as $k) {
+            $sum[$k] = $rows->sum(fn ($r) => $r['t'][$k]);
+        }
+
+        if ($request->boolean('export')) {
+            $m = fn ($v) => \App\Support\Csv::money($v);
+
+            return \App\Support\Csv::download(
+                'online-pickups.csv',
+                [__('online.pickup_no'), __('common.date'), __('online.courier'), __('online.by_user'), __('online.orders_count'),
+                    __('online.pieces'), __('online.goods_amount'), __('online.shipping'), __('common.total'),
+                    __('online.collected'), __('online.remaining'), __('common.status')],
+                $rows->map(fn ($r) => [
+                    $r['p']->number, $r['p']->date->format('Y-m-d'), $r['p']->courier?->name ?? '', $r['p']->creator?->displayName() ?? '',
+                    $r['t']['orders'], $r['t']['pieces'], $m($r['t']['goods']), $m($r['t']['ship']), $m($r['t']['amount']),
+                    $m($r['t']['collected']), $m($r['t']['remaining']),
+                    $r['t']['remaining'] <= 0 ? __('online.settled') : __('online.open'),
+                ]),
+                [__('common.total'), $rows->count(), '', '', $sum['orders'], $sum['pieces'], $m($sum['goods']), $m($sum['ship']),
+                    $m($sum['amount']), $m($sum['collected']), $m($sum['remaining']), ''],
+                \App\Support\Csv::meta(__('online.pickups_title'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
         return view('online.pickups', [
+            'sum' => $sum,
             'pickups' => $q->orderByDesc('date')->orderByDesc('id')
                 ->paginate(30)->withQueryString(),
             'search' => trim((string) $request->input('search')),
@@ -842,7 +873,33 @@ class OnlineOrderController extends Controller
         $range = DateRange::fromRequest($request);
         $q->tap(fn ($x) => $range->apply($x, 'shipped_at'));
 
+        // ═══ التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩) ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('shipped_at')->orderBy('id')->get();
+            $m = fn ($v) => \App\Support\Csv::money($v);
+
+            return \App\Support\Csv::download(
+                'online-collections.csv',
+                [__('online.shopify_no'), __('online.pickup_no'), __('online.courier'), __('common.name'), __('common.phone'),
+                    __('online.goods_amount'), __('online.shipping'), __('common.total'), __('online.collected'),
+                    __('online.remaining'), __('online.shipped_at')],
+                $all->map(fn ($o) => [
+                    '#'.$o->number, $o->pickup?->number ?? '', $o->pickup?->courier?->name ?? '', (string) $o->customer_name, (string) $o->phone,
+                    $m($o->subtotal), $m($o->shipping), $m($o->total), $m($o->collected_total), $m($o->remaining()),
+                    $o->shipped_at?->format('Y-m-d H:i') ?? '',
+                ]),
+                [__('common.total'), $all->count(), '', '', '', $m($all->sum('subtotal')), $m($all->sum('shipping')), $m($all->sum('total')),
+                    $m($all->sum('collected_total')), $m($all->sum(fn ($o) => $o->remaining())), ''],
+                \App\Support\Csv::meta(__('online.collections_title'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        $totals = (clone $q)->reorder()->toBase()->selectRaw('COALESCE(SUM(subtotal),0) as goods, COALESCE(SUM(shipping),0) as ship,
+            COALESCE(SUM(total),0) as total, COALESCE(SUM(collected_total),0) as collected,
+            COALESCE(SUM(subtotal - returned_total - collected_total),0) as remaining')->first();
+
         return view('online.collections', [
+            'totals' => $totals,
             'orders' => $q->orderByDesc('shipped_at')->paginate(50)->withQueryString(),
             'range' => $range,
             // بره = تمن البضاعة (− المرتجع) الغير محصّل — الشحن للمندوب
@@ -882,7 +939,31 @@ class OnlineOrderController extends Controller
         $q->when($request->filled('status'),
             fn ($x) => $x->where('status', $request->input('status')));
 
+        // ═══ التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩) ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('ordered_at')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'online-orders.csv',
+                [__('online.shopify_no'), __('common.name'), __('common.phone'), __('online.area'), __('online.pieces'),
+                    __('common.total'), __('online.collected'), __('online.pickup_no'), __('common.status'), __('common.date')],
+                $all->map(fn ($o) => [
+                    '#'.$o->number, (string) $o->customer_name, (string) $o->phone, (string) $o->area, (int) $o->items_count,
+                    \App\Support\Csv::money($o->total), \App\Support\Csv::money($o->collected_total),
+                    $o->pickup?->number ?? '', $o->statusLabel(), $o->ordered_at?->format('Y-m-d') ?? '',
+                ]),
+                [__('common.total'), $all->count(), '', '', '',
+                    \App\Support\Csv::money($all->sum('total')), \App\Support\Csv::money($all->sum('collected_total')), '', '', ''],
+                \App\Support\Csv::meta(__('online.orders_title'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        $totals = (clone $q)->reorder()->toBase()
+            ->selectRaw('COALESCE(SUM(items_count),0) as pieces, COALESCE(SUM(total),0) as total, COALESCE(SUM(collected_total),0) as collected')
+            ->first();
+
         return view('online.orders', [
+            'totals' => $totals,
             'orders' => $q->orderByDesc('ordered_at')->paginate(50)->withQueryString(),
             'counts' => $counts,
             'filters' => $request->only(['status', 'search']),

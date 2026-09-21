@@ -25,16 +25,40 @@ class StockCountController extends Controller
         // `count_date` بتاعة فورم فتح جرد جديد (POST).
         $range = DateRange::fromRequest($request);
 
-        $counts = StockCount::with(['warehouse', 'startedBy', 'approvedBy'])
+        // أساس واحد للجدول والإجمالي والتصدير (٢٢/٩) — القايمة صفحات
+        $base = fn () => StockCount::query()
             ->when($request->filled('warehouse'), fn ($q) => $q->where('warehouse_id', $request->input('warehouse')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
-            ->tap(fn ($q) => $range->apply($q, 'count_date'))
+            ->tap(fn ($q) => $range->apply($q, 'count_date'));
+
+        if ($request->boolean('export')) {
+            $all = $base()->with(['warehouse', 'startedBy'])->orderBy('count_date')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'stock-counts.csv',
+                [__('count.count'), __('count.warehouse'), __('count.count_date'), __('count.lines'), __('count.diff_lines'),
+                    __('count.qty_diff'), __('count.value_diff'), __('common.status')],
+                $all->map(fn ($c) => [
+                    $c->number, $c->warehouse?->displayName() ?? '', $c->count_date?->format('Y-m-d') ?? '',
+                    (int) $c->lines, (int) $c->diff_lines, (int) $c->qty_diff, \App\Support\Csv::money($c->value_diff), $c->statusLabel(),
+                ]),
+                [__('common.total'), $all->count(), '', (int) $all->sum('lines'), (int) $all->sum('diff_lines'),
+                    (int) $all->sum('qty_diff'), \App\Support\Csv::money($all->sum('value_diff')), ''],
+                \App\Support\Csv::meta(__('count.counts'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        $totals = $base()->selectRaw('COALESCE(SUM(`lines`),0) as `lines`, COALESCE(SUM(diff_lines),0) as diff_lines,
+            COALESCE(SUM(qty_diff),0) as qty_diff, COALESCE(SUM(value_diff),0) as value_diff')->toBase()->first();
+
+        $counts = $base()->with(['warehouse', 'startedBy', 'approvedBy'])
             ->latest()
             ->paginate(25)
             ->withQueryString();
 
         return view('wh.counts', [
             'counts' => $counts,
+            'totals' => $totals,
             'warehouses' => Warehouse::where('active', true)->orderBy('code')->get(),
             'openCount' => StockCount::whereIn('status', ['draft', 'counting'])->count(),
             'filters' => [

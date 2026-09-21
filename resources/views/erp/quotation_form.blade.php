@@ -85,7 +85,7 @@
 
         {{-- الجدول — نفس نمط تسليم العهدة --}}
         <div class="tablewrap" style="margin-top:12px;max-height:52vh;overflow-y:auto">
-            <table>
+            <table data-noxl>
                 <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>

@@ -11,7 +11,9 @@
     $isRtl = app()->getLocale() === 'ar';
 
     $fmt = fn ($n) => number_format((float) $n);
-    $manager = auth()->user()->isManager();
+    // ⚠️ (٢٢/٩) مدير الفرع `isManager()` بس راوتس تعديل السلسلة `role:admin,manager` —
+    // كان بيشوف فورم التعديل والربط ويترمي على 403 لما يحفظ
+    $manager = in_array(auth()->user()->role, ['admin', 'manager'], true);
     $purchases = $branches->sum('purchases');
     $collections = $branches->sum('collections');
     $balance = $branches->sum('balance');
@@ -31,6 +33,26 @@
         'count' => $grp->count(),
         'color' => $catColorMap[$key] ?? 'muted',
     ])->values();
+
+    // كروت الملخّص بتفلتر «آخر قيود السلسلة» تحت بنوع القيد، بنفس الفترة (٢٢/٩)
+    $stUrl = fn (?string $kind, array $extra = []) => route('erp.groups.show', ['group' => $g] + $extra + $range->query()
+        + array_filter(['kind' => $kind])).'#chainStatement';
+    // القيد ← مستنده الأصلي. الزيارة مالهاش صفحة، فبتفتح لوحة الزيارات على يومها وعميلها
+    $srcUrl = function ($t) {
+        if (! $t->source_id) {
+            return null;
+        }
+
+        return match ($t->source_type) {
+            \App\Models\Invoice::class => route('ops.invoice', $t->source_id),
+            \App\Models\PurchaseOrder::class => route('ops.pos.show', $t->source_id),
+            \App\Models\ClientReturn::class => route('ops.returns.show', $t->source_id),
+            \App\Models\Visit::class => route('ops.visits', ['q' => $t->client?->code,
+                'from' => $t->date->toDateString(), 'to' => $t->date->toDateString()]),
+            \App\Models\User::class => route('ops.rep', $t->source_id),
+            default => null,
+        };
+    };
 @endphp
 
 @php
@@ -60,7 +82,7 @@
 
 <div style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     @if ($g->channel)
-        <span class="badge {{ $g->channel->badgeClass() }}">🎯 {{ $g->channel->displayName() }}</span>
+        <a class="badge {{ $g->channel->badgeClass() }}" href="{{ route('erp.groups', ['channel' => $g->channel_id]) }}">🎯 {{ $g->channel->displayName() }}</a>
     @endif
     @if ($g->sub_channel)<span class="badge b-gray">{{ $g->subChannelLabel() }}</span>@endif
     {{-- ⚠️ **مفيش خصم ولا مسؤول على السلسلة.** قرار 2026-08-01:
@@ -70,24 +92,29 @@
     @if (! $g->active)<span class="badge b-red">{{ __('client.suspended') }}</span>@endif
 </div>
 
+{{-- كل رقم هنا بيتداس (٢٢/٩): يا ينزّلك على جدول الفروع مترتّب بالرقم ده، يا يفلتر قيود السلسلة بنوعها --}}
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('client.branch_count') }}</div><div class="val">{{ $branches->count() }}</div>
-        <div class="sub2">{{ __('client.branches_with_contract', ['count' => $contracts->count()]) }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('report.total_purchases') }}</div>
-        <div class="val" style="color:var(--primary)">{{ $fmt($purchases) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($collections) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ $purchases > 0 ? number_format($collections / $purchases * 100, 1) : 0 }}% {{ __('client.collection_rate') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.outstanding') }}</div>
-        <div class="val {{ $balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($balance) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($returns) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('report.sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.zones_covered') }}</div><div class="val">{{ $zonesCovered }}</div>
-        <div class="sub2">{{ __('client.governorates_covered', ['count' => $govsCovered]) }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.avg_branch_purchases') }}</div>
-        <div class="val" style="color:var(--primary)">{{ $fmt($avgPurchases) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.biggest_branch') }}</div>
-        <div class="val" style="font-size:15px">{{ $topBranch?->displayName() ?? '—' }}</div>
-        <div class="sub2">{{ $fmt($topBranch?->purchases ?? 0) }} {{ __('common.currency') }}</div></div>
+    <a class="kpi" href="#branches"><div class="lbl">{{ __('client.branch_count') }}</div><div class="val">{{ $branches->count() }}</div>
+        <div class="sub2">{{ __('client.branches_with_contract', ['count' => $contracts->count()]) }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'sale']) href="{{ $stUrl($kind === 'sale' ? null : 'sale') }}"><div class="lbl">{{ __('report.total_purchases') }}</div>
+        <div class="val" style="color:var(--primary)">{{ $fmt($purchases) }} {{ __('common.currency') }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'collection']) href="{{ $stUrl($kind === 'collection' ? null : 'collection') }}"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($collections) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ $purchases > 0 ? number_format($collections / $purchases * 100, 1) : 0 }}% {{ __('client.collection_rate') }}</div></a>
+    <a class="kpi" href="#branches" onclick="sortBranchesBy('bal')"><div class="lbl">{{ __('client.outstanding') }}</div>
+        <div class="val {{ $balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($balance) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.by_branch') }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($returns) }} {{ __('common.currency') }}</div></a>
+    <a class="kpi" href="{{ route('erp.groups.show', ['group' => $g, 'kind' => 'sale', 'from' => today()->toDateString(), 'to' => today()->toDateString()]) }}#chainStatement"><div class="lbl">{{ __('report.sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></a>
+    <a class="kpi" href="#branches" onclick="sortBranchesBy('zone')"><div class="lbl">{{ __('client.zones_covered') }}</div><div class="val">{{ $zonesCovered }}</div>
+        <div class="sub2">{{ __('client.governorates_covered', ['count' => $govsCovered]) }}</div></a>
+    <a class="kpi" href="#branches" onclick="sortBranchesBy('pur')"><div class="lbl">{{ __('client.avg_branch_purchases') }}</div>
+        <div class="val" style="color:var(--primary)">{{ $fmt($avgPurchases) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.by_branch') }}</div></a>
+    @if ($topBranch)
+        <a class="kpi" href="{{ route('erp.clients.show', $topBranch) }}"><div class="lbl">{{ __('client.biggest_branch') }}</div>
+            <div class="val" style="font-size:15px">{{ $topBranch->displayName() }}</div>
+            <div class="sub2">{{ $fmt($topBranch->purchases) }} {{ __('common.currency') }}</div></a>
+    @endif
 </div>
 
 <div class="grid2">
@@ -127,35 +154,39 @@
     <div class="chartbox"><canvas id="chTop"></canvas></div>
 </div>
 
-<div class="card">
+<div class="card" id="branches">
     <h3>🏬 {{ __('client.branches') }} <span class="side">{{ __('client.branch_countable', ['count' => $branches->count()]) }}</span></h3>
     {{-- ⚠️ فلتر «من — إلى» (٩/٩/٢٠٢٦) — الجدول ده أرقامه مجمّعة مالوش صف
          بتاريخ، فالفترة بتسوق لينكات التصدير (كشوف الفروع فوق · كشف كل
          فرع هنا · حركة الأصناف) اللي بتفلتر على `transactions.date`. --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    <form method="GET" action="{{ url()->current() }}#branches" class="searchbar" style="margin-bottom:12px" data-noprint>
+        @if ($kind !== '')<input type="hidden" name="kind" value="{{ $kind }}">@endif
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
     </form>
     {{-- فلاتر + فريز + سورت (2026-08-06) — كله client-side، الداتا محمّلة أصلاً --}}
     <div class="searchbar">
-        <input type="text" id="qBr" placeholder="🔍 {{ __('client.search_branch') }}" oninput="filterBranches()">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" id="qBr" placeholder="🔍 {{ __('client.search_branch') }}" oninput="filterBranches()"></label>
+        <label class="fl"><span>{{ __('ui.l_zone') }}</span>
         <select id="fZone" onchange="filterBranches()">
             <option value="">{{ __('client.all_zones') }}</option>
             @foreach ($branches->map(fn ($b) => $b->zone?->displayName())->filter()->unique()->sort() as $zn)
                 <option value="{{ $zn }}">{{ $zn }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_category') }}</span>
         <select id="fCat" onchange="filterBranches()">
             <option value="">{{ __('client.all_categories') }}</option>
             @foreach ($branches->map(fn ($b) => $b->categoryLabel())->filter()->unique()->sort() as $cl)
                 <option value="{{ $cl }}">{{ $cl }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_contract') }}</span>
         <select id="fCon" onchange="filterBranches()">
-            <option value="">{{ __('client.contract') }}: {{ __('common.all') }}</option>
+            <option value="">{{ __('client.contracts_all') }}</option>
             <option value="1">{{ __('client.with_contract') }}</option>
             <option value="0">{{ __('client.without_contract') }}</option>
-        </select>
+        </select></label>
         <span class="badge b-gray" id="brCount">{{ $branches->count() }}</span>
     </div>
     <div class="tablewrap" style="max-height:66vh;overflow-y:auto">
@@ -165,17 +196,17 @@
                 <th class="srt" data-k="name" data-t="s">{{ __('client.branch') }}<span class="arw"></span></th>
                 <th class="srt" data-k="zone" data-t="s">{{ __('client.zone') }}<span class="arw"></span></th>
                 <th class="srt" data-k="cat" data-t="s">{{ __('client.category') }}<span class="arw"></span></th>
-                <th class="srt" data-k="disc" data-t="n">{{ __('client.discount') }}<span class="arw"></span></th>
+                <th class="srt" data-k="disc" data-t="n" data-nosum>{{ __('client.discount') }}<span class="arw"></span></th>
                 {{-- ⚠️ العمود ده هو اللي بيثبت إن «طبّق على كل الفروع»
                      اشتغل فعلاً — من غيره اللي بيدوس الزرار مايعرفش
                      وصل لمين وبكام يوم إلا لو فتح كل فرع لوحده. --}}
-                <th class="srt" data-k="pay" data-t="s">{{ __('client.pay_terms_col') }}<span class="arw"></span></th>
-                <th class="srt" data-k="con" data-t="n">{{ __('client.contract') }}<span class="arw"></span></th>
+                <th class="srt" data-k="pay" data-t="s" data-nosum>{{ __('client.pay_terms_col') }}<span class="arw"></span></th>
+                <th class="srt" data-k="con" data-t="n" data-nosum>{{ __('client.contract') }}<span class="arw"></span></th>
                 <th class="srt" data-k="pur" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
                 <th class="srt" data-k="col" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
                 <th class="srt" data-k="ret" data-t="n">{{ __('client.returns') }}<span class="arw"></span></th>
                 <th class="srt" data-k="bal" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
-                <th class="srt" data-k="act" data-t="s">{{ __('client.last_activity') }}<span class="arw"></span></th>
+                <th class="srt" data-k="act" data-t="s" data-nosum>{{ __('client.last_activity') }}<span class="arw"></span></th>
                 <th data-nosum>{{ __('client.statement') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
@@ -197,8 +228,8 @@
                         {{-- ⚠️ اسم السلسلة من `$g` مش من `$b->fullName()` —
                              الـ199 صف كلهم نفس السلسلة، و`fullName()` كانت
                              هتعمل lazy load للمجموعة لكل صف. --}}
-                        <b><span style="color:var(--muted);font-weight:600">{{ $g->displayName() }} — </span>{{ $b->displayName() }}</b>
-                        <br><span style="font-size:10.5px;color:var(--muted)">{{ $b->address }}</span>
+                        <a href="{{ route('erp.clients.show', $b) }}" style="color:inherit"><b><span style="color:var(--muted);font-weight:600">{{ $g->displayName() }} — </span>{{ $b->displayName() }}</b></a>
+                        <br><span style="font-size:10.5px;color:var(--muted)"><span dir="ltr">{{ $b->code }}</span>@if ($b->address) · {{ $b->address }} @endif</span>
                     </td>
                     <td style="color:var(--muted)">{{ $b->zone?->displayName() ?? '—' }}</td>
                     <td><span class="badge {{ $b->categoryClass() }}">{{ $b->categoryLabel() }}</span></td>
@@ -217,7 +248,7 @@
                     </td>
                     <td>
                         @if ($b->contract)
-                            <span class="badge b-green">{{ $b->contract->typeLabel() ?: __('client.contract') }}</span>
+                            <a class="badge b-green" href="{{ route('erp.contracts.show', $b->contract) }}">{{ $b->contract->typeLabel() ?: __('client.contract') }}</a>
                             @if ($isRtl && $b->contract->terms)
                                 <br><span style="font-size:10px;color:var(--muted)">{{ $b->contract->terms }}</span>
                             @elseif ($b->contract->paymentDays() !== null)
@@ -256,6 +287,72 @@
     </div>
 </div>
 
+{{-- ═══ قيود السلسلة (٢٢/٩/٢٠٢٦) ═══
+     السلسلة ماكانش ليها كشف على الشاشة — التصدير بس. ده آخر القيود على كل
+     الفروع بنفس الفترة، وكل صف بيفتح مستنده وفرعه، والريفرنس بيجيب عملاءه. --}}
+<div class="card" id="chainStatement">
+    <h3>📋 {{ __('uia.chain_entries') }}
+        <span class="side">{{ __('uia.chain_entries_hint', ['shown' => $txns->count(), 'total' => $txnTotals['n']]) }}</span></h3>
+    <form method="GET" action="{{ url()->current() }}#chainStatement" class="searchbar" style="margin-bottom:12px" data-noprint>
+        <label class="fl"><span>{{ __('client.type') }}</span>
+            <select name="kind" onchange="this.form.submit()">
+                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_entries')]) }}</option>
+                @foreach ($kinds as $k)
+                    <option value="{{ $k }}" @selected($kind === $k)>{{ __('enums.transaction.'.$k) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('uia.l_pay_ref') }}</span>
+            <input type="text" name="ref" value="{{ $ref }}" dir="ltr" placeholder="{{ __('uia.pay_ref_ph') }}" onchange="this.form.submit()"></label>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        @if ($kind !== '' || $ref !== '' || ! $range->isOpen())
+            <a class="btn sm" href="{{ url()->current() }}#chainStatement">✕ {{ __('common.clear') }}</a>
+        @endif
+    </form>
+    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
+        <table>
+            <thead><tr>
+                <th data-nosum>{{ __('common.date') }}</th><th>{{ __('client.branch') }}</th><th>{{ __('client.type') }}</th>
+                <th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th>
+                <th class="num">{{ __('client.debit') }}</th><th class="num">{{ __('client.credit') }}</th>
+            </tr></thead>
+            <tbody>
+            @forelse ($txns as $t)
+                <tr>
+                    <td class="num" dir="ltr">{{ $t->date->format('Y-m-d') }}</td>
+                    <td>@if ($t->client)<a href="{{ route('erp.clients.show', $t->client) }}">{{ $t->client->displayName() }}</a>@else — @endif</td>
+                    <td><span class="badge b-gray">{{ $t->kindLabel() }}</span></td>
+                    <td style="white-space:normal;max-width:460px">
+                        @if ($u = $srcUrl($t))<a href="{{ $u }}">{{ $t->memo ?: $t->kindLabel() }}</a>@else{{ $t->memo }}@endif
+                    </td>
+                    <td style="white-space:normal">
+                        @if ($t->method)
+                            <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">{{ $t->methodLabel() }}</span>
+                            @if ($t->reference)
+                                <div style="font-size:10.5px" dir="ltr"><a href="{{ route('erp.clients', ['ref' => $t->reference]) }}" title="{{ __('uia.ref_open_hint') }}">{{ $t->reference }}</a></div>
+                            @endif
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
+                    <td class="num">{{ $t->debit > 0 ? number_format((float) $t->debit, 2) : '—' }}</td>
+                    <td class="num pos">{{ $t->credit > 0 ? number_format((float) $t->credit, 2) : '—' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">{{ __('uia.no_entries') }}</td></tr>
+            @endforelse
+            </tbody>
+            {{-- الإجمالي على **كل** قيود الفلتر من السيرفر — الجدول بيعرض آخر ٥٠٠ بس --}}
+            @if ($txnTotals['n'] > 0)
+                <tfoot><tr>
+                    <td colspan="5"><b>Σ {{ __('common.total') }}</b> — {{ __('client.transaction_countable', ['count' => $txnTotals['n']]) }}</td>
+                    <td class="num"><b>{{ number_format($txnTotals['debit'], 2) }}</b></td>
+                    <td class="num pos"><b>{{ number_format($txnTotals['credit'], 2) }}</b></td>
+                </tr></tfoot>
+            @endif
+        </table>
+    </div>
+</div>
+
 <style>
     #brTbl th.srt{cursor:pointer;user-select:none;white-space:nowrap}
     #brTbl th.srt:hover{color:var(--primary)}
@@ -282,7 +379,7 @@
 <div class="card">
     <h3>📜 {{ __('client.chain_contract') }}
         @if ($gct)
-            <span class="side">{{ $gct->number }}</span>
+            <span class="side"><a href="{{ route('erp.contracts.show', $gct) }}">{{ $gct->number }} ↗</a></span>
         @endif
     </h3>
 
@@ -365,12 +462,12 @@
          نسخ من عقد واحد — وهما بالعكس: الاستثناءات. --}}
     <div class="tablewrap">
         <table>
-            <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.chain_in_contract') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.discount') }}</th><th>{{ __('client.payment_terms') }}</th><th>{{ __('client.expires_on') }}</th><th>{{ __('common.notes') }}</th></tr>
+            <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.chain_in_contract') }}</th><th>{{ __('client.type') }}</th><th data-nosum>{{ __('client.discount') }}</th><th data-nosum>{{ __('client.payment_terms') }}</th><th data-nosum>{{ __('client.expires_on') }}</th><th>{{ __('common.notes') }}</th></tr>
             @foreach ($contracts as $b)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $b) }}'">
                     <td><b><span style="color:var(--muted);font-weight:600">{{ $g->displayName() }} — </span>{{ $b->displayName() }}</b></td>
                     <td>{{ $b->contract->displayChain() ?: '—' }}</td>
-                    <td><span class="badge b-blue">{{ $b->contract->typeLabel() ?: '—' }}</span></td>
+                    <td><a class="badge b-blue" href="{{ route('erp.contracts.show', $b->contract) }}" onclick="event.stopPropagation()">{{ $b->contract->typeLabel() ?: '—' }} · {{ $b->contract->number }}</a></td>
                     <td class="num">{{ number_format($b->contract->discount * 100, 1) }}%</td>
                     <td>
                         @if ($isRtl)
@@ -669,6 +766,12 @@ new Chart(document.getElementById('chTop'), {
 });
 
 // ═══ فلترة مركبة: بحث + زون + تصنيف + عقد ═══
+// كروت الملخّص بتنادي دي — بترتّب جدول الفروع تنازلي على عمود الكارت
+function sortBranchesBy(k) {
+    const th = document.querySelector('#brTbl th.srt[data-k="' + k + '"]');
+    if (th) th.click();
+}
+
 function filterBranches() {
     const q = document.getElementById('qBr').value.trim().toLowerCase();
     const zn = document.getElementById('fZone').value;

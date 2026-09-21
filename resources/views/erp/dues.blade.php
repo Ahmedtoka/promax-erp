@@ -28,22 +28,23 @@
     <div class="alert info">{{ __('client.dues_not_posted_hint') }}</div>
 </div>
 
+{{-- الكروت بتفلتر الجدول تحت بحالتها (٢٢/٩) — والمحجوز بينزل على جدوله --}}
 <div class="kpis">
-    <div class="kpi">
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'due']) href="{{ route('erp.dues', ['status' => 'due']) }}#duesList">
         <div class="lbl">{{ __('client.due_amount') }}</div>
         <div class="val neg">{{ $fmt($kpi['due_amount']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $kpi['due_count'] }} · {{ $kpi['clients'] }} {{ __('client.due_clients') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'settled']) href="{{ route('erp.dues', ['status' => 'settled']) }}#duesList">
         <div class="lbl">{{ __('client.due_settled') }}</div>
         <div class="val pos">{{ $fmt($kpi['settled_amount']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('client.due_status_settled') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#withheldCard">
         <div class="lbl">{{ __('client.withheld_total') }}</div>
         <div class="val mid">{{ $fmt($kpi['withheld_total']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $kpi['withheld_clients'] }} · {{ __('client.withheld_hint') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ أكبر المستحقات ═══════════ --}}
@@ -74,7 +75,7 @@
     </div>
 
     {{-- المحجوز — رقم مختلف تماماً عن المستحق --}}
-    <div class="card">
+    <div class="card" id="withheldCard">
         <h3>🔒 {{ __('client.held_by_client') }} <span class="side">{{ __('client.withheld_hint') }}</span></h3>
         @if ($withheld->count() > 0)
             <div class="tablewrap">
@@ -112,12 +113,16 @@
             <tr>
                 <th>{{ __('client.contract') }}</th>
                 <th>{{ __('client.clause') }}</th>
-                <th class="num">{{ __('client.clause_value') }}</th>
+                <th class="num" data-nosum>{{ __('client.clause_value') }}</th>
                 <th></th>
             </tr>
             @foreach ($undated as $cl)
                 <tr>
-                    <td>{{ $cl->contract?->client?->displayName() ?: $cl->contract?->displayChain() ?: '—' }}</td>
+                    <td>
+                        @if ($cl->contract)
+                            <a href="{{ route('erp.contracts.show', $cl->contract) }}">{{ $cl->contract->client?->displayName() ?: $cl->contract->displayChain() ?: $cl->contract->number }}</a>
+                        @else — @endif
+                    </td>
                     <td style="white-space:normal;max-width:360px">{{ $cl->displayLabel() }}</td>
                     <td class="num"><b>{{ $cl->valueLabel() }}</b></td>
                     <td class="num">
@@ -135,29 +140,30 @@
 @endif
 
 {{-- ═══════════ الفلاتر ═══════════ --}}
-<form class="searchbar" method="GET">
+<form class="searchbar" method="GET" id="duesList">
+    {{-- ⚠️ الافتراضي هنا «المستحق» مش الكل (الكنترولر) — فأول اختيار «كل الحالات» قيمته `all` مش فاضي --}}
+    <label class="fl"><span>{{ __('ui.l_status') }}</span>
     <select name="status">
         <option value="all" @selected(($filters['status'] ?? '') === 'all')>{{ __('client.all_statuses') }}</option>
         @foreach (['due', 'settled', 'waived'] as $st)
             <option value="{{ $st }}" @selected(($filters['status'] ?? '') === $st)>{{ __('client.due_status_'.$st) }}</option>
         @endforeach
-    </select>
+    </select></label>
 
+    <label class="fl wide"><span>{{ __('ui.l_client') }}</span>
     <select name="client">
         <option value="">{{ __('client.all_clients') }}</option>
         @foreach ($clients as $c)
             <option value="{{ $c->id }}" @selected((int) ($filters['client'] ?? 0) === $c->id)>{{ $c->displayName() }}</option>
         @endforeach
-    </select>
+    </select></label>
 
     {{-- فلتر «من — إلى» على `period_end` (٩/٩/٢٠٢٦) — نهاية فترة الاستحقاق --}}
-    <label class="f" style="margin:0;align-self:center">{{ __('common.from') }}</label>
-    <input type="date" name="from" value="{{ $range->fromValue() }}">
-    <label class="f" style="margin:0;align-self:center">{{ __('common.to') }}</label>
-    <input type="date" name="to" value="{{ $range->toValue() }}">
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
 
     <button class="btn gold">{{ __('common.search') }}</button>
     <a class="btn" href="{{ route('erp.dues') }}">{{ __('common.clear') }}</a>
+    <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
 </form>
 
 {{-- ═══════════ الاستحقاقات ═══════════ --}}
@@ -168,9 +174,9 @@
             <tr>
                 <th>{{ __('client.client') }}</th>
                 <th>{{ __('client.clause') }}</th>
-                <th>{{ __('client.due_period') }}</th>
+                <th data-nosum>{{ __('client.due_period') }}</th>
                 <th class="num">{{ __('client.due_basis') }}</th>
-                <th class="num">{{ __('client.clause_value') }}</th>
+                <th class="num" data-nosum>{{ __('client.clause_value') }}</th>
                 <th class="num">{{ __('client.due_amount') }}</th>
                 <th>{{ __('common.status') }}</th>
                 @if ($manager)<th></th>@endif
@@ -225,6 +231,16 @@
                     {{ __('client.no_dues') }}
                 </td></tr>
             @endforelse
+            {{-- الجدول صفحات — الإجمالي من السيرفر على كل النتيجة المفلترة، نفس رقم التصدير --}}
+            @if ($listTotals->n > 0)
+                <tfoot><tr>
+                    <td colspan="3"><b>Σ {{ __('common.total') }}</b> — {{ __('ui.rows_n', ['n' => $fmt($listTotals->n)]) }}</td>
+                    <td class="num"><b>{{ $fmt($listTotals->basis) }}</b></td>
+                    <td></td>
+                    <td class="num"><b>{{ $fmt($listTotals->amount) }}</b></td>
+                    <td colspan="{{ $manager ? 2 : 1 }}"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 

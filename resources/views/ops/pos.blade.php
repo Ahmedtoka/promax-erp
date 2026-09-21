@@ -40,37 +40,33 @@
 
 {{-- ═══ الأوفرفيو: كل كارت فلتر بضغطة — وبنفس فلاتر القايمة ═══ --}}
 <div class="kpis">
-    <a class="kpi" href="{{ $kpiLink([]) }}" style="text-decoration:none;color:inherit">
+    <a @class(['kpi', 'on' => ! ($f['approval'] ?? '') && ! ($f['status'] ?? '') && ! ($f['late'] ?? false)]) href="{{ $kpiLink([]) }}">
         <div class="lbl">🚚 {{ __('ops.total_orders') }}</div>
         <div class="val">{{ $fmt($kpi['total']) }}</div>
-        <div class="sub2">{{ __('ops.kpi_value') }}: <b>{{ $fmt($kpi['value']) }}</b></div>
+        {{-- قيمة أوامر بتاريخ الأمر — مش مبيعات كشف الحساب (دي بتتقيد عند التسليم) --}}
+        <div class="sub2">{{ __('uic.po_orders_value') }}: <b>{{ $fmt($kpi['value']) }}</b></div>
     </a>
-    <a class="kpi" href="{{ $kpiLink(['approval' => 'pending']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['approval'] ?? '') === 'pending' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['approval'] ?? '') === 'pending']) href="{{ $kpiLink(['approval' => 'pending']) }}">
         <div class="lbl">🔏 {{ __('enums.po_approval.pending') }}</div>
         <div class="val mid">{{ $fmt($kpi['pending']) }}</div>
         <div class="sub2">{{ __('ops.kpi_pending_hint') }}</div>
     </a>
-    <a class="kpi" href="{{ $kpiLink(['approval' => 'approved']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['approval'] ?? '') === 'approved' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['approval'] ?? '') === 'approved']) href="{{ $kpiLink(['approval' => 'approved']) }}">
         <div class="lbl">✅ {{ __('enums.po_approval.approved') }}</div>
         <div class="val pos">{{ $fmt($kpi['approved']) }}</div>
         <div class="sub2">{{ __('ops.kpi_approved_hint') }}</div>
     </a>
-    <a class="kpi" href="{{ $kpiLink(['approval' => 'rejected']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['approval'] ?? '') === 'rejected' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['approval'] ?? '') === 'rejected']) href="{{ $kpiLink(['approval' => 'rejected']) }}">
         <div class="lbl">⛔ {{ __('enums.po_approval.rejected') }}</div>
         <div class="val neg">{{ $fmt($kpi['rejected']) }}</div>
         <div class="sub2">{{ __('ops.kpi_rejected_hint') }}</div>
     </a>
-    <a class="kpi" href="{{ $kpiLink(['status' => 'delivered']) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['status'] ?? '') === 'delivered' ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['status'] ?? '') === 'delivered']) href="{{ $kpiLink(['status' => 'delivered']) }}">
         <div class="lbl">📬 {{ __('enums.po_status.delivered') }}</div>
         <div class="val pos">{{ $fmt($kpi['delivered']) }}</div>
         <div class="sub2">{{ __('ops.kpi_delivered_hint') }}</div>
     </a>
-    <a class="kpi" href="{{ $kpiLink(['late' => 1]) }}"
-       style="text-decoration:none;color:inherit;{{ ($f['late'] ?? false) ? 'outline:2px solid var(--royal-blue)' : '' }}">
+    <a @class(['kpi', 'on' => ($f['late'] ?? false)]) href="{{ $kpiLink(['late' => 1]) }}">
         <div class="lbl">⏰ {{ __('ops.po_late') }}</div>
         <div class="val {{ $kpi['late'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($kpi['late']) }}</div>
         <div class="sub2">{{ __('ops.kpi_late_hint') }}</div>
@@ -83,34 +79,44 @@
     {{-- الفلاتر: بحث ← القناة ← السلسلة ← الموافقة ← الحالة ← من/إلى --}}
     <form class="searchbar" method="GET">
         @if ($f['late'] ?? false)<input type="hidden" name="late" value="1">@endif
-        <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
-               placeholder="🔍 {{ __('ops.search_po_ph') }}" style="flex:1;min-width:220px">
-        <select name="channel" style="min-width:130px">
-            <option value="">{{ __('client.all_channels') }}</option>
-            @foreach ($channels as $ch)
-                <option value="{{ $ch->id }}" @selected((int) ($f['channel'] ?? 0) === $ch->id)>{{ $ch->displayName() }}</option>
-            @endforeach
-        </select>
-        <select name="group" style="min-width:140px">
-            <option value="">— {{ __('nav.chains') }} —</option>
-            @foreach ($groups as $g)
-                <option value="{{ $g->id }}" @selected((int) ($f['group'] ?? 0) === $g->id)>{{ $g->displayName() }}</option>
-            @endforeach
-        </select>
-        <select name="approval" style="min-width:130px">
-            <option value="">{{ __('ops.decision') }}: {{ __('common.all') }}</option>
-            @foreach (['pending', 'approved', 'rejected'] as $a)
-                <option value="{{ $a }}" @selected(($f['approval'] ?? '') === $a)>{{ __('enums.po_approval.'.$a) }}</option>
-            @endforeach
-        </select>
-        <select name="status" style="min-width:120px">
-            <option value="">{{ __('common.status') }}: {{ __('common.all') }}</option>
-            @foreach (array_keys(\App\Models\PurchaseOrder::STATUSES) as $k)
-                <option value="{{ $k }}" @selected(($f['status'] ?? '') === $k)>{{ __('enums.po_status.'.$k) }}</option>
-            @endforeach
-        </select>
-        <input type="date" name="from" value="{{ $f['from'] ?? '' }}" style="width:135px" title="{{ __('common.from') }}">
-        <input type="date" name="to" value="{{ $f['to'] ?? '' }}" style="width:135px" title="{{ __('common.to') }}">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('ops.search_po_ph') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_channel') }}</span>
+            <select name="channel">
+                <option value="">{{ __('client.all_channels') }}</option>
+                @foreach ($channels as $ch)
+                    <option value="{{ $ch->id }}" @selected((int) ($f['channel'] ?? 0) === $ch->id)>{{ $ch->displayName() }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_group') }}</span>
+            <select name="group">
+                <option value="">{{ __('ui.all_of', ['x' => __('nav.chains')]) }}</option>
+                @foreach ($groups as $g)
+                    <option value="{{ $g->id }}" @selected((int) ($f['group'] ?? 0) === $g->id)>{{ $g->displayName() }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_rep') }}</span>
+            <select name="rep">
+                <option value="">{{ __('ops.all_reps') }}</option>
+                @foreach ($reps as $rp)
+                    <option value="{{ $rp->id }}" @selected((int) ($f['rep'] ?? 0) === $rp->id)>{{ $rp->displayName() }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_approval') }}</span>
+            <select name="approval">
+                <option value="">{{ __('ui.all_of', ['x' => __('uic.decisions')]) }}</option>
+                @foreach (['pending', 'approved', 'rejected'] as $a)
+                    <option value="{{ $a }}" @selected(($f['approval'] ?? '') === $a)>{{ __('enums.po_approval.'.$a) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
+            <select name="status">
+                <option value="">{{ __('ui.all_of', ['x' => __('uic.statuses')]) }}</option>
+                @foreach (array_keys(\App\Models\PurchaseOrder::STATUSES) as $k)
+                    <option value="{{ $k }}" @selected(($f['status'] ?? '') === $k)>{{ __('enums.po_status.'.$k) }}</option>
+                @endforeach
+            </select></label>
+        @include('partials._range', ['from' => $f['from'] ?? '', 'to' => $f['to'] ?? ''])
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('ops.pos') }}">{{ __('common.clear') }}</a>
     </form>
@@ -123,7 +129,7 @@
                 <th>{{ __('ops.order') }}</th>
                 <th>{{ __('ops.branch_client') }}</th>
                 <th>{{ __('ops.rep') }}</th>
-                <th>{{ __('ops.due_at') }}</th>
+                <th data-nosum>{{ __('ops.due_at') }}</th>
                 <th class="num">{{ __('ops.units') }}</th>
                 <th class="num">{{ __('stock.value') }}</th>
                 <th>{{ __('ops.decision') }}</th>
@@ -136,6 +142,7 @@
             @forelse ($pos as $po)
                 {{-- الصف كله بيفتح صفحة الأمر (١٢/٨) — عرض + تعديل من مكان
                      واحد. الأزرار في آخر عمود عليها stopPropagation. --}}
+                @php $poOut = ! \App\Http\Controllers\OpsController::poCounted($po); @endphp
                 <tr class="clickable" onclick="location.href='{{ route('ops.pos.show', $po) }}'" style="cursor:pointer">
                     {{-- ⚠️ **كلمة «replenishment» اتشالت** (طلب المالك ١٥/٨).
                          كانت بتتطبع خام (مصطلح داخلي مش مسمى معتمد)، وحتى
@@ -160,7 +167,7 @@
                             );
                         });
                     @endphp
-                    <td class="num"><b>{{ $po->number }}</b>
+                    <td class="num"><a href="{{ route('ops.pos.show', $po) }}" onclick="event.stopPropagation()"><b>{{ $po->number }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $po->created_at->format('m-d') }}</span>
                         @foreach ($hitItems->take(2) as $hit)
                             <div style="font-size:10px;color:#15803D;font-weight:700;white-space:normal;max-width:190px">
@@ -188,12 +195,22 @@
                         @endif
                     </td>
                     <td>
-                        <b>{{ $po->client?->fullName() ?? '—' }}</b>
+                        {{-- (٢٢/٩) السلسلة والفرع كل واحد بيفتح صفحته --}}
+                        @if ($po->client)
+                            @if ($po->client->group)
+                                <a href="{{ route('erp.groups.show', $po->client->group) }}" onclick="event.stopPropagation()" style="font-size:10.5px;color:var(--muted)">{{ $po->client->group->displayName() }}</a><br>
+                            @endif
+                            <a href="{{ route('erp.clients.show', $po->client) }}" onclick="event.stopPropagation()"><b>{{ $po->client->displayName() }}</b></a>
+                        @else — @endif
                         @if ($po->client?->channel)
                             <br><span class="badge {{ $po->client->channel->badgeClass() }}" style="font-size:9.5px">{{ $po->client->channel->displayName() }}</span>
                         @endif
                     </td>
-                    <td>{{ $po->courier?->displayName() ?? '—' }}</td>
+                    <td>
+                        @if ($po->courier)
+                            <a href="{{ route('ops.rep', $po->courier) }}" onclick="event.stopPropagation()">{{ $po->courier->displayName() }}</a>
+                        @else — @endif
+                    </td>
                     {{-- معاد التوريد بالساعة + شارة التأخير --}}
                     <td style="font-size:11.5px">
                         {{ $po->due_at?->format('m-d h:i A') ?? $po->due_date?->format('m-d') ?? '—' }}
@@ -205,7 +222,14 @@
                             <br><span style="font-size:10px;color:#B86E00;font-weight:800">{{ __('ops.po_delivered_qty') }} {{ $po->deliveredQtyTotal() }} · {{ __('ops.po_variance') }} {{ $po->qtyTotal() - $po->deliveredQtyTotal() }}</span>
                         @endif
                     </td>
-                    <td class="num pos">{{ $fmt($po->total) }}</td>
+                    {{-- (٢٢/٩) `grand_total` زي الكارت والإكسيل — والمرفوض/الملغي مشطوب وبره الإجمالي --}}
+                    <td class="num {{ $poOut ? '' : 'pos' }}">
+                        @if ($poOut)
+                            <s style="color:var(--muted)" title="{{ __('uic.po_excluded_tip') }}">{{ $fmt($po->grand_total) }}</s>
+                        @else
+                            {{ $fmt($po->grand_total) }}
+                        @endif
+                    </td>
                     <td>
                         @if ($po->needsApproval())
                             <span class="badge {{ $po->approvalClass() }}">{{ $po->approvalLabel() }}</span>
@@ -278,6 +302,21 @@
                 <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.no_orders') }}</td></tr>
             @endforelse
             </tbody>
+            {{-- (٢٢/٩) إجمالي القيمة من الفلتر كله مش صفوف الصفحة --}}
+            @if ($sum->n > 0)
+                <tfoot>
+                <tr style="background:var(--card2);font-weight:900">
+                    <td>Σ</td>
+                    <td colspan="4">{{ __('uic.po_scope_note', ['n' => $fmt($sum->n)]) }}
+                        @if ($sum->excluded > 0)
+                            <div style="font-size:10.5px;font-weight:700;color:var(--muted)">{{ __('uic.po_excluded_note', ['n' => $fmt($sum->excluded)]) }}</div>
+                        @endif
+                    </td>
+                    <td class="num pos">{{ $fmt($sum->total) }}</td>
+                    <td colspan="4"></td>
+                </tr>
+                </tfoot>
+            @endif
         </table>
     </div>
     @include('partials._pagination', ['p' => $pos])
@@ -290,6 +329,7 @@
         <h4 id="aTitle">{{ __('ops.assign_to_driver') }}</h4>
         <label class="f">{{ __('ops.driver') }}</label>
         <select name="assigned_to" required style="width:100%">
+            <option value="">{{ __('ui.choose', ['x' => __('ops.driver')]) }}</option>
             @foreach ($couriers as $co)<option value="{{ $co->id }}">{{ $co->name }} ({{ $co->code }})</option>@endforeach
         </select>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">

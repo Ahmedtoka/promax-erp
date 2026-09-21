@@ -51,9 +51,37 @@ class EntryController extends Controller
                 $q->where(fn ($w) => $w->where('number', 'like', $term)->orWhere('memo', 'like', $term));
             });
 
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩) — سطر لكل سطر قيد، وإجمالي المدين = الدائن ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderByDesc('date')->orderByDesc('id')->limit(3000)->get();
+            $out = [];
+            $td = 0.0; $tc = 0.0;
+
+            foreach ($all as $e) {
+                foreach ($e->lines as $l) {
+                    $td += (float) $l->debit; $tc += (float) $l->credit;
+                    $out[] = [$e->number, $e->date?->format('Y-m-d'), __('gl.origin_'.$e->origin), (string) $e->memo,
+                        (string) $l->account?->code, $l->account?->displayName() ?? '',
+                        \App\Support\Csv::money($l->debit), \App\Support\Csv::money($l->credit)];
+                }
+            }
+
+            return \App\Support\Csv::download('gl-entries-'.now()->format('Y-m-d-Hi').'.csv',
+                [__('gl.number'), __('common.date'), __('gl.origin'), __('gl.memo'), __('gl.code'), __('gl.account'), __('gl.debit'), __('gl.credit')],
+                $out,
+                [__('common.total'), '', '', '', '', '', \App\Support\Csv::money($td), \App\Support\Csv::money($tc)],
+                \App\Support\Csv::meta(__('gl.journal'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
+        // إجمالي الفلتر كله لصف الإجمالي تحت الجدول (الجدول مقسم صفحات)
+        $sums = \App\Models\Gl\GlLine::whereIn('entry_id', (clone $q)->select('gl_entries.id'))
+            ->selectRaw('COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c')->first();
+
         $rows = $q->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString();
 
         return view('gl.entries', [
+            'sumDebit' => (float) $sums->d,
+            'sumCredit' => (float) $sums->c,
             'range' => $range,
             'rows' => $rows,
             'links' => $this->linksFor($rows->getCollection()),

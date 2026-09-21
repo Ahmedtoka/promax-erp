@@ -15,15 +15,16 @@
         <h3 style="margin:0">📋 {{ __('online.pickups_title') }}</h3>
         {{-- بحث شامل: رقم أوردر / اسم عميل / موبايل → البيك ابات اللي فيها --}}
         <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
-            <input name="search" value="{{ $search }}" placeholder="{{ __('online.pu_search_ph') }}"
-                   style="min-width:280px">
+            <label class="fl wide"><span>{{ __('ui.l_search') }}</span>
+                <input name="search" value="{{ $search }}" placeholder="{{ __('online.pu_search_ph') }}"></label>
             {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ شيت البيك اب --}}
-            <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-            <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+            @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>
             @if ($search !== '' || ! $range->isOpen())
-                <a class="btn" href="{{ route('online.pickups') }}">✕</a>
+                <a class="btn" href="{{ route('online.pickups') }}">{{ __('common.clear') }}</a>
             @endif
+            {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+            <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         </form>
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.pickups_hint2') }}</div>
@@ -33,7 +34,7 @@
         <table>
             <tr>
                 <th>{{ __('online.pickup_no') }}</th>
-                <th>{{ __('common.date') }}</th>
+                <th data-nosum>{{ __('common.date') }}</th>
                 <th>{{ __('online.courier') }}</th>
                 <th>{{ __('online.by_user') }}</th>
                 <th class="num" data-nosum>{{ __('online.orders_count') }}</th>
@@ -50,7 +51,7 @@
                 @php $t = $p->totals(); @endphp
                 <tr class="clickable" onclick="location.href='{{ route('online.pickup', $p) }}'">
                     <td class="num s">
-                        <span style="font-weight:900;color:var(--royal-blue)">{{ $p->number }}</span>
+                        <a href="{{ route('online.pickup', $p) }}" style="font-weight:900;color:var(--royal-blue)">{{ $p->number }}</a>
                     </td>
                     <td class="s">{{ $p->date->format('Y-m-d') }}</td>
                     <td>{{ $p->courier?->name ?: '—' }}</td>
@@ -79,6 +80,20 @@
                     {{ $search !== '' ? __('online.pu_search_none') : __('online.pickups_empty') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($pickups->total() > 0)
+                <tfoot><tr>
+                    <td colspan="4"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $pickups->total()]) }})</span></td>
+                    <td class="num"><b>{{ number_format($sum['orders']) }}</b></td>
+                    <td class="num"><b>{{ number_format($sum['pieces']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['goods']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['ship']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['amount']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['collected']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['remaining']) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 

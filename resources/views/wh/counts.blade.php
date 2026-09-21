@@ -28,39 +28,40 @@
     @endif
 
     <form method="GET" action="{{ route('wh.counts') }}" class="searchbar">
-        <div>
-            <label class="f">{{ __('count.warehouse') }}</label>
+        <label class="fl"><span>{{ __('ui.l_warehouse') }}</span>
             <select name="warehouse">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('stock.all_warehouses') }}</option>
                 @foreach ($warehouses as $w)
                     <option value="{{ $w->id }}" @selected($filters['warehouse'] == $w->id)>{{ $w->displayName() }}</option>
                 @endforeach
             </select>
-        </div>
-        <div>
-            <label class="f">{{ __('common.status') }}</label>
+        </label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
             <select name="status">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('stock.all_statuses') }}</option>
                 @foreach (\App\Models\StockCount::STATUS as $st)
                     <option value="{{ $st }}" @selected($filters['status'] === $st)>{{ __('count.status_'.$st) }}</option>
                 @endforeach
             </select>
-        </div>
+        </label>
         {{-- فلتر «من — إلى» على يوم الجرد `count_date` (٩/٩/٢٠٢٦) —
              ده فلتر عرض GET، مش خانة `count_date` بتاعة فتح جرد جديد تحت --}}
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
-        <button class="btn">{{ __('common.filter') }}</button>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
+        <button class="btn gold">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('wh.counts') }}">{{ __('common.clear') }}</a>
+        {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 </div>
 
 <div class="card">
+    <h3>📋 {{ __('count.counts') }}</h3>
     <div class="tablewrap">
         <table>
             <tr>
                 <th>{{ __('count.count') }}</th>
                 <th>{{ __('count.warehouse') }}</th>
-                <th>{{ __('count.count_date') }}</th>
+                <th data-nosum>{{ __('count.count_date') }}</th>
                 <th class="num">{{ __('count.lines') }}</th>
                 <th class="num">{{ __('count.diff_lines') }}</th>
                 <th class="num">{{ __('count.qty_diff') }}</th>
@@ -71,10 +72,10 @@
 
             @forelse ($counts as $c)
                 <tr>
-                    <td><b>{{ $c->number }}</b>
+                    <td><a href="{{ route('wh.count', $c) }}"><b>{{ $c->number }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $c->startedBy?->displayName() }}</span>
                     </td>
-                    <td>{{ $c->warehouse->displayName() }}</td>
+                    <td>@if ($c->warehouse)<a href="{{ route('erp.warehouses.stock', $c->warehouse) }}">{{ $c->warehouse->displayName() }}</a>@else — @endif</td>
                     <td class="num">{{ $c->count_date?->format('Y-m-d') }}</td>
                     <td class="num">{{ $fmt($c->lines) }}</td>
                     <td class="num {{ $c->diff_lines > 0 ? 'mid' : '' }}">{{ $fmt($c->diff_lines) }}</td>
@@ -96,6 +97,17 @@
                     {{ __('count.no_counts') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($counts->total() > 0)
+                <tfoot><tr>
+                    <td colspan="3"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $counts->total()]) }})</span></td>
+                    <td class="num"><b>{{ $fmt($totals->lines) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totals->diff_lines) }}</b></td>
+                    <td class="num"><b>{{ $totals->qty_diff > 0 ? '+' : '' }}{{ $fmt($totals->qty_diff) }}</b></td>
+                    <td class="num"><b>{{ $money($totals->value_diff) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 
@@ -111,6 +123,8 @@
         <div>
             <label class="f">{{ __('count.warehouse') }}</label>
             <select name="warehouse_id" required style="width:100%">
+                {{-- ⚠️ من غير مخزن جاهز (٢٢/٩): أول مخزن كان بينزل لوحده والجرد يتفتح على مخزن غلط --}}
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                 @foreach ($warehouses as $w)
                     <option value="{{ $w->id }}">{{ $w->displayName() }}</option>
                 @endforeach

@@ -29,13 +29,14 @@
 
     {{-- اختيار العميل — الشاشة بتتعاد بالمتاح للرد بتاعه --}}
     <form class="searchbar" method="GET">
+        <label class="fl wide grow"><span>{{ __('ui.l_client') }}</span>
         <select name="client" onchange="this.form.submit()">
-            <option value="">— {{ __('client.client') }} —</option>
+            <option value="">{{ __('ui.choose', ['x' => __('ui.l_client')]) }}</option>
             @foreach ($clients as $c)
                 <option value="{{ $c->id }}" @selected($client && $client->id === $c->id)>
                     {{ $c->code }} — {{ $c->displayName() }}</option>
             @endforeach
-        </select>
+        </select></label>
         <noscript><button class="btn gold" type="submit">{{ __('common.filter') }}</button></noscript>
     </form>
 
@@ -82,7 +83,7 @@
             <div class="alert info">{{ __('field.return_cond_hint') }}</div>
 
             <div class="tablewrap">
-                <table>
+                <table data-noxl>
                     <tr>
                         <th>{{ __('stock.product') }}</th>
                         <th>{{ __('field.return_returnable') }}</th>

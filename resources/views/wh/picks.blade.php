@@ -49,29 +49,33 @@
         <span class="side">{{ __('stock.pick_open_count', ['count' => $openCount]) }}</span></h3>
 
     <form class="searchbar" method="GET">
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status">
             <option value="">{{ __('stock.all_statuses') }}</option>
             @foreach ($statusOptions as $k => $lbl)
                 <option value="{{ $k }}" @selected($statusFilter === $k)>{{ $lbl }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
         <select name="rep">
             <option value="">{{ __('ops.all_reps') }}</option>
             @foreach ($reps as $r)
                 <option value="{{ $r->id }}" @selected($repFilter === (string) $r->id)>{{ $r->name }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_warehouse') }}</span>
         <select name="warehouse">
             <option value="">{{ __('stock.all_warehouses') }}</option>
             @foreach ($warehouses as $w)
                 <option value="{{ $w->id }}" @selected($whFilter === (string) $w->id)>{{ $w->displayName() }}</option>
             @endforeach
-        </select>
+        </select></label>
         {{-- فلتر «من — إلى» على موعد التحميل `pickup_at` (٩/٩/٢٠٢٦) --}}
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.picks') }}">{{ __('common.clear') }}</a>
+        {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -81,7 +85,7 @@
                 <th>{{ __('stock.warehouse') }}</th>
                 <th>{{ __('ops.rep') }}</th>
                 <th>{{ __('stock.pick_purpose') }}</th>
-                <th>{{ __('stock.pickup_at') }}</th>
+                <th data-nosum>{{ __('stock.pickup_at') }}</th>
                 <th>{{ __('stock.qty_requested') }}</th>
                 <th>{{ __('stock.qty_picked') }}</th>
                 <th>{{ __('stock.qty_received_col') }}</th>
@@ -90,11 +94,11 @@
             </tr>
             @forelse ($orders as $o)
                 <tr class="clickable" onclick="location.href='{{ route('wh.picks.show', $o) }}'">
-                    <td class="num"><b>{{ $o->number }}</b>
+                    <td class="num"><a href="{{ route('wh.picks.show', $o) }}"><b>{{ $o->number }}</b></a>
                         <br><span style="font-size:10.5px;color:var(--muted)">{{ $o->created_at?->format('Y-m-d') ?? '—' }}</span>
                     </td>
-                    <td>{{ $o->warehouse?->displayName() ?? '—' }}</td>
-                    <td>{{ $o->rep?->name ?? '—' }}</td>
+                    <td>@if ($o->warehouse)<a href="{{ route('erp.warehouses.stock', $o->warehouse) }}" onclick="event.stopPropagation()">{{ $o->warehouse->displayName() }}</a>@else — @endif</td>
+                    <td>@if ($o->rep)<a href="{{ route('ops.rep', $o->rep) }}" onclick="event.stopPropagation()">{{ $o->rep->displayName() }}</a>@else — @endif</td>
                     <td>
                         {{-- ⚠️ **الفرق بين عهدة وتوريد لازم يبان من نظرة**
                              (2026-08-08). كل الأوامر كانت بنفس الشكل
@@ -102,8 +106,10 @@
                              البضاعة دي رايحة عربية ولا فرع كي أكاونت. --}}
                         @if ($o->purchase_order_id)
                             <span class="badge b-purple">🚚 {{ __('stock.pick_purpose_customer_po') }}</span>
+                            {{-- رقم أمر التوريد بيفتحه، والعميل بيفتح كارته (٢٢/٩) --}}
                             <div style="font-size:10.5px;color:var(--muted)">
-                                {{ $o->purchaseOrder?->client?->displayName() ?? '—' }}
+                                @if ($o->purchaseOrder)<a href="{{ route('ops.pos.show', $o->purchaseOrder) }}" onclick="event.stopPropagation()" dir="ltr">{{ $o->purchaseOrder->number }}</a> ·@endif
+                                @if ($o->purchaseOrder?->client)<a href="{{ route('erp.clients.show', $o->purchaseOrder->client) }}" onclick="event.stopPropagation()">{{ $o->purchaseOrder->client->displayName() }}</a>@else — @endif
                             </div>
                         @else
                             <span class="badge b-blue">📦 {{ __('stock.pick_purpose_van_load') }}</span>
@@ -142,10 +148,20 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('stock.no_picks') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($orders->total() > 0)
+                <tfoot><tr>
+                    <td colspan="5"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $orders->total()]) }})</span></td>
+                    <td class="num"><b>{{ $fmt($totals->requested) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totals->picked) }}</b></td>
+                    <td class="num"><b>{{ $fmt($totals->received) }}</b></td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $orders->links('pagination::simple-default') }}</div>

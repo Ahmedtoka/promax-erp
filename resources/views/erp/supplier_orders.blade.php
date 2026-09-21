@@ -25,24 +25,25 @@
     </h3>
 
     <form class="searchbar" method="GET">
+        <label class="fl wide"><span>{{ __('ui.l_supplier') }}</span>
         <select name="supplier" onchange="this.form.submit()">
-            <option value="">— {{ __('supplier.all_suppliers') }} —</option>
+            <option value="">{{ __('supplier.all_suppliers') }}</option>
             @foreach ($suppliers as $sup)
                 <option value="{{ $sup->id }}" @selected((int) ($filters['supplier'] ?? 0) === $sup->id)>{{ $sup->displayName() }}</option>
             @endforeach
-        </select>
+        </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status" onchange="this.form.submit()">
             <option value="">{{ __('client.status_all') }}</option>
             @foreach (['open', 'received', 'closed', 'cancelled'] as $st)
                 <option value="{{ $st }}" @selected(($filters['status'] ?? '') === $st)>{{ __('supplier.status_'.$st) }}</option>
             @endforeach
-        </select>
+        </select></label>
         {{-- فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر مش يوم الإدخال --}}
-        <label class="f" style="margin:0;align-self:center">{{ __('common.from') }}</label>
-        <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        <label class="f" style="margin:0;align-self:center">{{ __('common.to') }}</label>
-        <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
         <a class="btn" href="{{ route('erp.purchasing') }}">{{ __('common.clear') }}</a>
+        {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -51,16 +52,16 @@
                 <th>{{ __('common.number') }}</th>
                 <th>{{ __('supplier.supplier') }}</th>
                 <th>{{ __('stock.warehouse') }}</th>
-                <th>{{ __('supplier.ordered_on') }}</th>
-                <th>{{ __('supplier.expected_on') }}</th>
+                <th data-nosum>{{ __('supplier.ordered_on') }}</th>
+                <th data-nosum>{{ __('supplier.expected_on') }}</th>
                 <th class="num">{{ __('common.total') }}</th>
                 <th>{{ __('common.status') }}</th>
             </tr>
             @forelse ($orders as $o)
                 <tr class="clickable" onclick="location.href='{{ route('erp.purchasing.show', $o) }}'">
-                    <td class="num"><b>{{ $o->number }}</b></td>
-                    <td><b>{{ $o->supplier->displayName() }}</b></td>
-                    <td class="s">{{ $o->warehouse->displayName() }}</td>
+                    <td class="num"><a href="{{ route('erp.purchasing.show', $o) }}"><b>{{ $o->number }}</b></a></td>
+                    <td>@if ($o->supplier)<a href="{{ route('erp.suppliers.show', $o->supplier) }}" onclick="event.stopPropagation()"><b>{{ $o->supplier->displayName() }}</b></a>@else — @endif</td>
+                    <td class="s">@if ($o->warehouse)<a href="{{ route('erp.warehouses.stock', $o->warehouse) }}" onclick="event.stopPropagation()">{{ $o->warehouse->displayName() }}</a>@else — @endif</td>
                     <td class="num s">{{ $o->ordered_on->format('Y-m-d') }}</td>
                     <td class="num s {{ $o->isOpen() && $o->expected_on?->isPast() ? 'neg' : '' }}">
                         {{ $o->expected_on?->format('Y-m-d') ?? '—' }}
@@ -73,6 +74,14 @@
                     {{ __('supplier.no_orders') }}
                 </td></tr>
             @endforelse
+            {{-- إجمالي كل النتيجة المفلترة من السيرفر — مش الصفحة (٢٢/٩) --}}
+            @if ($orders->total() > 0)
+                <tfoot><tr>
+                    <td colspan="5"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $orders->total()]) }})</span></td>
+                    <td class="num"><b>{{ $money($ordersTotal) }}</b></td>
+                    <td></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
     <div class="pag">{{ $orders->links('pagination::simple-default') }}</div>

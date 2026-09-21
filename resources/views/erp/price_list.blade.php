@@ -35,8 +35,9 @@
 
 @section('content')
 
+{{-- الكروت (٢٢/٩): القايمة ← كل القوايم، المسعَّر ← الجدول كله، الناقص ← فلتر «الناقص بس» --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('erp.prices') }}">
         <div class="lbl">{{ __('price.list') }}</div>
         <div class="val" style="font-size:17px">{{ $list->displayName() }}</div>
         <div class="sub2">
@@ -48,18 +49,18 @@
             @endif
             @if ($list->is_default)<span class="badge b-purple">{{ __('price.default') }}</span>@endif
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ! ($f['missing'] ?? false)]) href="{{ route('erp.prices.show', $list) }}">
         <div class="lbl">{{ __('price.priced') }}</div>
         <div class="val pos">{{ $total - $missing }} <span style="font-size:13px;color:var(--muted)">/ {{ $total }}</span></div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => (bool) ($f['missing'] ?? false)]) href="{{ route('erp.prices.show', ['priceList' => $list, 'missing' => 1]) }}">
         <div class="lbl">{{ __('price.missing') }}</div>
         <div class="val {{ $missing > 0 ? 'neg' : 'pos' }}">{{ $missing }}</div>
         @if ($missing > 0)
             <div class="sub2">{{ __('price.missing_blocks_activation') }}</div>
         @endif
-    </div>
+    </a>
 </div>
 
 @if (! $list->active && $missing === 0 && $canEdit)
@@ -77,8 +78,8 @@
 
 <div class="card">
     <form class="searchbar" method="GET" style="margin-bottom:12px">
-        <input type="text" name="q" value="{{ $f['q'] ?? '' }}"
-               placeholder="{{ __('stock.search_item') }}" style="flex:1;min-width:180px">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="{{ __('stock.search_item') }}"></label>
         {{-- ⚠️⚠️ **`$lbl` مش `__('enums.family.'.$k)`** (إصلاح ١٧/٨).
              `ProductFamily::options()` بترجّع **[مفتاح ⇒ الاسم
              المعروض]** جاهز من جدول العائلات، والبليد كان برمي القيمة
@@ -86,12 +87,13 @@
              شاشة العائلات (مش موجودة في `enums`) كانت بتظهر في القايمة
              باسمها الخام `enums.family.xxx` — فالمستخدم يشوف كود
              ومايعرفش يختار. --}}
-        <select name="family" style="min-width:160px">
-            <option value="">— {{ __('stock.family') }} —</option>
+        <label class="fl"><span>{{ __('ui.l_family') }}</span>
+        <select name="family">
+            <option value="">{{ __('ui.all_of', ['x' => __('uia.x_families')]) }}</option>
             @foreach ($families as $k => $lbl)
                 <option value="{{ $k }}" @selected(($f['family'] ?? '') === $k)>{{ $lbl }}</option>
             @endforeach
-        </select>
+        </select></label>
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;white-space:nowrap">
             <input type="checkbox" name="missing" value="1" @checked($f['missing'] ?? false)>
             {{ __('price.missing_only') }}
@@ -192,9 +194,9 @@
                     <th style="width:120px">{{ __('stock.family') }}</th>
                     <th style="width:110px">{{ __('stock.unit') }}</th>
                     @if ($reference && $reference->id !== $list->id)
-                        <th class="num" style="width:120px">{{ $reference->displayName() }}</th>
+                        <th class="num" style="width:120px" data-nosum>{{ $reference->displayName() }}</th>
                     @endif
-                    <th class="num" style="width:140px">{{ __('price.price') }}</th>
+                    <th class="num" style="width:140px" data-nosum>{{ __('price.price') }}</th>
                 </tr>
 
                 @forelse ($products as $p)
@@ -227,7 +229,7 @@
                         <td class="num">
                             <a href="{{ route('erp.products.show', $p) }}">{{ $p->code }}</a>
                         </td>
-                        <td><b>{{ $p->displayName() }}</b></td>
+                        <td><a href="{{ route('erp.products.show', $p) }}"><b>{{ $p->displayName() }}</b></a></td>
                         <td><span class="badge b-gray">{{ $p->familyLabel() }}</span></td>
                         <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                         @if ($reference && $reference->id !== $list->id)

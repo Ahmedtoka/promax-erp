@@ -24,35 +24,35 @@
         [
             'title' => __('audit.g_coverage'),
             'boxes' => [
-                ['✅ '.__('audit.k_has_account'), $s['has_account'], __('audit.k_has_account_hint'), 'pos'],
-                ['❌ '.__('audit.k_no_account'), $s['no_account'], __('audit.k_no_account_hint'), ''],
-                ['⏳ '.__('audit.k_pending'), $s['pending'], __('audit.k_pending_hint'), $s['pending'] > 0 ? 'neg' : ''],
+                ['✅ '.__('audit.k_has_account'), $s['has_account'], __('audit.k_has_account_hint'), 'pos', 'has_account'],
+                ['❌ '.__('audit.k_no_account'), $s['no_account'], __('audit.k_no_account_hint'), '', 'no_account'],
+                ['⏳ '.__('audit.k_pending'), $s['pending'], __('audit.k_pending_hint'), $s['pending'] > 0 ? 'neg' : '', 'pending'],
             ],
         ],
         [
             'title' => __('audit.g_papers'),
             'boxes' => [
-                ['📄 '.__('audit.k_has_statement'), $s['has_statement'], __('audit.k_has_statement_hint'), 'pos'],
-                ['🚫 '.__('audit.k_no_statement'), $s['no_statement'], __('audit.k_no_statement_hint'), 'neg'],
-                ['🧾 '.__('audit.k_has_receipt'), $s['has_receipt'], __('audit.k_has_receipt_hint'), 'pos'],
-                ['📭 '.__('audit.k_no_receipt'), $s['no_receipt'], __('audit.k_no_receipt_hint'), 'neg'],
-                ['📎 '.__('audit.k_files'), $s['files'], __('audit.k_files_hint'), ''],
+                ['📄 '.__('audit.k_has_statement'), $s['has_statement'], __('audit.k_has_statement_hint'), 'pos', 'has_statement'],
+                ['🚫 '.__('audit.k_no_statement'), $s['no_statement'], __('audit.k_no_statement_hint'), 'neg', 'no_statement'],
+                ['🧾 '.__('audit.k_has_receipt'), $s['has_receipt'], __('audit.k_has_receipt_hint'), 'pos', 'has_receipt'],
+                ['📭 '.__('audit.k_no_receipt'), $s['no_receipt'], __('audit.k_no_receipt_hint'), 'neg', 'no_receipt'],
+                ['📎 '.__('audit.k_files'), $s['files'], __('audit.k_files_hint'), '', 'files'],
             ],
         ],
         [
             'title' => __('audit.g_tax'),
             'boxes' => [
-                ['💠 '.__('audit.k_billed'), $s['billed'], __('audit.k_billed_hint'), 'pos'],
-                ['⭕ '.__('audit.k_unbilled'), $s['unbilled'], __('audit.k_unbilled_hint'), 'neg'],
-                ['❔ '.__('audit.k_billing_pending'), $s['billing_pending'], __('audit.k_billing_pending_hint'), ''],
-                ['🎯 '.__('audit.k_ready'), $s['ready_to_bill'], __('audit.k_ready_hint'), 'mid'],
+                ['💠 '.__('audit.k_billed'), $s['billed'], __('audit.k_billed_hint'), 'pos', 'billed'],
+                ['⭕ '.__('audit.k_unbilled'), $s['unbilled'], __('audit.k_unbilled_hint'), 'neg', 'unbilled'],
+                ['❔ '.__('audit.k_billing_pending'), $s['billing_pending'], __('audit.k_billing_pending_hint'), '', 'billing_pending'],
+                ['🎯 '.__('audit.k_ready'), $s['ready_to_bill'], __('audit.k_ready_hint'), 'mid', 'ready_to_bill'],
             ],
         ],
         [
             'title' => __('audit.g_done'),
             'boxes' => [
-                ['🏆 '.__('audit.k_full'), $s['full'], __('audit.k_full_hint'), 'pos'],
-                ['🤝 '.__('audit.k_confirmed'), $s['confirmed'], __('audit.k_confirmed_hint'), 'pos'],
+                ['🏆 '.__('audit.k_full'), $s['full'], __('audit.k_full_hint'), 'pos', 'full'],
+                ['🤝 '.__('audit.k_confirmed'), $s['confirmed'], __('audit.k_confirmed_hint'), 'pos', 'confirmed'],
             ],
         ],
     ];
@@ -109,12 +109,13 @@
                 {{ $g['title'] }}
             </div>
             <div class="kpis">
-                @foreach ($g['boxes'] as [$t, $v, $h, $c])
-                    <div class="kpi">
+                {{-- كل مربع بيفتح قايمة المراجعة متفلترة بحالته (٢٢/٩) — عدد الصفوف هناك = الرقم هنا --}}
+                @foreach ($g['boxes'] as [$t, $v, $h, $c, $k])
+                    <a class="kpi" href="{{ $sec['link'] }}?show={{ $k }}#auditForm">
                         <div class="lbl">{{ $t }}</div>
                         <div class="val {{ $c }}">{{ $fmt($v) }}</div>
                         <div class="sub2">{{ $h }}</div>
-                    </div>
+                    </a>
                 @endforeach
             </div>
         @endforeach

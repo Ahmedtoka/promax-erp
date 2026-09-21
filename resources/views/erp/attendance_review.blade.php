@@ -26,9 +26,10 @@
 @endif
 
 {{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على يوم الحضور — نفس عمود شاشة السجل --}}
-<form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+<form method="GET" class="searchbar" data-noprint>
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+    <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+    <a class="btn" href="{{ route('erp.attendance.review') }}">{{ __('common.clear') }}</a>
 </form>
 
 @if ($rows->isEmpty())

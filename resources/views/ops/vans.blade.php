@@ -22,18 +22,36 @@
 @php $fmt = fn ($n) => number_format((float) $n); @endphp
 
 {{-- ═══ السامري ═══ --}}
+{{-- (٢٢/٩) الكروت فلاتر: العهد المفتوحة هي الصفوف اللي مجموعها = القيمة والوحدات --}}
+@php $stUrl = fn (?string $s) => route('ops.vans', array_filter(['state' => $state === $s ? null : $s])).'#vansTable'; @endphp
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val" style="color:#16A34A">{{ $openCount }}</div></div>
-    <div class="kpi"><div class="lbl">💰 {{ __('field.vans_street_value') }}</div><div class="val">{{ $fmt($streetValue) }}</div>
+    <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val" style="color:#16A34A">{{ $openCount }}</div>
+        <div class="sub2">{{ __('uic.of_n_reps', ['n' => $allCount]) }}</div></a>
+    <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">💰 {{ __('field.vans_street_value') }}</div><div class="val">{{ $fmt($streetValue) }}</div>
         {{-- عرض فقط (١٢/٨): نفس البضاعة متقيّمة بكل قايمة مفعّلة --}}
         <div class="sub2">@include('partials._list_values', ['totals' => $streetValues])</div>
-    </div>
-    <div class="kpi"><div class="lbl">📦 {{ __('field.vans_units_left') }}</div><div class="val">{{ $fmt($unitsLeft) }}</div></div>
-    <div class="kpi"><div class="lbl">⚪ {{ __('field.vans_no_custody') }}</div><div class="val" style="color:var(--muted)">{{ $noneCount }}</div></div>
+    </a>
+    <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">📦 {{ __('field.vans_units_left') }}</div><div class="val">{{ $fmt($unitsLeft) }}</div></a>
+    <a @class(['kpi', 'on' => $state === 'none']) href="{{ $stUrl('none') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">⚪ {{ __('field.vans_no_custody') }}</div><div class="val" style="color:var(--muted)">{{ $noneCount }}</div></a>
 </div>
 
-<div class="card">
+@if ($extraOpen->isNotEmpty())
+    <div class="alert" style="margin-bottom:14px;flex-direction:column;align-items:stretch;gap:4px">
+        <b>⚠️ {{ __('uic.extra_open_title') }}</b>
+        @foreach ($extraOpen as $xc)
+            <div style="font-size:12.5px">
+                <a href="{{ route('ops.rep', $xc->user_id) }}"><b>{{ $xc->user?->displayName() }}</b></a>
+                — <span dir="ltr">{{ $xc->date?->format('Y-m-d') }}</span>
+                · {{ __('uic.extra_open_units', ['n' => $fmt($xc->remainingUnits())]) }}
+            </div>
+        @endforeach
+        <div style="font-size:11.5px;color:var(--muted)">{{ __('uic.extra_open_hint') }}</div>
+    </div>
+@endif
+
+<div class="card" id="vansTable">
     <h3>🚐 {{ __('nav.vans_board') }}
+        @if ($state)<a class="btn sm" href="{{ route('ops.vans') }}">✕ {{ __('common.clear') }}</a>@endif
         <span class="side">{{ __('field.vans_value_hint') }}</span>
     </h3>
     <div class="tablewrap">
@@ -47,7 +65,7 @@
                 <th>{{ __('field.vans_returned') }}</th>
                 <th>{{ __('field.vans_gifts') }}</th>
                 <th>{{ __('field.vans_left') }}</th>
-                <th style="width:150px">{{ __('field.vans_progress') }}</th>
+                <th style="width:150px" data-nosum>{{ __('field.vans_progress') }}</th>
                 <th>{{ __('field.vans_now_at') }}</th>
                 <th>{{ __('field.vans_sales_today') }}</th>
                 <th></th>
@@ -61,7 +79,7 @@
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 34])
                             <div>
-                                <b>{{ $u->displayName() }}</b>
+                                <a href="{{ route('ops.rep', $u) }}"><b>{{ $u->displayName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">
                                     {{ $u->roleLabel() }} · <span dir="ltr">{{ $u->code }}</span>
                                     @if ($c?->vehicle) · 🚐 <span dir="ltr">{{ $c->vehicle->plate }}</span>@endif
@@ -125,7 +143,7 @@
                     </td>
                     <td style="font-size:11.5px">
                         @if ($r['active_client'])
-                            📍 {{ $r['active_client'] }}
+                            📍 <a href="{{ route('erp.clients.show', $r['active_client_id']) }}">{{ $r['active_client'] }}</a>
                         @else
                             <span style="color:var(--muted)">—</span>
                         @endif

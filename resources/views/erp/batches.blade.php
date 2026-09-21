@@ -30,6 +30,10 @@
         'ok' => 'pos', 'undated' => '',
     ];
 
+    // اسم الصنف بيفتح كارته — الملف فيه الكود بس، والكنترولر بيجيب الـid (٢٢/٩)
+    $pUrl = fn ($code) => isset($productIds[$code]) ? route('erp.products.show', $productIds[$code]) : null;
+    $fltUrl = fn (array $x) => route('erp.batches', array_filter($x + $filters + ['from' => $range->fromValue(), 'to' => $range->toValue()])).'#bList';
+
     // شريط توزيع الوحدات على الحالات — عرض كل قطعة بنسبتها
     $totalUnits = max(array_sum(array_column($buckets, 'qty')), 1);
 @endphp
@@ -51,35 +55,36 @@
     </div>
 </div>
 
+{{-- الكروت على الملف كله — أول أربعة بيفتحوا تفصيل العائلات، والأخير بيودّي على أقرب الباتشات (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.stock_value_new_price') }}</div>
         <div class="val" style="color:var(--primary)">{{ $money($kpi['value']) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('stock.sku_countable', ['count' => $kpi['skus']]) }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.units_on_hand') }}</div>
         <div class="val">{{ $fmt($kpi['qty']) }}</div>
         <div class="sub2">{{ $fmt($kpi['batches']) }} {{ __('stock.batches_on_hand') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.sellable_units') }}</div>
         <div class="val pos">{{ $fmt($kpi['qty_live']) }}</div>
         <div class="sub2">{{ $money($kpi['value_live']) }} {{ __('common.currency') }}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.reserved_units') }}</div>
         <div class="val mid">{{ $fmt($kpi['qty_hold']) }}</div>
         <div class="sub2">{{ $money($kpi['value_hold']) }} {{ __('common.currency') }}</div>
     </div>
-    <div class="kpi">
+    <a class="kpi" href="#bSoon">
         <div class="lbl">{{ __('stock.soonest_expiry') }}</div>
         @php $first = $soonest[0] ?? null; @endphp
         <div class="val {{ $first ? $stateText[$stateOf($first['days_left'])] : '' }}">
             {{ $first ? $fmt($first['days_left']).' '.__('stock.days_left_short') : '—' }}
         </div>
         <div class="sub2">{{ $first['name'] ?? '—' }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ شريط حالات الصلاحية ═══════════ --}}
@@ -107,7 +112,7 @@
                 </tr>
                 @foreach (['expired', 'danger', 'warn', 'ok', 'undated'] as $k)
                     <tr>
-                        <td><span class="badge {{ $stateClass[$k] }}">{{ __('stock.state_'.$k) }}</span></td>
+                        <td><a class="badge {{ $stateClass[$k] }}" href="{{ $fltUrl(['state' => $k]) }}" title="{{ __('ui.click_to_filter') }}">{{ __('stock.state_'.$k) }}</a></td>
                         <td class="num">{{ $fmt($buckets[$k]['batches']) }}</td>
                         <td class="num">{{ $fmt($buckets[$k]['qty']) }}</td>
                         <td class="num">{{ $money($buckets[$k]['value']) }}</td>
@@ -130,7 +135,7 @@
                 </tr>
                 @foreach ($families as $key => $f)
                     <tr>
-                        <td><b>{{ $isRtl ? $f['label'] : $f['label_en'] }}</b></td>
+                        <td><a href="{{ $fltUrl(['family' => $key]) }}" title="{{ __('ui.click_to_filter') }}"><b>{{ $isRtl ? $f['label'] : $f['label_en'] }}</b></a></td>
                         <td class="num">{{ $f['skus'] }}</td>
                         <td class="num">{{ $f['batches'] }}</td>
                         <td class="num">{{ $fmt($f['qty']) }}</td>
@@ -144,23 +149,23 @@
 
 {{-- ═══════════ أقرب الباتشات للانتهاء ═══════════ --}}
 @if (count($soonest) > 0)
-<div class="card">
+<div class="card" id="bSoon">
     <h3>🔔 {{ __('stock.nearest_expiries') }}</h3>
     <div class="tablewrap">
         <table>
             <tr>
                 <th>{{ __('stock.item') }}</th>
                 <th>{{ __('stock.family') }}</th>
-                <th>{{ __('stock.produced_on') }}</th>
-                <th>{{ __('stock.expires_on') }}</th>
-                <th class="num">{{ __('stock.days_left_col') }}</th>
+                <th data-nosum>{{ __('stock.produced_on') }}</th>
+                <th data-nosum>{{ __('stock.expires_on') }}</th>
+                <th class="num" data-nosum>{{ __('stock.days_left_col') }}</th>
                 <th class="num">{{ __('stock.qty') }}</th>
                 <th class="num">{{ __('stock.value_at_new') }}</th>
             </tr>
             @foreach ($soonest as $b)
                 @php $st = $stateOf($b['days_left']); @endphp
                 <tr>
-                    <td><b>{{ $b['name'] }}</b>
+                    <td>@if ($u = $pUrl($b['code'] ?? ''))<a href="{{ $u }}"><b>{{ $b['name'] }}</b></a>@else<b>{{ $b['name'] }}</b>@endif
                         <br><span style="font-size:10.5px;color:var(--muted)" class="num">{{ $b['barcode'] }}</span>
                     </td>
                     <td>{{ $isRtl ? $b['family_ar'] : $b['family_en'] }}</td>
@@ -177,10 +182,12 @@
 @endif
 
 {{-- ═══════════ الفلاتر ═══════════ --}}
-<form class="searchbar" method="GET">
-    <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
-           placeholder="🔍 {{ __('stock.search_batch_item') }}" style="min-width:240px">
+<form class="searchbar" method="GET" id="bList">
+    <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
+               placeholder="🔍 {{ __('stock.search_batch_item') }}"></label>
 
+    <label class="fl"><span>{{ __('ui.l_family') }}</span>
     <select name="family">
         <option value="">{{ __('stock.all_families') }}</option>
         @foreach ($families as $key => $f)
@@ -188,18 +195,18 @@
                 {{ $isRtl ? $f['label'] : $f['label_en'] }}
             </option>
         @endforeach
-    </select>
+    </select></label>
 
+    <label class="fl"><span>{{ __('stock.expiry_state') }}</span>
     <select name="state">
         <option value="">{{ __('stock.state_all') }}</option>
         @foreach (['expired', 'danger', 'warn', 'ok', 'undated'] as $k)
             <option value="{{ $k }}" @selected(($filters['state'] ?? '') === $k)>{{ __('stock.state_'.$k) }}</option>
         @endforeach
-    </select>
+    </select></label>
 
     {{-- نافذة الصلاحية «من — إلى» على `expires_on` بتاع الباتش (٩/٩/٢٠٢٦) --}}
-    <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-    <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
 
     <button class="btn gold">{{ __('common.search') }}</button>
     <a class="btn" href="{{ route('erp.batches') }}">{{ __('common.clear') }}</a>
@@ -210,7 +217,7 @@
     @php $st = $stateOf($i['soonest']); @endphp
     <div class="card">
         <h3>
-            {{ $i['name'] }}
+            @if ($u = $pUrl($i['code']))<a href="{{ $u }}">{{ $i['name'] }}</a>@else{{ $i['name'] }}@endif
             <span class="side">
                 {{ $isRtl ? $i['family_ar'] : $i['family_en'] }}
                 · {{ $i['unit'] }}
@@ -263,9 +270,9 @@
         <div class="tablewrap">
             <table>
                 <tr>
-                    <th>{{ __('stock.produced_on') }}</th>
-                    <th>{{ __('stock.expires_on') }}</th>
-                    <th class="num">{{ __('stock.days_left_col') }}</th>
+                    <th data-nosum>{{ __('stock.produced_on') }}</th>
+                    <th data-nosum>{{ __('stock.expires_on') }}</th>
+                    <th class="num" data-nosum>{{ __('stock.days_left_col') }}</th>
                     <th class="num">{{ __('stock.qty') }}</th>
                     <th class="num">{{ __('stock.value_at_new') }}</th>
                     <th>{{ __('common.notes') }}</th>
@@ -306,5 +313,44 @@
         <div class="alert info">{{ __('stock.no_batch_items') }}</div>
     </div>
 @endforelse
+
+{{-- تفصيل أرقام الكروت بالعائلة — الصفوف مجموعها = الكارت (٢٢/٩) --}}
+<dialog id="dlgBFam" class="wide">
+    <div class="dlg">
+        <h4>{{ __('uid.fam_breakdown') }}</h4>
+        <div class="tablewrap">
+            <table>
+                <thead><tr>
+                    <th>{{ __('stock.family') }}</th>
+                    <th class="num">{{ __('stock.units_on_hand') }}</th>
+                    <th class="num">{{ __('stock.sellable_units') }}</th>
+                    <th class="num">{{ __('stock.reserved_units') }}</th>
+                    <th class="num">{{ __('stock.value_at_new') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($families as $key => $f)
+                    <tr>
+                        <td><a href="{{ $fltUrl(['family' => $key]) }}">{{ $isRtl ? $f['label'] : $f['label_en'] }}</a></td>
+                        <td class="num">{{ $fmt($f['qty']) }}</td>
+                        <td class="num pos">{{ $fmt($f['qty_live']) }}</td>
+                        <td class="num mid">{{ $fmt($f['qty_hold']) }}</td>
+                        <td class="num">{{ $money($f['value']) }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+                <tfoot><tr>
+                    <td><b>{{ __('common.total') }}</b></td>
+                    <td class="num"><b>{{ $fmt($kpi['qty']) }}</b></td>
+                    <td class="num"><b>{{ $fmt($kpi['qty_live']) }}</b></td>
+                    <td class="num"><b>{{ $fmt($kpi['qty_hold']) }}</b></td>
+                    <td class="num"><b>{{ $money($kpi['value']) }}</b></td>
+                </tr></tfoot>
+            </table>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgBFam')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
 
 @endsection

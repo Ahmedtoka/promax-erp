@@ -38,28 +38,29 @@
 {{-- ═══════════ الفحص الثابت — الشجرة مقابل الدفتر ═══════════ --}}
 <div class="kpis">
     @if ($invariants === null)
-        <div class="kpi">
+        {{-- (٢٢/٩) الفحص بيفتح الشاشة اللي رقمه «المتوقع» جاي منها: المديونيات/الموردين، والباقي لليومية --}}
+        <a class="kpi" href="{{ route('gl.accounts') }}">
             <div class="lbl">{{ __('gl.invariants') }}</div>
             <div class="val neg">—</div>
             <div class="sub2">{{ __('gl.no_tree') }}</div>
-        </div>
+        </a>
     @else
         @foreach (['receivables', 'payables'] as $k)
-            <div class="kpi">
+            <a class="kpi" href="{{ $k === 'receivables' ? route('erp.reports', ['tab' => 'aging']) : route('erp.suppliers') }}">
                 <div class="lbl">{{ __('gl.invariant_'.$k) }}</div>
                 <div class="val {{ $invariants[$k]['ok'] ? '' : 'neg' }}">{{ $fmt($invariants[$k]['gl']) }}</div>
                 <div class="sub2">
                     {{ __('gl.expected') }}: {{ $fmt($invariants[$k]['expected']) }}
                     <span class="badge {{ $invariants[$k]['ok'] ? 'b-green' : 'b-red' }}">{{ $invariants[$k]['ok'] ? '✓' : '✕' }}</span>
                 </div>
-            </div>
+            </a>
         @endforeach
     @endif
-    <div class="kpi">
+    <a class="kpi" href="#gl-general">
         <div class="lbl">{{ __('gl.enabled') }}</div>
         <div class="val">{{ $general['gl_enabled'] ? '✓' : '✕' }}</div>
         <div class="sub2">{{ __('gl.start_date') }}: {{ $general['gl_start_date'] ?: '—' }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ تقرير إعادة البناء ═══════════ --}}
@@ -71,16 +72,16 @@
     </h3>
 
     <div class="kpis">
-        <div class="kpi">
+        <a class="kpi" href="{{ route('gl.entries') }}">
             <div class="lbl">{{ __('gl.rebuild_deleted') }}</div>
             <div class="val">{{ number_format($report->deleted) }}</div>
             <div class="sub2">{{ __('gl.rebuild_created') }}: {{ number_format($report->created) }}</div>
-        </div>
-        <div class="kpi">
+        </a>
+        <a class="kpi" href="{{ route('gl.entries') }}">
             <div class="lbl">{{ __('gl.rebuild_keep_overrides') }}</div>
             <div class="val">{{ number_format($report->overridesKept) }}</div>
             <div class="sub2">{{ __('gl.rebuild_overrides_dropped') }}: {{ number_format($report->overridesDropped) }}</div>
-        </div>
+        </a>
     </div>
 
     <div class="tablewrap">
@@ -145,7 +146,7 @@
 @endif
 
 {{-- ═══════════ الإعدادات العامة ═══════════ --}}
-<div class="card">
+<div class="card" id="gl-general">
     <h3>⚙️ {{ __('gl.settings') }} <span class="side">{{ __('gl.enabled_hint') }}</span></h3>
 
     @if ($canAdmin)

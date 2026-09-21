@@ -34,8 +34,8 @@ return [
     'chart_flow' => 'Sales vs collections',
     'by_day' => 'daily',
     'by_month' => 'monthly',
-    'h_flow' => 'Blue is what we sold, green is what we collected - green consistently shorter means credit is piling up. Click any bar for its invoices.',
-    'h_channels' => 'Each channel share of period sales — click any channel for the channels report.',
+    'h_flow' => 'Blue is what we sold, green is what we collected - green consistently shorter means credit is piling up. Click any bar for the sales by client of that day.',
+    'h_channels' => 'Each channel share of period sales — click a channel for the sales of its clients in the same period.',
 
     'chart_families' => 'Sales by family',
     'h_families' => 'Which product family drives sales this period — click for the products report.',
@@ -48,7 +48,7 @@ return [
     'top_reps' => 'Top selling reps',
     'top_clients' => 'Biggest clients this period',
     'full_report' => 'Full report',
-    'h_top_reps' => 'Reps ranked by period sales — click a rep for his invoices.',
+    'h_top_reps' => 'Reps ranked by period sales — click a rep to open his page for the same period.',
     'h_top_clients' => 'Top 10 buyers this period with each balance — click a client to open his card.',
 
     'k_stock' => 'Stock value',

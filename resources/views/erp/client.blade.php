@@ -32,6 +32,26 @@
         ? $groups->concat([$c->group]) : $groups;
     $repOpts = $c->rep && ! $reps->contains('id', $c->rep_id)
         ? $reps->concat([$c->rep]) : $reps;
+
+    // كروت الملخّص بتفلتر كشف الحساب تحت بنوع القيد، بنفس الفترة (٢٢/٩)
+    $stUrl = fn (?string $kind) => route('erp.clients.show', ['client' => $c] + $range->query()
+        + array_filter(['kind' => $kind])).'#statement';
+    // القيد ← مستنده الأصلي. الزيارة مالهاش صفحة، فبتفتح لوحة الزيارات على يومها وعميلها
+    $srcUrl = function ($t) use ($c) {
+        if (! $t->source_id) {
+            return null;
+        }
+
+        return match ($t->source_type) {
+            \App\Models\Invoice::class => route('ops.invoice', $t->source_id),
+            \App\Models\PurchaseOrder::class => route('ops.pos.show', $t->source_id),
+            \App\Models\ClientReturn::class => route('ops.returns.show', $t->source_id),
+            \App\Models\Visit::class => route('ops.visits', ['q' => $c->code,
+                'from' => $t->date->toDateString(), 'to' => $t->date->toDateString()]),
+            \App\Models\User::class => route('ops.rep', $t->source_id),
+            default => null,
+        };
+    };
 @endphp
 
 @section('actions')
@@ -90,7 +110,7 @@
         @endif
     </span>
     @if ($ct)
-        <span class="badge {{ $ct->statusClass() }}">📜 {{ __('client.contract') }} {{ $ct->number }} — {{ $ct->statusLabel() }}</span>
+        <a class="badge {{ $ct->statusClass() }}" href="{{ route('erp.contracts.show', $ct) }}">📜 {{ __('client.contract') }} {{ $ct->number }} — {{ $ct->statusLabel() }}</a>
     @else
         <span class="badge b-red">🚫 {{ __('client.no_contract') }}</span>
     @endif
@@ -100,11 +120,11 @@
         </a>
     @endif
     @if ($c->channel)
-        <span class="badge {{ $c->channel->badgeClass() }}">🎯 {{ $c->channel->displayName() }}</span>
+        <a class="badge {{ $c->channel->badgeClass() }}" href="{{ route('erp.clients', ['channel' => $c->channel_id]) }}">🎯 {{ $c->channel->displayName() }}</a>
         @if ($c->sub_channel)<span class="badge b-gray">{{ $c->subChannelLabel() }}</span>@endif
     @endif
     @if ($c->governorate)<span class="badge b-gray">🗺️ {{ $c->governorateLabel() }}</span>@endif
-    @if ($c->zone)<span class="badge b-blue">📍 {{ $c->zone->displayName() }}</span>@endif
+    @if ($c->zone)<a class="badge b-blue" href="{{ route('erp.clients', ['zone' => $c->zone_id]) }}">📍 {{ $c->zone->displayName() }}</a>@endif
     @if ($c->mapUrl())
         {{-- ⚠️ `noopener` — الصفحة اللي بتتفتح بتقدر تتحكم في اللي قبلها
              من غيرها، والرابط ده مكتوب بإيد المندوب مش مضمون. --}}
@@ -113,20 +133,21 @@
     @if ($c->taxable)
         <span class="badge b-orange">🧾 {{ __('client.taxable') }} {{ number_format((float) $c->tax_rate * 100, 1) }}%@if ($c->tax_cycle) · {{ $c->taxCycleLabel() }}@endif</span>
     @endif
-    @if ($c->manager)<span class="badge b-purple">{{ __('client.account_manager') }}: {{ $c->manager->displayName() }}</span>@endif
-    @if ($c->rep)<span class="badge b-gray">{{ __('ops.rep') }}: {{ $c->rep->displayName() }}</span>@endif
+    @if ($c->manager)<a class="badge b-purple" href="{{ route('ops.rep', $c->manager) }}">{{ __('client.account_manager') }}: {{ $c->manager->displayName() }}</a>@endif
+    @if ($c->rep)<a class="badge b-gray" href="{{ route('ops.rep', $c->rep) }}">{{ __('ops.rep') }}: {{ $c->rep->displayName() }}</a>@endif
     @if ($c->is_new)<span class="badge b-purple">{{ __('client.new_from_app') }}</span>@endif
     <span class="badge b-gray">{{ $c->code }}</span>
 </div>
 
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('client.purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($c->purchases) }}</div><div class="sub2">{{ __('client.since', ['date' => $c->first_activity_at?->format('Y-m-d') ?? '—']) }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($c->collections) }}</div><div class="sub2">{{ number_format($c->collectionRate() * 100, 1) }}% {{ __('client.collection_rate') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.balance') }}</div><div class="val {{ $c->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($c->balance) }}</div><div class="sub2">{{ $c->balance > 0 ? __('client.owes_us') : __('client.in_credit') }}</div></div>
+    {{-- كل رقم هنا بيتداس (٢٢/٩): فلتر كشف الحساب بنوع القيد، أو تفسير للرقم --}}
+    <a @class(['kpi', 'on' => $kind === 'sale']) href="{{ $stUrl($kind === 'sale' ? null : 'sale') }}"><div class="lbl">{{ __('client.purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($c->purchases) }}</div><div class="sub2">{{ __('client.since', ['date' => $c->first_activity_at?->format('Y-m-d') ?? '—']) }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'collection']) href="{{ $stUrl($kind === 'collection' ? null : 'collection') }}"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($c->collections) }}</div><div class="sub2">{{ number_format($c->collectionRate() * 100, 1) }}% {{ __('client.collection_rate') }}</div></a>
+    <div class="kpi" data-explain onclick="openDlg('dlgBalance')"><div class="lbl">{{ __('client.balance') }}</div><div class="val {{ $c->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($c->balance) }}</div><div class="sub2">{{ $c->balance > 0 ? __('client.owes_us') : __('client.in_credit') }}</div></div>
     {{-- ⚠️ المتأخر **غير** الرصيد وغير الأعمار: ده اللي عدّى ميعاد
          سداده حسب شروط العقد. عميل بشروط 60 يوم وعليه فاتورة عمرها
          45 يوم رصيده كبير وأعماره ظاهرة — بس متأخره صفر. --}}
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('dlgOverdue')">
         <div class="lbl">{{ __('client.overdue') }}</div>
         @if (! $overdue['has_terms'])
             <div class="val" style="font-size:17px;color:var(--muted)">—</div>
@@ -143,9 +164,13 @@
             </div>
         @endif
     </div>
-    <div class="kpi"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($c->returns) }}</div><div class="sub2">{{ __('client.discounts') }} {{ $fmt($c->rebates) }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('client.last_payment') }}</div><div class="val" style="font-size:17px">{{ $c->last_payment_at?->format('Y-m-d') ?? '—' }}</div><div class="sub2">{{ __('client.last_activity') }} {{ $c->last_activity_at?->format('Y-m-d') ?? '—' }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('common.phone') }}</div><div class="val" style="font-size:17px">{{ $c->phone ?? '—' }}</div><div class="sub2">{{ $c->address ?: '—' }}</div></div>
+    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($c->returns) }}</div><div class="sub2">{{ __('client.discounts') }} {{ $fmt($c->rebates) }}</div></a>
+    <a class="kpi" href="{{ $stUrl('collection') }}"><div class="lbl">{{ __('client.last_payment') }}</div><div class="val" style="font-size:17px" dir="ltr">{{ $c->last_payment_at?->format('Y-m-d') ?? '—' }}</div><div class="sub2">{{ __('client.last_activity') }} {{ $c->last_activity_at?->format('Y-m-d') ?? '—' }}</div></a>
+    @if ($c->phone)
+        <a class="kpi" href="tel:{{ $c->phone }}"><div class="lbl">{{ __('common.phone') }}</div><div class="val" style="font-size:17px" dir="ltr">{{ $c->phone }}</div><div class="sub2">{{ $c->address ?: '—' }}</div></a>
+    @else
+        <div class="kpi"><div class="lbl">{{ __('common.phone') }}</div><div class="val" style="font-size:17px">—</div><div class="sub2">{{ $c->address ?: '—' }}</div></div>
+    @endif
 </div>
 
 @if ($c->contactList())
@@ -206,12 +231,12 @@
 
         {{-- ═══ الرقم اللي بيتشال على الفاتورة مقابل اللي بيتشال فعلاً ═══ --}}
         <div class="kpis" style="margin-bottom:14px">
-            <div class="kpi">
+            <a class="kpi" href="{{ route('erp.contracts.show', $ct) }}">
                 <div class="lbl">{{ __('client.invoice_discount') }}</div>
                 <div class="val" style="color:var(--primary)">{{ number_format($ct->discount * 100, 2) }}%</div>
                 <div class="sub2">{{ __('client.invoice_discount_hint') }}</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="{{ route('erp.contracts.show', $ct) }}">
                 <div class="lbl">{{ __('client.total_deduction') }}</div>
                 <div class="val {{ $ct->totalDeduction() > 0.3 ? 'neg' : 'mid' }}">
                     {{ number_format($ct->totalDeduction() * 100, 2) }}%
@@ -223,28 +248,28 @@
                         {{ __('client.all_on_invoice') }}
                     @endif
                 </div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="{{ route('erp.contracts.show', $ct) }}">
                 <div class="lbl">{{ __('client.annual_commitment') }}</div>
                 <div class="val">{{ $fmt($ct->annualCommitment()) }} {{ __('common.currency') }}</div>
                 <div class="sub2">{{ __('client.annual_commitment_hint') }}</div>
-            </div>
+            </a>
             @if ($ct->withholding_pct > 0)
-                <div class="kpi">
+                <a class="kpi" href="{{ route('erp.contracts.show', $ct) }}">
                     <div class="lbl">{{ __('client.withholding') }}</div>
                     <div class="val neg">{{ number_format($ct->withholding_pct * 100, 2) }}%</div>
                     <div class="sub2">
                         ≈ {{ $fmt($c->balance * $ct->withholding_pct) }} {{ __('common.currency') }}
                     </div>
-                </div>
+                </a>
             @endif
-            <div class="kpi">
+            <a class="kpi" href="{{ route('erp.contracts.show', $ct) }}">
                 <div class="lbl">{{ __('client.days_to_expiry') }}</div>
                 <div class="val {{ $ct->daysLeft() === null ? '' : ($ct->daysLeft() < 0 ? 'neg' : ($ct->daysLeft() <= 90 ? 'mid' : 'pos')) }}">
                     {{ $ct->daysLeft() === null ? '—' : $fmt($ct->daysLeft()) }}
                 </div>
                 <div class="sub2">{{ $ct->ends_at?->format('Y-m-d') ?? __('client.undated_contract') }}</div>
-            </div>
+            </a>
         </div>
 
         <div class="tablewrap">
@@ -252,7 +277,7 @@
                 <tr>
                     <th>{{ __('client.contract_type') }}</th><th>{{ __('common.status') }}</th>
                     <th>{{ __('client.settlement_mode') }}</th><th>{{ __('client.price_list') }}</th>
-                    <th>{{ __('client.payment_days') }}</th>
+                    <th data-nosum>{{ __('client.payment_days') }}</th>
                     <th>{{ __('client.starts_at') }}</th><th>{{ __('client.ends_at') }}</th>
                     <th>{{ __('client.renewal') }}</th>
                 </tr>
@@ -314,7 +339,7 @@
                 <table>
                     <tr>
                         <th>{{ __('client.clause') }}</th>
-                        <th class="num">{{ __('client.clause_value') }}</th>
+                        <th class="num" data-nosum>{{ __('client.clause_value') }}</th>
                         <th>{{ __('client.clause_basis') }}</th>
                         <th>{{ __('client.clause_kind') }}</th>
                     </tr>
@@ -377,8 +402,8 @@
             <thead>
                 <tr>
                     <th>{{ __('common.code') }}</th><th>{{ __('stock.item') }}</th><th>{{ __('stock.unit') }}</th>
-                    <th>{{ __('client.list_price') }}</th><th>{{ __('client.discount_pct') }}</th>
-                    <th>{{ __('client.unit_price') }}</th><th>{{ __('stock.margin_pct') }}</th>
+                    <th data-nosum>{{ __('client.list_price') }}</th><th data-nosum>{{ __('client.discount_pct') }}</th>
+                    <th data-nosum>{{ __('client.unit_price') }}</th><th data-nosum>{{ __('stock.margin_pct') }}</th>
                 </tr>
             </thead>
             <tbody id="pricedRows">
@@ -389,7 +414,7 @@
 @endphp
                     <tr data-txt="{{ Str::lower($p->code.' '.$p->name.' '.$p->name_en) }}">
                         <td class="num">{{ $p->code }}</td>
-                        <td><b>{{ $p->displayName() }}</b></td>
+                        <td><a href="{{ route('erp.products.show', $p) }}"><b>{{ $p->displayName() }}</b></a></td>
                         <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                         <td class="num">{{ number_format($q['list_price'], 2) }}</td>
                         <td class="num">{{ number_format($q['discount_pct'] * 100, 1) }}%</td>
@@ -476,7 +501,7 @@
                         {{ $tz($v->checked_in_at)?->format('h:i A') ?? '—' }}
                         → {{ $tz($v->checked_out_at)?->format('h:i A') ?? '—' }}
                     </td>
-                    <td>{{ $v->user?->displayName() ?? '—' }}</td>
+                    <td>@if ($v->user)<a href="{{ route('ops.rep', $v->user) }}">{{ $v->user->displayName() }}</a>@else — @endif</td>
                     <td class="num s">
                         {{ $v->minutes() !== null ? __('ops.minutes', ['count' => $v->minutes()]) : __('ops.in_progress') }}
                     </td>
@@ -525,7 +550,7 @@
             <thead><tr>
                 <th>{{ __('ops.invoice') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('ops.payment') }}</th>
                 <th>{{ __('client.price_list') }}</th><th>{{ __('stock.batch_no') }}</th>
-                <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th>{{ __('common.date') }}</th>
+                <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th data-nosum>{{ __('common.date') }}</th>
             </tr></thead><tbody>
             @foreach ($c->invoices->take(20) as $inv)
                 @php
@@ -534,8 +559,12 @@
                         : '';
 @endphp
                 <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                    <td><b>{{ $inv->number }}</b></td>
-                    <td>{{ $inv->user?->displayName() ?? '—' }}</td>
+                    <td><a href="{{ route('ops.invoice', $inv) }}" onclick="event.stopPropagation()"><b>{{ $inv->number }}</b></a>
+                        @if ($inv->paper_ref)
+                            <br><a href="{{ route('ops.invoices', ['paper' => $inv->paper_ref]) }}" onclick="event.stopPropagation()" style="font-size:10.5px" dir="ltr">📄 {{ $inv->paper_ref }}</a>
+                        @endif
+                    </td>
+                    <td>@if ($inv->user)<a href="{{ route('ops.rep', $inv->user) }}" onclick="event.stopPropagation()">{{ $inv->user->displayName() }}</a>@else — @endif</td>
                     <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
                     <td><span class="badge b-gray">{{ $inv->priceListLabel() }}</span></td>
                     <td class="num" style="color:var(--muted);font-size:11.5px">{{ $batches !== '' ? $batches : '—' }}</td>
@@ -553,17 +582,27 @@
 </div>
 @endif
 
-<div class="card">
+<div class="card" id="statement">
     <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
     {{-- ⚠️ فلتر «من — إلى» على `transactions.date` (٩/٩/٢٠٢٦). فورم GET
          منفصل عن مودالات الفلوس — `data-range-filter` عشان
          `ClientFormIntegrityTest` يعرف إن الخانتين دول مش خانات عميل. --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint data-range-filter>
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
-        <div style="align-self:flex-end">
-            <a class="btn sm green" href="{{ route('erp.clients.statement_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_statement') }}</a>
-        </div>
+    <form method="GET" action="{{ url()->current() }}#statement" class="searchbar" style="margin-bottom:12px" data-noprint data-range-filter>
+        {{-- نوع القيد والريفرنس (٢٢/٩): كروت الملخّص فوق بتحط `kind`، والريفرنس بيتداس من الجدول --}}
+        <label class="fl"><span>{{ __('client.type') }}</span>
+            <select name="kind" onchange="this.form.submit()">
+                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_entries')]) }}</option>
+                @foreach ($kinds as $k)
+                    <option value="{{ $k }}" @selected($kind === $k)>{{ __('enums.transaction.'.$k) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('uia.l_pay_ref') }}</span>
+            <input type="text" name="ref" value="{{ $ref }}" dir="ltr" placeholder="{{ __('uia.pay_ref_ph') }}" onchange="this.form.submit()"></label>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        @if ($kind !== '' || $ref !== '' || ! $range->isOpen())
+            <a class="btn sm" href="{{ url()->current() }}#statement">✕ {{ __('common.clear') }}</a>
+        @endif
+        <a class="btn sm green" href="{{ route('erp.clients.statement_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_statement') }}</a>
     </form>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
@@ -572,18 +611,22 @@
                  بيعرضهم — فالمحاسب بيسجّل شيك برقم وبنك وتاريخ
                  استحقاق، وبعد كده مايلاقيش الرقم ده في أي شاشة
                  ويرجع يفتح الدرج يدوّر على الورقة. --}}
-            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th><th>{{ __('client.debit') }}</th><th>{{ __('client.credit') }}</th></tr></thead><tbody>
+            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th><th class="num">{{ __('client.debit') }}</th><th class="num">{{ __('client.credit') }}</th></tr></thead><tbody>
             @foreach ($txns as $t)
                 <tr>
                     <td class="num">{{ $t->date->format('Y-m-d') }}</td>
                     <td><span class="badge b-gray">{{ $t->kindLabel() }}</span></td>
-                    <td style="white-space:normal;max-width:520px">{{ $t->memo }}</td>
+                    {{-- البيان بيفتح المستند اللي طلّع القيد: فاتورة / أمر توريد / مرتجع / زيارة التحصيل --}}
+                    <td style="white-space:normal;max-width:520px">
+                        @if ($u = $srcUrl($t))<a href="{{ $u }}">{{ $t->memo ?: $t->kindLabel() }}</a>@else{{ $t->memo }}@endif
+                    </td>
                     <td style="white-space:normal">
                         @if ($t->method)
                             <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
                                 {{ $t->methodLabel() }}</span>
                             @if ($t->reference)
-                                <div style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $t->reference }}</div>
+                                {{-- الريفرنس ← كل العملاء اللي عليهم قيد بنفس الرقم (تحويل واحد بيتقسّم على كذا فرع) --}}
+                                <div style="font-size:10.5px" dir="ltr"><a href="{{ route('erp.clients', ['ref' => $t->reference]) }}" title="{{ __('uia.ref_open_hint') }}">{{ $t->reference }}</a></div>
                             @endif
                             {{-- ⚠️ **تاريخ استحقاق الشيك لازم يبان** —
                                  الشيك بيدخل الحساب فوراً (قرار المالك)،
@@ -603,11 +646,82 @@
                     <td class="num pos">{{ $t->credit > 0 ? $fmt($t->credit) : '—' }}</td>
                 </tr>
             @endforeach
-        </tbody></table>
+        </tbody>
+        {{-- الكشف صفحات — الإجمالي من السيرفر على كل القيود المفلترة مش الستين المعروضين --}}
+        @if ($txns->total() > 0)
+            <tfoot><tr>
+                <td colspan="4"><b>Σ {{ __('common.total') }}</b> — {{ __('client.transaction_countable', ['count' => $txns->total()]) }}</td>
+                <td class="num"><b>{{ number_format($txnTotals['debit'], 2) }}</b></td>
+                <td class="num pos"><b>{{ number_format($txnTotals['credit'], 2) }}</b></td>
+            </tr></tfoot>
+        @endif
+        </table>
     </div>
     @include('partials._pagination', ['p' => $txns])
 </div>
 
+
+{{-- ═══ تفسير رقم الرصيد والمتأخر (٢٢/٩) ═══ --}}
+<dialog id="dlgBalance">
+    <div class="dlg">
+        <h4>{{ __('uia.balance_explain') }} — {{ $c->displayName() }}</h4>
+        <div class="tablewrap">
+            <table data-noxl>
+                <thead><tr><th>{{ __('client.type') }}</th><th class="num" data-nosum>{{ __('uia.entries_n') }}</th><th class="num">{{ __('client.debit') }}</th><th class="num">{{ __('client.credit') }}</th><th class="num">{{ __('uia.net_effect') }}</th></tr></thead>
+                <tbody>
+                @foreach ($balanceBreak as $bk)
+                    <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', ['client' => $c, 'kind' => $bk->kind]) }}#statement'">
+                        <td><span class="badge b-gray">{{ __('enums.transaction.'.$bk->kind) }}</span></td>
+                        <td class="num">{{ $fmt($bk->n) }}</td>
+                        <td class="num">{{ number_format((float) $bk->d, 2) }}</td>
+                        <td class="num pos">{{ number_format((float) $bk->c, 2) }}</td>
+                        <td class="num"><b>{{ number_format((float) $bk->d - (float) $bk->c, 2) }}</b></td>
+                    </tr>
+                @endforeach
+                </tbody>
+                <tfoot><tr>
+                    <td colspan="2"><b>{{ __('client.balance') }}</b></td>
+                    <td class="num">{{ number_format((float) $balanceBreak->sum('d'), 2) }}</td>
+                    <td class="num">{{ number_format((float) $balanceBreak->sum('c'), 2) }}</td>
+                    <td class="num"><b>{{ number_format((float) $balanceBreak->sum('d') - (float) $balanceBreak->sum('c'), 2) }}</b></td>
+                </tr></tfoot>
+            </table>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgBalance')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="dlgOverdue">
+    <div class="dlg">
+        <h4>{{ __('uia.overdue_explain') }} — {{ $c->displayName() }}</h4>
+        <div class="tablewrap">
+            <table data-noxl>
+                <tr><th>{{ __('uia.item') }}</th><th class="num" data-nosum>{{ __('uia.value') }}</th></tr>
+                <tr><td>{{ __('client.payment_days') }}</td><td class="num">{{ $c->paymentDays() !== null ? __('client.days_countable', ['count' => $c->paymentDays()]).' — '.$c->paymentBasisLabel() : __('client.no_payment_terms') }}</td></tr>
+                <tr><td>{{ __('client.due_on') }}</td><td class="num" dir="ltr">{{ $overdue['due_on']?->format('Y-m-d') ?? '—' }}</td></tr>
+                <tr><td>{{ __('client.overdue') }}</td><td class="num neg"><b>{{ number_format((float) $overdue['amount'], 2) }}</b></td></tr>
+                <tr><td>{{ __('uia.overdue_days') }}</td><td class="num">{{ (int) ($overdue['days'] ?? 0) }}</td></tr>
+                <tr><td>{{ __('client.balance') }}</td><td class="num">{{ number_format((float) $c->balance, 2) }}</td></tr>
+            </table>
+        </div>
+        <h4 style="margin-top:14px">{{ __('report.aging') }}</h4>
+        <div class="tablewrap">
+            <table data-noxl>
+                <tr><th>≤30</th><th>31-60</th><th>61-90</th><th>91-180</th><th>{{ __('report.days_180_plus') }}</th></tr>
+                <tr>
+                    @foreach (['a30', 'a60', 'a90', 'a180', 'a180p'] as $ak)
+                        <td class="num">{{ $fmt($aging[$ak]) }}</td>
+                    @endforeach
+                </tr>
+            </table>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgOverdue')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
 
 {{-- ⚠️ **المودالين دول تحت بوابة الفلوس مش بوابة المدير.** كانوا جوه
      `@if ($manager)` — يعني المحاسب مش بس مشفش الزرار، المودال نفسه

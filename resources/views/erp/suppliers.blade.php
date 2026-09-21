@@ -20,22 +20,25 @@
 
 @section('content')
 
+{{-- الكروت بتفلتر: الكل / اللي علينا لهم فلوس (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi {{ empty($filters['owed']) && empty($filters['q']) ? 'on' : '' }}" href="{{ route('erp.suppliers') }}">
         <div class="lbl">{{ __('supplier.suppliers') }}</div>
-        <div class="val">{{ $suppliers->count() }}</div>
-    </div>
-    <div class="kpi">
+        <div class="val">{{ $supplierCount }}</div>
+    </a>
+    <a class="kpi {{ ! empty($filters['owed']) ? 'on' : '' }}" href="{{ route('erp.suppliers', ['owed' => 1]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">{{ __('supplier.total_owed') }}</div>
         <div class="val neg">{{ $money($totalOwed) }}</div>
         <div class="sub2">{{ __('supplier.total_owed_hint') }}</div>
-    </div>
+    </a>
 </div>
 
 <div class="card">
     <form class="searchbar" method="GET">
-        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
-               placeholder="🔍 {{ __('supplier.search_ph') }}" style="flex:1;min-width:200px">
+        @if (! empty($filters['owed']))<input type="hidden" name="owed" value="1">@endif
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}"
+                   placeholder="🔍 {{ __('supplier.search_ph') }}"></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.suppliers') }}">{{ __('common.clear') }}</a>
     </form>
@@ -47,7 +50,7 @@
                 <th>{{ __('supplier.supplier') }}</th>
                 <th>{{ __('common.phone') }}</th>
                 <th>{{ __('supplier.contact_person') }}</th>
-                <th>{{ __('supplier.payment_days') }}</th>
+                <th data-nosum>{{ __('supplier.payment_days') }}</th>
                 <th>{{ __('supplier.open_orders') }}</th>
                 <th class="num">{{ __('supplier.balance') }}</th>
                 <th>{{ __('common.status') }}</th>
@@ -55,13 +58,17 @@
             @forelse ($suppliers as $s)
                 <tr class="clickable" onclick="location.href='{{ route('erp.suppliers.show', $s) }}'">
                     <td class="num">{{ $s->code }}</td>
-                    <td><b>{{ $s->displayName() }}</b></td>
+                    <td><a href="{{ route('erp.suppliers.show', $s) }}"><b>{{ $s->displayName() }}</b></a></td>
                     <td class="num" dir="ltr">{{ $s->phone ?: '—' }}</td>
                     <td>{{ $s->contact_person ?: '—' }}</td>
                     <td class="num">{{ $s->payment_days ? __('client.days_countable', ['count' => $s->payment_days]) : '—' }}</td>
                     <td class="num">
                         @if ($s->open_orders > 0)
-                            <span class="badge b-blue">{{ $s->open_orders }}</span>
+                            @if (\App\Support\Access::allows(auth()->user(), 'erp.purchasing'))
+                                <a class="badge b-blue" onclick="event.stopPropagation()" href="{{ route('erp.purchasing', ['supplier' => $s->id, 'status' => 'open']) }}">{{ $s->open_orders }}</a>
+                            @else
+                                <span class="badge b-blue">{{ $s->open_orders }}</span>
+                            @endif
                         @else — @endif
                     </td>
                     {{-- ⚠️ موجب = علينا له — أحمر لأنه التزام مش أصل --}}

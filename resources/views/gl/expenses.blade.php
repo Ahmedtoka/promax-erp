@@ -16,6 +16,7 @@
 @endphp
 
 @section('actions')
+    <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     @if ($canPost)
         <button class="btn gold" type="button" onclick="openDlg('dlgExpense')">＋ {{ __('gl.new_expense') }}</button>
     @endif
@@ -24,47 +25,40 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi">
+    {{-- (٢٢/٩) الإجمالي = المرحّل بس فبيفلتر عليه، والعدد هو الجدول تحت --}}
+    <a class="kpi" href="{{ request()->fullUrlWithQuery(['status' => 'posted', 'page' => null]) }}#gl-table">
         <div class="lbl">{{ __('gl.total_posted') }}</div>
         <div class="val neg">{{ $fmt($total) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ $range->fromValue() }} → {{ $range->toValue() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.count') }}</div>
         <div class="val">{{ number_format($count) }}</div>
         <div class="sub2">{{ __('gl.expenses_sub') }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="gl-table">
     <h3>🧾 {{ __('gl.expenses') }} <span class="side">{{ __('gl.expenses_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('gl.account') }}</label>
+    <form method="GET" class="searchbar" data-noprint>
+        <label class="fl"><span>{{ __('gl.account') }}</span>
             <select name="account" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.accounts')]) }}</option>
                 @foreach ($accounts as $a)
                     <option value="{{ $a->id }}" @selected(request('account') == $a->id)>{{ $a->code }} · {{ $a->displayName() }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('gl.status') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('gl.status') }}</span>
             <select name="status" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.statuses')]) }}</option>
                 <option value="posted" @selected(request('status') === 'posted')>{{ __('gl.status_posted') }}</option>
                 <option value="void" @selected(request('status') === 'void')>{{ __('gl.status_void') }}</option>
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
+            </select></label>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.expenses') }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -86,9 +80,11 @@
                 <tr>
                     <td><b>{{ $x->number }}</b></td>
                     <td class="num" style="font-size:11px">{{ $x->date?->format('Y-m-d') }}</td>
-                    <td style="text-align:start">{{ $x->account?->displayName() ?? '—' }}</td>
+                    <td style="text-align:start">@if ($x->account)<a href="{{ route('gl.accounts.show', $x->account_id) }}">{{ $x->account->displayName() }}</a>@else — @endif</td>
                     <td style="text-align:start">
-                        {{ $x->payeeLabel() }}
+                        @if ($x->payeeSupplier)<a href="{{ route('erp.suppliers.show', $x->payeeSupplier->id) }}">{{ $x->payeeLabel() }}</a>
+                        @elseif ($x->payeeUser && in_array($x->payeeUser->role, \App\Models\User::FIELD_WORK_ROLES, true))<a href="{{ route('ops.rep', $x->payeeUser->id) }}">{{ $x->payeeLabel() }}</a>
+                        @else{{ $x->payeeLabel() }}@endif
                         @if ($x->note)
                             <div style="font-size:10.5px;color:var(--muted)">{{ $x->note }}</div>
                         @endif
@@ -96,7 +92,7 @@
                     <td>
                         <span class="badge {{ $x->paid_from === 'bank' ? 'b-blue' : 'b-gray' }}">{{ __('gl.paid_'.$x->paid_from) }}</span>
                         @if ($x->paidFromUser)
-                            <div style="font-size:10px;color:var(--muted)">{{ $x->paidFromUser->displayName() }}</div>
+                            <div style="font-size:10px"><a href="{{ route('ops.rep', $x->paidFromUser->id) }}">{{ $x->paidFromUser->displayName() }}</a></div>
                         @endif
                     </td>
                     <td style="font-size:11px">{{ $x->reference ?: '—' }}</td>
@@ -124,6 +120,14 @@
             @empty
                 <tr><td colspan="{{ $cols }}" style="color:var(--muted);font-size:12px">{{ __('gl.no_rows') }}</td></tr>
             @endforelse
+            {{-- الجدول مقسم صفحات — الإجمالي من السيرفر على الفلتر كله = كارت الإجمالي = ملف الإكسيل --}}
+            @if ($rows->total() > 0)
+                <tfoot><tr>
+                    <td colspan="8" style="text-align:start">{{ __('gl.total_posted') }} · {{ __('ui.rows_n', ['n' => number_format($count)]) }}</td>
+                    <td class="num">{{ $fmt($total) }}</td>
+                    @if ($canPost)<td></td>@endif
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 
@@ -151,7 +155,7 @@
         <div style="margin-top:10px">
             <label class="f">{{ __('gl.account') }} <b class="req-star">*</b></label>
             <select name="account_id" required style="width:100%">
-                <option value="">— {{ __('common.pick') }} —</option>
+                <option value="">{{ __('ui.choose', ['x' => __('gl.account')]) }}</option>
                 @foreach ($accounts as $a)
                     <option value="{{ $a->id }}" @selected(old('account_id') == $a->id)>{{ $a->code }} · {{ $a->displayName() }}</option>
                 @endforeach
@@ -170,7 +174,7 @@
             <div id="expRepBox" hidden>
                 <label class="f">{{ __('gl.rep') }} <b class="req-star">*</b></label>
                 <select name="paid_from_user_id" data-req-repcash style="width:100%">
-                    <option value="">— {{ __('common.pick') }} —</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected(old('paid_from_user_id') == $r->id)>{{ $r->displayName() }} ({{ $r->code }})</option>
                     @endforeach
@@ -196,7 +200,7 @@
         <div id="expPayeeSupplier" style="margin-top:10px" hidden>
             <label class="f">{{ __('gl.payee_supplier') }} <b class="req-star">*</b></label>
             <select name="payee_supplier_id" data-req-payee style="width:100%">
-                <option value="">— {{ __('common.pick') }} —</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_supplier')]) }}</option>
                 @foreach ($suppliers as $s)
                     <option value="{{ $s->id }}" @selected(old('payee_supplier_id') == $s->id)>{{ $s->displayName() }}</option>
                 @endforeach
@@ -206,7 +210,7 @@
         <div id="expPayeeEmployee" style="margin-top:10px" hidden>
             <label class="f">{{ __('gl.payee_employee') }} <b class="req-star">*</b></label>
             <select name="payee_user_id" data-req-payee style="width:100%">
-                <option value="">— {{ __('common.pick') }} —</option>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_user')]) }}</option>
                 @foreach ($employees as $e)
                     <option value="{{ $e->id }}" @selected(old('payee_user_id') == $e->id)>{{ $e->displayName() }} ({{ $e->code }})</option>
                 @endforeach

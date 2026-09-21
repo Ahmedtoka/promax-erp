@@ -7,15 +7,17 @@
 @section('content')
 
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('ops.cash_van_sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('ops.delivered_today') }}</div><div class="val" style="color:var(--blue)">{{ $fmt($todayPos) }} {{ __('common.currency') }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('ops.visits_closed') }}</div><div class="val">{{ $visitsDone }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('ops.pending_client_requests') }}</div><div class="val mid">{{ $openRequests }}</div>
-        <div class="sub2"><a href="{{ route('ops.requests') }}" style="color:var(--blue);font-weight:800">{{ __('ops.review_them') }} ←</a></div></div>
-    <div class="kpi"><div class="lbl">{{ __('ops.reps_on_road') }}</div><div class="val">{{ $field->count() }}</div></div>
+    {{-- (٢٢/٩) كروت النهارده بتفتح قايمتها بتاريخ النهارده --}}
+    @php $td = today()->toDateString(); @endphp
+    <a class="kpi" href="{{ route('ops.invoices', ['from' => $td, 'to' => $td]) }}"><div class="lbl">{{ __('ops.cash_van_sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></a>
+    <a class="kpi" href="{{ route('ops.pos', ['status' => 'delivered']) }}"><div class="lbl">{{ __('ops.delivered_today') }}</div><div class="val" style="color:var(--blue)">{{ $fmt($todayPos) }} {{ __('common.currency') }}</div></a>
+    <a class="kpi" href="{{ route('ops.visits', ['from' => $td, 'to' => $td, 'status' => 'closed']) }}"><div class="lbl">{{ __('ops.visits_closed') }}</div><div class="val">{{ $visitsDone }}</div></a>
+    <a class="kpi" href="{{ route('ops.requests') }}"><div class="lbl">{{ __('ops.pending_client_requests') }}</div><div class="val mid">{{ $openRequests }}</div>
+        <div class="sub2" style="color:var(--blue);font-weight:800">{{ __('ops.review_them') }} ←</div></a>
+    <a class="kpi" href="#opsReps"><div class="lbl">{{ __('ops.reps_on_road') }}</div><div class="val">{{ $field->count() }}</div></a>
 </div>
 
-<div class="card">
+<div class="card" id="opsReps">
     <h3>🚛 {{ __('ops.reps_live') }}</h3>
     <div class="tablewrap">
         <table>
@@ -27,7 +29,7 @@
             @foreach ($field as $s)
                 @php $u = $s['user']; @endphp
                 <tr class="clickable" onclick="location.href='{{ route('ops.rep', $u) }}'">
-                    <td><b>{{ $u->displayName() }}</b><br><span style="font-size:10.5px;color:var(--muted)">{{ $u->code }}</span></td>
+                    <td><a href="{{ route('ops.rep', $u) }}" onclick="event.stopPropagation()"><b>{{ $u->displayName() }}</b></a><br><span style="font-size:10.5px;color:var(--muted)">{{ $u->code }}</span></td>
                     <td><span class="badge {{ $u->isDriver() ? 'b-blue' : 'b-green' }}">{{ $u->roleLabel() }}</span></td>
                     <td style="color:var(--muted)">{{ $u->zone?->displayName() ?? ($u->isDriver() ? __('ops.delivery_run') : '—') }}</td>
                     {{-- الرقم موحّد للكل: فواتيره + أوامره المسلَّمة
@@ -73,7 +75,7 @@
                 };
             @endphp
             <div class="alert {{ $cls }}">
-                <div><b>{{ $e->happened_at->format('h:i A') }} — {{ $e->user->displayName() }}:</b> {{ $e->title }}
+                <div><b>{{ $e->happened_at->format('h:i A') }} — <a href="{{ route('ops.rep', $e->user_id) }}" style="color:inherit">{{ $e->user?->displayName() }}</a>:</b> {{ $e->title }}
                     @if ($e->subtitle)<span style="color:var(--muted)"> • {{ $e->subtitle }}</span>@endif
                 </div>
             </div>

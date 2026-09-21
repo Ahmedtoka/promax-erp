@@ -47,6 +47,8 @@ class CollectionController extends Controller
         $source = in_array($source, self::SOURCES, true) ? $source : '';
         $from = $request->query('from');
         $to = $request->query('to');
+        // المرجع (٢٢/٩) — رقم الشيك/التحويل في الجدول بقى لينك بيفلتر عليه
+        $ref = is_string($request->query('ref')) ? trim($request->query('ref')) : '';
         $user = $request->user();
 
         // ═══ سكوب واحد للصفوف والإجماليات (إصلاح تدقيق ٩/٨) ═══
@@ -63,11 +65,13 @@ class CollectionController extends Controller
         // «1–50 من 4,200». والأخطر: كروت الإجماليات كانت من غير
         // السكوب خالص، فمدير القناة بيشوف فلوس عملاء غيره —
         // مخالفة مباشرة لدوكترين سكوب الفريق (٨ أغسطس).
-        $scoped = function () use ($user, $method, $repId, $source, $from, $to) {
+        // `$withMethod = false` لكروت الطرق: الكارت فلتر، فلازم يفضل شايف باقي الطرق
+        $scoped = function (bool $withMethod = true) use ($user, $method, $repId, $source, $from, $to, $ref) {
             return Transaction::where('kind', 'collection')
                 ->whereNotNull('method')
-                ->when(in_array($method, Transaction::METHODS, true),
+                ->when($withMethod && in_array($method, Transaction::METHODS, true),
                     fn ($q) => $q->where('method', $method))
+                ->when($ref !== '', fn ($q) => $q->where('reference', 'like', '%'.$ref.'%'))
                 // المصدر: زيارة / مندوب مكتبي / مباشر بلا أي مصدر
                 ->when($source === 'field', fn ($q) => $q->where('source_type', Visit::class))
                 ->when($source === 'rep', fn ($q) => $q->where('source_type', User::class))
@@ -90,10 +94,26 @@ class CollectionController extends Controller
                         Client::visibleTo(Client::query(), $user)->select('id')));
         };
 
+        // ═══ مطابقة الداشبورد (٢٢/٩) ═══
+        // الجدول قاصد يخبّي قيود كاش الفواتير الأوتوماتيك (`method IS NULL`)، فإجماليه
+        // كان أقل من تحصيل الداشبورد/كشف الحساب لنفس الفترة من غير ما الشاشة تقول ليه.
+        // كارتين صريحين: «كاش الفواتير» (المخفي، بنفس الفترة والسكوب) و«إجمالي
+        // التحصيل (كشف الحساب)» = المسجّل + كاش الفواتير. بيظهروا بس والشاشة
+        // من غير فلتر مصدر/وسيلة/مندوب/مرجع — غير كده المقارنة مالهاش معنى.
+        $reconcile = $mode === 'all' && $method === '' && $source === '' && $repId === 0 && $ref === '';
+        $invoiceCash = ! $reconcile ? 0.0 : (float) Transaction::where('kind', 'collection')
+            ->whereNull('method')
+            ->when($from, fn ($q) => $q->whereDate('date', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('date', '<=', $to))
+            ->when(! in_array($user->role, ['admin', 'accountant'], true),
+                fn ($q) => $q->whereIn('client_id', Client::visibleTo(Client::query(), $user)->select('id')))
+            ->sum('credit');
+
         // ⚠️ التصدير من **نفس الكويري المفلترة** قبل الباجينيشن —
         // الملف مرآة الفلتر مش الخمسين المعروضين
         if ($request->boolean('export')) {
-            return $this->excel($scoped()->with(['client.group'])->latest()->limit(5001)->get(), $mode);
+            return $this->excel($scoped()->with(['client.group'])->latest()->limit(5001)->get(), $mode, $from, $to,
+                $reconcile ? $invoiceCash : null);
         }
 
         $rows = $scoped()->with(['client.group'])->latest()
@@ -115,7 +135,7 @@ class CollectionController extends Controller
 
         // الإجماليات من **نفس السكوب** — الكروت لازم تساوي مجموع
         // الجدول اللي تحتها، وإلا الشاشة بتكدب على المحاسب.
-        $totals = $scoped()
+        $totals = $scoped(false)
             ->selectRaw('method, SUM(credit) total, COUNT(*) cnt')
             ->groupBy('method')
             ->get()->keyBy('method');
@@ -124,6 +144,7 @@ class CollectionController extends Controller
         // منفصل بنفس العميل والتاريخ والمرجع. الكارت من نفس فلتر
         // الفترة، والعمود بالمفتاح المركّب لصفوف الصفحة.
         $taxByKey = collect();
+        $taxBreak = collect();
         $taxTotal = 0.0;
         if ($mode === 'direct') {
             $taxQ = Transaction::where('kind', 'taxded')->whereNull('source_type')
@@ -133,6 +154,10 @@ class CollectionController extends Controller
                     fn ($q) => $q->whereIn('client_id',
                         Client::visibleTo(Client::query(), $user)->select('id')));
             $taxTotal = (float) (clone $taxQ)->sum('credit');
+            // تفسير كارت الضرايب (٢٢/٩): نفس الرقم مفرود بالعميل
+            $taxBreak = (clone $taxQ)->with('client.group')
+                ->selectRaw('client_id, SUM(credit) total, COUNT(*) cnt')
+                ->groupBy('client_id')->orderByDesc('total')->get();
             $taxByKey = self::taxByKey((clone $taxQ)->whereIn('client_id', $rows->getCollection()->pluck('client_id')->unique())->get());
         }
 
@@ -144,6 +169,12 @@ class CollectionController extends Controller
             'totals' => $totals,
             'taxByKey' => $taxByKey,
             'taxTotal' => $taxTotal,
+            'taxBreak' => $taxBreak,
+            'ref' => $ref,
+            // إجمالي الجدول كله (مش الصفحة) — لصف الإجمالي تحت
+            'grand' => (float) $scoped()->sum('credit'),
+            'reconcile' => $reconcile,
+            'invoiceCash' => $invoiceCash,
             'method' => $method,
             'repId' => $repId,
             'source' => $source,
@@ -171,7 +202,7 @@ class CollectionController extends Controller
      * CSV التحصيلات — من نفس الكويري المفلترة. في المباشر عمود
      * الضرايب المخصومة من قيود `taxded` المطابقة.
      */
-    private function excel($rows, string $mode)
+    private function excel($rows, string $mode, ?string $from = null, ?string $to = null, ?float $invoiceCash = null)
     {
         $truncated = $rows->count() > 5000;
         $rows = $rows->take(5000);
@@ -233,6 +264,19 @@ class CollectionController extends Controller
         $totals[] = Csv::money($sum);
         $totals[] = $truncated ? __('ops.export_truncated') : '';
 
-        return Csv::download(($mode === 'direct' ? 'direct-collections-' : 'collections-').now()->format('Y-m-d-Hi').'.csv', $columns, $out, $totals);
+        // نفس سطرين المطابقة اللي على الشاشة: المسجّل، ثم كاش الفواتير، ثم إجمالي كشف الحساب
+        if ($invoiceCash !== null && ! $truncated) {
+            $blank = array_fill(0, count($columns), '');
+            $amountCol = count($columns) - 2;
+
+            $out[] = [__('uib.recorded_total')] + $totals;
+            $out[] = [0 => __('uib.invoice_cash'), $amountCol => Csv::money($invoiceCash)] + $blank;
+            $totals = [0 => __('uib.ledger_total'), $amountCol => Csv::money($sum + $invoiceCash)] + $blank;
+            ksort($out[count($out) - 1]);
+            ksort($totals);
+        }
+
+        return Csv::download(($mode === 'direct' ? 'direct-collections-' : 'collections-').now()->format('Y-m-d-Hi').'.csv', $columns, $out, $totals,
+            Csv::meta(__($mode === 'direct' ? 'nav.collections_direct' : 'nav.collections'), $from ?: null, $to ?: null));
     }
 }

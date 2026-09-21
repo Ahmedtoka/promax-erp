@@ -10,7 +10,7 @@
     // الجافاسكريبت، والدالة اللي بتفتح المودال محتاجة الـ HTML جاهز.
     // ⚠️ مجمّعة بالمحافظة زي باقي السيستم — optgroup لكل محافظة
     // بالترتيب الجغرافي، والـ«بدون» في الآخر.
-    $zoneOptions = '<option value="">—</option>';
+    $zoneOptions = '<option value="">'.e(__('ui.choose', ['x' => __('ui.l_zone')])).'</option>';
     $zByGov = $zones->groupBy(fn ($z) => $z->governorate ?: '_none');
     foreach (array_merge(\App\Support\Governorates::keys(), ['_none']) as $gk) {
         $zGroup = $zByGov->get($gk);
@@ -24,11 +24,11 @@
         }
         $zoneOptions .= '</optgroup>';
     }
-    $channelOptions = '<option value="">—</option>';
+    $channelOptions = '<option value="">'.e(__('ui.choose', ['x' => __('ui.l_channel')])).'</option>';
     foreach ($channels as $c) {
         $channelOptions .= '<option value="'.(int) $c->id.'">'.e($c->displayName()).'</option>';
     }
-    $repOptions = '<option value="">—</option>';
+    $repOptions = '<option value="">'.e(__('ui.choose', ['x' => __('ui.l_rep')])).'</option>';
     foreach ($reps as $r) {
         $repOptions .= '<option value="'.(int) $r->id.'">'.e($r->displayName()).'</option>';
     }
@@ -72,123 +72,117 @@
     <h3>🎯 {{ __('lead.page') }} <span class="side">{{ __('lead.page_sub') }}</span></h3>
 
     {{-- ⭐ ليبل فوق كل فلتر (٦/٩ — طلب المالك: «ده إيه وده إيه») --}}
-    <form method="GET" action="{{ route('erp.leads') }}" class="searchbar"
-          style="align-items:flex-end;row-gap:10px">
-        <div style="flex:1;min-width:200px">
-            <label class="f">🔎 {{ __('common.search') }}</label>
-            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
-                   placeholder="{{ __('common.search') }}" style="width:100%">
-        </div>
-        <div>
-            <label class="f">{{ __('common.status') }}</label>
+    <form method="GET" action="{{ route('erp.leads') }}" class="searchbar" style="row-gap:10px">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
             <select name="status">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_statuses')]) }}</option>
                 @foreach ($statuses as $s)
                     <option value="{{ $s }}" @selected(($filters['status'] ?? '') === $s)>{{ __('lead.status_'.$s) }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('client.zone') }}</label>
+            </select></label>
+        {{-- «المتابعة» (٢٢/٩): نفس تعريف كروت الملخّص — الكارت بيحطها والخانة دي بتشيلها --}}
+        <label class="fl"><span>{{ __('uia.l_followup') }}</span>
+            <select name="focus">
+                <option value="">{{ __('ui.all_of', ['x' => __('lead.page')]) }}</option>
+                @foreach (['open', 'strong', 'overdue', 'assigned'] as $fk)
+                    <option value="{{ $fk }}" @selected(($filters['focus'] ?? '') === $fk)>{{ __('uia.focus_'.$fk) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_zone') }}</span>
             @include('partials._zone_select', [
                 'zones' => $zones,
                 'name' => 'zone',
                 'selected' => $filters['zone'] ?? null,
-                'placeholder' => __('common.all'),
-            ])
-        </div>
-        <div>
-            <label class="f">{{ __('ops.rep') }}</label>
+                'placeholder' => __('client.all_zones'),
+            ])</label>
+        <label class="fl"><span>{{ __('ui.l_rep') }}</span>
             <select name="rep">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_reps')]) }}</option>
                 @foreach ($reps as $r)
                     <option value="{{ $r->id }}" @selected(($filters['rep'] ?? '') == $r->id)>{{ $r->displayName() }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('lead.f_source') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('lead.f_source') }}</span>
             <select name="source">
                 <option value="">{{ __('lead.all_sources') }}</option>
                 @foreach ($sources as $s)
                     <option value="{{ $s }}" @selected(($filters['source'] ?? '') === $s)>{{ __('lead.source_'.$s) }}</option>
                 @endforeach
-            </select>
-        </div>
+            </select></label>
         {{-- فلتر القسم/النشاط (٢٦/٨) — «كل الجيمات في الدقي» --}}
-        <div>
-            <label class="f">{{ __('lead.f_cat') }}</label>
+        <label class="fl wide"><span>{{ __('lead.f_cat') }}</span>
             <select name="cat">
                 <option value="">{{ __('lead.all_cats') }}</option>
                 @foreach ($cats as $c)
                     <option value="{{ $c->category_raw }}" @selected(($filters['cat'] ?? '') === $c->category_raw)>
                         {{ $c->category_raw }} ({{ $c->n }})</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('lead.f_sort') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_sort') }}</span>
             <select name="sort">
                 <option value="score" @selected($sort === 'score')>{{ __('lead.sort_score') }}</option>
                 <option value="recent" @selected($sort === 'recent')>{{ __('lead.sort_recent') }}</option>
-            </select>
-        </div>
+            </select></label>
         <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;padding-bottom:8px">
             <input type="checkbox" name="unassigned" value="1" @checked($filters['unassigned'] ?? false)>
             {{ __('lead.only_unassigned') }}
         </label>
         {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ دخول الليد المحفظة --}}
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}"></div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
         <button class="btn gold">{{ __('common.filter') }}</button>
         {{-- مسح كل الفلاتر بضغطة (٦/٩) --}}
         <a class="btn" href="{{ route('erp.leads') }}">🧹 {{ __('lead.clear_filters') }}</a>
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 </div>
 
+{{-- كل كارت بيفلتر القايمة تحت بنفس تعريف رقمه، مع باقي الفلاتر زي ما هي (٢٢/٩) --}}
+@php $kUrl = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]).'#leadsList'; @endphp
 <div class="kpis">
-    <div class="kpi">
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'open']) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
         <div class="lbl">{{ __('lead.open_leads') }}</div>
         <div class="val">{{ $fmt($stats['open']) }}</div>
         <div class="sub2">{{ __('lead.page') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'strong']) href="{{ $kUrl(['focus' => 'strong', 'status' => null]) }}">
         <div class="lbl">{{ __('lead.top_score') }}</div>
         <div class="val pos">{{ $fmt($stats['strong']) }}</div>
         <div class="sub2">{{ __('lead.top_score_note') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'overdue']) href="{{ $kUrl(['focus' => 'overdue', 'status' => null]) }}">
         <div class="lbl">{{ __('lead.overdue') }}</div>
         <div class="val {{ $stats['overdue'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($stats['overdue']) }}</div>
         <div class="sub2">{{ __('lead.overdue_note') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'won']) href="{{ $kUrl(['status' => 'won', 'focus' => null]) }}">
         <div class="lbl">{{ __('lead.won_leads') }}</div>
         <div class="val pos">{{ $fmt($stats['won']) }}</div>
         <div class="sub2">{{ __('lead.status_won') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'lost']) href="{{ $kUrl(['status' => 'lost', 'focus' => null]) }}">
         <div class="lbl">{{ __('lead.lost_leads') }}</div>
         <div class="val">{{ $fmt($stats['lost']) }}</div>
         <div class="sub2">{{ __('lead.status_lost') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => false]) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
         <div class="lbl">{{ __('lead.pipeline') }}</div>
         <div class="val num">{{ $money($stats['pipeline']) }}</div>
         <div class="sub2">{{ __('common.currency') }}</div>
-    </div>
+    </a>
     {{-- المحفظة (بايبلاين ٢٦/٨): متوزع على مناديب ولا لأ --}}
-    <div class="kpi">
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'assigned']) href="{{ $kUrl(['focus' => 'assigned', 'unassigned' => null]) }}">
         <div class="lbl">{{ __('lead.k_assigned') }}</div>
         <div class="val pos">{{ $fmt($dist->assigned ?? 0) }}</div>
         <div class="sub2">{{ __('lead.of_total', ['t' => number_format($dist->total ?? 0)]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a @class(['kpi', 'on' => (bool) ($filters['unassigned'] ?? false)]) href="{{ $kUrl(['unassigned' => 1, 'focus' => null]) }}">
         <div class="lbl">{{ __('lead.k_unassigned') }}</div>
         <div class="val {{ ($dist->total ?? 0) - ($dist->assigned ?? 0) > 0 ? 'mid' : 'pos' }}">
             {{ $fmt(($dist->total ?? 0) - ($dist->assigned ?? 0)) }}</div>
         <div class="sub2">{{ __('lead.k_unassigned_note') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══ خريطة المحفظة (بايبلاين ٢٦/٨) — كل النقط ملونة بالحالة،
@@ -323,7 +317,7 @@
             </span>
         </form>
     @endif
-    <div class="tablewrap">
+    <div class="tablewrap" id="leadsList">
         <table>
             <tr>
                 @if ($canConvert)
@@ -335,11 +329,11 @@
                 {{-- ⚠️ `data-nosum` — القوة ترتيب مالوش وحدة، ومجموعه في فوتر الجدول مالوش معنى --}}
                 <th class="num" data-nosum title="{{ __('lead.score_hint') }}">{{ __('lead.score') }}</th>
                 <th>{{ __('common.name') }}</th>
-                <th>{{ __('common.phone') }}</th>
+                <th data-nosum>{{ __('common.phone') }}</th>
                 <th>{{ __('client.zone') }}</th>
                 <th>{{ __('lead.assigned_to') }}</th>
                 <th class="num">{{ __('lead.expected_monthly') }}</th>
-                <th>{{ __('lead.next_action') }}</th>
+                <th data-nosum>{{ __('lead.next_action') }}</th>
                 <th>{{ __('common.status') }}</th>
                 <th></th>
             </tr>
@@ -417,7 +411,7 @@
                         @endif
                     </td>
                     <td class="s">
-                        {{ $l->assignee?->displayName() ?: '—' }}
+                        @if ($l->assignee)<a href="{{ route('ops.rep', $l->assignee) }}">{{ $l->assignee->displayName() }}</a>@else — @endif
                         {{-- في محفظة مدير ولسه ماتوزعش لمندوب (٦/٩) --}}
                         @if ($l->manager_id !== null && $l->assigned_to === null)
                             <br><span class="badge b-purple" style="font-size:9px">
@@ -489,6 +483,14 @@
                     {{ __('lead.none') }}
                 </td></tr>
             @endforelse
+                    {{-- القايمة صفحات — الإجمالي من السيرفر على كل النتيجة المفلترة، نفس رقم التصدير (٢٢/٩) --}}
+            @if ($leads->total() > 0)
+                <tfoot><tr>
+                    <td colspan="{{ $canConvert ? 7 : 6 }}"><b>Σ {{ __('common.total') }}</b> — {{ __('ui.rows_n', ['n' => number_format($leads->total())]) }}</td>
+                    <td class="num"><b>{{ $money($listValue) }}</b></td>
+                    <td colspan="3"></td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 
@@ -641,7 +643,7 @@
 
         <label class="f">{{ __('lead.assign_to') }}</label>
         <select name="target" required style="width:100%;margin-bottom:10px">
-            <option value="">—</option>
+            <option value="">— {{ __('lead.assign_to') }} —</option>
             @if ($managers->isNotEmpty())
                 <optgroup label="👔 {{ __('lead.grp_managers') }}">
                     @foreach ($managers as $m)

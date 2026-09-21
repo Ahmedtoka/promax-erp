@@ -12,6 +12,8 @@
     $fmt = fn ($n) => number_format((float) $n);
     $rq = array_filter(['from' => $from, 'to' => $to, 'user_id' => $repId]);
     $rpt = fn (string $key, array $extra = []) => route('erp.reports.show', array_merge(['key' => $key], $rq, $extra));
+    // (٢٢/٩) لينكات الصفوف لصفحات السجلات نفسها — بنفس فترة الداشبورد
+    $per = ['from' => $from, 'to' => $to];
     $palette = ['#12399B', '#602D90', '#D74297', '#16A34A', '#B86E00', '#0E7490', '#B00020', '#64748B'];
     // باليت النكهات من الجايد لاين — لفليفار بار المنتجات
     $flavours = ['#FFA600', '#BF2917', '#693300', '#82C7FF', '#FFC796', '#FFF759', '#C9EBFF', '#FFF0E3'];
@@ -34,19 +36,11 @@
         </div>
     </div>
     <form method="GET" class="dash-filters">
-        <div class="df">
-            <label>📅 {{ __('rpt.f_from') }}</label>
-            <input type="date" name="from" value="{{ $from }}">
-        </div>
-        <div class="df">
-            <label>📅 {{ __('rpt.f_to') }}</label>
-            <input type="date" name="to" value="{{ $to }}">
-        </div>
         @if ($managers->isNotEmpty())
             <div class="df grow">
                 <label>👔 {{ __('dash.f_manager') }}</label>
                 <select name="manager_id" onchange="this.form.submit()">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uic.managers')]) }}</option>
                     @foreach ($managers as $m)
                         <option value="{{ $m->id }}" @selected($mgrId === $m->id)>{{ $m->displayName() }}</option>
                     @endforeach
@@ -56,12 +50,14 @@
         <div class="df grow">
             <label>🧑‍💼 {{ __('rpt.f_rep') }}</label>
             <select name="user_id">
-                <option value="">{{ __('rpt.f_all') }}</option>
+                <option value="">{{ __('ops.all_reps') }}</option>
                 @foreach ($reps as $r)
                     <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->displayName() }}</option>
                 @endforeach
             </select>
         </div>
+        {{-- الفترة آخر الفلاتر زي كل الشاشات — والفاضي هنا = الشهر الحالي مش كل الفترات --}}
+        @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false])
         <div class="df dfbtns">
             <button class="dash-btn main" type="submit">🔍 {{ __('rpt.apply') }}</button>
             <a class="dash-btn" href="{{ route('erp.overview') }}">↺ {{ __('common.clear') }}</a>
@@ -76,10 +72,14 @@
 @php
     $salesAll = (float) $inv->g + (float) $posDelivered->g;
     $billedAll = (float) $inv->billed_g + (float) $posDelivered->billed_g;
-    $netMove = $salesAll - (float) $coll - (float) $rets->g;
+    // (٢٢/٩) + القيود التانية (رد نقدية/تسويات) — فالصافي = Σ مدين − Σ دائن للفترة
+    $netMove = $salesAll - (float) $coll - (float) $rets->g + (float) $otherNet;
 @endphp
 <div class="dash-eqrow">
-    <a class="kpi dash-link has-bolt" href="{{ $rpt('sales_docs') }}">
+    {{-- ⚠️ (٢٢/٩) الكارت كان بيفتح «الفواتير تفصيلي» اللي إجماليه الفواتير بس
+         (من غير التوريدات) — رقم غير اللي على الكارت. «المبيعات بالعميل» إجماليه
+         هو نفس الرقم بالظبط: فواتير + توريدات اتسلمت. --}}
+    <a class="kpi dash-link has-bolt" href="{{ $rpt('sales_by_client') }}">
         <img class="bolt-mark" src="{{ $bolt }}" alt="">
         <div class="val pos big">{{ $fmt($salesAll) }}</div>
         <div class="lbl"><span class="kic">💰</span> {{ __('dash.k_sales') }}</div>
@@ -130,6 +130,12 @@
             <span class="on"><b>{{ $fmt($debt->g) }}</b><i>⏳ {{ __('dash.eq_debt_now') }}</i></span>
             <span><b>{{ $fmt($debt->n) }}</b><i>👥 {{ __('rpt.k_clients') }}</i></span>
         </div>
+        @if (abs($otherNet) >= 0.5)
+            {{-- الجزء اللي مش ظاهر في التلات كروت اللي قبله — عشان المعادلة تقفل قدام العين --}}
+            <div class="kmini">
+                <span><b>{{ $otherNet > 0 ? '+' : '' }}{{ $fmt($otherNet) }}</b><i>🔁 {{ __('uic.eq_other') }}</i></span>
+            </div>
+        @endif
         <div class="dash-hint">{{ __('dash.h_eq_net') }}</div>
     </a>
 </div>
@@ -237,7 +243,12 @@
         @php $maxV = max(1, collect($series)->flatMap(fn ($s) => [$s['sales'], $s['coll']])->max()); @endphp
         <div class="dash-bars {{ count($series) > 16 ? 'dense' : '' }}">
             @foreach ($series as $k => $s)
-                <a class="dash-bcol" href="{{ $rpt('sales_docs', $daily ? ['from' => $k, 'to' => $k] : []) }}"
+                @php
+                    // العمود الشهري بيفتح شهره هو (مقصوص على فترة الداشبورد) مش الفترة كلها
+                    $kA = $daily ? $k : max($from, $k.'-01');
+                    $kB = $daily ? $k : min($to, \Illuminate\Support\Carbon::parse($k.'-01')->endOfMonth()->toDateString());
+                @endphp
+                <a class="dash-bcol" href="{{ $rpt('sales_by_client', ['from' => $kA, 'to' => $kB]) }}"
                    title="{{ $k }} — {{ __('dash.k_sales') }}: {{ $fmt($s['sales']) }} · {{ __('dash.k_coll') }}: {{ $fmt($s['coll']) }}">
                     <span class="b sales" style="height:{{ round($s['sales'] / $maxV * 100) }}%"></span>
                     <span class="b coll" style="height:{{ round($s['coll'] / $maxV * 100) }}%"></span>
@@ -269,7 +280,7 @@
             </div>
             <div class="dash-dlegend">
                 @forelse ($byChannel as $i => $ch)
-                    <a href="{{ $rpt('sales_by_channel') }}">
+                    <a href="{{ $rpt('sales_by_client', ['channel_id' => $ch->cid]) }}">
                         <i style="background:{{ $palette[$i % count($palette)] }}"></i>
                         <span>{{ $ch->cname }}</span>
                         <b>{{ number_format($ch->v / $chTotal * 100, 1) }}%</b>
@@ -290,7 +301,7 @@
     @php $prodMax = max(1, $topProducts->max('v') ?? 1); @endphp
     <div class="dash-flav">
         @forelse ($topProducts as $i => $p)
-            <a class="dash-frow" href="{{ $rpt('sales_by_product') }}">
+            <a class="dash-frow" href="{{ route('erp.products.show', ['product' => $p->pid] + $per) }}">
                 <span class="rank">{{ $i + 1 }}</span>
                 <span class="nm">{{ app()->getLocale() === 'ar' ? ($p->pname ?: $p->pname_en) : ($p->pname_en ?: $p->pname) }}</span>
                 <span class="tr">
@@ -430,7 +441,7 @@
         @php $repMax = max(1, $topReps->max('v') ?? 1); @endphp
         <div class="dash-hbars">
             @forelse ($topReps as $r)
-                <a class="dash-hrow" href="{{ $rpt('sales_docs', ['user_id' => $r->user_id]) }}">
+                <a class="dash-hrow" href="{{ route('ops.rep', ['user' => $r->user_id] + $per) }}">
                     <span class="nm">{{ $r->rep?->displayName() ?? '—' }}</span>
                     <span class="tr"><span class="fill alt" style="width:{{ round($r->v / $repMax * 100) }}%"></span></span>
                     <span class="fnums"><b class="pos">{{ $fmt($r->v) }}</b><i class="ksep"></i><b>{{ $fmt($r->n) }}</b> <i>{{ __('rpt.k_count') }}</i></span>
@@ -452,13 +463,17 @@
                     <th>{{ __('client.channel') }}</th>
                     <th class="num">{{ __('rpt.k_count') }}</th>
                     <th class="num">{{ __('rpt.k_grand') }}</th>
-                    <th class="num">{{ __('rpt.k_balance') }}</th>
+                    <th class="num" data-nosum>{{ __('rpt.k_balance') }}</th>
                 </tr></thead>
                 <tbody>
                 @forelse ($topClients as $tc)
                     @php $c = $topClientRows->get($tc->client_id); @endphp
-                    <tr class="clickable" onclick="location.href='{{ $c ? route('erp.clients.show', $c) : '#' }}'">
-                        <td style="text-align:start"><b>{{ $c?->fullName() ?? '—' }}</b></td>
+                    <tr class="clickable" onclick="location.href='{{ $c ? route('erp.clients.show', ['client' => $c->id] + $per) : '#' }}'">
+                        <td style="text-align:start">
+                            @if ($c)
+                                <a href="{{ route('erp.clients.show', ['client' => $c->id] + $per) }}" onclick="event.stopPropagation()"><b>{{ $c->fullName() }}</b></a>
+                            @else — @endif
+                        </td>
                         <td><span class="badge b-purple">{{ $c?->channel?->displayName() ?? '—' }}</span></td>
                         <td class="num">{{ $fmt($tc->n) }}</td>
                         <td class="num pos"><b>{{ $fmt($tc->v) }}</b></td>
@@ -498,6 +513,13 @@
 .dash-head .bolt-mark{position:absolute;inset-inline-end:-30px;top:-40px;width:220px;transform:rotate(-9deg);pointer-events:none}
 .dash-head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;position:relative}
 .dash-filters{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;position:relative}
+/* (٢٢/٩) فلتر الفترة الموحّد جوه الهيدر الغامق — نفس شكل خانات `.df` */
+.dash-filters .rng .fl>span{color:#fff;opacity:.85;font-size:10.5px}
+.dash-filters .rng input{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);color:#fff;border-radius:9px;padding:7px 10px;font-family:inherit;font-size:12.5px}
+.dash-filters .rng input:focus{outline:none;border-color:#FFF927;background:rgba(255,255,255,.22)}
+.dash-filters .rng-q a{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff}
+.dash-filters .rng-q a:hover{background:rgba(255,255,255,.25);color:#fff;border-color:#fff}
+.dash-filters .rng-q a.on{background:#FFF927;border-color:#FFF927;color:#12399B}
 .df{display:flex;flex-direction:column;gap:4px}
 /* ⚠️ البوزيشنز (٢٣/٨): السيلكت كان بياخد نص الشاشة والزراير بتطير
    لسطر لوحدها — مقاسات منضبطة: التواريخ ثابتة، السيلكتات مرنة بحد

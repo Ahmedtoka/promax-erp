@@ -27,10 +27,11 @@
 
 {{-- ═══ السامري — من نفس صفوف الجدول (نطاق واحد) ═══ --}}
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">🟢 {{ __('field.board_kpi_working') }}</div><div class="val" style="color:#16A34A">{{ $kpi['working'] }}</div></div>
-    <div class="kpi"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val">{{ $kpi['open_vans'] }}</div></div>
-    <div class="kpi"><div class="lbl">💵 {{ __('field.board_kpi_sales') }}</div><div class="val">{{ $fmt($kpi['sales']) }}</div></div>
-    <div class="kpi"><div class="lbl">🧾 {{ __('field.board_kpi_colls') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['collections']) }}</div></div>
+    {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتفصّل رقمه بنفس النافذة --}}
+    <a class="kpi" href="{{ route('ops.open_visits') }}"><div class="lbl">🟢 {{ __('field.board_kpi_working') }}</div><div class="val" style="color:#16A34A">{{ $kpi['working'] }}</div></a>
+    <a class="kpi" href="{{ route('ops.vans', ['state' => 'open']) }}"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val">{{ $kpi['open_vans'] }}</div></a>
+    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">💵 {{ __('field.board_kpi_sales') }}</div><div class="val">{{ $fmt($kpi['sales']) }}</div></a>
+    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">🧾 {{ __('uic.board_field_colls') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['collections']) }}</div></a>
 </div>
 
 <div class="card">
@@ -39,10 +40,8 @@
     </h3>
 
     <form class="searchbar" method="GET">
-        <label class="f">{{ __('common.from') }}</label>
-        <input type="date" name="from" value="{{ $from }}">
-        <label class="f">{{ __('common.to') }}</label>
-        <input type="date" name="to" value="{{ $to }}">
+        {{-- ⚠️ الفاضي هنا = النهارده (boardWindow) مش كل الفترات — فمفيش اختصار «كل الفترات» --}}
+        @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false])
         <button class="btn gold" type="submit">🔍 {{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.rep_board') }}">{{ __('common.clear') }}</a>
     </form>
@@ -54,11 +53,11 @@
                 <th style="text-align:start">{{ __('hr.employee') }}</th>
                 <th>{{ __('field.board_attendance') }}</th>
                 <th>{{ __('field.board_custody') }}</th>
-                <th style="width:150px">{{ __('field.vans_progress') }}</th>
+                <th style="width:150px" data-nosum>{{ __('field.vans_progress') }}</th>
                 <th data-nosum>{{ __('field.board_sales_col') }}</th>
                 <th data-nosum>{{ __('field.board_colls_col') }}</th>
                 <th data-nosum title="{{ __('field.board_visits_hint') }}">{{ __('field.board_visits') }}</th>
-                <th>{{ __('field.board_last_event') }}</th>
+                <th data-nosum>{{ __('field.board_last_event') }}</th>
                 <th></th>
             </tr>
         </thead>
@@ -70,7 +69,7 @@
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 34])
                             <div>
-                                <b>{{ $u->displayName() }}</b>
+                                <a href="{{ route('ops.rep', ['user' => $u->id, 'from' => $from, 'to' => $to]) }}"><b>{{ $u->displayName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">
                                     {{ $u->roleLabel() }} · <span dir="ltr">{{ $u->code }}</span>
                                 </div>
@@ -148,6 +147,18 @@
                 <tr><td colspan="9"><div class="empty">{{ __('common.no_results') }}</div></td></tr>
             @endforelse
         </tbody>
+        {{-- الخلايا فيها تفصيلة تحت الرقم فالجمع التلقائي واقف — الإجمالي من نفس أرقام الكروت --}}
+        @if ($rows->isNotEmpty())
+            <tfoot>
+                <tr>
+                    <td style="text-align:start" colspan="4">Σ {{ __('common.total') }}</td>
+                    <td class="num">{{ $fmt($kpi['sales']) }}</td>
+                    <td class="num">{{ $fmt($kpi['collections']) }}</td>
+                    <td class="num"><span dir="ltr">{{ $rows->sum('visits_done') }} / {{ $rows->sum('visits_total') }}</span></td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        @endif
     </table>
     </div>
 </div>

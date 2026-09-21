@@ -804,4 +804,6 @@ return [
     // الفترة ووقت السحب في التقارير والملفات (٢١ سبتمبر ٢٠٢٦)
     'export_invoices' => 'Export invoices (Excel)',
     'export_statement' => 'Export statement (Excel)',
+    'exp_quiet' => 'Clients with no movement in the period (their balance)',
+    'exp_balance_all' => 'Total balance — all clients (as on screen)',
 ];

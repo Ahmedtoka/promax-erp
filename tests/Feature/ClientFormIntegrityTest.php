@@ -68,6 +68,8 @@ class ClientFormIntegrityTest extends TestCase
             // ⭐ ٩/٩/٢٠٢٦ — فلتر «من — إلى» على كشف الحساب (فورم GET بـ`data-range-filter`،
             // بيتقرا بـ`DateRange::fromRequest` مش من قواعد العميل)
             'from', 'to',
+            // ⭐ ٢٢/٩/٢٠٢٦ — فلتر نوع القيد والريفرنس على نفس فورم الكشف (GET، بيتقروا في `ErpController::client`)
+            'kind', 'ref',
         ],
         'erp/client_form' => ['amount', 'date', 'memo'],
     ];

@@ -34,12 +34,13 @@
             <input id="scanBox" placeholder="{{ __('online.scan_ph') }}" dir="ltr"
                    style="flex:0 1 200px" autocomplete="off">
             <span id="shipCount" class="badge b-blue">0</span>
-            <select name="courier_id" required style="flex:0 1 220px">
-                <option value="">— {{ __('online.courier') }} —</option>
+            <label class="fl wide"><span>{{ __('ui.l_courier') }}</span>
+            <select name="courier_id" required>
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_courier')]) }}</option>
                 @foreach ($couriers as $c)
                     <option value="{{ $c->id }}">{{ $c->name }}</option>
                 @endforeach
-            </select>
+            </select></label>
             <button class="btn sm" type="button" onclick="openDlg('dlgCourier')">➕ {{ __('online.courier_new') }}</button>
             <button class="btn gold" type="submit" id="shipBtn" disabled
                     onclick="return confirm(SHIP_MSG)">
@@ -57,7 +58,7 @@
                 <th>{{ __('online.area') }}</th>
                 <th class="num" data-nosum>{{ __('online.pieces') }}</th>
                 <th class="num">{{ __('online.cod_total') }}</th>
-                <th>{{ __('online.ready_since') }}</th>
+                <th data-nosum>{{ __('online.ready_since') }}</th>
                 <th></th>
             </tr>
             @forelse ($orders as $o)
@@ -66,7 +67,8 @@
                         <td><input type="checkbox" class="ship-ck" form="shipForm"
                                    name="ids[]" value="{{ $o->id }}"></td>
                     @endif
-                    <td class="num s"><b>#{{ $o->number }}</b></td>
+                    {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
+                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td>{{ $o->customer_name ?: '—' }}</td>
                     <td class="num s" dir="ltr">{{ $o->phone ?: '—' }}</td>
                     <td class="s">{{ $o->area ?: '—' }}</td>

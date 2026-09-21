@@ -11,45 +11,38 @@
 
 {{-- ═══ الفلاتر ═══ --}}
 <div class="card" style="padding:12px 14px">
-    <form method="GET" action="{{ route('erp.reports.quotations') }}"
-          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div>
-            <label class="f">{{ __('rpt.f_from') }}</label>
-            <input type="date" name="from" value="{{ request('from', today()->startOfMonth()->toDateString()) }}">
-        </div>
-        <div>
-            <label class="f">{{ __('rpt.f_to') }}</label>
-            <input type="date" name="to" value="{{ request('to', today()->toDateString()) }}">
-        </div>
+    <form class="searchbar" method="GET" action="{{ route('erp.reports.quotations') }}" style="margin-bottom:0">
         @if ($creators->isNotEmpty())
-            <div style="min-width:180px">
-                <label class="f">{{ __('rpt.qts_creator') }}</label>
+            <label class="fl"><span>{{ __('rpt.qts_creator') }}</span>
                 <select name="creator_id">
-                    <option value="">{{ __('rpt.f_all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.users')]) }}</option>
                     @foreach ($creators as $u)
                         <option value="{{ $u->id }}" @selected(request('creator_id') == $u->id)>{{ $u->displayName() }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
-        <div style="flex:1;min-width:180px">
-            <label class="f">{{ __('common.search') }}</label>
-            <input type="search" name="q" value="{{ request('q') }}" style="width:100%"
-                   placeholder="{{ __('rpt.qts_search_ph') }}">
-        </div>
-        <button class="btn gold" type="submit">🔍 {{ __('rpt.apply') }}</button>
+        <label class="fl wide grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" name="q" value="{{ request('q') }}" dir="auto"
+                   placeholder="{{ __('rpt.qts_search_ph') }}"></label>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`ReportController::range`) --}}
+        @include('partials._range', ['from' => $periodFrom, 'to' => $periodTo, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('erp.reports.quotations') }}">{{ __('common.clear') }}</a>
     </form>
 </div>
 
 {{-- ═══ السامري ═══ --}}
 <div class="kpis">
-    <div class="kpi"><div class="lbl">{{ __('rpt.qts_count') }}</div><div class="val">{{ $kCount }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('rpt.qts_value') }}</div><div class="val pos">{{ $kValue }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('rpt.qts_month') }}</div><div class="val mid">{{ $kMonth }}</div></div>
+    {{-- (٢٢/٩) العدد والقيمة هما الجدول اللي تحت، و«الشهر ده» فلتر على الشهر الحالي --}}
+    @php $mFrom = today()->startOfMonth()->toDateString(); $mTo = today()->toDateString(); @endphp
+    <a class="kpi" href="#qt-list"><div class="lbl">{{ __('rpt.qts_count') }}</div><div class="val">{{ $kCount }}</div></a>
+    <a class="kpi" href="#qt-list"><div class="lbl">{{ __('rpt.qts_value') }}</div><div class="val pos">{{ $kValue }}</div></a>
+    <a @class(['kpi', 'on' => $periodFrom === $mFrom && $periodTo === $mTo && ! request('q') && ! request('creator_id')])
+       href="{{ route('erp.reports.quotations', ['from' => $mFrom, 'to' => $mTo]) }}"><div class="lbl">{{ __('rpt.qts_month') }}</div><div class="val mid">{{ $kMonth }}</div></a>
 </div>
 
 {{-- ═══ الليستة ═══ --}}
-<div class="card">
+<div class="card" id="qt-list">
     <h3>📄 {{ __('rpt.qts_title') }} <span class="side">{{ __('rpt.rows_n', ['n' => number_format($rows->count())]) }}</span></h3>
 
     <div class="tablewrap rpt-wrap">
@@ -60,10 +53,10 @@
                 <th>{{ __('rpt.c_number') }}</th>
                 <th style="text-align:start">{{ __('rpt.qt_to') }}</th>
                 <th>{{ __('rpt.qts_creator') }}</th>
-                <th class="num">{{ __('rpt.qts_items') }}</th>
+                <th class="num" data-nosum>{{ __('rpt.qts_items') }}</th>
                 <th class="num">{{ __('rpt.qt_disc') }}</th>
                 <th class="num">{{ __('rpt.qt_grand') }}</th>
-                <th>{{ __('rpt.qt_valid_until') }}</th>
+                <th data-nosum>{{ __('rpt.qt_valid_until') }}</th>
                 <th class="act"></th>
             </tr>
             </thead>
@@ -71,8 +64,10 @@
             @forelse ($rows as $qt)
                 <tr>
                     <td class="num" dir="ltr">{{ $qt->created_at->format('Y-m-d') }}</td>
-                    <td class="num" dir="ltr"><b>{{ $qt->number }}</b></td>
-                    <td style="text-align:start"><b>{{ $qt->client_name }}</b></td>
+                    <td class="num" dir="ltr"><a href="{{ route('erp.reports.quotations.show', $qt) }}"><b>{{ $qt->number }}</b></a></td>
+                    <td style="text-align:start">
+                        @if ($qt->client_id ?? null)<a href="{{ route('erp.clients.show', $qt->client_id) }}"><b>{{ $qt->client_name }}</b></a>@else<b>{{ $qt->client_name }}</b>@endif
+                    </td>
                     <td>{{ $qt->creator?->displayName() ?? '—' }}</td>
                     <td class="num">{{ $qt->items->count() }}
                         <div style="font-size:10px;color:var(--muted)">{{ number_format($qt->items->sum('qty')) }} {{ __('rpt.k_qty') }}</div>

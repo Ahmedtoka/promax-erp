@@ -112,7 +112,8 @@ class CashForecastController extends Controller
                 __('cashflow.col_debit'), __('cashflow.col_open'), __('cashflow.col_terms'), __('cashflow.col_days_late'),
             ],
             $out,
-            [__('cashflow.total'), '', '', '', '', '', '', '', Csv::money((float) $rows->sum('open')), '', '']
+            [__('cashflow.total'), '', '', '', '', '', '', '', Csv::money((float) $rows->sum('open')), '', ''],
+            Csv::meta(__('cashflow.title'), $range->fromValue(), $range->toValue())
         );
     }
 }

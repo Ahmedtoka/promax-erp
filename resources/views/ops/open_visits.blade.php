@@ -23,18 +23,19 @@
 @section('content')
 
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">📍 {{ __('ops.ov_clients') }}</div>
-        <div class="val {{ $visits->count() > 0 ? 'mid' : '' }}">{{ $visits->count() }}</div></div>
-    <div class="kpi"><div class="lbl">🏭 {{ __('ops.ov_warehouses') }}</div>
-        <div class="val">{{ $whVisits->count() }}</div></div>
-    <div class="kpi"><div class="lbl">⏳ {{ __('ops.ov_stale') }}</div>
+    {{-- (٢٢/٩) كل كارت بينزل على جدوله في نفس الصفحة --}}
+    <a class="kpi" href="#ovClients"><div class="lbl">📍 {{ __('ops.ov_clients') }}</div>
+        <div class="val {{ $visits->count() > 0 ? 'mid' : '' }}">{{ $visits->count() }}</div></a>
+    <a class="kpi" href="#ovWh"><div class="lbl">🏭 {{ __('ops.ov_warehouses') }}</div>
+        <div class="val">{{ $whVisits->count() }}</div></a>
+    <a class="kpi" href="#ovClients"><div class="lbl">⏳ {{ __('ops.ov_stale') }}</div>
         <div class="val neg">{{ $visits->filter(fn ($v) => ! $v->checked_in_at?->isToday())->count() }}</div>
-        <div class="sub2">{{ __('ops.ov_stale_hint') }}</div></div>
-    <div class="kpi"><div class="lbl">⏱ {{ __('ops.att_kpi') }}</div>
-        <div class="val {{ $attRows->count() > 0 ? 'mid' : '' }}">{{ $attRows->count() }}</div></div>
+        <div class="sub2">{{ __('ops.ov_stale_hint') }}</div></a>
+    <a class="kpi" href="#ovAtt"><div class="lbl">⏱ {{ __('ops.att_kpi') }}</div>
+        <div class="val {{ $attRows->count() > 0 ? 'mid' : '' }}">{{ $attRows->count() }}</div></a>
 </div>
 
-<div class="card">
+<div class="card" id="ovClients">
     <h3>📍 {{ __('ops.ov_clients') }}
         <span class="side">{{ __('ops.ov_hint') }}</span></h3>
 
@@ -44,9 +45,9 @@
             <tr>
                 <th style="text-align:start">{{ __('ops.rep') }}</th>
                 <th>{{ __('client.client') }}</th>
-                <th>{{ __('ops.ov_since') }}</th>
-                <th>{{ __('ops.ov_duration') }}</th>
-                <th>{{ __('geo.current_point') }}</th>
+                <th data-nosum>{{ __('ops.ov_since') }}</th>
+                <th data-nosum>{{ __('ops.ov_duration') }}</th>
+                <th data-nosum>{{ __('geo.current_point') }}</th>
                 <th></th>
             </tr>
             </thead>
@@ -58,12 +59,12 @@
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $v->user, 'size' => 32])
                             <div>
-                                <b>{{ $v->user?->displayName() ?? '—' }}</b>
+                                @if ($v->user)<a href="{{ route('ops.rep', $v->user_id) }}"><b>{{ $v->user->displayName() }}</b></a>@else <b>—</b> @endif
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $v->user?->roleLabel() }}</div>
                             </div>
                         </div>
                     </td>
-                    <td><b>{{ $v->client?->displayName() ?? '—' }}</b>
+                    <td>@if ($v->client)<a href="{{ route('erp.clients.show', $v->client_id) }}"><b>{{ $v->client->displayName() }}</b></a>@else <b>—</b> @endif
                         <div style="font-size:10.5px;color:var(--muted)">{{ $v->client?->zone?->displayName() ?? '' }}</div>
                     </td>
                     <td dir="ltr">
@@ -97,7 +98,7 @@
     </div>
 </div>
 
-<div class="card">
+<div class="card" id="ovWh">
     <h3>🏭 {{ __('ops.ov_warehouses') }}
         <span class="side">{{ __('ops.ov_wh_hint') }}</span></h3>
 
@@ -107,8 +108,8 @@
             <tr>
                 <th style="text-align:start">{{ __('hr.employee') }}</th>
                 <th>{{ __('stock.warehouse') }}</th>
-                <th>{{ __('ops.ov_since') }}</th>
-                <th>{{ __('ops.ov_duration') }}</th>
+                <th data-nosum>{{ __('ops.ov_since') }}</th>
+                <th data-nosum>{{ __('ops.ov_duration') }}</th>
                 <th></th>
             </tr>
             </thead>
@@ -118,7 +119,7 @@
                     <td>
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $w->user, 'size' => 32])
-                            <b>{{ $w->user?->displayName() ?? '—' }}</b>
+                            @if ($w->user)<a href="{{ route('ops.rep', $w->user_id) }}"><b>{{ $w->user->displayName() }}</b></a>@else <b>—</b> @endif
                         </div>
                     </td>
                     <td>{{ $w->warehouse?->displayName() ?? '—' }}</td>
@@ -146,7 +147,7 @@
     وبيحدد ساعات الشغل من الديالوج. الشغل المفتوح بيبان كتنبيه بس —
     قفله من الكارتين اللي فوق.
 --}}
-<div class="card">
+<div class="card" id="ovAtt">
     <h3>⏱ {{ __('ops.att_title') }}
         <span class="side">{{ __('ops.att_hint') }}</span></h3>
 
@@ -155,8 +156,8 @@
             <thead>
             <tr>
                 <th style="text-align:start">{{ __('hr.employee') }}</th>
-                <th>{{ __('hr.in_since') }}</th>
-                <th>{{ __('hr.working_for') }}</th>
+                <th data-nosum>{{ __('hr.in_since') }}</th>
+                <th data-nosum>{{ __('hr.working_for') }}</th>
                 <th>{{ __('hr.state') }}</th>
                 <th>{{ __('ops.att_open_work') }}</th>
                 <th></th>
@@ -169,7 +170,7 @@
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $r['user'], 'size' => 32])
                             <div>
-                                <b>{{ $r['user']->displayName() }}</b>
+                                <a href="{{ route('ops.rep', $r['user']->id) }}"><b>{{ $r['user']->displayName() }}</b></a>
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $r['user']->roleLabel() }}</div>
                             </div>
                         </div>

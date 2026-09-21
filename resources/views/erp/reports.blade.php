@@ -34,19 +34,25 @@
 
 @if ($tab === 'aging')
     <div class="kpis">
+        {{-- (٢٢/٩) الكارت فلتر: بيعرض كل أصحاب الشريحة دي (مجموع عمودها = رقم الكارت)، ودوسة تانية بترجّع أكبر 25 --}}
         @foreach ($agingLabels as $k => $lbl)
-            <div class="kpi">
+            <a @class(['kpi', 'on' => ($bucket ?? null) === $k]) title="{{ __('ui.click_to_filter') }}"
+               href="{{ route('erp.reports', ['tab' => 'aging', 'bucket' => ($bucket ?? null) === $k ? null : $k]) }}">
                 <div class="lbl">{{ $lbl }}</div>
                 <div class="val {{ in_array($k, ['a180','a180p']) ? 'neg' : ($k === 'a30' ? 'pos' : 'mid') }}">{{ $fmt($aging[$k]) }}</div>
                 <div class="sub2">{{ number_format($aging[$k] / $agingTotal * 100, 1) }}% {{ __('report.of_outstanding') }}</div>
-            </div>
+            </a>
         @endforeach
     </div>
     <div class="card">
-        <h3>{{ __('report.top_debtors', ['count' => $topDebt->count()]) }}</h3>
+        <h3>@if ($bucket ?? null){{ __('uib.aging_bucket_clients', ['x' => $agingLabels[$bucket]]) }}
+            <span class="side">{{ $topDebt->count() }} {{ __('client.client_count') }}</span>
+            @else{{ __('report.top_debtors', ['count' => $topDebt->count()]) }}@endif</h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.overdue') }}</th><th>≤30</th><th>31-60</th><th>61-90</th><th>91-180</th><th>&gt;180</th></tr>
+                <thead>
+                <tr><th>{{ __('client.client') }}</th><th data-nosum>{{ __('client.category') }}</th><th>{{ __('client.balance') }}</th><th data-nosum>{{ __('client.overdue') }}</th><th>≤30</th><th>31-60</th><th>61-90</th><th>91-180</th><th>&gt;180</th></tr>
+                </thead>
                 @foreach ($topDebt as $c)
                     @php $ag = $c->aging(); $od = $c->overdue(); @endphp
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
@@ -82,7 +88,7 @@
         <h3>↩️ {{ __('report.returns') }} <span class="side">{{ $returns->count() }} {{ __('client.client_count') }}</span></h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.returns') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.returns') }} %</th><th>{{ __('client.balance') }}</th></tr>
+                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.returns') }}</th><th>{{ __('client.purchases') }}</th><th data-nosum>{{ __('client.returns') }} %</th><th>{{ __('client.balance') }}</th></tr>
                 @foreach ($returns as $c)
                     @php $pct = $c->purchases > 0 ? $c->returns / $c->purchases * 100 : 0; @endphp
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
@@ -102,7 +108,7 @@
         <h3>🏷️ {{ __('report.trade_discounts_settlements') }} <span class="side">{{ $rebates->count() }} {{ __('client.client_count') }}</span></h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.discounts') }}</th><th>{{ __('client.settlements') }}</th><th>{{ __('common.total') }}</th><th>{{ __('client.purchases') }}</th><th>% {{ __('report.of_which') }}</th></tr>
+                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.discounts') }}</th><th>{{ __('client.settlements') }}</th><th>{{ __('common.total') }}</th><th>{{ __('client.purchases') }}</th><th data-nosum>% {{ __('report.of_which') }}</th></tr>
                 @foreach ($rebates as $c)
                     @php $tot = $c->rebates + $c->settlements; @endphp
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
@@ -123,16 +129,17 @@
         $ckPurch = $circleK->sum('purchases'); $ckColl = $circleK->sum('collections'); $ckBal = $circleK->sum('balance');
     @endphp
     <div class="kpis">
-        <div class="kpi"><div class="lbl">{{ __('client.branches') }} — Circle K</div><div class="val">{{ $circleK->count() }}</div><div class="sub2">{{ __('report.one_umbrella') }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('report.network_purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($ckPurch) }}</div></div>
-        <div class="kpi"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($ckColl) }}</div><div class="sub2">{{ number_format($ckColl / max($ckPurch, 1) * 100, 1) }}%</div></div>
-        <div class="kpi"><div class="lbl">{{ __('report.network_balance') }}</div><div class="val {{ $ckBal > 0 ? 'neg' : 'pos' }}">{{ $fmt($ckBal) }}</div></div>
+        {{-- (٢٢/٩) الفروع لقايمة العملاء مفلترة، والتلات أرقام مجموع أعمدة الجدول اللي تحت --}}
+        <a class="kpi" href="{{ route('erp.clients', ['q' => 'Circle K']) }}"><div class="lbl">{{ __('client.branches') }} — Circle K</div><div class="val">{{ $circleK->count() }}</div><div class="sub2">{{ __('report.one_umbrella') }}</div></a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($ckPurch) }}</div></a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($ckColl) }}</div><div class="sub2">{{ number_format($ckColl / max($ckPurch, 1) * 100, 1) }}%</div></a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_balance') }}</div><div class="val {{ $ckBal > 0 ? 'neg' : 'pos' }}">{{ $fmt($ckBal) }}</div></a>
     </div>
-    <div class="card">
+    <div class="card" id="ck-branches">
         <h3>🏪 {{ __('client.branches') }}</h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('report.collection_rate') }} %</th></tr>
+                <tr><th>{{ __('client.branch') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th data-nosum>{{ __('report.collection_rate') }} %</th></tr>
                 @foreach ($circleK as $c)
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                         <td><b>{{ $c->displayName() }}</b></td>
@@ -153,7 +160,7 @@
         <h3>⚠️ {{ __('report.high_risk') }} <span class="side">{{ __('client.balance') }} &gt; 50 {{ __('report.thousand') }} • {{ __('report.collection_rate') }} &lt; 50%</span></h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('report.collection_rate') }} %</th><th>{{ __('client.last_payment') }}</th><th>{{ __('report.contract') }}</th></tr>
+                <tr><th>{{ __('client.client') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.balance') }}</th><th data-nosum>{{ __('report.collection_rate') }} %</th><th data-nosum>{{ __('client.last_payment') }}</th><th data-nosum>{{ __('report.contract') }}</th></tr>
                 @foreach ($risk as $c)
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                         <td><b>{{ $c->displayName() }}</b></td>
@@ -175,7 +182,7 @@
         <h3>🔵 {{ __('report.clients_in_credit') }} <span class="side">{{ $credit->count() }} {{ __('client.client_count') }}</span></h3>
         <div class="tablewrap">
             <table>
-                <tr><th>{{ __('client.client') }}</th><th>{{ __('report.credit_balance') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.last_activity') }}</th></tr>
+                <tr><th>{{ __('client.client') }}</th><th>{{ __('report.credit_balance') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th data-nosum>{{ __('client.last_activity') }}</th></tr>
                 @foreach ($credit as $c)
                     <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
                         <td><b>{{ $c->displayName() }}</b></td>

@@ -84,12 +84,36 @@ class WarehouseController extends Controller
         // يومين من وصول البضاعة). مفتوح لو الخانتين فاضيتين.
         $range = DateRange::fromRequest($request);
 
+        // أساس واحد للجدول والإجمالي والتصدير (٢٢/٩) — القايمة صفحات
+        $base = fn () => GoodsReceipt::where('warehouse_id', $warehouse?->id)
+            ->tap(fn ($q) => $range->apply($q, 'received_on'));
+
+        if ($request->boolean('export')) {
+            $all = $base()->with(['batches', 'sourceWarehouse'])->orderBy('received_on')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'goods-receipts.csv',
+                [__('stock.receipt_number'), __('stock.received_on'), __('stock.supplier'), __('stock.batches'),
+                    __('stock.total_units'), __('common.status')],
+                $all->map(fn ($r) => [
+                    $r->number, $r->received_on?->format('Y-m-d') ?? '',
+                    $r->sourceWarehouse?->displayName() ?? (string) $r->supplier,
+                    $r->batches->count(), $r->totalQty(),
+                    $r->isFullyShelved() ? __('stock.fully_shelved') : __('stock.partly_shelved'),
+                ]),
+                [__('common.total'), $all->count(), '', $all->sum(fn ($r) => $r->batches->count()), $all->sum(fn ($r) => $r->totalQty()), ''],
+                \App\Support\Csv::meta(__('stock.goods_receipts').' — '.($warehouse?->displayName() ?? ''),
+                    $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
         return view('wh.receipts', [
             'warehouse' => $warehouse,
             'warehouses' => $this->visibleWarehouses($request),
             'range' => $range,
-            'receipts' => GoodsReceipt::where('warehouse_id', $warehouse?->id)
-                ->tap(fn ($q) => $range->apply($q, 'received_on'))
+            'totals' => Batch::whereIn('goods_receipt_id', $base()->select('id'))
+                ->selectRaw('COUNT(*) as batches, COALESCE(SUM(qty_received),0) as qty')->toBase()->first(),
+            'receipts' => $base()
                 ->with(['batches.product', 'creator', 'sourceWarehouse'])
                 ->latest()->paginate(20)->withQueryString(),
             'products' => Product::where('active', true)->orderBy('code')->get(),
@@ -962,6 +986,9 @@ class WarehouseController extends Controller
                 array_key_exists($request->string('kind')->value(), StockTransfer::KINDS),
                 fn ($q) => $q->where('kind', $request->string('kind')->value()),
             )
+            // «ميداني» = النوعين اللي من عربية — نفس تعريف كارت الميداني (٢٢/٩)
+            ->when($request->string('kind')->value() === 'van',
+                fn ($q) => $q->whereIn('kind', ['rep_wh', 'rep_rep']))
             ->tap(fn ($q) => $range->apply($q, 'sent_on'));
 
         $q = $base()->with([
@@ -974,7 +1001,33 @@ class WarehouseController extends Controller
             $q->where('status', $status);
         }
 
+        // ═══ التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩) ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->reorder()->orderBy('sent_on')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'transfers.csv',
+                [__('stock.transfer'), __('stock.kind'), __('stock.from_warehouse'), __('stock.to_warehouse'),
+                    __('stock.sent_on'), __('stock.qty_sent'), __('stock.qty_received'), __('common.status')],
+                $all->map(fn ($t) => [
+                    $t->number, $t->kindLabel(), $t->fromLabel(), $t->toLabel(), $t->sent_on?->format('Y-m-d') ?? '',
+                    $t->qtySent(), $t->status === 'received' ? $t->qtyReceived() : '', $t->statusLabel(),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', $all->sum(fn ($t) => $t->qtySent()),
+                    $all->where('status', 'received')->sum(fn ($t) => $t->qtyReceived()), ''],
+                \App\Support\Csv::meta(__('stock.transfers'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        $ids = (clone $q)->reorder()->select('stock_transfers.id');
+        $recvIds = (clone $q)->reorder()->where('status', 'received')->select('stock_transfers.id');
+
         return view('wh.transfers', [
+            'totals' => (object) [
+                'sent' => (int) StockTransferItem::whereIn('stock_transfer_id', $ids)->sum('qty_sent'),
+                // المستلم بيتعرض للتحويلات اللي اتستلمت بس — نفس قاعدة العمود
+                'received' => (int) StockTransferItem::whereIn('stock_transfer_id', $recvIds)->sum('qty_received'),
+            ],
             'transfers' => $q->latest()->paginate(20)->withQueryString(),
             // KPIs من نفس الأساس المفلتر — رقم فوق وجدول تحت من نطاقين = شاشة بتكدب
             'kpi' => [

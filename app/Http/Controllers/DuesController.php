@@ -55,6 +55,31 @@ class DuesController extends Controller
         $range = DateRange::fromRequest($request);
         $range->apply($q, 'period_end');
 
+        // إجمالي الجدول على **كل** النتيجة المفلترة (الجدول صفحات) — نفس كويري التصدير (٢٢/٩)
+        $listTotals = (clone $q)->toBase()
+            ->selectRaw('COUNT(*) AS n, COALESCE(SUM(basis_amount), 0) AS basis, COALESCE(SUM(amount), 0) AS amount')
+            ->first();
+
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩/٢٠٢٦) — زرار الجدول بيصدّر الصفحة بس ═══
+        if ($request->boolean('export')) {
+            $rows = (clone $q)->orderBy('status')->orderByDesc('period_end')->orderByDesc('amount')->get();
+
+            return \App\Support\Csv::download('contract-dues-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('client.client'), __('common.code'), __('client.contract'), __('client.clause'),
+                __('client.due_period'), __('common.from'), __('common.to'),
+                __('client.due_basis'), __('client.clause_value'), __('client.due_amount'), __('common.status'),
+            ], $rows->map(fn (ContractDue $d) => [
+                $d->client?->displayName() ?? '', $d->client?->code ?? '', $d->contract?->number ?? '', $d->label(),
+                $d->periodLabel(), $d->period_start?->format('Y-m-d') ?? '', $d->period_end?->format('Y-m-d') ?? '',
+                \App\Support\Csv::money($d->basis_amount),
+                $d->pct !== null ? number_format($d->pct * 100, 2).'%' : '',
+                \App\Support\Csv::money($d->amount), $d->statusLabel(),
+            ]), [
+                __('common.total'), $rows->count(), '', '', '', '', '',
+                \App\Support\Csv::money($rows->sum('basis_amount')), '', \App\Support\Csv::money($rows->sum('amount')), '',
+            ], \App\Support\Csv::meta(__('client.dues_page'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         $dues = $q->orderBy('status')
             ->orderByDesc('period_end')
             ->orderByDesc('amount')
@@ -77,6 +102,7 @@ class DuesController extends Controller
             // فالقايمة بتفضل من غير اختيار رغم إن الفلتر شغّال.
             'filters' => array_merge($filters, ['status' => $status]),
             'range' => $range,
+            'listTotals' => $listTotals,
             'kpi' => [
                 'due_count' => (clone $allDue)->count(),
                 'due_amount' => (float) (clone $allDue)->sum('amount'),

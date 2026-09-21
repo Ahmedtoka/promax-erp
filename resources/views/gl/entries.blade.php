@@ -16,6 +16,7 @@
 @endphp
 
 @section('actions')
+    <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     @if ($canPost)
         <button class="btn gold" type="button" onclick="glOpenEntry()">＋ {{ __('gl.new_entry') }}</button>
     @endif
@@ -33,37 +34,27 @@
 <div class="card">
     <h3>📒 {{ __('gl.journal') }} <span class="side">{{ __('gl.journal_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('gl.origin') }}</label>
+    <form method="GET" class="searchbar" data-noprint>
+        <label class="fl"><span>{{ __('gl.origin') }}</span>
             <select name="origin" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.origins')]) }}</option>
                 @foreach (\App\Models\Gl\GlEntry::ORIGINS as $o)
                     <option value="{{ $o }}" @selected(request('origin') === $o)>{{ __('gl.origin_'.$o) }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('gl.account') }}</label>
+            </select></label>
+        <label class="fl"><span>{{ __('gl.account') }}</span>
             <select name="account" onchange="this.form.submit()">
-                <option value="">{{ __('common.all') }}</option>
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.accounts')]) }}</option>
                 @foreach ($filterAccounts as $a)
                     <option value="{{ $a->id }}" @selected(request('account') == $a->id)>{{ $a->code }} · {{ $a->displayName() }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('gl.search') }}</label>
-            <input type="search" name="q" value="{{ request('q') }}" placeholder="{{ __('gl.search_hint') }}">
-        </div>
+            </select></label>
+        <label class="fl"><span>{{ __('gl.search') }}</span>
+            <input type="search" name="q" value="{{ request('q') }}" placeholder="{{ __('gl.search_hint') }}"></label>
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.entries') }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -106,7 +97,7 @@
                         @foreach ($e->lines as $l)
                             <div style="display:flex;gap:6px;align-items:center;font-size:11px;padding:1px 0">
                                 <span dir="ltr">{{ $l->account?->code }}</span>
-                                <span>{{ $l->account?->displayName() }}</span>
+                                @if ($l->account)<a href="{{ route('gl.accounts.show', $l->account_id) }}">{{ $l->account->displayName() }}</a>@endif
                                 <span class="num">{{ $fmt($l->debit) }} / {{ $fmt($l->credit) }}</span>
                                 @if ($l->overridden)
                                     <span class="badge b-orange">{{ __('gl.override') }}</span>
@@ -129,6 +120,14 @@
             @empty
                 <tr><td colspan="7" style="color:var(--muted);font-size:12px">{{ __('gl.no_entries') }}</td></tr>
             @endforelse
+            {{-- الجدول مقسم صفحات — الإجمالي من السيرفر على الفلتر كله = إجمالي ملف الإكسيل --}}
+            @if ($rows->total() > 0)
+                <tfoot><tr>
+                    <td colspan="5" style="text-align:start">{{ __('common.total') }} · {{ __('ui.rows_n', ['n' => number_format($rows->total())]) }}</td>
+                    <td class="num">{{ $fmt($sumDebit) }}</td>
+                    <td class="num">{{ $fmt($sumCredit) }}</td>
+                </tr></tfoot>
+            @endif
         </table>
     </div>
 
@@ -180,7 +179,7 @@
                     <tr class="gl-line">
                         <td style="text-align:start">
                             <select name="lines[{{ $i }}][account_id]" required style="width:100%">
-                                <option value="">— {{ __('common.pick') }} —</option>
+                                <option value="">{{ __('ui.choose', ['x' => __('gl.account')]) }}</option>
                                 @foreach ($accounts as $a)
                                     <option value="{{ $a->id }}" @selected(($ln['account_id'] ?? null) == $a->id)>{{ $a->code }} · {{ $a->displayName() }}</option>
                                 @endforeach
@@ -222,7 +221,7 @@
         <div>
             <label class="f">{{ __('gl.account') }} <b class="req-star">*</b></label>
             <select name="account_id" id="ovAccount" required style="width:100%">
-                <option value="">— {{ __('common.pick') }} —</option>
+                <option value="">{{ __('ui.choose', ['x' => __('gl.account')]) }}</option>
                 @foreach ($accounts as $a)
                     <option value="{{ $a->id }}">{{ $a->code }} · {{ $a->displayName() }}</option>
                 @endforeach

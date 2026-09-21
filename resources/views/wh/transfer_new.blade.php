@@ -61,7 +61,10 @@
         <div class="frow">
             <div>
                 <label class="f">{{ __('stock.from_warehouse') }} <b class="req-star">*</b></label>
+                {{-- ⚠️ من غير مخزن جاهز (٢٢/٩): أول مخزن كان بينزل لوحده في الخانتين،
+                     وتحويل من/إلى مخزن غلط بيحرّك رصيد حقيقي. لازم يتختار بالإيد. --}}
                 <select name="from_warehouse_id" id="trFrom" required style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('stock.from_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}">{{ $w->displayName() }} — {{ $w->typeLabel() }}</option>
                     @endforeach
@@ -70,8 +73,9 @@
             <div>
                 <label class="f">{{ __('stock.to_warehouse') }} <b class="req-star">*</b></label>
                 <select name="to_warehouse_id" required style="width:100%">
+                    <option value="">{{ __('ui.choose', ['x' => __('stock.to_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
-                        <option value="{{ $w->id }}" @selected($loop->index === 1)>{{ $w->displayName() }} — {{ $w->typeLabel() }}</option>
+                        <option value="{{ $w->id }}">{{ $w->displayName() }} — {{ $w->typeLabel() }}</option>
                     @endforeach
                 </select>
             </div>
@@ -99,15 +103,16 @@
 
         {{-- ═══ ملخصات لايف — البوكسات بتتحدث مع كل سطر ═══ --}}
         <div class="kpis" style="margin-top:12px">
-            <div class="kpi">
+            {{-- عدادات لايف للسطور اللي تحت — بتودّي على جدول السطور --}}
+            <a class="kpi" href="#trLines">
                 <div class="lbl">{{ __('stock.transfer_lines') }}</div>
                 <div class="val" id="trKpiLines">0</div>
-            </div>
-            <div class="kpi">
+            </a>
+            <a class="kpi" href="#trLines">
                 <div class="lbl">{{ __('stock.total_pieces') }}</div>
                 <div class="val pos" id="trKpiPieces">0</div>
                 <div class="sub2">{{ __('stock.units') }}</div>
-            </div>
+            </a>
         </div>
 
         {{-- ═══ البحث بالصور — المنتقي المشترك بالتشيك بوكس (١٢/٨) ═══
@@ -123,13 +128,14 @@
             ])
         </div>
 
-        <div class="tablewrap" style="margin-top:12px;max-height:52vh;overflow-y:auto">
-            <table>
+        <div class="tablewrap" id="trLines" style="margin-top:12px;max-height:52vh;overflow-y:auto">
+            {{-- جدول إدخال — من غير إكسيل --}}
+            <table data-noxl>
                 <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>
                         <th style="width:190px">{{ __('stock.batch_no') }}</th>
-                        <th class="num" style="width:100px">{{ __('stock.produced_on') }}</th>
+                        <th class="num" style="width:100px" data-nosum>{{ __('stock.produced_on') }}</th>
                         <th class="num" style="width:90px">{{ __('stock.available') }}</th>
                         <th style="width:110px">{{ __('stock.entry_unit') }}</th>
                         <th class="num" style="width:110px">{{ __('common.qty') }}</th>

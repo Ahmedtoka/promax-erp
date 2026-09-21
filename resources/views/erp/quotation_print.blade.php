@@ -237,7 +237,7 @@
         @php $bankQt = array_filter($co['bank']); @endphp
         @if ($bankQt && ! ($co['bank_demo'] ?? false))
             <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:10px 13px;font-size:11.5px">
-                <b>🏦 {{ __('doc.bank_box') }}</b>
+                <b>🏦 {{ __('doc.bank_details') }}</b>
                 <div style="display:flex;gap:6px 22px;flex-wrap:wrap;margin-top:5px">
                     @foreach ([
                         'doc.bank_name' => $co['bank']['name'],

@@ -13,47 +13,74 @@
 
 @section('content')
 
-<form method="GET" class="filters" style="margin-bottom:12px">
-    <div>
-        <label class="f">{{ __('hr.from') }}</label>
-        <input type="date" name="from" value="{{ $from }}">
-    </div>
-    <div>
-        <label class="f">{{ __('hr.to') }}</label>
-        <input type="date" name="to" value="{{ $to }}">
-    </div>
-    <div>
-        <label class="f">{{ __('hr.employee') }}</label>
+<form method="GET" class="searchbar" style="margin-bottom:12px">
+    <label class="fl wide"><span>{{ __('hr.employee') }}</span>
         <select name="user">
-            <option value="">{{ __('common.all') }}</option>
+            <option value="">{{ __('ui.all_of', ['x' => __('uib.employees')]) }}</option>
             @foreach ($users as $u)
                 <option value="{{ $u->id }}" @selected(request('user') == $u->id)>{{ $u->displayName() }}</option>
             @endforeach
-        </select>
-    </div>
-    <div>
-        <label class="f">{{ __('hr.state') }}</label>
+        </select></label>
+    <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status">
-            <option value="">{{ __('common.all') }}</option>
+            <option value="">{{ __('ui.all_of', ['x' => __('uib.statuses')]) }}</option>
             <option value="open" @selected(request('status') === 'open')>{{ __('hr.status_open') }}</option>
             <option value="closed" @selected(request('status') === 'closed')>{{ __('hr.status_closed') }}</option>
             <option value="auto" @selected(request('status') === 'auto')>{{ __('hr.status_auto') }}</option>
-        </select>
-    </div>
-    <button class="btn primary" type="submit">{{ __('common.search') }}</button>
+        </select></label>
+    {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`AttendanceController::log`) --}}
+    @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false])
+    <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+    <a class="btn" href="{{ route('erp.attendance.log') }}">{{ __('common.clear') }}</a>
     {{-- ⚠️ التصدير بنفس فلاتر الفورم بالظبط: موظف واحد أو «الكل» —
          الزرار بيبعت لراوت التصدير بنفس الحقول (formaction). --}}
     <button class="btn" type="submit"
             formaction="{{ route('erp.attendance.export') }}">📥 {{ __('hr.export_excel') }}</button>
 </form>
 
+{{-- (٢٢/٩) الكروت بتفسّر رقمها: الساعات مفرودة بالموظف (مجموعها = إجمالي الساعات) --}}
+@php $byEmp = $rows->groupBy('user_id')->map(fn ($g) => [
+    'user' => $g->first()->user, 'days' => $g->count(), 'min' => $g->sum(fn ($d) => $d->payableMinutes()),
+])->sortByDesc('min'); @endphp
 <div class="kpis" style="margin-bottom:14px">
-    <div class="kpi"><div class="lbl">{{ __('hr.log') }}</div><div class="val">{{ $rows->count() }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('hr.total_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div></div>
-    <div class="kpi"><div class="lbl">{{ __('hr.avg_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div></div>
+    <a class="kpi" href="#att-table"><div class="lbl">{{ __('hr.log') }}</div><div class="val">{{ $rows->count() }}</div></a>
+    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.total_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div></div>
+    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.avg_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div></div>
 </div>
 
-<div class="card">
+<dialog id="attExplain" style="max-width:560px">
+    <h3>{{ __('hr.total_hours') }} <span class="side">{{ __('ui.explain') }} · <span dir="ltr">{{ $from }} → {{ $to }}</span></span></h3>
+    <div class="tablewrap" style="max-height:60vh;overflow:auto">
+        <table data-noxl>
+            <thead><tr>
+                <th style="text-align:start">{{ __('hr.employee') }}</th>
+                <th>{{ __('uib.days') }}</th>
+                <th>{{ __('hr.total_hours') }}</th>
+                <th>{{ __('hr.avg_hours') }}</th>
+            </tr></thead>
+            <tbody>
+            @foreach ($byEmp as $uid => $e)
+                <tr>
+                    <td style="text-align:start"><a href="{{ request()->fullUrlWithQuery(['user' => $uid]) }}">{{ $e['user']?->displayName() ?? '—' }}</a></td>
+                    <td class="num">{{ $e['days'] }}</td>
+                    <td class="num" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($e['min']) }}</td>
+                    <td class="num" dir="ltr">{{ \App\Models\AttendanceDay::hhmm((int) round($e['min'] / max(1, $e['days']))) }}</td>
+                </tr>
+            @endforeach
+            </tbody>
+            <tfoot><tr>
+                <td style="text-align:start">{{ __('common.total') }}</td>
+                <td class="num">{{ $rows->count() }}</td>
+                <td class="num" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</td>
+                <td class="num" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</td>
+            </tr></tfoot>
+        </table>
+    </div>
+    <div style="text-align:end;margin-top:10px"><button class="btn" type="button" onclick="closeDlg('attExplain')">{{ __('common.close') }}</button></div>
+</dialog>
+
+<div class="card" id="att-table">
+    <h3>🗓️ {{ __('hr.log') }} <span class="side">{{ __('ui.rows_n', ['n' => number_format($rows->count())]) }}</span></h3>
     @if ($rows->isEmpty())
         <div class="empty">{{ __('hr.no_rows') }}</div>
     @else
@@ -67,7 +94,7 @@
                     <th>{{ __('hr.last_out') }}</th>
                     <th>{{ __('hr.worked') }}</th>
                     <th>{{ __('hr.breaks') }}</th>
-                    <th>{{ __('hr.sessions') }}</th>
+                    <th data-nosum>{{ __('hr.sessions') }}</th>
                     <th>{{ __('hr.state') }}</th>
                     <th>{{ __('hr.approved') }}</th>
                 </tr>
@@ -76,7 +103,8 @@
                 @foreach ($rows as $d)
                     <tr>
                         <td dir="ltr">{{ $d->date->format('Y-m-d') }}</td>
-                        <td>{{ $d->user?->displayName() ?? '—' }}</td>
+                        {{-- الموظف بيفلتر السجل عليه --}}
+                        <td>@if ($d->user)<a href="{{ request()->fullUrlWithQuery(['user' => $d->user_id]) }}">{{ $d->user->displayName() }}</a>@else — @endif</td>
                         <td dir="ltr">{{ $d->first_in_at?->format('h:i A') ?? '—' }}</td>
                         <td dir="ltr">{{ $d->last_out_at?->format('h:i A') ?? '—' }}</td>
                         <td dir="ltr" style="font-weight:800">{{ $d->workedLabel() }}</td>

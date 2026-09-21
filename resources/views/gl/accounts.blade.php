@@ -25,18 +25,13 @@
 <div class="card">
     <h3>🌳 {{ __('gl.accounts') }} <span class="side">{{ __('gl.tree_sub') }}</span></h3>
 
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div>
-            <label class="f">{{ __('common.from') }}</label>
-            <input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()">
-        </div>
-        <div>
-            <label class="f">{{ __('common.to') }}</label>
-            <input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()">
-        </div>
+    <form method="GET" class="searchbar" data-noprint>
         <div style="align-self:flex-end;font-size:11px;color:var(--muted)">
             {{ $range->isOpen() ? __('gl.balance_all_time') : $range->fromValue().' → '.$range->toValue() }}
         </div>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('gl.accounts') }}">{{ __('common.clear') }}</a>
     </form>
 
     <div class="tablewrap">
@@ -67,7 +62,7 @@
         <div id="accTreeBox">
             <label class="f">{{ __('gl.parent') }} <b class="req-star">*</b></label>
             <select name="parent_id" id="accParent" required style="width:100%">
-                <option value="">— {{ __('common.pick') }} —</option>
+                <option value="">{{ __('ui.choose', ['x' => __('gl.account')]) }}</option>
                 @foreach ($parents as $p)
                     {{-- data-root = رقم الجذر، والجافاسكربت بيخفي غير بتاع
                          الحساب اللي بيتعدّل (نقل بين الجذور مرفوض في السيرفر) --}}

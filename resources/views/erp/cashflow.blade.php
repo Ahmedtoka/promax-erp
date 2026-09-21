@@ -11,6 +11,9 @@
     $fmt0 = fn ($n) => number_format((float) $n, 0);
     $user = auth()->user();
     $canInvoice = \App\Support\Access::allows($user, 'ops.invoice');
+    // لينك المستند في التلات جداول (٢٢/٩): فاتورة أو أمر توريد
+    $docUrl = fn (array $r) => ($canInvoice && ($r['invoice_id'] ?? null)) ? route('ops.invoice', $r['invoice_id'])
+        : (($r['po_id'] ?? null) ? route('ops.pos.show', $r['po_id']) : null);
     $days = $data['days'];
     $overdueTotal = $data['overdue']['total'];
     $windowTotal = round((float) $data['rows']->sum('open'), 2);
@@ -74,7 +77,7 @@
 @section('title', __('cashflow.title'))
 
 @section('actions')
-    <a class="btn" href="{{ $q(['export' => 1]) }}">📊 {{ __('ops.inv_excel') }}</a>
+    <a class="btn sm green" href="{{ $q(['export' => 1]) }}">⬇ {{ __('ui.export_all') }}</a>
     <button class="btn" type="button" onclick="window.print()" title="{{ __('ops.pdf_hint') }}">📄 {{ __('ops.save_pdf') }}</button>
 @endsection
 
@@ -107,38 +110,69 @@
 </style>
 
 {{-- ═══ الأرقام الكبيرة ═══ --}}
+{{-- (٢٢/٩) كل كارت بيودّي للجدول اللي بيفرد رقمه تحت؛ «بعد الفترة» بيمدّ النافذة، و«إجمالي المفتوح» لشاشة المديونيات --}}
 <div class="kpis">
-    <div class="kpi">
+    <div class="kpi" data-explain onclick="openDlg('cfCashBy')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('cashflow.kpi_cash_by', ['date' => $range->to->toDateString()]) }}</div>
         <div class="val">{{ $fmt($cashBy) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_cash_by_sub') }}</div>
     </div>
-    <div class="kpi">
+    <a class="kpi" href="#cf-due">
         <div class="lbl">{{ __('cashflow.kpi_window') }}</div>
         <div class="val">{{ $fmt($windowTotal) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_window_sub', ['n' => $data['rows']->count(), 'from' => $range->from->toDateString(), 'to' => $range->to->toDateString()]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#cf-overdue">
         <div class="lbl">{{ __('cashflow.kpi_overdue') }}</div>
         <div class="val neg">{{ $fmt($overdueTotal) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_overdue_sub', ['n' => $data['overdue']['count']]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    {{-- اللي بعد الفترة مالوش جدول — الكارت بيمدّ «إلى» 90 يوم كمان فيدخل الجدول --}}
+    <a class="kpi" href="{{ $q(['to' => $range->to->copy()->addDays(90)->toDateString()]) }}" title="{{ __('uib.cf_extend') }}">
         <div class="lbl">{{ __('cashflow.kpi_later') }}</div>
         <div class="val">{{ $fmt($data['later']['total']) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_later_sub', ['n' => $data['later']['count'], 'to' => $range->to->toDateString()]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#cf-noterms">
         <div class="lbl">{{ __('cashflow.kpi_no_terms') }}</div>
         <div class="val mid">{{ $fmt($data['no_terms']['total']) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_no_terms_sub', ['n' => $data['no_terms']['count']]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <div class="kpi" data-explain onclick="openDlg('cfOpen')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('cashflow.kpi_total_open') }}</div>
         <div class="val">{{ $fmt($data['total_open']) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_total_open_sub') }}</div>
     </div>
 </div>
+
+{{-- تفسير الرقمين المركّبين: صفوف بتتجمع على رقم الكارت --}}
+<dialog id="cfCashBy" style="max-width:480px">
+    <h3>{{ __('cashflow.kpi_cash_by', ['date' => $range->to->toDateString()]) }} <span class="side">{{ __('ui.explain') }}</span></h3>
+    <div class="tablewrap"><table data-noxl>
+        <tbody>
+            <tr><td style="text-align:start"><a href="#cf-overdue" onclick="closeDlg('cfCashBy')">{{ __('cashflow.kpi_overdue') }}</a></td><td class="num">{{ $fmt($overdueTotal) }}</td></tr>
+            <tr><td style="text-align:start"><a href="#cf-due" onclick="closeDlg('cfCashBy')">{{ __('cashflow.kpi_window') }}</a></td><td class="num">{{ $fmt($windowTotal) }}</td></tr>
+        </tbody>
+        <tfoot><tr><td style="text-align:start">{{ __('cashflow.total') }}</td><td class="num">{{ $fmt($cashBy) }}</td></tr></tfoot>
+    </table></div>
+    <div style="text-align:end;margin-top:10px"><button class="btn" type="button" onclick="closeDlg('cfCashBy')">{{ __('common.close') }}</button></div>
+</dialog>
+<dialog id="cfOpen" style="max-width:480px">
+    <h3>{{ __('cashflow.kpi_total_open') }} <span class="side">{{ __('ui.explain') }}</span></h3>
+    <div class="tablewrap"><table data-noxl>
+        <tbody>
+            <tr><td style="text-align:start">{{ __('cashflow.kpi_overdue') }}</td><td class="num">{{ $fmt($overdueTotal) }}</td></tr>
+            <tr><td style="text-align:start">{{ __('cashflow.kpi_window') }}</td><td class="num">{{ $fmt($windowTotal) }}</td></tr>
+            <tr><td style="text-align:start">{{ __('cashflow.kpi_later') }}</td><td class="num">{{ $fmt($data['later']['total']) }}</td></tr>
+            <tr><td style="text-align:start">{{ __('cashflow.kpi_no_terms') }}</td><td class="num">{{ $fmt($data['no_terms']['total']) }}</td></tr>
+        </tbody>
+        <tfoot><tr><td style="text-align:start">{{ __('cashflow.total') }}</td><td class="num">{{ $fmt($data['total_open']) }}</td></tr></tfoot>
+    </table></div>
+    <div style="text-align:end;margin-top:10px">
+        <a class="btn" href="{{ route('erp.reports', ['tab' => 'aging']) }}">{{ __('nav.reports') }}</a>
+        <button class="btn" type="button" onclick="closeDlg('cfOpen')">{{ __('common.close') }}</button>
+    </div>
+</dialog>
 
 <div class="card">
     <h3>📆 {{ __('cashflow.title') }} <span class="side">{{ __('cashflow.sub') }}</span></h3>
@@ -156,31 +190,29 @@
     </div>
 
     {{-- ═══ الفلاتر ═══ --}}
-    <form method="GET" class="frow" style="margin-bottom:12px" data-noprint>
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" min="{{ $today }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    {{-- ⚠️ `shortcuts => false`: الشاشة عن المستقبل — «الشهر اللي فات» مالوش معنى هنا، واختصاراتها هي الأفق 15/30/60/90 اللي فوق --}}
+    <form method="GET" class="searchbar" data-noprint>
         @if ($reps->count())
-            <div>
-                <label class="f">{{ __('cashflow.rep') }}</label>
+            <label class="fl"><span>{{ __('ui.l_rep') }}</span>
                 <select name="rep" onchange="this.form.submit()">
-                    <option value="">{{ __('common.all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.reps')]) }}</option>
                     @foreach ($reps as $r)
                         <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->displayName() }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
         @if ($managers->count())
-            <div>
-                <label class="f">{{ __('cashflow.manager') }}</label>
+            <label class="fl"><span>{{ __('ui.l_manager') }}</span>
                 <select name="manager" onchange="this.form.submit()">
-                    <option value="">{{ __('common.all') }}</option>
+                    <option value="">{{ __('ui.all_of', ['x' => __('uib.managers')]) }}</option>
                     @foreach ($managers as $m)
                         <option value="{{ $m->id }}" @selected($managerId === $m->id)>{{ $m->displayName() }}</option>
                     @endforeach
-                </select>
-            </div>
+                </select></label>
         @endif
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'shortcuts' => false])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('erp.cashflow') }}">{{ __('common.clear') }}</a>
     </form>
 
     {{-- ═══ المنحنى التراكمي ═══ --}}
@@ -246,7 +278,7 @@
 </div>
 
 {{-- ═══ الجدول: المستحق في الفترة ═══ --}}
-<div class="card">
+<div class="card" id="cf-due">
     <h3>🗓 {{ __('cashflow.table_due') }} <span class="side">{{ $data['rows']->count() }} {{ __('ops.entries') }}</span></h3>
     <div class="tablewrap rpt-wrap">
         <table>
@@ -260,15 +292,9 @@
                 <tr>
                     <td class="num">{{ $r['due']->toDateString() }}</td>
                     <td><a href="{{ route('erp.clients.show', $r['client_id']) }}">{{ $r['client'] }}</a></td>
-                    <td>{{ $r['rep'] ?? '—' }}</td>
+                    <td>@if ($r['rep_id'] ?? null)<a href="{{ route('ops.rep', $r['rep_id']) }}">{{ $r['rep'] }}</a>@else{{ $r['rep'] ?? '—' }}@endif</td>
                     <td>{{ $r['channel'] ?? '—' }}</td>
-                    <td>
-                        @if ($canInvoice && $r['invoice_id'])
-                            <a href="{{ route('ops.invoice', $r['invoice_id']) }}">{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</a>
-                        @else
-                            {{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}
-                        @endif
-                    </td>
+                    <td>@php $du = $docUrl($r); @endphp@if ($du)<a href="{{ $du }}">{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</a>@else{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}@endif</td>
                     <td class="num">{{ $r['date']->toDateString() }}</td>
                     <td class="num">{{ $fmt($r['debit']) }}</td>
                     <td class="num pos">{{ $fmt($r['open']) }}</td>
@@ -286,12 +312,13 @@
 </div>
 
 {{-- ═══ المتأخر ═══ --}}
-<div class="card">
+<div class="card" id="cf-overdue">
     <h3>⏰ {{ __('cashflow.table_overdue') }} <span class="side neg">{{ $fmt($overdueTotal) }} · {{ $data['overdue']['count'] }} {{ __('ops.entries') }}</span></h3>
     <div class="tablewrap rpt-wrap">
         <table>
             <thead><tr>
-                <th>{{ __('cashflow.col_due') }}</th><th class="num">{{ __('cashflow.col_days_late') }}</th><th>{{ __('cashflow.col_client') }}</th><th>{{ __('cashflow.col_rep') }}</th>
+                {{-- ⚠️ أيام التأخير مابتتجمعش — الجمع الأوتوماتيك كان بيطلّع «مجموع أيام» مالوش معنى (٢٢/٩) --}}
+                <th>{{ __('cashflow.col_due') }}</th><th class="num" data-nosum>{{ __('cashflow.col_days_late') }}</th><th>{{ __('cashflow.col_client') }}</th><th>{{ __('cashflow.col_rep') }}</th>
                 <th>{{ __('cashflow.col_doc') }}</th><th>{{ __('cashflow.col_doc_date') }}</th><th class="num">{{ __('cashflow.col_open') }}</th>
             </tr></thead>
             <tbody>
@@ -300,8 +327,8 @@
                     <td class="num">{{ $r['due']->toDateString() }}</td>
                     <td class="num neg">{{ $r['days_late'] }}</td>
                     <td><a href="{{ route('erp.clients.show', $r['client_id']) }}">{{ $r['client'] }}</a></td>
-                    <td>{{ $r['rep'] ?? '—' }}</td>
-                    <td>{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</td>
+                    <td>@if ($r['rep_id'] ?? null)<a href="{{ route('ops.rep', $r['rep_id']) }}">{{ $r['rep'] }}</a>@else{{ $r['rep'] ?? '—' }}@endif</td>
+                    <td>@php $du = $docUrl($r); @endphp@if ($du)<a href="{{ $du }}">{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</a>@else{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}@endif</td>
                     <td class="num">{{ $r['date']->toDateString() }}</td>
                     <td class="num neg">{{ $fmt($r['open']) }}</td>
                 </tr>
@@ -309,13 +336,16 @@
                 <tr><td colspan="7" class="empty">—</td></tr>
             @endforelse
             </tbody>
+            @if ($data['overdue']['count'])
+                <tfoot><tr><th colspan="6">{{ __('cashflow.total') }}</th><th class="num">{{ $fmt($overdueTotal) }}</th></tr></tfoot>
+            @endif
         </table>
     </div>
 </div>
 
 {{-- ═══ بلا شروط ═══ --}}
 @if ($data['no_terms']['count'])
-<div class="card">
+<div class="card" id="cf-noterms">
     <h3>❔ {{ __('cashflow.table_no_terms') }} <span class="side mid">{{ $fmt($data['no_terms']['total']) }}</span></h3>
     <div class="tablewrap rpt-wrap">
         <table>
@@ -327,15 +357,16 @@
             @foreach ($data['no_terms']['rows'] as $r)
                 <tr>
                     <td><a href="{{ route('erp.clients.show', $r['client_id']) }}">{{ $r['client'] }}</a></td>
-                    <td>{{ $r['rep'] ?? '—' }}</td>
+                    <td>@if ($r['rep_id'] ?? null)<a href="{{ route('ops.rep', $r['rep_id']) }}">{{ $r['rep'] }}</a>@else{{ $r['rep'] ?? '—' }}@endif</td>
                     <td>{{ $r['channel'] ?? '—' }}</td>
-                    <td>{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</td>
+                    <td>@php $du = $docUrl($r); @endphp@if ($du)<a href="{{ $du }}">{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}</a>@else{{ $r['doc'] ?: __('cashflow.kind_'.$r['kind']) }}@endif</td>
                     <td class="num">{{ $r['date']->toDateString() }}</td>
                     <td class="num">{{ $fmt($r['open']) }}</td>
                     <td data-noprint><a class="btn sm" href="{{ route('erp.clients.show', $r['client_id']) }}">{{ __('cashflow.set_terms') }}</a></td>
                 </tr>
             @endforeach
             </tbody>
+            <tfoot><tr><th colspan="5">{{ __('cashflow.total') }}</th><th class="num">{{ $fmt($data['no_terms']['total']) }}</th><th></th></tr></tfoot>
         </table>
     </div>
 </div>
@@ -345,7 +376,7 @@
 <dialog id="cfDay" class="cf-dlg">
     <h3 id="cfDayTitle" style="margin-top:0"></h3>
     <div class="tablewrap">
-        <table>
+        <table data-noxl>
             <thead><tr><th>{{ __('cashflow.col_client') }}</th><th>{{ __('cashflow.col_rep') }}</th><th>{{ __('cashflow.col_doc') }}</th><th>{{ __('cashflow.col_doc_date') }}</th><th class="num">{{ __('cashflow.col_open') }}</th><th>{{ __('cashflow.col_terms') }}</th></tr></thead>
             <tbody id="cfDayBody"></tbody>
         </table>

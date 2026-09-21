@@ -6,7 +6,8 @@
     $fmt = fn ($n) => number_format((float) $n);
 
     // ⚠️ قايمة المديرين بتتبني هنا — البليد مابيشتغلش جوه الجافاسكريبت
-    $managerOptions = '<option value="">—</option>';
+    // الاختيار الفاضي مكتوب بالكلام — «—» لوحدها ماكانتش مفهومة (٢٢/٩)
+    $managerOptions = '<option value="">— '.e(__('common.none')).' —</option>';
     foreach ($managers as $m) {
         $managerOptions .= '<option value="'.(int) $m->id.'">'.e($m->displayName()).'</option>';
     }
@@ -67,12 +68,12 @@
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $b->address }}</span>
                         @endif
                     </td>
-                    <td class="s">{{ $b->manager?->displayName() ?: '—' }}</td>
+                    <td class="s">@if ($b->manager)<a href="{{ route('ops.rep', $b->manager) }}">{{ $b->manager->displayName() }}</a>@else — @endif</td>
                     <td class="num">{{ $fmt($b->users_count) }}</td>
                     <td class="num">{{ $fmt($b->clients_count) }}</td>
                     <td class="num">{{ $fmt($b->zones_count) }}</td>
-                    <td class="num">{{ $fmt($b->warehouses_count) }}</td>
-                    <td class="num">{{ $fmt($b->vehicles_count) }}</td>
+                    <td class="num">@if ($b->warehouses_count > 0)<a href="{{ route('erp.warehouses') }}">{{ $fmt($b->warehouses_count) }}</a>@else{{ $fmt($b->warehouses_count) }}@endif</td>
+                    <td class="num">@if ($b->vehicles_count > 0)<a href="{{ route('erp.vehicles') }}">{{ $fmt($b->vehicles_count) }}</a>@else{{ $fmt($b->vehicles_count) }}@endif</td>
                     <td>
                         <span class="badge {{ $b->active ? 'b-green' : 'b-gray' }}">
                             {{ $b->active ? __('common.active') : __('common.inactive') }}

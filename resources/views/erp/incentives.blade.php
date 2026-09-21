@@ -63,7 +63,7 @@
         <h3>💵 {{ __('incent.tiers') }}
             <span class="side">{{ __('incent.tiers_hint') }}</span></h3>
         <div class="tablewrap" style="max-width:480px">
-            <table id="tiersTbl">
+            <table id="tiersTbl" data-noxl>
                 <tr>
                     <th style="text-align:center">{{ __('incent.tier_min') }}</th>
                     <th style="text-align:center">{{ __('incent.tier_rate') }}</th>

@@ -70,31 +70,34 @@
 
 {{-- ═══ البحث والفلاتر — لايف على الكروت والجدول مع بعض ═══ --}}
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="search" id="tkSearch" placeholder="🔎 {{ __('tasks.search_ph') }}"
-               style="flex:1;min-width:220px">
-        <select id="tkPrFilter" style="flex:0 0 150px">
-            <option value="">{{ __('tasks.all_priorities') }}</option>
-            @foreach (\App\Models\Task::PRIORITIES as $p)
-                <option value="{{ $p }}">{{ __('tasks.pr_'.$p) }}</option>
-            @endforeach
-        </select>
-        <select id="tkStFilter" style="flex:0 0 170px">
-            <option value="">{{ __('tasks.all_statuses') }}</option>
-            <option value="open">{{ __('tasks.st_open') }}</option>
-            <option value="late">{{ __('tasks.late') }}</option>
-            <option value="submitted">{{ __('tasks.st_submitted') }}</option>
-            <option value="approved">{{ __('tasks.st_approved') }}</option>
-        </select>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <label class="fl wide grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" id="tkSearch" placeholder="🔎 {{ __('tasks.search_ph') }}"></label>
+        <label class="fl"><span>{{ __('ui.l_priority') }}</span>
+            <select id="tkPrFilter">
+                <option value="">{{ __('tasks.all_priorities') }}</option>
+                @foreach (\App\Models\Task::PRIORITIES as $p)
+                    <option value="{{ $p }}">{{ __('tasks.pr_'.$p) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
+            <select id="tkStFilter">
+                <option value="">{{ __('tasks.all_statuses') }}</option>
+                <option value="open">{{ __('tasks.st_open') }}</option>
+                <option value="late">{{ __('tasks.late') }}</option>
+                <option value="submitted">{{ __('tasks.st_submitted') }}</option>
+                <option value="approved">{{ __('tasks.st_approved') }}</option>
+            </select></label>
         <span id="tkCount" class="badge b-blue" style="display:none"></span>
         <button type="button" id="tkClear" class="btn sm" style="display:none">✕ {{ __('tasks.clear_filters') }}</button>
     </div>
 
     {{-- فلتر «من — إلى» (٩/٩/٢٠٢٦) على **موعد التسليم** — ده من السيرفر
          مش لايف زي الفلاتر اللي فوقه، لأنه بيقصّ الكويري نفسها --}}
-    <form method="GET" class="frow" style="margin:10px 0 0" data-noprint>
-        <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
-        <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+    <form method="GET" class="searchbar" style="margin:10px 0 0" data-noprint>
+        <span class="badge b-gray" style="align-self:flex-end;margin-bottom:6px">⏰ {{ __('tasks.f_deadline') }}</span>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        <a class="btn" href="{{ route('erp.tasks') }}">{{ __('common.clear') }}</a>
     </form>
 </div>
 

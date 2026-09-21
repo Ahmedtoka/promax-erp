@@ -38,7 +38,7 @@
                     <td>
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 32])
-                            <b>{{ $u->displayName() }}</b>
+                            @if (in_array($u->role, \App\Models\User::FIELD_WORK_ROLES, true))<a href="{{ route('ops.rep', $u->id) }}"><b>{{ $u->displayName() }}</b></a>@else<b>{{ $u->displayName() }}</b>@endif
                         </div>
                     </td>
                     <td class="num">{{ $u->code ?? '—' }}</td>
@@ -231,7 +231,7 @@
             <div id="uWarehouseBox">
                 <label class="f">{{ __('stock.warehouse') }} <span id="uWhStar" hidden>*</span></label>
                 <select name="warehouse_id" id="uWarehouse" style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                     @foreach ($warehouses as $w)
                         <option value="{{ $w->id }}">{{ $w->displayName() }}</option>
                     @endforeach
@@ -292,7 +292,7 @@
             <div>
                 <label class="f">{{ __('geo.governorate') }}</label>
                 <select name="governorate" style="width:100%">
-                    <option value="">—</option>
+                    <option value="">{{ __('ui.choose', ['x' => __('ui.l_gov')]) }}</option>
                     @foreach (\App\Support\Governorates::options() as $gk => $gLabel)
                         <option value="{{ $gk }}">{{ $gLabel }}</option>
                     @endforeach

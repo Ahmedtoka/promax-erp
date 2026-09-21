@@ -65,37 +65,40 @@
     <div class="card"><div class="alert warn">{{ __('stock.no_warehouse') }}</div></div>
 @else
 
+{{-- الكروت: الأرفف على الخريطة، والوحدات على جدول الرصيد بالرف اللي مجموعه نفس الرقم (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#shMap">
         <div class="lbl">{{ __('stock.shelf_count') }}</div>
         <div class="val">{{ $fmt($locations->count()) }}</div>
         <div class="sub2">{{ $warehouse->displayName() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#shMap">
         <div class="lbl">{{ __('stock.occupied') }}</div>
         <div class="val">{{ $fmt($occupied) }}</div>
         <div class="sub2">{{ __('stock.empty_shelf') }}: {{ $fmt(max($locations->count() - $occupied, 0)) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#slList">
         <div class="lbl">{{ __('stock.total_on_shelves') }}</div>
         <div class="val pos">{{ $fmt($totalOnShelves) }}</div>
         <div class="sub2">{{ __('stock.units') }}</div>
-    </div>
+    </a>
 </div>
 
-<div class="card">
+<div class="card" id="shMap">
     <h3>🗄️ {{ __('stock.shelf_map') }} <span class="side">{{ __('stock.map_hint') }}</span></h3>
 
     {{-- البحث بيضوّي على الأرفف المطابقة في الخريطة (سيرفر سايد) --}}
     <form class="searchbar" method="GET">
         <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
-        <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('stock.search_shelf') }}">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('stock.search_shelf') }}"></label>
+        <label class="fl"><span>{{ __('stock.expiry_state') }}</span>
         <select name="state">
             <option value="">{{ __('stock.all_states') }}</option>
             @foreach ($stateLabel as $k => $lbl)
                 <option value="{{ $k }}" @selected(($filters['state'] ?? '') === $k)>{{ $lbl }}</option>
             @endforeach
-        </select>
+        </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">{{ __('common.clear') }}</a>
     </form>
@@ -195,25 +198,28 @@
 </div>
 
 {{-- ═══ جدول المخزون بالأرفف — الليستة الكاملة بالنقل والصور ═══ --}}
-<div class="card">
+<div class="card" id="slList">
     <h3>📋 {{ __('stock.stock_by_location') }}
         <span class="side">{{ __('stock.total_on_shelves') }}: {{ $fmt($totalOnShelves) }}</span></h3>
 
     <div class="searchbar" style="margin-bottom:10px">
-        <input type="search" id="slFilter" placeholder="🔍 {{ __('stock.search_stock_rows') }}"
-               oninput="slApply()" style="flex:1;min-width:220px">
-        <select id="slLoc" onchange="slApply()" style="min-width:130px">
-            <option value="">{{ __('stock.location') }}: {{ __('common.all') }}</option>
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" id="slFilter" placeholder="🔍 {{ __('stock.search_stock_rows') }}"
+                   oninput="slApply()"></label>
+        <label class="fl"><span>{{ __('ui.l_location') }}</span>
+        <select id="slLoc" onchange="slApply()">
+            <option value="">{{ __('ui.all_of', ['x' => __('uid.shelves')]) }}</option>
             @foreach ($locations->sortBy('code') as $loc)
                 <option value="{{ $loc->code }}">{{ $loc->code }}</option>
             @endforeach
-        </select>
-        <select id="slState" onchange="slApply()" style="min-width:130px">
+        </select></label>
+        <label class="fl"><span>{{ __('stock.expiry_state') }}</span>
+        <select id="slState" onchange="slApply()">
             <option value="">{{ __('stock.all_states') }}</option>
             @foreach ($stateLabel as $k => $lbl)
                 <option value="{{ $k }}">{{ $lbl }}</option>
             @endforeach
-        </select>
+        </select></label>
         <span class="s" style="color:var(--muted)"><b id="slCount">0</b> {{ __('stock.rows_visible') }}</span>
     </div>
 
@@ -224,8 +230,8 @@
                 <th>{{ __('stock.location') }}</th>
                 <th style="text-align:start">{{ __('stock.item') }}</th>
                 <th>{{ __('stock.batch_no') }}</th>
-                <th>{{ __('stock.expires_on') }}</th>
-                <th style="width:190px">{{ __('stock.life_left') }}</th>
+                <th data-nosum>{{ __('stock.expires_on') }}</th>
+                <th style="width:190px" data-nosum>{{ __('stock.life_left') }}</th>
                 <th>{{ __('common.qty') }}</th>
                 @if ($manager)<th></th>@endif
             </tr>
@@ -265,14 +271,14 @@
                                     <div style="width:72px;height:72px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">📦</div>
                                 @endif
                                 <div>
-                                    <b style="font-size:12.5px">{{ $p?->displayName() ?? '—' }}</b>
+                                    @if ($p)<a href="{{ route('erp.products.show', $p) }}"><b style="font-size:12.5px">{{ $p->displayName() }}</b></a>@else<b style="font-size:12.5px">—</b>@endif
                                     @if ($p)
                                         <div style="font-size:10px;color:var(--muted)">{{ $p->code }}</div>
                                     @endif
                                 </div>
                             </div>
                         </td>
-                        <td class="num">{{ $b?->batch_no ?? '—' }}</td>
+                        <td class="num">@if ($b?->goods_receipt_id)<a href="{{ route('wh.receipt', $b->goods_receipt_id) }}">{{ $b->batch_no }}</a>@else{{ $b?->batch_no ?? '—' }}@endif</td>
                         <td class="num">{{ $b?->expires_on?->format('Y-m-d') ?? '—' }}</td>
                         <td>
                             @if ($pct === null)
@@ -325,7 +331,7 @@
                 <tr>
                     <th style="text-align:start">{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>
-                    <th>{{ __('stock.expires_on') }}</th>
+                    <th data-nosum>{{ __('stock.expires_on') }}</th>
                     <th>{{ __('common.qty') }}</th>
                     @if ($manager)<th></th>@endif
                 </tr>
@@ -389,6 +395,8 @@
                 <div>
                     <label class="f">{{ __('stock.warehouse') }}</label>
                     <select name="warehouse_id" required style="width:100%">
+                        {{-- المخزن المفتوح متعلّم عن قصد — والاختيار الفاضي موجود للي عايز يغيّر (٢٢/٩) --}}
+                        <option value="">{{ __('ui.choose', ['x' => __('ui.l_warehouse')]) }}</option>
                         @foreach ($warehouses as $w)
                             <option value="{{ $w->id }}" @selected($w->id === $warehouse->id)>{{ $w->displayName() }}</option>
                         @endforeach

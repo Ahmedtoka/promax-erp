@@ -18,32 +18,33 @@
 
 @section('content')
 
+{{-- الكروت بتنزّل على الجدول اللي بيفصّل رقمها (٢٢/٩) — والمشتريات المتغطية بتفتح عملاءها --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('client.signed_contracts') }}</div>
         <div class="val pos">{{ $contracts->count() }}</div>
         <div class="sub2">{{ __('client.out_of_clients', ['count' => $clientsCount]) }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('report.average_discount') }}</div>
         <div class="val">{{ number_format($avgDisc * 100, 1) }}%</div>
         <div class="sub2">{{ __('client.invoice_discount') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ $hiddenCost->count() > 0 ? '#hiddenCard' : '#signedCard' }}">
         <div class="lbl">{{ __('client.total_deduction') }}</div>
         <div class="val {{ $avgTotalDeduction > 0.25 ? 'neg' : 'mid' }}">{{ number_format($avgTotalDeduction * 100, 1) }}%</div>
         <div class="sub2">{{ __('client.avg_true_deduction') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('client.annual_commitment') }}</div>
         <div class="val" style="color:var(--primary)">{{ $fmt($totalCommitment) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('client.annual_commitment_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.clients', ['contract' => 'yes', 'sort' => 'purchases', 'dir' => 'desc']) }}">
         <div class="lbl">{{ __('report.purchases_under_contract') }}</div>
         <div class="val">{{ $fmt($covered) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ number_format($covered / max($totalPurch, 1) * 100, 1) }}% {{ __('report.of_total') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════ اللي محتاج قرار دلوقتي ═══════════ --}}
@@ -74,19 +75,21 @@
                         <tr>
                             <th>{{ __('client.contract') }}</th>
                             <th>{{ __('client.chain') }}</th>
-                            <th>{{ __('client.ends_at') }}</th>
-                            <th class="num">{{ __('client.days_to_expiry') }}</th>
+                            <th data-nosum>{{ __('client.ends_at') }}</th>
+                            <th class="num" data-nosum>{{ __('client.days_to_expiry') }}</th>
                             <th>{{ __('common.notes') }}</th>
                         </tr>
                         @foreach ($rows as $ct)
                             <tr>
-                                <td class="num"><b>{{ $ct->number }}</b></td>
+                                <td class="num"><a href="{{ route('erp.contracts.show', $ct) }}"><b>{{ $ct->number }}</b></a></td>
                                 <td>
                                     @if ($ct->client)
                                         <a href="{{ route('erp.clients.show', $ct->client) }}">{{ $ct->client->displayName() }}</a>
+                                    @elseif ($ct->group)
+                                        <a href="{{ route('erp.groups.show', $ct->group) }}">{{ $ct->group->displayName() }}</a>
+                                        <span class="badge b-gray">{{ __('client.chain') }}</span>
                                     @else
                                         {{ $ct->displayChain() ?: '—' }}
-                                        @if ($ct->group_id)<span class="badge b-gray">{{ __('client.chain') }}</span>@endif
                                     @endif
                                 </td>
                                 <td class="num">{{ $ct->ends_at?->format('Y-m-d') ?? '—' }}</td>
@@ -117,17 +120,17 @@
 
 {{-- ═══════════ الخصومات المخفية ═══════════ --}}
 @if ($hiddenCost->count() > 0)
-<div class="card">
+<div class="card" id="hiddenCard">
     <h3>🫥 {{ __('client.hidden_deductions') }}
         <span class="side">{{ __('client.hidden_deductions_hint') }}</span></h3>
     <div class="tablewrap">
         <table>
             <tr>
                 <th>{{ __('client.chain') }}</th>
-                <th class="num">{{ __('client.invoice_discount') }}</th>
-                <th class="num">{{ __('client.after_invoice') }}</th>
-                <th class="num">{{ __('client.total_deduction') }}</th>
-                <th class="num">{{ __('client.withholding') }}</th>
+                <th class="num" data-nosum>{{ __('client.invoice_discount') }}</th>
+                <th class="num" data-nosum>{{ __('client.after_invoice') }}</th>
+                <th class="num" data-nosum>{{ __('client.total_deduction') }}</th>
+                <th class="num" data-nosum>{{ __('client.withholding') }}</th>
                 <th class="num">{{ __('client.annual_commitment') }}</th>
             </tr>
             @foreach ($hiddenCost as $ct)
@@ -135,9 +138,12 @@
                     <td>
                         @if ($ct->client)
                             <a href="{{ route('erp.clients.show', $ct->client) }}">{{ $ct->client->displayName() }}</a>
+                        @elseif ($ct->group)
+                            <a href="{{ route('erp.groups.show', $ct->group) }}">{{ $ct->group->displayName() }}</a>
                         @else
                             {{ $ct->displayChain() ?: '—' }}
                         @endif
+                        <br><a href="{{ route('erp.contracts.show', $ct) }}" style="font-size:10px" class="num">{{ $ct->number }}</a>
                     </td>
                     <td class="num">{{ number_format($ct->discount * 100, 2) }}%</td>
                     <td class="num mid"><b>+{{ number_format($ct->hiddenDeduction() * 100, 2) }}%</b></td>
@@ -155,18 +161,19 @@
 </div>
 @endif
 
-<div class="card">
+<div class="card" id="signedCard">
     <h3>📜 {{ __('client.signed_contracts') }}</h3>
     <div class="searchbar">
-        <input type="text" id="q" placeholder="🔍 {{ __('client.search_by_client_or_chain') }}" oninput="filterCon()">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" id="q" placeholder="🔍 {{ __('client.search_by_client_or_chain') }}" oninput="filterCon()"></label>
     </div>
     <div class="tablewrap">
         <table id="conTbl">
             <tr>
                 <th>{{ __('client.client') }}</th><th>{{ __('client.chain') }}</th><th>{{ __('client.type') }}</th>
-                <th class="num">{{ __('client.invoice_discount') }}</th><th class="num">{{ __('client.total_deduction') }}</th>
-                <th class="num">{{ __('client.clause') }}</th>
-                <th>{{ __('client.payment_terms') }}</th><th>{{ __('client.expires_on') }}</th>
+                <th class="num" data-nosum>{{ __('client.invoice_discount') }}</th><th class="num" data-nosum>{{ __('client.total_deduction') }}</th>
+                <th class="num" data-nosum>{{ __('client.clause') }}</th>
+                <th data-nosum>{{ __('client.payment_terms') }}</th><th data-nosum>{{ __('client.expires_on') }}</th>
                 <th class="num">{{ __('client.purchases') }}</th><th class="num">{{ __('client.balance') }}</th><th></th>
                 @if ($manager)<th></th>@endif
             </tr>
@@ -177,13 +184,13 @@
                         @if ($ct->client)
                             <a href="{{ route('erp.clients.show', $ct->client) }}"><b>{{ $ct->client->displayName() }}</b></a>
                         @elseif ($ct->group)
-                            <b>{{ $ct->group->displayName() }}</b>
+                            <a href="{{ route('erp.groups.show', $ct->group) }}"><b>{{ $ct->group->displayName() }}</b></a>
                             <span class="badge b-gray">{{ __('client.chain') }}</span>
                         @else
                             <b>{{ $ct->displayChain() ?: '—' }}</b>
                             <span class="badge b-orange">{{ __('client.alert_unlinked') }}</span>
                         @endif
-                        <br><span style="font-size:10px;color:var(--muted)" class="num">{{ $ct->number }}</span>
+                        <br><a href="{{ route('erp.contracts.show', $ct) }}" style="font-size:10px" class="num">{{ $ct->number }}</a>
                     </td>
                     <td>{{ $ct->displayChain() ?: '—' }}</td>
                     <td><span class="badge b-blue">{{ $ct->typeLabel() }}</span></td>
@@ -237,10 +244,10 @@
     <h3>🚫 {{ __('report.top_uncontracted', ['count' => 20]) }} <span class="side">{{ __('report.contract_opportunities') }}</span></h3>
     <div class="tablewrap">
         <table>
-            <tr><th>{{ __('client.client') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th>{{ __('client.collection_rate') }}</th></tr>
+            <tr><th>{{ __('client.client') }}</th><th>{{ __('client.category') }}</th><th>{{ __('client.zone') }}</th><th>{{ __('client.purchases') }}</th><th>{{ __('client.collected') }}</th><th>{{ __('client.balance') }}</th><th data-nosum>{{ __('client.collection_rate') }}</th></tr>
             @foreach ($noContract as $c)
                 <tr class="clickable" onclick="location.href='{{ route('erp.clients.show', $c) }}'">
-                    <td><b>{{ $c->displayName() }}</b></td>
+                    <td><a href="{{ route('erp.clients.show', $c) }}" onclick="event.stopPropagation()"><b>{{ $c->displayName() }}</b></a></td>
                     <td><span class="badge {{ $c->categoryClass() }}">{{ $c->categoryLabel() }}</span></td>
                     <td style="color:var(--muted)">{{ $c->zone?->displayName() ?? '—' }}</td>
                     <td class="num">{{ $fmt($c->purchases) }}</td>
@@ -260,6 +267,7 @@
         <h4>{{ __('client.new_contract') }}</h4>
         <div><label class="f">{{ __('client.client') }}</label>
             <select name="client_id" required style="width:100%">
+                <option value="">{{ __('ui.choose', ['x' => __('ui.l_client')]) }}</option>
                 @foreach ($noContract as $c)<option value="{{ $c->id }}">{{ $c->displayName() }}</option>@endforeach
             </select>
         </div>

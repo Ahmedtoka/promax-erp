@@ -27,44 +27,45 @@
 @section('content')
 
 {{-- ═══ الكروت: أرقام اللقطة المعتمدة — مش إعادة البناء ═══ --}}
+{{-- (٢٢/٩) الكروت بتودّي: المندوب لصفحته، المتوقع لمعادلة المطابقة، المستلم للمحضر، الرصيد لشاشة تصفية المندوب، البضاعة لعهدته --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="{{ route('ops.rep', $rep->id) }}">
         <div class="lbl">{{ __('settle.rep') }} · <b>{{ $s->number }}</b></div>
         <div class="val" style="font-size:17px">{{ $rep->displayName() }}</div>
         <div class="sub2" dir="ltr">
             {{ $s->from_at?->format('m-d h:i A') ?? __('settle.since_start') }} ← {{ $s->to_at->format('m-d h:i A') }}
         </div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#st-recon">
         <div class="lbl">💰 {{ __('settle.expected') }}</div>
         <div class="val">{{ $fmt($s->expected) }}</div>
         <div class="sub2">{{ __('settle.expected_hint') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.repclose.doc', $s) }}">
         <div class="lbl">🤝 {{ __('settle.received') }}</div>
         <div class="val pos">{{ $fmt($s->received) }}</div>
         <div class="sub2">{{ __('settle.by') }}: {{ $s->creator?->name ?? '—' }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.repclose.show', $rep->id) }}">
         <div class="lbl">⚖️ {{ __('settle.balance') }}</div>
         <div class="val {{ (float) $s->balance > 0 ? 'neg' : ((float) $s->balance < 0 ? 'pos' : '') }}">
             {{ $fmt(abs((float) $s->balance)) }}
         </div>
         <div class="sub2">{{ $s->balanceLabel() }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.repclose.doc', $s) }}">
         <div class="lbl">📦 {{ __('settle.goods_match') }}</div>
         <div class="val {{ $goodsDiff === 0 ? 'pos' : 'neg' }}">
             {{ $goodsDiff === 0 ? '0 ✓' : number_format($goodsDiff) }}
         </div>
         <div class="sub2">{{ __('settle.shortage') }}</div>
-    </div>
+    </a>
 </div>
 
 {{-- ═══════════════════════════════════════════════════════════
      شريط المطابقة — إجابة «31,767 ولا 29,045؟» بمعادلة صريحة
      ═══════════════════════════════════════════════════════════ --}}
-<div class="card">
+<div class="card" id="st-recon">
     <h3>🔎 {{ __('settle.recon_title') }}
         <span class="side">{{ __('settle.recon_hint') }}</span></h3>
 
@@ -136,7 +137,9 @@
                         @forelse ($box['rows'] as $inv)
                             <tr class="clickable" onclick="window.open('{{ route('ops.invoice', $inv) }}', '_blank')">
                                 <td class="num"><b>{{ $inv->number }}</b></td>
-                                <td style="text-align:start">{{ $inv->client?->fullName() ?? '—' }}</td>
+                                <td style="text-align:start">
+                                    @if ($inv->client)<a href="{{ route('erp.clients.show', $inv->client_id) }}" onclick="event.stopPropagation()">{{ $inv->client->fullName() }}</a>@else — @endif
+                                </td>
                                 <td class="num" style="font-size:11px" dir="ltr">{{ $inv->created_at->format('m-d h:i A') }}</td>
                                 {{-- بالإجمالي شامل الضريبة — نفس عقيدة الليدجر --}}
                                 <td class="num {{ $box['cls'] }}"><b>{{ $fmt($inv->grand_total) }}</b></td>
@@ -186,8 +189,8 @@
                         $poCreditRow = round(max(0, $poVal - $poCashRow), 2);
                     @endphp
                     <tr>
-                        <td style="text-align:start"><b>{{ $po->number }}</b></td>
-                        <td>{{ $po->client?->fullName() ?? '—' }}</td>
+                        <td style="text-align:start"><a href="{{ route('ops.pos.show', $po->id) }}"><b>{{ $po->number }}</b></a></td>
+                        <td>@if ($po->client)<a href="{{ route('erp.clients.show', $po->client_id) }}">{{ $po->client->fullName() }}</a>@else — @endif</td>
                         <td class="num" style="font-size:11px" dir="ltr">{{ $po->delivered_at?->format('m-d h:i A') ?? '—' }}</td>
                         <td class="num"><b>{{ $fmt($poVal) }}</b></td>
                         <td class="num pos">{{ $poCashRow > 0 ? $fmt($poCashRow) : '—' }}</td>
@@ -232,7 +235,9 @@
             <tbody>
                 @forelse ($collections as $c)
                     <tr>
-                        <td style="text-align:start">{{ $c['client'] ?? '—' }}</td>
+                        <td style="text-align:start">
+                            @if (! empty($c['client_id']))<a href="{{ route('erp.clients.show', $c['client_id']) }}">{{ $c['client'] ?? '—' }}</a>@else{{ $c['client'] ?? '—' }}@endif
+                        </td>
                         <td class="num" style="font-size:11px" dir="ltr">{{ $c['at'] ?? '—' }}</td>
                         <td>
                             <span class="badge {{ ($c['method'] ?? '') === 'cash' ? 'b-green' : 'b-blue' }}">
@@ -242,7 +247,9 @@
                                     {{ $c['cheque_bank'] ?? '' }} · {{ $c['cheque_due'] }}</div>
                             @endif
                         </td>
-                        <td class="num" style="font-size:11px">{{ ($c['reference'] ?? '') ?: '—' }}</td>
+                        <td class="num" style="font-size:11px">
+                            @if (! empty($c['reference']))<a href="{{ route('erp.collections', ['ref' => $c['reference']]) }}">{{ $c['reference'] }}</a>@else — @endif
+                        </td>
                         <td class="num pos"><b>{{ $fmt($c['amount'] ?? 0) }}</b></td>
                     </tr>
                 @empty
@@ -283,8 +290,8 @@
                 <tbody>
                     @forelse ($f['returns'] as $r)
                         <tr>
-                            <td style="text-align:start"><b>{{ $r->number }}</b></td>
-                            <td>{{ $r->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start"><a href="{{ route('ops.returns.show', $r->id) }}"><b>{{ $r->number }}</b></a></td>
+                            <td>@if ($r->client)<a href="{{ route('erp.clients.show', $r->client_id) }}">{{ $r->client->fullName() }}</a>@else — @endif</td>
                             <td><span class="badge b-purple">{{ $r->policyLabel() }}</span></td>
                             <td class="num"><b>{{ $fmt($r->grand_total) }}</b></td>
                         </tr>
@@ -320,7 +327,7 @@
                 <tbody>
                     @forelse ($f['refund_rows'] as $t)
                         <tr>
-                            <td style="text-align:start">{{ $t->client?->fullName() ?? '—' }}</td>
+                            <td style="text-align:start">@if ($t->client)<a href="{{ route('erp.clients.show', $t->client_id) }}">{{ $t->client->fullName() }}</a>@else — @endif</td>
                             <td class="num" style="font-size:11px" dir="ltr">{{ $t->created_at->format('m-d h:i A') }}</td>
                             <td class="num neg"><b>{{ $fmt($t->debit) }}</b></td>
                         </tr>

@@ -71,7 +71,7 @@
         </div>
 
         <div class="tablewrap">
-            <table class="doc-table">
+            <table data-noxl class="doc-table">
                 <thead>
                 <tr>
                     <th>#</th>

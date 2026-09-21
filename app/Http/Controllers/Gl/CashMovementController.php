@@ -28,6 +28,21 @@ class CashMovementController extends Controller
 
         $posted = (clone $q)->where('status', 'posted');
 
+        // ═══ تصدير كل النتيجة المفلترة (٢٢/٩) — نفس الكويري قبل الباجينيشن،
+        // والإجمالي = «إجمالي المرحّل» اللي على الشاشة (الملغي بيتكتب بس مابيتجمعش) ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderByDesc('date')->orderByDesc('id')->limit(5000)->get();
+
+            return \App\Support\Csv::download('cash-movements-'.now()->format('Y-m-d-Hi').'.csv',
+                [__('gl.number'), __('common.date'), __('gl.kind'), __('gl.rep'), __('gl.reference'), __('gl.status'), __('gl.amount'), __('gl.note')],
+                $all->map(fn ($m) => [
+                    $m->number, $m->date?->format('Y-m-d'), __('gl.kind_'.$m->kind), $m->user?->displayName() ?? '',
+                    (string) $m->reference, __('gl.status_'.$m->status), \App\Support\Csv::money($m->amount), (string) $m->note,
+                ]),
+                [__('gl.total_posted'), '', '', '', '', '', \App\Support\Csv::money((clone $posted)->sum('amount')), ''],
+                \App\Support\Csv::meta(__('gl.cash'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         return view('gl.cash', [
             'range' => $range,
             'rows' => (clone $q)->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),

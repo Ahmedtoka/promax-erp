@@ -21,9 +21,9 @@
         <span class="side">{{ __('incent.targets_hint') }}</span></h3>
 
     <div class="searchbar" style="margin-bottom:12px">
-        <form method="GET" style="display:flex;gap:8px;align-items:center">
-            <label class="f" style="margin:0">{{ __('incent.month') }}</label>
-            <input type="month" name="month" value="{{ $month->format('Y-m') }}" onchange="this.form.submit()">
+        <form method="GET" style="display:flex;gap:8px;align-items:flex-end">
+            <label class="fl"><span>{{ __('ui.l_month') }}</span>
+                <input type="month" name="month" value="{{ $month->format('Y-m') }}" onchange="this.form.submit()"></label>
         </form>
         <form method="POST" action="{{ route('erp.targets.copy') }}" style="margin-inline-start:auto">
             @csrf
@@ -36,7 +36,8 @@
         @csrf
         <input type="hidden" name="month" value="{{ $month->format('Y-m') }}">
         <div class="tablewrap tg-tbl">
-            <table>
+            {{-- جدول إدخال مش داتا — من غير زرار إكسيل --}}
+            <table data-noxl>
                 <tr>
                     <th style="text-align:start">{{ __('settle.rep') }}</th>
                     <th style="width:170px">💰 {{ __('incent.money_target') }}</th>
@@ -48,7 +49,7 @@
                     @php $t = $targets->get($rep->id); @endphp
                     <tr>
                         <td style="text-align:start">
-                            <b>{{ $rep->displayName() }}</b>
+                            <a href="{{ route('ops.rep', $rep->id) }}"><b>{{ $rep->displayName() }}</b></a>
                             <div style="font-size:10px;color:var(--muted)">{{ $rep->code }} · {{ __('enums.role.'.$rep->role) }}</div>
                         </td>
                         <td><input type="number" name="rows[{{ $rep->id }}][money]" min="0" step="100" dir="ltr"

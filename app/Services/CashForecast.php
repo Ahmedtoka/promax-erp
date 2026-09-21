@@ -165,8 +165,11 @@ class CashForecast
             'client_id' => $client->id,
             'client' => $client->displayName(),
             'rep' => $client->rep?->displayName(),
+            'rep_id' => $client->rep?->id,
             'channel' => $client->channel?->displayName(),
             'tx_id' => $t->id,
+            // لينك المستند لو أمر توريد (٢٢/٩) — الفاتورة ليها `invoice_id` تحت
+            'po_id' => $t->source_type === \App\Models\PurchaseOrder::class ? $t->source_id : null,
             'kind' => $t->kind,
             'doc' => $t->reference ?: ($t->memo ?: ''),
             'date' => $t->date,

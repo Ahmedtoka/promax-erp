@@ -47,7 +47,8 @@
             @if ($filters['unlinked'] ?? false)
                 <input type="hidden" name="unlinked" value="1">
             @endif
-            <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}">
+            <label class="fl"><span>{{ __('ui.l_search') }}</span>
+                <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
         </form>
         <a class="btn {{ ($filters['unlinked'] ?? false) ? 'gold' : '' }}"
            href="{{ route('online.products', array_filter(['search' => $filters['search'] ?? null, 'unlinked' => ($filters['unlinked'] ?? false) ? null : 1])) }}">
@@ -57,7 +58,8 @@
     <form method="POST" action="{{ route('online.products.save') }}">
         @csrf
         <div class="tablewrap">
-            <table>
+            {{-- جدول ربط (سيلكت وخانة لكل صف) — إكسيل الجدول بيقرا النص بس فكان هيطلّع الربط فاضي (٢٢/٩) --}}
+            <table data-noxl>
                 <tr>
                     <th style="width:52px"></th>
                     <th>{{ __('online.shopify_product') }}</th>

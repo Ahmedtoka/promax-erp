@@ -18,30 +18,31 @@
 
 @section('content')
 
+{{-- الكروت بتنزّل على القسم اللي بيفصّل رقمها (٢٢/٩) --}}
 <div class="kpis">
-    <div class="kpi">
+    <a class="kpi" href="#govsCard">
         <div class="lbl">{{ __('geo.governorate') }}</div>
         {{-- ⚠️ مش `except()` — على كولكشن Eloquent بتفلتر بمفاتيح
              الموديلز وبتنادي getKey() على المجموعات = 500 --}}
         <div class="val">{{ $byGov->keys()->reject(fn ($k) => $k === '_none')->count() }}</div>
         <div class="sub2">{{ __('team.of_27_governorates') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="#zonesStart">
         <div class="lbl">{{ __('team.zones') }}</div>
         <div class="val">{{ $zones->count() }}</div>
         <div class="sub2">{{ $zones->where('active', true)->count() }} {{ __('common.active') }}</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a class="kpi" href="{{ route('erp.clients', ['status' => 'active']) }}">
         <div class="lbl">{{ __('client.clients') }}</div>
         <div class="val">{{ $fmt($zones->sum('active_clients')) }}</div>
         <div class="sub2">{{ __('team.in_zones_hint') }}</div>
-    </div>
+    </a>
     @if (($none = $byGov->get('_none')) && $none->isNotEmpty())
-        <div class="kpi">
+        <a class="kpi" href="#gov__none">
             <div class="lbl">{{ __('geo.no_governorate') }}</div>
             <div class="val neg">{{ $none->count() }}</div>
             <div class="sub2">{{ __('team.no_gov_hint') }}</div>
-        </div>
+        </a>
     @endif
 </div>
 
@@ -61,7 +62,7 @@
     // إحصاءات كل محافظة من المناطق المحمّلة — مفيش كويريز زيادة
     $govStats = $byGov->map(fn ($g) => ['zones' => $g->count(), 'clients' => $g->sum('active_clients')]);
 @endphp
-<div class="card">
+<div class="card" id="govsCard">
     <h3>🗺️ {{ __('geo.govs') }}
         <span class="side">{{ __('geo.geo_ref_hint') }}</span>
         @if ($canGov)
@@ -178,9 +179,10 @@
 </div>
 
 {{-- ═══════════ محافظة ← مناطقها ═══════════ --}}
+<span id="zonesStart"></span>
 @foreach (array_merge(Governorates::keys(), ['_none']) as $gk)
     @continue(! ($group = $byGov->get($gk)) || $group->isEmpty())
-    <div class="card zone-card">
+    <div class="card zone-card" id="gov_{{ $gk }}">
         <h3>📍 {{ $gk === '_none' ? __('geo.no_governorate') : Governorates::label($gk) }}
             <span class="side">{{ $group->count() }} {{ __('journey.zone_countable') }}
                 · {{ $fmt($group->sum('active_clients')) }} {{ __('client.clients') }}</span>
@@ -221,8 +223,16 @@
                             @endif
                         </td>
                         <td class="s">{{ $z->day_label ?: '—' }}</td>
-                        <td class="num">{{ $fmt($z->active_clients) }}</td>
-                        <td class="s">{{ $z->users->map(fn ($u) => $u->displayName())->join($sep) ?: '—' }}</td>
+                        <td class="num">
+                            @if ($z->active_clients > 0)
+                                <a href="{{ route('erp.clients', ['zone' => $z->id, 'status' => 'active']) }}">{{ $fmt($z->active_clients) }}</a>
+                            @else 0 @endif
+                        </td>
+                        <td class="s">
+                            @forelse ($z->users as $zu)
+                                <a href="{{ route('ops.rep', $zu) }}">{{ $zu->displayName() }}</a>@if (! $loop->last){{ $sep }}@endif
+                            @empty — @endforelse
+                        </td>
                         <td>
                             @if ($z->active)
                                 <span class="badge b-green">{{ __('common.active') }}</span>
