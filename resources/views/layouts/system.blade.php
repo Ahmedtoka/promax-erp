@@ -1906,11 +1906,20 @@ document.addEventListener('DOMContentLoaded', function () {
       if (current) current.close();
       refresh();
       build();
+      // ⚠️⚠️ **اللوحة بتطلع لـ<body> وقت الفتح** (إصلاح ٢١/٩ — بلاغ «القايمة مقصوصة
+      // ومش بعرف أختار»). وهي جوه مكان السيلكت كانت بتترسم جوه طبقة أبوها:
+      // هيدر الداشبورد `overflow:hidden`، والكروت اللي تحته بتترسم فوقها —
+      // فالأسماء بتبان متقطعة تحت أرقام الكروت والضغط بيروح للكارت. على
+      // مستوى الـbody مفيش أب يقصّها ولا طبقة تغطيها. جوه `<dialog>` بتفضل
+      // مكانها: المودال في الـtop layer وأي حاجة براه بتبقى وراه.
+      if (!sel.closest('dialog') && panel.parentNode !== document.body) {
+        document.body.appendChild(panel);
+      }
       q.value = '';
       panel.hidden = false;
       filter('');
       place();
-      current = { wrap: wrap, close: closePanel, place: place };
+      current = { wrap: wrap, panel: panel, close: closePanel, place: place };
       q.focus();
     }
 
@@ -1961,7 +1970,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.addEventListener('click', function (e) {
-      if (current && !current.wrap.contains(e.target)) current.close();
+      // اللوحة ممكن تكون بره الـwrap (متنقولة للـbody) — الضغط جواها مش «بره»
+      if (current && !current.wrap.contains(e.target) && !current.panel.contains(e.target)) current.close();
     });
     // اللوحة fixed — أي سكرول (حتى جوه كونتينر) بيغيّر مكان الزرار
     document.addEventListener('scroll', function () {

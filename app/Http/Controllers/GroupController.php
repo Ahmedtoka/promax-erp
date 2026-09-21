@@ -178,7 +178,11 @@ class GroupController extends Controller
             ];
         }
 
-        return Csv::download('chain-'.$group->code.'-branches-'.now()->format('Y-m-d-Hi').'.csv', [
+        // اسم الملف فيه الفترة — الرقم اللي جواه رقم الفترة مش المجمّع
+        $range = DateRange::fromRequest($request);
+        $tag = $range->isOpen() ? 'all' : ($range->fromValue() ?: 'start').'_'.($range->toValue() ?: 'today');
+
+        return Csv::download('chain-'.$group->code.'-branches-'.$tag.'-'.now()->format('Y-m-d-Hi').'.csv', [
             __('client.branch'), __('common.code'), __('client.zone'), __('client.category'), __('client.pay_terms_col'),
             __('client.purchases'), __('client.collected'), __('client.returns'), __('client.balance'),
             __('client.last_activity'),
@@ -253,12 +257,44 @@ class GroupController extends Controller
     /** فروع السلسلة زي ما الشاشة بتشوفها — نفس السكوب ونفس الترتيب */
     private function branchesOf(ClientGroup $group, Request $request)
     {
-        return Client::visibleTo(
+        $branches = Client::visibleTo(
             $group->clients()->with(['zone', 'contract', 'group.contract']),
             $request->user()
         )
             ->orderByDesc('purchases')
             ->get();
+
+        // ═══ أرقام الفترة (٢١/٩ — بلاغ «التصدير مش مطابق الشاشة») ═══
+        //
+        // الصفحة فيها «من — إلى»، لكن الكروت والجدول والتصدير كانوا بيعرضوا
+        // المجمّع من أول يوم — فالمستخدم يحدد أغسطس ويشوف رقم، ويصدّر يطلع
+        // رقم تاني، والاتنين مش أغسطس. مع الفترة بنحط أرقامها **في الذاكرة**
+        // مكان المجمّع (مشتريات/تحصيل/مرتجعات — من `transactions` بتاريخ
+        // القيد، نفس تعريف `recalculate()`)، فكل اللي بيقرا `$b->purchases`
+        // (الكروت · الجدول · الرسومات · التصدير) بياخد نفس الرقم من غير ما
+        // يتغير. ⚠️ الرصيد بيفضل الحالي، والموديلز دي **مابتتحفظش**.
+        $range = DateRange::fromRequest($request);
+
+        if (! $range->isOpen() && $branches->isNotEmpty()) {
+            $agg = $range->apply(Transaction::query(), 'date')
+                ->whereIn('client_id', $branches->pluck('id'))
+                ->selectRaw("client_id,
+                    SUM(CASE WHEN kind = 'sale' THEN debit ELSE 0 END) AS s,
+                    SUM(CASE WHEN kind = 'collection' THEN credit ELSE 0 END) AS c,
+                    SUM(CASE WHEN kind = 'return' THEN credit ELSE 0 END) AS r")
+                ->groupBy('client_id')->get()->keyBy('client_id');
+
+            foreach ($branches as $b) {
+                $x = $agg->get($b->id);
+                $b->setAttribute('purchases', (float) ($x->s ?? 0));
+                $b->setAttribute('collections', (float) ($x->c ?? 0));
+                $b->setAttribute('returns', (float) ($x->r ?? 0));
+            }
+
+            $branches = $branches->sortByDesc(fn ($b) => (float) $b->purchases)->values();
+        }
+
+        return $branches;
     }
 
     private function dateOrNull(mixed $raw): ?\Illuminate\Support\Carbon

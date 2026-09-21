@@ -800,4 +800,8 @@ return [
     'exp_type_invoice' => 'Invoice',
     'exp_type_po' => 'Purchase order',
     'exp_type_entry' => 'Sale entry without lines',
+
+    // الفترة ووقت السحب في التقارير والملفات (٢١ سبتمبر ٢٠٢٦)
+    'export_invoices' => 'Export invoices (Excel)',
+    'export_statement' => 'Export statement (Excel)',
 ];

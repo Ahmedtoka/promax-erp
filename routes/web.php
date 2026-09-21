@@ -273,6 +273,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // حركة أصناف العميل بالكمية (٨/٩) — CSV تفصيلي أو ملخص
         Route::get('/clients/{client}/movements', [\App\Http\Controllers\ProductMovementController::class, 'client'])
             ->name('clients.movements');
+        // تصدير كشف حساب العميل وفواتيره (٢١/٩) — نفس فترة «من — إلى» بتاعة الصفحة
+        Route::get('/clients/{client}/statement-export', [ErpController::class, 'clientStatementCsv'])
+            ->name('clients.statement_csv');
+        Route::get('/clients/{client}/invoices-export', [ErpController::class, 'clientInvoicesCsv'])
+            ->name('clients.invoices_csv');
         Route::get('/contracts/{contract}', [ErpController::class, 'contract'])->name('contracts.show');
         Route::post('/contracts', [ErpController::class, 'storeContract'])
             ->middleware('role:admin,manager')->name('contracts.store');

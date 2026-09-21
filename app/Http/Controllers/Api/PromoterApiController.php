@@ -197,12 +197,14 @@ class PromoterApiController extends Controller
 
     private function visitPayload(MerchVisit $visit): array
     {
-        $visit->load(['client', 'refills.product', 'replenishment', 'counts.product']);
+        $ready = MerchVisit::countsReady();
+        $visit->load($ready ? ['client', 'refills.product', 'replenishment', 'counts.product']
+            : ['client', 'refills.product', 'replenishment']);
 
         // ═══ آخر جرد في نفس الفرع (٢١/٩) — للمتابعة في الزيارة دي ═══
         // آخر زيارة **قبل دي** اتسجّل فيها جرد، أياً كان المنسق اللي عملها:
         // الجرد ملك الفرع مش ملك الشخص.
-        $lastVisitId = \App\Models\ShelfCount::where('client_id', $visit->client_id)
+        $lastVisitId = ! $ready ? null : \App\Models\ShelfCount::where('client_id', $visit->client_id)
             ->where('merch_visit_id', '<', $visit->id)->max('merch_visit_id');
         $last = $lastVisitId === null ? collect()
             : \App\Models\ShelfCount::with('product')->where('merch_visit_id', $lastVisitId)->get();
@@ -234,8 +236,8 @@ class PromoterApiController extends Controller
             'moved_total' => $visit->movedTotal(),
             'out_of_stock' => $visit->outOfStockCount(),
             'has_request' => $visit->replenishment !== null,
-            'no_photos' => (bool) $visit->no_photos,
-            'counts' => $visit->counts->map($countRow)->values(),
+            'no_photos' => $ready && (bool) $visit->no_photos,
+            'counts' => $ready ? $visit->counts->map($countRow)->values() : [],
             'last_count_at' => $last->first()?->created_at?->toIso8601String(),
             'last_counts' => $last->map($countRow)->values(),
             'refills' => $visit->refills->map(fn ($r) => [
@@ -508,6 +510,9 @@ class PromoterApiController extends Controller
         if (! $merchVisit->isOpen()) {
             return response()->json(['message' => __('field.visit_already_closed')], 422);
         }
+        if (! MerchVisit::countsReady()) {
+            return response()->json(['message' => __('field.count_not_ready')], 503);
+        }
 
         $data = $request->validate([
             'lines' => ['present', 'array', 'max:200'],
@@ -531,6 +536,18 @@ class PromoterApiController extends Controller
                 return response()->json(['message' => __('stock.unit_not_for_product', [
                     'name' => $product?->displayName() ?? $line['product_id'],
                 ])], 422);
+            }
+
+            // المنسق بيكتب تاريخ واحد (اللي على العبوة) — التاني بيتحسب سنة منه.
+            // الأبلكيشن بيبعت الاتنين محسوبين؛ الحساب هنا للي بعت واحد بس.
+            $months = \App\Models\ShelfCount::SHELF_LIFE_MONTHS;
+            $prod = $line['production_date'] ?? null;
+            $exp = $line['expiry_date'] ?? null;
+
+            if ($prod && ! $exp) {
+                $line['expiry_date'] = \Illuminate\Support\Carbon::parse($prod)->addMonthsNoOverflow($months)->toDateString();
+            } elseif ($exp && ! $prod) {
+                $line['production_date'] = \Illuminate\Support\Carbon::parse($exp)->subMonthsNoOverflow($months)->toDateString();
             }
 
             if (! empty($line['production_date']) && ! empty($line['expiry_date'])
@@ -610,7 +627,9 @@ class PromoterApiController extends Controller
         // الحل إن الاستثناء يبقى **معلن**: علم + سبب مكتوب + تنبيه
         // لمديره + شارة حمرا في متابعة الرفوف. الأبلكيشن القديم
         // مابيبعتش العلم، فسلوكه زي ما هو بالظبط.
-        $noPhotos = $request->boolean('no_photos');
+        // قبل المايجريشن: الاستثناء مش متاح، والقفل العادي شغال زي الأول بالظبط
+        $ready = MerchVisit::countsReady();
+        $noPhotos = $ready && $request->boolean('no_photos');
         $missing = $merchVisit->photo_before === null || $merchVisit->photo_after === null;
 
         if ($missing && ! $noPhotos) {
@@ -629,9 +648,7 @@ class PromoterApiController extends Controller
         $merchVisit->update([
             'checked_out_at' => now(),
             'note' => $request->input('note', $merchVisit->note),
-            'no_photos' => $missing,
-            'no_photo_reason' => $reason,
-        ]);
+        ] + ($ready ? ['no_photos' => $missing, 'no_photo_reason' => $reason] : []));
 
         if ($missing) {
             $this->alertNoPhotos($merchVisit, $request->user());

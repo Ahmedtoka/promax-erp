@@ -87,4 +87,10 @@ return [
     'mark_all_read' => 'Mark all read',
     'no_notifications' => 'No notifications yet',
     'unit' => 'Unit',
+
+    // الفترة ووقت السحب في التقارير والملفات (٢١ سبتمبر ٢٠٢٦)
+    'exp_period' => 'Period',
+    'exp_all_time' => 'All time',
+    'exp_generated' => 'Generated at',
+    'exp_time' => 'Time',
 ];

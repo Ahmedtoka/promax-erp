@@ -93,6 +93,13 @@ class ReportController extends Controller
             'channelOptions' => \App\Models\Channel::orderBy('id')->get(),
         ];
 
+        // ═══ الفترة ووقت السحب (٢١/٩) — على الشاشة وفي أول سطور الملف ═══
+        $hasRange = in_array('range', $data['filters'] ?? [], true);
+        [$pa, $pb] = $hasRange ? $this->range($request) : [null, null];
+        $data['periodFrom'] = $pa?->toDateString();
+        $data['periodTo'] = $pb?->toDateString();
+        $data['generatedAt'] = now()->format('Y-m-d h:i A');
+
         // ═══ تصدير CSV — نفس الصفوف بالظبط، بالـBOM عشان إكسيل عربي ═══
         if ($request->boolean('export')) {
             return $this->csv($data);
@@ -139,6 +146,11 @@ class ReportController extends Controller
             $out = fopen('php://output', 'w');
             // BOM — من غيره إكسيل بيفتح العربي طلاسم
             fwrite($out, "\xEF\xBB\xBF");
+
+            foreach (\App\Support\Csv::meta($d['title'], $d['periodFrom'] ?? null, $d['periodTo'] ?? null) as $m) {
+                fputcsv($out, $m);
+            }
+            fputcsv($out, []);
             fputcsv($out, array_map(fn ($c) => $c[0], $d['columns']));
 
             foreach ($d['rows'] as $row) {
@@ -238,7 +250,7 @@ class ReportController extends Controller
         $inv = \App\Services\SalesSource::docs($a, $b)
             ->selectRaw("user_id, COUNT(*) c, SUM(total) net, SUM(tax_total) tax, SUM(grand_total) g,
                 SUM(CASE WHEN payment = 'cash' THEN grand_total ELSE 0 END) cash_g,
-                SUM(CASE WHEN kind = 'po' THEN grand_total ELSE 0 END) po_g")
+                SUM(CASE WHEN kind = 'po' THEN grand_total ELSE 0 END) po_g, MAX(doc_at) last_at")
             ->groupBy('user_id')->get()->keyBy('user_id');
 
         $rets = \App\Services\SalesSource::returns($a, $b)
@@ -274,6 +286,7 @@ class ReportController extends Controller
                 $this->m($rt->g ?? 0),
                 $this->f0($gifts[$rep->id] ?? 0),
                 $this->f0($visits[$rep->id] ?? 0),
+                substr((string) ($i->last_at ?? ''), 0, 10) ?: '—',
             ];
 
             $T['c'] += $i->c ?? 0; $T['net'] += $i->net ?? 0; $T['tax'] += $i->tax ?? 0;
@@ -295,13 +308,13 @@ class ReportController extends Controller
                 [__('rpt.c_rep')], [__('rpt.k_count'), 'num'], [__('rpt.k_net'), 'num'],
                 [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'], [__('rpt.k_cash'), 'num'],
                 [__('rpt.k_credit'), 'num'], [__('rpt.k_po_delivered'), 'num'], [__('rpt.k_returns'), 'num'],
-                [__('rpt.k_gifts'), 'num'], [__('rpt.k_visits'), 'num'],
+                [__('rpt.k_gifts'), 'num'], [__('rpt.k_visits'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows,
             'totals' => [__('common.total'), $this->f0($T['c']), $this->m($T['net']),
                 $this->m($T['tax']), $this->m($T['g']), $this->m($T['cash']),
                 $this->m($T['g'] - $T['cash'] - $T['po']), $this->m($T['po']), $this->m($T['ret']),
-                $this->f0($T['gift']), $this->f0($T['vis'])],
+                $this->f0($T['gift']), $this->f0($T['vis']), ''],
         ];
     }
 
@@ -325,7 +338,7 @@ class ReportController extends Controller
             ->when($repId, fn ($w) => $w->where(fn ($x) => $x
                 ->whereHasMorph('source', [Invoice::class], fn ($m) => $m->where('user_id', $repId))
                 ->orWhereHasMorph('source', [PurchaseOrder::class], fn ($m) => $m->where('assigned_to', $repId))))
-            ->selectRaw('client_id, COUNT(*) c, SUM(debit) g')
+            ->selectRaw('client_id, COUNT(*) c, SUM(debit) g, MAX(date) last_at')
             ->groupBy('client_id')->get()->keyBy('client_id');
 
         $rets = Transaction::where('kind', 'return')->whereBetween('date', $day)
@@ -362,6 +375,7 @@ class ReportController extends Controller
                 $this->m($rets[$c->id] ?? 0),
                 $this->m($colls[$c->id] ?? 0),
                 $this->m($c->balance),
+                substr((string) ($inv->get($c->id)->last_at ?? ''), 0, 10) ?: '—',
             ];
         })->values()->all();
 
@@ -377,10 +391,10 @@ class ReportController extends Controller
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.k_count'), 'num'],
                 [__('rpt.k_grand'), 'num'], [__('rpt.k_returns'), 'num'],
-                [__('rpt.k_collected'), 'num'], [__('rpt.k_balance'), 'num'],
+                [__('rpt.k_collected'), 'num'], [__('rpt.k_balance'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows,
-            'totals' => [__('common.total'), '', '', $this->m($tg), $this->m($tr), $this->m($tc), $this->m($tb)],
+            'totals' => [__('common.total'), '', '', $this->m($tg), $this->m($tr), $this->m($tc), $this->m($tb), ''],
         ];
     }
 
@@ -394,7 +408,7 @@ class ReportController extends Controller
         // ⚠️ فواتير + بنود أوامر التوريد المسلّمة (٢١/٩) — كان فواتير بس
         $lines = \App\Services\SalesSource::lines($a, $b,
                 $r->filled('user_id') ? [$r->integer('user_id')] : null)
-            ->selectRaw('product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax, SUM(cost) cost')
+            ->selectRaw('product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax, SUM(cost) cost, MAX(doc_at) last_at')
             ->groupBy('product_id')
             ->get()->keyBy('product_id');
 
@@ -416,6 +430,7 @@ class ReportController extends Controller
             $row = [
                 $p->code, $p->displayName(), $this->f0($l->q),
                 $this->m($l->net), $this->m($l->tax), $this->m($l->net + $l->tax),
+                substr((string) $l->last_at, 0, 10) ?: '—',
             ];
 
             if ($seeCost) {
@@ -434,7 +449,7 @@ class ReportController extends Controller
             $gap = round($ledgerG - ($tn + $tt), 2);
 
             if (abs($gap) >= 0.01) {
-                $row = ['—', __('rpt.entries_without_lines'), '', $this->m($gap), $this->m(0), $this->m($gap)];
+                $row = ['—', __('rpt.entries_without_lines'), '', $this->m($gap), $this->m(0), $this->m($gap), ''];
                 if ($seeCost) {
                     $row[] = $this->m(0);
                     $row[] = '';
@@ -446,9 +461,9 @@ class ReportController extends Controller
 
         $columns = [
             [__('common.code')], [__('rpt.c_product')], [__('rpt.k_qty'), 'num'],
-            [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'],
+            [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'], [__('rpt.c_last_op')],
         ];
-        $totals = [__('common.total'), '', $this->f0($tq), $this->m($tn), $this->m($tt), $this->m($tn + $tt)];
+        $totals = [__('common.total'), '', $this->f0($tq), $this->m($tn), $this->m($tt), $this->m($tn + $tt), ''];
 
         if ($seeCost) {
             $columns[] = [__('rpt.k_cost'), 'num'];
@@ -481,7 +496,7 @@ class ReportController extends Controller
         // فنصيبه كان بيطلع أقل من حقيقته بكتير
         $agg = \App\Services\SalesSource::docs($a, $b)
             ->join('clients', 'clients.id', '=', 's.client_id')
-            ->selectRaw('clients.channel_id ch, COUNT(*) c, SUM(s.grand_total) g')
+            ->selectRaw('clients.channel_id ch, COUNT(*) c, SUM(s.grand_total) g, MAX(s.doc_at) last_at')
             ->groupBy('clients.channel_id')->get();
 
         $total = (float) $agg->sum('g') ?: 1;
@@ -492,6 +507,7 @@ class ReportController extends Controller
             $this->f0($x->c),
             $this->m($x->g),
             number_format($x->g / $total * 100, 1).'%',
+            substr((string) $x->last_at, 0, 10) ?: '—',
         ])->values()->all();
 
         return [
@@ -502,10 +518,10 @@ class ReportController extends Controller
             ],
             'columns' => [
                 [__('rpt.c_channel')], [__('rpt.k_count'), 'num'],
-                [__('rpt.k_grand'), 'num'], [__('rpt.k_share'), 'num'],
+                [__('rpt.k_grand'), 'num'], [__('rpt.k_share'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows,
-            'totals' => [__('common.total'), $this->f0($agg->sum('c')), $this->m($agg->sum('g')), '100%'],
+            'totals' => [__('common.total'), $this->f0($agg->sum('c')), $this->m($agg->sum('g')), '100%', ''],
         ];
     }
 
@@ -1011,7 +1027,10 @@ class ReportController extends Controller
         // آخر صف جرد لكل (فرع، صنف)
         $latest = \App\Models\ShelfCount::selectRaw('MAX(id) id')->groupBy('client_id', 'product_id');
 
-        $rows = \App\Models\ShelfCount::with(['client.group', 'client.channel', 'product', 'merchVisit.user'])
+        // جدول الجرد لسه متعملش (الملفات اترفعت قبل التحديث) → تقرير فاضي مش خطأ
+        $ready = \App\Models\MerchVisit::countsReady();
+
+        $rows = ! $ready ? collect() : \App\Models\ShelfCount::with(['client.group', 'client.channel', 'product', 'merchVisit.user'])
             ->whereIn('id', $latest)
             ->whereIn('client_id', Client::visibleTo(Client::query(), $r->user())->select('clients.id'))
             ->whereNotNull('expiry_date')->where('expiry_date', '<=', $limit)
@@ -1020,7 +1039,7 @@ class ReportController extends Controller
                 fn ($c) => $c->where('channel_id', $r->integer('channel_id'))))
             ->orderBy('expiry_date')->take(self::MAX_ROWS)->get();
 
-        if ($r->filled('q')) {
+        if ($ready && $r->filled('q')) {
             $s = mb_strtolower($r->string('q')->trim());
             $rows = $rows->filter(fn ($c) => str_contains(mb_strtolower(
                 ($c->client?->fullName() ?? '').' '.($c->product?->displayName() ?? '')), $s));
@@ -1071,7 +1090,9 @@ class ReportController extends Controller
 
         $team = User::fieldVisibleTo(User::query(), $r->user())->select('id');
 
-        $visits = \App\Models\MerchVisit::with(['user', 'refills'])->withCount('counts')
+        // `counts_count` و`no_photos` بيبقوا null قبل التحديث → الأعمدة دي بتطلع صفر
+        $visits = \App\Models\MerchVisit::with(['user', 'refills'])
+            ->when(\App\Models\MerchVisit::countsReady(), fn ($w) => $w->withCount('counts'))
             ->whereIn('user_id', $team)->whereBetween('checked_in_at', [$a, $b])
             ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')))
             ->get()->groupBy('user_id');
@@ -1133,7 +1154,7 @@ class ReportController extends Controller
 
         $lines = \App\Services\SalesSource::lines($a, $b, $r->filled('user_id') ? [$r->integer('user_id')] : null)
             ->whereIn('client_id', $visible)
-            ->selectRaw('client_id, product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax')
+            ->selectRaw('client_id, product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax, MAX(doc_at) last_at')
             ->groupBy('client_id', 'product_id')->get();
 
         $clients = Client::with('group')->whereIn('id', $lines->pluck('client_id')->unique())->get()->keyBy('id');
@@ -1146,6 +1167,7 @@ class ReportController extends Controller
             'product' => $products->get($l->product_id)?->displayName() ?? '#'.$l->product_id,
             'pcode' => $products->get($l->product_id)?->code ?? '',
             'q' => (float) $l->q, 'net' => (float) $l->net, 'tax' => (float) $l->tax,
+            'last' => substr((string) $l->last_at, 0, 10),
             'rank' => $perClient[$l->client_id] ?? 0,
         ]);
 
@@ -1168,12 +1190,12 @@ class ReportController extends Controller
             ],
             'columns' => [
                 [__('common.code')], [__('rpt.c_client')], [__('rpt.c_product')], [__('rpt.k_qty'), 'num'],
-                [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'],
+                [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows->map(fn ($x) => [$x['code'], $x['client'], $x['product'], $this->f0($x['q']),
-                $this->m($x['net']), $this->m($x['tax']), $this->m($x['net'] + $x['tax'])])->all(),
+                $this->m($x['net']), $this->m($x['tax']), $this->m($x['net'] + $x['tax']), $x['last'] ?: '—'])->all(),
             'totals' => [__('common.total'), '', '', $this->f0($rows->sum('q')), $this->m($rows->sum('net')),
-                $this->m($rows->sum('tax')), $this->m($rows->sum('net') + $rows->sum('tax'))],
+                $this->m($rows->sum('tax')), $this->m($rows->sum('net') + $rows->sum('tax')), ''],
         ];
     }
 

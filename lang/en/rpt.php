@@ -271,4 +271,7 @@ return [
     'rc_kind_collection' => 'Collection',
     'rc_kind_entry' => 'Entry',
     'entries_without_lines' => 'Sale entries without lines',
+
+    // الفترة ووقت السحب في التقارير والملفات (٢١ سبتمبر ٢٠٢٦)
+    'c_last_op' => 'Last operation',
 ];

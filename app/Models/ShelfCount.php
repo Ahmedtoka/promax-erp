@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ShelfCount extends Model
 {
+    /** مدة الصلاحية بالشهور — الانتهاء = الإنتاج + سنة (قرار المالك ٢١/٩) */
+    public const SHELF_LIFE_MONTHS = 12;
+
     protected $fillable = [
         'merch_visit_id', 'client_id', 'user_id', 'product_id',
         'qty', 'unit', 'pieces', 'production_date', 'expiry_date', 'note',

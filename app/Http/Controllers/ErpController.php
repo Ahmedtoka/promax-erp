@@ -696,6 +696,101 @@ class ErpController extends Controller
     }
 
     /**
+     * ═══ تصدير كشف حساب العميل (٢١ سبتمبر ٢٠٢٦) ═══
+     *
+     * كل قيد بتاريخه والرصيد بعد كل حركة. مع الفترة، اللي قبل `from`
+     * بيتلخّص في صف «رصيد سابق» فالرصيد الجاري بيقفل على رصيد العميل
+     * الحقيقي دايماً — نفس قاعدة كشف فرع السلسلة.
+     */
+    public function clientStatementCsv(Request $request, Client $client)
+    {
+        \App\Support\Scope::assertClient($request->user(), $client);
+
+        $range = DateRange::fromRequest($request);
+        // ⚠️ `getQuery()` — `DateRange::apply` بتاخد Builder مش Relation (اتمسكت في التجربة ٢١/٩)
+        $q = $client->transactions()->getQuery()->reorder()->orderBy('date')->orderBy('id');
+        $running = 0.0;
+        $rows = [];
+
+        if ($range->from !== null) {
+            $before = $client->transactions()->reorder()->whereDate('date', '<', $range->from->toDateString())
+                ->selectRaw('COALESCE(SUM(debit), 0) as d, COALESCE(SUM(credit), 0) as c')->first();
+            $running = (float) $before->d - (float) $before->c;
+            $rows[] = [$range->fromValue(), '', __('client.previous_balance'), '', '', '', \App\Support\Csv::money($running)];
+        }
+
+        $range->apply($q, 'date');
+        $debit = 0.0;
+        $credit = 0.0;
+
+        foreach ($q->get() as $t) {
+            $running += (float) $t->debit - (float) $t->credit;
+            $debit += (float) $t->debit;
+            $credit += (float) $t->credit;
+
+            $rows[] = [
+                $t->date instanceof \DateTimeInterface ? $t->date->format('Y-m-d') : (string) $t->date,
+                $t->kindLabel(), (string) $t->memo,
+                trim(($t->methodLabel() ?? '').' '.($t->reference ?? '')),
+                $t->debit > 0 ? \App\Support\Csv::money($t->debit) : '',
+                $t->credit > 0 ? \App\Support\Csv::money($t->credit) : '',
+                \App\Support\Csv::money($running),
+            ];
+        }
+
+        return \App\Support\Csv::download('statement-'.$client->code.'-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('common.date'), __('client.type'), __('client.memo'), __('client.pay_method_label'),
+            __('client.debit'), __('client.credit'), __('client.running_balance'),
+        ], $rows, [
+            __('common.total'), '', $client->fullName(), '',
+            \App\Support\Csv::money($debit), \App\Support\Csv::money($credit), \App\Support\Csv::money($running),
+        ], \App\Support\Csv::meta(__('client.statement').' — '.$client->fullName().' ('.$client->code.')',
+            $range->from?->toDateString(), $range->to?->toDateString()));
+    }
+
+    /**
+     * ═══ تصدير فواتير الأبلكيشن للعميل (٢١ سبتمبر ٢٠٢٦) ═══
+     *
+     * **كل** فواتير العميل (الشاشة بتعرض آخر 20 بس) بتاريخها ووقتها، وبنفس
+     * فترة الصفحة لو متحددة. الإجمالي هو المستحق (`payable`) — نفس رقم
+     * عمود الإجمالي في الشاشة ونفس اللي بيتقيّد في كشف الحساب.
+     */
+    public function clientInvoicesCsv(Request $request, Client $client)
+    {
+        \App\Support\Scope::assertClient($request->user(), $client);
+
+        $range = DateRange::fromRequest($request);
+        $invoices = $range->apply($client->invoices()->getQuery()->with('user')->reorder(), 'created_at')
+            ->orderBy('created_at')->orderBy('id')->get();
+
+        $rows = [];
+        $T = ['sub' => 0.0, 'disc' => 0.0, 'net' => 0.0, 'tax' => 0.0, 'pay' => 0.0];
+
+        foreach ($invoices as $inv) {
+            $pay = (float) $inv->payable();
+            $T['sub'] += (float) $inv->subtotal; $T['disc'] += (float) $inv->discount;
+            $T['net'] += (float) $inv->total; $T['tax'] += (float) $inv->tax_total; $T['pay'] += $pay;
+
+            $rows[] = [
+                $inv->created_at->format('Y-m-d'), $inv->created_at->format('h:i A'), $inv->number, $inv->paper_ref ?? '',
+                $inv->user?->displayName() ?? '', $inv->paymentLabel(), $inv->priceListLabel(),
+                \App\Support\Csv::money($inv->subtotal), \App\Support\Csv::money($inv->discount),
+                \App\Support\Csv::money($inv->total), \App\Support\Csv::money($inv->tax_total), \App\Support\Csv::money($pay),
+            ];
+        }
+
+        return \App\Support\Csv::download('invoices-'.$client->code.'-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('common.date'), __('common.exp_time'), __('ops.invoice'), __('rpt.c_paper'), __('ops.rep'), __('ops.payment'),
+            __('client.price_list'), __('common.subtotal'), __('common.discount'), __('rpt.k_net'), __('rpt.k_tax'), __('common.total'),
+        ], $rows, [
+            __('common.total'), '', $invoices->count(), '', '', '', '',
+            \App\Support\Csv::money($T['sub']), \App\Support\Csv::money($T['disc']), \App\Support\Csv::money($T['net']),
+            \App\Support\Csv::money($T['tax']), \App\Support\Csv::money($T['pay']),
+        ], \App\Support\Csv::meta(__('client.app_invoices').' — '.$client->fullName().' ('.$client->code.')',
+            $range->from?->toDateString(), $range->to?->toDateString()));
+    }
+
+    /**
      * صفحة تعريف عميل جديد — الفلو على 3 مراحل.
      *
      * ⚠️ صفحة مستقلة مش مودال. الفلو فيه رفع ملف وبنود بتتفتح

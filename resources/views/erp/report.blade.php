@@ -93,6 +93,13 @@
 </div>
 
 {{-- ═══ السامري بوكسات ═══ --}}
+{{-- الفترة ووقت السحب (٢١/٩) — التقرير المطبوع أو المتصوّر لازم يقول لأنهي فترة واتسحب إمتى --}}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px">
+    <span class="badge b-blue">📅 {{ __('common.exp_period') }}:
+        <span class="num">{{ $periodFrom ? $periodFrom.' → '.$periodTo : __('common.exp_all_time') }}</span></span>
+    <span class="badge b-gray">🕒 {{ __('common.exp_generated') }}: <span class="num">{{ $generatedAt }}</span></span>
+</div>
+
 <div class="kpis">
     @foreach ($kpis as [$lbl, $val, $cls])
         <div class="kpi">

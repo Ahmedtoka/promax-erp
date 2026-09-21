@@ -87,7 +87,7 @@ final class SalesSource
                 ->where('t.source_type', '=', Invoice::class))
             ->join('invoice_items as ii', 'ii.invoice_id', '=', 'i.id')
             ->when($repIds, fn ($w) => $w->whereIn('i.user_id', $repIds))
-            ->selectRaw("'invoice' AS kind, i.id AS doc_id, t.client_id, i.user_id AS user_id, ii.product_id,
+            ->selectRaw("'invoice' AS kind, i.id AS doc_id, t.client_id, i.user_id AS user_id, t.date AS doc_at, ii.product_id,
                 ii.qty AS qty, ii.total AS total, ii.tax AS tax, (ii.qty * ii.unit_cost) AS cost");
 
         $full = 'pi.delivered_qty IS NULL OR pi.delivered_qty = pi.qty';
@@ -97,7 +97,7 @@ final class SalesSource
             ->join('purchase_order_items as pi', 'pi.purchase_order_id', '=', 'p.id')
             ->join('products as pr', 'pr.id', '=', 'pi.product_id')
             ->when($repIds, fn ($w) => $w->whereIn('p.assigned_to', $repIds))
-            ->selectRaw("'po' AS kind, p.id AS doc_id, t.client_id, p.assigned_to AS user_id, pi.product_id,
+            ->selectRaw("'po' AS kind, p.id AS doc_id, t.client_id, p.assigned_to AS user_id, t.date AS doc_at, pi.product_id,
                 COALESCE(pi.delivered_qty, pi.qty) AS qty,
                 CASE WHEN $full THEN pi.total ELSE ROUND(pi.delivered_qty * pi.price, 2) END AS total,
                 CASE WHEN $full THEN pi.tax

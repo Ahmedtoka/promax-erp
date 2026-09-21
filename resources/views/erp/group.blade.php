@@ -173,6 +173,7 @@
                 <th class="srt" data-k="con" data-t="n">{{ __('client.contract') }}<span class="arw"></span></th>
                 <th class="srt" data-k="pur" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
                 <th class="srt" data-k="col" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
+                <th class="srt" data-k="ret" data-t="n">{{ __('client.returns') }}<span class="arw"></span></th>
                 <th class="srt" data-k="bal" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
                 <th class="srt" data-k="act" data-t="s">{{ __('client.last_activity') }}<span class="arw"></span></th>
                 <th data-nosum>{{ __('client.statement') }}</th>
@@ -189,6 +190,7 @@
                     data-pay="{{ $b->paymentTermsLabel() }}"
                     data-con="{{ $b->contract ? 1 : 0 }}"
                     data-pur="{{ (float) $b->purchases }}" data-col="{{ (float) $b->collections }}"
+                    data-ret="{{ (float) $b->returns }}"
                     data-bal="{{ (float) $b->balance }}"
                     data-act="{{ $b->last_activity_at?->format('Y-m-d') ?? '' }}">
                     <td onclick="location.href='{{ route('erp.clients.show', $b) }}'" style="cursor:pointer">
@@ -227,6 +229,7 @@
                     </td>
                     <td class="num">{{ $fmt($b->purchases) }}</td>
                     <td class="num pos">{{ $fmt($b->collections) }}</td>
+                    <td class="num mid">{{ $fmt($b->returns) }}</td>
                     <td class="num {{ $b->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($b->balance) }}</td>
                     <td class="num">{{ $b->last_activity_at?->format('Y-m-d') ?? '—' }}</td>
                     {{-- كشف حساب الفرع إكسيل (٨/٩) — فرع بفرعه --}}
@@ -244,7 +247,7 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="{{ $manager ? 12 : 11 }}" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="{{ $manager ? 13 : 12 }}" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('client.no_branches') }}
                 </td></tr>
             @endforelse

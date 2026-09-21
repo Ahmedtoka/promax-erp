@@ -44,6 +44,22 @@ class MerchVisit extends Model
         return $this->hasMany(ShelfRefill::class);
     }
 
+    /**
+     * مايجريشن الجرد (`2026_09_21_000100`) اتشغّلت؟
+     *
+     * ⚠️ السيرفر اللايف بيترفع عليه بالإيد — الكود ممكن يوصل قبل
+     * المايجريشن. من غير الحارس ده، قفل أي زيارة منسق وبوت ستراب أي
+     * منسق عنده زيارة مفتوحة كانوا هيرموا 500 (عمود/جدول مش موجود)
+     * **حتى من الأبلكيشن القديم**. الفحص مرة واحدة للريكوست.
+     */
+    public static function countsReady(): bool
+    {
+        static $ready = null;
+
+        return $ready ??= \Illuminate\Support\Facades\Schema::hasTable('shelf_counts')
+            && \Illuminate\Support\Facades\Schema::hasColumn('merch_visits', 'no_photos');
+    }
+
     /** جرد الرف اللي المنسق كتبه بإيده في الزيارة دي */
     public function counts(): HasMany
     {

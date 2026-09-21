@@ -516,6 +516,10 @@
 @if ($c->invoices->isNotEmpty())
 <div class="card">
     <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>
+    {{-- التصدير بيطلّع **كل** الفواتير بتواريخها (الجدول آخر 20 بس) وبنفس فترة «من — إلى» تحت --}}
+    <div data-noprint style="margin-bottom:10px">
+        <a class="btn sm green" href="{{ route('erp.clients.invoices_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_invoices') }}</a>
+    </div>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>
             <thead><tr>
@@ -557,6 +561,9 @@
     <form method="GET" class="frow" style="margin-bottom:12px" data-noprint data-range-filter>
         <div><label class="f">{{ __('common.from') }}</label><input type="date" name="from" value="{{ $range->fromValue() }}" onchange="this.form.submit()"></div>
         <div><label class="f">{{ __('common.to') }}</label><input type="date" name="to" value="{{ $range->toValue() }}" onchange="this.form.submit()"></div>
+        <div style="align-self:flex-end">
+            <a class="btn sm green" href="{{ route('erp.clients.statement_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_statement') }}</a>
+        </div>
     </form>
     <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
         <table>

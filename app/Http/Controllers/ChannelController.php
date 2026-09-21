@@ -358,7 +358,9 @@ class ChannelController extends Controller
         $capped = false;
 
         if ($source !== 'rep') {
-            $mq = MerchVisit::with(['user', 'client.channel', 'client.zone', 'refills.product', 'counts.product'])
+            $ready = MerchVisit::countsReady();
+            $mq = MerchVisit::with(array_merge(['user', 'client.channel', 'client.zone', 'refills.product'],
+                $ready ? ['counts.product'] : []))
                 ->whereIn('user_id', $team);
 
             $this->shelfCommonFilters($mq, $repId, $clientIds, $from, $to);
@@ -380,8 +382,8 @@ class ChannelController extends Controller
                     'short' => $m->outOfStockCount(),
                     'refills' => $m->refills,
                     // جرد الرف بإيد المنسق + علم «اتقفلت بدون تصوير» (٢١/٩)
-                    'counts' => $m->counts,
-                    'no_photos' => (bool) $m->no_photos,
+                    'counts' => $ready ? $m->counts : collect(),
+                    'no_photos' => $ready && (bool) $m->no_photos,
                     'no_photo_reason' => $m->no_photo_reason,
                     'visit_id' => null,
                     // بُعد نقطة التشيك إن عن الفرع بالمتر (تدقيق ١٥/٩) — `null`
@@ -464,7 +466,7 @@ class ChannelController extends Controller
         return view('erp.merch_visits', [
             'visits' => $visits,
             // ⚠️ التنبيه بنفس سكوب الفريق والفترة — مش عدّاد على مستوى الشركة
-            'noPhotosCount' => MerchVisit::whereIn('user_id', $team)->where('no_photos', true)
+            'noPhotosCount' => ! MerchVisit::countsReady() ? 0 : MerchVisit::whereIn('user_id', $team)->where('no_photos', true)
                 ->when($from, fn ($q) => $q->whereDate('checked_in_at', '>=', $from->toDateString()))
                 ->when($to, fn ($q) => $q->whereDate('checked_in_at', '<=', $to->toDateString()))
                 ->when(! $from && ! $to, fn ($q) => $q->where('checked_in_at', '>=', now()->subDays(7)))

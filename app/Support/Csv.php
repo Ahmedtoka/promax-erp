@@ -23,11 +23,21 @@ class Csv
      * @param  iterable<list<mixed>>  $rows
      * @param  list<mixed>|null  $totals
      */
-    public static function download(string $name, array $columns, iterable $rows, ?array $totals = null): StreamedResponse
+    public static function download(string $name, array $columns, iterable $rows, ?array $totals = null, array $meta = []): StreamedResponse
     {
-        return response()->streamDownload(function () use ($columns, $rows, $totals) {
+        return response()->streamDownload(function () use ($columns, $rows, $totals, $meta) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF");
+
+            // سطور التعريف (٢١/٩ — «كل ما أسحب تقرير مش بلاقي تاريخ»): الملف
+            // لوحده لازم يقول هو إيه، لأنهي فترة، واتسحب إمتى.
+            foreach ($meta as $m) {
+                fputcsv($out, $m);
+            }
+            if ($meta !== []) {
+                fputcsv($out, []);
+            }
+
             fputcsv($out, $columns);
 
             foreach ($rows as $row) {
@@ -40,6 +50,23 @@ class Csv
 
             fclose($out);
         }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * سطور التعريف الموحّدة لأي ملف: العنوان · الفترة · وقت السحب · مين سحبه.
+     * `$from`/`$to` نصوص `Y-m-d` أو null (= كل الفترات).
+     */
+    public static function meta(string $title, ?string $from = null, ?string $to = null): array
+    {
+        $period = ($from === null && $to === null)
+            ? __('common.exp_all_time')
+            : ($from ?? '…').' → '.($to ?? now()->toDateString());
+
+        return [
+            [$title],
+            [__('common.exp_period'), $period],
+            [__('common.exp_generated'), now()->format('Y-m-d h:i A'), auth()->user()?->displayName() ?? ''],
+        ];
     }
 
     /** رقم مالي للخلية — منزلتين، من غير فاصلة آلاف */

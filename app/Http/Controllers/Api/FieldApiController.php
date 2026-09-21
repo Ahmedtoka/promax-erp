@@ -667,6 +667,28 @@ class FieldApiController extends Controller
             ->selectRaw('client_id, AVG(grand_total) as a')
             ->groupBy('client_id')->pluck('a', 'client_id');
 
+        // ═══ المنسق زيارته `merch_visits` مش `visits` (إصلاح ٢١/٩) ═══
+        //
+        // `Journeys::forDay` بتقارن الخطة بجدول زيارات البيع، فخط سير المنسق
+        // كان بيفضل «0 من 4» والمحطة «ابدأ الزيارة» حتى بعد ما يزورها —
+        // والضغط عليها يقول «اتزار النهارده». الحالة هنا بتتصحح من زيارات
+        // الرف بتاعة النهارده قبل العدّ والإرسال.
+        if ($user->role === 'promoter') {
+            $merch = \App\Models\MerchVisit::where('user_id', $user->id)
+                ->whereDate('checked_in_at', today())->orderBy('id')->get()->keyBy('client_id');
+
+            $rows = $rows->map(function ($r) use ($merch) {
+                $m = $merch->get($r['client']->id);
+
+                if ($m !== null) {
+                    $r['status'] = $m->isOpen() ? 'in_visit' : 'done';
+                    $r['merch'] = $m;
+                }
+
+                return $r;
+            });
+        }
+
         $done = $rows->where('status', 'done')->count();
         $planned = $rows->count();
 
@@ -718,8 +740,8 @@ class FieldApiController extends Controller
                 // مالهاش وقت. الأبلكيشن القديم بيتجاهله والجديد بيوريه.
                 'visit_at' => $r['plan']->visitTimeLabel() ?: null,
                 // ═══ إضافي (موك أب ٢١/٨) — أرقام المحطة المتزارة ═══
-                'checked_in_at' => $r['visit']?->checked_in_at?->toIso8601String(),
-                'checked_out_at' => $r['visit']?->checked_out_at?->toIso8601String(),
+                'checked_in_at' => ($r['merch'] ?? $r['visit'])?->checked_in_at?->toIso8601String(),
+                'checked_out_at' => ($r['merch'] ?? $r['visit'])?->checked_out_at?->toIso8601String(),
                 'visit_sales' => (float) ($visitSales->get($r['visit']?->id) ?? 0),
                 'visit_collected' => (float) ($visitCollected->get($r['visit']?->id) ?? 0),
                 'visit_return_qty' => (int) ($visitReturnQty->get($r['visit']?->id) ?? 0),
