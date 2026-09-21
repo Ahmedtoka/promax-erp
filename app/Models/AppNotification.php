@@ -70,6 +70,8 @@ class AppNotification extends Model
             // المستنية اللي العميل ده **خرج منه** لحظتها.
             'client_locations' => route('erp.client_locations', ['show' => 'from_app']),
             'custody' => route('ops.handout'),
+            // زيارة منسق اتقفلت بدون تصوير (٢١/٩) — متابعة الرفوف مفلترة عليها
+            'merch' => route('ops.merch', ['shots' => 'none']),
             // مهمة إدارية (٢٦/٨) — صفحة المهمة بشاتها
             'task' => $id ? route('erp.tasks.show', $id) : route('erp.tasks'),
             default => null,

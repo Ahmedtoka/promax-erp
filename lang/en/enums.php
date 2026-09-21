@@ -119,6 +119,7 @@ return [
         'gift' => 'Gift',
         'deliver' => 'Sales order delivered',
         'refill' => 'Shelf Refill',
+        'no_photos' => 'Visit Without Photos',
         'request' => 'New client request',
         'shift_in' => 'Shift start',
         'shift_break' => 'Break',

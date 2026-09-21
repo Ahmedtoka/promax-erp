@@ -358,7 +358,7 @@ class ChannelController extends Controller
         $capped = false;
 
         if ($source !== 'rep') {
-            $mq = MerchVisit::with(['user', 'client.channel', 'client.zone', 'refills.product'])
+            $mq = MerchVisit::with(['user', 'client.channel', 'client.zone', 'refills.product', 'counts.product'])
                 ->whereIn('user_id', $team);
 
             $this->shelfCommonFilters($mq, $repId, $clientIds, $from, $to);
@@ -379,6 +379,10 @@ class ChannelController extends Controller
                     'moved' => $m->movedTotal(),
                     'short' => $m->outOfStockCount(),
                     'refills' => $m->refills,
+                    // جرد الرف بإيد المنسق + علم «اتقفلت بدون تصوير» (٢١/٩)
+                    'counts' => $m->counts,
+                    'no_photos' => (bool) $m->no_photos,
+                    'no_photo_reason' => $m->no_photo_reason,
                     'visit_id' => null,
                     // بُعد نقطة التشيك إن عن الفرع بالمتر (تدقيق ١٥/٩) — `null`
                     // لو الزيارة أو الفرع بلا إحداثيات. صفر بالظبط غالباً فولباك
@@ -419,6 +423,9 @@ class ChannelController extends Controller
                     'moved' => null,
                     'short' => null,
                     'refills' => collect(),
+                    'counts' => collect(),
+                    'no_photos' => false,
+                    'no_photo_reason' => null,
                     'visit_id' => $v->id,
                     'gps' => null,
                 ]);
@@ -432,6 +439,11 @@ class ChannelController extends Controller
             $rows = $rows->filter(fn ($r) => $r['before'] !== [] && $r['after'] !== []);
         } elseif ($shots === 'partial') {
             $rows = $rows->filter(fn ($r) => ($r['before'] === []) !== ($r['after'] === []));
+        } elseif ($shots === 'none') {
+            // اتقفلت بدون تصوير بعلم المنسق — ده اللي التنبيه بيفتح عليه
+            $rows = $rows->filter(fn ($r) => $r['no_photos']);
+        } elseif ($shots === 'counted') {
+            $rows = $rows->filter(fn ($r) => $r['counts']->isNotEmpty());
         }
 
         // ⚠️ الترتيب بوقت الزيارة الفعلي مش بالـid — الجدولين مالهمش
@@ -451,6 +463,12 @@ class ChannelController extends Controller
 
         return view('erp.merch_visits', [
             'visits' => $visits,
+            // ⚠️ التنبيه بنفس سكوب الفريق والفترة — مش عدّاد على مستوى الشركة
+            'noPhotosCount' => MerchVisit::whereIn('user_id', $team)->where('no_photos', true)
+                ->when($from, fn ($q) => $q->whereDate('checked_in_at', '>=', $from->toDateString()))
+                ->when($to, fn ($q) => $q->whereDate('checked_in_at', '<=', $to->toDateString()))
+                ->when(! $from && ! $to, fn ($q) => $q->where('checked_in_at', '>=', now()->subDays(7)))
+                ->count(),
             // ⚠️ **كل رولز الشغل الميداني مش البروموترات بس** — الشاشة
             // بقت بتعرض صور المناديب كمان، فقايمة فلتر فيها البروموترات
             // بس كانت هتخفي نص المحتوى عن الفلترة.

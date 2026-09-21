@@ -102,41 +102,37 @@ class ErpController extends Controller
         $invQ = fn () => Invoice::whereBetween('invoices.created_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds));
 
-        // ═══ KPIs الفترة ═══
-        // ⚠️ Billed = مستند عليه ضريبة (فاتورة رسمية) — Unbilled = من غير
-        $inv = $invQ()->selectRaw("COUNT(*) n, COALESCE(SUM(grand_total),0) g,
+        // ═══ KPIs الفترة — **كلها من كشف الحساب** (قرار المالك ٢١/٩) ═══
+        //
+        // «مش عاوز أي رقم مش مساوي التاني»: المبيعات والتحصيل والمرتجعات
+        // هنا هي قيود `transactions` بتاريخ القيد — نفس اللي صفحة العملاء
+        // وتصديرها وكشف الحساب والتارجيت بيجمعوه (`SalesSource`). المستند
+        // بيدّي القيد صفاته بس (كاش/آجل/توريد، ومندوبه). بضاعة الأمانة
+        // مش مبيعات لحد ما تتباع، والتسليم الجزئي بقيمة اللي اتسلّم.
+        // ⚠️ Billed = قيد عليه ضريبة (فاتورة رسمية) — Unbilled = من غير
+        $sales = fn () => \App\Services\SalesSource::docs($a, $b, $repIds);
+        $saleLines = fn () => \App\Services\SalesSource::lines($a, $b, $repIds);
+
+        // `$inv` = الفواتير + قيود البيع اللي مالهاش مستند (آجل) · `$posDelivered` = أوامر التوريد
+        $inv = $sales()->where('kind', '!=', 'po')->selectRaw("COUNT(*) n, COALESCE(SUM(grand_total),0) g,
             COALESCE(SUM(total),0) net, COALESCE(SUM(tax_total),0) tax,
             COALESCE(SUM(CASE WHEN payment='cash' THEN grand_total ELSE 0 END),0) cash_g,
             COALESCE(SUM(CASE WHEN tax_total > 0 THEN grand_total ELSE 0 END),0) billed_g")->first();
 
-        // التحصيل — قيود collection، ولو مفلتر بمندوب/مدير بنمسك القيود
-        // اللي مصدرها فواتيره أو زياراته أو أوامره.
-        // ⚠️ **مقسوم بالمصدر (٢٦/٨)** — طلب المالك: «كام اتحصل منين»:
-        // كاش الفواتير الفوري / التحصيل الميداني / تحصيل التوريدات.
-        $collRows = Transaction::where('kind', 'collection')
-            ->whereBetween('created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->where(fn ($w) => $w
-                ->where(fn ($x) => $x->where('source_type', Invoice::class)
-                    ->whereIn('source_id', Invoice::whereIn('user_id', $repIds)->select('id')))
-                ->orWhere(fn ($x) => $x->where('source_type', \App\Models\Visit::class)
-                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))
-                ->orWhere(fn ($x) => $x->where('source_type', PurchaseOrder::class)
-                    ->whereIn('source_id', PurchaseOrder::whereIn('assigned_to', $repIds)->select('id')))))
-            ->selectRaw('source_type, COALESCE(SUM(credit),0) v')
-            ->groupBy('source_type')
-            ->pluck('v', 'source_type');
+        // التحصيل مقسوم بالمصدر: كاش الفواتير / ميداني / توريدات / مكتب
+        $collRows = \App\Services\SalesSource::collections($a, $b, $repIds)
+            ->selectRaw('src, COALESCE(SUM(amount),0) v')->groupBy('src')->pluck('v', 'src');
 
         $collSplit = [
-            'invoice' => (float) ($collRows[Invoice::class] ?? 0),
-            'visit' => (float) ($collRows[\App\Models\Visit::class] ?? 0),
-            'po' => (float) ($collRows[PurchaseOrder::class] ?? 0),
+            'invoice' => (float) ($collRows['invoice'] ?? 0),
+            'visit' => (float) ($collRows['visit'] ?? 0),
+            'po' => (float) ($collRows['po'] ?? 0),
         ];
         $collSplit['other'] = (float) $collRows->sum() - array_sum($collSplit);
         $coll = (float) $collRows->sum();
 
-        $rets = \App\Models\ClientReturn::whereBetween('created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))
-            ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g')->first();
+        $rets = \App\Services\SalesSource::returns($a, $b, $repIds)
+            ->selectRaw('COUNT(*) n, COALESCE(SUM(amount),0) g')->first();
 
         $visitsN = \App\Models\Visit::whereBetween('created_at', [$a, $b])
             ->when($repIds, fn ($q) => $q->whereIn('user_id', $repIds))->count();
@@ -157,16 +153,10 @@ class ErpController extends Controller
         $daily = $a->diffInDays($b) <= 35;
         $fmt = $daily ? '%Y-%m-%d' : '%Y-%m';
 
-        $salesSeries = $invQ()->selectRaw("DATE_FORMAT(created_at, '$fmt') k, SUM(grand_total) v")
+        $salesSeries = $sales()->selectRaw("DATE_FORMAT(doc_at, '$fmt') k, SUM(grand_total) v")
             ->groupBy('k')->pluck('v', 'k');
-        $collSeries = Transaction::where('kind', 'collection')
-            ->whereBetween('created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->where(fn ($w) => $w
-                ->where(fn ($x) => $x->where('source_type', Invoice::class)
-                    ->whereIn('source_id', Invoice::whereIn('user_id', $repIds)->select('id')))
-                ->orWhere(fn ($x) => $x->where('source_type', \App\Models\Visit::class)
-                    ->whereIn('source_id', \App\Models\Visit::whereIn('user_id', $repIds)->select('id')))))
-            ->selectRaw("DATE_FORMAT(created_at, '$fmt') k, SUM(credit) v")
+        $collSeries = \App\Services\SalesSource::collections($a, $b, $repIds)
+            ->selectRaw("DATE_FORMAT(doc_at, '$fmt') k, SUM(amount) v")
             ->groupBy('k')->pluck('v', 'k');
 
         $series = [];
@@ -181,17 +171,14 @@ class ErpController extends Controller
         }
 
         // ═══ الدواير والتوزيعات ═══
-        $byChannel = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+        $byChannel = $sales()->join('clients', 'clients.id', '=', 's.client_id')
             ->join('channels', 'channels.id', '=', 'clients.channel_id')
-            ->selectRaw('channels.id cid, channels.name cname, SUM(invoices.grand_total) v')
+            ->selectRaw('channels.id cid, channels.name cname, SUM(s.grand_total) v')
             ->groupBy('cid', 'cname')->orderByDesc('v')->get();
 
-        $byFamily = DB::table('invoice_items')
-            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
-            ->join('products', 'products.id', '=', 'invoice_items.product_id')
-            ->whereBetween('invoices.created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds))
-            ->selectRaw('products.family, SUM(invoice_items.total) v')
+        $byFamily = $saleLines()
+            ->join('products', 'products.id', '=', 's.product_id')
+            ->selectRaw('products.family, SUM(s.total) v')
             ->groupBy('products.family')->orderByDesc('v')->get();
 
         $catCounts = Client::visibleTo(Client::query())
@@ -200,7 +187,7 @@ class ErpController extends Controller
             ->groupBy('category')->pluck('n', 'category')->all();
 
         // ═══ أفضل المناديب والعملاء في الفترة ═══
-        $topReps = $invQ()->selectRaw('user_id, COUNT(*) n, SUM(grand_total) v')
+        $topReps = $sales()->whereNotNull('user_id')->selectRaw('user_id, COUNT(*) n, SUM(grand_total) v')
             ->groupBy('user_id')->orderByDesc('v')->take(8)->get()
             ->map(function ($r) {
                 $r->rep = User::find($r->user_id);
@@ -208,7 +195,7 @@ class ErpController extends Controller
                 return $r;
             });
 
-        $topClients = $invQ()->selectRaw('client_id, COUNT(*) n, SUM(grand_total) v')
+        $topClients = $sales()->selectRaw('client_id, COUNT(*) n, SUM(grand_total) v')
             ->groupBy('client_id')->orderByDesc('v')->take(10)->get();
         $topClientRows = Client::with(['group', 'channel'])
             ->whereIn('id', $topClients->pluck('client_id'))->get()->keyBy('id');
@@ -216,9 +203,8 @@ class ErpController extends Controller
         // ═══ V2 (٢٣/٨ — «تطوير خبير») ═══
 
         // التوريدات: أوامر اتسلمت فعلاً في الفترة — عدد وفلوس
-        $posDelivered = PurchaseOrder::where('status', 'delivered')
-            ->whereBetween('delivered_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->whereIn('assigned_to', $repIds))
+        // ⚠️ من قيد التسليم (المسلَّم فعلاً، ومن غير بضاعة الأمانة) — مش من إجمالي الأمر
+        $posDelivered = $sales()->where('kind', 'po')
             ->selectRaw('COUNT(*) n, COALESCE(SUM(grand_total),0) g,
                 COALESCE(SUM(CASE WHEN tax_total > 0 THEN grand_total ELSE 0 END),0) billed_g')->first();
 
@@ -240,27 +226,24 @@ class ErpController extends Controller
             ->first();
 
         // فليفار بار المنتجات: أفضل الأصناف بالقطع وبالفلوس
-        $topProducts = DB::table('invoice_items')
-            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
-            ->join('products', 'products.id', '=', 'invoice_items.product_id')
-            ->whereBetween('invoices.created_at', [$a, $b])
-            ->when($repIds, fn ($q) => $q->whereIn('invoices.user_id', $repIds))
+        $topProducts = $saleLines()
+            ->join('products', 'products.id', '=', 's.product_id')
             ->selectRaw('products.name pname, products.name_en pname_en,
-                SUM(invoice_items.qty) q, SUM(invoice_items.total) v')
+                SUM(s.qty) q, SUM(s.total) v')
             ->groupBy('products.id', 'pname', 'pname_en')
             ->orderByDesc('v')->take(8)->get();
 
         // المناطق والمحافظات — مبيعات الفترة جغرافياً
-        $byZone = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+        $byZone = $sales()->join('clients', 'clients.id', '=', 's.client_id')
             ->join('zones', 'zones.id', '=', 'clients.zone_id')
             ->selectRaw('zones.id zid, zones.name zname, zones.name_en zname_en,
-                COUNT(DISTINCT invoices.client_id) nc, SUM(invoices.grand_total) v')
+                COUNT(DISTINCT s.client_id) nc, SUM(s.grand_total) v')
             ->groupBy('zid', 'zname', 'zname_en')->orderByDesc('v')->take(10)->get();
 
-        $byGov = $invQ()->join('clients', 'clients.id', '=', 'invoices.client_id')
+        $byGov = $sales()->join('clients', 'clients.id', '=', 's.client_id')
             ->whereNotNull('clients.governorate')
-            ->selectRaw('clients.governorate gov, COUNT(DISTINCT invoices.client_id) nc,
-                SUM(invoices.grand_total) v')
+            ->selectRaw('clients.governorate gov, COUNT(DISTINCT s.client_id) nc,
+                SUM(s.grand_total) v')
             ->groupBy('gov')->orderByDesc('v')->take(10)->get();
 
         // ═══ سيكشن «مهامي» (٢٦/٨) — متابعة إدارة المهام من الرئيسية:

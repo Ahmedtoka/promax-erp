@@ -512,6 +512,12 @@ select.ssel-native{display:none!important}
 .ssel-panel{position:fixed;z-index:650;background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow-lift);padding:8px;display:flex;flex-direction:column;gap:6px}
 .ssel-panel[hidden]{display:none}
 .ssel-q{width:100%}
+/* ⚠️ اللوحة بتتبني جوه مكان السيلكت — فبترث لون النص من أبوها (٢١/٩).
+   جوه هيدر الداشبورد الغامق (`.dash-head{color:#fff}` + `.df input{color:#fff}`)
+   الاختيارات وخانة البحث كانوا **أبيض على أبيض**: القايمة بتبان فاضية
+   ومفيش غير «الكل» المتعلّم عليه. اللوحة كارت أبيض دايماً، فألوانها صريحة. */
+.ssel-panel,.ssel-opt{color:var(--text)}
+.ssel-panel .ssel-q{color:var(--text)!important;background:var(--card)!important;border:1px solid var(--border)!important}
 .ssel-list{max-height:260px;overflow-y:auto;overscroll-behavior:contain}
 .ssel-grp{font-size:10.5px;font-weight:800;color:var(--muted);padding:7px 9px 3px;position:sticky;top:0;background:var(--card);z-index:1}
 .ssel-opt{padding:7px 11px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

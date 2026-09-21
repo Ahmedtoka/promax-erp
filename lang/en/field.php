@@ -339,4 +339,11 @@ return [
     'notif_manual_gift_title' => 'A gift was recorded for you from the office',
     'notif_manual_gift_body' => 'For :client dated :date — deducted from your gift balance.',
     'custody_adjust_more' => '+:n more changes',
+
+    // جرد الرف وإنهاء الزيارة بدون تصوير (٢١ سبتمبر ٢٠٢٦)
+    'attr_no_photo_reason' => 'reason for no photos',
+    'count_dates_reversed' => 'Expiry date of :product is before its production date — check both dates.',
+    'no_photos_alert_title' => 'Visit closed without photos',
+    'no_photos_alert_body' => ':user closed the visit at :client without shelf photos. Reason: :reason',
+    'event_no_photos' => 'Visit at :client closed without photos',
 ];

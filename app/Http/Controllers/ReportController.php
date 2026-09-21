@@ -50,18 +50,36 @@ class ReportController extends Controller
         'pos_status' => '🚚',
         'inactive_clients' => '😴',
         'new_clients' => '✨',
+        // المنسقين (٢١ سبتمبر ٢٠٢٦) — من جرد الرف وزيارات الرفوف
+        'shelf_expiry' => '⏰',
+        'merch_performance' => '🛍️',
+        // تقارير القرار (٢١ سبتمبر ٢٠٢٦)
+        'client_products' => '🧺',
+        'sales_decline' => '📉',
+        'target_vs_actual' => '🎯',
+        'oos_frequency' => '🕳️',
+        'profitability' => '💹',
+        // مطابقة: ليه رقم الداشبورد مش هو رقم كشف الحساب (٢١ سبتمبر ٢٠٢٦)
+        'sales_reconcile' => '⚖️',
     ];
+
+    /** تقارير فيها تكلفة وربح — للأدمن بس، زي عمود التكلفة في «المبيعات بالصنف» */
+    private const ADMIN_ONLY = ['profitability', 'sales_reconcile'];
 
     private const MAX_ROWS = 2000;
 
     public function index()
     {
-        return view('erp.report_hub', ['reports' => self::REPORTS]);
+        $admin = request()->user()?->isAdmin() ?? false;
+
+        return view('erp.report_hub', ['reports' => array_filter(self::REPORTS,
+            fn ($k) => $admin || ! in_array($k, self::ADMIN_ONLY, true), ARRAY_FILTER_USE_KEY)]);
     }
 
     public function show(Request $request, string $key)
     {
         abort_unless(isset(self::REPORTS[$key]), 404);
+        abort_if(in_array($key, self::ADMIN_ONLY, true) && ! ($request->user()?->isAdmin() ?? false), 403);
 
         $method = 'r'.str_replace(' ', '', ucwords(str_replace('_', ' ', $key)));
         $data = $this->{$method}($request);
@@ -70,7 +88,7 @@ class ReportController extends Controller
             'key' => $key,
             'icon' => self::REPORTS[$key],
             'title' => __('rpt.'.$key),
-            'repOptions' => User::whereIn('role', User::FIELD_WORK_ROLES)
+            'repOptions' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
                 ->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
             'channelOptions' => \App\Models\Channel::orderBy('id')->get(),
         ];
@@ -159,8 +177,12 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
+        // ⚠️ الفاتورة بتدخل الفترة **بتاريخ قيدها في كشف الحساب** (٢١/٩) —
+        // نفس قاعدة الداشبورد وصفحة العملاء، فمجموع الفواتير هنا هو نفس
+        // رقم «كاش + آجل» فوق. فاتورة من غير قيد بيع مش مبيعات.
         $q = Invoice::with(['client.group', 'user'])
-            ->whereBetween('created_at', [$a, $b])
+            ->whereIn('id', Transaction::where('kind', 'sale')->where('source_type', Invoice::class)
+                ->whereBetween('date', [$a->toDateString(), $b->toDateString()])->select('source_id'))
             ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')))
             ->when($r->filled('payment'), fn ($w) => $w->where('payment', $r->input('payment')));
 
@@ -206,16 +228,21 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $reps = User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)
-            ->orderBy('name')->get();
+        // ⚠️ سكوب الفريق — التقرير كان بيعرض مناديب كل المديرين لأي مدير
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES), $r->user())
+            ->where('active', true)->orderBy('name')->get();
 
-        $inv = Invoice::whereBetween('created_at', [$a, $b])
-            ->selectRaw('user_id, COUNT(*) c, SUM(total) net, SUM(tax_total) tax, SUM(grand_total) g,
-                SUM(CASE WHEN payment = "cash" THEN grand_total ELSE 0 END) cash_g')
+        // ⚠️ **فواتير + أوامر توريد مسلّمة** (٢١/٩) — كان فواتير بس، فالسواق
+        // والمندوب اللي شغله توريد كانوا بيطلعوا بصفر مبيعات. نفس تعريف
+        // الداشبورد (`SalesSource`)، و`po_g` عمود مستقل عشان يبان المصدر.
+        $inv = \App\Services\SalesSource::docs($a, $b)
+            ->selectRaw("user_id, COUNT(*) c, SUM(total) net, SUM(tax_total) tax, SUM(grand_total) g,
+                SUM(CASE WHEN payment = 'cash' THEN grand_total ELSE 0 END) cash_g,
+                SUM(CASE WHEN kind = 'po' THEN grand_total ELSE 0 END) po_g")
             ->groupBy('user_id')->get()->keyBy('user_id');
 
-        $rets = ClientReturn::whereBetween('created_at', [$a, $b])
-            ->selectRaw('user_id, COUNT(*) c, SUM(grand_total) g')
+        $rets = \App\Services\SalesSource::returns($a, $b)
+            ->selectRaw('user_id, COUNT(*) c, SUM(amount) g')
             ->groupBy('user_id')->get()->keyBy('user_id');
 
         $gifts = GiftHandout::whereBetween('created_at', [$a, $b])
@@ -225,7 +252,7 @@ class ReportController extends Controller
             ->selectRaw('user_id, COUNT(*) c')->groupBy('user_id')->pluck('c', 'user_id');
 
         $rows = [];
-        $T = ['c' => 0, 'net' => 0, 'tax' => 0, 'g' => 0, 'cash' => 0, 'ret' => 0, 'gift' => 0, 'vis' => 0];
+        $T = ['c' => 0, 'net' => 0, 'tax' => 0, 'g' => 0, 'cash' => 0, 'po' => 0, 'ret' => 0, 'gift' => 0, 'vis' => 0];
 
         foreach ($reps as $rep) {
             $i = $inv->get($rep->id);
@@ -242,14 +269,15 @@ class ReportController extends Controller
                 $this->m($i->tax ?? 0),
                 $this->m($i->g ?? 0),
                 $this->m($i->cash_g ?? 0),
-                $this->m(($i->g ?? 0) - ($i->cash_g ?? 0)),
+                $this->m(($i->g ?? 0) - ($i->cash_g ?? 0) - ($i->po_g ?? 0)),
+                $this->m($i->po_g ?? 0),
                 $this->m($rt->g ?? 0),
                 $this->f0($gifts[$rep->id] ?? 0),
                 $this->f0($visits[$rep->id] ?? 0),
             ];
 
             $T['c'] += $i->c ?? 0; $T['net'] += $i->net ?? 0; $T['tax'] += $i->tax ?? 0;
-            $T['g'] += $i->g ?? 0; $T['cash'] += $i->cash_g ?? 0;
+            $T['g'] += $i->g ?? 0; $T['cash'] += $i->cash_g ?? 0; $T['po'] += $i->po_g ?? 0;
             $T['ret'] += $rt->g ?? 0; $T['gift'] += $gifts[$rep->id] ?? 0;
             $T['vis'] += $visits[$rep->id] ?? 0;
         }
@@ -266,13 +294,13 @@ class ReportController extends Controller
             'columns' => [
                 [__('rpt.c_rep')], [__('rpt.k_count'), 'num'], [__('rpt.k_net'), 'num'],
                 [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'], [__('rpt.k_cash'), 'num'],
-                [__('rpt.k_credit'), 'num'], [__('rpt.k_returns'), 'num'],
+                [__('rpt.k_credit'), 'num'], [__('rpt.k_po_delivered'), 'num'], [__('rpt.k_returns'), 'num'],
                 [__('rpt.k_gifts'), 'num'], [__('rpt.k_visits'), 'num'],
             ],
             'rows' => $rows,
             'totals' => [__('common.total'), $this->f0($T['c']), $this->m($T['net']),
                 $this->m($T['tax']), $this->m($T['g']), $this->m($T['cash']),
-                $this->m($T['g'] - $T['cash']), $this->m($T['ret']),
+                $this->m($T['g'] - $T['cash'] - $T['po']), $this->m($T['po']), $this->m($T['ret']),
                 $this->f0($T['gift']), $this->f0($T['vis'])],
         ];
     }
@@ -363,14 +391,11 @@ class ReportController extends Controller
         [$a, $b] = $this->range($r);
         $seeCost = $r->user()?->isAdmin() ?? false;
 
-        $lines = DB::table('invoice_items')
-            ->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
-            ->whereBetween('invoices.created_at', [$a, $b])
-            ->when($r->filled('user_id'), fn ($w) => $w->where('invoices.user_id', $r->integer('user_id')))
-            ->selectRaw('invoice_items.product_id, SUM(invoice_items.qty) q,
-                SUM(invoice_items.total) net, SUM(invoice_items.tax) tax,
-                SUM(invoice_items.qty * invoice_items.unit_cost) cost')
-            ->groupBy('invoice_items.product_id')
+        // ⚠️ فواتير + بنود أوامر التوريد المسلّمة (٢١/٩) — كان فواتير بس
+        $lines = \App\Services\SalesSource::lines($a, $b,
+                $r->filled('user_id') ? [$r->integer('user_id')] : null)
+            ->selectRaw('product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax, SUM(cost) cost')
+            ->groupBy('product_id')
             ->get()->keyBy('product_id');
 
         $products = \App\Models\Product::whereIn('id', $lines->keys())->orderBy('name')->get();
@@ -399,6 +424,24 @@ class ReportController extends Controller
             }
 
             $rows[] = $row;
+        }
+
+        // ⚠️ قيود بيع مالهاش بنود (استيراد/قيد يدوي/فرق تقريب): سطر صريح بالفرق،
+        // فإجمالي التقرير = مبيعات كشف الحساب بالظبط. بيتحسب من غير فلتر البحث.
+        if (! $r->filled('q')) {
+            $ledgerG = (float) \App\Services\SalesSource::docs($a, $b,
+                $r->filled('user_id') ? [$r->integer('user_id')] : null)->sum('grand_total');
+            $gap = round($ledgerG - ($tn + $tt), 2);
+
+            if (abs($gap) >= 0.01) {
+                $row = ['—', __('rpt.entries_without_lines'), '', $this->m($gap), $this->m(0), $this->m($gap)];
+                if ($seeCost) {
+                    $row[] = $this->m(0);
+                    $row[] = '';
+                }
+                $rows[] = $row;
+                $tn += $gap;
+            }
         }
 
         $columns = [
@@ -434,9 +477,11 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $agg = Invoice::join('clients', 'clients.id', '=', 'invoices.client_id')
-            ->whereBetween('invoices.created_at', [$a, $b])
-            ->selectRaw('clients.channel_id ch, COUNT(*) c, SUM(invoices.grand_total) g')
+        // ⚠️ فواتير + أوامر توريد مسلّمة (٢١/٩) — الكي أكاونت معظمه توريد،
+        // فنصيبه كان بيطلع أقل من حقيقته بكتير
+        $agg = \App\Services\SalesSource::docs($a, $b)
+            ->join('clients', 'clients.id', '=', 's.client_id')
+            ->selectRaw('clients.channel_id ch, COUNT(*) c, SUM(s.grand_total) g')
             ->groupBy('clients.channel_id')->get();
 
         $total = (float) $agg->sum('g') ?: 1;
@@ -472,7 +517,8 @@ class ReportController extends Controller
 
         $q = Transaction::with('client.group')
             ->where('kind', 'collection')
-            ->whereBetween('created_at', [$a, $b]);
+            // ⚠️ بتاريخ القيد (`date`) مش تاريخ التسجيل — نفس رقم الداشبورد (٢١/٩)
+            ->whereBetween('date', [$a->toDateString(), $b->toDateString()]);
 
         $this->like($q, $r, ['memo', 'reference', 'client.name']);
 
@@ -531,8 +577,10 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
+        // ⚠️ المرتجع بيدخل الفترة بتاريخ قيده في كشف الحساب (٢١/٩)
         $q = ClientReturn::with(['client.group', 'user'])
-            ->whereBetween('created_at', [$a, $b])
+            ->whereIn('id', Transaction::where('kind', 'return')->where('source_type', ClientReturn::class)
+                ->whereBetween('date', [$a->toDateString(), $b->toDateString()])->select('source_id'))
             ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')));
 
         $this->like($q, $r, ['number', 'client.name']);
@@ -573,7 +621,8 @@ class ReportController extends Controller
 
     private function rDebts(Request $r): array
     {
-        $clients = Client::with(['group', 'channel', 'zone', 'rep'])
+        // ⚠️ `visibleTo` — عملاء فريق اللي فاتح التقرير بس (تدقيق ٢١/٩)
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'zone', 'rep'])
             ->where('status', 'active')
             ->where('balance', '>', 0)
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
@@ -630,26 +679,23 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $reps = User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)
+        $reps = User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES), $r->user())->where('active', true)
             ->orderBy('name')->get();
 
-        $inv = Invoice::whereBetween('created_at', [$a, $b])
-            ->selectRaw('user_id, COUNT(*) c, SUM(grand_total) g,
-                SUM(CASE WHEN payment = "cash" THEN grand_total ELSE 0 END) cash_g')
+        // ⚠️ من كشف الحساب (٢١/٩): فواتير + أوامر توريد + قيود، بتاريخ القيد
+        $inv = \App\Services\SalesSource::docs($a, $b)
+            ->selectRaw("user_id, COUNT(*) c, SUM(grand_total) g,
+                SUM(CASE WHEN payment = 'cash' THEN grand_total ELSE 0 END) cash_g")
             ->groupBy('user_id')->get()->keyBy('user_id');
 
         // التحصيل الميداني — قيوده مصدرها الزيارة، والزيارة ليها مندوب
         // ⚠️ `transactions.created_at` مؤهّلة — الجوين مع visits خلّى
         // العمود ambiguous ورمى 500 (بلاغ ٢١/٨)
-        $fieldColl = Transaction::where('kind', 'collection')
-            ->where('source_type', Visit::class)
-            ->whereBetween('transactions.created_at', [$a, $b])
-            ->join('visits', 'visits.id', '=', 'transactions.source_id')
-            ->selectRaw('visits.user_id uid, SUM(transactions.credit) g')
-            ->groupBy('visits.user_id')->pluck('g', 'uid');
+        $fieldColl = \App\Services\SalesSource::collections($a, $b)->where('src', 'visit')
+            ->selectRaw('user_id uid, SUM(amount) g')->groupBy('user_id')->pluck('g', 'uid');
 
-        $rets = ClientReturn::whereBetween('created_at', [$a, $b])
-            ->selectRaw('user_id, SUM(grand_total) g')->groupBy('user_id')->pluck('g', 'user_id');
+        $rets = \App\Services\SalesSource::returns($a, $b)
+            ->selectRaw('user_id, SUM(amount) g')->groupBy('user_id')->pluck('g', 'user_id');
 
         $gifts = GiftHandout::whereBetween('created_at', [$a, $b])
             ->selectRaw('user_id, SUM(qty) q')->groupBy('user_id')->pluck('q', 'user_id');
@@ -860,7 +906,8 @@ class ReportController extends Controller
             ->selectRaw('client_id, MAX(checked_in_at) t')
             ->groupBy('client_id')->pluck('t', 'client_id');
 
-        $clients = Client::with(['group', 'channel', 'zone', 'rep'])
+        // ⚠️ `visibleTo` — عملاء فريق اللي فاتح التقرير بس (تدقيق ٢١/٩)
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'zone', 'rep'])
             ->where('status', 'active')
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
             ->get()
@@ -913,13 +960,15 @@ class ReportController extends Controller
     {
         [$a, $b] = $this->range($r);
 
-        $clients = Client::with(['group', 'channel', 'zone', 'rep'])
+        // ⚠️ `visibleTo` — عملاء فريق اللي فاتح التقرير بس (تدقيق ٢١/٩)
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'zone', 'rep'])
             ->whereBetween('created_at', [$a, $b])
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
             ->latest()->take(self::MAX_ROWS)->get();
 
-        $sales = Invoice::whereIn('client_id', $clients->pluck('id'))
-            ->selectRaw('client_id, SUM(grand_total) g')->groupBy('client_id')->pluck('g', 'client_id');
+        // ⚠️ من كشف الحساب (`clients.purchases`) — كان فواتير بس، فعميل الكي
+        // أكاونت الجديد اللي شغله أوامر توريد كان بيطلع «صفر مبيعات» (٢١/٩)
+        $sales = $clients->pluck('purchases', 'id');
 
         $rows = $clients->map(fn ($c) => [
             $c->created_at->format('Y-m-d'),
@@ -944,6 +993,594 @@ class ReportController extends Controller
             ],
             'rows' => $rows,
             'totals' => ['', __('common.total'), '', '', '', $this->m($sales->sum()), $this->m($clients->sum('balance'))],
+        ];
+    }
+
+    // ═══════════════════ ١٥. صلاحية الرفوف (من جرد المنسقين) ═══════════════════
+
+    /**
+     * آخر جرد لكل صنف في كل فرع، مرتب بالأقرب انتهاءً. «خلال كام يوم»
+     * بيتحكم فيها فلتر `days` (الافتراضي 60). الصنف اللي اتجرد من غير
+     * تاريخ انتهاء مش بيظهر هنا — التقرير ده عن الصلاحية مش عن الكمية.
+     */
+    private function rShelfExpiry(Request $r): array
+    {
+        $days = max(1, min(365, $r->integer('days') ?: 60));
+        $limit = today()->addDays($days)->toDateString();
+
+        // آخر صف جرد لكل (فرع، صنف)
+        $latest = \App\Models\ShelfCount::selectRaw('MAX(id) id')->groupBy('client_id', 'product_id');
+
+        $rows = \App\Models\ShelfCount::with(['client.group', 'client.channel', 'product', 'merchVisit.user'])
+            ->whereIn('id', $latest)
+            ->whereIn('client_id', Client::visibleTo(Client::query(), $r->user())->select('clients.id'))
+            ->whereNotNull('expiry_date')->where('expiry_date', '<=', $limit)
+            ->where('pieces', '>', 0)
+            ->when($r->filled('channel_id'), fn ($w) => $w->whereHas('client',
+                fn ($c) => $c->where('channel_id', $r->integer('channel_id'))))
+            ->orderBy('expiry_date')->take(self::MAX_ROWS)->get();
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $rows = $rows->filter(fn ($c) => str_contains(mb_strtolower(
+                ($c->client?->fullName() ?? '').' '.($c->product?->displayName() ?? '')), $s));
+        }
+
+        $expired = $rows->filter(fn ($c) => $c->daysToExpiry() < 0);
+
+        return [
+            'filters' => ['days', 'channel', 'q'],
+            // خانة الأيام بتفتح على 60 هنا (الافتراضي العام 14 بتاع «من غير زيارة»)
+            'daysDefault' => 60,
+            'daysLabel' => __('rpt.f_days_expiry'),
+            'kpis' => [
+                [__('rpt.k_lines'), $this->f0($rows->count()), ''],
+                [__('rpt.k_expired'), $this->f0($expired->count()), 'neg'],
+                [__('rpt.k_expired_pcs'), $this->f0($expired->sum('pieces')), 'neg'],
+                [__('rpt.k_near_pcs'), $this->f0($rows->sum('pieces') - $expired->sum('pieces')), 'mid'],
+            ],
+            'columns' => [
+                [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_product')],
+                [__('rpt.k_qty'), 'num'], [__('rpt.c_unit')], [__('rpt.k_pieces'), 'num'],
+                [__('rpt.c_production')], [__('rpt.c_expiry')], [__('rpt.k_days_left'), 'num'],
+                [__('rpt.c_counted_at')], [__('rpt.c_rep')],
+            ],
+            'rows' => $rows->map(fn ($c) => [
+                $c->client?->fullName() ?? '—',
+                $c->client?->channel?->displayName() ?? '—',
+                $c->product?->displayName() ?? '—',
+                rtrim(rtrim(number_format((float) $c->qty, 2), '0'), '.'),
+                __('stock.unit_'.$c->unit),
+                $this->f0($c->pieces),
+                $c->production_date?->format('Y-m-d') ?? '—',
+                $c->expiry_date->format('Y-m-d'),
+                $this->f0($c->daysToExpiry()),
+                $c->created_at?->format('Y-m-d') ?? '—',
+                $c->merchVisit?->user?->displayName() ?? '—',
+            ])->values()->all(),
+            'totals' => [__('common.total'), '', '', '', '', $this->f0($rows->sum('pieces')), '', '', '', '', ''],
+        ];
+    }
+
+    // ═══════════════════ ١٦. أداء المنسقين ═══════════════════
+
+    /** لكل منسق في الفترة: زيارات، صور كاملة، بدون تصوير، جرد، اتنقل للرف، نواقص، ومتوسط المدة */
+    private function rMerchPerformance(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+
+        $team = User::fieldVisibleTo(User::query(), $r->user())->select('id');
+
+        $visits = \App\Models\MerchVisit::with(['user', 'refills'])->withCount('counts')
+            ->whereIn('user_id', $team)->whereBetween('checked_in_at', [$a, $b])
+            ->when($r->filled('user_id'), fn ($w) => $w->where('user_id', $r->integer('user_id')))
+            ->get()->groupBy('user_id');
+
+        $T = ['v' => 0, 'full' => 0, 'np' => 0, 'cnt' => 0, 'moved' => 0, 'short' => 0, 'br' => 0];
+        $rows = [];
+
+        foreach ($visits as $list) {
+            $done = $list->whereNotNull('checked_out_at');
+            $full = $list->filter(fn ($v) => $v->photo_before !== null && $v->photo_after !== null)->count();
+            $np = $list->where('no_photos', true)->count();
+            $cnt = $list->where('counts_count', '>', 0)->count();
+            $moved = (int) $list->sum(fn ($v) => $v->movedTotal());
+            $short = (int) $list->sum(fn ($v) => $v->outOfStockCount());
+            $branches = $list->pluck('client_id')->unique()->count();
+            $mins = $done->map(fn ($v) => $v->minutes())->filter(fn ($m) => $m !== null);
+
+            $rows[] = [
+                $list->first()->user?->displayName() ?? '—',
+                $this->f0($list->count()), $this->f0($branches), $this->f0($full),
+                $this->f0($np), $this->f0($cnt), $this->f0($moved), $this->f0($short),
+                $mins->isEmpty() ? '—' : $this->f0($mins->avg()),
+            ];
+
+            $T['v'] += $list->count(); $T['full'] += $full; $T['np'] += $np; $T['cnt'] += $cnt;
+            $T['moved'] += $moved; $T['short'] += $short; $T['br'] += $branches;
+        }
+
+        return [
+            'filters' => ['range', 'rep'],
+            'kpis' => [
+                [__('rpt.k_visits'), $this->f0($T['v']), ''],
+                [__('rpt.k_full_photos'), $this->f0($T['full']), 'pos'],
+                [__('rpt.k_no_photos'), $this->f0($T['np']), 'neg'],
+                [__('rpt.k_counted'), $this->f0($T['cnt']), ''],
+                [__('rpt.k_moved'), $this->f0($T['moved']), 'mid'],
+            ],
+            'columns' => [
+                [__('rpt.c_rep')], [__('rpt.k_visits'), 'num'], [__('rpt.k_branches'), 'num'],
+                [__('rpt.k_full_photos'), 'num'], [__('rpt.k_no_photos'), 'num'], [__('rpt.k_counted'), 'num'],
+                [__('rpt.k_moved'), 'num'], [__('rpt.k_short'), 'num'], [__('rpt.k_avg_minutes'), 'num'],
+            ],
+            'rows' => $rows,
+            'totals' => [__('common.total'), $this->f0($T['v']), $this->f0($T['br']), $this->f0($T['full']),
+                $this->f0($T['np']), $this->f0($T['cnt']), $this->f0($T['moved']), $this->f0($T['short']), ''],
+        ];
+    }
+
+    // ═══════════════════ ١٧. العميل × الصنف ═══════════════════
+
+    /** كل عميل اشترى إيه في الفترة: كمية وقيمة لكل صنف. فواتير + أوامر توريد مسلّمة. */
+    private function rClientProducts(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+
+        $visible = Client::visibleTo(Client::query(), $r->user())
+            ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->select('clients.id');
+
+        $lines = \App\Services\SalesSource::lines($a, $b, $r->filled('user_id') ? [$r->integer('user_id')] : null)
+            ->whereIn('client_id', $visible)
+            ->selectRaw('client_id, product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax')
+            ->groupBy('client_id', 'product_id')->get();
+
+        $clients = Client::with('group')->whereIn('id', $lines->pluck('client_id')->unique())->get()->keyBy('id');
+        $products = \App\Models\Product::whereIn('id', $lines->pluck('product_id')->unique())->get()->keyBy('id');
+        $perClient = $lines->groupBy('client_id')->map(fn ($g) => (float) $g->sum(fn ($l) => $l->net + $l->tax));
+
+        $rows = $lines->map(fn ($l) => [
+            'client' => $clients->get($l->client_id)?->fullName() ?? '—',
+            'code' => $clients->get($l->client_id)?->code ?? '',
+            'product' => $products->get($l->product_id)?->displayName() ?? '#'.$l->product_id,
+            'pcode' => $products->get($l->product_id)?->code ?? '',
+            'q' => (float) $l->q, 'net' => (float) $l->net, 'tax' => (float) $l->tax,
+            'rank' => $perClient[$l->client_id] ?? 0,
+        ]);
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $rows = $rows->filter(fn ($x) => str_contains(mb_strtolower($x['client'].' '.$x['code'].' '.$x['product'].' '.$x['pcode']), $s));
+        }
+
+        // أكبر عميل الأول، وجوّه العميل أكبر صنف الأول
+        $rows = $rows->sort(fn ($x, $y) => [$y['rank'], $x['client'], $y['net']] <=> [$x['rank'], $y['client'], $x['net']])
+            ->take(self::MAX_ROWS)->values();
+
+        return [
+            'filters' => ['range', 'rep', 'channel', 'q'],
+            'kpis' => [
+                [__('rpt.k_clients'), $this->f0($rows->pluck('code')->unique()->count()), ''],
+                [__('rpt.k_products'), $this->f0($rows->pluck('pcode')->unique()->count()), ''],
+                [__('rpt.k_qty'), $this->f0($rows->sum('q')), ''],
+                [__('rpt.k_grand'), $this->m($rows->sum('net') + $rows->sum('tax')), 'pos'],
+            ],
+            'columns' => [
+                [__('common.code')], [__('rpt.c_client')], [__('rpt.c_product')], [__('rpt.k_qty'), 'num'],
+                [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'],
+            ],
+            'rows' => $rows->map(fn ($x) => [$x['code'], $x['client'], $x['product'], $this->f0($x['q']),
+                $this->m($x['net']), $this->m($x['tax']), $this->m($x['net'] + $x['tax'])])->all(),
+            'totals' => [__('common.total'), '', '', $this->f0($rows->sum('q')), $this->m($rows->sum('net')),
+                $this->m($rows->sum('tax')), $this->m($rows->sum('net') + $rows->sum('tax'))],
+        ];
+    }
+
+    // ═══════════════════ ١٨. عملاء مبيعاتهم نزلت ═══════════════════
+
+    /**
+     * صافي مبيعات الفترة (بيع − مرتجع من كشف الحساب) مقابل الفترة اللي قبلها.
+     * لو الفترة بتبدأ أول الشهر، المقارنة بنفس الأيام من الشهر اللي فات؛
+     * غير كده بنفس عدد الأيام اللي قبلها مباشرة. الأكبر نزولاً فوق.
+     */
+    private function rSalesDecline(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+
+        if ($a->day === 1) {
+            $pa = $a->copy()->subMonthNoOverflow();
+            $pb = $b->copy()->subMonthNoOverflow();
+        } else {
+            $len = (int) $a->copy()->startOfDay()->diffInDays($b->copy()->startOfDay()) + 1;
+            $pb = $a->copy()->subDay();
+            $pa = $pb->copy()->subDays($len - 1);
+        }
+
+        $net = fn ($x, $y) => Transaction::whereIn('kind', ['sale', 'return'])
+            ->whereBetween('date', [$x->toDateString(), $y->toDateString()])
+            ->selectRaw("client_id, SUM(CASE WHEN kind = 'sale' THEN debit ELSE -credit END) v")
+            ->groupBy('client_id')->pluck('v', 'client_id');
+
+        $cur = $net($a, $b);
+        $prev = $net($pa, $pb);
+
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'rep'])
+            ->whereIn('clients.id', $cur->keys()->merge($prev->keys())->unique())
+            ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->get();
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $clients = $clients->filter(fn ($c) => str_contains(mb_strtolower($c->fullName().' '.$c->name_en.' '.$c->code), $s));
+        }
+
+        $rows = $clients->map(fn ($c) => [
+            'c' => $c, 'prev' => (float) ($prev[$c->id] ?? 0), 'cur' => (float) ($cur[$c->id] ?? 0),
+        ])->map(fn ($x) => $x + ['diff' => $x['cur'] - $x['prev']])
+            ->sortBy('diff')->take(self::MAX_ROWS)->values();
+
+        $down = $rows->where('diff', '<', 0);
+        $lost = $rows->filter(fn ($x) => $x['prev'] > 0 && $x['cur'] <= 0);
+
+        return [
+            'filters' => ['range', 'channel', 'q'],
+            'kpis' => [
+                [__('rpt.k_prev_period'), $pa->toDateString().' → '.$pb->toDateString(), ''],
+                [__('rpt.k_down_clients'), $this->f0($down->count()), 'neg'],
+                [__('rpt.k_down_value'), $this->m(abs($down->sum('diff'))), 'neg'],
+                [__('rpt.k_stopped'), $this->f0($lost->count()), 'mid'],
+                [__('rpt.k_up_value'), $this->m($rows->where('diff', '>', 0)->sum('diff')), 'pos'],
+            ],
+            'columns' => [
+                [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_rep')],
+                [__('rpt.k_prev_sales'), 'num'], [__('rpt.k_cur_sales'), 'num'],
+                [__('rpt.k_diff'), 'num'], [__('rpt.k_change_pct'), 'num'],
+            ],
+            'rows' => $rows->map(fn ($x) => [
+                $x['c']->fullName(), $x['c']->channel?->displayName() ?? '—', $x['c']->rep?->displayName() ?? '—',
+                $this->m($x['prev']), $this->m($x['cur']), $this->m($x['diff']),
+                $x['prev'] > 0 ? number_format($x['diff'] / $x['prev'] * 100, 1).'%' : '—',
+            ])->all(),
+            'totals' => [__('common.total'), '', '', $this->m($rows->sum('prev')), $this->m($rows->sum('cur')),
+                $this->m($rows->sum('diff')),
+                $rows->sum('prev') > 0 ? number_format($rows->sum('diff') / $rows->sum('prev') * 100, 1).'%' : '—'],
+        ];
+    }
+
+    // ═══════════════════ ١٩. التارجت مقابل المحقق ═══════════════════
+
+    /**
+     * من شجرة التارجيت السنوي: الشركة والمديرين والمناديب، لشهور الفترة.
+     * المحقق من `TargetProgress` (كشف الحساب + اليدوي) — نفس رقم شاشة التارجيت.
+     * الفترة بتتقص على سنة تاريخ «إلى»، وبالشهور الكاملة.
+     */
+    private function rTargetVsActual(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+        $year = (int) $b->year;
+        $m1 = (int) ($a->year < $year ? 1 : $a->month);
+        $m2 = (int) $b->month;
+
+        $viewer = $r->user();
+        $team = User::fieldVisibleTo(User::query(), $viewer)->pluck('id');
+
+        $targets = \App\Models\Target::with(['months', 'user'])->where('year', $year)
+            ->whereIn('kind', [\App\Models\Target::KIND_COMPANY, \App\Models\Target::KIND_MANAGER, \App\Models\Target::KIND_REP])
+            ->get()
+            // المدير بيشوف عقدته وعقد فريقه بس — مش الشركة ولا باقي المديرين
+            ->filter(fn ($t) => $viewer?->role !== 'manager'
+                || ($t->kind === \App\Models\Target::KIND_MANAGER && (int) $t->user_id === (int) $viewer->id)
+                || ($t->kind === \App\Models\Target::KIND_REP && $team->contains($t->user_id)))
+            ->when($r->filled('user_id'), fn ($c) => $c->where('user_id', $r->integer('user_id')));
+
+        $order = [\App\Models\Target::KIND_COMPANY => 0, \App\Models\Target::KIND_MANAGER => 1, \App\Models\Target::KIND_REP => 2];
+        $rows = [];
+        $T = ['t' => 0.0, 'a' => 0.0];
+
+        foreach ($targets->sortBy(fn ($t) => [$order[$t->kind], $t->user?->name]) as $t) {
+            $plan = (float) $t->months->filter(fn ($m) => $m->month >= $m1 && $m->month <= $m2)->sum('amount');
+            $ach = 0.0;
+
+            foreach (\App\Services\TargetProgress::achievedByMonth($t) as $mon => $v) {
+                if ($mon >= $m1 && $mon <= $m2) {
+                    $ach += (float) $v;
+                }
+            }
+
+            $rows[] = [
+                __('rpt.tk_'.$t->kind),
+                $t->kind === \App\Models\Target::KIND_COMPANY ? __('rpt.tk_company') : ($t->user?->displayName() ?? '—'),
+                $this->m($plan), $this->m($ach), $this->m($ach - $plan),
+                $plan > 0 ? number_format($ach / $plan * 100, 1).'%' : '—',
+                $this->m($t->amount),
+            ];
+
+            // الإجمالي من المناديب بس — جمع الشركة والمدير والمندوب مع بعض تكرار
+            if ($t->kind === \App\Models\Target::KIND_REP) {
+                $T['t'] += $plan; $T['a'] += $ach;
+            }
+        }
+
+        return [
+            'filters' => ['range', 'rep'],
+            'kpis' => [
+                [__('rpt.k_months'), $year.' · '.$m1.' → '.$m2, ''],
+                [__('rpt.k_target'), $this->m($T['t']), ''],
+                [__('rpt.k_achieved'), $this->m($T['a']), 'pos'],
+                [__('rpt.k_achieved_pct'), $T['t'] > 0 ? number_format($T['a'] / $T['t'] * 100, 1).'%' : '—', 'mid'],
+            ],
+            'columns' => [
+                [__('rpt.c_level')], [__('rpt.c_name')], [__('rpt.k_target'), 'num'], [__('rpt.k_achieved'), 'num'],
+                [__('rpt.k_gap'), 'num'], [__('rpt.k_achieved_pct'), 'num'], [__('rpt.k_year_target'), 'num'],
+            ],
+            'rows' => $rows,
+            'totals' => [__('rpt.tk_reps_total'), '', $this->m($T['t']), $this->m($T['a']), $this->m($T['a'] - $T['t']),
+                $T['t'] > 0 ? number_format($T['a'] / $T['t'] * 100, 1).'%' : '—', ''],
+        ];
+    }
+
+    // ═══════════════════ ٢٠. تكرار النواقص ═══════════════════
+
+    /** أنهي صنف بيخلص في أنهي فرع: من بنود ريفيل المنسقين في الفترة. */
+    private function rOosFrequency(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+
+        $team = User::fieldVisibleTo(User::query(), $r->user())->select('id');
+
+        $agg = DB::table('shelf_refills')
+            ->join('merch_visits', 'merch_visits.id', '=', 'shelf_refills.merch_visit_id')
+            ->whereBetween('merch_visits.checked_in_at', [$a, $b])
+            ->whereIn('merch_visits.user_id', $team)
+            ->when($r->filled('user_id'), fn ($w) => $w->where('merch_visits.user_id', $r->integer('user_id')))
+            ->selectRaw('merch_visits.client_id, shelf_refills.product_id, COUNT(*) seen,
+                SUM(CASE WHEN shelf_refills.out_of_stock = 1 THEN 1 ELSE 0 END) oos,
+                MAX(CASE WHEN shelf_refills.out_of_stock = 1 THEN merch_visits.checked_in_at END) last_oos')
+            ->groupBy('merch_visits.client_id', 'shelf_refills.product_id')
+            ->havingRaw('oos > 0')->orderByDesc('oos')->limit(self::MAX_ROWS)->get();
+
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel'])
+            ->whereIn('clients.id', $agg->pluck('client_id')->unique())
+            ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->get()->keyBy('id');
+        $products = \App\Models\Product::whereIn('id', $agg->pluck('product_id')->unique())->get()->keyBy('id');
+
+        $rows = $agg->filter(fn ($x) => $clients->has($x->client_id));
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $rows = $rows->filter(fn ($x) => str_contains(mb_strtolower(
+                $clients[$x->client_id]->fullName().' '.($products->get($x->product_id)?->displayName() ?? '')), $s));
+        }
+
+        return [
+            'filters' => ['range', 'rep', 'channel', 'q'],
+            'kpis' => [
+                [__('rpt.k_lines'), $this->f0($rows->count()), ''],
+                [__('rpt.k_oos_times'), $this->f0($rows->sum('oos')), 'neg'],
+                [__('rpt.k_branches'), $this->f0($rows->pluck('client_id')->unique()->count()), ''],
+                [__('rpt.k_products'), $this->f0($rows->pluck('product_id')->unique()->count()), ''],
+            ],
+            'columns' => [
+                [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_product')],
+                [__('rpt.k_oos_times'), 'num'], [__('rpt.k_seen_times'), 'num'], [__('rpt.k_oos_pct'), 'num'],
+                [__('rpt.c_last_oos')],
+            ],
+            'rows' => $rows->map(fn ($x) => [
+                $clients[$x->client_id]->fullName(),
+                $clients[$x->client_id]->channel?->displayName() ?? '—',
+                $products->get($x->product_id)?->displayName() ?? '#'.$x->product_id,
+                $this->f0($x->oos), $this->f0($x->seen), number_format($x->oos / max(1, $x->seen) * 100, 0).'%',
+                $x->last_oos ? Carbon::parse($x->last_oos)->format('Y-m-d') : '—',
+            ])->values()->all(),
+            'totals' => [__('common.total'), '', '', $this->f0($rows->sum('oos')), $this->f0($rows->sum('seen')), '', ''],
+        ];
+    }
+
+    // ═══════════════════ ٢١. ربحية العميل والقناة (أدمن) ═══════════════════
+
+    /**
+     * صافي المبيعات − التكلفة لكل عميل. ⚠️ الصنف اللي تكلفته صفر بيطلّع
+     * ربح 100% كدب — فعمود «مبيعات بلا تكلفة» بيقول قد إيه من رقم العميل
+     * مش متغطي بتكلفة، والهامش بيتحسب على المتغطي بس.
+     */
+    private function rProfitability(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+
+        $agg = \App\Services\SalesSource::lines($a, $b, $r->filled('user_id') ? [$r->integer('user_id')] : null)
+            ->selectRaw('client_id, SUM(total) net, SUM(cost) cost,
+                SUM(CASE WHEN cost > 0 THEN total ELSE 0 END) covered,
+                SUM(CASE WHEN cost > 0 THEN 0 ELSE total END) uncosted')
+            ->groupBy('client_id')->get()->keyBy('client_id');
+
+        $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel'])
+            ->whereIn('clients.id', $agg->keys())
+            ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->get();
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $clients = $clients->filter(fn ($c) => str_contains(mb_strtolower($c->fullName().' '.$c->name_en.' '.$c->code), $s));
+        }
+
+        $clients = $clients->sortByDesc(fn ($c) => (float) $agg[$c->id]->net)->take(self::MAX_ROWS);
+        $T = ['net' => 0.0, 'cost' => 0.0, 'cov' => 0.0, 'unc' => 0.0];
+        $rows = [];
+
+        foreach ($clients as $c) {
+            $x = $agg[$c->id];
+            $profit = (float) $x->covered - (float) $x->cost;
+            $T['net'] += $x->net; $T['cost'] += $x->cost; $T['cov'] += $x->covered; $T['unc'] += $x->uncosted;
+
+            $rows[] = [
+                $c->fullName(), $c->channel?->displayName() ?? '—', $this->m($x->net), $this->m($x->cost),
+                $this->m($profit), $x->covered > 0 ? number_format($profit / $x->covered * 100, 1).'%' : '—',
+                $this->m($x->uncosted),
+            ];
+        }
+
+        $profitT = $T['cov'] - $T['cost'];
+
+        return [
+            'filters' => ['range', 'rep', 'channel', 'q'],
+            'kpis' => [
+                [__('rpt.k_net'), $this->m($T['net']), ''],
+                [__('rpt.k_cost'), $this->m($T['cost']), ''],
+                [__('rpt.k_profit'), $this->m($profitT), 'pos'],
+                [__('rpt.k_margin'), $T['cov'] > 0 ? number_format($profitT / $T['cov'] * 100, 1).'%' : '—', 'mid'],
+                [__('rpt.k_uncosted'), $this->m($T['unc']), 'neg'],
+            ],
+            'columns' => [
+                [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.k_net'), 'num'], [__('rpt.k_cost'), 'num'],
+                [__('rpt.k_profit'), 'num'], [__('rpt.k_margin'), 'num'], [__('rpt.k_uncosted'), 'num'],
+            ],
+            'rows' => $rows,
+            'totals' => [__('common.total'), '', $this->m($T['net']), $this->m($T['cost']), $this->m($profitT),
+                $T['cov'] > 0 ? number_format($profitT / $T['cov'] * 100, 1).'%' : '—', $this->m($T['unc'])],
+        ];
+    }
+
+    // ═══════════════════ ٢٢. مطابقة المبيعات والتحصيل (أدمن) ═══════════════════
+
+    /**
+     * السيستم كله بقى بيقرا من **كشف الحساب** (قرار المالك ٢١/٩). التقرير ده
+     * بيقارن كشف الحساب بإجمالي **المستندات** (الحساب القديم بتاع الداشبورد)
+     * وبيفرد الفرق سطر سطر بسببه — عشان أي مستند مالوش قيد يبان ويتصلّح:
+     *
+     *   consignment  أمر توريد لعميل أمانة — قيده `consignment` مش بيع، فمش مديونية
+     *   no_entry     مستند مالوش قيد بيع خالص
+     *   other_date   المستند في الفترة وقيده بتاريخ بره الفترة
+     *   amount       القيد بقيمة غير إجمالي المستند (تسليم جزئي مثلاً)
+     *   ledger_only  قيد بيع في الفترة ومستنده بره الفترة أو مالوش مستند
+     *   coll_date    قيد تحصيل اتسجّل في الفترة وتاريخه بره الفترة (أو العكس)
+     *
+     * قراءة بس — مفيش أي تعديل. الحل بيتقرر بعد ما السبب يبان بالأرقام.
+     */
+    private function rSalesReconcile(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+        $day = [$a->toDateString(), $b->toDateString()];
+        $types = ['invoice' => Invoice::class, 'po' => PurchaseOrder::class];
+
+        // ⚠️ المستندات الخام عن قصد (مش `SalesSource`) — ده الطرف التاني في المقارنة
+        $docs = DB::table('invoices')->whereBetween('created_at', [$a, $b])
+            ->selectRaw("'invoice' AS kind, id AS doc_id, client_id, created_at AS doc_at, grand_total")
+            ->unionAll(DB::table('purchase_orders')->where('status', 'delivered')->whereBetween('delivered_at', [$a, $b])
+                ->selectRaw("'po' AS kind, id AS doc_id, client_id, delivered_at AS doc_at, grand_total"))
+            ->get();
+        $docsTotal = (float) $docs->sum('grand_total');
+
+        // كل قيود البيع/الأمانة المربوطة بمستندات الفترة — أياً كان تاريخها
+        $entries = collect();
+        foreach ($types as $kind => $class) {
+            foreach ($docs->where('kind', $kind)->pluck('doc_id')->chunk(500) as $ids) {
+                $entries = $entries->concat(Transaction::where('source_type', $class)
+                    ->whereIn('source_id', $ids)->whereIn('kind', ['sale', 'consignment'])
+                    ->get(['id', 'source_type', 'source_id', 'kind', 'date', 'debit']));
+            }
+        }
+        $byDoc = $entries->groupBy(fn ($t) => $t->source_type.'#'.$t->source_id);
+
+        $ledger = Transaction::where('kind', 'sale')->whereBetween('date', $day)
+            ->get(['id', 'client_id', 'source_type', 'source_id', 'date', 'debit', 'memo']);
+        $ledgerTotal = (float) $ledger->sum('debit');
+
+        $numbers = [
+            'invoice' => Invoice::whereIn('id', $docs->where('kind', 'invoice')->pluck('doc_id'))->pluck('number', 'id'),
+            'po' => PurchaseOrder::whereIn('id', $docs->where('kind', 'po')->pluck('doc_id'))->pluck('number', 'id'),
+        ];
+
+        $rows = collect();
+        $sum = ['consignment' => 0.0, 'no_entry' => 0.0, 'other_date' => 0.0, 'amount' => 0.0, 'ledger_only' => 0.0, 'coll_date' => 0.0];
+        $docKeys = [];
+
+        foreach ($docs as $d) {
+            $key = $types[$d->kind].'#'.$d->doc_id;
+            $docKeys[$key] = true;
+            $list = $byDoc->get($key) ?? collect();
+            $sale = $list->where('kind', 'sale');
+            $g = (float) $d->grand_total;
+            $base = [$d->kind, $numbers[$d->kind][$d->doc_id] ?? '#'.$d->doc_id, $d->client_id, substr((string) $d->doc_at, 0, 10), $g];
+
+            if ($sale->isEmpty()) {
+                $why = $list->where('kind', 'consignment')->isNotEmpty() ? 'consignment' : 'no_entry';
+                $sum[$why] += $g;
+                $rows->push([...$base, $why, '', 0.0, $g]);
+
+                continue;
+            }
+
+            $in = $sale->filter(fn ($t) => $t->date?->toDateString() >= $day[0] && $t->date?->toDateString() <= $day[1]);
+            $inSum = (float) $in->sum('debit');
+
+            if ($in->isEmpty()) {
+                $sum['other_date'] += $g;
+                $rows->push([...$base, 'other_date', $sale->first()->date?->toDateString() ?? '', 0.0, $g]);
+            } elseif (abs($inSum - $g) > 0.009) {
+                $sum['amount'] += $g - $inSum;
+                $rows->push([...$base, 'amount', $in->first()->date?->toDateString() ?? '', $inSum, $g - $inSum]);
+            }
+        }
+
+        // قيود بيع في الفترة مالهاش مستند في الفترة — بتزوّد كشف الحساب عن الداشبورد
+        foreach ($ledger as $t) {
+            if ($t->source_type !== null && isset($docKeys[$t->source_type.'#'.$t->source_id])) {
+                continue;
+            }
+
+            $sum['ledger_only'] += (float) $t->debit;
+            $rows->push([$t->source_type ? class_basename($t->source_type) : 'entry', \Illuminate\Support\Str::limit((string) $t->memo, 40),
+                $t->client_id, '', 0.0, 'ledger_only', $t->date?->toDateString() ?? '', (float) $t->debit, -(float) $t->debit]);
+        }
+
+        // التحصيل: الداشبورد بتاريخ التسجيل (`created_at`) وكشف الحساب بتاريخ القيد (`date`)
+        $collDash = (float) Transaction::where('kind', 'collection')->whereBetween('created_at', [$a, $b])->sum('credit');
+        $collLedger = (float) Transaction::where('kind', 'collection')->whereBetween('date', $day)->sum('credit');
+
+        $collOff = Transaction::where('kind', 'collection')
+            ->where(fn ($w) => $w
+                ->where(fn ($x) => $x->whereBetween('created_at', [$a, $b])->whereNotBetween('date', $day))
+                ->orWhere(fn ($x) => $x->whereBetween('date', $day)->whereNotBetween('created_at', [$a, $b])))
+            ->orderByDesc('credit')->take(500)->get(['client_id', 'date', 'created_at', 'credit', 'memo', 'method']);
+
+        foreach ($collOff as $t) {
+            $inDash = $t->created_at >= $a && $t->created_at <= $b;
+            $sum['coll_date'] += $inDash ? (float) $t->credit : -(float) $t->credit;
+            $rows->push(['collection', \Illuminate\Support\Str::limit((string) $t->memo, 40), $t->client_id,
+                $t->created_at?->toDateString() ?? '', $inDash ? (float) $t->credit : 0.0, 'coll_date',
+                $t->date?->toDateString() ?? '', $inDash ? 0.0 : (float) $t->credit, $inDash ? (float) $t->credit : -(float) $t->credit]);
+        }
+
+        $names = Client::with('group')->whereIn('id', $rows->pluck(2)->unique())->get()->keyBy('id');
+        $rows = $rows->sortByDesc(fn ($x) => abs($x[8]))->take(self::MAX_ROWS)->values();
+
+        return [
+            'filters' => ['range'],
+            'kpis' => [
+                [__('rpt.rc_docs_total'), $this->m($docsTotal), ''],
+                [__('rpt.rc_ledger_total'), $this->m($ledgerTotal), ''],
+                [__('rpt.k_diff'), $this->m($docsTotal - $ledgerTotal), 'neg'],
+                [__('rpt.rc_consignment'), $this->m($sum['consignment']), 'mid'],
+                [__('rpt.rc_no_entry'), $this->m($sum['no_entry']), 'neg'],
+                [__('rpt.rc_other_date'), $this->m($sum['other_date']), 'mid'],
+                [__('rpt.rc_amount'), $this->m($sum['amount']), 'mid'],
+                [__('rpt.rc_ledger_only'), $this->m($sum['ledger_only']), 'mid'],
+                [__('rpt.rc_coll_dash'), $this->m($collDash), ''],
+                [__('rpt.rc_coll_ledger'), $this->m($collLedger), ''],
+            ],
+            'columns' => [
+                [__('rpt.c_doc_type')], [__('rpt.c_doc')], [__('rpt.c_client')], [__('rpt.rc_doc_date')],
+                [__('rpt.rc_doc_amount'), 'num'], [__('rpt.rc_reason')], [__('rpt.rc_entry_date')],
+                [__('rpt.rc_entry_amount'), 'num'], [__('rpt.k_diff'), 'num'],
+            ],
+            'rows' => $rows->map(fn ($x) => [
+                __('rpt.rc_kind_'.(in_array($x[0], ['invoice', 'po', 'collection'], true) ? $x[0] : 'entry')),
+                $x[1], $names->get($x[2])?->fullName() ?? '#'.$x[2], $x[3], $this->m($x[4]),
+                __('rpt.rc_'.$x[5]), $x[6], $this->m($x[7]), $this->m($x[8]),
+            ])->all(),
+            'totals' => [__('common.total'), '', '', '', '', '', '', '', $this->m($rows->sum(fn ($x) => $x[8]))],
         ];
     }
 

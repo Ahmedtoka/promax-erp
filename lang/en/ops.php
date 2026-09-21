@@ -871,4 +871,13 @@ return [
     'x_inv_qty' => 'Via invoices',
     'x_po_qty' => 'Via POs',
     'x_days' => 'Days left',
+
+    // متابعة الرفوف: بدون تصوير + جرد المنسق (٢١ سبتمبر ٢٠٢٦)
+    'sv_no_photos' => 'Closed without photos',
+    'sv_counted' => 'Has shelf count',
+    'sv_count' => 'Shelf count',
+    'sv_no_photos_alert' => ':count visits were closed without photos in this period — review the reasons.',
+    'sv_no_photos_show' => 'Show them',
+    'sv_prod' => 'Prod.',
+    'sv_exp' => 'Exp.',
 ];

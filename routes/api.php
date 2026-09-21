@@ -288,6 +288,7 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::post('/visits', [PromoterApiController::class, 'startVisit']);
         Route::post('/visits/{merchVisit}/photo', [PromoterApiController::class, 'uploadPhoto']);
         Route::post('/visits/{merchVisit}/refill', [PromoterApiController::class, 'saveRefill']);
+        Route::post('/visits/{merchVisit}/count', [PromoterApiController::class, 'saveCount']);
         Route::post('/visits/{merchVisit}/replenishment',
             [PromoterApiController::class, 'requestReplenishment']);
         Route::post('/visits/{merchVisit}/close', [PromoterApiController::class, 'closeVisit']);

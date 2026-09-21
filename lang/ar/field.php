@@ -338,4 +338,11 @@ return [
     'notif_manual_gift_title' => 'هدية اتسجلت عليك من المكتب',
     'notif_manual_gift_body' => 'لعميل :client بتاريخ :date — اتخصمت من رصيد هداياك.',
     'custody_adjust_more' => '+:n تغيير تاني',
+
+    // جرد الرف وإنهاء الزيارة بدون تصوير (٢١ سبتمبر ٢٠٢٦)
+    'attr_no_photo_reason' => 'سبب عدم التصوير',
+    'count_dates_reversed' => 'تاريخ انتهاء :product قبل تاريخ إنتاجه — راجع التاريخين.',
+    'no_photos_alert_title' => 'زيارة اتقفلت بدون تصوير',
+    'no_photos_alert_body' => ':user قفل زيارة :client من غير صور الرف. السبب: :reason',
+    'event_no_photos' => 'زيارة :client اتقفلت بدون تصوير',
 ];

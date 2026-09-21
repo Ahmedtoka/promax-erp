@@ -17,7 +17,7 @@ class MerchVisit extends Model
 
     protected $fillable = [
         'user_id', 'client_id', 'checked_in_at', 'checked_out_at',
-        'photo_before', 'photo_after', 'lat', 'lng', 'note',
+        'photo_before', 'photo_after', 'no_photos', 'no_photo_reason', 'lat', 'lng', 'note',
     ];
 
     protected function casts(): array
@@ -25,6 +25,7 @@ class MerchVisit extends Model
         return [
             'checked_in_at' => 'datetime',
             'checked_out_at' => 'datetime',
+            'no_photos' => 'boolean',
         ];
     }
 
@@ -41,6 +42,12 @@ class MerchVisit extends Model
     public function refills(): HasMany
     {
         return $this->hasMany(ShelfRefill::class);
+    }
+
+    /** جرد الرف اللي المنسق كتبه بإيده في الزيارة دي */
+    public function counts(): HasMany
+    {
+        return $this->hasMany(ShelfCount::class);
     }
 
     public function replenishment(): HasOne

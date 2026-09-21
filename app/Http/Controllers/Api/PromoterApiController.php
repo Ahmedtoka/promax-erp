@@ -156,6 +156,8 @@ class PromoterApiController extends Controller
                     // متطابقة تقريباً ويعلّم على الغلط.
                     'image' => $p->imageSrc(),
                     'unit' => $p->unitLabel(),
+                    // وحدات الجرد المتاحة للصنف ده ومضاعِف كل واحدة بالقطع
+                    'unit_factors' => $p->unitFactors(),
                 ])->values(),
             'today' => [
                 'visits' => MerchVisit::where('user_id', $user->id)
@@ -195,7 +197,25 @@ class PromoterApiController extends Controller
 
     private function visitPayload(MerchVisit $visit): array
     {
-        $visit->load(['client', 'refills.product', 'replenishment']);
+        $visit->load(['client', 'refills.product', 'replenishment', 'counts.product']);
+
+        // ═══ آخر جرد في نفس الفرع (٢١/٩) — للمتابعة في الزيارة دي ═══
+        // آخر زيارة **قبل دي** اتسجّل فيها جرد، أياً كان المنسق اللي عملها:
+        // الجرد ملك الفرع مش ملك الشخص.
+        $lastVisitId = \App\Models\ShelfCount::where('client_id', $visit->client_id)
+            ->where('merch_visit_id', '<', $visit->id)->max('merch_visit_id');
+        $last = $lastVisitId === null ? collect()
+            : \App\Models\ShelfCount::with('product')->where('merch_visit_id', $lastVisitId)->get();
+        $countRow = fn (\App\Models\ShelfCount $c) => [
+            'product_id' => $c->product_id,
+            'name' => $c->product?->displayName() ?? '#'.$c->product_id,
+            'qty' => (float) $c->qty,
+            'unit' => $c->unit,
+            'pieces' => (int) $c->pieces,
+            'production_date' => $c->production_date?->toDateString(),
+            'expiry_date' => $c->expiry_date?->toDateString(),
+            'note' => $c->note,
+        ];
 
         return [
             'id' => $visit->id,
@@ -214,6 +234,10 @@ class PromoterApiController extends Controller
             'moved_total' => $visit->movedTotal(),
             'out_of_stock' => $visit->outOfStockCount(),
             'has_request' => $visit->replenishment !== null,
+            'no_photos' => (bool) $visit->no_photos,
+            'counts' => $visit->counts->map($countRow)->values(),
+            'last_count_at' => $last->first()?->created_at?->toIso8601String(),
+            'last_counts' => $last->map($countRow)->values(),
             'refills' => $visit->refills->map(fn ($r) => [
                 'product_id' => $r->product_id,
                 'name' => $r->product->displayName(),
@@ -468,6 +492,107 @@ class PromoterApiController extends Controller
         ], 201);
     }
 
+    /**
+     * POST /api/promoter/visits/{merchVisit}/count
+     * { lines: [{product_id, qty, unit, production_date?, expiry_date?, note?}] }
+     *
+     * جرد الرف بإيد المنسق. القايمة بتتبعت **كاملة** كل مرة (زي الريفيل)،
+     * فالصنف اللي اتشال من الشاشة بيتشال من الزيارة. محفوظ على الفرع —
+     * الزيارة الجاية بتفتح عليه (`last_counts` في حمولة الزيارة).
+     */
+    public function saveCount(Request $request, MerchVisit $merchVisit): JsonResponse
+    {
+        if ($merchVisit->user_id !== $request->user()->id) {
+            return response()->json(['message' => __('api.not_your_visit')], 403);
+        }
+        if (! $merchVisit->isOpen()) {
+            return response()->json(['message' => __('field.visit_already_closed')], 422);
+        }
+
+        $data = $request->validate([
+            'lines' => ['present', 'array', 'max:200'],
+            'lines.*.product_id' => ['required', 'distinct', new \App\Rules\SellableProduct],
+            'lines.*.qty' => ['required', 'numeric', 'min:0', 'max:99999'],
+            'lines.*.unit' => ['required', 'in:piece,box,case'],
+            'lines.*.production_date' => ['nullable', 'date'],
+            'lines.*.expiry_date' => ['nullable', 'date'],
+            'lines.*.note' => ['nullable', 'string', 'max:190'],
+        ]);
+
+        $products = Product::whereIn('id', collect($data['lines'])->pluck('product_id'))->get()->keyBy('id');
+        $rows = [];
+
+        foreach ($data['lines'] as $line) {
+            $product = $products->get($line['product_id']);
+            $factor = $product?->unitFactor($line['unit']);
+
+            // ⚠️ وحدة مش معرّفة للصنف = رفض، مش افتراض إنها قطعة
+            if ($factor === null) {
+                return response()->json(['message' => __('stock.unit_not_for_product', [
+                    'name' => $product?->displayName() ?? $line['product_id'],
+                ])], 422);
+            }
+
+            if (! empty($line['production_date']) && ! empty($line['expiry_date'])
+                && $line['expiry_date'] < $line['production_date']) {
+                return response()->json(['message' => __('field.count_dates_reversed', [
+                    'product' => $product->displayName(),
+                ])], 422);
+            }
+
+            $rows[] = [
+                'merch_visit_id' => $merchVisit->id,
+                'client_id' => $merchVisit->client_id,
+                'user_id' => $merchVisit->user_id,
+                'product_id' => $product->id,
+                'qty' => round((float) $line['qty'], 2),
+                'unit' => $line['unit'],
+                'pieces' => (int) round((float) $line['qty'] * $factor),
+                'production_date' => $line['production_date'] ?? null,
+                'expiry_date' => $line['expiry_date'] ?? null,
+                'note' => $line['note'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($merchVisit, $rows) {
+            \App\Models\ShelfCount::where('merch_visit_id', $merchVisit->id)->delete();
+            \App\Models\ShelfCount::insert($rows);
+        });
+
+        $merchVisit->refresh();
+
+        return response()->json(['visit' => $this->visitPayload($merchVisit)]);
+    }
+
+    /**
+     * تنبيه «زيارة اتقفلت بدون تصوير» — لمدير المنسق والأدمن بس
+     * (عقيدة النوتفيكيشن: صاحبه ومديره)، ولينك على متابعة الرفوف.
+     */
+    private function alertNoPhotos(MerchVisit $visit, \App\Models\User $promoter): void
+    {
+        $to = \App\Models\User::where('active', true)
+            ->where(fn ($q) => $q->where('role', 'admin')
+                ->when($promoter->manager_id, fn ($w) => $w->orWhere('id', $promoter->manager_id)))
+            ->get();
+
+        $client = $visit->client->displayName();
+        $who = $promoter->displayName();
+        $why = (string) $visit->no_photo_reason;
+
+        foreach ($to as $u) {
+            \App\Models\AppNotification::send($u,
+                fn () => __('field.no_photos_alert_title'),
+                fn () => __('field.no_photos_alert_body', ['user' => $who, 'client' => $client, 'reason' => $why]),
+                link: 'merch', good: false);
+        }
+
+        TrackEvent::log($promoter, 'no_photos',
+            __('field.event_no_photos', ['client' => $client]), $why,
+            $visit->lat ?? $visit->client->lat, $visit->lng ?? $visit->client->lng);
+    }
+
     /** POST /api/promoter/visits/{merchVisit}/close */
     public function closeVisit(Request $request, MerchVisit $merchVisit): JsonResponse
     {
@@ -477,17 +602,40 @@ class PromoterApiController extends Controller
         if (! $merchVisit->isOpen()) {
             return response()->json(['message' => __('field.visit_already_closed')], 422);
         }
-        if ($merchVisit->photo_before === null) {
-            return response()->json(['message' => __('field.photo_before_required')], 422);
+        // ═══ إنهاء بدون تصوير (طلب المالك ٢١/٩) ═══
+        //
+        // «مش بعرف أنهي، بيقولي لازم تصور». فرع مانع التصوير أو المنسق
+        // خرج قبل ما يصوّر = زيارة مفتوحة للأبد، وبتمنع انصرافه كمان
+        // (`Attendance::openWork`). الحل مش إننا نشيل شرط الصورة —
+        // الحل إن الاستثناء يبقى **معلن**: علم + سبب مكتوب + تنبيه
+        // لمديره + شارة حمرا في متابعة الرفوف. الأبلكيشن القديم
+        // مابيبعتش العلم، فسلوكه زي ما هو بالظبط.
+        $noPhotos = $request->boolean('no_photos');
+        $missing = $merchVisit->photo_before === null || $merchVisit->photo_after === null;
+
+        if ($missing && ! $noPhotos) {
+            return response()->json(['message' => __($merchVisit->photo_before === null
+                ? 'field.photo_before_required' : 'field.photo_after_required')], 422);
         }
-        if ($merchVisit->photo_after === null) {
-            return response()->json(['message' => __('field.photo_after_required')], 422);
+
+        $reason = null;
+
+        if ($missing) {
+            $reason = trim((string) $request->validate([
+                'no_photo_reason' => ['required', 'string', 'min:3', 'max:190'],
+            ], [], ['no_photo_reason' => __('field.attr_no_photo_reason')])['no_photo_reason']);
         }
 
         $merchVisit->update([
             'checked_out_at' => now(),
             'note' => $request->input('note', $merchVisit->note),
+            'no_photos' => $missing,
+            'no_photo_reason' => $reason,
         ]);
+
+        if ($missing) {
+            $this->alertNoPhotos($merchVisit, $request->user());
+        }
 
         $merchVisit->load('refills');
         $user = $request->user();

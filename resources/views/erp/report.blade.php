@@ -76,8 +76,8 @@
 
         @if (in_array('days', $filters))
             <div>
-                <label class="f">{{ __('rpt.f_days') }}</label>
-                <input type="number" name="days" min="1" max="365" value="{{ request('days', 14) }}" style="width:90px">
+                <label class="f">{{ $daysLabel ?? __('rpt.f_days') }}</label>
+                <input type="number" name="days" min="1" max="365" value="{{ request('days', $daysDefault ?? 14) }}" style="width:90px">
             </div>
         @endif
 

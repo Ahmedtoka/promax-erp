@@ -68,12 +68,22 @@
                 <option value="">{{ __('common.all') }}</option>
                 <option value="full" @selected($filters['shots'] === 'full')>{{ __('ops.sv_full') }}</option>
                 <option value="partial" @selected($filters['shots'] === 'partial')>{{ __('ops.sv_partial') }}</option>
+                <option value="none" @selected($filters['shots'] === 'none')>{{ __('ops.sv_no_photos') }}</option>
+                <option value="counted" @selected($filters['shots'] === 'counted')>{{ __('ops.sv_counted') }}</option>
             </select>
         </div>
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('ops.merch') }}">{{ __('common.clear') }}</a>
         <span class="badge b-gray">{{ __('ops.visit_countable', ['count' => $visits->total()]) }}</span>
     </form>
+
+    {{-- تنبيه «اتقفلت بدون تصوير» — بنفس فترة الفلتر، وآخر 7 أيام لو مفيش فترة --}}
+    @if ($noPhotosCount > 0 && $filters['shots'] !== 'none')
+        <div class="alert warn" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span>🚫 {{ __('ops.sv_no_photos_alert', ['count' => $noPhotosCount]) }}</span>
+            <a class="btn sm" href="{{ request()->fullUrlWithQuery(['shots' => 'none', 'page' => null]) }}">{{ __('ops.sv_no_photos_show') }}</a>
+        </div>
+    @endif
 
     @if ($capped)
         <div class="alert info">{{ __('ops.sv_capped', ['count' => $cap]) }}</div>
@@ -93,6 +103,7 @@
                 <th>{{ __('ops.short') }}</th>
                 <th data-nosum>{{ __('ops.shelf_photos') }}</th>
                 <th data-nosum>{{ __('ops.items') }}</th>
+                <th data-nosum>{{ __('ops.sv_count') }}</th>
             </tr>
             </thead>
             <tbody>
@@ -130,8 +141,12 @@
                     <td class="num {{ ($v['short'] ?? 0) > 0 ? 'neg' : '' }}">{{ $v['short'] !== null ? $v['short'] : '—' }}</td>
                     <td style="white-space:normal;min-width:230px">
                         @php $total = count($v['before']) + count($v['after']); @endphp
+                        @if ($v['no_photos'])
+                            <span class="badge b-red">🚫 {{ __('ops.sv_no_photos') }}</span>
+                            <div style="font-size:11px;color:var(--muted);margin-top:3px">{{ $v['no_photo_reason'] }}</div>
+                        @endif
                         @if ($total === 0)
-                            <span style="color:var(--muted)">—</span>
+                            @if (! $v['no_photos'])<span style="color:var(--muted)">—</span>@endif
                         @else
                             <div style="display:flex;gap:12px;flex-wrap:wrap">
                                 @foreach (['before' => __('field.shelf_before'), 'after' => __('field.shelf_after')] as $stage => $label)
@@ -176,9 +191,26 @@
                             @endif
                         @endforelse
                     </td>
+                    {{-- جرد الرف بإيد المنسق: الكمية بوحدتها + تاريخ الإنتاج والانتهاء.
+                         أحمر = منتهي، برتقالي = أقل من 30 يوم. --}}
+                    <td style="white-space:normal;max-width:320px;font-size:11px">
+                        @forelse ($v['counts'] as $c)
+                            @php $d = $c->daysToExpiry(); @endphp
+                            <div style="color:{{ $d !== null && $d < 0 ? 'var(--red)' : ($d !== null && $d <= 30 ? 'var(--orange)' : 'inherit') }}">
+                                {{ $c->product?->displayName() }}:
+                                <b class="num">{{ rtrim(rtrim(number_format((float) $c->qty, 2), '0'), '.') }}</b> {{ __('stock.unit_'.$c->unit) }}
+                                @if ($c->unit !== 'piece') <span style="color:var(--muted)">(<span class="num">{{ number_format($c->pieces) }}</span> {{ __('stock.unit_piece') }})</span> @endif
+                                @if ($c->production_date) · {{ __('ops.sv_prod') }} <span class="num">{{ $c->production_date->format('Y-m-d') }}</span> @endif
+                                @if ($c->expiry_date) · {{ __('ops.sv_exp') }} <span class="num">{{ $c->expiry_date->format('Y-m-d') }}</span> @endif
+                                @if ($c->note) <span style="color:var(--muted)">— {{ $c->note }}</span> @endif
+                            </div>
+                        @empty
+                            <span style="color:var(--muted)">—</span>
+                        @endforelse
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.sv_no_rows') }}</td></tr>
+                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">{{ __('ops.sv_no_rows') }}</td></tr>
             @endforelse
             </tbody>
         </table>
