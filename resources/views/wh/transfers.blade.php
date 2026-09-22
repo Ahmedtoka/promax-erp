@@ -40,20 +40,25 @@
     <a class="kpi {{ ($f['status'] ?? '') === '' ? 'on' : '' }}" href="{{ $kUrl(['status' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚚 {{ __('stock.transfers_total') }}</div>
         <div class="val">{{ $fmt($kpi['total']) }}</div>
+        {{-- الإجمالي = في الطريق + مستلمة + باقي الحالات — من نفس الأساس المفلتر (٢٢/٩) --}}
+        @php $kOther = $kpi['total'] - $kpi['sent'] - $kpi['received']; @endphp
+        <div class="sub2">{{ __('uid.tr_total_how') }}<br><span dir="ltr">{{ $fmt($kpi['total']) }} = {{ $fmt($kpi['sent']) }} + {{ $fmt($kpi['received']) }}@if ($kOther !== 0) + {{ __('uid.tr_other') }} {{ $fmt($kOther) }}@endif</span></div>
     </a>
     <a class="kpi {{ ($f['status'] ?? '') === 'sent' ? 'on' : '' }}" href="{{ $kUrl(['status' => 'sent']) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">📦 {{ __('stock.in_transit') }}</div>
         <div class="val mid">{{ $fmt($kpi['sent']) }}</div>
-        <div class="sub2">{{ $fmt($kpi['transit_units']) }} {{ __('stock.units') }}</div>
+        <div class="sub2">{{ __('uid.tr_sent_how') }} — {{ $fmt($kpi['transit_units']) }} {{ __('stock.units') }}</div>
     </a>
     <a class="kpi {{ ($f['status'] ?? '') === 'received' ? 'on' : '' }}" href="{{ $kUrl(['status' => 'received']) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">✅ {{ __('stock.received_count') }}</div>
         <div class="val pos">{{ $fmt($kpi['received']) }}</div>
+        <div class="sub2">{{ __('uid.tr_recv_how') }}</div>
     </a>
     {{-- التحويلات الميدانية (١٤/٨) — من نفس الأساس المفلتر --}}
     <a class="kpi {{ ($f['kind'] ?? '') === 'van' ? 'on' : '' }}" href="{{ $kUrl(['kind' => 'van', 'status' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚐 {{ __('stock.van_transfers_count') }}</div>
         <div class="val">{{ $fmt($kpi['van']) }}</div>
+        <div class="sub2">{{ __('uid.tr_van_how') }}</div>
     </a>
 </div>
 
@@ -220,7 +225,7 @@
         </table>
     </div>
 
-    <div class="pag">{{ $transfers->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $transfers])
 </div>
 
 @endsection

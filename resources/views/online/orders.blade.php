@@ -27,7 +27,7 @@
                 <input type="hidden" name="status" value="{{ $filters['status'] }}">
             @endif
             <label class="fl"><span>{{ __('ui.l_search') }}</span>
-                <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
+                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
             {{-- «من — إلى» على تاريخ الأوردر في شوبيفاي --}}
             @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>

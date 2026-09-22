@@ -224,6 +224,8 @@ class OpsController extends Controller
 
         return view('ops.rep', [
             'u' => $user,
+            // (٢٢/٩) الكاش المستحق دلوقتي — نفس أرقام التصفية
+            'cashDue' => \App\Http\Controllers\RepSettlementController::cashDueFor($user),
             'from' => $fromD,
             'to' => $toD,
 
@@ -1065,7 +1067,8 @@ class OpsController extends Controller
         });
 
         return view('ops.rep_sales', [
-            'rows' => $rows,
+            // (٢٢/٩) اللي معاه نقدية أكتر الأول — اللي مالوش حركة كان بيطلع فوق
+            'rows' => $rows->sortByDesc(fn ($r) => [$r['net'], $r['cash'] + $r['credit']])->values(),
             'from' => $fromD,
             'to' => $toD,
             // ⚠️ الكروت من نفس كوليكشن الجدول — نطاق واحد، والفوتر
@@ -1201,7 +1204,8 @@ class OpsController extends Controller
         });
 
         return view('ops.rep_board', [
-            'rows' => $rows,
+            // (٢٢/٩) اللي شغال الأول: عهدة مفتوحة ثم الأعلى مبيعات — اللي مالوش حركة كان بيطلع فوق بترتيب الاسم
+            'rows' => $rows->sortByDesc(fn ($r) => [$r['state'] === 'open' ? 1 : 0, $r['sales'], $r['coll_total']])->values(),
             'from' => $fromD,
             'to' => $toD,
             // ⚠️ الكروت من نفس كوليكشن الجدول — نطاق واحد
@@ -1794,6 +1798,9 @@ class OpsController extends Controller
                 'delivered' => $base()->where('status', 'delivered')->count(),
                 'late' => $lateScope($base())->count(),
                 'value' => (float) $base()->whereRaw(self::PO_COUNTED_SQL)->sum('grand_total'),
+                // (٢٢/٩) الكارت بيكتب معادلته: كل الأوامر − المرفوض/الملغي = المحسوب
+                'excluded_n' => $base()->whereRaw('NOT ('.self::PO_COUNTED_SQL.')')->count(),
+                'excluded_value' => (float) $base()->whereRaw('NOT ('.self::PO_COUNTED_SQL.')')->sum('grand_total'),
             ],
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::whereHas('clients')->orderBy('name')->get(['id', 'name', 'name_en']),

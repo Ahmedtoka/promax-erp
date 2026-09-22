@@ -45,6 +45,11 @@
         <div class="val">{{ $fmt($kpi['total']) }}</div>
         {{-- قيمة أوامر بتاريخ الأمر — مش مبيعات كشف الحساب (دي بتتقيد عند التسليم) --}}
         <div class="sub2">{{ __('uic.po_orders_value') }}: <b>{{ $fmt($kpi['value']) }}</b></div>
+        {{-- (٢٢/٩) المرفوض والملغي بره القيمة — الكارت بيقولها بالأرقام --}}
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.po_value_eq', [
+            't' => $fmt($kpi['value']), 'all' => $fmt(round($kpi['value']) + round($kpi['excluded_value'])),
+            'x' => $fmt($kpi['excluded_value']), 'n' => $fmt($kpi['excluded_n'])])) }}</span></div>
+        <div class="sub2">{{ __('uic.po_value_scope') }}</div>
     </a>
     <a @class(['kpi', 'on' => ($f['approval'] ?? '') === 'pending']) href="{{ $kpiLink(['approval' => 'pending']) }}">
         <div class="lbl">🔏 {{ __('enums.po_approval.pending') }}</div>

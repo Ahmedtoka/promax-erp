@@ -31,7 +31,10 @@
     };
 
     $boxes = [
-        $box($isChains ? __('audit.k_chains') : __('audit.k_clients'), $summary['total'], __('audit.k_total_hint'), 'mid', 'all'),
+        $box($isChains ? __('audit.k_chains') : __('audit.k_clients'), $summary['total'],
+            // الإجمالي بمعادلته (٢٢/٩) — وتلميح «الفرادى بس» بتاع شاشة العملاء كان طالع على شاشة السلاسل كمان
+            __('uia.eq_audit_total', ['t' => $fmt0($summary['total']), 'p' => $fmt0($summary['pending']), 'y' => $fmt0($summary['has_account']), 'n' => $fmt0($summary['no_account'])])
+                .($isChains ? '' : ' — '.__('audit.k_total_hint')), 'mid', 'all'),
         $box('⏳ '.__('audit.k_pending'), $summary['pending'], __('audit.k_pending_hint'), $summary['pending'] > 0 ? 'neg' : '', 'pending'),
         $box('✅ '.__('audit.k_has_account'), $summary['has_account'], __('audit.k_has_account_hint'), 'pos', 'has_account'),
         $box('❌ '.__('audit.k_no_account'), $summary['no_account'], __('audit.k_no_account_hint'), '', 'no_account'),
@@ -105,7 +108,7 @@
         <table class="tbl">
             <thead>
             <tr>
-                <th style="width:62px" data-nosum title="{{ __('audit.sort_hint') }}">↕ {{ __('audit.c_sort') }}</th>
+                <th style="width:84px" data-nosum title="{{ __('audit.sort_hint') }}">↕ {{ __('audit.c_sort') }}</th>
                 <th style="min-width:190px">{{ $isChains ? __('audit.c_chain') : __('audit.c_client') }}</th>
                 <th style="width:132px">1️⃣ {{ __('audit.c_has_account') }}</th>
                 <th class="num" style="width:118px" data-nosum>2️⃣ {{ __('audit.c_their') }}</th>
@@ -140,7 +143,7 @@
                         <input type="number" min="1" max="99999" step="1" class="aud-sort"
                                name="rows[{{ $r['id'] }}][sort]" value="{{ $a?->sort }}"
                                placeholder="{{ $i + 1 }}"
-                               style="width:52px;text-align:center;font-weight:800">
+                               style="width:72px;text-align:center;font-weight:800">{{-- ٧٢ بدل ٥٢ (٢٢/٩): الرقم من خانتين كان بيتقص تحت أسهم المتصفح --}}
                     </td>
 
                     <td>

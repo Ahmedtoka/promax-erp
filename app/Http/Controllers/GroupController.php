@@ -6,7 +6,6 @@ use App\Models\Channel;
 use App\Models\Client;
 use App\Models\ClientGroup;
 use App\Models\Contract;
-use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Support\Csv;
 use App\Support\DateRange;
@@ -43,34 +42,37 @@ class GroupController extends Controller
         [$groups, $stats] = $this->chainsWithStats($request);
 
         $rows = [];
-        $sum = ['branches' => 0, 'purchases' => 0.0, 'collections' => 0.0, 'balance' => 0.0];
+        // المرتجعات انضمّت للتصدير (٢٢/٩) — نفس عمود الشاشة، ومن غيره الرصيد مايتفهمش من الصف
+        $sum = ['branches' => 0, 'purchases' => 0.0, 'collections' => 0.0, 'returns' => 0.0, 'balance' => 0.0];
 
         foreach ($groups as $g) {
             $st = $stats->get($g->id);
             $p = (float) ($st->purchases ?? 0);
             $c = (float) ($st->collections ?? 0);
             $b = (float) ($st->balance ?? 0);
+            $r = (float) ($st->returns ?? 0);
 
             $rows[] = [
                 $g->displayName(), $g->code,
                 $g->channel?->displayName() ?? '', $g->subChannelLabel() ?? '',
-                $g->clients_count, Csv::money($p), Csv::money($c), Csv::money($b),
+                $g->clients_count, Csv::money($p), Csv::money($c), Csv::money($r), Csv::money($b),
                 $p > 0 ? round($c / $p * 100, 1) : 0,
             ];
 
             $sum['branches'] += $g->clients_count;
             $sum['purchases'] += $p;
             $sum['collections'] += $c;
+            $sum['returns'] += $r;
             $sum['balance'] += $b;
         }
 
         return Csv::download('chains-'.now()->format('Y-m-d-Hi').'.csv', [
             __('client.chain'), __('common.code'), __('client.channel'), __('client.segment'),
-            __('client.branch_count'), __('client.purchases'), __('client.collected'), __('client.balance'),
+            __('client.branch_count'), __('client.purchases'), __('client.collected'), __('client.returns'), __('client.balance'),
             __('client.collection_rate'),
         ], $rows, [
             __('common.total'), '', '', '',
-            $sum['branches'], Csv::money($sum['purchases']), Csv::money($sum['collections']), Csv::money($sum['balance']),
+            $sum['branches'], Csv::money($sum['purchases']), Csv::money($sum['collections']), Csv::money($sum['returns']), Csv::money($sum['balance']),
             $sum['purchases'] > 0 ? round($sum['collections'] / $sum['purchases'] * 100, 1) : 0,
         ]);
     }
@@ -115,6 +117,7 @@ class GroupController extends Controller
             ->selectRaw('group_id,
                 SUM(purchases) as purchases,
                 SUM(collections) as collections,
+                SUM(`returns`) as `returns`,
                 SUM(balance) as balance')
             ->groupBy('group_id')
             ->get()->keyBy('group_id');
@@ -165,8 +168,10 @@ class GroupController extends Controller
             'g' => $group->load(['channel', 'contract']),
             'branches' => $branches,
             'monthly' => $monthly,
-            'todaySales' => (float) Invoice::whereIn('client_id', $ids)
-                ->whereDate('created_at', today())->sum('total'),
+            // ⚠️ من `SalesSource` (٢٢/٩) — نفس تعريف الداشبورد: قيود البيع بتاريخ النهارده
+            // (فواتير + أوامر توريد مسلّمة)، مش فواتير `created_at` بس
+            'todaySales' => (float) \App\Services\SalesSource::docs(today(), today())
+                ->whereIn('client_id', $ids)->sum('grand_total'),
             'contracts' => $branches->filter(fn ($b) => $b->contract !== null),
             'zones' => \App\Models\Zone::orderBy('code')->get(),
             // حركة أصناف السلسلة بالكمية (٨/٩) — كل الفروع اللي الفاعل شايفها.

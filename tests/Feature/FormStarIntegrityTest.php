@@ -51,6 +51,7 @@ class FormStarIntegrityTest extends TestCase
         'erp/replenishments#formRpl' => ['ops.replenishments.assign'],
         'erp/replenishments#formRplEdit' => ['ops.replenishments.update'],
         'erp/team#passForm' => ['erp.team.password'],
+        'gl/coa#coaMoveForm' => ['gl.coa.move'],
         'erp/vehicles#formEditVehicle' => ['erp.vehicles.update'],
         'online/collections#formCollect' => ['online.collect'],
         'online/pickup#formCollect' => ['online.collect'],

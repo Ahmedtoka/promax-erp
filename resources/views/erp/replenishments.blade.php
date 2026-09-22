@@ -75,13 +75,16 @@
                         <br><span class="badge {{ $r->origin() === 'rep' ? 'b-blue' : 'b-gray' }}"
                               style="font-size:9.5px">{{ $r->originLabel() }}</span>
                     </td>
-                    <td style="white-space:normal;max-width:260px;font-size:11.5px">
+                    {{-- (٢٢/٩) الكمية الأول في خانة ثابتة — كانت بتنزل سطر لوحدها بعيد عن صنفها --}}
+                    <td style="white-space:normal;min-width:240px;max-width:320px;font-size:11.5px">
                         @foreach ($r->items as $i)
-                            <div>
+                            <div style="display:flex;gap:6px;align-items:baseline;text-align:start">
+                                <b dir="ltr" style="flex:0 0 30px;text-align:center;font-variant-numeric:tabular-nums">{{ $i->qty }}</b>
+                                <span style="flex:1;min-width:0">
                                 @if ($i->product)
                                     <a href="{{ route('erp.products.show', $i->product) }}" style="color:inherit">{{ $i->product->displayName() }}</a>
                                 @else #{{ $i->product_id }} @endif
-                                — <b>{{ $i->qty }}</b></div>
+                                </span></div>
                         @endforeach
                     </td>
                     <td class="num"><b>{{ $r->qtyTotal() }}</b></td>

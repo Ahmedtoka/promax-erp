@@ -35,6 +35,13 @@
 @if ($tab === 'aging')
     <div class="kpis">
         {{-- (٢٢/٩) الكارت فلتر: بيعرض كل أصحاب الشريحة دي (مجموع عمودها = رقم الكارت)، ودوسة تانية بترجّع أكبر 25 --}}
+        {{-- (٢٢/٩) إجمالي المديونية = مجموع الشرايح بالأرقام — وبيرجّع الجدول لأكبر 25 --}}
+        <a class="kpi" style="grid-column:span 2" href="{{ route('erp.reports', ['tab' => 'aging']) }}">
+            <div class="lbl">{{ __('uib.aging_total') }}</div>
+            <div class="val neg">{{ $fmt(array_sum($aging)) }}</div>
+            <div class="sub2">@include('erp._eq', ['total' => array_sum($aging), 'dec' => 2, 'parts' => collect($agingLabels)->map(fn ($l, $k) => [$l, $aging[$k]])->values()->all()])</div>
+            <div class="sub2">{{ __('uib.aging_total_sub') }}</div>
+        </a>
         @foreach ($agingLabels as $k => $lbl)
             <a @class(['kpi', 'on' => ($bucket ?? null) === $k]) title="{{ __('ui.click_to_filter') }}"
                href="{{ route('erp.reports', ['tab' => 'aging', 'bucket' => ($bucket ?? null) === $k ? null : $k]) }}">
@@ -131,9 +138,9 @@
     <div class="kpis">
         {{-- (٢٢/٩) الفروع لقايمة العملاء مفلترة، والتلات أرقام مجموع أعمدة الجدول اللي تحت --}}
         <a class="kpi" href="{{ route('erp.clients', ['q' => 'Circle K']) }}"><div class="lbl">{{ __('client.branches') }} — Circle K</div><div class="val">{{ $circleK->count() }}</div><div class="sub2">{{ __('report.one_umbrella') }}</div></a>
-        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($ckPurch) }}</div></a>
-        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($ckColl) }}</div><div class="sub2">{{ number_format($ckColl / max($ckPurch, 1) * 100, 1) }}%</div></a>
-        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_balance') }}</div><div class="val {{ $ckBal > 0 ? 'neg' : 'pos' }}">{{ $fmt($ckBal) }}</div></a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($ckPurch) }}</div><div class="sub2">{{ __('uib.ck_purch_sub') }}</div></a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($ckColl) }}</div>@if ($ckPurch > 0)<div class="sub2">@include('erp._eq', ['totalLabel' => __('uib.ck_coll_rate'), 'total' => $ckColl / max($ckPurch, 1) * 100, 'dec' => 1, 'suffix' => '%', 'zeros' => true, 'parts' => [[__('client.collected'), $ckColl, '+', 0], [__('report.network_purchases'), $ckPurch, '÷', 0]]])</div>@endif</a>
+        <a class="kpi" href="#ck-branches"><div class="lbl">{{ __('report.network_balance') }}</div><div class="val {{ $ckBal > 0 ? 'neg' : 'pos' }}">{{ $fmt($ckBal) }}</div><div class="sub2">{{ __('uib.ck_bal_sub') }}</div></a>
     </div>
     <div class="card" id="ck-branches">
         <h3>🏪 {{ __('client.branches') }}</h3>

@@ -15,6 +15,9 @@
     <a class="btn" href="{{ route('erp.attendance.log') }}">📋 {{ __('hr.log') }}</a>
 @endsection
 
+{{-- (٢٢/٩) يوم فات وفضل مفتوح مابيعدّش لايف لحد دلوقتي — بيتعرض بدقايقه المسجّلة (نفس حساب سجل الحضور) --}}
+@php $wl = fn ($d) => \App\Models\AttendanceDay::hhmm($d->date->toDateString() < today()->toDateString() ? (int) $d->worked_minutes : $d->liveMinutes()); @endphp
+
 @section('content')
 
 @if (session('ok'))
@@ -49,7 +52,7 @@
             <div class="frow" style="align-items:flex-end">
                 <div>
                     <label class="f">{{ __('hr.computed') }}</label>
-                    <div dir="ltr" style="font-size:19px;font-weight:900">{{ $d->workedLabel() }}</div>
+                    <div dir="ltr" style="font-size:19px;font-weight:900">{{ $wl($d) }}</div>
                     <div class="side" style="font-size:11px">
                         {{ __('hr.breaks') }}: {{ \App\Models\AttendanceDay::hhmm($d->break_minutes) }}
                         · {{ __('hr.punches_count', ['n' => $d->punches->count()]) }}
@@ -61,7 +64,7 @@
                     @csrf
                     <div>
                         <label class="f">{{ __('hr.approved_minutes') }}</label>
-                        <input type="text" name="hours" dir="ltr" placeholder="{{ $d->workedLabel() }}"
+                        <input type="text" name="hours" dir="ltr" placeholder="{{ $wl($d) }}"
                                pattern="\d{1,2}:[0-5]\d" style="width:110px;text-align:center;font-weight:800">
                         <div class="side" style="font-size:10.5px">{{ __('hr.approved_hint') }}</div>
                     </div>

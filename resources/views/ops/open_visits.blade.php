@@ -25,14 +25,19 @@
 <div class="kpis" style="margin-bottom:14px">
     {{-- (٢٢/٩) كل كارت بينزل على جدوله في نفس الصفحة --}}
     <a class="kpi" href="#ovClients"><div class="lbl">📍 {{ __('ops.ov_clients') }}</div>
-        <div class="val {{ $visits->count() > 0 ? 'mid' : '' }}">{{ $visits->count() }}</div></a>
+        <div class="val {{ $visits->count() > 0 ? 'mid' : '' }}">{{ $visits->count() }}</div>
+        {{-- (٢٢/٩) شرح الكارت + تقسيمته من نفس الصفوف --}}
+        @php $ovStale = $visits->filter(fn ($v) => ! $v->checked_in_at?->isToday())->count(); @endphp
+        <div class="sub2">{{ __('uic.ov_clients_sub', ['t' => $visits->count(), 'a' => $visits->count() - $ovStale, 'b' => $ovStale]) }}</div></a>
     <a class="kpi" href="#ovWh"><div class="lbl">🏭 {{ __('ops.ov_warehouses') }}</div>
-        <div class="val">{{ $whVisits->count() }}</div></a>
+        <div class="val">{{ $whVisits->count() }}</div>
+        <div class="sub2">{{ __('uic.ov_wh_sub') }}</div></a>
     <a class="kpi" href="#ovClients"><div class="lbl">⏳ {{ __('ops.ov_stale') }}</div>
         <div class="val neg">{{ $visits->filter(fn ($v) => ! $v->checked_in_at?->isToday())->count() }}</div>
         <div class="sub2">{{ __('ops.ov_stale_hint') }}</div></a>
     <a class="kpi" href="#ovAtt"><div class="lbl">⏱ {{ __('ops.att_kpi') }}</div>
-        <div class="val {{ $attRows->count() > 0 ? 'mid' : '' }}">{{ $attRows->count() }}</div></a>
+        <div class="val {{ $attRows->count() > 0 ? 'mid' : '' }}">{{ $attRows->count() }}</div>
+        <div class="sub2">{{ __('uic.ov_att_sub') }}</div></a>
 </div>
 
 <div class="card" id="ovClients">

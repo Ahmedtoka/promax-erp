@@ -46,6 +46,12 @@ class ChannelController extends Controller
             // الشاشة دي. لازم يبانوا، وإلا الإجماليات تحت بتقل عن
             // إجمالي السيستم ومحدش يعرف ليه.
             'orphans' => Client::visibleTo(Client::whereNull('channel_id'), $request->user())->where('status', 'active')->count(),
+            // صف «بدون قناة» في الجدول (٢٢/٩) — بنفس أعمدة القنوات، عشان إجمالي الشاشة يقفل على إجمالي شاشة العملاء
+            'orphanStats' => Client::visibleTo(Client::whereNull('channel_id'), $request->user())
+                ->selectRaw("COUNT(*) as n_clients, COALESCE(SUM(status = 'active'), 0) as n_active,
+                    COALESCE(SUM(`purchases`), 0) as purchases, COALESCE(SUM(`collections`), 0) as collections,
+                    COALESCE(SUM(`returns`), 0) as n_returns, COALESCE(SUM(`balance`), 0) as balance,
+                    COALESCE(SUM(`balance` > 0), 0) as n_owing")->first(),
             'managers' => User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
                 ->where('active', true)->with('channels')->get(),
         ]);
@@ -162,12 +168,13 @@ class ChannelController extends Controller
             });
 
         // ═══ مبيعات النهارده ═══
-        $today = Invoice::query()
-            ->join('clients', 'clients.id', '=', 'invoices.client_id')
+        // ⚠️ من `SalesSource` (٢٢/٩) — نفس تعريف الداشبورد: قيود البيع بتاريخ النهارده
+        // (فواتير + أوامر توريد مسلّمة). كانت فواتير `created_at` بس فالرقم مايطابقش الرئيسية.
+        $today = \App\Services\SalesSource::docs(today(), today())
+            ->join('clients', 'clients.id', '=', 's.client_id')
             ->whereNotNull('clients.channel_id')
-            ->whereDate('invoices.created_at', today())
-            ->whereIn('invoices.client_id', Client::visibleTo(Client::query(), auth()->user())->select('id'))
-            ->selectRaw('clients.channel_id, SUM(invoices.total) as amt')
+            ->whereIn('s.client_id', Client::visibleTo(Client::query(), auth()->user())->select('id'))
+            ->selectRaw('clients.channel_id, SUM(s.grand_total) as amt')
             ->groupBy('clients.channel_id')
             ->pluck('amt', 'channel_id');
 

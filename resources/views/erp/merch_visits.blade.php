@@ -163,7 +163,7 @@
                             @endif
                         @endif
                     </td>
-                    <td style="white-space:normal;max-width:300px;font-size:11px">
+                    <td style="white-space:normal;min-width:200px;max-width:300px;font-size:11px">{{-- (٢٢/٩) min-width: العمود كان بيتعصر كلمة في السطر --}}
                         @forelse ($v['refills'] as $r)
                             <div style="color:{{ $r->out_of_stock ? 'var(--red)' : 'inherit' }}">
                                 @if ($r->product)<a href="{{ route('erp.products.show', $r->product_id) }}" style="color:inherit">{{ $r->product->displayName() }}</a>@endif:
@@ -184,7 +184,7 @@
                     </td>
                     {{-- جرد الرف بإيد المنسق: الكمية بوحدتها + تاريخ الإنتاج والانتهاء.
                          أحمر = منتهي، برتقالي = أقل من 30 يوم. --}}
-                    <td style="white-space:normal;max-width:320px;font-size:11px">
+                    <td style="white-space:normal;min-width:200px;max-width:320px;font-size:11px">
                         @forelse ($v['counts'] as $c)
                             @php $d = $c->daysToExpiry(); @endphp
                             <div style="color:{{ $d !== null && $d < 0 ? 'var(--red)' : ($d !== null && $d <= 30 ? 'var(--orange)' : 'inherit') }}">

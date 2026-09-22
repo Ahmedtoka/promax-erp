@@ -145,6 +145,9 @@ class ClientLocationController extends Controller
             fn ($qq) => $qq->whereNotNull('location_confirmed_at'),
         );
 
+        // بحث بالاسم/الكود/التليفون (٢٢/٩) — المراجع بيدوّر على عميل بعينه في طابور من مئات
+        $search = $request->string('q')->trim()->value();
+        Client::search($q, $search);
         $clients = Client::visibleTo($q)->orderBy('name')->get();
 
         // ═══ آخر زيارة بإحداثيات لكل عميل — استعلام واحد ═══
@@ -168,6 +171,7 @@ class ClientLocationController extends Controller
         return view('erp.client_locations', [
             'rows' => $rows,
             'filter' => $filter,
+            'search' => $search,
             'zones' => Zone::orderBy('code')->get(),
             'governorates' => Governorates::options(),
             // ⚠️ العدادات من استعلامات مستقلة مش من `$rows` — الأخيرة

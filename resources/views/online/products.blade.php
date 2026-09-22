@@ -8,7 +8,8 @@
     // ⚠️ قايمة الأوبشنز بتتبني مرة واحدة وتتحقن بـ<template> —
     // سيلكت كامل المنتجات × ١٠٠ صف مكتوب في الـHTML كان هيتخن
     // الصفحة جامد (فخ «قايمة أوبشنز جوه جافاسكريبت» الموثق).
-    $optsHtml = '<option value="">—</option>';
+    // «اختار الصنف» بدل شرطة — 70 صف مش مربوط كانوا شكلهم خانات فاضية مش مطلوب منها حاجة (٢٢/٩)
+    $optsHtml = '<option value="">'.e(__('ui.choose', ['x' => __('ui.l_product')])).'</option>';
     foreach ($products as $p) {
         $optsHtml .= '<option value="'.$p->id.'">'
             .e($p->code.' · '.$p->displayName()).'</option>';
@@ -48,7 +49,7 @@
                 <input type="hidden" name="unlinked" value="1">
             @endif
             <label class="fl"><span>{{ __('ui.l_search') }}</span>
-                <input name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
+                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="🔎 {{ __('common.search') }}"></label>
         </form>
         <a class="btn {{ ($filters['unlinked'] ?? false) ? 'gold' : '' }}"
            href="{{ route('online.products', array_filter(['search' => $filters['search'] ?? null, 'unlinked' => ($filters['unlinked'] ?? false) ? null : 1])) }}">

@@ -7,6 +7,11 @@
     $fmt = fn ($n) => number_format((float) $n);
     // ⚠️ `isManager()` بتشمل مدير الفرع و`erp.groups.store` بترفضه — الزرار بيتحكم فيه الأكشن (٨/٩)
     $manager = \App\Support\Access::action(auth()->user(), 'act.org.structure');
+    // الكروت على السلاسل المعروضة بس (٢٢/٩) — كانت بتجمع كل السلاسل حتى والجدول مفلتر، فالكارت مايطابقش الجدول
+    $shown = $stats->toBase()->only($groups->pluck('id')->all());
+    $kP = (float) $shown->sum('purchases'); $kC = (float) $shown->sum('collections');
+    $kR = (float) $shown->sum('returns'); $kB = (float) $shown->sum('balance');
+    $kO = round($kB) - round($kP) + round($kR) + round($kC);   // من الأرقام المقرّبة المعروضة — المعادلة تقفل بالجنيه
 @endphp
 
 @section('actions')
@@ -28,13 +33,13 @@
     </a>
     <a class="kpi" href="#chainsTbl" onclick="sortChainsBy('purchases')">
         <div class="lbl">{{ __('client.chains_purchases') }}</div>
-        <div class="val" style="color:var(--primary)">{{ $fmt($stats->sum('purchases')) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('uia.by_chain') }}</div>
+        <div class="val" style="color:var(--primary)">{{ $fmt($kP) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.eq_chains_purchases', ['n' => $shown->where('purchases', '>', 0)->count()]) }} · {{ __('uia.by_chain') }}</div>
     </a>
     <a class="kpi" href="#chainsTbl" onclick="sortChainsBy('balance')">
         <div class="lbl">{{ __('client.chains_balance') }}</div>
-        <div class="val {{ $stats->sum('balance') > 0 ? 'neg' : 'pos' }}">{{ $fmt($stats->sum('balance')) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('uia.by_chain') }}</div>
+        <div class="val {{ $kB > 0 ? 'neg' : 'pos' }}">{{ $fmt($kB) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.eq_balance', ['s' => $fmt($kP), 'r' => $fmt($kR), 'c' => $fmt($kC)]) }}@if (abs($kO) >= 0.5) {{ __($kO > 0 ? 'uia.eq_other_plus' : 'uia.eq_other_minus', ['o' => $fmt(abs($kO))]) }}@endif</div>
     </a>
     <a class="kpi" href="{{ route('erp.clients', ['flag' => 'indep']) }}">
         <div class="lbl">{{ __('client.independent_clients') }}</div>
@@ -71,6 +76,8 @@
                 <th class="srt" data-k="branches" data-t="n">{{ __('client.branch_count') }}<span class="arw">▼</span></th>
                 <th class="srt" data-k="purchases" data-t="n">{{ __('client.purchases') }}<span class="arw"></span></th>
                 <th class="srt" data-k="collected" data-t="n">{{ __('client.collected') }}<span class="arw"></span></th>
+                {{-- المرتجعات (٢٢/٩): من غيرها الرصيد مايتفهمش من الصف — مشتريات − محصّل مش بتساوي الرصيد --}}
+                <th class="srt" data-k="returns" data-t="n">{{ __('client.returns') }}<span class="arw"></span></th>
                 <th class="srt" data-k="balance" data-t="n">{{ __('client.balance') }}<span class="arw"></span></th>
                 <th class="srt" data-k="rate" data-t="n" data-nosum>{{ __('client.collection_rate') }}<span class="arw"></span></th>
             </tr>
@@ -82,6 +89,7 @@
                     $p = (float) ($s->purchases ?? 0);
                     $c = (float) ($s->collections ?? 0);
                     $b = (float) ($s->balance ?? 0);
+                    $r = (float) ($s->returns ?? 0);
                     $rate = $p > 0 ? $c / $p * 100 : 0;
                 @endphp
                 <tr class="clickable" onclick="location.href='{{ route('erp.groups.show', $g) }}'"
@@ -89,7 +97,7 @@
                     data-channel="{{ mb_strtolower($g->channel?->displayName() ?? '') }}"
                     data-segment="{{ mb_strtolower($g->subChannelLabel() ?? '') }}"
                     data-branches="{{ $g->clients_count }}"
-                    data-purchases="{{ $p }}" data-collected="{{ $c }}"
+                    data-purchases="{{ $p }}" data-collected="{{ $c }}" data-returns="{{ $r }}"
                     data-balance="{{ $b }}" data-rate="{{ round($rate, 2) }}">
                     <td>
                         <a href="{{ route('erp.groups.show', $g) }}" onclick="event.stopPropagation()"><b>{{ $g->displayName() }}</b></a>
@@ -105,11 +113,12 @@
                     <td class="num"><b>{{ $g->clients_count }}</b></td>
                     <td class="num">{{ $fmt($p) }}</td>
                     <td class="num pos">{{ $fmt($c) }}</td>
+                    <td class="num mid">{{ $fmt($r) }}</td>
                     <td class="num {{ $b > 0 ? 'neg' : 'pos' }}">{{ $fmt($b) }}</td>
                     <td class="num">{{ number_format($rate, 1) }}%</td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
                     {{ __('client.no_chains') }}
                 </td></tr>
             @endforelse

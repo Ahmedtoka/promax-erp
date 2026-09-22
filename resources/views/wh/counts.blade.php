@@ -111,7 +111,7 @@
         </table>
     </div>
 
-    <div class="pag">{{ $counts->links() }}</div>
+    @include('partials._pagination', ['p' => $counts])
 </div>
 
 @if ($manager)

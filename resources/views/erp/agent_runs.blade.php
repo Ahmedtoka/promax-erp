@@ -19,11 +19,13 @@
         <a @class(['kpi', 'on' => $curSt === '']) href="{{ $stq(null) }}">
             <div class="lbl">{{ __('agent.r_total') }}</div>
             <div class="val">{{ number_format($stats->n) }}</div>
+            {{-- (٢٢/٩) العدد مفرود بالحالة --}}
+            <div class="sub2">@include('erp._eq', ['total' => $stats->n, 'dec' => 0, 'zeros' => true, 'parts' => [[__('uib.ag_ok'), $stats->n - $stats->refused - $stats->failed], [__('agent.r_refused'), $stats->refused], [__('agent.r_failed'), $stats->failed]]])</div>
         </a>
         <div class="kpi" data-explain onclick="openDlg('agExplain')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">{{ __('agent.r_tokens') }}</div>
             <div class="val">{{ number_format($stats->tin + $stats->tout) }}</div>
-            <div class="sub2">{{ number_format($stats->tin) }} ⬇ · {{ number_format($stats->tout) }} ⬆</div>
+            <div class="sub2">@include('erp._eq', ['total' => $stats->tin + $stats->tout, 'dec' => 0, 'zeros' => true, 'parts' => [[__('uib.ag_in'), $stats->tin], [__('uib.ag_out'), $stats->tout]]])</div>
         </div>
         <div class="kpi" data-explain onclick="openDlg('agExplain')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">{{ __('agent.r_cost') }}</div>
@@ -38,10 +40,12 @@
         <a @class(['kpi', 'neg' => $stats->failed > 0, 'on' => $curSt === 'failed']) href="{{ $stq($curSt === 'failed' ? null : 'failed') }}">
             <div class="lbl">{{ __('agent.r_failed') }}</div>
             <div class="val">{{ number_format($stats->failed) }}</div>
+            <div class="sub2">{{ __('uib.ag_failed_sub') }}</div>
         </a>
         <div class="kpi" data-explain onclick="openDlg('agExplain')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">{{ __('agent.r_avg') }}</div>
             <div class="val">{{ number_format($stats->avg_ms / 1000, 1) }}s</div>
+            <div class="sub2">{{ __('uib.ag_avg_sub') }}</div>
         </div>
     </div>
 
@@ -152,7 +156,7 @@
             </table>
         </div>
 
-        {{ $rows->links() }}
+        @include('partials._pagination', ['p' => $rows])
     </div>
 
 @endsection

@@ -66,6 +66,8 @@
         <input type="hidden" name="bucket" value="{{ $bucketFilter }}">
     @endif
     @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+    {{-- الفترة هنا على تاريخ الانتهاء مش تاريخ الحركة — من غير التوضيح ده الشاشة بتطلع أصفار ومحدش فاهم ليه (٢٢/٩) --}}
+    <span style="font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:9px">ℹ️ {{ __('uid.exp_range_note') }}</span>
 </form>
 
 <div class="alert info" style="margin-bottom:14px">
@@ -86,9 +88,17 @@
         <a class="kpi {{ $active ? 'on' : '' }}" href="{{ $link }}" title="{{ __('ui.click_to_filter') }}">
             <div class="lbl">{{ $meta['icon'] }} {{ $meta['label'] }}</div>
             <div class="val {{ $meta['val'] }}">{{ $fmt($bucket->sum('qty_remaining')) }}</div>
-            <div class="sub2">{{ __('stock.units') }} • {{ __('stock.batch_countable', ['count' => $bucket->count()]) }}</div>
+            {{-- كل كارت بيقول مداه بالأيام — من نفس ثوابت Batch اللي بتلوّن الباتش (٢٢/٩) --}}
+            <div class="sub2">{{ __('uid.exp_'.$key, ['d' => \App\Models\Batch::DANGER_DAYS, 'd1' => \App\Models\Batch::DANGER_DAYS + 1, 'w' => \App\Models\Batch::WARN_DAYS]) }}<br>{{ __('stock.units') }} • {{ __('stock.batch_countable', ['count' => $bucket->count()]) }}</div>
         </a>
     @endforeach
+</div>
+{{-- الأربع كروت بيقفلوا على الإجمالي — بالأرقام (٢٢/٩) --}}
+@php $bq = fn ($k) => (int) ($buckets[$k] ?? collect())->sum('qty_remaining'); @endphp
+<div class="sub2" style="margin:-6px 4px 14px;font-size:11.5px;color:var(--muted)">
+    {{ __('uid.exp_total', ['n' => $rows->count()]) }}
+    <b dir="ltr">{{ $fmt($rows->sum('qty_remaining')) }} = {{ $fmt($bq('expired')) }} + {{ $fmt($bq('danger')) }} + {{ $fmt($bq('warn')) }} + {{ $fmt($bq('ok')) }}</b>
+    @if ($range->fromValue() || $range->toValue()) — {{ __('uid.exp_in_window') }}@endif
 </div>
 
 {{-- ═══ بلوكات FEFO: محتاجة تتنقل لبلوك أقل ═══
@@ -203,7 +213,9 @@
                             </td>
                             @if ($all)<td class="s">@if ($b->warehouse)<a href="{{ route('erp.warehouses.stock', $b->warehouse) }}">{{ $b->warehouse->displayName() }}</a>@else — @endif</td>@endif
                             <td class="num">@if ($b->goods_receipt_id)<a href="{{ route('wh.receipt', $b->goods_receipt_id) }}"><b>{{ $b->batch_no }}</b></a>@else<b>{{ $b->batch_no }}</b>@endif</td>
-                            <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
+                            <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}
+                                    {{-- سنة قبل 2000 = غلطة كتابة في الإذن (0203 بدل 2030) — بننبّه بدل ما نقول «منتهي من 600 ألف يوم» (٢٢/٩) --}}
+                                    @if ($b->expires_on && $b->expires_on->year < 2000)<div><span class="badge b-red" title="{{ __('uid.bad_date_tip') }}">⚠ {{ __('uid.bad_date') }}</span></div>@endif</td>
                             {{-- بار العمر: النسبة الفاضلة من عمر الباتش --}}
                             <td>
                                 @if ($pct === null)

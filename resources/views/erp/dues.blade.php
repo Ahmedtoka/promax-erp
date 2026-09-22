@@ -33,23 +33,25 @@
     <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'due']) href="{{ route('erp.dues', ['status' => 'due']) }}#duesList">
         <div class="lbl">{{ __('client.due_amount') }}</div>
         <div class="val neg">{{ $fmt($kpi['due_amount']) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ $kpi['due_count'] }} · {{ $kpi['clients'] }} {{ __('client.due_clients') }}</div>
+        <div class="sub2">{{ __('uia.eq_dues_due', ['n' => $fmt($kpi['due_count']), 'c' => $fmt($kpi['clients'])]) }}</div>
     </a>
     <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'settled']) href="{{ route('erp.dues', ['status' => 'settled']) }}#duesList">
         <div class="lbl">{{ __('client.due_settled') }}</div>
         <div class="val pos">{{ $fmt($kpi['settled_amount']) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('client.due_status_settled') }}</div>
+        <div class="sub2">{{ __('uia.eq_dues_settled') }}</div>
     </a>
     <a class="kpi" href="#withheldCard">
         <div class="lbl">{{ __('client.withheld_total') }}</div>
         <div class="val mid">{{ $fmt($kpi['withheld_total']) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ $kpi['withheld_clients'] }} · {{ __('client.withheld_hint') }}</div>
+        <div class="sub2">{{ __('uia.eq_withheld', ['n' => $fmt($kpi['withheld_clients'])]) }} <span dir="ltr">{{ $fmt($withheld->sum('balance')) }} − {{ $fmt($kpi['withheld_total']) }} = {{ $fmt(round($withheld->sum('balance')) - round($kpi['withheld_total'])) }}</span> {{ __('uia.eq_withheld_tail') }}</div>
     </a>
 </div>
 
 {{-- ═══════════ أكبر المستحقات ═══════════ --}}
-@if ($byClient->count() > 0)
-<div class="grid2">
+{{-- كارت المحجوز بيظهر حتى لو مفيش مستحقات (٢٢/٩) — كان جوه شرط المستحقات فكارت «محجوز كضمان» فوق بيودّي على حاجة مش مرسومة --}}
+@if ($byClient->count() > 0 || $withheld->count() > 0)
+<div @class(['grid2' => $byClient->count() > 0])>
+    @if ($byClient->count() > 0)
     <div class="card">
         <h3>📊 {{ __('client.top_by_dues') }}</h3>
         <div class="tablewrap">
@@ -73,6 +75,8 @@
             </table>
         </div>
     </div>
+
+    @endif
 
     {{-- المحجوز — رقم مختلف تماماً عن المستحق --}}
     <div class="card" id="withheldCard">
@@ -139,8 +143,12 @@
 </div>
 @endif
 
-{{-- ═══════════ الفلاتر ═══════════ --}}
-<form class="searchbar" method="GET" id="duesList">
+
+{{-- ═══════════ الاستحقاقات ═══════════ --}}
+<div class="card" id="duesList">
+    <h3>💸 {{ __('client.dues_page') }} <span class="side">{{ $dues->total() }}</span></h3>
+    {{-- الفلاتر جوه كارت الجدول (٢٢/٩) — كانت طايرة بين الكروت ومش باين إنها بتاعة أنهي جدول --}}
+<form class="searchbar" method="GET" style="margin-bottom:12px" data-noprint>
     {{-- ⚠️ الافتراضي هنا «المستحق» مش الكل (الكنترولر) — فأول اختيار «كل الحالات» قيمته `all` مش فاضي --}}
     <label class="fl"><span>{{ __('ui.l_status') }}</span>
     <select name="status">
@@ -165,10 +173,6 @@
     <a class="btn" href="{{ route('erp.dues') }}">{{ __('common.clear') }}</a>
     <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
 </form>
-
-{{-- ═══════════ الاستحقاقات ═══════════ --}}
-<div class="card">
-    <h3>💸 {{ __('client.dues_page') }} <span class="side">{{ $dues->total() }}</span></h3>
     <div class="tablewrap">
         <table>
             <tr>

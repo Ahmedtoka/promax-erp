@@ -7,6 +7,11 @@
 
     $isRtl = app()->getLocale() === 'ar';
 
+    // أجزاء كروت الملخّص (٢٢/٩) — بنفس شرط «ساري» بتاع الكنترولر عشان المعادلة تقفل على رقم الكارت
+    $liveK = $contracts->filter(fn ($x) => $x->active && ! $x->isExpired());
+    $feesYear = round($liveK->sum(fn ($x) => $x->annualFees()), 2);
+    $feesMonth = round($liveK->sum(fn ($x) => $x->monthlyFees()), 2);
+
     $fmt = fn ($n) => number_format((float) $n);         // ⚠️ **مدير الفرع مش هنا.** الراوتس دي `role:admin,manager`،
     // و`isManager()` بترجّع له true — فكان بيشوف الزرار ويترمي على
     // 403 بعد ما يملا الفورم.
@@ -23,27 +28,27 @@
     <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('client.signed_contracts') }}</div>
         <div class="val pos">{{ $contracts->count() }}</div>
-        <div class="sub2">{{ __('client.out_of_clients', ['count' => $clientsCount]) }}</div>
+        <div class="sub2">{{ __('uia.eq_contracts_n', ['live' => $liveK->count(), 'off' => $contracts->count() - $liveK->count(), 'clients' => $fmt($clientsCount)]) }}</div>
     </a>
     <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('report.average_discount') }}</div>
         <div class="val">{{ number_format($avgDisc * 100, 1) }}%</div>
-        <div class="sub2">{{ __('client.invoice_discount') }}</div>
+        <div class="sub2">{{ __('uia.eq_avg_disc', ['n' => $liveK->count()]) }}</div>
     </a>
     <a class="kpi" href="{{ $hiddenCost->count() > 0 ? '#hiddenCard' : '#signedCard' }}">
         <div class="lbl">{{ __('client.total_deduction') }}</div>
         <div class="val {{ $avgTotalDeduction > 0.25 ? 'neg' : 'mid' }}">{{ number_format($avgTotalDeduction * 100, 1) }}%</div>
-        <div class="sub2">{{ __('client.avg_true_deduction') }}</div>
+        <div class="sub2">{{ __('uia.eq_avg_total_ded', ['n' => $liveK->count(), 'h' => $hiddenCost->count()]) }}</div>
     </a>
     <a class="kpi" href="#signedCard">
         <div class="lbl">{{ __('client.annual_commitment') }}</div>
         <div class="val" style="color:var(--primary)">{{ $fmt($totalCommitment) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('client.annual_commitment_hint') }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($totalCommitment) }} = {{ $fmt($feesYear) }} + {{ $fmt($feesMonth) }} × 12</span> — {{ __('uia.eq_commitment') }}</div>
     </a>
     <a class="kpi" href="{{ route('erp.clients', ['contract' => 'yes', 'sort' => 'purchases', 'dir' => 'desc']) }}">
         <div class="lbl">{{ __('report.purchases_under_contract') }}</div>
         <div class="val">{{ $fmt($covered) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ number_format($covered / max($totalPurch, 1) * 100, 1) }}% {{ __('report.of_total') }}</div>
+        <div class="sub2">{{ __('uia.eq_covered') }} <span dir="ltr">{{ number_format($covered / max($totalPurch, 1) * 100, 1) }}% = {{ $fmt($covered) }} ÷ {{ $fmt($totalPurch) }}</span></div>
     </a>
 </div>
 

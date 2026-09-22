@@ -191,7 +191,7 @@
         @csrf
         <h4>✖ {{ __('online.cancel_title') }} <span id="ccNum"></span></h4>
         <label class="f">{{ __('online.cancel_reason') }}</label>
-        <input name="reason" required maxlength="250" style="width:100%;margin-bottom:12px">
+        <input type="text" name="reason" required maxlength="250" style="width:100%;margin-bottom:12px">
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgCancel')">{{ __('common.cancel') }}</button>
             <button class="btn red" type="submit">✖ {{ __('online.act_cancel') }}</button>

@@ -70,7 +70,7 @@
         <h3>{{ __('supplier.order_lines') }} <span class="side">{{ __('supplier.order_lines_hint') }}</span></h3>
         <div class="tablewrap">
             {{-- جدول إدخال — من غير إكسيل --}}
-            <table data-noxl>
+            <table data-noxl data-page="0">{{-- فورم إدخال: كل السطور ظاهرة، صفحات الجدول كانت بتخبّي خانات من غير ما حد ياخد باله (٢٢/٩) --}}
                 <tr>
                     <th>{{ __('common.code') }}</th>
                     <th>{{ __('stock.product') }}</th>

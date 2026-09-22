@@ -37,14 +37,18 @@
      على الحالة دي، والضغط على الكارت النشط تاني بيشيل الفلتر. --}}
 @php $kpiUrl = fn ($s) => route('erp.attendance', array_filter(['date' => $date, 'state' => $state === $s ? null : $s])); @endphp
 <div class="kpis" style="margin-bottom:14px">
+    {{-- (٢٢/٩) كارت الإجمالي: الأربع حالات لازم يقفلوا على عدد الموظفين — وبيشيل فلتر الحالة --}}
+    <a class="kpi {{ ($state ?? '') === '' ? 'on' : '' }}" style="grid-column:span 2" href="{{ route('erp.attendance', ['date' => $date]) }}">
+        <div class="lbl">👥 {{ __('uib.att_staff') }}</div><div class="val">{{ $working + $onBreak + $done + $notIn }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $working + $onBreak + $done + $notIn, 'dec' => 0, 'zeros' => true, 'parts' => [[__('hr.working_now'), $working], [__('hr.on_break_now'), $onBreak], [__('hr.done_today'), $done], [__('hr.not_in_yet'), $notIn]]])</div></a>
     <a class="kpi {{ $state === 'working' ? 'on' : '' }}" href="{{ $kpiUrl('working') }}">
-        <div class="lbl">🟢 {{ __('hr.working_now') }}</div><div class="val" style="color:#16A34A">{{ $working }}</div></a>
+        <div class="lbl">🟢 {{ __('hr.working_now') }}</div><div class="val" style="color:#16A34A">{{ $working }}</div><div class="sub2">{{ __('uib.att_working_sub') }}</div></a>
     <a class="kpi {{ $state === 'break' ? 'on' : '' }}" href="{{ $kpiUrl('break') }}">
-        <div class="lbl">⏸️ {{ __('hr.on_break_now') }}</div><div class="val" style="color:#B86E00">{{ $onBreak }}</div></a>
+        <div class="lbl">⏸️ {{ __('hr.on_break_now') }}</div><div class="val" style="color:#B86E00">{{ $onBreak }}</div><div class="sub2">{{ __('uib.att_break_sub') }}</div></a>
     <a class="kpi {{ $state === 'done' ? 'on' : '' }}" href="{{ $kpiUrl('done') }}">
-        <div class="lbl">✅ {{ __('hr.done_today') }}</div><div class="val">{{ $done }}</div></a>
+        <div class="lbl">✅ {{ __('hr.done_today') }}</div><div class="val">{{ $done }}</div><div class="sub2">{{ __('uib.att_done_sub') }}</div></a>
     <a class="kpi {{ $state === 'off' ? 'on' : '' }}" href="{{ $kpiUrl('off') }}">
-        <div class="lbl">⚪ {{ __('hr.not_in_yet') }}</div><div class="val" style="color:#B00020">{{ $notIn }}</div></a>
+        <div class="lbl">⚪ {{ __('hr.not_in_yet') }}</div><div class="val" style="color:#B00020">{{ $notIn }}</div><div class="sub2">{{ __('uib.att_off_sub') }}</div></a>
 </div>
 
 {{-- ═══ الأونلاين دلوقتي — كروت (طلب المالك ٩/٨) ═══ --}}

@@ -38,6 +38,8 @@
         <div class="lbl">{{ __('gl.balanced') }}</div>
         <div class="val {{ $balanced ? '' : 'neg' }}">{{ $balanced ? '✓' : '✕' }}</div>
         <div class="sub2">{{ $balanced ? __('gl.balanced') : __('gl.not_balanced') }}</div>
+        {{-- (٢٢/٩) الفرق بالأرقام — لازم يبقى صفر --}}
+        <div class="sub2">@include('erp._eq', ['totalLabel' => __('uib.gl_diff'), 'total' => $data['totals']['debit'] - $data['totals']['credit'], 'zeros' => true, 'parts' => [[__('gl.debit'), $data['totals']['debit']], [__('gl.credit'), $data['totals']['credit'], '-']]])</div>
     </a>
 </div>
 

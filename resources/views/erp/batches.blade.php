@@ -60,22 +60,23 @@
     <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.stock_value_new_price') }}</div>
         <div class="val" style="color:var(--primary)">{{ $money($kpi['value']) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('stock.sku_countable', ['count' => $kpi['skus']]) }}</div>
+        {{-- كل كارت بمعادلته من نفس مصفوفة $kpi (٢٢/٩) --}}
+        <div class="sub2">{{ __('uid.bk_value_how', ['n' => $kpi['skus']]) }}<br><span dir="ltr">{{ $money($kpi['value']) }} = {{ __('stock.sellable_units') }} {{ $money($kpi['value_live']) }} + {{ __('stock.reserved_units') }} {{ $money($kpi['value_hold']) }}</span></div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.units_on_hand') }}</div>
         <div class="val">{{ $fmt($kpi['qty']) }}</div>
-        <div class="sub2">{{ $fmt($kpi['batches']) }} {{ __('stock.batches_on_hand') }}</div>
+        <div class="sub2">{{ $fmt($kpi['batches']) }} {{ __('stock.batches_on_hand') }}<br><span dir="ltr">{{ $fmt($kpi['qty']) }} = {{ $fmt($kpi['qty_live']) }} + {{ $fmt($kpi['qty_hold']) }}</span></div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.sellable_units') }}</div>
         <div class="val pos">{{ $fmt($kpi['qty_live']) }}</div>
-        <div class="sub2">{{ $money($kpi['value_live']) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uid.bk_live_how') }} — {{ $money($kpi['value_live']) }} {{ __('common.currency') }}</div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('dlgBFam')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.reserved_units') }}</div>
         <div class="val mid">{{ $fmt($kpi['qty_hold']) }}</div>
-        <div class="sub2">{{ $money($kpi['value_hold']) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uid.bk_hold_how') }} — {{ $money($kpi['value_hold']) }} {{ __('common.currency') }}</div>
     </div>
     <a class="kpi" href="#bSoon">
         <div class="lbl">{{ __('stock.soonest_expiry') }}</div>
@@ -210,6 +211,8 @@
 
     <button class="btn gold">{{ __('common.search') }}</button>
     <a class="btn" href="{{ route('erp.batches') }}">{{ __('common.clear') }}</a>
+    {{-- الفترة على تاريخ الانتهاء — من غير التوضيح القايمة بتفضى ومحدش فاهم ليه (٢٢/٩) --}}
+    <span style="font-size:11px;color:var(--muted);flex-basis:100%">ℹ️ {{ __('uid.exp_range_note') }}</span>
 </form>
 
 {{-- ═══════════ الأصناف وباتشاتها ═══════════ --}}

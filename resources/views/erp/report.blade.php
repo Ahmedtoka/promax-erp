@@ -96,16 +96,28 @@
 <div class="kpis">
     {{-- (٢٢/٩) الكارت إما فلتر على نفس التقرير (`on` لما يبقى شغال) أو لينك للشاشة اللي بتفرد رقمه --}}
     @foreach ($kpis as $k)
-        @php [$lbl, $val, $cls] = $k; $kUrl = $k[3] ?? null; @endphp
+        {{-- (٢٢/٩) العنصر السادس = سطر الشرح: الرقم ده إيه واتحسب إزاي. نص، أو
+             `[كلام, معادلة]` والمعادلة بتترسم LTR عشان الأرقام ماتتقلبش. مش بيدخل الـCSV --}}
+        @php
+            [$lbl, $val, $cls] = $k; $kUrl = $k[3] ?? null;
+            $kEx = $k[5] ?? null;
+            [$kExText, $kExEq] = is_array($kEx) ? [$kEx[0] ?? '', $kEx[1] ?? ''] : [(string) $kEx, ''];
+        @endphp
         @if ($kUrl)
             <a @class(['kpi', 'on' => ! empty($k[4])]) href="{{ $kUrl }}">
                 <div class="lbl">{{ $lbl }}</div>
                 <div class="val {{ $cls }}">{{ $val }}</div>
+                @if ($kExText !== '' || $kExEq !== '')
+                    <div class="sub2">{{ $kExText }} @if ($kExEq !== '')<span dir="ltr" class="rpt-eq">{{ $kExEq }}</span>@endif</div>
+                @endif
             </a>
         @else
             <div class="kpi">
                 <div class="lbl">{{ $lbl }}</div>
                 <div class="val {{ $cls }}">{{ $val }}</div>
+                @if ($kExText !== '' || $kExEq !== '')
+                    <div class="sub2">{{ $kExText }} @if ($kExEq !== '')<span dir="ltr" class="rpt-eq">{{ $kExEq }}</span>@endif</div>
+                @endif
             </div>
         @endif
     @endforeach
@@ -116,6 +128,12 @@
     <h3>{{ $icon }} {{ $title }}
         <span class="side">{{ __('rpt.rows_n', ['n' => number_format(count($rows))]) }}</span>
     </h3>
+
+    {{-- ملحوظة التقرير (٢٢/٩): الحاجة اللي لازم تتعرف قبل قراية الجدول — زي إن الأرقام
+         «لحد النهارده» مش بالفترة، أو إن الإجمالي من مستوى واحد --}}
+    @if (! empty($note))
+        <div class="rpt-note">ℹ️ {{ $note }}</div>
+    @endif
 
     <div class="tablewrap rpt-wrap">
         <table>
@@ -133,7 +151,7 @@
                 <tr>
                     @foreach ($row as $i => $cell)
                         {{-- الخلية نص عادي أو `['text' => …, 'url' => …]` — اللي بيسمّي سجل بيفتحه --}}
-                        <td @if (($columns[$i][1] ?? null) === 'num') class="num" dir="ltr" @endif>@if (is_array($cell) && ! empty($cell['url']))<a href="{{ $cell['url'] }}">{{ $cell['text'] }}</a>@else{{ is_array($cell) ? ($cell['text'] ?? '') : $cell }}@endif</td>
+                        <td @if (($columns[$i][1] ?? null) === 'num') class="num" dir="ltr" @endif>@if (is_array($cell) && ! empty($cell['url']))<a href="{{ $cell['url'] }}">{{ $cell['text'] }}</a>@elseif (is_array($cell) && ! empty($cell['badge']))<span class="badge {{ $cell['badge'] }}">{{ $cell['text'] ?? '' }}</span>@else{{ is_array($cell) ? ($cell['text'] ?? '') : $cell }}@endif</td>
                     @endforeach
                 </tr>
             @empty
@@ -169,6 +187,11 @@
   background:var(--blue-050);font-weight:900;color:var(--royal-blue);
   border-top:2px solid var(--royal-blue);
 }
+.rpt-note{background:var(--blue-050);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.7}
+/* معادلة الكارت: LTR وسطر لوحدها عشان الأرقام تتقري بترتيبها (٢٢/٩) */
+.kpi .sub2{line-height:1.6}
+.kpi .sub2 .rpt-eq{display:block;unicode-bidi:isolate;font-variant-numeric:tabular-nums;text-align:start}
+[dir="rtl"] .kpi .sub2 .rpt-eq{text-align:right}
 @media print{.rpt-wrap{max-height:none;overflow:visible}}
 </style>
 @endsection

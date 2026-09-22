@@ -57,12 +57,14 @@
     {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتفرد رقمه لنفس اليوم --}}
     @php $dq = ['from' => $date->toDateString(), 'to' => $date->toDateString()]; @endphp
     <div class="kpis">
-        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">🧾 {{ __('incent.invoices_count') }}</div><div class="val">{{ $fmtI($v('invoices_count')) }}</div><div class="sub2">{{ $fmtI($v('clients_count')) }} {{ __('incent.clients_count') }}</div></a>
-        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'cash']) }}"><div class="lbl">💵 {{ __('incent.sales_cash') }}</div><div class="val pos">{{ $fmt($v('sales_cash')) }}</div></a>
-        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'credit']) }}"><div class="lbl">📒 {{ __('incent.sales_credit') }}</div><div class="val mid">{{ $fmt($v('sales_credit')) }}</div></a>
-        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">📈 {{ __('incent.sales_net') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($v('sales_net')) }}</div></a>
-        <a class="kpi" href="{{ route('ops.returns', $dq) }}"><div class="lbl">↩️ {{ __('incent.returns_total') }}</div><div class="val neg">{{ $fmt($v('returns_total')) }}</div></a>
-        <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'collections'] + $dq) }}"><div class="lbl">💰 {{ __('incent.collections_total') }}</div><div class="val pos">{{ $fmt($v('collections_total')) }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">🧾 {{ __('incent.invoices_count') }}</div><div class="val">{{ $fmtI($v('invoices_count')) }}</div><div class="sub2">{{ $fmtI($v('clients_count')) }} {{ __('incent.clients_count') }}</div><div class="sub2">{{ __('uib.dc_inv_sub') }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'cash']) }}"><div class="lbl">💵 {{ __('incent.sales_cash') }}</div><div class="val pos">{{ $fmt($v('sales_cash')) }}</div><div class="sub2">{{ __('uib.dc_cash_sub') }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq + ['pay' => 'credit']) }}"><div class="lbl">📒 {{ __('incent.sales_credit') }}</div><div class="val mid">{{ $fmt($v('sales_credit')) }}</div><div class="sub2">{{ __('uib.dc_credit_sub') }}</div></a>
+        <a class="kpi" href="{{ route('ops.invoices', $dq) }}"><div class="lbl">📈 {{ __('incent.sales_net') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($v('sales_net')) }}</div>
+            {{-- (٢٢/٩) الصافي قبل الضريبة = الكاش + الآجل (الاتنين شاملين الضريبة) − الضريبة؛ الضريبة هي الفرق بينهم فعلاً (grand_total = total + tax_total) --}}
+            <div class="sub2">@include('erp._eq', ['total' => $v('sales_net'), 'zeros' => true, 'single' => true, 'parts' => [[__('incent.sales_cash'), $v('sales_cash')], [__('incent.sales_credit'), $v('sales_credit')], [__('uib.dc_vat'), $v('sales_cash') + $v('sales_credit') - $v('sales_net'), '-']]])</div></a>
+        <a class="kpi" href="{{ route('ops.returns', $dq) }}"><div class="lbl">↩️ {{ __('incent.returns_total') }}</div><div class="val neg">{{ $fmt($v('returns_total')) }}</div><div class="sub2">{{ __('uib.dc_returns_sub') }}</div></a>
+        <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'collections'] + $dq) }}"><div class="lbl">💰 {{ __('incent.collections_total') }}</div><div class="val pos">{{ $fmt($v('collections_total')) }}</div><div class="sub2">{{ __('uib.dc_coll_sub') }}</div></a>
         <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'pos_status', 'status' => 'delivered'] + $dq) }}"><div class="lbl">🚚 {{ __('incent.pos_delivered') }}</div><div class="val">{{ $fmtI($v('pos_delivered_count')) }}</div><div class="sub2">{{ $fmt($v('pos_delivered_value')) }} {{ __('common.currency') }}</div></a>
         <a class="kpi" href="{{ route('erp.repclose', $dq) }}"><div class="lbl">🤝 {{ __('incent.settlements') }}</div><div class="val">{{ $fmtI($v('settlements_count')) }}</div><div class="sub2">{{ __('incent.received_total') }}: {{ $fmt($v('settlements_received')) }} · {{ __('incent.carried_total') }}: {{ $fmt($v('settlements_balance')) }}</div></a>
     </div>

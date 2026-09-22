@@ -31,11 +31,13 @@
     <a class="kpi" href="{{ route('gl.expenses', ['from' => $from->toDateString(), 'to' => $to->toDateString()]) }}">
         <div class="lbl">{{ __('gl.expenses_total') }}</div>
         <div class="val neg">{{ $fmt($data['total_expenses']) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('gl.expenses') }}</div>
+        <div class="sub2">{{ __('uib.gl_exp_sub') }}</div>
     </a>
     <a class="kpi" href="#gl-table">
         <div class="lbl">{{ __('gl.net_income') }}</div>
         <div class="val {{ $data['net'] < 0 ? 'neg' : '' }}">{{ $fmt($data['net']) }} {{ __('common.currency') }}</div>
+        {{-- (٢٢/٩) المعادلة بأرقام الفترة --}}
+        <div class="sub2">@include('erp._eq', ['total' => $data['net'], 'zeros' => true, 'parts' => [[__('gl.revenue'), $data['total_revenue']], [__('gl.expenses_total'), $data['total_expenses'], '-']]])</div>
         <div class="sub2">{{ __('gl.net_income_hint') }}</div>
     </a>
 </div>

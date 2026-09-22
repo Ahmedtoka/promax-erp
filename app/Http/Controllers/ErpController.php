@@ -2184,6 +2184,16 @@ class ErpController extends Controller
         }
 
         $products = $q->orderBy('code')->get();
+
+        // فلتر «محتاج تصرف» (٢٢/٩): أمين المخزن عايز يشوف الخلصان والمحجوز واللي من غير تكلفة
+        // من غير ما يقلّب الجدول كله — الكروت فوق بتفتح الفلتر ده.
+        $need = $request->string('need')->value();
+        $products = match ($need) {
+            'out' => $products->filter(fn ($p) => $p->active && $p->qtyTotal() <= 0)->values(),
+            'hold' => $products->filter(fn ($p) => $p->holdTotal() > 0)->values(),
+            'nocost' => $products->filter(fn ($p) => (float) $p->cost <= 0)->values(),
+            default => $products,
+        };
         $all = Product::with('stocks')->get();
 
         // ⚠️ **السعر المعروض واحد بس: سعر القايمة الافتراضية** (قرار
@@ -2215,7 +2225,13 @@ class ErpController extends Controller
             'families' => \App\Models\ProductFamily::options(),
             'warehouses' => $warehouses,
             'defaultList' => $defaultList,
-            'filters' => $request->only(['q', 'family', 'sort', 'status']),
+            'filters' => $request->only(['q', 'family', 'sort', 'status', 'need']),
+            // عدّادات «محتاج تصرف» على المخزن كله — نفس تعريف الفلتر فوق (٢٢/٩)
+            'outCount' => $all->filter(fn ($p) => $p->active && $p->qtyTotal() <= 0)->count(),
+            'holdCount' => $all->filter(fn ($p) => $p->holdTotal() > 0)->count(),
+            'holdQty' => $all->sum(fn ($p) => $p->holdTotal()),
+            'goodQty' => $all->sum(fn ($p) => $p->goodTotal()),
+            'noCostCount' => $all->filter(fn ($p) => (float) $p->cost <= 0)->count(),
             // شارة على زرار الفلتر — «عندك ٧ درافت» من غير ما تفتحه
             'draftCount' => Product::where('active', false)->count(),
             // ⚠️ كل الـ KPIs دي على $all (المخزن كله) — ممنوع تخلط واحد منهم
@@ -2840,6 +2856,9 @@ class ErpController extends Controller
                 $request->user(),
             )->get(),
             'govRows' => \App\Models\Governorate::orderBy('sort')->orderBy('id')->get(),
+            // شغّالين من غير زون (٢٢/٩) — كارت «العملاء» بيكتب بيه معادلته: متسكّن = كل الشغّالين − دول
+            'noZoneActive' => Client::visibleTo(\App\Models\Branch::scope(Client::query()))
+                ->where('status', 'active')->whereNull('zone_id')->count(),
         ]);
     }
 

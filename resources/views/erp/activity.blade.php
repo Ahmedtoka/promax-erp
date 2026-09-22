@@ -51,7 +51,8 @@
         <div class="lbl">✏️ {{ __('activity.k_work_today') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($kpi['work']) }}</div>
         <div class="sub2">{{ __('activity.k_work_hint') }}</div></a>
     <a class="kpi" href="{{ $tabUrl('log', ['event' => 'deleted', 'from' => $todayStr, 'to' => $todayStr]) }}">
-        <div class="lbl">🗑 {{ __('activity.k_deleted_today') }}</div><div class="val" style="color:var(--red)">{{ $fmt($kpi['deleted']) }}</div></a>
+        <div class="lbl">🗑 {{ __('activity.k_deleted_today') }}</div><div class="val" style="color:var(--red)">{{ $fmt($kpi['deleted']) }}</div>
+        <div class="sub2">{{ __('activity.x_deleted') }}</div></a>
     <a class="kpi" href="{{ $tabUrl('log', ['failed' => 1, 'from' => $todayStr, 'to' => $todayStr]) }}">
         <div class="lbl">✖ {{ __('activity.k_failed_today') }}</div><div class="val">{{ $fmt($kpi['failed']) }}</div>
         <div class="sub2">{{ __('activity.k_failed_hint') }}</div></a>
@@ -215,15 +216,20 @@
 @php $fq = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]); @endphp
 <div class="kpis">
     <a class="kpi" href="{{ $fq(['event' => null, 'failed' => null]) }}">
-        <div class="lbl">🧾 {{ __('activity.k_rows') }}</div><div class="val">{{ $fmt($kpi['total']) }}</div></a>
+        <div class="lbl">🧾 {{ __('activity.k_rows') }}</div><div class="val">{{ $fmt($kpi['total']) }}</div>
+        <div class="sub2">{{ __('activity.x_rows') }}</div></a>
     <a class="kpi" href="{{ $tabUrl('users', array_filter(['from' => $filters['from'] ?? null, 'to' => $filters['to'] ?? null])) }}">
-        <div class="lbl">🧑‍💼 {{ __('activity.k_users') }}</div><div class="val">{{ $fmt($kpi['users']) }}</div></a>
+        <div class="lbl">🧑‍💼 {{ __('activity.k_users') }}</div><div class="val">{{ $fmt($kpi['users']) }}</div>
+        <div class="sub2">{{ __('activity.x_users') }}</div></a>
     <a class="kpi @if(($filters['event'] ?? '') === 'work') on @endif" href="{{ $fq(['event' => ($filters['event'] ?? '') === 'work' ? null : 'work']) }}">
-        <div class="lbl">✏️ {{ __('activity.c_work') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($kpi['work']) }}</div></a>
+        <div class="lbl">✏️ {{ __('activity.c_work') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($kpi['work']) }}</div>
+        <div class="sub2">{{ __('activity.k_work_hint') }} — {{ __('activity.x_of_rows', ['n' => $fmt($kpi['total'])]) }}</div></a>
     <a class="kpi @if(($filters['event'] ?? '') === 'deleted') on @endif" href="{{ $fq(['event' => ($filters['event'] ?? '') === 'deleted' ? null : 'deleted']) }}">
-        <div class="lbl">🗑 {{ __('activity.e_deleted') }}</div><div class="val" style="color:var(--red)">{{ $fmt($kpi['deleted']) }}</div></a>
+        <div class="lbl">🗑 {{ __('activity.e_deleted') }}</div><div class="val" style="color:var(--red)">{{ $fmt($kpi['deleted']) }}</div>
+        <div class="sub2">{{ __('activity.x_deleted') }}</div></a>
     <a class="kpi @if(! empty($filters['failed'])) on @endif" href="{{ $fq(['failed' => empty($filters['failed']) ? 1 : null]) }}">
-        <div class="lbl">✖ {{ __('activity.k_failed') }}</div><div class="val">{{ $fmt($kpi['failed']) }}</div></a>
+        <div class="lbl">✖ {{ __('activity.k_failed') }}</div><div class="val">{{ $fmt($kpi['failed']) }}</div>
+        <div class="sub2">{{ __('activity.k_failed_hint') }}</div></a>
 </div>
 
 <div class="card">

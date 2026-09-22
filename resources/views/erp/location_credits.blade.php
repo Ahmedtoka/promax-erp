@@ -40,17 +40,17 @@
     <a class="kpi" href="{{ route('erp.client_locations', ['show' => 'done']) }}">
         <div class="lbl">{{ __('geo.confirmed_total') }}</div>
         <div class="val pos">{{ number_format($totalOk) }}</div>
-        <div class="sub2">{{ __('geo.confirmed_total_hint') }}</div>
+        <div class="sub2">{{ __('geo.confirmed_total_hint') }} — <span dir="ltr">{{ $totalSent > 0 ? number_format($totalOk / $totalSent * 100, 1) : 0 }}% = {{ number_format($totalOk) }} ÷ {{ number_format($totalSent) }}</span></div>
     </a>
     <a class="kpi" href="#creditsTable">
         <div class="lbl">{{ __('geo.points_earned') }}</div>
         <div class="val">{{ number_format($totalPts) }}</div>
-        <div class="sub2">{{ __('geo.points_rule', ['n' => $perPoint, 'p' => $ptsPer]) }}</div>
+        <div class="sub2">{{ __('geo.points_rule', ['n' => $perPoint, 'p' => $ptsPer]) }} — {{ __('uia.eq_points_per_rep') }}</div>
     </a>
     <a class="kpi" href="#creditsTable">
         <div class="lbl">{{ __('incent.point_value') }}</div>
         <div class="val">{{ number_format($totalPts * $pointValue, 2) }}</div>
-        <div class="sub2">{{ __('geo.points_money_hint') }}</div>
+        <div class="sub2"><span dir="ltr">{{ number_format($totalPts * $pointValue, 2) }} = {{ number_format($totalPts) }} × {{ number_format($pointValue, 2) }}</span> {{ __('uia.eq_points_money') }}</div>
     </a>
 </div>
 

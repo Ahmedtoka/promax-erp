@@ -77,17 +77,24 @@
         <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'target_vs_actual', 'from' => $year.'-01-01', 'to' => $year.'-12-31']) }}">
             <div class="lbl">{{ __('targets.kpi_achieved') }}</div>
             <div class="val num pos">{{ $fmt($grid['achieved_total']) }}</div>
+            {{-- (٢٢/٩) المحقق = المحسوب لايف من السيستم ± اليدوي المكتوب في الجريد — الفرق بينهم هو اليدوي فعلاً --}}
+            @php $tgLive = round(array_sum($grid['computed']), 2); $tgMan = round($grid['achieved_total'] - $tgLive, 2); if (abs($tgMan) < 0.05) { $tgMan = 0; } /* كسر تقريب الشهور مش يدوي */ @endphp
+            <div class="sub2">@include('erp._eq', ['total' => $grid['achieved_total'], 'parts' => [[__('uib.tg_live'), $tgLive], [__('uib.tg_manual'), abs($tgMan), $tgMan < 0 ? '-' : '+']]])</div>
+            <div class="sub2">{{ __('uib.tg_achieved_sub', ['y' => $year]) }}</div>
         </a>
         <a class="kpi" href="#tg-months">
             <div class="lbl">{{ __('targets.kpi_remaining') }}</div>
             <div class="val num {{ $gridRemaining > 0 ? 'mid' : 'pos' }}">{{ $fmt(max($gridRemaining, 0)) }}</div>
+            <div class="sub2">@include('erp._eq', ['total' => $gridRemaining, 'zeros' => true, 'parts' => [[__('targets.kpi_target'), $grid['annual']], [__('targets.kpi_achieved'), $grid['achieved_total'], '-']]])</div>
             @if ($pace !== null)
-                <div class="sub2">⚡ {{ __('targets.need_monthly', ['amount' => $fmt($pace)]) }}</div>
+                <div class="sub2">⚡ {{ __('targets.need_monthly', ['amount' => $fmt($pace)]) }}
+                    — @include('erp._eq', ['total' => $pace, 'zeros' => true, 'single' => true, 'parts' => [[__('targets.kpi_remaining'), $gridRemaining], [__('uib.tg_months_left'), $monthsLeft, '÷', 0]]])</div>
             @endif
         </a>
         <a class="kpi" href="#tg-months">
             <div class="lbl">{{ __('targets.kpi_pct') }}</div>
             <div class="val num">{{ $gridPct }}%</div>
+            <div class="sub2">@include('erp._eq', ['totalText' => $gridPct.'%', 'total' => 0, 'zeros' => true, 'parts' => [[__('targets.kpi_achieved'), $grid['achieved_total']], [__('targets.kpi_target'), $grid['annual'], '÷']]])</div>
             <div style="background:var(--card2);border:1px solid var(--border);border-radius:6px;height:9px;overflow:hidden;margin-top:6px">
                 <div style="height:100%;width:{{ $gridPct > 0 ? max(min($gridPct, 100), 2) : 0 }}%;min-width:{{ $gridPct > 0 ? 2 : 0 }}px;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
             </div>
@@ -118,7 +125,7 @@
                                        value="{{ $grid['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                        data-action="{{ route('erp.targets.annual.rebalance', $grid['node_id']) }}"
                                        onchange="rbSubmit(this)"
-                                       style="width:92px;text-align:center;font-weight:700">
+                                       style="width:112px;padding-inline:6px;text-align:center;font-weight:700">
                             @else
                                 {{ $fmt($grid['targets'][$m]) }}
                             @endif
@@ -140,7 +147,7 @@
                                        name="manual[{{ $m }}]"
                                        value="{{ $grid['manuals'][$m] !== null ? $grid['manuals'][$m] + 0 : '' }}"
                                        placeholder="{{ $fmt($grid['computed'][$m]) }}"
-                                       style="width:92px;text-align:center">
+                                       style="width:112px;padding-inline:6px;text-align:center">
                                 @if ($grid['manuals'][$m] !== null)
                                     <div><span class="badge b-purple" style="margin-top:3px">{{ __('targets.manual_badge') }}</span></div>
                                 @endif
@@ -323,7 +330,7 @@
                                                                value="{{ $row['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                                                data-action="{{ route('erp.targets.annual.rebalance', $row['node_id']) }}"
                                                                onchange="rbSubmit(this)"
-                                                               style="width:88px;text-align:center;font-weight:700">
+                                                               style="width:112px;padding-inline:6px;text-align:center;font-weight:700">
                                                     @else
                                                         {{ $fmt($row['targets'][$m]) }}
                                                     @endif
@@ -345,7 +352,7 @@
                                                                name="manual[{{ $m }}]"
                                                                value="{{ $row['manuals'][$m] !== null ? $row['manuals'][$m] + 0 : '' }}"
                                                                placeholder="{{ $fmt($row['computed'][$m]) }}"
-                                                               style="width:88px;text-align:center">
+                                                               style="width:112px;padding-inline:6px;text-align:center">
                                                         @if ($row['manuals'][$m] !== null)
                                                             <div><span class="badge b-purple" style="margin-top:3px">{{ __('targets.manual_badge') }}</span></div>
                                                         @endif

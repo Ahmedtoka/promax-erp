@@ -94,9 +94,9 @@
         @csrf
         <h4>➕ {{ __('online.courier_new') }}</h4>
         <label class="f">{{ __('common.name') }}</label>
-        <input name="name" required maxlength="120" style="width:100%;margin-bottom:8px">
+        <input type="text" name="name" required maxlength="120" style="width:100%;margin-bottom:8px">
         <label class="f">{{ __('common.phone') }}</label>
-        <input name="phone" maxlength="30" style="width:100%;margin-bottom:12px" dir="ltr">
+        <input type="text" name="phone" maxlength="30" style="width:100%;margin-bottom:12px" dir="ltr">
         <div class="dash-hint" style="margin-bottom:10px">{{ __('online.courier_hint') }}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgCourier')">{{ __('common.cancel') }}</button>

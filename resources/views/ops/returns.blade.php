@@ -31,17 +31,22 @@
         <div class="lbl">📈 {{ __('field.ret_kpi_rate') }}</div>
         <div class="val num {{ $periodSales && $sumValue / max($periodSales, 1) > 0.1 ? 'neg' : 'mid' }}">
             {{ $periodSales ? number_format($sumValue / $periodSales * 100, 1).'%' : '—' }}</div>
-        <div class="sub2">{{ $periodSales ? __('field.ret_kpi_rate_hint', ['sales' => $f0($periodSales)]) : __('field.ret_kpi_rate_pick') }}</div>
+        {{-- (٢٢/٩) النسبة بمعادلتها --}}
+        @if ($periodSales)
+            <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.ret_rate_eq', ['p' => number_format($sumValue / $periodSales * 100, 1), 'r' => $f0($sumValue), 's' => $f0($periodSales)])) }}</span></div>
+        @else
+            <div class="sub2">{{ __('field.ret_kpi_rate_pick') }}</div>
+        @endif
     </a>
     <a @class(['kpi', 'on' => ($filters['condition'] ?? '') === 'good']) href="{{ request()->fullUrlWithQuery(['condition' => ($filters['condition'] ?? '') === 'good' ? null : 'good', 'page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">✅ {{ __('field.return_good_units') }}</div>
         <div class="val pos num">{{ $f0($sumGood) }}</div>
-        <div class="sub2">{{ __('common.piece') }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.ret_units_eq', ['u' => $f0($units), 'g' => $f0($sumGood), 'd' => $f0($sumDamaged)])) }}</span></div>
     </a>
     <a @class(['kpi', 'on' => ($filters['condition'] ?? '') === 'damaged']) href="{{ request()->fullUrlWithQuery(['condition' => ($filters['condition'] ?? '') === 'damaged' ? null : 'damaged', 'page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">⚠️ {{ __('field.return_damaged_units') }}</div>
         <div class="val neg num">{{ $f0($sumDamaged) }}</div>
-        <div class="sub2">{{ $units > 0 ? number_format($sumDamaged / $units * 100, 1) : 0 }}% {{ __('field.ret_of_units') }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.ret_dmg_eq', ['p' => $units > 0 ? number_format($sumDamaged / $units * 100, 1) : 0, 'd' => $f0($sumDamaged), 'u' => $f0($units)])) }}</span></div>
     </a>
 </div>
 
@@ -119,55 +124,7 @@
     @endif
 </div>
 
-{{-- ═══ مين بيرجّع إيه — أعلى 8 في كل تقسيمة، بنفس الفلاتر ═══ --}}
-@if ($sumDocs > 0)
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:14px">
-    <div class="card" style="margin:0">
-        <h3>📦 {{ __('field.ret_by_product') }}</h3>
-        <div class="tablewrap"><table>
-            <tr><th>{{ __('field.ret_item') }}</th><th class="num">{{ __('field.ret_qty') }}</th><th class="num">{{ __('field.return_damaged_units') }}</th><th class="num">{{ __('common.total') }}</th></tr>
-            @foreach ($byProduct as $x)
-                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['product' => $x->id, 'page' => null]) }}'">
-                    <td>{{ app()->getLocale() === 'en' && $x->name_en ? $x->name_en : $x->name }}
-                        <a href="{{ route('erp.products.show', $x->id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_product') }}">↗</a></td>
-                    <td class="num">{{ $f0($x->q) }}</td>
-                    <td class="num {{ $x->dq > 0 ? 'neg' : '' }}">{{ $f0($x->dq) }}</td>
-                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
-                </tr>
-            @endforeach
-        </table></div>
-    </div>
-    <div class="card" style="margin:0">
-        <h3>👥 {{ __('field.ret_by_client') }}</h3>
-        <div class="tablewrap"><table>
-            <tr><th>{{ __('client.client') }}</th><th class="num">{{ __('field.ret_docs') }}</th><th class="num">{{ __('common.total') }}</th></tr>
-            @foreach ($byClient as $x)
-                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['client' => $x->client_id, 'page' => null]) }}'">
-                    <td>{{ $clientNames->get($x->client_id)?->fullName() ?? '#'.$x->client_id }}
-                        <a href="{{ route('erp.clients.show', $x->client_id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_client') }}">↗</a></td>
-                    <td class="num">{{ $f0($x->n) }}</td>
-                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
-                </tr>
-            @endforeach
-        </table></div>
-    </div>
-    <div class="card" style="margin:0">
-        <h3>🧑‍💼 {{ __('field.ret_by_rep') }}</h3>
-        <div class="tablewrap"><table>
-            <tr><th>{{ __('ops.rep') }}</th><th class="num">{{ __('field.ret_docs') }}</th><th class="num">{{ __('common.total') }}</th></tr>
-            @foreach ($byRep as $x)
-                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['rep' => $x->user_id ?: 'office', 'page' => null]) }}'">
-                    <td>{{ $x->user_id ? ($repNames->get($x->user_id)?->displayName() ?? '#'.$x->user_id) : __('common.office') }}
-                        @if ($x->user_id)<a href="{{ route('ops.rep', $x->user_id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_rep') }}">↗</a>@endif</td>
-                    <td class="num">{{ $f0($x->n) }}</td>
-                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
-                </tr>
-            @endforeach
-        </table></div>
-    </div>
-</div>
-@endif
-
+{{-- (٢٢/٩) القايمة قبل التحليلات — اللي فاتح الشاشة بيدوّر على مستند الأول --}}
 <div class="card">
     <h3>↩️ {{ __('field.returns') }} <span class="side">{{ __('field.ret_kpi_docs', ['count' => $f0($returns->total())]) }}</span></h3>
     <div class="tablewrap" style="max-height:65vh;overflow-y:auto">
@@ -232,6 +189,55 @@
     </div>
     <div class="pag">{{ $returns->links('pagination::simple-default') }}</div>
 </div>
+
+{{-- ═══ مين بيرجّع إيه — أعلى 8 في كل تقسيمة، بنفس الفلاتر ═══ --}}
+@if ($sumDocs > 0)
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:14px">
+    <div class="card" style="margin:0">
+        <h3>📦 {{ __('field.ret_by_product') }}</h3>
+        <div class="tablewrap"><table>
+            <tr><th>{{ __('field.ret_item') }}</th><th class="num">{{ __('field.ret_qty') }}</th><th class="num">{{ __('field.return_damaged_units') }}</th><th class="num">{{ __('common.total') }}</th></tr>
+            @foreach ($byProduct as $x)
+                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['product' => $x->id, 'page' => null]) }}'">
+                    <td>{{ app()->getLocale() === 'en' && $x->name_en ? $x->name_en : $x->name }}
+                        <a href="{{ route('erp.products.show', $x->id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_product') }}">↗</a></td>
+                    <td class="num">{{ $f0($x->q) }}</td>
+                    <td class="num {{ $x->dq > 0 ? 'neg' : '' }}">{{ $f0($x->dq) }}</td>
+                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
+                </tr>
+            @endforeach
+        </table></div>
+    </div>
+    <div class="card" style="margin:0">
+        <h3>👥 {{ __('field.ret_by_client') }}</h3>
+        <div class="tablewrap"><table>
+            <tr><th>{{ __('client.client') }}</th><th class="num">{{ __('field.ret_docs') }}</th><th class="num">{{ __('common.total') }}</th></tr>
+            @foreach ($byClient as $x)
+                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['client' => $x->client_id, 'page' => null]) }}'">
+                    <td>{{ $clientNames->get($x->client_id)?->fullName() ?? '#'.$x->client_id }}
+                        <a href="{{ route('erp.clients.show', $x->client_id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_client') }}">↗</a></td>
+                    <td class="num">{{ $f0($x->n) }}</td>
+                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
+                </tr>
+            @endforeach
+        </table></div>
+    </div>
+    <div class="card" style="margin:0">
+        <h3>🧑‍💼 {{ __('field.ret_by_rep') }}</h3>
+        <div class="tablewrap"><table>
+            <tr><th>{{ __('ops.rep') }}</th><th class="num">{{ __('field.ret_docs') }}</th><th class="num">{{ __('common.total') }}</th></tr>
+            @foreach ($byRep as $x)
+                <tr class="clickable" onclick="location.href='{{ request()->fullUrlWithQuery(['rep' => $x->user_id ?: 'office', 'page' => null]) }}'">
+                    <td>{{ $x->user_id ? ($repNames->get($x->user_id)?->displayName() ?? '#'.$x->user_id) : __('common.office') }}
+                        @if ($x->user_id)<a href="{{ route('ops.rep', $x->user_id) }}" onclick="event.stopPropagation()" title="{{ __('ui.l_rep') }}">↗</a>@endif</td>
+                    <td class="num">{{ $f0($x->n) }}</td>
+                    <td class="num neg"><b>{{ $fmt($x->v) }}</b></td>
+                </tr>
+            @endforeach
+        </table></div>
+    </div>
+</div>
+@endif
 
 {{-- ═══ تفسير قيمة المرتجعات: نفس الفلتر مقسوم بسياسة المرتجع ═══ --}}
 <dialog id="retExplain" class="wide">

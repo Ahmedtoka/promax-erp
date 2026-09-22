@@ -67,7 +67,7 @@
             <select name="rep_id" required style="width:100%">
                 <option value="">{{ __('ui.choose', ['x' => __('ui.l_rep')]) }}</option>
                 @foreach ($reps as $r)
-                    <option value="{{ $r->id }}">{{ $r->displayName() }} ({{ $r->code }})</option>
+                    <option value="{{ $r->id }}">{{ $r->displayName() }}@if ($r->code) ({{ $r->code }})@endif</option>
                 @endforeach
             </select>
         </div>

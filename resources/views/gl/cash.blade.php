@@ -31,9 +31,24 @@
         <a class="kpi" href="{{ request()->fullUrlWithQuery(['kind' => request('kind') === $k ? null : $k, 'page' => null]) }}#gl-table" title="{{ __('ui.click_to_filter') }}">
             <div class="lbl">{{ __('gl.kind_'.$k) }}</div>
             <div class="val">{{ $fmt($byKind[$k] ?? 0) }}</div>
-            <div class="sub2">{{ __('common.currency') }}</div>
+            <div class="sub2">{{ __('uib.gl_cash_kind_sub') }}</div>
         </a>
     @endforeach
+    {{-- (٢٢/٩) الرقمين المركّبين اللي المحاسب بيدوّر عليهم: صافي الخزنة وصافي اللي مع المناديب في الفترة --}}
+    @php
+        $cDep = (float) ($byKind['deposit'] ?? 0); $cWd = (float) ($byKind['withdraw'] ?? 0);
+        $cAdv = (float) ($byKind['rep_advance'] ?? 0); $cRet = (float) ($byKind['rep_return'] ?? 0);
+    @endphp
+    <a class="kpi" style="grid-column:span 2" href="#gl-table">
+        <div class="lbl">{{ __('uib.gl_safe_net') }}</div>
+        <div class="val {{ $cWd + $cRet - $cDep - $cAdv < 0 ? 'neg' : 'pos' }}" dir="ltr">{{ $fmt($cWd + $cRet - $cDep - $cAdv) }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $cWd + $cRet - $cDep - $cAdv, 'zeros' => true, 'parts' => [[__('gl.kind_withdraw'), $cWd], [__('gl.kind_rep_return'), $cRet], [__('gl.kind_deposit'), $cDep, '-'], [__('gl.kind_rep_advance'), $cAdv, '-']]])</div>
+    </a>
+    <a class="kpi" style="grid-column:span 2" href="{{ request()->fullUrlWithQuery(['kind' => 'rep_advance', 'page' => null]) }}#gl-table">
+        <div class="lbl">{{ __('uib.gl_rep_net') }}</div>
+        <div class="val" dir="ltr">{{ $fmt($cAdv - $cRet) }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $cAdv - $cRet, 'zeros' => true, 'parts' => [[__('gl.kind_rep_advance'), $cAdv], [__('gl.kind_rep_return'), $cRet, '-']]])</div>
+    </a>
 </div>
 
 <div class="card" id="gl-table">
@@ -124,7 +139,7 @@
         </table>
     </div>
 
-    <div style="margin-top:12px">{{ $rows->links() }}</div>
+    @include('partials._pagination', ['p' => $rows])
 </div>
 
 {{-- ═══════════ سند حركة نقدية — الديالوج جوه content عن قصد ═══════════ --}}

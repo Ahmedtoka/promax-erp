@@ -30,9 +30,13 @@
     <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">💰 {{ __('field.vans_street_value') }}</div><div class="val">{{ $fmt($streetValue) }}</div>
         {{-- عرض فقط (١٢/٨): نفس البضاعة متقيّمة بكل قايمة مفعّلة --}}
         <div class="sub2">@include('partials._list_values', ['totals' => $streetValues])</div>
+        <div class="sub2">{{ __('uic.vans_value_sub') }}</div>
     </a>
-    <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">📦 {{ __('field.vans_units_left') }}</div><div class="val">{{ $fmt($unitsLeft) }}</div></a>
-    <a @class(['kpi', 'on' => $state === 'none']) href="{{ $stUrl('none') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">⚪ {{ __('field.vans_no_custody') }}</div><div class="val" style="color:var(--muted)">{{ $noneCount }}</div></a>
+    <a @class(['kpi', 'on' => $state === 'open']) href="{{ $stUrl('open') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">📦 {{ __('field.vans_units_left') }}</div><div class="val">{{ $fmt($unitsLeft) }}</div>
+        {{-- (٢٢/٩) --}}
+        <div class="sub2">{{ __('uic.vans_units_sub', ['n' => $openCount]) }}</div></a>
+    <a @class(['kpi', 'on' => $state === 'none']) href="{{ $stUrl('none') }}" title="{{ __('ui.click_to_filter') }}"><div class="lbl">⚪ {{ __('field.vans_no_custody') }}</div><div class="val" style="color:var(--muted)">{{ $noneCount }}</div>
+        <div class="sub2">{{ __('uic.vans_none_sub', ['n' => $allCount]) }}</div></a>
 </div>
 
 @if ($extraOpen->isNotEmpty())

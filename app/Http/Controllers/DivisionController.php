@@ -32,6 +32,7 @@ class DivisionController extends Controller
                          COUNT(*) as n,
                          SUM(purchases) as purchases,
                          SUM(collections) as collections,
+                         SUM(`returns`) as n_returns,
                          SUM(balance) as balance,
                          MIN(NULLIF(discount, 0)) as dmin,
                          MAX(discount) as dmax,
@@ -40,9 +41,11 @@ class DivisionController extends Controller
             ->get()->keyBy('division');
 
         // مبيعات النهارده والكميات — من مصادرها الأصلية (الدوكترين)
-        $today = \App\Models\Invoice::join('clients', 'clients.id', '=', 'invoices.client_id')
-            ->whereDate('invoices.created_at', today())
-            ->selectRaw('clients.division, SUM(invoices.grand_total) as t')
+        // ⚠️ النهارده من `SalesSource` (٢٢/٩) — نفس تعريف الداشبورد: قيود البيع بتاريخ النهارده
+        // (فواتير + أوامر توريد مسلّمة)، مش فواتير `created_at` بس
+        $today = \App\Services\SalesSource::docs(today(), today())
+            ->join('clients', 'clients.id', '=', 's.client_id')
+            ->selectRaw('clients.division, SUM(s.grand_total) as t')
             ->groupBy('clients.division')->pluck('t', 'division');
 
         $qty = DB::table('invoice_items')

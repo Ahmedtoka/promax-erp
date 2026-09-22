@@ -16,7 +16,7 @@
         {{-- بحث شامل: رقم أوردر / اسم عميل / موبايل → البيك ابات اللي فيها --}}
         <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
             <label class="fl wide"><span>{{ __('ui.l_search') }}</span>
-                <input name="search" value="{{ $search }}" placeholder="{{ __('online.pu_search_ph') }}"></label>
+                <input type="text" name="search" value="{{ $search }}" placeholder="{{ __('online.pu_search_ph') }}"></label>
             {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ شيت البيك اب --}}
             @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>

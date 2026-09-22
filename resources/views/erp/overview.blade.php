@@ -74,6 +74,25 @@
     $billedAll = (float) $inv->billed_g + (float) $posDelivered->billed_g;
     // (٢٢/٩) + القيود التانية (رد نقدية/تسويات) — فالصافي = Σ مدين − Σ دائن للفترة
     $netMove = $salesAll - (float) $coll - (float) $rets->g + (float) $otherNet;
+    // (٢٢/٩) طلب المالك: كل رقم كبير مكتوب تحته معادلته بأرقامه. الأجزاء بتتقرّب
+    // لأقرب جنيه، وفرق التقريب (جنيه) بيتحط على أكبر جزء عشان السطر يقفل بالظبط.
+    $fit = function (float $total, array $parts): array {
+        $r = array_map(fn ($v) => (int) round($v), $parts);
+        $diff = (int) round($total) - array_sum($r);
+        if ($diff !== 0 && $r) {
+            $k = array_search(max($r), $r, true);
+            $r[$k] += $diff;
+        }
+
+        return $r;
+    };
+    // سطر المعادلة LTR: علامة اتجاه بعد كل كلمة عربي — من غيرها الأرقام بتتشقلب حوالين الكلام
+    $eq = fn (string $key, array $p = []) => preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', "$1".html_entity_decode('&lrm;'), __($key, $p));
+    $sPay = $fit($salesAll, ["cash" => $inv->cash_g, "credit" => $inv->g - $inv->cash_g, "po" => $posDelivered->g]);
+    $sBill = $fit($salesAll, ["billed" => $billedAll, "unbilled" => $salesAll - $billedAll]);
+    $cParts = $fit((float) $coll, $collSplit);
+    // القيود التانية = اللي يقفل المعادلة بعد التقريب (الفرق جنيه بالكتير)
+    $otherShown = (int) round($netMove) - ((int) round($salesAll) - (int) round($coll) - (int) round($rets->g));
 @endphp
 <div class="dash-eqrow">
     {{-- ⚠️ (٢٢/٩) الكارت كان بيفتح «الفواتير تفصيلي» اللي إجماليه الفواتير بس
@@ -85,16 +104,19 @@
         <div class="lbl"><span class="kic">💰</span> {{ __('dash.k_sales') }}</div>
         {{-- الأرقام الفرعية في مربعات صغيرة (٢٦/٨) — أوضح من سطر متلزق --}}
         <div class="kmini">
-            <span><b>{{ $fmt($inv->cash_g) }}</b><i>💵 {{ __('dash.eq_cash') }}</i></span>
-            <span><b>{{ $fmt($inv->g - $inv->cash_g) }}</b><i>🕐 {{ __('dash.eq_credit') }}</i></span>
-            <span><b>{{ $fmt($posDelivered->g) }}</b><i>🚚 {{ __('dash.eq_pos') }}</i></span>
+            <span><b>{{ $fmt($sPay['cash']) }}</b><i>💵 {{ __('dash.eq_cash') }}</i></span>
+            <span><b>{{ $fmt($sPay['credit']) }}</b><i>🕐 {{ __('dash.eq_credit') }}</i></span>
+            <span><b>{{ $fmt($sPay['po']) }}</b><i>🚚 {{ __('dash.eq_pos') }}</i></span>
         </div>
         <div class="kmini">
-            <span class="on"><b>{{ $fmt($billedAll) }}</b><i>🧾 {{ __('dash.billed') }}</i></span>
-            <span><b>{{ $fmt($salesAll - $billedAll) }}</b><i>📄 {{ __('dash.unbilled') }}</i></span>
+            <span class="on"><b>{{ $fmt($sBill['billed']) }}</b><i>🧾 {{ __('dash.billed') }}</i></span>
+            <span><b>{{ $fmt($sBill['unbilled']) }}</b><i>📄 {{ __('dash.unbilled') }}</i></span>
             <span><b>{{ $fmt($openPos) }}</b><i>⏳ {{ __('rpt.k_open') }}</i></span>
         </div>
-        <div class="dash-hint">{{ __('dash.h_eq_sales') }}</div>
+        {{-- (٢٢/٩) المعادلة بالأرقام — التقسيمتين كل واحدة لوحدها بتقفل على رقم الكارت --}}
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_sales_pay', ['t' => $fmt($salesAll), 'a' => $fmt($sPay['cash']), 'b' => $fmt($sPay['credit']), 'c' => $fmt($sPay['po'])]) }}</span></div>
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_sales_bill', ['t' => $fmt($salesAll), 'a' => $fmt($sBill['billed']), 'b' => $fmt($sBill['unbilled'])]) }}</span></div>
+        <div class="dash-hint">{{ __('dash.h_eq_sales') }} {{ __('uic.open_pos_note', ['n' => $fmt($openPos)]) }}</div>
     </a>
     <span class="eqop">−</span>
     <a class="kpi dash-link has-bolt" href="{{ $rpt('collections') }}">
@@ -102,14 +124,18 @@
         <div class="val pos big">{{ $fmt($coll) }}</div>
         <div class="lbl"><span class="kic">🤲</span> {{ __('dash.k_coll') }}</div>
         <div class="kmini">
-            <span><b>{{ $fmt($collSplit['invoice']) }}</b><i>💵 {{ __('dash.coll_cash') }}</i></span>
-            <span><b>{{ $fmt($collSplit['visit']) }}</b><i>🚪 {{ __('dash.coll_field') }}</i></span>
-            <span><b>{{ $fmt($collSplit['po']) }}</b><i>🚚 {{ __('dash.coll_pos') }}</i></span>
+            <span><b>{{ $fmt($cParts['invoice']) }}</b><i>💵 {{ __('dash.coll_cash') }}</i></span>
+            <span><b>{{ $fmt($cParts['visit']) }}</b><i>🚪 {{ __('dash.coll_field') }}</i></span>
+            <span><b>{{ $fmt($cParts['po']) }}</b><i>🚚 {{ __('dash.coll_pos') }}</i></span>
+            {{-- ⚠️ (٢٢/٩) تحصيل المكتب/الحسابات كان محسوب في الرقم ومش ظاهر — المربعات ماكانتش بتجمع على الكارت --}}
+            <span><b>{{ $fmt($cParts['other']) }}</b><i>🏦 {{ __('uic.coll_office') }}</i></span>
         </div>
         <div class="kmini">
             <span><b>{{ $salesAll > 0 ? number_format($coll / $salesAll * 100, 1) : 0 }}%</b><i>📈 {{ __('dash.of_sales') }}</i></span>
         </div>
-        <div class="dash-hint">{{ __('dash.h_coll') }}</div>
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_coll', ['t' => $fmt($coll), 'a' => $fmt($cParts['invoice']), 'b' => $fmt($cParts['visit']), 'c' => $fmt($cParts['po']), 'd' => $fmt($cParts['other'])]) }}</span></div>
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_coll_pct', ['p' => $salesAll > 0 ? number_format($coll / $salesAll * 100, 1) : 0, 'a' => $fmt($coll), 'b' => $fmt($salesAll)]) }}</span></div>
+        <div class="dash-hint">{{ __('uic.h_coll2') }}</div>
     </a>
     <span class="eqop">−</span>
     <a class="kpi dash-link has-bolt" href="{{ $rpt('returns_docs') }}">
@@ -119,6 +145,7 @@
         <div class="kmini">
             <span><b>{{ $fmt($rets->n) }}</b><i>🧾 {{ __('dash.rets_n') }}</i></span>
         </div>
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_rets', ['t' => $fmt($rets->g), 'n' => $fmt($rets->n), 'p' => $salesAll > 0 ? number_format($rets->g / $salesAll * 100, 1) : 0, 's' => $fmt($salesAll)]) }}</span></div>
         <div class="dash-hint">{{ __('dash.h_rets') }}</div>
     </a>
     <span class="eqop">=</span>
@@ -130,13 +157,14 @@
             <span class="on"><b>{{ $fmt($debt->g) }}</b><i>⏳ {{ __('dash.eq_debt_now') }}</i></span>
             <span><b>{{ $fmt($debt->n) }}</b><i>👥 {{ __('rpt.k_clients') }}</i></span>
         </div>
-        @if (abs($otherNet) >= 0.5)
+        @if ($otherShown !== 0)
             {{-- الجزء اللي مش ظاهر في التلات كروت اللي قبله — عشان المعادلة تقفل قدام العين --}}
             <div class="kmini">
-                <span><b>{{ $otherNet > 0 ? '+' : '' }}{{ $fmt($otherNet) }}</b><i>🔁 {{ __('uic.eq_other') }}</i></span>
+                <span><b>{{ $otherShown > 0 ? '+' : '' }}{{ $fmt($otherShown) }}</b><i>🔁 {{ __('uic.eq_other') }}</i></span>
             </div>
         @endif
-        <div class="dash-hint">{{ __('dash.h_eq_net') }}</div>
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_net', ['t' => ($netMove > 0 ? '+' : '').$fmt($netMove), 'a' => $fmt($salesAll), 'b' => $fmt($coll), 'c' => $fmt($rets->g), 'd' => ($otherShown < 0 ? '− ' : '+ ').$fmt(abs($otherShown))]) }}</span></div>
+        <div class="dash-hint">{{ __('uic.h_eq_net2', ['g' => $fmt($debt->g), 'n' => $fmt($debt->n)]) }}</div>
     </a>
 </div>
 
@@ -154,6 +182,7 @@
             <span><b>{{ $fmt($street->vans) }}</b><i>🚐 {{ __('dash.vans_open') }}</i></span>
             <span><b>{{ $fmt($street->units) }}</b><i>📦 {{ __('dash.units') }}</i></span>
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_street', ['v' => $fmt($street->val), 'u' => $fmt($street->units), 'n' => $fmt($street->vans)]) }}</div>
         <div class="dash-hint">{{ __('dash.h_street') }}</div>
     @if (\App\Support\Access::allows(auth()->user(), 'ops.vans'))</a>@else</div>@endif
     <a class="kpi dash-link has-bolt" href="{{ $rpt('visits_log') }}">
@@ -164,6 +193,7 @@
             <span><b>{{ $fmt($giftsQ) }}</b><i>🎁 {{ __('rpt.k_gifts') }}</i></span>
             <span><b>{{ $fmt($rets->n) }}</b><i>↩️ {{ __('dash.docs') }}</i></span>
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_field', ['n' => $fmt($visitsN)]) }}</div>
         <div class="dash-hint">{{ __('dash.h_visits') }}</div>
     </a>
     <a class="kpi dash-link has-bolt" href="{{ $rpt('new_clients') }}">
@@ -173,6 +203,7 @@
         <div class="kmini">
             <span><b>{{ $fmt($openRequests) }}</b><i>📋 {{ __('dash.pending_req') }}</i></span>
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_new') }}</div>
         <div class="dash-hint">{{ __('dash.h_new') }}</div>
     </a>
     @if (\App\Support\Access::allows(auth()->user(), 'erp.stock'))
@@ -186,6 +217,7 @@
         <div class="kmini">
             <span><b>💵</b><i>{{ __('dash.h_stock_short') }}</i></span>
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_stock', ['v' => $fmt($stockValue)]) }}</div>
         <div class="dash-hint">{{ __('dash.h_stock') }}</div>
     @if (\App\Support\Access::allows(auth()->user(), 'erp.stock'))</a>@else</div>@endif
 </div>
@@ -290,6 +322,7 @@
                 @endforelse
             </div>
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_channels', ['t' => $fmt($byChannel->sum('v'))]) }}</div>
         <div class="dash-hint">{{ __('dash.h_channels') }}</div>
     </div>
 </div>
@@ -336,6 +369,7 @@
                 <div class="s" style="color:var(--muted)">{{ __('rpt.no_rows') }}</div>
             @endforelse
         </div>
+        <div class="sub2 eqline">{{ __('uic.eq_lines_pre_tax', ['t' => $fmt($byFamily->sum('v'))]) }}</div>
         <div class="dash-hint">{{ __('dash.h_families') }}</div>
     </div>
 
@@ -392,6 +426,8 @@
                 </a>
             @endforeach
         </div>
+        {{-- (٢٢/٩) الشرايح بتجمع على المديونية القائمة اللي في كارت الصافي فوق --}}
+        <div class="sub2 eqline"><span dir="ltr">{{ $eq('uic.eq_aging', ['t' => $fmt(array_sum($aging))]) }}</span></div>
         <div class="dash-hint">{{ __('dash.h_aging') }}</div>
     </div>
 </div>
@@ -558,6 +594,10 @@
 .dash-eqrow .kpi{flex:1;min-width:225px;position:relative;overflow:hidden;
   display:flex;flex-direction:column;gap:4px;padding:14px 16px}
 .dash-eqrow .sub2{font-size:10.5px}
+/* (٢٢/٩) سطر المعادلة تحت كل رقم — أرقام متساوية العرض وبيلفّ لو طويل */
+.kpi .sub2.eqline,.card .sub2.eqline{display:block;font-size:10.5px;line-height:1.7;color:var(--ink,#1B1B29);
+  font-variant-numeric:tabular-nums;margin-top:3px;position:relative}
+.eqline span[dir=ltr]{unicode-bidi:isolate;display:inline-block}
 .dash-eqrow .dash-hint{font-size:9.5px;margin-top:auto}
 /* صفوف ويدجت «مهامي» (٢٦/٨) */
 .dtk-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;

@@ -42,11 +42,11 @@
         <div style="text-align:center;color:var(--muted);padding:22px">{{ __('client.no_movements') }}</div>
     @else
         <div class="kpis" style="margin-bottom:10px">
-            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.sold_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['sold_qty']) }}</div></a>
-            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.returned_qty') }}</div><div class="val neg">{{ $mvFmt($mvTotals['returned_qty']) }}</div></a>
-            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.gift_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['gift_qty']) }}</div></a>
-            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.net_qty') }}</div><div class="val pos">{{ $mvFmt($mvTotals['net_qty']) }}</div></a>
-            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.families_count') }}</div><div class="val">{{ count($movements['families']) }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.sold_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['sold_qty']) }}</div><div class="sub2">{{ __('uia.mv_sold_sub') }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.returned_qty') }}</div><div class="val neg">{{ $mvFmt($mvTotals['returned_qty']) }}</div><div class="sub2">{{ __('uia.eq_return_rate') }} <span dir="ltr">{{ $mvTotals['sold_qty'] > 0 ? number_format($mvTotals['returned_qty'] / $mvTotals['sold_qty'] * 100, 1) : 0 }}% = {{ $mvFmt($mvTotals['returned_qty']) }} ÷ {{ $mvFmt($mvTotals['sold_qty']) }}</span></div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.gift_qty') }}</div><div class="val">{{ $mvFmt($mvTotals['gift_qty']) }}</div><div class="sub2">{{ __('uia.mv_gift_sub') }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.net_qty') }}</div><div class="val pos">{{ $mvFmt($mvTotals['net_qty']) }}</div><div class="sub2"><span dir="ltr">{{ $mvFmt($mvTotals['net_qty']) }} = {{ $mvFmt($mvTotals['sold_qty']) }} − {{ $mvFmt($mvTotals['returned_qty']) }}</span> {{ __('uia.mv_net_sub') }}</div></a>
+            <a class="kpi" href="#mvTable"><div class="lbl">{{ __('client.families_count') }}</div><div class="val">{{ count($movements['families']) }}</div><div class="sub2">{{ __('uia.mv_fam_sub', ['n' => collect($movements['families'])->sum(fn ($x) => count($x['products']))]) }}</div></a>
         </div>
 
         {{-- الكروت فوق بتنزل على الجدول ده — هو اللي بيفصّل الرقم صنف صنف --}}

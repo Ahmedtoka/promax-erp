@@ -13,37 +13,43 @@
 
 {{-- ═══ صف ١: الفلوس — كل بوكس تحته سطر بيشرحه ═══ --}}
 {{-- كل بوكس بيودّي على القايمة اللي بتعدّ رقمه: بره ← التحصيل، والباقي ← الأوردرات بالحالة (٢٢/٩) --}}
+{{-- الكروت بماركب الكروت الموحّد (lbl/val/sub2) — كانت b/span/small فالرقم والعنوان بيتلخبطوا على سطر واحد.
+     وكل رقم مركّب تحته معادلته بأجزاء من نفس كويري التجميع (٢٢/٩) --}}
+@php $n = fn ($s) => (int) ($counts[$s]->n ?? 0); @endphp
 <div class="kpis">
     <a class="kpi" href="{{ route('online.collections') }}">
-        <b class="num neg">{{ $money($sum->outstanding) }}</b>
-        <span>{{ __('online.k_outstanding') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_outstanding') }}</small>
+        <div class="lbl">{{ __('online.k_outstanding') }}</div>
+        <div class="val neg">{{ $money($sum->outstanding) }}</div>
+        <div class="sub2">{{ __('online.h_outstanding') }}<br>
+            <span dir="ltr">{{ $money($sum->outstanding) }} = {{ __('uid.oa_goods') }} {{ $money($sum->out_goods) }} − {{ __('uid.oa_ret') }} {{ $money($sum->out_returned) }} − {{ __('uid.oa_coll') }} {{ $money($sum->out_collected) }}</span>
+            <br>{{ __('uid.oa_shipped_n', ['n' => $n('shipped')]) }}</div>
     </a>
     <a class="kpi" href="{{ route('online.orders', ['status' => 'completed']) }}">
-        <b class="num pos">{{ $money($sum->collected) }}</b>
-        <span>{{ __('online.k_collected') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_collected') }}</small>
+        <div class="lbl">{{ __('online.k_collected') }}</div>
+        <div class="val pos">{{ $money($sum->collected) }}</div>
+        <div class="sub2">{{ __('online.h_collected') }} — {{ __('uid.oa_all_time') }}</div>
     </a>
     <a class="kpi" href="{{ route('online.orders', ['status' => 'returned']) }}">
-        <b class="num">{{ $money($sum->returned_amount) }}</b>
-        <span>{{ __('online.k_returned') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_returned') }}</small>
+        <div class="lbl">{{ __('online.k_returned') }}</div>
+        <div class="val">{{ $money($sum->returned_amount) }}</div>
+        <div class="sub2">{{ __('online.h_returned') }} — {{ __('uid.oa_all_time') }}</div>
     </a>
     <a class="kpi" href="#onByStatus">
-        <b class="num">{{ $money($sum->shipping_sum) }}</b>
-        <span>{{ __('online.k_shipping') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_shipping') }}</small>
+        <div class="lbl">{{ __('online.k_shipping') }}</div>
+        <div class="val">{{ $money($sum->shipping_sum) }}</div>
+        <div class="sub2">{{ __('online.h_shipping') }}<br>{{ __('uid.oa_live_n', ['n' => $n('ready') + $n('shipped') + $n('completed')]) }}</div>
     </a>
     <a class="kpi" href="#onByStatus">
-        <b class="num">{{ $money($sum->cost_sum) }}</b>
-        <span>{{ __('online.k_cost') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_cost') }}</small>
+        <div class="lbl">{{ __('online.k_cost') }}</div>
+        <div class="val">{{ $money($sum->cost_sum) }}</div>
+        <div class="sub2">{{ __('online.h_cost') }}<br>{{ __('uid.oa_live_n', ['n' => $n('ready') + $n('shipped') + $n('completed')]) }}
+            @if ((float) $sum->cost_sum <= 0 && (float) $sum->live_amount > 0)<br><span class="neg">⚠ {{ __('uid.oa_cost_zero') }}</span>@endif</div>
     </a>
     <a class="kpi" href="{{ route('online.orders', ['status' => 'completed']) }}">
-        <b class="num {{ ($sum->completed_amount - $sum->completed_cost) >= 0 ? 'pos' : 'neg' }}">
-            {{ $money($sum->completed_amount - $sum->completed_cost) }}</b>
-        <span>{{ __('online.k_margin') }}</span>
-        <small style="font-size:10px;color:var(--muted)">{{ __('online.h_margin') }}</small>
+        <div class="lbl">{{ __('online.k_margin') }}</div>
+        <div class="val {{ ($sum->completed_amount - $sum->completed_cost) >= 0 ? 'pos' : 'neg' }}">{{ $money($sum->completed_amount - $sum->completed_cost) }}</div>
+        <div class="sub2">{{ __('uid.oa_margin_how', ['n' => $n('completed')]) }}<br>
+            <span dir="ltr">{{ $money($sum->completed_amount - $sum->completed_cost) }} = {{ $money($sum->completed_amount) }} − {{ $money($sum->completed_cost) }}</span></div>
     </a>
 </div>
 
@@ -54,7 +60,7 @@
         <table>
             <tr>
                 <th>{{ __('common.status') }}</th>
-                <th class="num" data-nosum>{{ __('online.orders_count') }}</th>
+                <th class="num">{{ __('online.orders_count') }}</th>
                 <th class="num">{{ __('online.amount') }}</th>
             </tr>
             @foreach ($statuses as $s)

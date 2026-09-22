@@ -36,6 +36,14 @@
     // كروت الملخّص بتفلتر كشف الحساب تحت بنوع القيد، بنفس الفترة (٢٢/٩)
     $stUrl = fn (?string $kind) => route('erp.clients.show', ['client' => $c] + $range->query()
         + array_filter(['kind' => $kind])).'#statement';
+    // معادلة كارت الرصيد (٢٢/٩): من نفس `$balanceBreak` بتاع التفسير — مبيعات − مرتجعات − تحصيل ± الباقي
+    $bkNet = fn (string $k) => (float) ($balanceBreak->firstWhere('kind', $k)?->d ?? 0) - (float) ($balanceBreak->firstWhere('kind', $k)?->c ?? 0);
+    $eqSales = $bkNet('sale');
+    $eqReturns = -$bkNet('return');
+    $eqColl = -$bkNet('collection');
+    $eqTotal = (float) $balanceBreak->sum('d') - (float) $balanceBreak->sum('c');
+    $eqOther = round($eqTotal) - round($eqSales) + round($eqReturns) + round($eqColl);   // من الأرقام المقرّبة المعروضة — المعادلة تقفل بالجنيه
+    $saleN = (int) ($balanceBreak->firstWhere('kind', 'sale')?->n ?? 0);
     // القيد ← مستنده الأصلي. الزيارة مالهاش صفحة، فبتفتح لوحة الزيارات على يومها وعميلها
     $srcUrl = function ($t) use ($c) {
         if (! $t->source_id) {
@@ -141,9 +149,9 @@
 
 <div class="kpis">
     {{-- كل رقم هنا بيتداس (٢٢/٩): فلتر كشف الحساب بنوع القيد، أو تفسير للرقم --}}
-    <a @class(['kpi', 'on' => $kind === 'sale']) href="{{ $stUrl($kind === 'sale' ? null : 'sale') }}"><div class="lbl">{{ __('client.purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($c->purchases) }}</div><div class="sub2">{{ __('client.since', ['date' => $c->first_activity_at?->format('Y-m-d') ?? '—']) }}</div></a>
-    <a @class(['kpi', 'on' => $kind === 'collection']) href="{{ $stUrl($kind === 'collection' ? null : 'collection') }}"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($c->collections) }}</div><div class="sub2">{{ number_format($c->collectionRate() * 100, 1) }}% {{ __('client.collection_rate') }}</div></a>
-    <div class="kpi" data-explain onclick="openDlg('dlgBalance')"><div class="lbl">{{ __('client.balance') }}</div><div class="val {{ $c->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($c->balance) }}</div><div class="sub2">{{ $c->balance > 0 ? __('client.owes_us') : __('client.in_credit') }}</div></div>
+    <a @class(['kpi', 'on' => $kind === 'sale']) href="{{ $stUrl($kind === 'sale' ? null : 'sale') }}"><div class="lbl">{{ __('client.purchases') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($c->purchases) }}</div><div class="sub2">{{ __('uia.eq_purchases', ['n' => $fmt($saleN), 'date' => $c->first_activity_at?->format('Y-m-d') ?? '—']) }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'collection']) href="{{ $stUrl($kind === 'collection' ? null : 'collection') }}"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($c->collections) }}</div><div class="sub2">{{ __('uia.eq_coll_rate') }} <span dir="ltr">{{ number_format($c->collectionRate() * 100, 1) }}% = {{ $fmt($c->collections) }} ÷ {{ $fmt($c->purchases) }}</span></div></a>
+    <div class="kpi" data-explain onclick="openDlg('dlgBalance')"><div class="lbl">{{ __('client.balance') }}</div><div class="val {{ $c->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($c->balance) }}</div><div class="sub2">{{ $c->balance > 0 ? __('client.owes_us') : __('client.in_credit') }} — {{ __('uia.eq_balance', ['s' => $fmt($eqSales), 'r' => $fmt($eqReturns), 'c' => $fmt($eqColl)]) }}@if (abs($eqOther) >= 0.5) {{ __($eqOther > 0 ? 'uia.eq_other_plus' : 'uia.eq_other_minus', ['o' => $fmt(abs($eqOther))]) }}@endif</div></div>
     {{-- ⚠️ المتأخر **غير** الرصيد وغير الأعمار: ده اللي عدّى ميعاد
          سداده حسب شروط العقد. عميل بشروط 60 يوم وعليه فاتورة عمرها
          45 يوم رصيده كبير وأعماره ظاهرة — بس متأخره صفر. --}}
@@ -154,17 +162,18 @@
             <div class="sub2">{{ __('client.no_payment_terms') }}</div>
         @elseif ($overdue['amount'] > 0)
             <div class="val neg">{{ $fmt($overdue['amount']) }}</div>
-            <div class="sub2">{{ __('client.overdue_by_days', ['days' => $overdue['days']]) }}</div>
+            <div class="sub2">{{ __('client.overdue_by_days', ['days' => $overdue['days']]) }} — {{ __('uia.eq_overdue', ['o' => $fmt($overdue['amount']), 'b' => $fmt($c->balance), 'rest' => $fmt(max((float) $c->balance - $overdue['amount'], 0)), 'days' => $c->paymentDays()]) }}</div>
         @else
             <div class="val pos">0</div>
             <div class="sub2">
                 {{ $overdue['due_on']
                     ? __('client.due_on').' '.$overdue['due_on']->format('Y-m-d')
                     : __('client.within_terms') }}
+                — {{ __('uia.eq_overdue_none', ['b' => $fmt(max((float) $c->balance, 0)), 'days' => $c->paymentDays()]) }}
             </div>
         @endif
     </div>
-    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($c->returns) }}</div><div class="sub2">{{ __('client.discounts') }} {{ $fmt($c->rebates) }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($c->returns) }}</div><div class="sub2">{{ __('uia.eq_return_rate') }} <span dir="ltr">{{ number_format((float) $c->purchases > 0 ? (float) $c->returns / (float) $c->purchases * 100 : 0, 1) }}% = {{ $fmt($c->returns) }} ÷ {{ $fmt($c->purchases) }}</span> · {{ __('client.discounts') }} {{ $fmt($c->rebates) }}</div></a>
     <a class="kpi" href="{{ $stUrl('collection') }}"><div class="lbl">{{ __('client.last_payment') }}</div><div class="val" style="font-size:17px" dir="ltr">{{ $c->last_payment_at?->format('Y-m-d') ?? '—' }}</div><div class="sub2">{{ __('client.last_activity') }} {{ $c->last_activity_at?->format('Y-m-d') ?? '—' }}</div></a>
     @if ($c->phone)
         <a class="kpi" href="tel:{{ $c->phone }}"><div class="lbl">{{ __('common.phone') }}</div><div class="val" style="font-size:17px" dir="ltr">{{ $c->phone }}</div><div class="sub2">{{ $c->address ?: '—' }}</div></a>
@@ -193,6 +202,135 @@
                 </tr>
             @endforeach
         </table>
+    </div>
+</div>
+@endif
+
+{{-- ═══ ترتيب الصفحة (٢٢/٩): اللي بيطارد فلوس محتاج الأعمار والكشف والفواتير الأول،
+     وبعدين العقد والتسعير، وفي الآخر الحركة والخريطة والزيارات ═══ --}}
+<div class="grid2">
+    <div class="card"><h3>{{ __('report.aging') }}</h3><div class="chartbox"><canvas id="chAg"></canvas></div></div>
+    <div class="card"><h3>{{ __('client.monthly_movement') }}</h3><div class="chartbox"><canvas id="chM"></canvas></div></div>
+</div>
+
+<div class="card" id="statement">
+    <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
+    {{-- ⚠️ فلتر «من — إلى» على `transactions.date` (٩/٩/٢٠٢٦). فورم GET
+         منفصل عن مودالات الفلوس — `data-range-filter` عشان
+         `ClientFormIntegrityTest` يعرف إن الخانتين دول مش خانات عميل. --}}
+    <form method="GET" action="{{ url()->current() }}#statement" class="searchbar" style="margin-bottom:12px" data-noprint data-range-filter>
+        {{-- نوع القيد والريفرنس (٢٢/٩): كروت الملخّص فوق بتحط `kind`، والريفرنس بيتداس من الجدول --}}
+        <label class="fl"><span>{{ __('client.type') }}</span>
+            <select name="kind" onchange="this.form.submit()">
+                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_entries')]) }}</option>
+                @foreach ($kinds as $k)
+                    <option value="{{ $k }}" @selected($kind === $k)>{{ __('enums.transaction.'.$k) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('uia.l_pay_ref') }}</span>
+            <input type="text" name="ref" value="{{ $ref }}" dir="ltr" placeholder="{{ __('uia.pay_ref_ph') }}" onchange="this.form.submit()"></label>
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        @if ($kind !== '' || $ref !== '' || ! $range->isOpen())
+            <a class="btn sm" href="{{ url()->current() }}#statement">✕ {{ __('common.clear') }}</a>
+        @endif
+        <a class="btn sm green" href="{{ route('erp.clients.statement_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_statement') }}</a>
+    </form>
+    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
+        <table>
+            {{-- ⚠️ **عمود طريقة التحصيل** (٨/٨/٢٠٢٦). `method` و
+                 `reference` وبيانات الشيك بيتخزنوا مع القيد ومحدش
+                 بيعرضهم — فالمحاسب بيسجّل شيك برقم وبنك وتاريخ
+                 استحقاق، وبعد كده مايلاقيش الرقم ده في أي شاشة
+                 ويرجع يفتح الدرج يدوّر على الورقة. --}}
+            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th><th class="num">{{ __('client.debit') }}</th><th class="num">{{ __('client.credit') }}</th></tr></thead><tbody>
+            @foreach ($txns as $t)
+                <tr>
+                    <td class="num">{{ $t->date->format('Y-m-d') }}</td>
+                    <td><span class="badge b-gray">{{ $t->kindLabel() }}</span></td>
+                    {{-- البيان بيفتح المستند اللي طلّع القيد: فاتورة / أمر توريد / مرتجع / زيارة التحصيل --}}
+                    <td style="white-space:normal;max-width:520px">
+                        @if ($u = $srcUrl($t))<a href="{{ $u }}">{{ $t->memo ?: $t->kindLabel() }}</a>@else{{ $t->memo }}@endif
+                    </td>
+                    <td style="white-space:normal">
+                        @if ($t->method)
+                            <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
+                                {{ $t->methodLabel() }}</span>
+                            @if ($t->reference)
+                                {{-- الريفرنس ← كل العملاء اللي عليهم قيد بنفس الرقم (تحويل واحد بيتقسّم على كذا فرع) --}}
+                                <div style="font-size:10.5px" dir="ltr"><a href="{{ route('erp.clients', ['ref' => $t->reference]) }}" title="{{ __('uia.ref_open_hint') }}">{{ $t->reference }}</a></div>
+                            @endif
+                            {{-- ⚠️ **تاريخ استحقاق الشيك لازم يبان** —
+                                 الشيك بيدخل الحساب فوراً (قرار المالك)،
+                                 فالتاريخ ده هو الحاجة الوحيدة اللي
+                                 بتفكّر المحاسب إنه لسه مااتحصّلش من البنك. --}}
+                            @if ($t->cheque_due)
+                                <div style="font-size:10.5px;color:var(--orange)">
+                                    {{ $t->cheque_bank }} · {{ __('client.cheque_due') }}
+                                    {{ $t->cheque_due->format('Y-m-d') }}
+                                </div>
+                            @endif
+                        @else
+                            <span style="color:var(--muted)">—</span>
+                        @endif
+                    </td>
+                    <td class="num">{{ $t->debit > 0 ? $fmt($t->debit) : '—' }}</td>
+                    <td class="num pos">{{ $t->credit > 0 ? $fmt($t->credit) : '—' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+        {{-- الكشف صفحات — الإجمالي من السيرفر على كل القيود المفلترة مش الستين المعروضين --}}
+        @if ($txns->total() > 0)
+            <tfoot><tr>
+                <td colspan="4"><b>Σ {{ __('common.total') }}</b> — {{ __('client.transaction_countable', ['count' => $txns->total()]) }}</td>
+                <td class="num"><b>{{ number_format($txnTotals['debit'], 2) }}</b></td>
+                <td class="num pos"><b>{{ number_format($txnTotals['credit'], 2) }}</b></td>
+            </tr></tfoot>
+        @endif
+        </table>
+    </div>
+    @include('partials._pagination', ['p' => $txns])
+</div>
+
+@if ($c->invoices->isNotEmpty())
+<div class="card">
+    <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>
+    {{-- التصدير بيطلّع **كل** الفواتير بتواريخها (الجدول آخر 20 بس) وبنفس فترة «من — إلى» تحت --}}
+    <div data-noprint style="margin-bottom:10px">
+        <a class="btn sm green" href="{{ route('erp.clients.invoices_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_invoices') }}</a>
+    </div>
+    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
+        <table>
+            <thead><tr>
+                <th>{{ __('ops.invoice') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('ops.payment') }}</th>
+                <th>{{ __('client.price_list') }}</th><th>{{ __('stock.batch_no') }}</th>
+                <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th data-nosum>{{ __('common.date') }}</th>
+            </tr></thead><tbody>
+            @foreach ($c->invoices->take(20) as $inv)
+                @php
+                    $batches = $inv->relationLoaded('items')
+                        ? $inv->items->map(fn ($it) => $it->batchLabel())->reject(fn ($b) => $b === '—')->unique()->take(3)->implode(__('common.list_separator'))
+                        : '';
+@endphp
+                <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
+                    <td><a href="{{ route('ops.invoice', $inv) }}" onclick="event.stopPropagation()"><b>{{ $inv->number }}</b></a>
+                        @if ($inv->paper_ref)
+                            <br><a href="{{ route('ops.invoices', ['paper' => $inv->paper_ref]) }}" onclick="event.stopPropagation()" style="font-size:10.5px" dir="ltr">📄 {{ $inv->paper_ref }}</a>
+                        @endif
+                    </td>
+                    <td>@if ($inv->user)<a href="{{ route('ops.rep', $inv->user) }}" onclick="event.stopPropagation()">{{ $inv->user->displayName() }}</a>@else — @endif</td>
+                    <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
+                    <td><span class="badge b-gray">{{ $inv->priceListLabel() }}</span></td>
+                    <td class="num" style="color:var(--muted);font-size:11.5px">{{ $batches !== '' ? $batches : '—' }}</td>
+                    <td class="num">{{ $fmt($inv->subtotal) }}</td>
+                    <td class="num">{{ $fmt($inv->discount) }}</td>
+                    {{-- ⚠️ المستحق مش الصافي — الجدول ده جنب كشف الحساب
+                         اللي بيقيّد الإجمالي، ورقمين مختلفين لنفس الفاتورة
+                         على نفس الصفحة بيخلّي اليوزر يشك في السيستم كله. --}}
+                    <td class="num pos">{{ $fmt($inv->payable()) }}</td>
+                    <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
+                </tr>
+            @endforeach
+        </tbody></table>
     </div>
 </div>
 @endif
@@ -429,22 +567,6 @@
     </div>
 </div>
 
-<div class="grid2">
-    <div class="card">
-        <h3>📍 {{ __('client.branch_location') }}</h3>
-        <div class="mapbox sm" id="mapClient"></div>
-        @if (! $c->hasLocation())
-            <div style="font-size:11.5px;color:var(--muted);margin-top:8px">
-                {{ __('client.no_coords') }}
-
-            </div>
-        @endif
-    </div>
-    <div class="card"><h3>{{ __('report.aging') }}</h3><div class="chartbox"><canvas id="chAg"></canvas></div></div>
-</div>
-
-<div class="card"><h3>{{ __('client.sales_by_family') }}</h3><div class="chartbox"><canvas id="chSplit"></canvas></div></div>
-
 {{-- ═══ حركة الأصناف بالكمية (٨/٩/٢٠٢٦) — طلب المالك: «الكميات والمنتجات
      وكام عائلة وسحب كام من ده ورجع كام» — الكارت المشترك مع صفحة السلسلة ═══ --}}
 @include('partials._movements_table', [
@@ -456,7 +578,20 @@
     'range' => $range,
 ])
 
-<div class="card"><h3>{{ __('client.monthly_movement') }}</h3><div class="chartbox"><canvas id="chM"></canvas></div></div>
+
+<div class="grid2">
+    <div class="card"><h3>{{ __('client.sales_by_family') }}</h3><div class="chartbox"><canvas id="chSplit"></canvas></div></div>
+    <div class="card">
+        <h3>📍 {{ __('client.branch_location') }}</h3>
+        <div class="mapbox sm" id="mapClient"></div>
+        @if (! $c->hasLocation())
+            <div style="font-size:11.5px;color:var(--muted);margin-top:8px">
+                {{ __('client.no_coords') }}
+
+            </div>
+        @endif
+    </div>
+</div>
 
 {{-- ═══════════ آخر الزيارات (١٥ أغسطس ٢٠٢٦) ═══════════
      بلاغ المالك: «مش شايف الزيارات اللي اتعملت، ولا صور الرف».
@@ -537,128 +672,6 @@
     </div>
 </div>
 @endif
-
-@if ($c->invoices->isNotEmpty())
-<div class="card">
-    <h3>🧾 {{ __('client.app_invoices') }} <span class="side">{{ __('client.invoice_countable', ['count' => $c->invoices->count()]) }}</span></h3>
-    {{-- التصدير بيطلّع **كل** الفواتير بتواريخها (الجدول آخر 20 بس) وبنفس فترة «من — إلى» تحت --}}
-    <div data-noprint style="margin-bottom:10px">
-        <a class="btn sm green" href="{{ route('erp.clients.invoices_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_invoices') }}</a>
-    </div>
-    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
-        <table>
-            <thead><tr>
-                <th>{{ __('ops.invoice') }}</th><th>{{ __('ops.rep') }}</th><th>{{ __('ops.payment') }}</th>
-                <th>{{ __('client.price_list') }}</th><th>{{ __('stock.batch_no') }}</th>
-                <th>{{ __('common.subtotal') }}</th><th>{{ __('common.discount') }}</th><th>{{ __('common.total') }}</th><th data-nosum>{{ __('common.date') }}</th>
-            </tr></thead><tbody>
-            @foreach ($c->invoices->take(20) as $inv)
-                @php
-                    $batches = $inv->relationLoaded('items')
-                        ? $inv->items->map(fn ($it) => $it->batchLabel())->reject(fn ($b) => $b === '—')->unique()->take(3)->implode(__('common.list_separator'))
-                        : '';
-@endphp
-                <tr class="clickable" onclick="location.href='{{ route('ops.invoice', $inv) }}'">
-                    <td><a href="{{ route('ops.invoice', $inv) }}" onclick="event.stopPropagation()"><b>{{ $inv->number }}</b></a>
-                        @if ($inv->paper_ref)
-                            <br><a href="{{ route('ops.invoices', ['paper' => $inv->paper_ref]) }}" onclick="event.stopPropagation()" style="font-size:10.5px" dir="ltr">📄 {{ $inv->paper_ref }}</a>
-                        @endif
-                    </td>
-                    <td>@if ($inv->user)<a href="{{ route('ops.rep', $inv->user) }}" onclick="event.stopPropagation()">{{ $inv->user->displayName() }}</a>@else — @endif</td>
-                    <td><span class="badge {{ $inv->payment === 'cash' ? 'b-green' : 'b-orange' }}">{{ $inv->paymentLabel() }}</span></td>
-                    <td><span class="badge b-gray">{{ $inv->priceListLabel() }}</span></td>
-                    <td class="num" style="color:var(--muted);font-size:11.5px">{{ $batches !== '' ? $batches : '—' }}</td>
-                    <td class="num">{{ $fmt($inv->subtotal) }}</td>
-                    <td class="num">{{ $fmt($inv->discount) }}</td>
-                    {{-- ⚠️ المستحق مش الصافي — الجدول ده جنب كشف الحساب
-                         اللي بيقيّد الإجمالي، ورقمين مختلفين لنفس الفاتورة
-                         على نفس الصفحة بيخلّي اليوزر يشك في السيستم كله. --}}
-                    <td class="num pos">{{ $fmt($inv->payable()) }}</td>
-                    <td class="num">{{ $inv->created_at->format('Y-m-d h:i A') }}</td>
-                </tr>
-            @endforeach
-        </tbody></table>
-    </div>
-</div>
-@endif
-
-<div class="card" id="statement">
-    <h3>📋 {{ __('client.statement') }} <span class="side">{{ __('client.transaction_countable', ['count' => $txns->total()]) }}</span></h3>
-    {{-- ⚠️ فلتر «من — إلى» على `transactions.date` (٩/٩/٢٠٢٦). فورم GET
-         منفصل عن مودالات الفلوس — `data-range-filter` عشان
-         `ClientFormIntegrityTest` يعرف إن الخانتين دول مش خانات عميل. --}}
-    <form method="GET" action="{{ url()->current() }}#statement" class="searchbar" style="margin-bottom:12px" data-noprint data-range-filter>
-        {{-- نوع القيد والريفرنس (٢٢/٩): كروت الملخّص فوق بتحط `kind`، والريفرنس بيتداس من الجدول --}}
-        <label class="fl"><span>{{ __('client.type') }}</span>
-            <select name="kind" onchange="this.form.submit()">
-                <option value="">{{ __('ui.all_of', ['x' => __('uia.x_entries')]) }}</option>
-                @foreach ($kinds as $k)
-                    <option value="{{ $k }}" @selected($kind === $k)>{{ __('enums.transaction.'.$k) }}</option>
-                @endforeach
-            </select></label>
-        <label class="fl"><span>{{ __('uia.l_pay_ref') }}</span>
-            <input type="text" name="ref" value="{{ $ref }}" dir="ltr" placeholder="{{ __('uia.pay_ref_ph') }}" onchange="this.form.submit()"></label>
-        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
-        @if ($kind !== '' || $ref !== '' || ! $range->isOpen())
-            <a class="btn sm" href="{{ url()->current() }}#statement">✕ {{ __('common.clear') }}</a>
-        @endif
-        <a class="btn sm green" href="{{ route('erp.clients.statement_csv', ['client' => $c] + $range->query()) }}">⬇ {{ __('client.export_statement') }}</a>
-    </form>
-    <div class="tablewrap" style="max-height:55vh;overflow-y:auto">
-        <table>
-            {{-- ⚠️ **عمود طريقة التحصيل** (٨/٨/٢٠٢٦). `method` و
-                 `reference` وبيانات الشيك بيتخزنوا مع القيد ومحدش
-                 بيعرضهم — فالمحاسب بيسجّل شيك برقم وبنك وتاريخ
-                 استحقاق، وبعد كده مايلاقيش الرقم ده في أي شاشة
-                 ويرجع يفتح الدرج يدوّر على الورقة. --}}
-            <thead><tr><th>{{ __('common.date') }}</th><th>{{ __('client.type') }}</th><th>{{ __('client.memo') }}</th><th>{{ __('client.pay_method_label') }}</th><th class="num">{{ __('client.debit') }}</th><th class="num">{{ __('client.credit') }}</th></tr></thead><tbody>
-            @foreach ($txns as $t)
-                <tr>
-                    <td class="num">{{ $t->date->format('Y-m-d') }}</td>
-                    <td><span class="badge b-gray">{{ $t->kindLabel() }}</span></td>
-                    {{-- البيان بيفتح المستند اللي طلّع القيد: فاتورة / أمر توريد / مرتجع / زيارة التحصيل --}}
-                    <td style="white-space:normal;max-width:520px">
-                        @if ($u = $srcUrl($t))<a href="{{ $u }}">{{ $t->memo ?: $t->kindLabel() }}</a>@else{{ $t->memo }}@endif
-                    </td>
-                    <td style="white-space:normal">
-                        @if ($t->method)
-                            <span class="badge {{ $t->method === 'cash' ? 'b-green' : 'b-blue' }}">
-                                {{ $t->methodLabel() }}</span>
-                            @if ($t->reference)
-                                {{-- الريفرنس ← كل العملاء اللي عليهم قيد بنفس الرقم (تحويل واحد بيتقسّم على كذا فرع) --}}
-                                <div style="font-size:10.5px" dir="ltr"><a href="{{ route('erp.clients', ['ref' => $t->reference]) }}" title="{{ __('uia.ref_open_hint') }}">{{ $t->reference }}</a></div>
-                            @endif
-                            {{-- ⚠️ **تاريخ استحقاق الشيك لازم يبان** —
-                                 الشيك بيدخل الحساب فوراً (قرار المالك)،
-                                 فالتاريخ ده هو الحاجة الوحيدة اللي
-                                 بتفكّر المحاسب إنه لسه مااتحصّلش من البنك. --}}
-                            @if ($t->cheque_due)
-                                <div style="font-size:10.5px;color:var(--orange)">
-                                    {{ $t->cheque_bank }} · {{ __('client.cheque_due') }}
-                                    {{ $t->cheque_due->format('Y-m-d') }}
-                                </div>
-                            @endif
-                        @else
-                            <span style="color:var(--muted)">—</span>
-                        @endif
-                    </td>
-                    <td class="num">{{ $t->debit > 0 ? $fmt($t->debit) : '—' }}</td>
-                    <td class="num pos">{{ $t->credit > 0 ? $fmt($t->credit) : '—' }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-        {{-- الكشف صفحات — الإجمالي من السيرفر على كل القيود المفلترة مش الستين المعروضين --}}
-        @if ($txns->total() > 0)
-            <tfoot><tr>
-                <td colspan="4"><b>Σ {{ __('common.total') }}</b> — {{ __('client.transaction_countable', ['count' => $txns->total()]) }}</td>
-                <td class="num"><b>{{ number_format($txnTotals['debit'], 2) }}</b></td>
-                <td class="num pos"><b>{{ number_format($txnTotals['credit'], 2) }}</b></td>
-            </tr></tfoot>
-        @endif
-        </table>
-    </div>
-    @include('partials._pagination', ['p' => $txns])
-</div>
 
 
 {{-- ═══ تفسير رقم الرصيد والمتأخر (٢٢/٩) ═══ --}}

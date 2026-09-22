@@ -141,6 +141,8 @@
     <div class="kpi" data-explain onclick="document.getElementById('poItems').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('ops.units') }}</div>
         <div class="val">{{ $fmt0($po->qtyTotal()) }}</div>
+        {{-- (٢٢/٩) --}}
+        <div class="sub2">{{ __('uic.po_units_sub', ['n' => $po->items->count()]) }}</div>
         {{-- بعد التسليم: المسلَّم فعلاً والفرق --}}
         @if ($po->status === 'delivered' && $po->qtyTotal() !== $po->deliveredQtyTotal())
             <div class="sub2" style="color:#B86E00;font-weight:800">{{ __('ops.po_delivered_qty') }} {{ $fmt0($po->deliveredQtyTotal()) }} · {{ __('ops.po_variance') }} {{ $fmt0($po->qtyTotal() - $po->deliveredQtyTotal()) }}</div>
@@ -149,7 +151,7 @@
     <div class="kpi" data-explain onclick="document.getElementById('poItems').scrollIntoView({behavior:'smooth'})">
         <div class="lbl">{{ __('doc.total_with_tax') }}</div>
         <div class="val pos">{{ $fmt0($po->grand_total) }}</div>
-        <div class="sub2">{{ __('doc.net_before_tax') }}: {{ $fmt0($po->total) }} · {{ __('tax.tax') }}: {{ $fmt0($po->tax_total) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.po_total_eq', ['t' => $fmt0($po->grand_total), 'n' => $fmt0(round($po->grand_total) - round($po->tax_total)), 'x' => $fmt0($po->tax_total)])) }}</span></div>
     </div>
 </div>
 

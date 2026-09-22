@@ -157,9 +157,9 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
                      (البحث السريع) مش الصفحة الظاهرة بس — نفس دوكترين
                      صف الإجماليات، والعدّاد جنب الزراير بيقول كام
                      واحد متعلّم عشان مفيش مفاجآت. --}}
-                <th style="width:34px" data-nosum>
-                    <input type="checkbox" id="selAll" onchange="toggleSel(this)"></th>
-                <th>{{ $isChains ? __('client.chain') : __('client.client') }}</th>
+                {{-- التعليم والاسم في عمود واحد (٢٢/٩) — العمود الأول بيتثبّت لما الجدول يفيض، فلازم يبقى الاسم مش مربع التعليم --}}
+                <th><label style="display:inline-flex;gap:8px;align-items:center;margin:0">
+                    <input type="checkbox" id="selAll" onchange="toggleSel(this)"> {{ $isChains ? __('client.chain') : __('client.client') }}</label></th>
                 <th style="min-width:170px" data-nosum>{{ __('client.division') }}</th>
                 <th style="min-width:150px" data-nosum>{{ __('client.ff_type') }}</th>
                 <th style="min-width:150px" data-nosum>{{ __('client.price_list') }}</th>
@@ -179,8 +179,8 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
                     $done = (bool) ($isChains ? $r->reviewed_at : $r->setup_reviewed_at);
                 @endphp
                 <tr class="{{ $done ? 'su-done' : '' }}" data-done="{{ $done ? 1 : 0 }}">
-                    <td><input type="checkbox" class="su-sel" onchange="syncSel()"></td>
-                    <td>
+                    <td style="min-width:200px">
+                        <input type="checkbox" class="su-sel" onchange="syncSel()" style="float:inline-start;margin:4px 0 0;margin-inline-end:8px">
                         @if ($isChains)
                             <a href="{{ route('erp.groups.show', $r) }}"><b>{{ $r->displayName() }}</b></a>
                             <br><span style="font-size:10.5px;color:var(--muted)">
@@ -252,7 +252,7 @@ tbody tr.su-done td:first-child{border-inline-start:3px solid var(--green,#1e9e5
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">
                     {{ __('client.all_assigned') }}</td></tr>
             @endforelse
             </tbody>

@@ -61,6 +61,8 @@
     <a class="kpi" href="#visitsTable">
         <div class="lbl">🏬 {{ __('ops.vb_kpi_clients') }}</div>
         <div class="val">{{ number_format($kpi['clients']) }}</div>
+        {{-- (٢٢/٩) كل كارت بيشرح رقمه — ونسبته من إجمالي الزيارات بنفس الفلاتر --}}
+        <div class="sub2">{{ __('uic.vb_clients_sub', ['v' => number_format($kpi['visits']), 'a' => $kpi['clients'] > 0 ? number_format($kpi['visits'] / $kpi['clients'], 1) : 0]) }}</div>
     </a>
     <a @class(['kpi', 'on' => $filters['status'] === 'closed']) href="{{ request()->fullUrlWithQuery(['status' => $filters['status'] === 'closed' ? null : 'closed'] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">⏱️ {{ __('ops.vb_kpi_avg') }}</div>
@@ -70,10 +72,14 @@
     <a @class(['kpi', 'on' => $filters['has_photos']]) href="{{ request()->fullUrlWithQuery(['has_photos' => $filters['has_photos'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">📸 {{ __('ops.vb_kpi_photos') }}</div>
         <div class="val {{ $kpi['photos'] > 0 ? 'pos' : '' }}">{{ number_format($kpi['photos']) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.vb_share_eq', ['p' => $kpi['visits'] > 0 ? number_format($kpi['photos'] / $kpi['visits'] * 100, 1) : 0, 'n' => number_format($kpi['photos']), 'v' => number_format($kpi['visits'])])) }}</span></div>
+        <div class="sub2">{{ __('uic.vb_photos_sub') }}</div>
     </a>
     <a @class(['kpi', 'on' => $filters['has_invoice']]) href="{{ request()->fullUrlWithQuery(['has_invoice' => $filters['has_invoice'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🧾 {{ __('ops.vb_kpi_invoiced') }}</div>
         <div class="val pos">{{ number_format($kpi['invoiced']) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.vb_share_eq', ['p' => $kpi['visits'] > 0 ? number_format($kpi['invoiced'] / $kpi['visits'] * 100, 1) : 0, 'n' => number_format($kpi['invoiced']), 'v' => number_format($kpi['visits'])])) }}</span></div>
+        <div class="sub2">{{ __('uic.vb_invoiced_sub') }}</div>
     </a>
     <a @class(['kpi', 'on' => $filters['wasted']]) href="{{ request()->fullUrlWithQuery(['wasted' => $filters['wasted'] ? null : 1] + ['page' => null, 'export' => null]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">🚫 {{ __('ops.vb_kpi_wasted') }}</div>

@@ -140,6 +140,12 @@ class CollectionController extends Controller
             ->groupBy('method')
             ->get()->keyBy('method');
 
+        // (٢٢/٩) نفس الإجمالي مفرود بالمصدر (زيارة / مندوب مكتبي / مباشر) — كارت
+        // «الإجمالي» بيكتب معادلته بالأرقام، فالمحاسب يعرف الميدان جاب كام والمكتب كام
+        $bySource = $scoped(false)
+            ->selectRaw("CASE WHEN source_type = ? THEN 'field' WHEN source_type = ? THEN 'rep' WHEN source_type IS NULL THEN 'direct' ELSE 'other' END src, SUM(credit) total", [Visit::class, User::class])
+            ->groupBy('src')->pluck('total', 'src');
+
         // ⭐ الضرايب المخصومة تحت الحساب (المباشر بس) — قيد `taxded`
         // منفصل بنفس العميل والتاريخ والمرجع. الكارت من نفس فلتر
         // الفترة، والعمود بالمفتاح المركّب لصفوف الصفحة.
@@ -167,6 +173,7 @@ class CollectionController extends Controller
             'repByVisit' => $repByVisit,
             'repByUser' => $repByUser,
             'totals' => $totals,
+            'bySource' => $bySource,
             'taxByKey' => $taxByKey,
             'taxTotal' => $taxTotal,
             'taxBreak' => $taxBreak,

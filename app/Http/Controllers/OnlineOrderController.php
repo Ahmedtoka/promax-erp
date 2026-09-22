@@ -905,6 +905,10 @@ class OnlineOrderController extends Controller
             // بره = تمن البضاعة (− المرتجع) الغير محصّل — الشحن للمندوب
             'outstanding' => round((float) OnlineOrder::status('shipped')
                 ->selectRaw('COALESCE(SUM(subtotal - returned_total - collected_total), 0) as v')->value('v'), 2),
+            // أجزاء «بره» لمعادلة الكارت (٢٢/٩) — نفس النطاق (كل المشحون، من غير فلاتر)
+            'outParts' => OnlineOrder::status('shipped')->toBase()
+                ->selectRaw('COUNT(*) as n, COALESCE(SUM(subtotal),0) as goods, COALESCE(SUM(returned_total),0) as returned, COALESCE(SUM(collected_total),0) as collected')
+                ->first(),
         ]);
     }
 
@@ -987,6 +991,9 @@ class OnlineOrderController extends Controller
         // ⚠️ «فلوس بره» = تمن البضاعة بس — الشحن للمندوب (٥/٩)
         $sum = OnlineOrder::selectRaw("
             COALESCE(SUM(CASE WHEN status = 'shipped' THEN subtotal - returned_total - collected_total ELSE 0 END), 0) as outstanding,
+            COALESCE(SUM(CASE WHEN status = 'shipped' THEN subtotal ELSE 0 END), 0) as out_goods,
+            COALESCE(SUM(CASE WHEN status = 'shipped' THEN returned_total ELSE 0 END), 0) as out_returned,
+            COALESCE(SUM(CASE WHEN status = 'shipped' THEN collected_total ELSE 0 END), 0) as out_collected,
             COALESCE(SUM(collected_total), 0) as collected,
             COALESCE(SUM(returned_total), 0) as returned_amount,
             COALESCE(SUM(CASE WHEN status IN ('ready','shipped','completed') THEN shipping ELSE 0 END), 0) as shipping_sum,

@@ -16,7 +16,39 @@
     <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
 @endif
 
-<div class="card">
+{{-- ═══ ملخّص الفترات المفتوحة (٢٢/٩) — المطلوب من المناديب كام واتركّب إزاي، من نفس صفوف الجدول ═══ --}}
+@php
+    $rc = collect($rows);
+    $tCash = round($rc->sum('cash_sales'), 2); $tColl = round($rc->sum('cash_collections'), 2);
+    $tRef = round($rc->sum('cash_refunds'), 2); $tExp = round($rc->sum('expected'), 2);
+    $tPrev = round($rc->sum('prev_balance'), 2); $tDue = round($rc->sum('due_total'), 2);
+    $tOther = round($rc->sum('other_collections_value'), 2); $tCredit = round($rc->sum('credit_sales'), 2);
+@endphp
+<div class="kpis">
+    <a class="kpi" href="#rc-open" style="grid-column:span 2">
+        <div class="lbl">{{ __('settle.due_total') }}</div>
+        <div class="val" style="color:var(--royal-blue)">{{ $fmt($tDue) }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $tDue, 'zeros' => true, 'parts' => [[__('settle.expected'), $tExp], [__('settle.prev_balance'), abs($tPrev), $tPrev < 0 ? '-' : '+']]])</div>
+        <div class="sub2">{{ __('uib.rc_due_sub') }}</div>
+    </a>
+    <a class="kpi" href="#rc-open" style="grid-column:span 2">
+        <div class="lbl">{{ __('settle.expected') }}</div>
+        <div class="val pos">{{ $fmt($tExp) }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $tExp, 'zeros' => true, 'parts' => [[__('settle.cash_sales'), $tCash], [__('uib.rc_cash_coll'), $tColl], [__('settle.cash_refunds'), $tRef, '-']]])</div>
+    </a>
+    <a class="kpi" href="{{ route('erp.collections', ['source' => 'field']) }}">
+        <div class="lbl">{{ __('settle.other_collections') }}</div>
+        <div class="val">{{ $fmt($tOther) }}</div>
+        <div class="sub2">{{ __('settle.other_collections_hint') }}</div>
+    </a>
+    <a class="kpi" href="{{ route('ops.invoices', ['pay' => 'credit']) }}">
+        <div class="lbl">{{ __('settle.credit_sales') }}</div>
+        <div class="val mid">{{ $fmt($tCredit) }}</div>
+        <div class="sub2">{{ __('uib.rc_credit_sub') }}</div>
+    </a>
+</div>
+
+<div class="card" id="rc-open">
     <h3>🤝 {{ __('settle.title') }}
         <span class="side">{{ __('settle.hint') }}</span></h3>
 
@@ -31,11 +63,13 @@
                      والشيك والفيزا فلوس ماوصلتش إيد المندوب فمش داخلة
                      «المتوقع» النقدي — بس المحاسب لازم يشوفها عشان
                      يعرف المندوب حصّل كام بره الكاش وقت التصفية. --}}
-                <th>{{ __('settle.other_collections') }}</th>
+                {{-- (٢٢/٩) التحصيل النقدي داخل «المتوقع» وماكانش له عمود — الصف ماكانش بيتقفل بالعين --}}
+                <th>{{ __('uib.rc_cash_coll') }}</th>
                 <th>{{ __('settle.cash_refunds') }}</th>
-                <th>{{ __('settle.expected') }}</th>
-                <th>{{ __('settle.prev_balance') }}</th>
-                <th>{{ __('settle.due_total') }}</th>
+                <th title="{{ __('uib.rc_expected_eq') }}">{{ __('settle.expected') }}<div class="eqh">{{ __('uib.rc_expected_eq') }}</div></th>
+                <th>{{ __('settle.other_collections') }}</th>
+                <th data-nosum>{{ __('settle.prev_balance') }}</th>
+                <th title="{{ __('uib.rc_due_eq') }}">{{ __('settle.due_total') }}<div class="eqh">{{ __('uib.rc_due_eq') }}</div></th>
                 {{-- ⚠️ **القايمة كانت فلوس بس.** المحاسب بيفتح كل
                      مندوب واحد واحد عشان يعرف مين عنده عجز بضاعة —
                      والرقم موجود أصلاً في `openFigures`. --}}
@@ -57,16 +91,16 @@
                     </td>
                     <td class="num"><b>{{ $fmt($r['cash_sales']) }}</b></td>
                     <td class="num" style="color:var(--muted)">{{ $fmt($r['credit_sales']) }}</td>
-                    <td class="num">
+                    <td class="num">{{ $fmt($r['cash_collections']) }}</td>
+                    <td class="num mid">{{ $fmt($r['cash_refunds']) }}</td>
+                    <td class="num pos"><b>{{ $fmt($r['expected']) }}</b></td>
+                    <td class="num" title="{{ __('settle.other_collections_hint') }}">
                         @if ((float) ($r['other_collections_value'] ?? 0) > 0)
                             <b style="color:#0F766E">{{ $fmt($r['other_collections_value']) }}</b>
-                            <div style="font-size:9.5px;color:var(--muted)">{{ __('settle.other_collections_hint') }}</div>
                         @else
                             <span style="color:var(--muted)">—</span>
                         @endif
                     </td>
-                    <td class="num mid">{{ $fmt($r['cash_refunds']) }}</td>
-                    <td class="num pos"><b>{{ $fmt($r['expected']) }}</b></td>
                     <td class="num">
                         @if ((float) $r['prev_balance'] > 0)
                             <span class="badge b-red">{{ __('settle.rep_owes') }} {{ $fmt($r['prev_balance']) }}</span>
@@ -88,7 +122,7 @@
                             <span class="badge b-gray">—</span>
                         @endif
                         @if ((int) $r['goods']['returned_qty'] > 0 || (int) $r['goods']['damaged_qty'] > 0)
-                            <div style="font-size:10px;color:var(--muted);margin-top:3px">
+                            <div style="font-size:10px;color:var(--muted);margin-top:3px;white-space:normal;max-width:110px;margin-inline:auto">
                                 {{ __('settle.returned_in') }}:
                                 {{ number_format((int) $r['goods']['returned_qty']) }}
                                 @if ((int) $r['goods']['damaged_qty'] > 0)
@@ -127,7 +161,8 @@
                 <th>{{ __('settle.cash_sales') }}</th>
                 <th>{{ __('settle.credit_sales') }}</th>
                 <th>{{ __('settle.collections') }}</th>
-                <th>{{ __('settle.expected') }}</th>
+                <th>{{ __('settle.cash_refunds') }}</th>
+                <th title="{{ __('uib.rc_expected_eq') }}">{{ __('settle.expected') }}<div class="eqh">{{ __('uib.rc_expected_eq') }}</div></th>
                 <th>{{ __('settle.received') }}</th>
                 <th>{{ __('settle.balance') }}</th>
                 <th>{{ __('settle.by') }}</th>
@@ -145,6 +180,7 @@
                     {{-- ⚠️ آجل مريم كان مخزون هنا وماكانش بيبان في أي حتة --}}
                     <td class="num mid"><b>{{ $fmt($s->credit_sales) }}</b></td>
                     <td class="num">{{ $fmt($s->cash_collections) }}</td>
+                    <td class="num mid">{{ $fmt($s->cash_refunds) }}</td>
                     <td class="num">{{ $fmt($s->expected) }}</td>
                     <td class="num pos"><b>{{ $fmt($s->received) }}</b></td>
                     <td>
@@ -169,7 +205,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">{{ __('settle.no_settlements') }}</td></tr>
+                <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:24px">{{ __('settle.no_settlements') }}</td></tr>
             @endforelse
         </table>
     </div>
@@ -179,6 +215,10 @@
 
 @section('scripts')
 <style>
-.st-tbl th, .st-tbl td { text-align: center; vertical-align: middle; }
+.st-tbl th, .st-tbl td { text-align: center; vertical-align: middle; padding-inline: 7px; }
+/* العناوين الطويلة بتلفّ بدل ما تزقّ عمود «صفّي» بره الشاشة */
+.st-tbl th { white-space: normal; min-width: 72px; }
+/* (٢٢/٩) معادلة العمود تحت عنوانه — خط صغير عشان الجدول مايتمدّش */
+.st-tbl th .eqh { font-size: 9.5px; font-weight: 500; opacity: .85; white-space: normal; line-height: 1.3; margin-top: 2px; }
 </style>
 @endsection

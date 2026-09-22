@@ -434,7 +434,8 @@
             <div style="grid-column:span 2">
                 <label class="f">{{ __('geo.location_url') }}</label>
                 <div style="display:flex;gap:6px">
-                    <input type="url" name="location_url" id="locUrl" maxlength="500" dir="ltr"
+                    {{-- `text` مش `url` (٢٢/٩): ستايل الخانات في الليأوت مافيهوش `type=url` فالخانة كانت طالعة من غير شكل؛ السيرفر بيتحقق من الرابط --}}
+                    <input type="text" inputmode="url" pattern="https?://.+" name="location_url" id="locUrl" maxlength="500" dir="ltr"
                            value="{{ $own('location_url') }}" style="flex:1;min-width:0"
                            class="{{ trim($bad('location_url')) }}"
                            placeholder="https://maps.app.goo.gl/..." oninput="autoDetect()">

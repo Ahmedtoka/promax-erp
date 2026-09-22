@@ -34,6 +34,7 @@
         <div class="lbl">{{ __('ops.inv_count') }}</div>
         <div class="val mid">{{ $fmt($stats->n) }}</div>
         <div class="sub2">💵 {{ $fmt($stats->cash_n) }} {{ __('ops.cash') }} · 🕐 {{ $fmt($stats->credit_n) }} {{ __('ops.credit') }}</div>
+        <div class="sub2">{{ __('uic.inv_count_sub') }}</div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('common.subtotal') }}</div>
@@ -43,17 +44,21 @@
     <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('common.discount') }}</div>
         <div class="val mid">{{ $fmt($stats->discount) }}</div>
-        <div class="sub2">{{ $stats->subtotal > 0 ? number_format($stats->discount / $stats->subtotal * 100, 1) : 0 }}%</div>
+        {{-- (٢٢/٩) المعادلات بالأرقام — التقريب لأقرب جنيه بيتظبط على الرقم المشتق عشان السطر يقفل --}}
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.inv_disc_eq', ['p' => $stats->subtotal > 0 ? number_format($stats->discount / $stats->subtotal * 100, 1) : 0, 'd' => $fmt($stats->discount), 's' => $fmt($stats->subtotal)])) }}</span></div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('ops.inv_net') }}</div>
         <div class="val pos">{{ $fmt($stats->total) }}</div>
+        @if (abs((float) $stats->subtotal - (float) $stats->discount - (float) $stats->total) < 1)
+            <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.inv_net_eq', ['t' => $fmt($stats->total), 's' => $fmt(round($stats->total) + round($stats->discount)), 'd' => $fmt($stats->discount)])) }}</span></div>
+        @endif
         <div class="sub2">{{ __('ops.net_hint') }}</div>
     </div>
     <div class="kpi" data-explain onclick="openDlg('invExplain')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('ops.inv_grand') }}</div>
         <div class="val pos">{{ $fmt($stats->grand) }}</div>
-        <div class="sub2">{{ __('tax.tax') }}: {{ $fmt($stats->tax) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.inv_grand_eq', ['t' => $fmt($stats->grand), 'n' => $fmt(round($stats->grand) - round($stats->tax)), 'x' => $fmt($stats->tax)])) }}</span></div>
     </div>
 </div>
 

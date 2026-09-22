@@ -87,6 +87,8 @@
             <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">🟢 {{ __('journey.rd_att_in') }}</div>
                 <div class="val {{ $att['in'] !== null ? 'pos' : '' }}">{{ $att['in'] ?? '—' }}</div>
+                {{-- (٢٢/٩) كل كارت بيقول رقمه جاي منين --}}
+                <div class="sub2">{{ __('uic.rd_in_sub') }}</div>
             </div>
             <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">⏸️ {{ __('journey.rd_att_break') }}</div>
@@ -94,14 +96,17 @@
                 @if ($att['break_min'] > 0)
                     <div class="sub2">{{ __('journey.dur_min', ['count' => $att['break_min']]) }}</div>
                 @endif
+                <div class="sub2">{{ __('uic.rd_break_sub') }}</div>
             </div>
             <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">🔴 {{ __('journey.rd_att_out') }}</div>
                 <div class="val {{ $att['out'] !== null ? '' : 'mid' }}">{{ $att['out'] ?? '—' }}</div>
+                <div class="sub2">{{ __('uic.rd_out_sub') }}</div>
             </div>
             <div class="kpi" data-explain onclick="location.href='{{ route('erp.attendance.log', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
                 <div class="lbl">⏱️ {{ __('journey.rd_att_worked') }}</div>
                 <div class="val">{{ $att['worked'] ?? '—' }}</div>
+                <div class="sub2">{{ __('uic.rd_worked_sub', ['b' => (int) $att['break_min']]) }}</div>
             </div>
         </div>
     @else
@@ -116,17 +121,21 @@
     <div class="kpi" data-explain onclick="rdGo('rdPlan')">
         <div class="lbl">{{ __('journey.planned') }}</div>
         <div class="val">{{ $fmt($summary['planned']) }}</div>
-        <div class="sub2">{{ __('journey.plan') }}</div>
+        <div class="sub2">{{ __('uic.rd_planned_sub') }}</div>
     </div>
     <div class="kpi" data-explain onclick="location.href='{{ route('ops.visits', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">{{ __('journey.done') }}</div>
         <div class="val pos">{{ $fmt($summary['done']) }}</div>
-        <div class="sub2">{{ __('journey.completion') }}: {{ $summary['pct'] }}%</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rd_pct_eq', ['p' => $summary['pct'], 'd' => $fmt($summary['done']), 'n' => $fmt($summary['planned'])])) }}</span></div>
     </div>
     <div class="kpi" data-explain onclick="rdGo('rdPlan')">
         <div class="lbl">{{ __('journey.pending') }}</div>
         <div class="val {{ $summary['pending'] > 0 ? 'mid' : 'pos' }}">{{ $fmt($summary['pending']) }}</div>
-        <div class="sub2">{{ __('journey.plan') }}</div>
+        @if ((int) $summary['planned'] - (int) $summary['done'] === (int) $summary['pending'])
+            <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rd_pending_eq', ['t' => $fmt($summary['pending']), 'n' => $fmt($summary['planned']), 'd' => $fmt($summary['done'])])) }}</span></div>
+        @else
+            <div class="sub2">{{ __('journey.plan') }}</div>
+        @endif
     </div>
     <div class="kpi" data-explain onclick="rdGo('rdOff')">
         <div class="lbl">{{ __('journey.off_plan') }}</div>
@@ -140,6 +149,10 @@
     <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">💵 {{ __('journey.sales_today') }}</div>
         <div class="val pos">{{ $fm2($money['sales']) }}</div>
+        {{-- المعادلة بتتكتب لما تقفل بالظبط بس --}}
+        @if (abs((float) $money['sales'] - (float) $money['inv_total'] - (float) $money['po_sales']) < 0.01)
+            <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rep_sales_eq', ['t' => $fm2($money['sales']), 'inv' => $fm2($money['inv_total']), 'po' => $fm2($money['po_sales'])])) }}</span></div>
+        @endif
         <div class="sub2">
             {{ __('journey.rd_sales_sub', ['count' => $money['inv_count'], 'inv' => $fm2($money['inv_total'])]) }}
             @if ($money['po_sales'] > 0)
@@ -150,7 +163,8 @@
     <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">🧾 {{ __('journey.rd_collections') }}</div>
         <div class="val">{{ $fm2($money['coll_total']) }}</div>
-        <div class="sub2">{{ __('journey.rd_coll_sub', ['cash' => $fm2($money['coll_cash']), 'other' => $fm2($money['coll_other'])]) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rep_coll_eq', ['t' => $fm2($money['coll_total']), 'cash' => $fm2($money['coll_cash']), 'other' => $fm2($money['coll_other'])])) }}</span></div>
+        <div class="sub2">{{ __('uic.rd_coll_scope') }}</div>
     </div>
     <div class="kpi" data-explain onclick="location.href='{{ route('ops.rep', ['user' => $rep->id, 'from' => $date->toDateString(), 'to' => $date->toDateString()]) }}'">
         <div class="lbl">📦 {{ __('journey.rd_custody_left') }}</div>

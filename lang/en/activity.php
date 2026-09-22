@@ -178,4 +178,9 @@ return [
     'verb_sync' => "Synced",
     'verb_clone' => "Cloned",
     'verb_merge' => "Merged",
+    'x_deleted' => "Records deleted from the system — each with its day and who deleted it in the log",
+    'x_rows' => "All actions matching the filters: page views + work + logins/logouts",
+    'x_users' => "Distinct users with at least one action under the same filters",
+    'x_of_rows' => "out of :n actions",
+    'x_views' => "Screens opened without saving — out of :n actions",
 ];

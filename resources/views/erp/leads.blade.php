@@ -68,6 +68,54 @@
 
 @section('content')
 
+{{-- الملخّص فوق الفلاتر (٢٢/٩) — نفس ترتيب باقي الشاشات --}}
+{{-- كل كارت بيفلتر القايمة تحت بنفس تعريف رقمه، مع باقي الفلاتر زي ما هي (٢٢/٩) --}}
+@php $kUrl = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]).'#leadsList'; @endphp
+<div class="kpis">
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'open']) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
+        <div class="lbl">{{ __('lead.open_leads') }}</div>
+        <div class="val">{{ $fmt($stats['open']) }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($stats['open']) }} =</span> {{ collect($stats['open_parts'] ?? [])->map(fn ($n, $st) => __('lead.status_'.$st).' '.$fmt($n))->implode(' + ') ?: '0' }}</div>
+    </a>
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'strong']) href="{{ $kUrl(['focus' => 'strong', 'status' => null]) }}">
+        <div class="lbl">{{ __('lead.top_score') }}</div>
+        <div class="val pos">{{ $fmt($stats['strong']) }}</div>
+        <div class="sub2">{{ __('lead.top_score_note') }} — <span dir="ltr">{{ $stats['open'] > 0 ? number_format($stats['strong'] / $stats['open'] * 100, 1) : 0 }}% = {{ $fmt($stats['strong']) }} ÷ {{ $fmt($stats['open']) }}</span></div>
+    </a>
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'overdue']) href="{{ $kUrl(['focus' => 'overdue', 'status' => null]) }}">
+        <div class="lbl">{{ __('lead.overdue') }}</div>
+        <div class="val {{ $stats['overdue'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($stats['overdue']) }}</div>
+        <div class="sub2">{{ __('lead.overdue_note') }}</div>
+    </a>
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'won']) href="{{ $kUrl(['status' => 'won', 'focus' => null]) }}">
+        <div class="lbl">{{ __('lead.won_leads') }}</div>
+        <div class="val pos">{{ $fmt($stats['won']) }}</div>
+        <div class="sub2">{{ __('uia.eq_win_rate') }} <span dir="ltr">{{ $stats['won'] + $stats['lost'] > 0 ? number_format($stats['won'] / ($stats['won'] + $stats['lost']) * 100, 1) : 0 }}% = {{ $fmt($stats['won']) }} ÷ ({{ $fmt($stats['won']) }} + {{ $fmt($stats['lost']) }})</span></div>
+    </a>
+    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'lost']) href="{{ $kUrl(['status' => 'lost', 'focus' => null]) }}">
+        <div class="lbl">{{ __('lead.lost_leads') }}</div>
+        <div class="val">{{ $fmt($stats['lost']) }}</div>
+        <div class="sub2">{{ __('uia.eq_lost') }}</div>
+    </a>
+    <a @class(['kpi', 'on' => false]) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
+        <div class="lbl">{{ __('lead.pipeline') }}</div>
+        <div class="val num">{{ $money($stats['pipeline']) }}</div>
+        <div class="sub2">{{ __('uia.eq_pipeline', ['n' => $fmt($stats['open'])]) }}</div>
+    </a>
+    {{-- المحفظة (بايبلاين ٢٦/٨): متوزع على مناديب ولا لأ --}}
+    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'assigned']) href="{{ $kUrl(['focus' => 'assigned', 'unassigned' => null]) }}">
+        <div class="lbl">{{ __('lead.k_assigned') }}</div>
+        <div class="val pos">{{ $fmt($dist->assigned ?? 0) }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($dist->assigned ?? 0) }} = {{ $fmt($dist->total ?? 0) }} − {{ $fmt(($dist->total ?? 0) - ($dist->assigned ?? 0)) }}</span> {{ __('uia.eq_assigned') }}</div>
+    </a>
+    <a @class(['kpi', 'on' => (bool) ($filters['unassigned'] ?? false)]) href="{{ $kUrl(['unassigned' => 1, 'focus' => null]) }}">
+        <div class="lbl">{{ __('lead.k_unassigned') }}</div>
+        <div class="val {{ ($dist->total ?? 0) - ($dist->assigned ?? 0) > 0 ? 'mid' : 'pos' }}">
+            {{ $fmt(($dist->total ?? 0) - ($dist->assigned ?? 0)) }}</div>
+        <div class="sub2">{{ __('lead.k_unassigned_note') }}</div>
+    </a>
+</div>
+
 <div class="card">
     <h3>🎯 {{ __('lead.page') }} <span class="side">{{ __('lead.page_sub') }}</span></h3>
 
@@ -136,53 +184,6 @@
         <a class="btn" href="{{ route('erp.leads') }}">🧹 {{ __('lead.clear_filters') }}</a>
         <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
-</div>
-
-{{-- كل كارت بيفلتر القايمة تحت بنفس تعريف رقمه، مع باقي الفلاتر زي ما هي (٢٢/٩) --}}
-@php $kUrl = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]).'#leadsList'; @endphp
-<div class="kpis">
-    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'open']) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
-        <div class="lbl">{{ __('lead.open_leads') }}</div>
-        <div class="val">{{ $fmt($stats['open']) }}</div>
-        <div class="sub2">{{ __('lead.page') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'strong']) href="{{ $kUrl(['focus' => 'strong', 'status' => null]) }}">
-        <div class="lbl">{{ __('lead.top_score') }}</div>
-        <div class="val pos">{{ $fmt($stats['strong']) }}</div>
-        <div class="sub2">{{ __('lead.top_score_note') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'overdue']) href="{{ $kUrl(['focus' => 'overdue', 'status' => null]) }}">
-        <div class="lbl">{{ __('lead.overdue') }}</div>
-        <div class="val {{ $stats['overdue'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($stats['overdue']) }}</div>
-        <div class="sub2">{{ __('lead.overdue_note') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'won']) href="{{ $kUrl(['status' => 'won', 'focus' => null]) }}">
-        <div class="lbl">{{ __('lead.won_leads') }}</div>
-        <div class="val pos">{{ $fmt($stats['won']) }}</div>
-        <div class="sub2">{{ __('lead.status_won') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => ($filters['status'] ?? '') === 'lost']) href="{{ $kUrl(['status' => 'lost', 'focus' => null]) }}">
-        <div class="lbl">{{ __('lead.lost_leads') }}</div>
-        <div class="val">{{ $fmt($stats['lost']) }}</div>
-        <div class="sub2">{{ __('lead.status_lost') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => false]) href="{{ $kUrl(['focus' => 'open', 'status' => null]) }}">
-        <div class="lbl">{{ __('lead.pipeline') }}</div>
-        <div class="val num">{{ $money($stats['pipeline']) }}</div>
-        <div class="sub2">{{ __('common.currency') }}</div>
-    </a>
-    {{-- المحفظة (بايبلاين ٢٦/٨): متوزع على مناديب ولا لأ --}}
-    <a @class(['kpi', 'on' => ($filters['focus'] ?? '') === 'assigned']) href="{{ $kUrl(['focus' => 'assigned', 'unassigned' => null]) }}">
-        <div class="lbl">{{ __('lead.k_assigned') }}</div>
-        <div class="val pos">{{ $fmt($dist->assigned ?? 0) }}</div>
-        <div class="sub2">{{ __('lead.of_total', ['t' => number_format($dist->total ?? 0)]) }}</div>
-    </a>
-    <a @class(['kpi', 'on' => (bool) ($filters['unassigned'] ?? false)]) href="{{ $kUrl(['unassigned' => 1, 'focus' => null]) }}">
-        <div class="lbl">{{ __('lead.k_unassigned') }}</div>
-        <div class="val {{ ($dist->total ?? 0) - ($dist->assigned ?? 0) > 0 ? 'mid' : 'pos' }}">
-            {{ $fmt(($dist->total ?? 0) - ($dist->assigned ?? 0)) }}</div>
-        <div class="sub2">{{ __('lead.k_unassigned_note') }}</div>
-    </a>
 </div>
 
 {{-- ═══ خريطة المحفظة (بايبلاين ٢٦/٨) — كل النقط ملونة بالحالة،

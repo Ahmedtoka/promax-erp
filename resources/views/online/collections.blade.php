@@ -18,7 +18,23 @@
 
 {{-- الكارت رصيد كل المشحون (مش فترة) = مجموع عمود «الباقي» من غير فلاتر — فبيرجّع الجدول للكل (٢٢/٩) --}}
 <div class="kpis">
-    <a class="kpi {{ ! request()->filled('search') && $range->isOpen() ? 'on' : '' }}" href="{{ route('online.collections') }}"><b class="num neg">{{ $money($outstanding) }}</b><span>{{ __('online.k_outstanding') }}</span></a>
+    {{-- ماركب الكروت الموحّد + معادلة «بره» بأرقامها (٢٢/٩) --}}
+    <a class="kpi {{ ! request()->filled('search') && $range->isOpen() ? 'on' : '' }}" href="{{ route('online.collections') }}">
+        <div class="lbl">{{ __('online.k_outstanding') }}</div>
+        <div class="val neg">{{ $money($outstanding) }}</div>
+        <div class="sub2">{{ __('uid.oa_shipped_n', ['n' => (int) $outParts->n]) }}<br>
+            <span dir="ltr">{{ $money($outstanding) }} = {{ __('uid.oa_goods') }} {{ $money($outParts->goods) }} − {{ __('uid.oa_ret') }} {{ $money($outParts->returned) }} − {{ __('uid.oa_coll') }} {{ $money($outParts->collected) }}</span></div>
+    </a>
+    <a class="kpi" href="{{ route('online.collections') }}">
+        <div class="lbl">{{ __('uid.oc_goods') }}</div>
+        <div class="val">{{ $money($outParts->goods) }}</div>
+        <div class="sub2">{{ __('uid.oc_goods_how') }}</div>
+    </a>
+    <a class="kpi" href="{{ route('online.collections') }}">
+        <div class="lbl">{{ __('uid.oc_coll') }}</div>
+        <div class="val pos">{{ $money($outParts->collected) }}</div>
+        <div class="sub2">{{ __('uid.oc_coll_how') }}</div>
+    </a>
 </div>
 
 <div class="card">
@@ -26,7 +42,7 @@
         <h3 style="margin:0">💰 {{ __('online.collections_title') }}</h3>
         <form method="GET" class="searchbar" style="margin:0;align-items:flex-end">
             <label class="fl"><span>{{ __('ui.l_search') }}</span>
-                <input name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}"></label>
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}"></label>
             {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ الشحن --}}
             @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>

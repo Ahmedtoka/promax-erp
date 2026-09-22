@@ -133,7 +133,8 @@
         <div class="val {{ $ct->totalDeduction() > 0.3 ? 'neg' : 'mid' }}">{{ $pct($ct->totalDeduction()) }}</div>
         <div class="sub2">
             @if ($ct->hiddenDeduction() > 0)
-                +{{ $pct($ct->hiddenDeduction()) }} {{ __('client.settled_later') }}
+                {{-- المعادلة بأرقامها (٢٢/٩): فاتورة + اللي بيتسوّى بعدها --}}
+                <span dir="ltr">{{ $pct($ct->totalDeduction()) }} = {{ $pct($ct->invoiceDiscount()) }} + {{ $pct($ct->hiddenDeduction()) }}</span> {{ __('uia.eq_ded_words') }}
             @else
                 {{ __('client.all_on_invoice') }}
             @endif
@@ -145,7 +146,7 @@
             <div class="val neg">{{ $pct($ct->withholding_pct) }}</div>
             <div class="sub2">
                 @if ($ct->client)
-                    ≈ {{ $fmt($ct->client->withheldAmount()) }} {{ __('common.currency') }}
+                    <span dir="ltr">≈ {{ $fmt($ct->client->withheldAmount()) }} = {{ $fmt(max((float) $ct->client->balance, 0)) }} × {{ $pct($ct->withholding_pct) }}</span> {{ __('uia.eq_withheld_words') }}
                 @endif
             </div>
         </a>
@@ -155,7 +156,7 @@
         <div class="val">{{ $fmt($ct->annualCommitment()) }} {{ __('common.currency') }}</div>
         <div class="sub2">
             @if ($ct->monthlyFees() > 0)
-                {{ $fmt($ct->monthlyFees()) }} {{ __('client.per_month') }}
+                <span dir="ltr">{{ $fmt($ct->annualCommitment()) }} = {{ $fmt($ct->annualFees()) }} + {{ $fmt($ct->monthlyFees()) }} × 12</span> {{ __('uia.eq_fees_words') }}
             @else
                 {{ __('client.annual_commitment_hint') }}
             @endif
@@ -166,7 +167,7 @@
         <div class="val {{ $days === null ? '' : ($days < 0 ? 'neg' : ($days <= 90 ? 'mid' : 'pos')) }}">
             {{ $days === null ? '—' : $fmt($days) }}
         </div>
-        <div class="sub2">{{ $ct->ends_at?->format('Y-m-d') ?? __('client.undated_contract') }}</div>
+        <div class="sub2">@if ($ct->ends_at){{ __('uia.eq_days_left', ['end' => $ct->ends_at->format('Y-m-d'), 'today' => today()->format('Y-m-d')]) }}@else{{ __('client.undated_contract') }}@endif</div>
     </a>
 </div>
 

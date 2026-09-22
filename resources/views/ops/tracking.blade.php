@@ -41,11 +41,16 @@
 <div class="kpis" style="margin-bottom:14px">
     {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتعدّ نفس الحاجة لنفس اليوم والمندوب --}}
     @php $trkQ = array_filter(['user' => $userId ?: null, 'from' => $date, 'to' => $date]); @endphp
-    <a class="kpi" href="{{ route('ops.rep_board', ['from' => $date, 'to' => $date]) }}"><div class="lbl">🧑‍💼 {{ __('ops.trk_reps') }}</div><div class="val">{{ $repCount }}</div></a>
-    <a class="kpi" href="#trkTimeline"><div class="lbl">⚡ {{ __('ops.trk_events') }}</div><div class="val">{{ $events->count() }}</div></a>
-    <a class="kpi" href="{{ route('ops.visits', $trkQ) }}"><div class="lbl">📍 {{ __('ops.trk_visits') }}</div><div class="val">{{ $events->where('type', 'check_in')->count() }}</div></a>
-    <a class="kpi" href="{{ route('ops.invoices', $trkQ) }}"><div class="lbl">💰 {{ __('ops.trk_sales') }}</div><div class="val pos">{{ $events->where('type', 'sale')->count() }}</div></a>
-    <a class="kpi" href="{{ route('ops.visits', $trkQ + ['has_collection' => 1]) }}"><div class="lbl">🧾 {{ __('ops.trk_collects') }}</div><div class="val">{{ $events->where('type', 'collect')->count() }}</div></a>
+    <a class="kpi" href="{{ route('ops.rep_board', ['from' => $date, 'to' => $date]) }}"><div class="lbl">🧑‍💼 {{ __('ops.trk_reps') }}</div><div class="val">{{ $repCount }}</div>
+        <div class="sub2">{{ __('uic.trk_reps_sub') }}</div></a>
+    <a class="kpi" href="#trkTimeline"><div class="lbl">⚡ {{ __('ops.trk_events') }}</div><div class="val">{{ $events->count() }}</div>
+        <div class="sub2">{{ __('uic.trk_events_sub') }}</div></a>
+    <a class="kpi" href="{{ route('ops.visits', $trkQ) }}"><div class="lbl">📍 {{ __('ops.trk_visits') }}</div><div class="val">{{ $events->where('type', 'check_in')->count() }}</div>
+        <div class="sub2">{{ __('uic.trk_type_sub') }}</div></a>
+    <a class="kpi" href="{{ route('ops.invoices', $trkQ) }}"><div class="lbl">💰 {{ __('ops.trk_sales') }}</div><div class="val pos">{{ $events->where('type', 'sale')->count() }}</div>
+        <div class="sub2">{{ __('uic.trk_type_sub') }}</div></a>
+    <a class="kpi" href="{{ route('ops.visits', $trkQ + ['has_collection' => 1]) }}"><div class="lbl">🧾 {{ __('ops.trk_collects') }}</div><div class="val">{{ $events->where('type', 'collect')->count() }}</div>
+        <div class="sub2">{{ __('uic.trk_type_sub') }}</div></a>
 </div>
 
 {{-- ═══ شيبس المناديب — إخفاء/إظهار بضغطة ═══ --}}

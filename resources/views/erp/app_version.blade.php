@@ -119,7 +119,8 @@
                         <td dir="ltr" style="font-weight:800">{{ $v }}</td>
                         <td>{{ $n }}</td>
                         <td>
-                            @if ($v === $version)
+                            {{-- ⚠️ (٢٢/٩) مقارنة إصدارات مش نصوص — جهاز على 2.1.0 والمنشور 2.0.0 كان بيتعلّم «قديم» --}}
+                            @if ($v !== '—' && version_compare($v, $version, '>='))
                                 <span class="pill good">{{ __('appver.up_to_date') }}</span>
                             @elseif ($v === '—')
                                 <span class="pill">{{ __('appver.unknown') }}</span>

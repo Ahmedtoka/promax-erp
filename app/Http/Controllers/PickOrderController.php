@@ -36,8 +36,10 @@ class PickOrderController extends Controller
             // وأكشنات الصفحة دي (تسليم لمندوب) مالهاش معنى لأوردر شحن
             ->where('purpose', '!=', PickOrder::PURPOSE_ONLINE);
 
-        if ($status = $request->string('status')->value()) {
-            $status === 'open' ? $q->open() : $q->where('status', $status);
+        // بحث برقم الأمر أو رقم أمر التوريد (٢٢/٩) — القايمة 150+ أمر ومكانش فيها بحث
+        if (($term = $request->string('q')->trim()->value()) !== '') {
+            $q->where(fn ($w) => $w->where('number', 'like', "%$term%")
+                ->orWhereHas('purchaseOrder', fn ($po) => $po->where('number', 'like', "%$term%")));
         }
         if ($rep = $request->integer('rep')) {
             $q->where('assigned_to', $rep);
@@ -52,6 +54,15 @@ class PickOrderController extends Controller
         // موعد بتختفي لما النافذة تتحدد — مقصود، مالهاش يوم تتحسب عليه.
         $range = DateRange::fromRequest($request);
         $range->apply($q, 'pickup_at');
+
+        // ⚠️ عدادات الحالات **قبل** فلتر الحالة (٢٢/٩) — الشيبس فوق بتعدّ جوه باقي الفلاتر،
+        // وإلا اختيار حالة كان هيصفّر عدادات الباقي.
+        $statusCounts = (clone $q)->reorder()->toBase()
+            ->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+
+        if ($status = $request->string('status')->value()) {
+            $status === 'open' ? $q->open() : $q->where('status', $status);
+        }
 
         // ═══ التصدير والإجمالي من نفس الكويري المفلتر قبل التقسيم لصفحات (٢٢/٩) ═══
         if ($request->boolean('export')) {
@@ -81,12 +92,16 @@ class PickOrderController extends Controller
 
         return view('wh.picks', [
             'totals' => $totals,
-            'orders' => $q->latest()->paginate(25)->withQueryString(),
+            // المفتوح الأول (٢٢/٩): اللي لسه محتاج شغل فوق، والمتسلّم/الملغي تاريخ تحت
+            'orders' => $q->orderByRaw("CASE WHEN status IN ('requested','picking','ready') THEN 0 ELSE 1 END")
+                ->latest()->paginate(25)->withQueryString(),
+            'statusCounts' => $statusCounts,
             'warehouses' => Warehouse::where('active', true)->orderBy('type')->get(),
             'reps' => User::whereIn('role', User::FIELD_ROLES)->where('active', true)
                 ->orderBy('name')->get(),
-            'filters' => $request->only(['status', 'rep', 'warehouse']),
-            'openCount' => PickOrder::open()->count(),
+            'filters' => $request->only(['status', 'rep', 'warehouse', 'q']),
+            // ⚠️ من غير الأونلاين (٢٢/٩) — القايمة دي مابتعرضهوش، فالعداد كان بيقول رقم أكبر من اللي تحته
+            'openCount' => PickOrder::open()->where('purpose', '!=', PickOrder::PURPOSE_ONLINE)->count(),
             'range' => $range,
         ]);
     }

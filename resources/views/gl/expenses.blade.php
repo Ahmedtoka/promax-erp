@@ -131,7 +131,7 @@
         </table>
     </div>
 
-    <div style="margin-top:12px">{{ $rows->links() }}</div>
+    @include('partials._pagination', ['p' => $rows])
 </div>
 
 {{-- ═══════════ سند مصروف جديد — الديالوج جوه content عن قصد ═══════════ --}}

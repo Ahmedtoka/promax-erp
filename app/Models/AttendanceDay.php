@@ -165,7 +165,11 @@ class AttendanceDay extends Model
     {
         $extra = 0;
 
-        if ($this->status === self::STATUS_OPEN) {
+        // ⚠️ (٢٢/٩) **العدّاد الحي لليوم الحالي بس.** يوم قديم فضل `open` (أمر القفل المجدول
+        // ماشتغلش) كان بيفضل يعدّ لحد «دلوقتي» — حضور من شهر بيبان 900 ساعة، ومتوسط
+        // اليوم في سجل الحضور طلع 92 ساعة. اليوم اللي فات بيتحسب بالمخزّن بس.
+        if ($this->status === self::STATUS_OPEN
+            && \Illuminate\Support\Carbon::parse($this->date)->isToday()) {
             $last = $this->lastPunch();
 
             if ($last !== null

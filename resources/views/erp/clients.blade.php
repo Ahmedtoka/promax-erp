@@ -19,13 +19,25 @@
 @section('content')
 
 {{-- KPIs بمعنى (2026-08-05): كام عميل، كام سلسلة، كام في كل قناة،
-     ومين عليه فلوس ومين ليه — وكل كارت فلتر بضغطة --}}
+     ومين عليه فلوس ومين ليه — وكل كارت فلتر بضغطة.
+     (٢٢/٩) الكروت اتقسمت تلات مجموعات بعنوان: عدد المحفظة · الأرصدة دلوقتي · أرقام الفترة —
+     عشان نطاق كل رقم يبان، وكل كارت تحته معادلته بأرقامه. --}}
+@php
+    $allN = array_sum($statusCounts);
+    $pctOf = fn ($a, $b) => (float) $b > 0 ? number_format((float) $a / (float) $b * 100, 1) : '0.0';
+    // الصافي من الرقمين المقرّبين اللي على الكارتين — عشان المعادلة المكتوبة تقفل بالجنيه (٢٢/٩)
+    $netRecv = round($kpi['debt_sum']) - round($kpi['credit_sum']);
+    $kHead = 'font-size:12px;font-weight:700;color:var(--muted);margin:2px 2px 8px';
+@endphp
+<div style="{{ $kHead }}">👥 {{ __('uia.kgrp_portfolio') }}</div>
 <div class="kpis">
     <a class="kpi" href="{{ route('erp.clients') }}">
         <div class="lbl">👥 {{ __('client.clients') }}</div>
-        <div class="val">{{ $fmt(array_sum($statusCounts)) }}</div>
-        <div class="sub2">{{ __('client.status_active') }} <b>{{ $fmt($statusCounts['active'] ?? 0) }}</b>
-            • {{ __('client.status_waiting') }} <b>{{ $fmt($statusCounts['pending'] ?? 0) }}</b></div>
+        <div class="val">{{ $fmt($allN) }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($allN) }} =</span>
+            {{ __('client.status_active') }} <b>{{ $fmt($statusCounts['active'] ?? 0) }}</b>
+            + {{ __('client.status_waiting') }} <b>{{ $fmt($statusCounts['pending'] ?? 0) }}</b>
+            @if (($statusCounts['rejected'] ?? 0) > 0)+ {{ __('client.status_rejected') }} <b>{{ $fmt($statusCounts['rejected']) }}</b>@endif</div>
     </a>
     <a class="kpi" href="{{ route('erp.groups') }}">
         <div class="lbl">🏬 {{ __('nav.chains') }}</div>
@@ -37,48 +49,61 @@
          يبقى 1، والفرعي = الفروع (13). الفرع مش عميل تجاري مستقل. --}}
     @foreach ($channels as $ch)
         @php
-            $entities = ($chainsByChannel[$ch->id] ?? 0) + ($indepByChannel[$ch->id] ?? 0);
+            $chainsN = $chainsByChannel[$ch->id] ?? 0;
+            $indepN = $indepByChannel[$ch->id] ?? 0;
+            $entities = $chainsN + $indepN;
             $branchesN = $channelCounts[$ch->id] ?? 0;
         @endphp
         <a @class(['kpi', 'on' => (int) ($filters['channel'] ?? 0) === $ch->id])
            href="{{ route('erp.clients', ['channel' => (int) ($filters['channel'] ?? 0) === $ch->id ? null : $ch->id]) }}">
             <div class="lbl">🎯 {{ $ch->displayName() }}</div>
             <div class="val">{{ $fmt($entities) }}</div>
-            <div class="sub2">{{ __('client.branch_countable', ['count' => $branchesN]) }} • {{ __('client.tap_to_filter') }}</div>
+            <div class="sub2">{{ __('uia.eq_channel_entities', ['t' => $fmt($entities), 'c' => $fmt($chainsN), 'i' => $fmt($indepN)]) }}
+                · {{ __('client.branch_countable', ['count' => $branchesN]) }}</div>
         </a>
     @endforeach
-    {{-- الكارتين دول بقوا فلتر «حالة الرصيد» مرتّب بالرصيد (٢٢/٩) — الرقم من غير قايمته مالوش لازمة --}}
-    <a @class(['kpi', 'on' => ($filters['bal'] ?? '') === 'debt'])
-       href="{{ route('erp.clients', ($filters['bal'] ?? '') === 'debt' ? [] : ['bal' => 'debt', 'sort' => 'balance', 'dir' => 'desc']) }}">
-        <div class="lbl">💸 {{ __('client.owe_us') }}</div>
-        <div class="val neg">{{ $fmt($kpi['debt_sum']) }}</div>
-        <div class="sub2">{{ __('client.client_countable', ['count' => $kpi['debt_n']]) }} • {{ __('client.tap_to_filter') }}</div>
-    </a>
-    <a @class(['kpi', 'on' => ($filters['bal'] ?? '') === 'credit'])
-       href="{{ route('erp.clients', ($filters['bal'] ?? '') === 'credit' ? [] : ['bal' => 'credit', 'sort' => 'balance', 'dir' => 'asc']) }}">
-        <div class="lbl">💰 {{ __('client.credit_balance') }}</div>
-        <div class="val pos">{{ $fmt($kpi['credit_sum']) }}</div>
-        <div class="sub2">{{ __('client.client_countable', ['count' => $kpi['credit_n']]) }} • {{ __('client.tap_to_filter') }}</div>
-    </a>
     {{-- الحالة التجارية بضغطة (١٥ أغسطس ٢٠٢٦): مين متعاقد، مين واخد
          خصم، ومين مالوش مدير حساب — تلاتتهم كانوا مدفونين في الأعمدة --}}
     <a @class(['kpi', 'on' => ($filters['contract'] ?? '') === 'yes'])
        href="{{ route('erp.clients', ['contract' => ($filters['contract'] ?? '') === 'yes' ? null : 'yes']) }}">
         <div class="lbl">📄 {{ __('client.kpi_live_contract') }}</div>
         <div class="val">{{ $fmt($kpi['live_contract']) }}</div>
-        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+        <div class="sub2">{{ __('uia.eq_live_contract') }} <span dir="ltr">{{ $pctOf($kpi['live_contract'], $allN) }}% = {{ $fmt($kpi['live_contract']) }} ÷ {{ $fmt($allN) }}</span></div>
     </a>
     <a @class(['kpi', 'on' => ($filters['disc'] ?? '') === 'yes'])
        href="{{ route('erp.clients', ['disc' => ($filters['disc'] ?? '') === 'yes' ? null : 'yes']) }}">
         <div class="lbl">🏷️ {{ __('client.kpi_discounted') }}</div>
         <div class="val">{{ $fmt($kpi['discounted']) }}</div>
-        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+        <div class="sub2">{{ __('uia.eq_discounted') }} <span dir="ltr">{{ $pctOf($kpi['discounted'], $allN) }}% = {{ $fmt($kpi['discounted']) }} ÷ {{ $fmt($allN) }}</span></div>
     </a>
     <a @class(['kpi', 'on' => ($filters['manager'] ?? '') === 'none'])
        href="{{ route('erp.clients', ['manager' => ($filters['manager'] ?? '') === 'none' ? null : 'none']) }}">
         <div class="lbl">🙍 {{ __('client.kpi_no_manager') }}</div>
         <div class="val {{ $kpi['no_manager'] > 0 ? 'mid' : '' }}">{{ $fmt($kpi['no_manager']) }}</div>
-        <div class="sub2">{{ __('client.tap_to_filter') }}</div>
+        <div class="sub2">{{ __('uia.eq_no_manager') }} <span dir="ltr">{{ $pctOf($kpi['no_manager'], $allN) }}% = {{ $fmt($kpi['no_manager']) }} ÷ {{ $fmt($allN) }}</span></div>
+    </a>
+</div>
+
+{{-- الكارتين دول بقوا فلتر «حالة الرصيد» مرتّب بالرصيد (٢٢/٩) — الرقم من غير قايمته مالوش لازمة --}}
+<div style="{{ $kHead }}">💰 {{ __('uia.kgrp_balances') }}</div>
+<div class="kpis">
+    <a @class(['kpi', 'on' => ($filters['bal'] ?? '') === 'debt'])
+       href="{{ route('erp.clients', ($filters['bal'] ?? '') === 'debt' ? [] : ['bal' => 'debt', 'sort' => 'balance', 'dir' => 'desc']) }}">
+        <div class="lbl">💸 {{ __('client.owe_us') }}</div>
+        <div class="val neg">{{ $fmt($kpi['debt_sum']) }}</div>
+        <div class="sub2">{{ __('uia.eq_debt', ['n' => $fmt($kpi['debt_n'])]) }}</div>
+    </a>
+    <a @class(['kpi', 'on' => ($filters['bal'] ?? '') === 'credit'])
+       href="{{ route('erp.clients', ($filters['bal'] ?? '') === 'credit' ? [] : ['bal' => 'credit', 'sort' => 'balance', 'dir' => 'asc']) }}">
+        <div class="lbl">💰 {{ __('client.credit_balance') }}</div>
+        <div class="val pos">{{ $fmt($kpi['credit_sum']) }}</div>
+        <div class="sub2">{{ __('uia.eq_credit', ['n' => $fmt($kpi['credit_n'])]) }}</div>
+    </a>
+    {{-- الصافي (٢٢/٩): اللي لينا فعلاً بعد ما نشيل اللي علينا — من نفس رقمي الكارتين --}}
+    <a class="kpi" href="{{ route('erp.clients', ['sort' => 'balance', 'dir' => 'desc']) }}#clientsTable">
+        <div class="lbl">🧮 {{ __('uia.net_receivable') }}</div>
+        <div class="val {{ $netRecv > 0 ? 'neg' : 'pos' }}">{{ $fmt($netRecv) }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($netRecv) }} = {{ $fmt($kpi['debt_sum']) }} − {{ $fmt($kpi['credit_sum']) }}</span> {{ __('uia.eq_net_receivable') }}</div>
     </a>
 </div>
 
@@ -87,37 +112,39 @@
 @php
     $periodOn = ! $range->isOpen();
     $periodLabel = $periodOn ? trim(($range->fromValue() ?: '…').' → '.($range->toValue() ?: '…')) : __('client.period_all');
-    $net = (float) $salesKpi->s - (float) $salesKpi->r;
+    // من الرقمين المقرّبين المعروضين — عشان المعادلة تحت الكارت تقفل بالجنيه (٢٢/٩)
+    $net = round((float) $salesKpi->s) - round((float) $salesKpi->r);
     // كروت المبيعات بترتّب نفس القايمة (بنفس الفلاتر) على الرقم اللي في الكارت (٢٢/٩)
     $kSort = fn (string $col, array $extra = []) => request()->fullUrlWithQuery(
         ['sort' => $col, 'dir' => 'desc', 'page' => null, 'export' => null] + $extra);
 @endphp
-<div class="kpis" style="margin-top:12px">
+<div style="{{ $kHead }}">🧾 {{ __('uia.kgrp_period') }} · <span class="num" dir="ltr">{{ $periodLabel }}</span></div>
+<div class="kpis">
     <a @class(['kpi', 'on' => $periodOn]) href="{{ $kSort('purchases') }}#clientsTable">
-        <div class="lbl">🧾 {{ __('client.sales_kpi_sales') }} · <span class="num">{{ $periodLabel }}</span></div>
+        <div class="lbl">🧾 {{ __('client.sales_kpi_sales') }}</div>
         <div class="val num">{{ $fmt($salesKpi->s) }}</div>
-        <div class="sub2">{{ __('client.sales_kpi_scope') }}@if ($periodOn) • <b class="num">{{ $fmt($salesKpi->d) }}</b> {{ __('client.sales_kpi_docs') }} @endif</div>
+        <div class="sub2">{{ __('uia.eq_period_sales') }}@if ($periodOn) • <b class="num">{{ $fmt($salesKpi->d) }}</b> {{ __('client.sales_kpi_docs') }} @endif</div>
     </a>
     <a @class(['kpi', 'on' => ($filters['flag'] ?? '') === 'buyers'])
        href="{{ $kSort('purchases', ['flag' => ($filters['flag'] ?? '') === 'buyers' ? null : 'buyers']) }}#clientsTable">
         <div class="lbl">🛒 {{ __('client.sales_kpi_buyers') }}</div>
         <div class="val num">{{ $fmt($salesKpi->buyers) }}</div>
-        <div class="sub2">{{ __('client.sales_kpi_of', ['count' => $fmt($salesKpi->n)]) }} • {{ __('client.tap_to_filter') }}</div>
+        <div class="sub2">{{ __('uia.eq_buyers') }} <span dir="ltr">{{ $pctOf($salesKpi->buyers, $salesKpi->n) }}% = {{ $fmt($salesKpi->buyers) }} ÷ {{ $fmt($salesKpi->n) }}</span></div>
     </a>
     <a class="kpi" href="{{ $kSort('returns') }}#clientsTable">
         <div class="lbl">↩️ {{ __('client.sales_kpi_returns') }}</div>
         <div class="val num mid">{{ $fmt($salesKpi->r) }}</div>
-        <div class="sub2">{{ $periodLabel }}</div>
+        <div class="sub2">{{ __('uia.eq_return_rate') }} <span dir="ltr">{{ $pctOf($salesKpi->r, $salesKpi->s) }}% = {{ $fmt($salesKpi->r) }} ÷ {{ $fmt($salesKpi->s) }}</span></div>
     </a>
     <a class="kpi" href="{{ $kSort('purchases') }}#clientsTable">
         <div class="lbl">✅ {{ __('client.sales_kpi_net') }}</div>
         <div class="val num {{ $net < 0 ? 'neg' : '' }}">{{ $fmt($net) }}</div>
-        <div class="sub2">{{ __('client.sales_kpi_net_hint') }}</div>
+        <div class="sub2"><span dir="ltr">{{ $fmt($net) }} = {{ $fmt($salesKpi->s) }} − {{ $fmt($salesKpi->r) }}</span> {{ __('uia.eq_net_words') }}</div>
     </a>
     <a class="kpi" href="{{ $kSort('collections') }}#clientsTable">
         <div class="lbl">💵 {{ __('client.sales_kpi_collected') }}</div>
         <div class="val num pos">{{ $fmt($salesKpi->c) }}</div>
-        <div class="sub2">{{ $periodLabel }}</div>
+        <div class="sub2">{{ __('uia.eq_coll_rate') }} <span dir="ltr">{{ $pctOf($salesKpi->c, $salesKpi->s) }}% = {{ $fmt($salesKpi->c) }} ÷ {{ $fmt($salesKpi->s) }}</span></div>
     </a>
 </div>
 

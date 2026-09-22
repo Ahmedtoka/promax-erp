@@ -44,11 +44,41 @@
 
 @section('content')
 
+{{-- كروت الحالات فلاتر بضغطة (٢٢/٩): الأمين عايز «إيه اللي مستنيني» قبل التاريخ كله.
+     العدادات جوه باقي الفلاتر (مخزن/مندوب/فترة/بحث) — ومجموعها = إجمالي الصفوف من غير فلتر حالة. --}}
+@php
+    $sc = fn ($k) => (int) ($statusCounts[$k] ?? 0);
+    $scAll = (int) collect($statusCounts)->sum();
+    $scOpen = $sc('requested') + $sc('picking') + $sc('ready');
+    $scLink = fn ($st) => route('wh.picks', array_filter(['status' => $st] + request()->except(['status', 'page', 'export'])));
+    $scMeta = ['requested' => 'mid', 'picking' => 'mid', 'ready' => '', 'handed' => 'pos', 'cancelled' => 'neg'];
+@endphp
+<div class="kpis">
+    <a class="kpi {{ $statusFilter === 'open' ? 'on' : '' }}" href="{{ $scLink($statusFilter === 'open' ? null : 'open') }}" title="{{ __('ui.click_to_filter') }}">
+        <div class="lbl">⚡ {{ __('uid.pk_open') }}</div>
+        <div class="val {{ $scOpen ? 'mid' : 'pos' }}">{{ $scOpen }}</div>
+        <div class="sub2"><span dir="ltr">{{ $scOpen }} = {{ $sc('requested') }} + {{ $sc('picking') }} + {{ $sc('ready') }}</span><br>{{ __('stock.pick_status_requested') }} + {{ __('stock.pick_status_picking') }} + {{ __('stock.pick_status_ready') }}</div>
+    </a>
+    @foreach ($scMeta as $k => $cls)
+        <a class="kpi {{ $statusFilter === $k ? 'on' : '' }}" href="{{ $scLink($statusFilter === $k ? null : $k) }}" title="{{ __('ui.click_to_filter') }}">
+            <div class="lbl">{{ $statusOptions[$k] ?? $k }}</div>
+            <div class="val {{ $cls }}">{{ $sc($k) }}</div>
+            <div class="sub2">{{ __('uid.pk_'.$k) }}</div>
+        </a>
+    @endforeach
+</div>
+<div class="sub2" style="margin:-6px 4px 14px;font-size:11.5px;color:var(--muted)">
+    {{ __('uid.pk_total') }} <b dir="ltr">{{ $scAll }} = {{ $sc('requested') }} + {{ $sc('picking') }} + {{ $sc('ready') }} + {{ $sc('handed') }} + {{ $sc('cancelled') }}</b>
+    — {{ __('uid.pk_range_note') }}
+</div>
+
 <div class="card">
     <h3>🧺 {{ __('stock.pick_orders') }}
         <span class="side">{{ __('stock.pick_open_count', ['count' => $openCount]) }}</span></h3>
 
     <form class="searchbar" method="GET">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('uid.pk_search_ph') }}"></label>
         <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status">
             <option value="">{{ __('stock.all_statuses') }}</option>
@@ -164,7 +194,7 @@
             @endif
         </table>
     </div>
-    <div class="pag">{{ $orders->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $orders])
 </div>
 
 @endsection

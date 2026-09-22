@@ -140,7 +140,7 @@ img{display:block;max-width:100%}
 .main{flex:1;min-width:0;padding:18px 24px 40px}
 .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .topbar h1{font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--ink)}
-.topbar .meta{display:flex;align-items:center;gap:8px}
+.topbar .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 
 /* ═══ جرس الإشعارات (2026-08-09) ═══ */
 .bell{position:relative}
@@ -362,10 +362,10 @@ img[data-zoom]{cursor:zoom-in}
 .b-purple{background:#F1EAFD;color:var(--purple)}
 .b-gold{background:#FFFDE0;color:#8A7A00}
 .searchbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
-input[type=text],input[type=search],input[type=number],input[type=date],input[type=datetime-local],input[type=time],input[type=email],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;outline:none;transition:.15s}
+input:not([type]),input[type=text],input[type=search],input[type=number],input[type=date],input[type=datetime-local],input[type=time],input[type=email],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;outline:none;transition:.15s}
 input[type=search]{-webkit-appearance:none;appearance:none}
 input:focus,select:focus,textarea:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14)}
-.searchbar input[type=text],.searchbar input[type=search]{flex:1;min-width:200px}
+.searchbar input:not([type]),.searchbar input[type=text],.searchbar input[type=search]{flex:1;min-width:200px}
 label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:var(--muted)}
 
 /* ═══ `.filters` و`.pill` — كانوا مستخدمين في ٤ صفحات (الحضور
@@ -399,6 +399,16 @@ label.f{display:block;font-size:11.5px;font-weight:800;margin-bottom:5px;color:v
 .rng-q a{font-size:11.5px;font-weight:700;text-decoration:none;color:var(--muted);background:var(--card2);border:1px solid var(--border);border-radius:99px;padding:5px 11px;white-space:nowrap;transition:.12s}
 .rng-q a:hover{color:var(--royal-blue);border-color:var(--royal-blue)}
 .rng-q a.on{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff}
+/* ⚠️ (٢٢/٩) تثبيت الهيدر لأي جدول حاويته بتسكرول — بالـCSS مش بالجافاسكربت، عشان جداول
+   `data-plain` والجداول اللي البليد حاططلها `max-height` بإيده كانت بتسكرول وهيدرها بيطلع معاها */
+.tablewrap[style*="max-height"]{overflow-y:auto}
+.tablewrap[style*="max-height"] thead th{position:sticky;top:0;z-index:5}
+/* (٢٢/٩) الجدول الأعرض من الشاشة: أول عمود (الاسم) بيثبت مع السكرول بالعرض — من غيره
+   اللي بيوصل لعمود الرصيد في آخر الجدول مابيبقاش عارف ده رصيد مين. الكلاس بيتحط من أدوات
+   الجداول بس لما الجدول فعلاً بيفيض؛ `data-nostickcol` بيوقّفه. */
+.tablewrap.sticky-first tbody td:first-child,.tablewrap.sticky-first tfoot td:first-child{position:sticky;inset-inline-start:0;z-index:2;background:var(--card);box-shadow:-1px 0 0 var(--border),1px 0 0 var(--border)}
+.tablewrap.sticky-first thead th:first-child{position:sticky;inset-inline-start:0;z-index:7}
+@media print{.tablewrap.sticky-first td:first-child,.tablewrap.sticky-first th:first-child{position:static}}
 .tbl-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .tbl-bar input[type=search]{flex:0 1 320px;margin:0!important}
 .tbl-xl{margin-inline-start:auto;font-size:11.5px;font-weight:800;color:var(--green,#1F8A4C);background:transparent;border:1px solid var(--border);border-radius:9px;padding:6px 11px;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -1196,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (table.querySelector('th.act, td.act')) return 0;
     if (table.hasAttribute('data-no-act')) return 0;
 
-    const bodyRows = Array.from(table.querySelectorAll('tr'))
+    const bodyRows = Array.from(table.querySelectorAll('tr')).filter(r => r.closest('table') === table)
       .filter(r => r !== headRow && r.querySelector('td'));
 
     // الـURL من الـonclick: location.href='…' أو window.open('…')
@@ -1380,7 +1390,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // واحدة (`cols`)، فزيادة عمود بعد كده بتكسّر صف الإجماليات.
     addRowViewButtons(table, headRow);
 
-    const allRows = () => Array.from(table.querySelectorAll('tr'))
+    // (٢٢/٩) صفوف الجدول نفسه بس — الجدول المتداخل (بنود الأمر جوه صف الاعتماد) كان بيتعدّ صفوف
+    const allRows = () => Array.from(table.querySelectorAll('tr')).filter(r => r.closest('table') === table)
       .filter(r => r !== headRow && r.querySelector('td') && !r.closest('tfoot'));
 
     const cols = headRow.cells.length;
@@ -1422,6 +1433,12 @@ document.addEventListener('DOMContentLoaded', function () {
       cells.forEach(function (td) {
         if (!td.title && td.scrollWidth > td.clientWidth) td.title = td.textContent.trim();
       });
+    }
+
+    /* ═══ 1-ب) الجدول فايض بالعرض؟ ثبّت أول عمود ═══ */
+    if (!table.hasAttribute('data-nostickcol') && wrap.scrollWidth > wrap.clientWidth + 40
+        && headRow.cells.length > 5 && !headRow.cells[0].hasAttribute('colspan')) {
+      wrap.classList.add('sticky-first');
     }
 
     /* ═══ 2) الفريز — الهيدر ثابت فوق ═══ */
@@ -1473,7 +1490,10 @@ document.addEventListener('DOMContentLoaded', function () {
          بـ`data-nosum` على الـth. */
       if (headRow.cells[c].hasAttribute('data-nosum')) continue;
       const head = (headRow.cells[c].textContent || '').trim().toLowerCase();
-      if (/كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|موعد|معاد|ساعة|time|تليفون|موبايل|هاتف|phone|mobile|whats|واتس|لوكيشن|الموقع|location|إحداثيات/.test(head)) continue;
+      /* (٢٢/٩) زاد: عمود «السعر» (كان بيتجمع في بنود أوامر التوريد — مجموع أسعار مالوش معنى)،
+         المتوسطات والهوامش والأيام. و«معاد» بقت كلمة كاملة — كانت بتمسك «مخزن المعادي» وتشيل إجمالي كميته. */
+      if (/^(ال)?سعر|^price|unit price|متوسط|^avg|average|هامش|margin|(^|\s)(ال)?أيام|(^|\s)يوم(\s|$)|days/.test(head)) continue;
+      if (/كود|code|رقم|no\.|#|سنة|year|نسبة|%|سعر الوحدة|تاريخ|date|موعد|ميعاد|(^|\s)معاد(\s|$)|ساعة|time|تليفون|موبايل|هاتف|phone|mobile|whats|واتس|لوكيشن|الموقع|location|إحداثيات/.test(head)) continue;
 
       /* ب) ⚠️ **الفحص الحقيقي: كل خلية لازم تكون رقم نضيف.** الفاضي
          و«—» محايدين (خانة مش متملية مش خطأ)، لكن أي خلية فيها حرف
@@ -1573,8 +1593,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /* حجم الصفحة لهذا الجدول — اختيار المستخدم يغلب على طلب البليد */
     const askedPage = parseInt(table.dataset.page, 10);
-    let PAGE = savedPage()
-      ?? (PAGE_OPTS.includes(askedPage) ? askedPage : 25);
+    // (٢٢/٩) جدول فيه خانات إدخال مايتقسمش صفحات أبداً — المستخدم بيملا 30 صف ويحفظ، والـ5 المخفيين بيروحوا
+    const hasInputs = !!table.querySelector('tbody input:not([type=hidden]), tbody select, tbody textarea');
+    let PAGE = hasInputs ? 0 : (savedPage()
+      ?? (PAGE_OPTS.includes(askedPage) ? askedPage : 25));
 
     const filtered = () => allRows().filter(r => r.dataset.hidden !== '1');
 
@@ -1652,7 +1674,7 @@ document.addEventListener('DOMContentLoaded', function () {
        كان `rows0.length > PAGE` — فلو المستخدم اختار «١٠٠» على جدول
        فيه ٣١ صف، الـpager مايتعملش خالص و**قايمة المقاسات تختفي
        معاه**، ومايبقاش فيه طريقة يرجع لـ٢٥ تاني. */
-    if (!serverPager && rows0.length > PAGE_OPTS[0]) {
+    if (!serverPager && !hasInputs && rows0.length > PAGE_OPTS[0]) {
       pager = document.createElement('div');
       pager.className = 'gs-pager';
       wrap.parentNode.insertBefore(pager, wrap.nextSibling);

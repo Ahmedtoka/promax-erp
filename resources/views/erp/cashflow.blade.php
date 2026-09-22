@@ -115,7 +115,8 @@
     <div class="kpi" data-explain onclick="openDlg('cfCashBy')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('cashflow.kpi_cash_by', ['date' => $range->to->toDateString()]) }}</div>
         <div class="val">{{ $fmt($cashBy) }}</div>
-        <div class="sub2">{{ __('cashflow.kpi_cash_by_sub') }}</div>
+        {{-- (٢٢/٩) المعادلة بالأرقام — نفس متغيرات الكارت --}}
+        <div class="sub2">@include('erp._eq', ['total' => $cashBy, 'zeros' => true, 'parts' => [[__('cashflow.kpi_overdue'), $overdueTotal], [__('cashflow.kpi_window'), $windowTotal]]])</div>
     </div>
     <a class="kpi" href="#cf-due">
         <div class="lbl">{{ __('cashflow.kpi_window') }}</div>
@@ -138,10 +139,10 @@
         <div class="val mid">{{ $fmt($data['no_terms']['total']) }}</div>
         <div class="sub2">{{ __('cashflow.kpi_no_terms_sub', ['n' => $data['no_terms']['count']]) }}</div>
     </a>
-    <div class="kpi" data-explain onclick="openDlg('cfOpen')" title="{{ __('ui.click_to_explain') }}">
+    <div class="kpi" style="grid-column:span 2" data-explain onclick="openDlg('cfOpen')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('cashflow.kpi_total_open') }}</div>
         <div class="val">{{ $fmt($data['total_open']) }}</div>
-        <div class="sub2">{{ __('cashflow.kpi_total_open_sub') }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $data['total_open'], 'zeros' => true, 'parts' => [[__('cashflow.kpi_overdue'), $overdueTotal], [__('cashflow.kpi_window'), $windowTotal], [__('cashflow.kpi_later'), $data['later']['total']], [__('cashflow.kpi_no_terms'), $data['no_terms']['total']]]])</div>
     </div>
 </div>
 

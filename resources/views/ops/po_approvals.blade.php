@@ -203,7 +203,8 @@
                                             <tr>
                                                 <th>{{ __('stock.item') }}</th>
                                                 <th class="num">{{ __('ops.qty_requested') }}</th>
-                                                <th class="num">{{ __('ops.avail_in_wh') }}</th>
+                                                {{-- (٢٢/٩) رصيد المخزن لكل صنف معلومة مش رقم بيتجمع --}}
+                                                <th class="num" data-nosum>{{ __('ops.avail_in_wh') }}</th>
                                                 <th class="num" style="width:130px">{{ __('ops.qty_after_edit') }}</th>
                                                 <th class="num">{{ __('ops.price') }}</th>
                                                 <th class="num">{{ __('common.total') }}</th>

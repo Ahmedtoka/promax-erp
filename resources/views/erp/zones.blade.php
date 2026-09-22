@@ -30,12 +30,12 @@
     <a class="kpi" href="#zonesStart">
         <div class="lbl">{{ __('team.zones') }}</div>
         <div class="val">{{ $zones->count() }}</div>
-        <div class="sub2">{{ $zones->where('active', true)->count() }} {{ __('common.active') }}</div>
+        <div class="sub2"><span dir="ltr">{{ $zones->count() }} = {{ $zones->where('active', true)->count() }} + {{ $zones->where('active', false)->count() }}</span> {{ __('uia.eq_zones_active') }}</div>
     </a>
     <a class="kpi" href="{{ route('erp.clients', ['status' => 'active']) }}">
         <div class="lbl">{{ __('client.clients') }}</div>
         <div class="val">{{ $fmt($zones->sum('active_clients')) }}</div>
-        <div class="sub2">{{ __('team.in_zones_hint') }}</div>
+        <div class="sub2">{{ __('team.in_zones_hint') }} — <span dir="ltr">{{ $fmt($zones->sum('active_clients')) }} = {{ $fmt($zones->sum('active_clients') + $noZoneActive) }} − {{ $fmt($noZoneActive) }}</span> {{ __('uia.eq_zoned') }}</div>
     </a>
     @if (($none = $byGov->get('_none')) && $none->isNotEmpty())
         <a class="kpi" href="#gov__none">

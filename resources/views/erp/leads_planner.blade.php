@@ -26,7 +26,7 @@
         <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
             <select name="rep" onchange="this.form.submit()">
                 @foreach ($reps as $r)
-                    <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->displayName() }} ({{ $r->code }})</option>
+                    <option value="{{ $r->id }}" @selected($repId === $r->id)>{{ $r->displayName() }}@if ($r->code) ({{ $r->code }})@endif</option>
                 @endforeach
             </select></label>
         <label class="fl"><span>{{ __('lead.week_of') }}</span>

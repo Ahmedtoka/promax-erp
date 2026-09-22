@@ -36,10 +36,11 @@
             {{ $s->from_at?->format('m-d h:i A') ?? __('settle.since_start') }} ← {{ $s->to_at->format('m-d h:i A') }}
         </div>
     </a>
-    <a class="kpi" href="#st-recon">
+    <a class="kpi" href="#st-recon" style="grid-column:span 2">
         <div class="lbl">💰 {{ __('settle.expected') }}</div>
         <div class="val">{{ $fmt($s->expected) }}</div>
-        <div class="sub2">{{ __('settle.expected_hint') }}</div>
+        {{-- (٢٢/٩) معادلة اللقطة المعتمدة بأرقامها --}}
+        <div class="sub2">@include('erp._eq', ['total' => $s->expected, 'zeros' => true, 'parts' => [[__('settle.cash_sales'), $s->cash_sales], [__('uib.rc_cash_coll'), $s->cash_collections], [__('settle.cash_refunds'), $s->cash_refunds, '-']]])</div>
     </a>
     <a class="kpi" href="{{ route('erp.repclose.doc', $s) }}">
         <div class="lbl">🤝 {{ __('settle.received') }}</div>
@@ -52,6 +53,8 @@
             {{ $fmt(abs((float) $s->balance)) }}
         </div>
         <div class="sub2">{{ $s->balanceLabel() }}</div>
+        {{-- الرصيد بإشارته: موجب = على المندوب --}}
+        <div class="sub2">@include('erp._eq', ['total' => $s->balance, 'zeros' => true, 'parts' => [[__('settle.prev_balance'), abs((float) $s->prev_balance), (float) $s->prev_balance < 0 ? '-' : '+'], [__('settle.expected'), $s->expected], [__('settle.received'), $s->received, '-']]])</div>
     </a>
     <a class="kpi" href="{{ route('erp.repclose.doc', $s) }}">
         <div class="lbl">📦 {{ __('settle.goods_match') }}</div>
@@ -137,7 +140,8 @@
                         @forelse ($box['rows'] as $inv)
                             <tr class="clickable" onclick="window.open('{{ route('ops.invoice', $inv) }}', '_blank')">
                                 <td class="num"><b>{{ $inv->number }}</b></td>
-                                <td style="text-align:start">
+                                {{-- اسم العميل الطويل بيلفّ — كان بيزقّ عمود الإجمالي بره الكارت (٢٢/٩) --}}
+                                <td style="text-align:start;white-space:normal;min-width:150px">
                                     @if ($inv->client)<a href="{{ route('erp.clients.show', $inv->client_id) }}" onclick="event.stopPropagation()">{{ $inv->client->fullName() }}</a>@else — @endif
                                 </td>
                                 <td class="num" style="font-size:11px" dir="ltr">{{ $inv->created_at->format('m-d h:i A') }}</td>

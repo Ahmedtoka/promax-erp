@@ -105,7 +105,7 @@
 
         <div class="tablewrap">
             {{-- وقت الاستلام «المستلم» خانات إدخال — إكسيل الجدول بيقرا النص بس فبيتقفل لحد ما يتستلم --}}
-            <table @if ($canReceive) data-noxl @endif>
+            <table @if ($canReceive) data-noxl data-page="0" @endif>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>

@@ -334,7 +334,7 @@
                             @forelse ($box['rows'] as $r)
                                 <tr class="clickable"
                                     onclick="location.href='{{ route('erp.clients.show', $r['client']) }}'">
-                                    <td>@if ($r['client'])<a href="{{ route('erp.clients.show', $r['client']->id) }}"><b>{{ $r['client']->fullName() }}</b></a>@else — @endif</td>
+                                    <td style="white-space:normal;min-width:150px">@if ($r['client'])<a href="{{ route('erp.clients.show', $r['client']->id) }}"><b>{{ $r['client']->fullName() }}</b></a>@else — @endif</td>
                                     <td class="num">{{ $r['count'] }}</td>
                                     {{-- القطع مجموع بنود الفاتورة — بالقطعة دايماً،
                                          مهما كانت الوحدة اللي المندوب كتب بيها --}}

@@ -101,7 +101,7 @@
                 @endif
             </table>
         </div>
-        <div class="pag">{{ $txns->links('pagination::simple-default') }}</div>
+        @include('partials._pagination', ['p' => $txns])
     </div>
 
     {{-- ═══════════ أوامر الشراء ═══════════ --}}

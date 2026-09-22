@@ -97,7 +97,8 @@
         <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px">
                 <span>{{ __('audit.progress_label') }}</span>
-                <b>{{ $pct($s, 'full') }}%</b>
+                {{-- النسبة بمعادلتها (٢٢/٩) — مظبوط تماماً ÷ الإجمالي --}}
+                <b dir="ltr">{{ $pct($s, 'full') }}% = {{ number_format($s['full']) }} ÷ {{ number_format($s['total']) }}</b>
             </div>
             <div style="height:9px;background:#E5E7EB;border-radius:99px;overflow:hidden">
                 <div style="height:100%;width:{{ $pct($s, 'full') }}%;background:#16A34A"></div>

@@ -59,8 +59,9 @@
                     <th data-nosum>{{ __('incent.check_ins') }}/{{ __('incent.check_outs') }}</th>
                     <th data-nosum>{{ __('incent.avg_visit') }}</th>
                     <th>{{ __('incent.km_today') }}</th>
-                    <th>⭐ {{ __('incent.points') }}</th>
-                    <th>💵 {{ __('incent.commission') }}</th>
+                    {{-- (٢٢/٩) معادلة العمود تحت عنوانه --}}
+                    <th>⭐ {{ __('incent.points') }}<div class="eqh">{{ __('uib.pf_h_points') }}</div></th>
+                    <th>💵 {{ __('incent.commission') }}<div class="eqh">{{ __('uib.pf_h_comm') }}</div></th>
                 </tr>
             </thead>
             <tbody>
@@ -113,7 +114,7 @@
                         </td>
                         <td>
                             <b class="pos" style="font-size:13px">{{ $fmt($k['commission']) }}</b>
-                            <div style="font-size:9px;color:var(--muted)" dir="ltr">{{ number_format($k['commission_rate'] * 100, 2) }}%</div>
+                            <div style="font-size:9px;color:var(--muted)" dir="ltr">{{ $fmt($k['net_sales'] ?? 0) }} × {{ number_format($k['commission_rate'] * 100, 2) }}%</div>
                         </td>
                     </tr>
                 @endforeach

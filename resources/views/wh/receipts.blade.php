@@ -91,7 +91,11 @@
     {{-- فلتر «من — إلى» على تاريخ الاستلام (٩/٩/٢٠٢٦) — المخزن المختار بيتحافظ عليه --}}
     <form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
         <input type="hidden" name="warehouse" value="{{ $warehouse->id }}">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="text" name="q" value="{{ request('q') }}" placeholder="🔍 {{ __('uid.grn_search_ph') }}"></label>
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+        <a class="btn" href="{{ route('wh.receipts', ['warehouse' => $warehouse->id]) }}">{{ __('common.clear') }}</a>
         {{-- القايمة صفحات — ده بينزّل كل أذون الفترة (٢٢/٩) --}}
         <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
@@ -132,7 +136,7 @@
                             <span class="badge b-orange">{{ __('stock.partly_shelved') }} — {{ $fmt($r->unshelvedQty()) }}</span>
                         @endif
                     </td>
-                    <td><a class="btn sm" href="{{ route('wh.receipt', $r) }}">{{ __('common.details') }}</a></td>
+                    {{-- .act = الجدول عنده زرار فتح خلاص، فالـlayout مايزوّدش «عرض» تاني جنبه (٢٢/٩) --}}<td class="act"><a class="btn sm" href="{{ route('wh.receipt', $r) }}">{{ __('common.details') }}</a></td>
                 </tr>
             @empty
                 <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">
@@ -150,7 +154,7 @@
             @endif
         </table>
     </div>
-    <div class="pag">{{ $receipts->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $receipts])
 </div>
 
 @endif

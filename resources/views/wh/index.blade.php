@@ -27,44 +27,98 @@
     </div>
 @endif
 
+@php
+    // الباقي = رصيد مش مرصوف ومش مستني ترصيف: منتهي/موقوف على الرف أو رصيد من غير باتش (٢٢/٩)
+    $restUnits = $stockUnits - $availableUnits - $awaiting;
+    $expiredQty = (int) $expired->sum('qty_remaining');
+    $expiringQty = (int) $expiring->sum('qty_remaining');
+@endphp
+
+{{-- «محتاج تصرف» الأول (٢٢/٩): الأمين بيفتح الشاشة عشان يعرف إيه مستنيه — تجهيز / ترصيف /
+     تحويل جاي / صلاحية — والإجماليات بعد كده. --}}
+<div class="card" style="padding:12px 16px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <b style="font-size:12.5px">⚡ {{ __('uid.needs_action') }}</b>
+        <a class="btn sm" href="{{ route('wh.picks', ['status' => 'open', 'warehouse' => $warehouse->id]) }}">
+            <span class="badge {{ $openPicks ? 'b-orange' : 'b-green' }}">{{ $openPicks }}</span> {{ __('uid.wa_picks') }}</a>
+        @if (($openOnlinePicks ?? 0) > 0 && \App\Support\Access::allows(auth()->user(), 'online.prep'))
+            <a class="btn sm" href="{{ route('online.prep') }}"><span class="badge b-orange">{{ $openOnlinePicks }}</span> {{ __('uid.wa_online') }}</a>
+        @endif
+        <a class="btn sm" href="#whPending">
+            <span class="badge {{ $pending->count() ? 'b-orange' : 'b-green' }}">{{ $pending->count() }}</span> {{ __('uid.wa_putaway', ['q' => $fmt($awaiting)]) }}</a>
+        <a class="btn sm" href="{{ $incoming->isNotEmpty() ? '#whIncoming' : route('wh.transfers') }}">
+            <span class="badge {{ $incoming->count() ? 'b-orange' : 'b-green' }}">{{ $incoming->count() }}</span> {{ __('uid.wa_incoming') }}</a>
+        <a class="btn sm" href="{{ route('wh.expiry', ['warehouse' => $warehouse->id]) }}">
+            <span class="badge {{ $expired->count() ? 'b-red' : 'b-green' }}">{{ $expired->count() }}</span> {{ __('uid.wa_expired', ['q' => $fmt($expiredQty)]) }}</a>
+        <a class="btn sm" href="{{ route('wh.expiry', ['warehouse' => $warehouse->id]) }}">
+            <span class="badge {{ $expiring->count() ? 'b-orange' : 'b-green' }}">{{ $expiring->count() }}</span> {{ __('uid.wa_expiring', ['d' => \App\Models\Batch::WARN_DAYS, 'q' => $fmt($expiringQty)]) }}</a>
+    </div>
+</div>
+
 {{-- كل كارت بيودّي على الشاشة اللي بتفصّل رقمه: رصيد المخزن / الأرفف / اللي مستني ترصيف / الصلاحية (٢٢/٩) --}}
 <div class="kpis">
     <a class="kpi" href="{{ \App\Support\Access::allows(auth()->user(), 'erp.warehouses.stock') ? route('erp.warehouses.stock', $warehouse) : route('wh.locations', ['warehouse' => $warehouse->id]).'#slList' }}">
         <div class="lbl">{{ __('stock.total_in_wh') }}</div>
         <div class="val">{{ $fmt($stockUnits) }}</div>
-        <div class="sub2">{{ $warehouse->displayName() }} — {{ $warehouse->typeLabel() }}</div>
+        <div class="sub2">{{ __('uid.wk_total_how', ['wh' => $warehouse->displayName()]) }}<br>
+            <span dir="ltr">{{ $fmt($stockUnits) }} = {{ __('uid.wk_avail') }} {{ $fmt($availableUnits) }} + {{ __('uid.wk_await') }} {{ $fmt($awaiting) }} {{ $restUnits < 0 ? '−' : '+' }} {{ __('uid.wk_rest') }} {{ $fmt(abs($restUnits)) }}</span></div>
     </a>
     <a class="kpi" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}#slList">
         <div class="lbl">{{ __('stock.available_units') }}</div>
         <div class="val pos">{{ $fmt($availableUnits) }}</div>
-        <div class="sub2">{{ __('stock.available_hint') }}</div>
-    </a>
-    <a class="kpi" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">
-        <div class="lbl">{{ __('stock.shelf_count') }}</div>
-        <div class="val">{{ $fmt($locationCount) }}</div>
-        <div class="sub2">{{ __('stock.shelf_map') }}</div>
+        <div class="sub2">{{ __('uid.wk_avail_how') }}</div>
     </a>
     <a class="kpi" href="#whPending">
         <div class="lbl">{{ __('stock.awaiting_putaway') }}</div>
         <div class="val {{ $awaiting > 0 ? 'mid' : 'pos' }}">{{ $fmt($awaiting) }}</div>
-        <div class="sub2">{{ __('stock.batch_countable', ['count' => $pending->count()]) }}</div>
+        <div class="sub2">{{ __('uid.wk_await_how', ['n' => $pending->count()]) }}</div>
     </a>
     <a class="kpi" href="{{ route('wh.expiry', ['warehouse' => $warehouse->id]) }}">
         <div class="lbl">{{ __('stock.expiry_warn') }}</div>
         <div class="val {{ $expiring->count() > 0 ? 'mid' : 'pos' }}">{{ $fmt($expiring->count()) }}</div>
-        <div class="sub2">{{ __('stock.expiring_soon_count', ['count' => $expiring->count()]) }}</div>
+        <div class="sub2">{{ __('uid.wk_expiring_how', ['d' => \App\Models\Batch::WARN_DAYS, 'q' => $fmt($expiringQty)]) }}</div>
+    </a>
+    <a class="kpi" href="{{ route('wh.locations', ['warehouse' => $warehouse->id]) }}">
+        <div class="lbl">{{ __('stock.shelf_count') }}</div>
+        <div class="val">{{ $fmt($locationCount) }}</div>
+        <div class="sub2">{{ __('uid.wk_shelves_how') }}</div>
     </a>
 </div>
 
-@if ($expired->isNotEmpty())
-    <div class="alert" style="margin-bottom:14px">
-        <span>⛔</span>
-        <span>
-            {{ __('stock.expired_count', ['count' => $expired->count()]) }}
-            <a href="{{ route('wh.expiry', ['warehouse' => $warehouse->id]) }}"
-               style="font-weight:800;color:var(--red);margin-inline-start:6px">{{ __('stock.view_all') }}</a>
-        </span>
+{{-- تنبيه المنتهي اتنقل لشريط «محتاج تصرف» فوق — مكانش ليه لازمة مرتين (٢٢/٩) --}}
+
+{{-- التحويل الجاي شغل مستني — فوق الترصيف، ومش بيظهر خالص لو مفيش (٢٢/٩) --}}
+@if ($incoming->isNotEmpty())
+<div class="card" id="whIncoming">
+    <h3>🔁 {{ __('stock.incoming_transfers') }}
+        <span class="side"><a href="{{ route('wh.transfers') }}">{{ __('stock.view_all') }}</a></span></h3>
+    <div class="tablewrap">
+        <table>
+            <tr>
+                <th>{{ __('stock.transfer') }}</th>
+                <th>{{ __('stock.from_warehouse') }}</th>
+                <th data-nosum>{{ __('stock.sent_on') }}</th>
+                <th>{{ __('stock.qty_sent') }}</th>
+                <th>{{ __('common.status') }}</th>
+                <th></th>
+            </tr>
+            @forelse ($incoming as $t)
+                <tr>
+                    <td class="num"><a href="{{ route('wh.transfers.show', $t) }}"><b>{{ $t->number }}</b></a></td>
+                    <td>@if ($t->fromWarehouse)<a href="{{ route('erp.warehouses.stock', $t->fromWarehouse) }}">{{ $t->fromWarehouse->displayName() }}</a>@else — @endif</td>
+                    <td class="num">{{ $t->sent_on?->format('Y-m-d') ?? '—' }}</td>
+                    <td class="num">{{ $fmt($t->qtySent()) }}</td>
+                    <td><span class="badge {{ $t->statusClass() }}">{{ $t->statusLabel() }}</span></td>
+                    <td><a class="btn sm" href="{{ route('wh.transfers') }}">{{ __('stock.receive_transfer') }}</a></td>
+                </tr>
+            @empty
+                <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">
+                    {{ __('common.no_results') }}
+                </td></tr>
+            @endforelse
+        </table>
     </div>
+</div>
 @endif
 
 <div class="card" id="whPending">
@@ -151,7 +205,9 @@
                                     </div>
                                 </td>
                                 <td class="num"><b>{{ $b->batch_no }}</b></td>
-                                <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}</td>
+                                <td class="num">{{ $b->expires_on?->format('Y-m-d') ?? '—' }}
+                                    {{-- سنة قبل 2000 = غلطة كتابة في الإذن (0203 بدل 2030) — بننبّه بدل ما نقول «منتهي من 600 ألف يوم» (٢٢/٩) --}}
+                                    @if ($b->expires_on && $b->expires_on->year < 2000)<div><span class="badge b-red" title="{{ __('uid.bad_date_tip') }}">⚠ {{ __('uid.bad_date') }}</span></div>@endif</td>
                                 <td><span class="badge {{ $b->expiryClass() }}">{{ $b->expiryLabel() }}</span></td>
                                 <td class="num mid"><b>{{ $fmt($left) }}</b>
                                     @if ($bd = $b->product?->packBreakdown($left))
@@ -210,37 +266,6 @@
             @endforeach
         </datalist>
     @endif
-</div>
-
-<div class="card">
-    <h3>🔁 {{ __('stock.incoming_transfers') }}
-        <span class="side"><a href="{{ route('wh.transfers') }}">{{ __('stock.view_all') }}</a></span></h3>
-    <div class="tablewrap">
-        <table>
-            <tr>
-                <th>{{ __('stock.transfer') }}</th>
-                <th>{{ __('stock.from_warehouse') }}</th>
-                <th data-nosum>{{ __('stock.sent_on') }}</th>
-                <th>{{ __('stock.qty_sent') }}</th>
-                <th>{{ __('common.status') }}</th>
-                <th></th>
-            </tr>
-            @forelse ($incoming as $t)
-                <tr>
-                    <td class="num"><a href="{{ route('wh.transfers.show', $t) }}"><b>{{ $t->number }}</b></a></td>
-                    <td>@if ($t->fromWarehouse)<a href="{{ route('erp.warehouses.stock', $t->fromWarehouse) }}">{{ $t->fromWarehouse->displayName() }}</a>@else — @endif</td>
-                    <td class="num">{{ $t->sent_on?->format('Y-m-d') ?? '—' }}</td>
-                    <td class="num">{{ $fmt($t->qtySent()) }}</td>
-                    <td><span class="badge {{ $t->statusClass() }}">{{ $t->statusLabel() }}</span></td>
-                    <td><a class="btn sm" href="{{ route('wh.transfers') }}">{{ __('stock.receive_transfer') }}</a></td>
-                </tr>
-            @empty
-                <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">
-                    {{ __('common.no_results') }}
-                </td></tr>
-            @endforelse
-        </table>
-    </div>
 </div>
 
 <div class="card">

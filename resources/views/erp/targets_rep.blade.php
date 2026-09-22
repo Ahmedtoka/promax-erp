@@ -53,18 +53,29 @@
             <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_target') }}</div>
                 <div class="val num">{{ $fmt($annual) }}</div>
+                {{-- (٢٢/٩) كل كارت بيقول رقمه إيه واتحسب إزاي --}}
+                <div class="sub2">{{ (float) $annual > 0 ? __('uib.tgr_target_sub', ['y' => $year]) : __('uib.tgr_no_target') }}</div>
             </a>
             <a class="kpi" href="{{ route('erp.reports.show', ['key' => 'sales_by_client', 'user_id' => $rep->id, 'from' => $year.'-01-01', 'to' => $year.'-12-31']) }}">
                 <div class="lbl">{{ __('targets.kpi_achieved') }}</div>
                 <div class="val num pos">{{ $fmt($repAchieved) }}</div>
+                <div class="sub2">{{ __('uib.tgr_achieved_sub', ['y' => $year]) }}</div>
             </a>
             <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_remaining') }}</div>
                 <div class="val num {{ $repRemaining > 0 ? 'mid' : 'pos' }}">{{ $fmt(max($repRemaining, 0)) }}</div>
+                @if ((float) $annual > 0)
+                    <div class="sub2">@include('erp._eq', ['total' => $repRemaining, 'zeros' => true, 'parts' => [[__('targets.kpi_target'), $annual], [__('targets.kpi_achieved'), $repAchieved, '-']]])</div>
+                @else
+                    <div class="sub2">{{ __('uib.tgr_no_target') }}</div>
+                @endif
             </a>
             <a class="kpi" href="#tg-clients">
                 <div class="lbl">{{ __('targets.kpi_pct') }}</div>
                 <div class="val num">{{ $repPct }}%</div>
+                @if ((float) $annual > 0)
+                    <div class="sub2">@include('erp._eq', ['totalText' => $repPct.'%', 'total' => 0, 'zeros' => true, 'parts' => [[__('targets.kpi_achieved'), $repAchieved], [__('targets.kpi_target'), $annual, '÷']]])</div>
+                @endif
                 <div style="background:var(--card2);border:1px solid var(--border);border-radius:6px;height:9px;overflow:hidden;margin-top:6px">
                     <div style="height:100%;width:{{ $repPct > 0 ? max(min($repPct, 100), 2) : 0 }}%;min-width:{{ $repPct > 0 ? 2 : 0 }}px;background:linear-gradient(135deg,var(--royal-blue),var(--purple-heart))"></div>
                 </div>

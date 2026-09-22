@@ -42,15 +42,56 @@
 
 @section('content')
 
+@php
+    // أجزاء الكروت من نفس متغيرات الكنترولر — المعادلة لازم تقفل على رقم الكارت (٢٢/٩)
+    $otherVal = $totalVal - $goodVal - $holdVal;
+    $otherQty = $totalQty - $goodQty - $holdQty;
+    $listName = $defaultList ? $defaultList->displayName() : '—';
+    $pctOf = fn ($n) => number_format($n / max($totalVal, 1) * 100, 1);
+    $need = $f['need'] ?? '';
+@endphp
+
+{{-- «محتاج تصرف» الأول (٢٢/٩): أمين المخزن بيفتح الشاشة عشان يعرف إيه خلص وإيه محجوز
+     قبل ما يبص على الإجماليات. كل زرار فلتر على الجدول تحت. --}}
+<div class="card" style="padding:12px 16px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <b style="font-size:12.5px">⚡ {{ __('uid.needs_action') }}</b>
+        <a class="btn sm {{ $need === 'out' ? 'gold' : '' }}" href="{{ route('erp.stock', ['need' => 'out']) }}#stockTable" title="{{ __('uid.na_out_tip') }}">
+            <span class="badge {{ $outCount ? 'b-red' : 'b-green' }}">{{ $outCount }}</span> {{ __('uid.na_out') }}</a>
+        <a class="btn sm {{ $need === 'hold' ? 'gold' : '' }}" href="{{ route('erp.stock', ['need' => 'hold']) }}#stockTable" title="{{ __('uid.na_hold_tip') }}">
+            <span class="badge {{ $holdCount ? 'b-orange' : 'b-green' }}">{{ $holdCount }}</span> {{ __('uid.na_hold', ['q' => $fmt($holdQty)]) }}</a>
+        @if ($seeCost)
+            <a class="btn sm {{ $need === 'nocost' ? 'gold' : '' }}" href="{{ route('erp.stock', ['need' => 'nocost']) }}#stockTable" title="{{ __('uid.no_cost_tip') }}">
+                <span class="badge {{ $noCostCount ? 'b-red' : 'b-green' }}">{{ $noCostCount }}</span> {{ __('uid.na_nocost') }}</a>
+        @endif
+        <a class="btn sm {{ ($f['status'] ?? '') === 'draft' ? 'gold' : '' }}" href="{{ route('erp.stock', ['status' => 'draft']) }}#stockTable">
+            <span class="badge {{ ($draftCount ?? 0) ? 'b-orange' : 'b-green' }}">{{ $draftCount ?? 0 }}</span> {{ __('stock.draft_only') }}</a>
+        <a class="btn sm" href="{{ route('wh.expiry') }}">⏳ {{ __('uid.na_expiry') }} ←</a>
+    </div>
+</div>
+
 <div class="kpis">
     {{-- الكروت على المخزن كله: القيمة والوحدات بيرتّبوا الجدول، والباقي بيفتح تفصيل العائلات (٢٢/٩) --}}
-    <a class="kpi {{ ($f['sort'] ?? '') === 'value' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'value']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.stock_value_new') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($totalVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.sku_countable', ['count' => $skuCount]) }}</div></a>
+    <a class="kpi {{ ($f['sort'] ?? '') === 'value' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'value']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.stock_value_new') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($totalVal) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uid.sv_how', ['n' => $skuCount, 'list' => $listName]) }}<br><span dir="ltr">{{ $fmt($totalVal) }} = {{ __('stock.good_stock') }} {{ $fmt($goodVal) }} + {{ __('stock.hold') }} {{ $fmt($holdVal) }}@if (abs($otherVal) >= 1) + {{ __('uid.unclassified') }} {{ $fmt($otherVal) }}@endif</span></div></a>
     @if ($seeCost)
-        <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.stock_value_cost') }}</div><div class="val">{{ $fmt($costVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.margin') }} {{ number_format(($totalVal - $costVal) / max($totalVal, 1) * 100, 1) }}%</div></div>
+        <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.stock_value_cost') }}</div><div class="val">{{ $fmt($costVal) }} {{ __('common.currency') }}</div>
+            <div class="sub2">{{ __('uid.cv_how') }}<br>
+                {{-- تكلفة 0 = هامش 100% مالوش معنى — بنقولها صريحة بدل رقم يضلّل (٢٢/٩) --}}
+                @if ($costVal <= 0)
+                    <span class="neg">⚠ {{ __('uid.margin_void', ['n' => $noCostCount, 'all' => $skuCount]) }}</span>
+                @else
+                    <span dir="ltr">{{ __('stock.margin') }} {{ number_format(($totalVal - $costVal) / max($totalVal, 1) * 100, 1) }}% = ({{ $fmt($totalVal) }} − {{ $fmt($costVal) }}) ÷ {{ $fmt($totalVal) }}</span>
+                    @if ($noCostCount > 0)<br><span class="neg">⚠ {{ __('uid.margin_partial', ['n' => $noCostCount]) }}</span>@endif
+                @endif
+            </div></div>
     @endif
-    <a class="kpi {{ ($f['sort'] ?? '') === 'qty' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'qty']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.total_units') }}</div><div class="val">{{ $fmt($totalQty) }}</div><div class="sub2">{{ __('stock.finished_goods') }}</div></a>
-    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.good_stock_value') }}</div><div class="val pos">{{ $fmt($goodVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ number_format($goodVal / max($totalVal, 1) * 100, 1) }}%</div></div>
-    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.hold_value') }}</div><div class="val mid">{{ $fmt($holdVal) }} {{ __('common.currency') }}</div><div class="sub2">{{ __('stock.pct_on_hold', ['pct' => number_format($holdVal / max($totalVal, 1) * 100, 1)]) }}</div></div>
+    <a class="kpi {{ ($f['sort'] ?? '') === 'qty' ? 'on' : '' }}" href="{{ route('erp.stock', ['sort' => 'qty']) }}#stockTable" title="{{ __('ui.click_to_filter') }}"><div class="lbl">{{ __('stock.total_units') }}</div><div class="val">{{ $fmt($totalQty) }}</div>
+        <div class="sub2">{{ __('uid.units_how') }}<br><span dir="ltr">{{ $fmt($totalQty) }} = {{ __('stock.good_stock') }} {{ $fmt($goodQty) }} + {{ __('stock.hold') }} {{ $fmt($holdQty) }}@if ($otherQty !== 0) + {{ __('uid.unclassified') }} {{ $fmt($otherQty) }}@endif</span></div></a>
+    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.good_stock_value') }}</div><div class="val pos">{{ $fmt($goodVal) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uid.good_how', ['q' => $fmt($goodQty)]) }}<br><span dir="ltr">{{ $pctOf($goodVal) }}% = {{ $fmt($goodVal) }} ÷ {{ $fmt($totalVal) }}</span></div></div>
+    <div class="kpi" data-explain onclick="openDlg('dlgFamBreak')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('stock.hold_value') }}</div><div class="val mid">{{ $fmt($holdVal) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uid.hold_how', ['q' => $fmt($holdQty)]) }}<br><span dir="ltr">{{ $pctOf($holdVal) }}% = {{ $fmt($holdVal) }} ÷ {{ $fmt($totalVal) }}</span></div></div>
 </div>
 
 {{-- ═══ الشارتات: القيمة والوحدات بالعائلة + توزيع المخازن ═══ --}}
@@ -77,7 +118,7 @@
     <h3>🧬 {{ __('stock.family_summary') }}</h3>
     <div class="tablewrap prod-tbl">
         <table>
-            <tr><th style="text-align:start">{{ __('stock.family') }}</th><th>{{ __('stock.skus') }}</th><th>{{ __('stock.units') }}</th><th>{{ __('stock.value') }}</th><th style="width:200px" data-nosum>{{ __('stock.value_share') }}</th><th>{{ __('stock.of_which_hold') }}</th></tr>
+            <tr><th style="text-align:start">{{ __('stock.family') }}</th><th>{{ __('stock.skus') }}</th><th>{{ __('stock.units') }}</th><th>{{ __('stock.value') }}</th><th style="width:200px" data-nosum>{{ __('uid.fam_share') }}</th><th>{{ __('stock.of_which_hold') }}</th></tr>
             @foreach ($famStats as $fam => $fs)
                 @php $share = (int) round($fs['val'] / max($totalVal, 1) * 100); @endphp
                 <tr>
@@ -122,6 +163,13 @@
             <option value="draft" @selected(($f['status'] ?? '') === 'draft')>
                 {{ __('stock.draft_only') }}@if (($draftCount ?? 0) > 0) ({{ $draftCount }})@endif
             </option>
+        </select></label>
+        <label class="fl"><span>{{ __('uid.needs_action') }}</span>
+        <select name="need">
+            <option value="">{{ __('uid.na_all') }}</option>
+            <option value="out" @selected($need === 'out')>{{ __('uid.na_out') }}</option>
+            <option value="hold" @selected($need === 'hold')>{{ __('uid.na_hold_short') }}</option>
+            @if ($seeCost)<option value="nocost" @selected($need === 'nocost')>{{ __('uid.na_nocost') }}</option>@endif
         </select></label>
         <label class="fl"><span>{{ __('ui.l_sort') }}</span>
         <select name="sort">
@@ -194,7 +242,14 @@
                     <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                     @if ($seeCost)<td class="num" style="color:var(--muted)">{{ number_format($p->cost, 2) }}</td>@endif
                     <td class="num"><span style="color:var(--primary);font-weight:800;font-size:13.5px">{{ number_format($price, 2) }}</span></td>
-                    @if ($seeCost)<td class="num {{ $mgCls($margin) }}"><b>{{ number_format($margin * 100, 1) }}%</b></td>@endif
+                    {{-- تكلفة 0 = هامش 100% مضلّل — بنعرض «—» مع توضيح (٢٢/٩) --}}
+                    @if ($seeCost)
+                        @if ((float) $p->cost <= 0)
+                            <td class="num muted" title="{{ __('uid.no_cost_tip') }}">—</td>
+                        @else
+                            <td class="num {{ $mgCls($margin) }}"><b>{{ number_format($margin * 100, 1) }}%</b></td>
+                        @endif
+                    @endif
                     {{-- الكمية + بار حصة الصنف من إجمالي الوحدات — بالعين --}}
                     <td class="num"><b>{{ $fmt($qty) }}</b>
                         @if ($bd = $p->packBreakdown($qty))
@@ -221,10 +276,13 @@
                     <td class="num">{{ $fmt($p->goodTotal()) }}</td>
                     <td class="num pos"><b>{{ $fmt($qty * $price) }}</b></td>
                     @if ($manager)
-                        <td><a class="btn sm" href="{{ route('erp.products.show', $p) }}">{{ __('stock.product_card') }} ←</a></td>
+                        <td class="act"><a class="btn sm" href="{{ route('erp.products.show', $p) }}">{{ __('stock.product_card') }} ←</a></td>
                     @endif
                 </tr>
             @endforeach
+            @if ($products->isEmpty())
+                <tr><td colspan="{{ 10 + $warehouses->count() + ($seeCost ? 2 : 0) }}" class="muted" style="padding:22px">{{ __('uid.no_match') }}</td></tr>
+            @endif
             </tbody>
             {{-- ⚠️ الإجمالي في tfoot (٢٢/٩): وهو صف عادي كانت أدوات الجدول بتحسبه صف بيانات
                  فيتجمع على نفسه ويدخل في الترتيب والتصدير كأنه صنف. --}}
@@ -235,7 +293,9 @@
                 @if ($seeCost)<td class="num"><b>{{ $fmt($costValF) }}</b></td>@endif
                 {{-- عمود السعر سعر وحدة — مفيش إجمالي ليه --}}
                 <td></td>
-                @if ($seeCost)
+                @if ($seeCost && $costValF <= 0)
+                    <td class="num muted" title="{{ __('uid.no_cost_tip') }}">—</td>
+                @elseif ($seeCost)
                     <td class="num {{ $mgCls($newValF > 0 ? ($newValF - $costValF) / $newValF : 0) }}">
                         <b>{{ number_format(($newValF - $costValF) / max($newValF, 1) * 100, 1) }}%</b>
                     </td>

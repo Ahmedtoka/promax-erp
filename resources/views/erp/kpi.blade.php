@@ -54,15 +54,18 @@
 <div class="kpis">
     <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">💰 {{ __('kpi.total_collections') }}</div>
         <div class="val">{{ $fmt($totColl) }}</div>
+        {{-- (٢٢/٩) الإجمالي مفرود بالقناة بالأرقام --}}
+        <div class="sub2">@include('erp._eq', ['total' => $totColl, 'dec' => 0, 'parts' => collect($result['channels'])->map(fn ($xc) => [$xc['channel']->displayName(), collect($xc['reps'])->sum(fn ($r) => $r['data']['collections'])])->all()])</div>
         <div class="sub2">{{ __('kpi.h_collections') }}</div></div>
     <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">🧑‍💼 {{ __('kpi.rep_due') }}</div>
-        <div class="val pos">{{ $f2($totRep) }}</div></div>
+        <div class="val pos">{{ $f2($totRep) }}</div><div class="sub2">{{ __('uib.kpi_rep_sub') }}</div></div>
     <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">👔 {{ __('kpi.manager_due') }}</div>
-        <div class="val pos">{{ $f2($totMgr) }}</div></div>
+        <div class="val pos">{{ $f2($totMgr) }}</div><div class="sub2">{{ __('uib.kpi_leader_sub') }}</div></div>
     <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">🎖️ {{ __('kpi.director_due') }}</div>
-        <div class="val pos">{{ $f2($totDir) }}</div></div>
+        <div class="val pos">{{ $f2($totDir) }}</div><div class="sub2">{{ __('uib.kpi_leader_sub') }}</div></div>
     <div class="kpi" data-explain onclick="openDlg('kpiExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">Σ {{ __('kpi.grand_due') }}</div>
         <div class="val pos"><b>{{ $f2($totRep + $totMgr + $totDir) }}</b></div>
+        <div class="sub2">@include('erp._eq', ['total' => $totRep + $totMgr + $totDir, 'zeros' => true, 'parts' => [[__('kpi.rep_due'), $totRep], [__('kpi.manager_due'), $totMgr], [__('kpi.director_due'), $totDir]]])</div>
         <div class="sub2">{{ $totColl > 0 ? $pct(($totRep + $totMgr + $totDir) / $totColl, 2) : '0%' }} {{ __('kpi.of_collections') }}</div></div>
 </div>
 
@@ -107,6 +110,100 @@
     <div style="text-align:end;margin-top:10px"><button class="btn" type="button" onclick="closeDlg('kpiExplain')">{{ __('common.close') }}</button></div>
 </dialog>
 
+{{-- ═══ قناة قناة ═══ --}}
+@foreach ($result['channels'] as $c)
+    @php $ch = $c['channel']; @endphp
+    <div class="card">
+        <h3>🎯 {{ $ch->displayName() }}
+            <span class="side">
+                {{ __('kpi.ch_summary', [
+                    'gate' => $fmt($ch->rep_gate),
+                    'cost' => number_format($ch->maxBaseCost() * 100, 2),
+                ]) }}
+            </span>
+        </h3>
+
+        {{-- المناديب --}}
+        <div class="tablewrap kpi-wrap">
+            <table>
+                <thead><tr>
+                    <th style="text-align:start">{{ __('kpi.c_name') }}</th>
+                    <th class="num">{{ __('kpi.c_collections') }}</th>
+                    <th class="num">{{ __('kpi.c_ach') }}<div class="eqh">{{ __('uib.kpi_h_ach') }}</div></th>
+                    <th>{{ __('kpi.c_gate') }}</th>
+                    <th class="num">{{ __('kpi.c_score') }}</th>
+                    <th class="num">{{ __('kpi.c_base_rate') }}</th>
+                    <th class="num">{{ __('kpi.c_base') }}<div class="eqh">{{ __('uib.kpi_h_base') }}</div></th>
+                    <th class="num">{{ __('kpi.c_mult') }}</th>
+                    <th class="num">{{ __('kpi.c_after') }}<div class="eqh">{{ __('uib.kpi_h_after') }}</div></th>
+                    <th class="num">{{ __('kpi.c_kpi') }}</th>
+                    <th class="num">{{ __('kpi.c_final') }}<div class="eqh">{{ __('uib.kpi_h_final') }}</div></th>
+                    <th class="num">{{ __('kpi.c_actual') }}<div class="eqh">{{ __('uib.kpi_h_actual') }}</div></th>
+                </tr></thead>
+                <tbody>
+                @forelse ($c['reps'] as $r)
+                    <tr class="kpi-row" onclick="kpiDetail({{ json_encode([
+                        'name' => $r['rep']->displayName(),
+                        'ratios' => collect($r['ratios'])->map(fn ($v) => $v === null ? null : round((float) $v, 4)),
+                        'points' => collect($r['points'])->map(fn ($v) => round((float) $v, 2)),
+                        'metrics' => $result['rep_metrics']->mapWithKeys(fn ($m) => [$m->key => [
+                            'name' => $m->displayName(), 'weight' => (float) $m->weight,
+                            'target' => $m->targetFor($ch->id), 'dir' => $m->direction]]),
+                    ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) }})">
+                        <td style="text-align:start"><a href="{{ route('ops.rep', $r['rep']->id) }}" onclick="event.stopPropagation()"><b>{{ $r['rep']->displayName() }}</b></a>
+                            <div class="s" style="color:var(--muted)">{{ $r['rep']->roleLabel() }}</div></td>
+                        <td class="num" dir="ltr">{{ $fmt($r['data']['collections']) }}</td>
+                        <td class="num" dir="ltr">{{ $pct($r['achievement']) }}
+                            <div class="s" style="color:var(--muted);font-size:9.5px">{{ $fmt($r['data']['collections']) }} ÷ {{ $fmt($ch->rep_gate) }}</div></td>
+                        <td><span class="badge {{ $r['cleared'] ? 'b-green' : 'b-red' }}">
+                            {{ $r['cleared'] ? __('kpi.cleared') : __('kpi.missed') }}</span></td>
+                        <td class="num"><b class="{{ $r['score'] >= $result['policy']['min_score'] ? 'pos' : ($r['score'] < 50 ? 'neg' : 'mid') }}"
+                            >{{ $r['score'] }}</b><span class="s" style="color:var(--muted)">/100</span></td>
+                        <td class="num" dir="ltr">{{ $pct($r['base_rate'], 2) }}</td>
+                        <td class="num" dir="ltr">{{ $f2($r['base_value']) }}</td>
+                        <td class="num" dir="ltr">×{{ $r['multiplier'] }}</td>
+                        <td class="num" dir="ltr">{{ $f2($r['after_perf']) }}</td>
+                        <td class="num" dir="ltr">{{ $r['eligible'] ? $f2($r['kpi_earned']) : '0.00' }}
+                            @unless ($r['eligible'])<span class="badge b-gray" style="font-size:9px">{{ __('kpi.not_eligible') }}</span>@endunless</td>
+                        <td class="num pos" dir="ltr"><b>{{ $f2($r['final']) }}</b></td>
+                        <td class="num" dir="ltr">{{ $pct($r['actual_rate'], 2) }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:20px">{{ __('kpi.no_reps') }}</td></tr>
+                @endforelse
+                </tbody>
+                {{-- المدير والمدير العام ورؤوس الإجماليات --}}
+                {{-- ⚠️ (٢٢/٩) الصفين دول **مش مجموع** عمود المناديب: «العمولة الأساسية» بتاعتهم = تحصيل القناة × نسبة المدير نفسه --}}
+                <tfoot>
+                @foreach (['manager' => $c['manager'], 'director' => $c['director']] as $role => $r)
+                    <tr class="kpi-leader">
+                        <td style="text-align:start">
+                            <span class="badge {{ $role === 'manager' ? 'b-purple' : 'b-blue' }}">{{ __('kpi.role_'.$role) }}</span>
+                            <b>{{ $role === 'manager' ? ($ch->manager?->displayName() ?? '—') : __('kpi.role_director') }}</b>
+                        </td>
+                        <td class="num" dir="ltr">{{ $fmt($r['collections']) }}</td>
+                        <td class="num" dir="ltr">{{ $pct($r['achievement']) }}
+                            <div class="s" style="color:var(--muted);font-size:9.5px">{{ $fmt($r['collections']) }} ÷ {{ $fmt($role === 'manager' ? $ch->manager_gate : $ch->director_gate) }}</div></td>
+                        <td><span class="badge {{ $r['cleared'] ? 'b-green' : 'b-red' }}">
+                            {{ $r['cleared'] ? __('kpi.cleared') : __('kpi.missed') }}</span></td>
+                        <td class="num"><b>{{ $r['score'] }}</b><span class="s" style="color:var(--muted)">/100</span></td>
+                        <td class="num" dir="ltr">{{ $pct($r['base_rate'], 2) }}</td>
+                        <td class="num" dir="ltr">{{ $f2($r['base_value']) }}</td>
+                        <td class="num" dir="ltr">×{{ $r['multiplier'] }}</td>
+                        <td class="num" dir="ltr">{{ $f2($r['after_perf']) }}</td>
+                        <td class="num" dir="ltr">{{ $f2($r['kpi_earned']) }}</td>
+                        <td class="num pos" dir="ltr"><b>{{ $f2($r['final']) }}</b></td>
+                        <td class="num" dir="ltr">{{ $pct($r['actual_rate'], 2) }}</td>
+                    </tr>
+                @endforeach
+                </tfoot>
+            </table>
+        </div>
+        <div class="dash-hint">{{ __('kpi.row_hint') }}</div>
+    </div>
+@endforeach
+
+{{-- (٢٢/٩) المدخلات اتنقلت تحت النتائج: بتتكتب مرة في الشهر، والنتيجة هي اللي بتتفتح كل يوم --}}
 {{-- ═══ المدخلات اليدوية الشهرية ═══ --}}
 <div class="card">
     <h3>✍️ {{ __('kpi.inputs_title') }} <span class="side">{{ __('kpi.inputs_sub') }}</span></h3>
@@ -149,95 +246,6 @@
     </form>
 </div>
 
-{{-- ═══ قناة قناة ═══ --}}
-@foreach ($result['channels'] as $c)
-    @php $ch = $c['channel']; @endphp
-    <div class="card">
-        <h3>🎯 {{ $ch->displayName() }}
-            <span class="side">
-                {{ __('kpi.ch_summary', [
-                    'gate' => $fmt($ch->rep_gate),
-                    'cost' => number_format($ch->maxBaseCost() * 100, 2),
-                ]) }}
-            </span>
-        </h3>
-
-        {{-- المناديب --}}
-        <div class="tablewrap kpi-wrap">
-            <table>
-                <thead><tr>
-                    <th style="text-align:start">{{ __('kpi.c_name') }}</th>
-                    <th class="num">{{ __('kpi.c_collections') }}</th>
-                    <th class="num">{{ __('kpi.c_ach') }}</th>
-                    <th>{{ __('kpi.c_gate') }}</th>
-                    <th class="num">{{ __('kpi.c_score') }}</th>
-                    <th class="num">{{ __('kpi.c_base_rate') }}</th>
-                    <th class="num">{{ __('kpi.c_base') }}</th>
-                    <th class="num">{{ __('kpi.c_mult') }}</th>
-                    <th class="num">{{ __('kpi.c_after') }}</th>
-                    <th class="num">{{ __('kpi.c_kpi') }}</th>
-                    <th class="num">{{ __('kpi.c_final') }}</th>
-                    <th class="num">{{ __('kpi.c_actual') }}</th>
-                </tr></thead>
-                <tbody>
-                @forelse ($c['reps'] as $r)
-                    <tr class="kpi-row" onclick="kpiDetail({{ json_encode([
-                        'name' => $r['rep']->displayName(),
-                        'ratios' => collect($r['ratios'])->map(fn ($v) => $v === null ? null : round((float) $v, 4)),
-                        'points' => collect($r['points'])->map(fn ($v) => round((float) $v, 2)),
-                        'metrics' => $result['rep_metrics']->mapWithKeys(fn ($m) => [$m->key => [
-                            'name' => $m->displayName(), 'weight' => (float) $m->weight,
-                            'target' => $m->targetFor($ch->id), 'dir' => $m->direction]]),
-                    ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) }})">
-                        <td style="text-align:start"><a href="{{ route('ops.rep', $r['rep']->id) }}" onclick="event.stopPropagation()"><b>{{ $r['rep']->displayName() }}</b></a>
-                            <div class="s" style="color:var(--muted)">{{ $r['rep']->roleLabel() }}</div></td>
-                        <td class="num" dir="ltr">{{ $fmt($r['data']['collections']) }}</td>
-                        <td class="num" dir="ltr">{{ $pct($r['achievement']) }}</td>
-                        <td><span class="badge {{ $r['cleared'] ? 'b-green' : 'b-red' }}">
-                            {{ $r['cleared'] ? __('kpi.cleared') : __('kpi.missed') }}</span></td>
-                        <td class="num"><b class="{{ $r['score'] >= $result['policy']['min_score'] ? 'pos' : ($r['score'] < 50 ? 'neg' : 'mid') }}"
-                            >{{ $r['score'] }}</b><span class="s" style="color:var(--muted)">/100</span></td>
-                        <td class="num" dir="ltr">{{ $pct($r['base_rate'], 2) }}</td>
-                        <td class="num" dir="ltr">{{ $f2($r['base_value']) }}</td>
-                        <td class="num" dir="ltr">×{{ $r['multiplier'] }}</td>
-                        <td class="num" dir="ltr">{{ $f2($r['after_perf']) }}</td>
-                        <td class="num" dir="ltr">{{ $r['eligible'] ? $f2($r['kpi_earned']) : '0.00' }}
-                            @unless ($r['eligible'])<span class="badge b-gray" style="font-size:9px">{{ __('kpi.not_eligible') }}</span>@endunless</td>
-                        <td class="num pos" dir="ltr"><b>{{ $f2($r['final']) }}</b></td>
-                        <td class="num" dir="ltr">{{ $pct($r['actual_rate'], 2) }}</td>
-                    </tr>
-                @empty
-                    <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:20px">{{ __('kpi.no_reps') }}</td></tr>
-                @endforelse
-                </tbody>
-                {{-- المدير والمدير العام ورؤوس الإجماليات --}}
-                <tfoot>
-                @foreach (['manager' => $c['manager'], 'director' => $c['director']] as $role => $r)
-                    <tr class="kpi-leader">
-                        <td style="text-align:start">
-                            <span class="badge {{ $role === 'manager' ? 'b-purple' : 'b-blue' }}">{{ __('kpi.role_'.$role) }}</span>
-                            <b>{{ $role === 'manager' ? ($ch->manager?->displayName() ?? '—') : __('kpi.role_director') }}</b>
-                        </td>
-                        <td class="num" dir="ltr">{{ $fmt($r['collections']) }}</td>
-                        <td class="num" dir="ltr">{{ $pct($r['achievement']) }}</td>
-                        <td><span class="badge {{ $r['cleared'] ? 'b-green' : 'b-red' }}">
-                            {{ $r['cleared'] ? __('kpi.cleared') : __('kpi.missed') }}</span></td>
-                        <td class="num"><b>{{ $r['score'] }}</b><span class="s" style="color:var(--muted)">/100</span></td>
-                        <td class="num" dir="ltr">{{ $pct($r['base_rate'], 2) }}</td>
-                        <td class="num" dir="ltr">{{ $f2($r['base_value']) }}</td>
-                        <td class="num" dir="ltr">×{{ $r['multiplier'] }}</td>
-                        <td class="num" dir="ltr">{{ $f2($r['after_perf']) }}</td>
-                        <td class="num" dir="ltr">{{ $f2($r['kpi_earned']) }}</td>
-                        <td class="num pos" dir="ltr"><b>{{ $f2($r['final']) }}</b></td>
-                        <td class="num" dir="ltr">{{ $pct($r['actual_rate'], 2) }}</td>
-                    </tr>
-                @endforeach
-                </tfoot>
-            </table>
-        </div>
-        <div class="dash-hint">{{ __('kpi.row_hint') }}</div>
-    </div>
-@endforeach
 
 {{-- ═══ مودال تفاصيل مؤشرات مندوب ═══ --}}
 <dialog id="dlgKpi">
@@ -269,6 +277,8 @@
 .kpi-wrap thead th{position:sticky;top:0;z-index:3;background:var(--royal-blue);color:#fff}
 .kpi-row{cursor:pointer}
 .kpi-row:hover td{background:var(--blue-050)}
+.kpi-wrap th{white-space:normal}
+.kpi-wrap th .eqh{font-size:9.5px;font-weight:500;opacity:.85;line-height:1.3;margin-top:2px}
 .kpi-leader td{background:var(--card2);font-weight:800;border-top:2px solid var(--royal-blue)}
 </style>
 <script>

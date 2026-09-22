@@ -32,6 +32,8 @@
     $cur = __('common.currency');
     $lists = \App\Support\CustodyValue::lists();
     $T = $drill['totals'];
+    // (٢٢/٩) سطر معادلة LTR: علامة اتجاه بعد كل كلمة عربي عشان الأرقام ماتتشقلبش
+    $eq = fn (string $key, array $p = []) => preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __($key, $p));
 
     // ⚠️ **الأزرار متحرسة بمفاتيح أكشناتها** — زرار بيودّي لـ403 أسوأ
     // من زرار مش موجود. القفل على `act.field.decide` (راوته
@@ -141,6 +143,8 @@
 .lnk{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;
      text-decoration:underline dotted;text-underline-offset:3px}
 .lnk:hover{color:var(--royal-blue, #12399B)}
+/* (٢٢/٩) سطر المعادلة تحت الكارت — بلوك LTR واحد عشان ترتيب الأرقام مايتعكسش لما يلف */
+.sub2 span[dir=ltr]{display:inline-block;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
 
 /* ═══ هيدر الكارت + علامة الصاعقة ═══
    الصورة `position:absolute` فمابتاخدش مساحة في التدفق خالص —
@@ -237,16 +241,48 @@ a.src-ref:hover{text-decoration-style:solid}
     <div class="kpi" data-explain onclick="rcGo('rcCustody')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">📦 {{ __('ops.van_stock_left') }}</div>
         <div class="val">{{ $fm($T['remaining']) }}</div>
+        {{-- (٢٢/٩) كل كارت بيقول رقمه اتبنى إزاي — بنفس أرقام معادلة العهدة تحت --}}
+        <div class="sub2" title="{{ __('uic.rep_custody_other') }}"><span dir="ltr">{{ $eq('uic.rep_custody_eq', ['t' => $fm($T['remaining']), 'l' => $fm($T['loaded']), 's' => $fm($T['sold']), 'o' => $fm($T['loaded'] - $T['sold'] - $T['remaining'])]) }}</span></div>
         <div class="sub2">@include('partials._list_values', ['totals' => $custodyValues])</div>
+        <div class="sub2">{{ __('uic.rep_custody_val') }}</div>
     </div>
+    {{-- (٢٢/٩) اللي على المندوب الأول (بضاعة ثم فلوس) — وبعده أرقام الفترة --}}
+    <div class="kpi" data-explain onclick="rcGo('rcSettle')" title="{{ __('ui.click_to_explain') }}">
+        <div class="lbl">🧮 {{ __('ops.rc_k_balance') }}</div>
+        <div class="val {{ (float) ($lastSettle->balance ?? 0) > 0 ? 'neg' : 'pos' }}">
+            {{ $fm2($lastSettle->balance ?? 0) }} {{ $cur }}</div>
+        <div class="sub2">{{ $lastSettle ? $dtm($lastSettle->to_at) : __('ops.rc_s_none') }}</div>
+        @if ($lastSettle)
+            <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_bal_eq', [
+                't' => $fm2($lastSettle->balance),
+                'p' => $fm2($lastSettle->prev_balance),
+                'd' => $fm2((float) $lastSettle->balance - (float) $lastSettle->prev_balance + (float) $lastSettle->received),
+                'r' => $fm2($lastSettle->received),
+            ]) }}</span></div>
+        @endif
+        <div class="sub2">{{ __('uic.rep_bal_scope') }}</div>
+    </div>
+    {{-- (٢٢/٩) الكاش اللي على المندوب **دلوقتي** — نفس حساب شاشة التصفية بالحرف (`cashDueFor`)،
+         مش رقم الفترة: من آخر تصفية لحد اللحظة --}}
+    <a class="kpi" href="{{ route('erp.repclose.show', $u) }}">
+        <div class="lbl">💵 {{ __('uic.rep_cash_due') }}</div>
+        <div class="val {{ $cashDue['due_total'] > 0 ? 'neg' : 'pos' }}">{{ $fm2($cashDue['due_total']) }} {{ $cur }}</div>
+        <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_cash_due_eq', [
+            't' => $fm2($cashDue['due_total']), 'p' => $fm2($cashDue['prev_balance']), 's' => $fm2($cashDue['cash_sales']),
+            'c' => $fm2($cashDue['cash_collections']), 'r' => $fm2($cashDue['cash_refunds']),
+        ]) }}</span></div>
+        <div class="sub2">{{ $cashDue['from_at'] ? __('uic.rep_cash_due_since', ['d' => $dtm($cashDue['from_at'])]) : __('uic.rep_cash_due_never') }}</div>
+    </a>
     <div class="kpi" data-explain onclick="rcGo('rcInvoices')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">💰 {{ __('ops.rc_k_sales') }}</div>
         {{-- (٢٢/٩) الرقم من كشف الحساب — نفس رقم المندوب في الرئيسية والتقارير --}}
         <div class="val pos">{{ $fm2($ledgerSales->total) }} {{ $cur }}</div>
-        <div class="sub2">{{ __('ops.rc_k_sales_sub', [
+        <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_sales_eq', [
+            't' => $fm2($ledgerSales->total),
             'inv' => $fm2($ledgerSales->total - $ledgerSales->po),
             'po' => $fm2($ledgerSales->po),
-        ]) }}</div>
+        ]) }}</span></div>
+        <div class="sub2">{{ __('uic.rep_sales_scope') }}</div>
         @if (abs($salesTotal - (float) $ledgerSales->total) >= 0.01)
             <div class="sub2" title="{{ __('uic.docs_vs_ledger_hint') }}">{{ __('uic.docs_vs_ledger', ['v' => $fm2($salesTotal)]) }}</div>
         @endif
@@ -254,10 +290,12 @@ a.src-ref:hover{text-decoration-style:solid}
     <div class="kpi" data-explain onclick="rcGo('rcColl')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">💵 {{ __('ops.rc_k_collect') }}</div>
         <div class="val">{{ $fm2($collTotal) }} {{ $cur }}</div>
-        <div class="sub2">{{ __('ops.rc_k_collect_sub', [
+        <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_coll_eq', [
+            't' => $fm2($collTotal),
             'cash' => $fm2($collCash),
             'other' => $fm2(round($collTotal - $collCash, 2)),
-        ]) }}</div>
+        ]) }}</span></div>
+        <div class="sub2">{{ __('uic.rep_coll_scope', ['n' => (int) ($collAgg->n ?? 0)]) }}</div>
     </div>
     <div class="kpi" data-explain onclick="rcGo('rcRet')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">↩️ {{ __('ops.rc_k_returns') }}</div>
@@ -266,22 +304,18 @@ a.src-ref:hover{text-decoration-style:solid}
             'good' => (int) ($retAgg->good ?? 0),
             'damaged' => (int) ($retAgg->damaged ?? 0),
         ]) }}</div>
+        <div class="sub2">{{ __('uic.rep_ret_scope', ['n' => (int) ($retAgg->n ?? 0)]) }}</div>
     </div>
     <div class="kpi" data-explain onclick="rcGo('rcVisits')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">🚪 {{ __('ops.visits') }}</div>
         <div class="val">{{ $visitsDone }}/{{ $visitsAll }}</div>
+        <div class="sub2">{{ __('uic.rep_visits_scope', ['done' => $visitsDone, 'all' => $visitsAll, 'open' => $visitsAll - $visitsDone]) }}</div>
         <div class="sub2">{{ __('ops.rc_k_plan', ['done' => $plan['done'], 'planned' => $plan['planned']]) }}</div>
     </div>
     <div class="kpi" data-explain onclick="location.href='{{ route('ops.tracking', ['user' => $u->id, 'date' => $to]) }}'" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">🛣️ {{ __('ops.rc_k_km') }}</div>
         <div class="val">{{ $fm2($km) }}</div>
         <div class="sub2">{{ __('ops.rc_k_km_hint') }}</div>
-    </div>
-    <div class="kpi" data-explain onclick="rcGo('rcSettle')" title="{{ __('ui.click_to_explain') }}">
-        <div class="lbl">🧮 {{ __('ops.rc_k_balance') }}</div>
-        <div class="val {{ (float) ($lastSettle->balance ?? 0) > 0 ? 'neg' : 'pos' }}">
-            {{ $fm2($lastSettle->balance ?? 0) }} {{ $cur }}</div>
-        <div class="sub2">{{ $lastSettle ? $dtm($lastSettle->to_at) : __('ops.rc_s_none') }}</div>
     </div>
 </div>
 
@@ -964,24 +998,28 @@ a.src-ref:hover{text-decoration-style:solid}
             <div class="lbl">📈 {{ __('ops.rc_p_pct') }}</div>
             <div class="val {{ $perf['money_pct'] >= 100 ? 'pos' : ($perf['money_pct'] >= 60 ? 'mid' : 'neg') }}">
                 {{ number_format((float) $perf['money_pct'], 1) }}%</div>
+            <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_pct_eq', ['p' => number_format((float) $perf['money_pct'], 1), 'a' => $fm2($perf['net_sales']), 't' => $fm2($perf['target']->money_target ?? 0)]) }}</span></div>
             <div class="sub2">{{ __('ops.rc_p_commission') }}: {{ $fm2($perf['commission']) }} {{ $cur }}</div>
         </div>
         <div class="kpi" data-explain onclick="rcGo('rcCustody')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">📤 {{ __('ops.rc_p_drain') }}</div>
             <div class="val">{{ $drainPct }}%</div>
+            <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_drain_eq', ['p' => $drainPct, 'l' => $fm($T['loaded']), 'r' => $fm($T['remaining'] + $T['gift_left'])]) }}</span></div>
             <div class="sub2">{{ __('ops.rc_p_drain_hint') }}</div>
         </div>
         <div class="kpi" data-explain onclick="rcGo('rcInvoices')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">🧾 {{ __('ops.rc_p_avg_invoice') }}</div>
             <div class="val">{{ $fm2($avgInvoice) }} {{ $cur }}</div>
-            <div class="sub2">{{ __('ops.rc_count_value', [
-                'n' => (int) ($invAgg->n ?? 0), 'v' => $fm2($invAgg->grand ?? 0),
-            ]) }}</div>
+            <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_avg_eq', ['v' => $fm2($avgInvoice), 'g' => $fm2($invAgg->grand ?? 0), 'n' => (int) ($invAgg->n ?? 0)]) }}</span></div>
         </div>
         <div class="kpi" data-explain onclick="rcGo('rcVisits')" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">🏬 {{ __('ops.rc_p_clients_seen') }}</div>
             <div class="val">{{ $fm($clientsSeen) }}</div>
             <div class="sub2">{{ __('ops.rc_p_clients_missed', ['n' => $fm($clientsMissed)]) }}</div>
+            {{-- المعادلة بتتكتب بس لما تقفل (ممكن يزور عملاء مش بتوعه) --}}
+            @if ($myClients >= $clientsSeen)
+                <div class="sub2"><span dir="ltr">{{ $eq('uic.rep_seen_eq', ['m' => $fm($clientsMissed), 'c' => $fm($myClients), 's' => $fm($clientsSeen)]) }}</span></div>
+            @endif
         </div>
         <div class="kpi" data-explain onclick="location.href='{{ route('erp.performance') }}'" title="{{ __('ui.click_to_explain') }}">
             <div class="lbl">⭐ {{ __('ops.rc_p_points') }}</div>

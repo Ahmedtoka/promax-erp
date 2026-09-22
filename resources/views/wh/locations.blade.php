@@ -70,22 +70,25 @@
     <a class="kpi" href="#shMap">
         <div class="lbl">{{ __('stock.shelf_count') }}</div>
         <div class="val">{{ $fmt($locations->count()) }}</div>
-        <div class="sub2">{{ $warehouse->displayName() }}</div>
+        {{-- عدد الأرفف = مشغول + فاضي — بالأرقام (٢٢/٩) --}}
+        <div class="sub2">{{ $warehouse->displayName() }}<br><span dir="ltr">{{ $fmt($locations->count()) }} = {{ __('stock.occupied') }} {{ $fmt($occupied) }} + {{ __('stock.empty_shelf') }} {{ $fmt(max($locations->count() - $occupied, 0)) }}</span></div>
     </a>
     <a class="kpi" href="#shMap">
         <div class="lbl">{{ __('stock.occupied') }}</div>
         <div class="val">{{ $fmt($occupied) }}</div>
-        <div class="sub2">{{ __('stock.empty_shelf') }}: {{ $fmt(max($locations->count() - $occupied, 0)) }}</div>
+        <div class="sub2">{{ __('uid.loc_occ_how') }} — {{ __('stock.empty_shelf') }}: {{ $fmt(max($locations->count() - $occupied, 0)) }}</div>
     </a>
     <a class="kpi" href="#slList">
         <div class="lbl">{{ __('stock.total_on_shelves') }}</div>
         <div class="val pos">{{ $fmt($totalOnShelves) }}</div>
-        <div class="sub2">{{ __('stock.units') }}</div>
+        <div class="sub2">{{ __('uid.loc_total_how') }}</div>
     </a>
 </div>
 
 <div class="card" id="shMap">
-    <h3>🗄️ {{ __('stock.shelf_map') }} <span class="side">{{ __('stock.map_hint') }}</span></h3>
+    {{-- الشرح الطويل كان جوه العنوان فبيكسره على سطرين — نزل تحته (٢٢/٩) --}}
+    <h3>🗄️ {{ __('stock.shelf_map') }}</h3>
+    <div class="dash-hint" style="margin-bottom:10px">{{ __('stock.map_hint') }}</div>
 
     {{-- البحث بيضوّي على الأرفف المطابقة في الخريطة (سيرفر سايد) --}}
     <form class="searchbar" method="GET">

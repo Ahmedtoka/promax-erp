@@ -41,7 +41,7 @@
             <div class="frow">
                 <div>
                     <label class="f">{{ __('online.shop_domain') }}</label>
-                    <input name="shopify_domain" value="{{ $settings['shopify_domain'] ?? '' }}"
+                    <input type="text" name="shopify_domain" value="{{ $settings['shopify_domain'] ?? '' }}"
                            placeholder="xxxx.myshopify.com" dir="ltr">
                 </div>
                 <div>
@@ -53,7 +53,7 @@
                 </div>
                 <div>
                     <label class="f">{{ __('online.api_version') }}</label>
-                    <input name="shopify_api_version" value="{{ $settings['shopify_api_version'] ?? '2025-01' }}" dir="ltr">
+                    <input type="text" name="shopify_api_version" value="{{ $settings['shopify_api_version'] ?? '2025-01' }}" dir="ltr">
                 </div>
                 <div>
                     <label class="f">{{ __('online.warehouse') }}</label>
@@ -77,7 +77,7 @@
             @csrf
             <b style="font-size:12px;color:#B42318">🧨 {{ __('online.reset_btn') }}</b>
             <span class="dash-hint" style="flex:1;min-width:240px">{{ __('online.reset_hint') }}</span>
-            <input name="confirm_word" placeholder="RESET" required autocomplete="off"
+            <input type="text" name="confirm_word" placeholder="RESET" required autocomplete="off"
                    style="width:110px;text-align:center" dir="ltr">
             <button class="btn red" type="submit" onclick="return confirm(RESET_MSG)">
                 🧨 {{ __('online.reset_btn') }}</button>
@@ -88,10 +88,16 @@
 {{-- ═══ الهيدر: العدادات + زرار السينك ═══ --}}
 <div class="kpis">
     {{-- العدادات بتفتح «كل الأوردرات» بنفس الحالة — والمؤجل اللي جه يومه طافي فوق في الجدول تحت (٢٢/٩) --}}
-    <a class="kpi" href="{{ route('online.orders', ['status' => 'new']) }}"><b class="num">{{ $counts['new'] }}</b><span>{{ __('online.k_new') }}</span></a>
-    <a class="kpi" href="{{ route('online.orders', ['status' => 'postponed']) }}"><b class="num">{{ $counts['postponed'] }}</b><span>{{ __('online.k_postponed') }}</span></a>
-    <a class="kpi" href="#syncList"><b class="num {{ $counts['due_today'] > 0 ? 'mid' : '' }}">{{ $counts['due_today'] }}</b>
-        <span>{{ __('online.k_due_today') }}</span></a>
+    {{-- ماركب الكروت الموحّد + سطر شرح لكل عداد (٢٢/٩) --}}
+    <a class="kpi" href="{{ route('online.orders', ['status' => 'new']) }}">
+        <div class="lbl">{{ __('online.k_new') }}</div><div class="val">{{ $counts['new'] }}</div>
+        <div class="sub2">{{ __('uid.os_new_how') }}</div></a>
+    <a class="kpi" href="{{ route('online.orders', ['status' => 'postponed']) }}">
+        <div class="lbl">{{ __('online.k_postponed') }}</div><div class="val">{{ $counts['postponed'] }}</div>
+        <div class="sub2">{{ __('uid.os_post_how') }}</div></a>
+    <a class="kpi" href="#syncList">
+        <div class="lbl">{{ __('online.k_due_today') }}</div><div class="val {{ $counts['due_today'] > 0 ? 'mid' : '' }}">{{ $counts['due_today'] }}</div>
+        <div class="sub2">{{ __('uid.os_due_how', ['n' => $counts['postponed']]) }}</div></a>
 </div>
 
 <div class="card" id="syncList">
@@ -133,7 +139,7 @@
                     <td class="num s" dir="ltr">{{ $o->phone ?: '—' }}</td>
                     <td class="s">{{ $o->area ?: '—' }}</td>
                     <td class="num">{{ $o->items_count }}</td>
-                    <td style="max-width:260px">
+                    <td style="min-width:230px;max-width:280px;white-space:normal">
                         @foreach ($o->items as $i)
                             <div style="font-size:11px">
                                 {{ $i->qty }} × {{ $i->product?->displayName() ?? $i->title }}
@@ -167,7 +173,8 @@
                     </td>
                     <td class="num">
                         @if ($canAct)
-                            <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+                            {{-- الزراير كانت بتتقص على طرف الجدول: عمود واحد بعرض ثابت بدل لفّ بيضيّق الخانة (٢٢/٩) --}}
+                            <div style="display:flex;gap:4px;flex-direction:column;align-items:stretch;min-width:104px;white-space:nowrap">
                                 <form method="POST" action="{{ route('online.confirm', $o) }}"
                                       onsubmit="return confirm(CONFIRM_MSG)">
                                     @csrf
@@ -239,7 +246,7 @@
         @csrf
         <h4>✖ {{ __('online.cancel_title') }} <span id="ccNum"></span></h4>
         <label class="f">{{ __('online.cancel_reason') }}</label>
-        <input name="reason" required maxlength="250" style="width:100%;margin-bottom:12px">
+        <input type="text" name="reason" required maxlength="250" style="width:100%;margin-bottom:12px">
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgCancel')">{{ __('common.cancel') }}</button>
             <button class="btn red" type="submit">✖ {{ __('online.act_cancel') }}</button>

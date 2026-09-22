@@ -28,10 +28,17 @@
 {{-- ═══ السامري — من نفس صفوف الجدول (نطاق واحد) ═══ --}}
 <div class="kpis" style="margin-bottom:14px">
     {{-- (٢٢/٩) كل كارت بيفتح الشاشة اللي بتفصّل رقمه بنفس النافذة --}}
-    <a class="kpi" href="{{ route('ops.open_visits') }}"><div class="lbl">🟢 {{ __('field.board_kpi_working') }}</div><div class="val" style="color:#16A34A">{{ $kpi['working'] }}</div></a>
-    <a class="kpi" href="{{ route('ops.vans', ['state' => 'open']) }}"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val">{{ $kpi['open_vans'] }}</div></a>
-    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">💵 {{ __('field.board_kpi_sales') }}</div><div class="val">{{ $fmt($kpi['sales']) }}</div></a>
-    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">🧾 {{ __('uic.board_field_colls') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['collections']) }}</div></a>
+    <a class="kpi" href="{{ route('ops.open_visits') }}"><div class="lbl">🟢 {{ __('field.board_kpi_working') }}</div><div class="val" style="color:#16A34A">{{ $kpi['working'] }}</div>
+        <div class="sub2">{{ __('uic.rb_working_sub', ['n' => $rows->count()]) }}</div></a>
+    <a class="kpi" href="{{ route('ops.vans', ['state' => 'open']) }}"><div class="lbl">🚐 {{ __('field.vans_open') }}</div><div class="val">{{ $kpi['open_vans'] }}</div>
+        <div class="sub2">{{ __('uic.rb_vans_sub', ['u' => $fmt($rows->where('state', 'open')->sum('remaining')), 'v' => $fmt($rows->where('state', 'open')->sum('remaining_value'))]) }}</div></a>
+    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">💵 {{ __('field.board_kpi_sales') }}</div><div class="val">{{ $fmt($kpi['sales']) }}</div>
+        {{-- (٢٢/٩) المعادلة من نفس صفوف الجدول: كاش + آجل (فواتير + توريدات متسلمة) --}}
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rb_sales_eq', ['t' => $fmt($kpi['sales']), 'c' => $fmt($rows->sum('cash')), 'r' => $fmt($kpi['sales'] - round($rows->sum('cash'), 2))])) }}</span></div>
+        <div class="sub2">{{ __('uic.rb_sales_sub') }}</div></a>
+    <a class="kpi" href="{{ route('ops.sales', ['from' => $from, 'to' => $to]) }}"><div class="lbl">🧾 {{ __('uic.board_field_colls') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['collections']) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rb_coll_eq', ['t' => $fmt($kpi['collections']), 'c' => $fmt($rows->sum('coll_cash')), 'o' => $fmt($kpi['collections'] - round($rows->sum('coll_cash'), 2))])) }}</span></div>
+        <div class="sub2">{{ __('uic.rb_coll_sub') }}</div></a>
 </div>
 
 <div class="card">

@@ -31,6 +31,12 @@
 {{-- ═══ السامري — من نفس صفوف الجدول (نطاق واحد) ═══ --}}
 {{-- (٢٢/٩) كل كارت هو مجموع عمود في الجدول تحت — الدوسة بتنزل على تفصيلته بالمندوب --}}
 <div class="kpis" style="margin-bottom:14px">
+    {{-- (٢٢/٩) أهم رقم للمشرف: النقدية اللي المفروض مع المناديب — كان عمود من غير كارت --}}
+    @php $netCash = round($kpi['cash'] + $kpi['coll_cash'] - $kpi['refunds'], 2); @endphp
+    <a class="kpi" href="#salesTable" title="{{ __('field.sales_net_hint') }}"><div class="lbl">🧮 {{ __('field.sales_net') }}</div>
+        <div class="val" style="color:var(--royal-blue,#12399B)">{{ $fmt($netCash) }}</div>
+        <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.rs_net_eq', ['t' => $fmt($netCash), 'a' => $fmt($kpi['cash']), 'b' => $fmt($kpi['coll_cash']), 'c' => $fmt($kpi['refunds'])])) }}</span></div>
+        <div class="sub2">{{ __('uic.rs_net_sub') }}</div></a>
     <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_cash')]) }}"><div class="lbl">💵 {{ __('field.sales_kpi_cash') }}</div><div class="val" style="color:#16A34A">{{ $fmt($kpi['cash']) }}</div>
         <div class="sub2">{{ __('uic.sum_of_col', ['col' => __('field.sales_cash')]) }}</div></a>
     <a class="kpi" href="#salesTable" title="{{ __('uic.sum_of_col', ['col' => __('field.sales_credit')]) }}"><div class="lbl">🧾 {{ __('field.sales_kpi_credit') }}</div><div class="val">{{ $fmt($kpi['credit']) }}</div>

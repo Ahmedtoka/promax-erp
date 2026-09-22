@@ -84,7 +84,7 @@
             @endif
         </table>
     </div>
-    <div class="pag">{{ $orders->links('pagination::simple-default') }}</div>
+    @include('partials._pagination', ['p' => $orders])
 </div>
 
 @endsection

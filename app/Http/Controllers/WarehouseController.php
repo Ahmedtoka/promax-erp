@@ -53,6 +53,13 @@ class WarehouseController extends Controller
                 ->with(['fromWarehouse', 'items'])->get(),
             'receipts' => $warehouse->receipts()->with('batches.product')->take(10)->get(),
             'locationCount' => $warehouse->locations()->count(),
+            // أوامر التجهيز المفتوحة على المخزن ده (٢٢/٩) — أول حاجة الأمين بيسأل عنها
+            // ومكانتش ظاهرة في شاشته الأولى خالص.
+            // من غير الأونلاين — زي قايمة «أوامر التجهيز» اللي الزرار بيفتحها، والأونلاين ليه عداده
+            'openPicks' => \App\Models\PickOrder::where('warehouse_id', $warehouse->id)->open()
+                ->where('purpose', '!=', \App\Models\PickOrder::PURPOSE_ONLINE)->count(),
+            'openOnlinePicks' => \App\Models\PickOrder::where('warehouse_id', $warehouse->id)->open()
+                ->where('purpose', \App\Models\PickOrder::PURPOSE_ONLINE)->count(),
             // للترصيف المباشر من الشاشة — باتشات الاستيراد القديمة مالهاش إذن
             // ⚠️ `reorder()` — العلاقة عليها `stand` ثم `level`، وإضافة
             // `code` عليهم كانت بتتجاهل وترتّب بالحامل. القايمة دي
@@ -85,7 +92,14 @@ class WarehouseController extends Controller
         $range = DateRange::fromRequest($request);
 
         // أساس واحد للجدول والإجمالي والتصدير (٢٢/٩) — القايمة صفحات
+        // بحث برقم الإذن / المورد / المرجع / رقم الباتش (٢٢/٩) — القايمة كانت من غير أي بحث
+        $term = $request->string('q')->trim()->value();
         $base = fn () => GoodsReceipt::where('warehouse_id', $warehouse?->id)
+            ->when($term !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->where('number', 'like', "%$term%")
+                ->orWhere('supplier', 'like', "%$term%")
+                ->orWhere('reference', 'like', "%$term%")
+                ->orWhereHas('batches', fn ($b) => $b->where('batch_no', 'like', "%$term%"))))
             ->tap(fn ($q) => $range->apply($q, 'received_on'));
 
         if ($request->boolean('export')) {

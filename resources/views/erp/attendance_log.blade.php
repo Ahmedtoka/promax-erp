@@ -40,12 +40,17 @@
 
 {{-- (٢٢/٩) الكروت بتفسّر رقمها: الساعات مفرودة بالموظف (مجموعها = إجمالي الساعات) --}}
 @php $byEmp = $rows->groupBy('user_id')->map(fn ($g) => [
-    'user' => $g->first()->user, 'days' => $g->count(), 'min' => $g->sum(fn ($d) => $d->payableMinutes()),
+    'user' => $g->first()->user, 'days' => $g->count(), 'min' => $g->sum($mins),
 ])->sortByDesc('min'); @endphp
 <div class="kpis" style="margin-bottom:14px">
-    <a class="kpi" href="#att-table"><div class="lbl">{{ __('hr.log') }}</div><div class="val">{{ $rows->count() }}</div></a>
-    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.total_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div></div>
-    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.avg_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div></div>
+    <a class="kpi" href="#att-table"><div class="lbl">{{ __('hr.log') }}</div><div class="val">{{ $rows->count() }}</div>@php $attIn = $rows->filter(fn ($d) => $d->first_in_at !== null)->count(); @endphp
+        {{-- (٢٢/٩) الصفوف فيها أيام اتفتحت من غير ولا بصمة — العدد بيتفرد عشان المتوسط مايتفهمش غلط --}}
+        <div class="sub2">@include('erp._eq', ['total' => $rows->count(), 'dec' => 0, 'zeros' => true, 'parts' => [[__('uib.att_with_in'), $attIn], [__('uib.att_no_in'), $rows->count() - $attIn]]])</div>
+        <div class="sub2">{{ __('uib.att_days_sub') }}</div></a>
+    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.total_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($totalMinutes) }}</div><div class="sub2">{{ __('uib.att_total_sub') }}</div></div>
+    <div class="kpi" data-explain onclick="openDlg('attExplain')" title="{{ __('ui.click_to_explain') }}"><div class="lbl">{{ __('hr.avg_hours') }}</div><div class="val" dir="ltr">{{ \App\Models\AttendanceDay::hhmm($avgMinutes) }}</div>
+        {{-- (٢٢/٩) المتوسط = إجمالي الدقايق ÷ عدد أيام الحضور --}}
+        <div class="sub2">@include('erp._eq', ['totalText' => \App\Models\AttendanceDay::hhmm($avgMinutes), 'total' => 0, 'dec' => 0, 'zeros' => true, 'parts' => [[__('uib.att_minutes'), $totalMinutes], [__('uib.att_day_rows'), $rows->count(), '÷']]])</div></div>
 </div>
 
 <dialog id="attExplain" style="max-width:560px">
@@ -107,7 +112,8 @@
                         <td>@if ($d->user)<a href="{{ request()->fullUrlWithQuery(['user' => $d->user_id]) }}">{{ $d->user->displayName() }}</a>@else — @endif</td>
                         <td dir="ltr">{{ $d->first_in_at?->format('h:i A') ?? '—' }}</td>
                         <td dir="ltr">{{ $d->last_out_at?->format('h:i A') ?? '—' }}</td>
-                        <td dir="ltr" style="font-weight:800">{{ $d->workedLabel() }}</td>
+                        {{-- (٢٢/٩) اليوم اللي فات مابيعدّش لايف — نفس حساب الكروت --}}
+                        <td dir="ltr" style="font-weight:800">{{ \App\Models\AttendanceDay::hhmm($d->approved_minutes === null ? $mins($d) : $d->worked_minutes) }}</td>
                         <td dir="ltr">{{ \App\Models\AttendanceDay::hhmm($d->break_minutes) }}</td>
                         <td>{{ $d->sessions }}</td>
                         <td>
@@ -124,7 +130,7 @@
                                 {{-- ⚠️ المعتمد بيتعرض حتى لو مساوي للمحسوب —
                                      «مين شاف الرقم ده» سؤال بيتسأل في المرتبات --}}
                                 <span class="pill good" dir="ltr">
-                                    {{ \App\Models\AttendanceDay::hhmm($d->payableMinutes()) }}
+                                    {{ \App\Models\AttendanceDay::hhmm($mins($d)) }}
                                 </span>
                                 <div class="side" style="font-size:10.5px">
                                     {{ __('hr.approved_by', ['name' => $d->approver?->displayName() ?? '—']) }}

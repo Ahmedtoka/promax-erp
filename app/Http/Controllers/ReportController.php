@@ -73,12 +73,46 @@ class ReportController extends Controller
 
     private const MAX_ROWS = 2000;
 
+    /**
+     * أقسام مركز التقارير (٢٢/٩) — 26 كارت في قايمة واحدة كانوا بيتدوّر فيهم بالعين.
+     * القسم ⇐ [أيقونة، تقاريره]. أي تقرير جديد مش متسكّن هنا بينزل تحت «تقارير تانية».
+     */
+    private const GROUPS = [
+        'sales' => ['📈', ['sales_docs', 'sales_by_rep', 'sales_by_client', 'sales_by_product', 'sales_by_channel',
+            'client_products', 'sales_decline', 'new_clients']],
+        'money' => ['💰', ['collections', 'debts', 'returns_docs', 'returns_quality', 'discounts_given',
+            'profitability', 'sales_reconcile']],
+        'field' => ['🚐', ['reps_overview', 'visits_log', 'inactive_clients', 'pos_status', 'gifts_log', 'gifts_balance']],
+        'merch' => ['🛍️', ['shelf_expiry', 'merch_performance', 'oos_frequency']],
+        'control' => ['🎯', ['target_vs_actual', 'contract_schedule']],
+    ];
+
     public function index()
     {
         $admin = request()->user()?->isAdmin() ?? false;
 
-        return view('erp.report_hub', ['reports' => array_filter(self::REPORTS,
-            fn ($k) => $admin || ! in_array($k, self::ADMIN_ONLY, true), ARRAY_FILTER_USE_KEY)]);
+        $reports = array_filter(self::REPORTS,
+            fn ($k) => $admin || ! in_array($k, self::ADMIN_ONLY, true), ARRAY_FILTER_USE_KEY);
+
+        $groups = [];
+        $placed = [];
+
+        foreach (self::GROUPS as $g => [$icon, $keys]) {
+            $list = array_intersect_key(array_replace(array_flip($keys), $reports), array_flip($keys), $reports);
+            $placed = array_merge($placed, $keys);
+
+            if ($list !== []) {
+                $groups[$g] = ['icon' => $icon, 'reports' => $list];
+            }
+        }
+
+        $rest = array_diff_key($reports, array_flip($placed));
+
+        if ($rest !== []) {
+            $groups['other'] = ['icon' => '📑', 'reports' => $rest];
+        }
+
+        return view('erp.report_hub', ['reports' => $reports, 'groups' => $groups]);
     }
 
     public function show(Request $request, string $key)
@@ -208,6 +242,51 @@ class ReportController extends Controller
         return [request()->fullUrlWithQuery([$param => $on ? null : $value, 'export' => null]), $on];
     }
 
+    // ═══ شرح الكروت (٢٢/٩) — «كل رقم ملخّص لازم يقول هو إيه واتحسب إزاي» ═══
+    // العنصر السادس في الكارت `[كلام, معادلة]`. المعادلة بتتبني من **نفس المتغيرات**
+    // اللي الكارت بيعرضها، فأجزاءها بتقفل على رقمه. الفيو بس اللي بيرسمها — الـCSV لأ.
+
+    private function k(array $card, array $explain): array
+    {
+        $card += [3 => null, 4 => false];
+        $card[5] = $explain;
+
+        return $card;
+    }
+
+    private function ex(string $key, array $p = [], string $eq = ''): array
+    {
+        return [__('uib2.'.$key, $p), $eq];
+    }
+
+    /** `الناتج = قيمة كلمة + قيمة كلمة …` — كل جزء `[علامة, قيمة, مفتاح الكلمة]` وعلامة أول جزء بتتساب */
+    private function eq(string $result, array ...$parts): string
+    {
+        // نسبة مقامها صفر = «—» — مفيش معادلة تتكتب
+        if ($result === '—') {
+            return '';
+        }
+
+        $s = '';
+
+        foreach ($parts as $i => [$op, $val, $word]) {
+            // الجزء الصفري (جمع/طرح) مالوش لازمة في السطر
+            if ($i > 0 && in_array($op, ['+', '−'], true) && in_array($val, ['0', '0.00'], true)) {
+                continue;
+            }
+
+            // ⚠️ علامة LRM بعد الكلمة العربي — من غيرها الرقم اللي بعدها بيتقلب مع الكلمة
+            $s .= ($i === 0 ? '' : ' '.$op.' ').$val.($word === '' ? '' : ' '.__('uib2.w_'.$word)."\u{200E}");
+        }
+
+        return $result.' = '.$s;
+    }
+
+    private function pct(float|int $a, float|int $b, int $dec = 1): string
+    {
+        return $b > 0 ? number_format($a * 100 / $b, $dec).'%' : '—';
+    }
+
     private function csv(array $d)
     {
         $name = $d['key'].'-'.now()->format('Y-m-d-Hi').'.csv';
@@ -285,16 +364,32 @@ class ReportController extends Controller
         $all = (clone $q)->get(['id', 'payment', 'total', 'tax_total', 'grand_total']);
         $rows = $q->latest()->take(self::MAX_ROWS)->get();
 
+        $cashDocs = $all->where('payment', 'cash');
+        $creditDocs = $all->where('payment', 'credit');
+        $gAll = (float) $all->sum('grand_total');
+
         return [
             'filters' => ['range', 'rep', 'payment', 'q'],
             'kpis' => [
-                [__('rpt.k_count'), $this->f0($all->count()), '', $this->scr('ops.invoices', array_filter([
+                $this->k([__('rpt.k_count'), $this->f0($all->count()), '', $this->scr('ops.invoices', array_filter([
                     'user' => $r->input('user_id'), 'pay' => $r->input('payment')]))],
-                [__('rpt.k_net'), $this->m($all->sum('total')), '', $this->to('sales_by_product')],
-                [__('rpt.k_tax'), $this->m($all->sum('tax_total')), '', $this->to('sales_by_product')],
-                [__('rpt.k_grand'), $this->m($all->sum('grand_total')), 'pos', $this->to('sales_by_client')],
-                [__('rpt.k_cash'), $this->m($all->where('payment', 'cash')->sum('grand_total')), '', ...$this->flt('payment', 'cash')],
-                [__('rpt.k_credit'), $this->m($all->where('payment', 'credit')->sum('grand_total')), 'mid', ...$this->flt('payment', 'credit')],
+                    $this->ex('sd_count', [], $this->eq($this->f0($all->count()),
+                        ['', $this->f0($cashDocs->count()), 'cash'], ['+', $this->f0($creditDocs->count()), 'credit']))),
+                $this->k([__('rpt.k_net'), $this->m($all->sum('total')), '', $this->to('sales_by_product')],
+                    $this->ex('sd_net', [], $this->eq($this->m($all->sum('total')),
+                        ['', $this->m($gAll), 'grand'], ['−', $this->m($all->sum('tax_total')), 'tax']))),
+                $this->k([__('rpt.k_tax'), $this->m($all->sum('tax_total')), '', $this->to('sales_by_product')],
+                    $this->ex('sd_tax', [], $this->eq($this->pct($all->sum('tax_total'), $all->sum('total')),
+                        ['', $this->m($all->sum('tax_total')), 'tax'], ['÷', $this->m($all->sum('total')), 'net']))),
+                $this->k([__('rpt.k_grand'), $this->m($gAll), 'pos', $this->to('sales_by_client')],
+                    $this->ex('sd_grand', [], $this->eq($this->m($gAll),
+                        ['', $this->m($all->sum('total')), 'net'], ['+', $this->m($all->sum('tax_total')), 'tax']))),
+                $this->k([__('rpt.k_cash'), $this->m($cashDocs->sum('grand_total')), '', ...$this->flt('payment', 'cash')],
+                    $this->ex('sd_cash', ['n' => $this->f0($cashDocs->count())], $this->eq($this->pct($cashDocs->sum('grand_total'), $gAll),
+                        ['', $this->m($cashDocs->sum('grand_total')), 'cash'], ['÷', $this->m($gAll), 'grand']))),
+                $this->k([__('rpt.k_credit'), $this->m($creditDocs->sum('grand_total')), 'mid', ...$this->flt('payment', 'credit')],
+                    $this->ex('sd_credit', ['n' => $this->f0($creditDocs->count())], $this->eq($this->m($creditDocs->sum('grand_total')),
+                        ['', $this->m($gAll), 'grand'], ['−', $this->m($cashDocs->sum('grand_total')), 'cash']))),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_number')], [__('rpt.c_paper')],
@@ -357,18 +452,20 @@ class ReportController extends Controller
                 continue;
             }
 
+            // ترتيب الأعمدة (٢٢/٩): الفلوس الأول (الإجمالي وتقسيمته والمرتجع) وبعدها العدّادات —
+            // كان عدد الفواتير والصافي والضريبة قبل الإجمالي
             $rows[] = [
                 $this->cRep($rep),
-                $this->f0($i->c ?? 0),
-                $this->m($i->net ?? 0),
-                $this->m($i->tax ?? 0),
                 $this->m($i->g ?? 0),
                 $this->m($i->cash_g ?? 0),
                 $this->m(($i->g ?? 0) - ($i->cash_g ?? 0) - ($i->po_g ?? 0)),
                 $this->m($i->po_g ?? 0),
                 $this->m($rt->g ?? 0),
-                $this->f0($gifts[$rep->id] ?? 0),
+                $this->m($i->net ?? 0),
+                $this->m($i->tax ?? 0),
+                $this->f0($i->c ?? 0),
                 $this->f0($visits[$rep->id] ?? 0),
+                $this->f0($gifts[$rep->id] ?? 0),
                 substr((string) ($i->last_at ?? ''), 0, 10) ?: '—',
             ];
 
@@ -381,23 +478,30 @@ class ReportController extends Controller
         return [
             'filters' => ['range'],
             'kpis' => [
-                [__('rpt.k_reps'), $this->f0(count($rows)), '', $this->to('reps_overview')],
-                [__('rpt.k_count'), $this->f0($T['c']), '', $this->to('sales_docs')],
-                [__('rpt.k_grand'), $this->m($T['g']), 'pos', $this->to('sales_by_client')],
-                [__('rpt.k_returns'), $this->m($T['ret']), 'neg', $this->to('returns_docs')],
-                [__('rpt.k_visits'), $this->f0($T['vis']), '', $this->to('visits_log')],
+                $this->k([__('rpt.k_reps'), $this->f0(count($rows)), '', $this->to('reps_overview')],
+                    $this->ex('sr_reps', ['n' => $this->f0($reps->count())])),
+                $this->k([__('uib2.k_sale_docs'), $this->f0($T['c']), '', $this->to('sales_docs')],
+                    $this->ex('sr_docs')),
+                $this->k([__('rpt.k_grand'), $this->m($T['g']), 'pos', $this->to('sales_by_client')],
+                    $this->ex('sr_grand', [], $this->eq($this->m($T['g']), ['', $this->m($T['cash']), 'cash'],
+                        ['+', $this->m($T['g'] - $T['cash'] - $T['po']), 'credit'], ['+', $this->m($T['po']), 'po']))),
+                $this->k([__('rpt.k_returns'), $this->m($T['ret']), 'neg', $this->to('returns_docs')],
+                    $this->ex('sr_returns', [], $this->eq($this->m($T['g'] - $T['ret']),
+                        ['', $this->m($T['g']), 'sales'], ['−', $this->m($T['ret']), 'returns']))),
+                $this->k([__('rpt.k_visits'), $this->f0($T['vis']), '', $this->to('visits_log')],
+                    $this->ex('sr_visits')),
             ],
             'columns' => [
-                [__('rpt.c_rep')], [__('rpt.k_count'), 'num'], [__('rpt.k_net'), 'num'],
-                [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'], [__('rpt.k_cash'), 'num'],
+                [__('rpt.c_rep')], [__('rpt.k_grand'), 'num'], [__('rpt.k_cash'), 'num'],
                 [__('rpt.k_credit'), 'num'], [__('rpt.k_po_delivered'), 'num'], [__('rpt.k_returns'), 'num'],
-                [__('rpt.k_gifts'), 'num'], [__('rpt.k_visits'), 'num'], [__('rpt.c_last_op')],
+                [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('uib2.k_sale_docs'), 'num'],
+                [__('rpt.k_visits'), 'num'], [__('rpt.k_gifts'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows,
-            'totals' => [__('common.total'), $this->f0($T['c']), $this->m($T['net']),
-                $this->m($T['tax']), $this->m($T['g']), $this->m($T['cash']),
+            'totals' => [__('common.total'), $this->m($T['g']), $this->m($T['cash']),
                 $this->m($T['g'] - $T['cash'] - $T['po']), $this->m($T['po']), $this->m($T['ret']),
-                $this->f0($T['gift']), $this->f0($T['vis']), ''],
+                $this->m($T['net']), $this->m($T['tax']), $this->f0($T['c']),
+                $this->f0($T['vis']), $this->f0($T['gift']), ''],
         ];
     }
 
@@ -424,11 +528,18 @@ class ReportController extends Controller
             ->selectRaw('client_id, COUNT(*) c, SUM(debit) g, SUM(COALESCE(tax, 0)) x, MAX(date) last_at')
             ->groupBy('client_id')->get()->keyBy('client_id');
 
-        $rets = Transaction::where('kind', 'return')->whereBetween('date', $day)
-            ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
+        // ⚠️ فلتر المندوب على المرتجع والتحصيل كمان (٢٢/٩) — كان على المبيعات بس، فالتقرير
+        // بيطلّع مبيعات مندوب جنب مرتجعات وتحصيلات كل المناديب. نفس القيود (`SalesSource`)
+        // بصاحب المستند؛ تحصيل المكتب مالوش مندوب فمش بيظهر مع الفلتر.
+        $rets = $repId
+            ? \App\Services\SalesSource::returns($a, $b, [$repId])->selectRaw('client_id, SUM(amount) g')->groupBy('client_id')->pluck('g', 'client_id')
+            : Transaction::where('kind', 'return')->whereBetween('date', $day)
+                ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
 
-        $colls = Transaction::where('kind', 'collection')->whereBetween('date', $day)
-            ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
+        $colls = $repId
+            ? \App\Services\SalesSource::collections($a, $b, [$repId])->selectRaw('client_id, SUM(amount) g')->groupBy('client_id')->pluck('g', 'client_id')
+            : Transaction::where('kind', 'collection')->whereBetween('date', $day)
+                ->selectRaw('client_id, SUM(credit) g')->groupBy('client_id')->pluck('g', 'client_id');
 
         // ⚠️ `visibleTo` — التقرير كان بيعرض عملاء كل الفرق لأي مدير
         $clients = Client::visibleTo(Client::query()->with(['group', 'channel']), $r->user())
@@ -468,11 +579,19 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
-                [__('rpt.k_clients'), $this->f0(count($rows)), '', $this->to('client_products')],
-                [__('rpt.k_grand'), $this->m($tg), 'pos', $this->to('sales_docs')],
-                [__('rpt.k_returns'), $this->m($tr), 'neg', $this->to('returns_docs')],
-                [__('rpt.k_collected'), $this->m($tc), '', $this->to('collections')],
-                [__('rpt.k_balance'), $this->m($tb), 'mid', $this->to('debts')],
+                $this->k([__('rpt.k_clients'), $this->f0(count($rows)), '', $this->to('client_products')],
+                    $this->ex('sc_clients')),
+                $this->k([__('rpt.k_grand'), $this->m($tg), 'pos', $this->to('sales_docs')],
+                    $this->ex('sc_grand', [], $this->eq($this->m($tg),
+                        ['', $this->m($tg - $tx), 'net'], ['+', $this->m($tx), 'tax']))),
+                $this->k([__('rpt.k_returns'), $this->m($tr), 'neg', $this->to('returns_docs')],
+                    $this->ex('sc_returns', [], $this->eq($this->m($tg - $tr),
+                        ['', $this->m($tg), 'sales'], ['−', $this->m($tr), 'returns']))),
+                $this->k([__('rpt.k_collected'), $this->m($tc), '', $this->to('collections')],
+                    $this->ex('sc_collected', [], $this->eq($this->pct($tc, $tg - $tr),
+                        ['', $this->m($tc), 'collected'], ['÷', $this->m($tg - $tr), 'net_sales']))),
+                $this->k([__('rpt.k_balance'), $this->m($tb), 'mid', $this->to('debts')],
+                    $this->ex('sc_balance')),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.k_count'), 'num'],
@@ -573,11 +692,20 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'q'],
             'kpis' => array_filter([
-                [__('rpt.k_products'), $this->f0(count($rows)), '', $this->scr('erp.stock', [], false)],
-                [__('rpt.k_qty'), $this->f0($tq), '', $this->to('client_products')],
-                [__('rpt.k_grand'), $this->m($tn + $tt), 'pos', $this->to('sales_docs')],
-                $seeCost ? [__('rpt.k_profit'), $this->m($tcov - $tc), 'mid', $this->to('profitability')] : null,
-                $seeCost ? [__('rpt.k_uncosted'), $this->m($tunc), 'neg', $this->scr('erp.stock', [], false)] : null,
+                // ⚠️ عدد الأصناف مش عدد الصفوف — سطر «قيود بلا بنود» كان بيتعدّ صنف (٢٢/٩)
+                $this->k([__('rpt.k_products'), $this->f0($products->count()), '', $this->scr('erp.stock', [], false)],
+                    $this->ex('sp_products')),
+                $this->k([__('rpt.k_qty'), $this->f0($tq), '', $this->to('client_products')],
+                    $this->ex('sp_qty')),
+                $this->k([__('rpt.k_grand'), $this->m($tn + $tt), 'pos', $this->to('sales_docs')],
+                    $this->ex('sp_grand', [], $this->eq($this->m($tn + $tt),
+                        ['', $this->m($tn), 'net'], ['+', $this->m($tt), 'tax']))),
+                $seeCost ? $this->k([__('rpt.k_profit'), $this->m($tcov - $tc), 'mid', $this->to('profitability')],
+                    $this->ex('sp_profit', [], $this->eq($this->m($tcov - $tc),
+                        ['', $this->m($tcov), 'covered'], ['−', $this->m($tc), 'cost']))) : null,
+                $seeCost ? $this->k([__('rpt.k_uncosted'), $this->m($tunc), 'neg', $this->scr('erp.stock', [], false)],
+                    $this->ex('sp_uncosted', [], $this->eq($this->m($tunc),
+                        ['', $this->m($tn), 'net'], ['−', $this->m($tcov), 'covered']))) : null,
             ]),
             'columns' => $columns,
             'rows' => $rows,
@@ -595,11 +723,15 @@ class ReportController extends Controller
         // فنصيبه كان بيطلع أقل من حقيقته بكتير
         $agg = \App\Services\SalesSource::docs($a, $b)
             ->join('clients', 'clients.id', '=', 's.client_id')
-            ->selectRaw('clients.channel_id ch, COUNT(*) c, SUM(s.grand_total) g, MAX(s.doc_at) last_at')
+            // `inv_g`/`po_g` (٢٢/٩) — أجزاء معادلة كارت الإجمالي، من نفس الكويري
+            ->selectRaw("clients.channel_id ch, COUNT(*) c, SUM(s.grand_total) g, MAX(s.doc_at) last_at,
+                SUM(CASE WHEN s.kind = 'invoice' THEN s.grand_total ELSE 0 END) inv_g,
+                SUM(CASE WHEN s.kind = 'po' THEN s.grand_total ELSE 0 END) po_g")
             ->groupBy('clients.channel_id')->get();
 
         $total = (float) $agg->sum('g') ?: 1;
         $channels = \App\Models\Channel::all()->keyBy('id');
+        $top = $agg->sortByDesc('g')->first();
 
         $rows = $agg->sortByDesc('g')->map(fn ($x) => [
             // القناة بتفتح «المبيعات بالعميل» لنفس الفترة مفلترة عليها
@@ -613,11 +745,20 @@ class ReportController extends Controller
         return [
             'filters' => ['range'],
             'kpis' => [
-                [__('rpt.k_count'), $this->f0($agg->sum('c')), '', $this->to('sales_docs')],
-                [__('rpt.k_grand'), $this->m($agg->sum('g')), 'pos', $this->to('sales_by_client')],
+                $this->k([__('uib2.k_sale_docs'), $this->f0($agg->sum('c')), '', $this->to('sales_docs')],
+                    $this->ex('sr_docs')),
+                $this->k([__('rpt.k_grand'), $this->m($agg->sum('g')), 'pos', $this->to('sales_by_client')],
+                    $this->ex('sch_grand', [], $this->eq($this->m($agg->sum('g')),
+                        ['', $this->m($agg->sum('inv_g')), 'inv'], ['+', $this->m($agg->sum('po_g')), 'po'],
+                        ['+', $this->m($agg->sum('g') - $agg->sum('inv_g') - $agg->sum('po_g')), 'entries']))),
+                // أكبر قناة (٢٢/٩) — الكارتين كانوا نفس صف الإجمالي، ده اللي المدير بيدوّر عليه
+                $this->k([__('uib2.k_top_channel'), $top ? ($channels->get($top->ch)?->displayName() ?? '—') : '—', 'mid',
+                    $top ? $this->to('sales_by_client', ['channel_id' => $top->ch]) : null],
+                    $this->ex('sch_top', [], $top ? $this->eq($this->pct($top->g, $agg->sum('g')),
+                        ['', $this->m($top->g), ''], ['÷', $this->m($agg->sum('g')), 'grand']) : '')),
             ],
             'columns' => [
-                [__('rpt.c_channel')], [__('rpt.k_count'), 'num'],
+                [__('rpt.c_channel')], [__('uib2.k_sale_docs'), 'num'],
                 [__('rpt.k_grand'), 'num'], [__('rpt.k_share'), 'num'], [__('rpt.c_last_op')],
             ],
             'rows' => $rows,
@@ -680,6 +821,9 @@ class ReportController extends Controller
         };
         $bySrc = fn ($cls) => $this->m($base->where('source_type', $cls)->sum('credit'));
         $officeSum = $base->filter(fn ($t) => ! in_array($t->source_type, array_values($srcMap), true))->sum('credit');
+        $baseSum = (float) $base->sum('credit');
+        // نصيب الكارت من إجمالي تحصيل الفترة (قبل فلتر المصدر/الوسيلة)
+        $share = fn ($v) => $this->eq($this->pct($v, $baseSum), ['', $this->m($v), ''], ['÷', $this->m($baseSum), 'period_total']);
 
         return [
             'filters' => ['range', 'q'],
@@ -692,21 +836,38 @@ class ReportController extends Controller
                         + ['none' => __('rpt.m_with_invoice')]],
             ],
             'kpis' => [
-                [__('uib.k_entries'), $this->f0($all->count()), '', $this->scr('erp.collections')],
-                [__('rpt.k_collected'), $this->m($all->sum('credit')), 'pos', $this->scr('erp.collections')],
+                $this->k([__('uib.k_entries'), $this->f0($all->count()), '', $this->scr('erp.collections')],
+                    $this->ex('co_entries')),
+                // من غير فلتر: الإجمالي = المصادر الأربعة. بفلتر مصدر/وسيلة: نصيب المعروض من إجمالي الفترة (٢٢/٩)
+                $this->k([__('rpt.k_collected'), $this->m($all->sum('credit')), 'pos', $this->scr('erp.collections')],
+                    $src === '' && $method === ''
+                        ? $this->ex('co_total', [], $this->eq($this->m($baseSum),
+                            ['', $bySrc(\App\Models\Invoice::class), 'src_invoice'], ['+', $bySrc(\App\Models\Visit::class), 'src_visit'],
+                            ['+', $bySrc(\App\Models\PurchaseOrder::class), 'src_po'], ['+', $this->m($officeSum), 'src_office']))
+                        : $this->ex('co_total_filtered', [], $this->eq($this->pct($all->sum('credit'), $baseSum),
+                            ['', $this->m($all->sum('credit')), 'shown'], ['÷', $this->m($baseSum), 'period_total']))),
                 // تقسيمة المصدر — لازم تطابق بوكس التحصيل في الداشبورد
-                [__('rpt.src_invoice'), $bySrc(\App\Models\Invoice::class), '', ...$this->flt('source', 'invoice')],
-                [__('rpt.src_visit'), $bySrc(\App\Models\Visit::class), '', ...$this->flt('source', 'visit')],
-                [__('rpt.src_po'), $bySrc(\App\Models\PurchaseOrder::class), '', ...$this->flt('source', 'po')],
+                $this->k([__('rpt.src_invoice'), $bySrc(\App\Models\Invoice::class), '', ...$this->flt('source', 'invoice')],
+                    $this->ex('co_src_invoice', [], $share($base->where('source_type', \App\Models\Invoice::class)->sum('credit')))),
+                $this->k([__('rpt.src_visit'), $bySrc(\App\Models\Visit::class), '', ...$this->flt('source', 'visit')],
+                    $this->ex('co_src_visit', [], $share($base->where('source_type', \App\Models\Visit::class)->sum('credit')))),
+                $this->k([__('rpt.src_po'), $bySrc(\App\Models\PurchaseOrder::class), '', ...$this->flt('source', 'po')],
+                    $this->ex('co_src_po', [], $share($base->where('source_type', \App\Models\PurchaseOrder::class)->sum('credit')))),
                 // «مكتب» كان ناقص من الكروت فمجموعهم مابيقفلش على الإجمالي (٢٢/٩)
-                [__('rpt.src_office'), $this->m($officeSum), '', ...$this->flt('source', 'office')],
+                $this->k([__('rpt.src_office'), $this->m($officeSum), '', ...$this->flt('source', 'office')],
+                    $this->ex('co_src_office', [], $share($officeSum))),
                 // تقسيمة الطريقة — للمطابقة المحاسبية
-                [__('rpt.m_cash'), $byMethod('cash'), '', ...$this->flt('method', 'cash')],
-                [__('rpt.m_card'), $byMethod('card'), '', ...$this->flt('method', 'card')],
-                [__('rpt.m_cheque'), $byMethod('cheque'), '', ...$this->flt('method', 'cheque')],
-                [__('rpt.m_transfer'), $byMethod('transfer'), '', ...$this->flt('method', 'transfer')],
+                $this->k([__('rpt.m_cash'), $byMethod('cash'), '', ...$this->flt('method', 'cash')],
+                    $this->ex('co_m_cash', [], $share($base->where('method', 'cash')->sum('credit')))),
+                $this->k([__('rpt.m_card'), $byMethod('card'), '', ...$this->flt('method', 'card')],
+                    $this->ex('co_m_card', [], $share($base->where('method', 'card')->sum('credit')))),
+                $this->k([__('rpt.m_cheque'), $byMethod('cheque'), '', ...$this->flt('method', 'cheque')],
+                    $this->ex('co_m_cheque', [], $share($base->where('method', 'cheque')->sum('credit')))),
+                $this->k([__('rpt.m_transfer'), $byMethod('transfer'), '', ...$this->flt('method', 'transfer')],
+                    $this->ex('co_m_transfer', [], $share($base->where('method', 'transfer')->sum('credit')))),
                 // قيود كاش الفواتير مالهاش وسيلة — من غير الكارت ده كروت الوسائل مابتقفلش على الإجمالي (٢٢/٩)
-                [__('rpt.m_with_invoice'), $this->m($base->whereNull('method')->sum('credit')), '', ...$this->flt('method', 'none')],
+                $this->k([__('rpt.m_with_invoice'), $this->m($base->whereNull('method')->sum('credit')), '', ...$this->flt('method', 'none')],
+                    $this->ex('co_m_none', [], $share($base->whereNull('method')->sum('credit')))),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_client')], [__('rpt.c_source')], [__('rpt.c_memo')],
@@ -745,15 +906,23 @@ class ReportController extends Controller
         $this->like($q, $r, ['number', 'client.name']);
 
         $all = (clone $q)->get(['id', 'grand_total', 'good_units', 'damaged_units']);
+        $unitsAll = (float) $all->sum('good_units') + (float) $all->sum('damaged_units');
         $rows = $q->latest()->take(self::MAX_ROWS)->get();
 
         return [
             'filters' => ['range', 'rep', 'q'],
             'kpis' => [
-                [__('uib.k_docs'), $this->f0($all->count()), '', $this->scr('ops.returns')],
-                [__('rpt.k_returns'), $this->m($all->sum('grand_total')), 'neg', $this->scr('ops.returns')],
-                [__('rpt.k_good'), $this->f0($all->sum('good_units')), '', $this->scr('ops.returns', ['condition' => 'good'])],
-                [__('rpt.k_damaged'), $this->f0($all->sum('damaged_units')), 'neg', $this->scr('ops.returns', ['condition' => 'damaged'])],
+                $this->k([__('uib.k_docs'), $this->f0($all->count()), '', $this->scr('ops.returns')],
+                    $this->ex('rd_docs')),
+                $this->k([__('rpt.k_returns'), $this->m($all->sum('grand_total')), 'neg', $this->scr('ops.returns')],
+                    $this->ex('rd_value', [], $all->count() > 0 ? $this->eq($this->m($all->sum('grand_total') / $all->count()),
+                        ['', $this->m($all->sum('grand_total')), ''], ['÷', $this->f0($all->count()), 'docs']) : '')),
+                $this->k([__('rpt.k_good'), $this->f0($all->sum('good_units')), '', $this->scr('ops.returns', ['condition' => 'good'])],
+                    $this->ex('rd_good', [], $this->eq($this->pct($all->sum('good_units'), $unitsAll),
+                        ['', $this->f0($all->sum('good_units')), 'good'], ['÷', $this->f0($unitsAll), 'units']))),
+                $this->k([__('rpt.k_damaged'), $this->f0($all->sum('damaged_units')), 'neg', $this->scr('ops.returns', ['condition' => 'damaged'])],
+                    $this->ex('rd_damaged', [], $this->eq($this->pct($all->sum('damaged_units'), $unitsAll),
+                        ['', $this->f0($all->sum('damaged_units')), 'damaged'], ['÷', $this->f0($unitsAll), 'units']))),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_number')], [__('rpt.c_client')],
@@ -785,6 +954,8 @@ class ReportController extends Controller
             ->where('status', 'active')
             ->where('balance', '>', 0)
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            // فلتر المندوب (٢٢/٩) — «مديونية عملاء فلان» أول سؤال في المتابعة، وعمود المندوب موجود أصلاً
+            ->when($r->filled('user_id'), fn ($w) => $w->where('rep_id', $r->integer('user_id')))
             ->orderByDesc('balance')
             ->take(self::MAX_ROWS)
             ->get();
@@ -816,53 +987,69 @@ class ReportController extends Controller
         $payDays = $this->avgDaysToPay($clients->pluck('id')->all());
         $noTerms = $clients->filter(fn ($c) => ! $od[$c->id]['has_terms'] && $c->allowsCredit());
         $overdueSum = $clients->sum(fn ($c) => $od[$c->id]['amount']);
+        $balSum = (float) $clients->sum('balance');
+        $topDebt = $clients->sortByDesc('balance')->first();
 
         $rows = $clients->map(function ($c) use ($lastColl, $od, $payDays) {
             $t = $lastColl->get($c->id);
             $o = $od[$c->id];
 
+            // ترتيب الأعمدة (٢٢/٩): الفلوس والمتأخر جنب اسم العميل، والمندوب اللي هيتابع، وبعدين
+            // الشروط والتحصيل — القناة والمنطقة في الآخر. كان المتأخر بره الشاشة ومحتاج تمرير.
             return [
                 $this->cClient($c),
-                $c->channel?->displayName() ?? '—',
-                $c->zone?->displayName() ?? '—',
-                $this->cRep($c->rep),
                 $this->m($c->balance),
+                $o['amount'] > 0 ? $this->m($o['amount']) : '—',
+                $o['amount'] > 0 && $o['days'] !== null ? $this->f0($o['days']) : '—',
+                $this->cRep($c->rep),
                 $c->paymentTermsLabel(),
                 // «بدون أيام» للآجل اللي مالوش أيام سداد — دي اللي المتابعة لازم تكمّلها
                 $o['has_terms'] ? $this->f0($c->paymentDays()) : ($c->allowsCredit() ? __('rpt.no_pay_days') : '—'),
-                $o['amount'] > 0 ? $this->m($o['amount']) : '—',
-                $o['amount'] > 0 && $o['days'] !== null ? $this->f0($o['days']) : '—',
-                (float) $c->withheld > 0 ? $this->m($c->withheld) : '—',
-                isset($payDays[$c->id]) ? $this->f0($payDays[$c->id]) : '—',
                 $t ? Carbon::parse($t)->format('Y-m-d') : '—',
                 $t ? $this->f0(Carbon::parse($t)->diffInDays(now())) : '—',
+                isset($payDays[$c->id]) ? $this->f0($payDays[$c->id]) : '—',
+                (float) $c->withheld > 0 ? $this->m($c->withheld) : '—',
+                $c->channel?->displayName() ?? '—',
+                $c->zone?->displayName() ?? '—',
             ];
         })->values()->all();
 
         return [
-            'filters' => ['channel', 'q'],
+            'filters' => ['rep', 'channel', 'q'],
+            'note' => __('uib2.note_debts'),
             'kpis' => [
-                [__('rpt.k_clients'), $this->f0($clients->count()), '', $this->scr('erp.reports', ['tab' => 'aging'], false)],
-                [__('rpt.k_balance'), $this->m($clients->sum('balance')), 'neg', $this->scr('erp.reports', ['tab' => 'aging'], false)],
+                $this->k([__('rpt.k_clients'), $this->f0($clients->count()), '', $this->scr('erp.reports', ['tab' => 'aging'], false)],
+                    $this->ex('db_clients')),
+                $this->k([__('rpt.k_balance'), $this->m($balSum), 'neg', $this->scr('erp.reports', ['tab' => 'aging'], false)],
+                    $this->ex('db_balance', [], $this->eq($this->m($balSum),
+                        ['', $this->m($overdueSum), 'overdue'], ['+', $this->m($balSum - $overdueSum), 'not_due']))),
                 // أكبر مديونية بتفتح صاحبها (القايمة مرتبة بالرصيد)
-                [__('rpt.k_max_debt'), $this->m($clients->max('balance')), '',
-                    $clients->isNotEmpty() ? route('erp.clients.show', $clients->sortByDesc('balance')->first()->id) : null],
-                [__('rpt.k_avg_debt'), $this->m($clients->avg('balance')), '', $this->scr('erp.reports', ['tab' => 'aging'], false)],
-                [__('rpt.k_overdue'), $this->m($overdueSum), 'neg', ...$this->flt('terms', 'overdue')],
-                [__('rpt.k_no_terms'), $this->f0($noTerms->count()).' · '.$this->m($noTerms->sum('balance')), 'mid', ...$this->flt('terms', 'none')],
-                [__('rpt.k_withheld'), $this->m($clients->sum('withheld')), '', ...$this->flt('terms', 'withheld')],
+                $this->k([__('rpt.k_max_debt'), $this->m($clients->max('balance')), '',
+                    $topDebt ? route('erp.clients.show', $topDebt->id) : null],
+                    $this->ex('db_max', ['name' => $topDebt?->fullName() ?? '—'], $this->eq($this->pct((float) $clients->max('balance'), $balSum),
+                        ['', $this->m($clients->max('balance')), ''], ['÷', $this->m($balSum), 'debt_total']))),
+                $this->k([__('rpt.k_avg_debt'), $this->m($clients->avg('balance')), '', $this->scr('erp.reports', ['tab' => 'aging'], false)],
+                    $this->ex('db_avg', [], $this->eq($this->m($clients->avg('balance')),
+                        ['', $this->m($balSum), 'debt_total'], ['÷', $this->f0($clients->count()), 'clients']))),
+                $this->k([__('rpt.k_overdue'), $this->m($overdueSum), 'neg', ...$this->flt('terms', 'overdue')],
+                    $this->ex('db_overdue', ['n' => $this->f0($clients->filter(fn ($c) => $od[$c->id]['amount'] > 0)->count())],
+                        $this->eq($this->pct($overdueSum, $balSum), ['', $this->m($overdueSum), 'overdue'], ['÷', $this->m($balSum), 'debt_total']))),
+                $this->k([__('rpt.k_no_terms'), $this->f0($noTerms->count()).' · '.$this->m($noTerms->sum('balance')), 'mid', ...$this->flt('terms', 'none')],
+                    $this->ex('db_no_terms', ['n' => $this->f0($noTerms->count()), 'v' => $this->m($noTerms->sum('balance'))],
+                        $this->eq($this->pct((float) $noTerms->sum('balance'), $balSum), ['', $this->m($noTerms->sum('balance')), ''], ['÷', $this->m($balSum), 'debt_total']))),
+                $this->k([__('rpt.k_withheld'), $this->m($clients->sum('withheld')), '', ...$this->flt('terms', 'withheld')],
+                    $this->ex('db_withheld', ['n' => $this->f0($clients->filter(fn ($c) => (float) $c->withheld > 0)->count())])),
             ],
             'columns' => [
-                [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_zone')],
-                [__('rpt.c_rep')], [__('rpt.k_balance'), 'num'],
-                [__('rpt.c_pay_terms')], [__('rpt.c_pay_days'), 'num'],
+                [__('rpt.c_client')], [__('rpt.k_balance'), 'num'],
                 [__('rpt.k_overdue'), 'num'], [__('rpt.c_overdue_days'), 'num'],
-                [__('rpt.k_withheld'), 'num'], [__('rpt.c_avg_pay_days'), 'num'],
-                [__('rpt.c_last_coll')], [__('rpt.c_days'), 'num'],
+                [__('rpt.c_rep')], [__('rpt.c_pay_terms')], [__('rpt.c_pay_days'), 'num'],
+                [__('rpt.c_last_coll')], [__('rpt.c_days'), 'num'], [__('rpt.c_avg_pay_days'), 'num'],
+                [__('rpt.k_withheld'), 'num'], [__('rpt.c_channel')], [__('rpt.c_zone')],
             ],
             'rows' => $rows,
-            'totals' => [__('common.total'), '', '', '', $this->m($clients->sum('balance')), '', '',
-                $this->m($overdueSum), '', $this->m($clients->sum('withheld')), '', '', ''],
+            'totals' => [__('common.total'), $this->m($balSum), $this->m($overdueSum), '', '', '', '',
+                '', '', '', $this->m($clients->sum('withheld')), '', ''],
         ];
     }
 
@@ -944,11 +1131,21 @@ class ReportController extends Controller
         return [
             'filters' => ['range'],
             'kpis' => [
-                [__('rpt.k_reps'), $this->f0($reps->count()), '', $this->scr('erp.team', [], false)],
-                [__('rpt.k_grand'), $this->m($inv->sum('g')), 'pos', $this->to('sales_by_rep')],
-                [__('rpt.k_field_coll'), $this->m($fieldColl->sum()), '', $this->to('collections', ['source' => 'visit'])],
-                [__('rpt.k_custody_val'), $this->m($T['val']), 'mid',
+                $this->k([__('rpt.k_reps'), $this->f0($reps->count()), '', $this->scr('erp.team', [], false)],
+                    $this->ex('ro_reps')),
+                // ⚠️ الكروت من صف الإجمالي (`$T`) — كانت من كل قيود الفترة، فالكارت بيزيد عن
+                // الجدول بمبيعات اللي مش مناديب نشطين في الفريق (٢٢/٩)
+                $this->k([__('rpt.k_grand'), $this->m($T['g']), 'pos', $this->to('sales_by_rep')],
+                    $this->ex('ro_grand', [], $this->eq($this->m($T['g'] - $T['ret']),
+                        ['', $this->m($T['g']), 'sales'], ['−', $this->m($T['ret']), 'returns']))),
+                $this->k([__('rpt.k_field_coll'), $this->m($T['fc']), '', $this->to('collections', ['source' => 'visit'])],
+                    $this->ex('ro_field_coll')),
+                $this->k([__('rpt.k_cash_due'), $this->m($T['cash']), 'neg', $this->scr('erp.repclose', [], false)],
+                    $this->ex('ro_cash_due', [], $this->eq($this->m($T['cash']),
+                        ['', $this->m($T['cash'] - $T['fc']), 'cash_inv'], ['+', $this->m($T['fc']), 'src_visit']))),
+                $this->k([__('rpt.k_custody_val'), $this->m($T['val']), 'mid',
                     $this->scr('ops.vans', [], false)],
+                    $this->ex('ro_custody', ['n' => $this->f0($T['units'])])),
             ],
             'columns' => [
                 [__('rpt.c_rep')], [__('rpt.c_role')], [__('rpt.k_count'), 'num'],
@@ -991,6 +1188,8 @@ class ReportController extends Controller
 
         $farCount = $rows->filter($isFar)->count();
         $shortCount = $rows->filter($isShort)->count();
+        // مقام نسبة «البعيدة»: الزيارات اللي ليها لوكيشن هي والعميل — الباقي مايتحكمش عليه
+        $located = $rows->filter(fn ($v) => $dist($v) !== null)->count();
 
         if ($r->input('flag') === 'far') {
             $rows = $rows->filter($isFar)->values();
@@ -1004,18 +1203,30 @@ class ReportController extends Controller
         $closed = $rows->whereNotNull('checked_out_at');
         // ⚠️ الفرق من الدخول للخروج (٢٢/٩) — بالعكس `diffInMinutes` بيرجّع سالب
         // فالمتوسط كان بيطلع «−45 دقيقة»
-        $avgMin = $closed->whereNotNull('checked_in_at')->isEmpty() ? 0 : $closed->whereNotNull('checked_in_at')->avg(
-            fn ($v) => abs($v->checked_in_at->diffInMinutes($v->checked_out_at)));
+        $timed = $closed->whereNotNull('checked_in_at');
+        $minSum = $timed->sum(fn ($v) => abs($v->checked_in_at->diffInMinutes($v->checked_out_at)));
+        $avgMin = $timed->isEmpty() ? 0 : $minSum / $timed->count();
 
         return [
             'filters' => ['range', 'rep', 'q'],
             'kpis' => [
-                [__('rpt.k_visits'), $this->f0($rows->count()), '', $this->scr('ops.visits')],
-                [__('rpt.k_closed'), $this->f0($closed->count()), '', $this->scr('ops.visits')],
-                [__('rpt.k_with_invoice'), $this->f0($withInvoice->count()), 'pos', $this->to('sales_docs')],
-                [__('rpt.k_avg_min'), $this->f0($avgMin), '', $this->scr('ops.visits')],
-                [__('rpt.k_far_visits', ['km' => self::FAR_KM]), $this->f0($farCount), 'neg', ...$this->flt('flag', 'far')],
-                [__('rpt.k_short_visits', ['m' => self::SHORT_MIN]), $this->f0($shortCount), 'mid', ...$this->flt('flag', 'short')],
+                $this->k([__('rpt.k_visits'), $this->f0($rows->count()), '', $this->scr('ops.visits')],
+                    $this->ex('vl_visits', [], $this->eq($this->f0($rows->count()),
+                        ['', $this->f0($closed->count()), 'closed'], ['+', $this->f0($rows->count() - $closed->count()), 'still_open']))),
+                $this->k([__('rpt.k_closed'), $this->f0($closed->count()), '', $this->scr('ops.visits')],
+                    $this->ex('vl_closed', [], $this->eq($this->pct($closed->count(), $rows->count()),
+                        ['', $this->f0($closed->count()), 'closed'], ['÷', $this->f0($rows->count()), 'visits']))),
+                $this->k([__('rpt.k_with_invoice'), $this->f0($withInvoice->count()), 'pos', $this->to('sales_docs')],
+                    $this->ex('vl_invoiced', [], $this->eq($this->pct($withInvoice->count(), $rows->count()),
+                        ['', $this->f0($withInvoice->count()), 'invoiced'], ['÷', $this->f0($rows->count()), 'visits']))),
+                $this->k([__('rpt.k_avg_min'), $this->f0($avgMin), '', $this->scr('ops.visits')],
+                    $this->ex('vl_avg', [], $timed->isEmpty() ? '' : $this->eq($this->f0($avgMin),
+                        ['', $this->f0($minSum), 'minutes'], ['÷', $this->f0($timed->count()), 'closed']))),
+                $this->k([__('rpt.k_far_visits', ['km' => self::FAR_KM]), $this->f0($farCount), 'neg', ...$this->flt('flag', 'far')],
+                    $this->ex('vl_far', ['km' => self::FAR_KM], $this->eq($this->pct($farCount, $located),
+                        ['', $this->f0($farCount), 'far'], ['÷', $this->f0($located), 'located']))),
+                $this->k([__('rpt.k_short_visits', ['m' => self::SHORT_MIN]), $this->f0($shortCount), 'mid', ...$this->flt('flag', 'short')],
+                    $this->ex('vl_short', ['m' => self::SHORT_MIN])),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_rep')], [__('rpt.c_client')],
@@ -1056,9 +1267,13 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'q'],
             'kpis' => [
-                // مفيش شاشة مستقلة للهدايا — أقرب تفصيل ليها عمود الهدايا في «المبيعات بالمندوب»
-                [__('uib.k_times'), $this->f0($rows->count()), '', $this->to('sales_by_rep')],
-                [__('rpt.k_qty'), $this->f0($rows->sum('qty')), 'mid', $this->to('sales_by_rep')],
+                // الكارتين بيفتحوا «رصيد الهدايا»: اللي اتحمّل مقابل اللي اتسجّل هنا (٢٢/٩)
+                $this->k([__('uib.k_times'), $this->f0($rows->count()), '', $this->to('gifts_balance')],
+                    $this->ex('gl_times', ['c' => $this->f0($rows->pluck('client_id')->unique()->count()),
+                        'r' => $this->f0($rows->pluck('user_id')->unique()->count())])),
+                $this->k([__('rpt.k_qty'), $this->f0($rows->sum('qty')), 'mid', $this->to('gifts_balance')],
+                    $this->ex('gl_qty', [], $rows->isEmpty() ? '' : $this->eq(number_format($rows->sum('qty') / $rows->count(), 1),
+                        ['', $this->f0($rows->sum('qty')), 'pcs'], ['÷', $this->f0($rows->count()), 'times']))),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_rep')], [__('rpt.c_client')],
@@ -1110,6 +1325,7 @@ class ReportController extends Controller
 
         $open = $rows->whereIn('status', ['pending', 'arrived']);
         $delivered = $rows->where('status', 'delivered');
+        $cancelled = $rows->where('status', 'cancelled');
         $deliveredLate = $delivered->filter(fn ($p) => $lateHours($p) !== null);
         $askedAll = (float) $delivered->sum(fn ($p) => $p->items->sum('qty'));
         $gotAll = (float) $delivered->sum(fn ($p) => $p->items->sum(fn ($i) => (float) ($i->delivered_qty ?? $i->qty)));
@@ -1117,35 +1333,50 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'status', 'q'],
             'kpis' => [
-                [__('uib.k_orders'), $this->f0($rows->count()), '', $this->scr('ops.pos')],
-                [__('rpt.k_open'), $this->f0($open->count()).' · '.$this->m($open->sum('grand_total')), 'mid', $this->scr('ops.pos')],
-                [__('rpt.k_delivered'), $this->f0($delivered->count()).' · '.$this->m($delivered->sum('grand_total')), 'pos', ...$this->flt('status', 'delivered')],
-                [__('rpt.k_cancelled'), $this->f0($rows->where('status', 'cancelled')->count()), 'neg', ...$this->flt('status', 'cancelled')],
-                [__('rpt.k_late'), $this->f0($rows->filter(fn ($p) => $p->isLate())->count()), 'neg', $this->scr('ops.pos')],
-                [__('rpt.k_delivered_late'), $this->f0($deliveredLate->count()).' / '.$this->f0($delivered->count()), 'neg', ...$this->flt('svc', 'late')],
-                [__('rpt.k_fill_rate'), $askedAll > 0 ? number_format($gotAll * 100 / $askedAll, 1).'%' : '—', '', ...$this->flt('svc', 'short')],
+                $this->k([__('uib.k_orders'), $this->f0($rows->count()), '', $this->scr('ops.pos')],
+                    $this->ex('ps_orders', [], $this->eq($this->f0($rows->count()),
+                        ['', $this->f0($open->count()), 'open'], ['+', $this->f0($delivered->count()), 'delivered'],
+                        ['+', $this->f0($cancelled->count()), 'cancelled'],
+                        ['+', $this->f0($rows->count() - $open->count() - $delivered->count() - $cancelled->count()), 'other_status']))),
+                $this->k([__('rpt.k_open'), $this->f0($open->count()).' · '.$this->m($open->sum('grand_total')), 'mid', $this->scr('ops.pos')],
+                    $this->ex('ps_open', ['n' => $this->f0($open->count()), 'v' => $this->m($open->sum('grand_total'))])),
+                $this->k([__('rpt.k_delivered'), $this->f0($delivered->count()).' · '.$this->m($delivered->sum('grand_total')), 'pos', ...$this->flt('status', 'delivered')],
+                    $this->ex('ps_delivered', ['n' => $this->f0($delivered->count()), 'v' => $this->m($delivered->sum('grand_total'))])),
+                $this->k([__('rpt.k_cancelled'), $this->f0($cancelled->count()), 'neg', ...$this->flt('status', 'cancelled')],
+                    $this->ex('ps_cancelled', ['v' => $this->m($cancelled->sum('grand_total'))], $this->eq($this->pct($cancelled->count(), $rows->count()),
+                        ['', $this->f0($cancelled->count()), 'cancelled'], ['÷', $this->f0($rows->count()), 'orders']))),
+                $this->k([__('rpt.k_late'), $this->f0($rows->filter(fn ($p) => $p->isLate())->count()), 'neg', $this->scr('ops.pos')],
+                    $this->ex('ps_late')),
+                $this->k([__('rpt.k_delivered_late'), $this->f0($deliveredLate->count()).' / '.$this->f0($delivered->count()), 'neg', ...$this->flt('svc', 'late')],
+                    $this->ex('ps_delivered_late', [], $this->eq($this->pct($deliveredLate->count(), $delivered->count()),
+                        ['', $this->f0($deliveredLate->count()), 'late'], ['÷', $this->f0($delivered->count()), 'delivered']))),
+                $this->k([__('rpt.k_fill_rate'), $askedAll > 0 ? number_format($gotAll * 100 / $askedAll, 1).'%' : '—', '', ...$this->flt('svc', 'short')],
+                    $this->ex('ps_fill', [], $this->eq($this->pct($gotAll, $askedAll),
+                        ['', $this->f0($gotAll), 'got_units'], ['÷', $this->f0($askedAll), 'asked_units']))),
             ],
+            // ترتيب الأعمدة (٢٢/٩): القيمة والحالة جنب العميل — القيمة كانت آخر عمود بره الشاشة،
+            // فصف الإجمالي كان باين فاضي
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_number')], [__('rpt.c_client')],
-                [__('rpt.c_rep')], [__('common.status')], [__('rpt.c_due')],
+                [__('rpt.k_amount'), 'num'], [__('common.status')], [__('rpt.c_rep')], [__('rpt.c_due')],
                 [__('rpt.c_delivered_at')], [__('rpt.c_late_hours'), 'num'], [__('rpt.c_fill'), 'num'],
-                [__('rpt.c_onsite_min'), 'num'], [__('rpt.c_reason')], [__('rpt.k_amount'), 'num'],
+                [__('rpt.c_onsite_min'), 'num'], [__('rpt.c_reason')],
             ],
             'rows' => $rows->map(fn ($p) => [
                 $p->created_at->format('Y-m-d'),
                 $this->lk($p->number, route('ops.pos.show', $p->id)),
                 $this->cClient($p->client),
-                $this->cRep($p->courier),
+                $this->m($p->grand_total),
                 $p->statusLabel().($p->isLate() ? ' ⏰' : ''),
+                $this->cRep($p->courier),
                 $p->due_at?->format('Y-m-d h:i A') ?? '—',
                 $p->delivered_at?->format('Y-m-d h:i A') ?? '—',
                 ($h = $lateHours($p)) === null ? '—' : $this->f0($h),
                 ($f = $fill($p)) === null ? '—' : rtrim(rtrim(number_format($f, 1), '0'), '.').'%',
                 $p->arrived_at && $p->delivered_at ? $this->f0(abs($p->arrived_at->diffInMinutes($p->delivered_at))) : '—',
                 (string) ($p->abort_reason ?: $p->approval_note ?: '—'),
-                $this->m($p->grand_total),
             ])->all(),
-            'totals' => ['', '', '', '', '', '', '', '', '', '', __('common.total'), $this->m($rows->sum('grand_total'))],
+            'totals' => ['', '', __('common.total'), $this->m($rows->sum('grand_total')), '', '', '', '', '', '', '', ''],
         ];
     }
 
@@ -1164,6 +1395,8 @@ class ReportController extends Controller
         $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'zone', 'rep'])
             ->where('status', 'active')
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            // فلتر المندوب (٢٢/٩) — القايمة دي بتتوزع على المناديب، فلازم تتفلتر بيهم
+            ->when($r->filled('user_id'), fn ($w) => $w->where('rep_id', $r->integer('user_id')))
             ->get()
             ->filter(function ($c) use ($lastVisits, $cut) {
                 $t = $lastVisits->get($c->id);
@@ -1177,6 +1410,8 @@ class ReportController extends Controller
             $s = mb_strtolower($r->string('q')->trim());
             $clients = $clients->filter(fn ($c) => str_contains(mb_strtolower($c->fullName().' '.$c->name_en), $s));
         }
+
+        $neverCount = $clients->filter(fn ($c) => $lastVisits->get($c->id) === null)->count();
 
         $rows = $clients->map(function ($c) use ($lastVisits) {
             $t = $lastVisits->get($c->id);
@@ -1193,10 +1428,14 @@ class ReportController extends Controller
         })->values()->all();
 
         return [
-            'filters' => ['days', 'channel', 'q'],
+            'filters' => ['days', 'rep', 'channel', 'q'],
+            'note' => __('uib2.note_inactive', ['d' => $days]),
             'kpis' => [
-                [__('rpt.k_clients'), $this->f0(count($rows)), 'neg', $this->scr('ops.journeys', [], false)],
-                [__('rpt.k_balance'), $this->m($clients->sum('balance')), 'mid', $this->to('debts')],
+                $this->k([__('rpt.k_clients'), $this->f0(count($rows)), 'neg', $this->scr('ops.journeys', [], false)],
+                    $this->ex('ic_clients', ['d' => $days], $this->eq($this->f0(count($rows)),
+                        ['', $this->f0($neverCount), 'never'], ['+', $this->f0(count($rows) - $neverCount), 'stale']))),
+                $this->k([__('rpt.k_balance'), $this->m($clients->sum('balance')), 'mid', $this->to('debts')],
+                    $this->ex('ic_balance', ['n' => $this->f0($clients->where('balance', '>', 0)->count())])),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_zone')],
@@ -1219,11 +1458,13 @@ class ReportController extends Controller
         $clients = Client::visibleTo(Client::query(), $r->user())->with(['group', 'channel', 'zone', 'rep'])
             ->whereBetween('created_at', [$a, $b])
             ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->when($r->filled('user_id'), fn ($w) => $w->where('rep_id', $r->integer('user_id')))
             ->latest()->take(self::MAX_ROWS)->get();
 
         // ⚠️ من كشف الحساب (`clients.purchases`) — كان فواتير بس، فعميل الكي
         // أكاونت الجديد اللي شغله أوامر توريد كان بيطلع «صفر مبيعات» (٢١/٩)
         $sales = $clients->pluck('purchases', 'id');
+        $bought = $clients->filter(fn ($c) => (float) $c->purchases > 0)->count();
 
         $rows = $clients->map(fn ($c) => [
             $c->created_at->format('Y-m-d'),
@@ -1236,10 +1477,16 @@ class ReportController extends Controller
         ])->all();
 
         return [
-            'filters' => ['range', 'channel'],
+            'filters' => ['range', 'rep', 'channel'],
             'kpis' => [
-                [__('rpt.k_clients'), $this->f0($clients->count()), 'pos', $this->scr('erp.clients', [], false)],
-                [__('rpt.k_grand'), $this->m($sales->sum()), '', $this->to('sales_by_client')],
+                $this->k([__('rpt.k_clients'), $this->f0($clients->count()), 'pos', $this->scr('erp.clients', [], false)],
+                    $this->ex('nc_clients', [], $this->eq($this->f0($clients->count()),
+                        ['', $this->f0($bought), 'bought'], ['+', $this->f0($clients->count() - $bought), 'not_bought']))),
+                $this->k([__('rpt.k_sales_since'), $this->m($sales->sum()), '', $this->to('sales_by_client')],
+                    $this->ex('nc_sales', [], $bought > 0 ? $this->eq($this->m($sales->sum() / $bought),
+                        ['', $this->m($sales->sum()), 'sales'], ['÷', $this->f0($bought), 'bought']) : '')),
+                $this->k([__('rpt.k_balance'), $this->m($clients->sum('balance')), 'mid', $this->to('debts')],
+                    $this->ex('nc_balance')),
             ],
             'columns' => [
                 [__('rpt.c_date')], [__('rpt.c_client')], [__('rpt.c_channel')],
@@ -1292,10 +1539,17 @@ class ReportController extends Controller
             'daysDefault' => 60,
             'daysLabel' => __('rpt.f_days_expiry'),
             'kpis' => [
-                [__('rpt.k_lines'), $this->f0($rows->count()), '', $this->scr('ops.merch', [], false)],
-                [__('rpt.k_expired'), $this->f0($expired->count()), 'neg', $this->scr('ops.merch', [], false)],
-                [__('rpt.k_expired_pcs'), $this->f0($expired->sum('pieces')), 'neg', $this->scr('ops.merch', [], false)],
-                [__('rpt.k_near_pcs'), $this->f0($rows->sum('pieces') - $expired->sum('pieces')), 'mid', $this->to('oos_frequency')],
+                $this->k([__('rpt.k_lines'), $this->f0($rows->count()), '', $this->scr('ops.merch', [], false)],
+                    $this->ex('se_lines', ['d' => $days], $this->eq($this->f0($rows->count()),
+                        ['', $this->f0($expired->count()), 'expired'], ['+', $this->f0($rows->count() - $expired->count()), 'near']))),
+                $this->k([__('rpt.k_expired'), $this->f0($expired->count()), 'neg', $this->scr('ops.merch', [], false)],
+                    $this->ex('se_expired', ['b' => $this->f0($expired->pluck('client_id')->unique()->count())])),
+                $this->k([__('rpt.k_expired_pcs'), $this->f0($expired->sum('pieces')), 'neg', $this->scr('ops.merch', [], false)],
+                    $this->ex('se_expired_pcs', [], $this->eq($this->pct($expired->sum('pieces'), $rows->sum('pieces')),
+                        ['', $this->f0($expired->sum('pieces')), 'expired'], ['÷', $this->f0($rows->sum('pieces')), 'all_pcs']))),
+                $this->k([__('rpt.k_near_pcs'), $this->f0($rows->sum('pieces') - $expired->sum('pieces')), 'mid', $this->to('oos_frequency')],
+                    $this->ex('se_near_pcs', ['d' => $days], $this->eq($this->f0($rows->sum('pieces') - $expired->sum('pieces')),
+                        ['', $this->f0($rows->sum('pieces')), 'all_pcs'], ['−', $this->f0($expired->sum('pieces')), 'expired']))),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_product')],
@@ -1365,11 +1619,24 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep'],
             'kpis' => [
-                [__('rpt.k_visits'), $this->f0($T['v']), '', $this->scr('ops.merch', $merchQ)],
-                [__('rpt.k_full_photos'), $this->f0($T['full']), 'pos', $this->scr('ops.merch', $merchQ)],
-                [__('rpt.k_no_photos'), $this->f0($T['np']), 'neg', $this->scr('ops.merch', $merchQ)],
-                [__('rpt.k_counted'), $this->f0($T['cnt']), '', $this->to('shelf_expiry')],
-                [__('rpt.k_moved'), $this->f0($T['moved']), 'mid', $this->to('oos_frequency')],
+                $this->k([__('rpt.k_visits'), $this->f0($T['v']), '', $this->scr('ops.merch', $merchQ)],
+                    $this->ex('mp_visits', ['n' => $this->f0(count($rows))], $this->eq($this->f0($T['v']),
+                        ['', $this->f0($T['full']), 'full_photos'], ['+', $this->f0($T['np']), 'no_photos'],
+                        ['+', $this->f0($T['v'] - $T['full'] - $T['np']), 'part_photos']))),
+                $this->k([__('rpt.k_full_photos'), $this->f0($T['full']), 'pos', $this->scr('ops.merch', $merchQ)],
+                    $this->ex('mp_full', [], $this->eq($this->pct($T['full'], $T['v']),
+                        ['', $this->f0($T['full']), ''], ['÷', $this->f0($T['v']), 'visits']))),
+                $this->k([__('rpt.k_no_photos'), $this->f0($T['np']), 'neg', $this->scr('ops.merch', $merchQ)],
+                    $this->ex('mp_np', [], $this->eq($this->pct($T['np'], $T['v']),
+                        ['', $this->f0($T['np']), ''], ['÷', $this->f0($T['v']), 'visits']))),
+                $this->k([__('rpt.k_counted'), $this->f0($T['cnt']), '', $this->to('shelf_expiry')],
+                    $this->ex('mp_counted', [], $this->eq($this->pct($T['cnt'], $T['v']),
+                        ['', $this->f0($T['cnt']), ''], ['÷', $this->f0($T['v']), 'visits']))),
+                $this->k([__('rpt.k_moved'), $this->f0($T['moved']), 'mid', $this->to('oos_frequency')],
+                    $this->ex('mp_moved', [], $T['v'] > 0 ? $this->eq(number_format($T['moved'] / $T['v'], 1),
+                        ['', $this->f0($T['moved']), 'pcs'], ['÷', $this->f0($T['v']), 'visits']) : '')),
+                $this->k([__('rpt.k_short'), $this->f0($T['short']), 'neg', $this->to('oos_frequency')],
+                    $this->ex('mp_short')),
             ],
             'columns' => [
                 [__('rpt.c_rep')], [__('rpt.k_visits'), 'num'], [__('rpt.k_branches'), 'num'],
@@ -1422,15 +1689,22 @@ class ReportController extends Controller
         // أكبر عميل الأول، وجوّه العميل أكبر صنف الأول
         $rows = $rows->sort(fn ($x, $y) => [$y['rank'], $x['client'], $y['net']] <=> [$x['rank'], $y['client'], $x['net']])
             ->take(self::MAX_ROWS)->values();
+        $cpClients = $rows->pluck('cid')->unique()->count();
 
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
                 // ⚠️ العدّ على الـid — الكود الفاضي كان بيلمّ كل العملاء اللي من غير كود في واحد (٢٢/٩)
-                [__('rpt.k_clients'), $this->f0($rows->pluck('cid')->unique()->count()), '', $this->to('sales_by_client')],
-                [__('rpt.k_products'), $this->f0($rows->pluck('pid')->unique()->count()), '', $this->to('sales_by_product')],
-                [__('rpt.k_qty'), $this->f0($rows->sum('q')), '', $this->to('sales_by_product')],
-                [__('rpt.k_grand'), $this->m($rows->sum('net') + $rows->sum('tax')), 'pos', $this->to('sales_docs')],
+                $this->k([__('rpt.k_clients'), $this->f0($cpClients), '', $this->to('sales_by_client')],
+                    $this->ex('cp_clients', [], $cpClients > 0 ? $this->eq(number_format($rows->count() / $cpClients, 1),
+                        ['', $this->f0($rows->count()), 'lines'], ['÷', $this->f0($cpClients), 'clients']) : '')),
+                $this->k([__('rpt.k_products'), $this->f0($rows->pluck('pid')->unique()->count()), '', $this->to('sales_by_product')],
+                    $this->ex('cp_products')),
+                $this->k([__('rpt.k_qty'), $this->f0($rows->sum('q')), '', $this->to('sales_by_product')],
+                    $this->ex('sp_qty')),
+                $this->k([__('rpt.k_grand'), $this->m($rows->sum('net') + $rows->sum('tax')), 'pos', $this->to('sales_docs')],
+                    $this->ex('cp_grand', [], $this->eq($this->m($rows->sum('net') + $rows->sum('tax')),
+                        ['', $this->m($rows->sum('net')), 'net'], ['+', $this->m($rows->sum('tax')), 'tax']))),
             ],
             'columns' => [
                 [__('common.code')], [__('rpt.c_client')], [__('rpt.c_product')], [__('rpt.k_qty'), 'num'],
@@ -1492,17 +1766,31 @@ class ReportController extends Controller
 
         $down = $rows->where('diff', '<', 0);
         $lost = $rows->filter(fn ($x) => $x['prev'] > 0 && $x['cur'] <= 0);
+        $up = $rows->where('diff', '>', 0);
 
         return [
             'filters' => ['range', 'channel', 'q'],
             'kpis' => [
                 // فترة المقارنة بتفتح «المبيعات بالعميل» عليها
-                [__('rpt.k_prev_period'), $pa->toDateString().' → '.$pb->toDateString(), '',
+                $this->k([__('rpt.k_prev_period'), $pa->toDateString().' → '.$pb->toDateString(), '',
                     $this->to('sales_by_client', ['from' => $pa->toDateString(), 'to' => $pb->toDateString()])],
-                [__('rpt.k_down_clients'), $this->f0($down->count()), 'neg', $this->to('sales_by_client')],
-                [__('rpt.k_down_value'), $this->m(abs($down->sum('diff'))), 'neg', $this->to('sales_by_client')],
-                [__('rpt.k_stopped'), $this->f0($lost->count()), 'mid', $this->to('inactive_clients')],
-                [__('rpt.k_up_value'), $this->m($rows->where('diff', '>', 0)->sum('diff')), 'pos', $this->to('sales_by_client')],
+                    $this->ex($a->day === 1 ? 'sdl_prev_month' : 'sdl_prev_days')),
+                $this->k([__('rpt.k_down_clients'), $this->f0($down->count()), 'neg', $this->to('sales_by_client')],
+                    $this->ex('sdl_down_clients', [], $this->eq($this->f0($rows->count()),
+                        ['', $this->f0($down->count()), 'went_down'], ['+', $this->f0($up->count()), 'went_up'],
+                        ['+', $this->f0($rows->count() - $down->count() - $up->count()), 'same']))),
+                $this->k([__('rpt.k_down_value'), $this->m(abs($down->sum('diff'))), 'neg', $this->to('sales_by_client')],
+                    $this->ex('sdl_down_value', [], $this->eq($this->m(abs($down->sum('diff'))),
+                        ['', $this->m($down->sum('prev')), 'prev'], ['−', $this->m($down->sum('cur')), 'cur']))),
+                $this->k([__('rpt.k_stopped'), $this->f0($lost->count()), 'mid', $this->to('inactive_clients')],
+                    $this->ex('sdl_stopped', ['v' => $this->m($lost->sum('prev'))])),
+                $this->k([__('rpt.k_up_value'), $this->m($up->sum('diff')), 'pos', $this->to('sales_by_client')],
+                    $this->ex('sdl_up_value', [], $this->eq($this->m($up->sum('diff')),
+                        ['', $this->m($up->sum('cur')), 'cur'], ['−', $this->m($up->sum('prev')), 'prev']))),
+                // المحصّلة (٢٢/٩) — من غيرها الكروت بتقول اللي نزل واللي طلع ومابتقولش الشركة رايحة فين
+                $this->k([__('uib2.k_net_change'), $this->m($rows->sum('diff')), $rows->sum('diff') < 0 ? 'neg' : 'pos', $this->to('sales_by_client')],
+                    $this->ex('sdl_net', [], $this->eq($this->m($rows->sum('diff')),
+                        ['', $this->m($rows->sum('cur')), 'cur'], ['−', $this->m($rows->sum('prev')), 'prev']))),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_rep')],
@@ -1561,7 +1849,10 @@ class ReportController extends Controller
             }
 
             $rows[] = [
-                __('rpt.tk_'.$t->kind),
+                // بادج المستوى (٢٢/٩) — الشركة ⊇ المديرين ⊇ المناديب، فالصفوف مش بتتجمع على بعض
+                ['text' => __('rpt.tk_'.$t->kind), 'kind' => $t->kind, 'badge' => [
+                    \App\Models\Target::KIND_COMPANY => 'b-blue', \App\Models\Target::KIND_MANAGER => 'b-orange',
+                ][$t->kind] ?? 'b-gray'],
                 $t->kind === \App\Models\Target::KIND_COMPANY ? __('rpt.tk_company')
                     : ($t->kind === \App\Models\Target::KIND_REP && $t->user
                         ? $this->lk($t->user->displayName(), route('erp.targets.annual.rep', ['user' => $t->user_id, 'year' => $year]))
@@ -1589,22 +1880,39 @@ class ReportController extends Controller
             default => __('rpt.tk_reps_total'),
         };
 
+        // عمود «داخل في الإجمالي» (٢٢/٩): ✓ لصفوف المستوى اللي الكروت وصف الإجمالي منه بس —
+        // الباقي تفصيل لنفس الفلوس، وجمعه عليها = عدّ مرتين
+        $rows = array_map(function ($row) use ($level) {
+            $row[] = ($row[0]['kind'] ?? null) === $level ? '✓' : '—';
+
+            return $row;
+        }, $rows);
+        $levelCount = count(array_filter($rows, fn ($row) => ($row[0]['kind'] ?? null) === $level));
+
         return [
             'filters' => ['range', 'rep'],
+            'note' => __('uib2.note_target', ['level' => $totalLabel]),
             'kpis' => [
-                [__('rpt.k_months'), $year.' · '.$m1.' → '.$m2, '', route('erp.targets.annual', ['year' => $year])],
-                [__('rpt.k_target').' · '.$totalLabel, $this->m($T['t']), '', route('erp.targets.annual', ['year' => $year])],
-                [__('rpt.k_achieved'), $this->m($T['a']), 'pos', $this->to('sales_by_rep')],
-                [__('rpt.k_achieved_pct'), $T['t'] > 0 ? number_format($T['a'] / $T['t'] * 100, 1).'%' : '—', 'mid',
+                $this->k([__('rpt.k_months'), $year.' · '.$m1.' → '.$m2, '', route('erp.targets.annual', ['year' => $year])],
+                    $this->ex('tv_months', ['n' => $m2 - $m1 + 1])),
+                $this->k([__('rpt.k_target').' · '.$totalLabel, $this->m($T['t']), '', route('erp.targets.annual', ['year' => $year])],
+                    $this->ex('tv_target', ['n' => $this->f0($levelCount), 'level' => $totalLabel])),
+                $this->k([__('rpt.k_achieved'), $this->m($T['a']), 'pos', $this->to('sales_by_rep')],
+                    $this->ex('tv_achieved', [], $this->eq($this->m($T['a'] - $T['t']),
+                        ['', $this->m($T['a']), 'achieved'], ['−', $this->m($T['t']), 'target']))),
+                $this->k([__('rpt.k_achieved_pct'), $T['t'] > 0 ? number_format($T['a'] / $T['t'] * 100, 1).'%' : '—', 'mid',
                     route('erp.targets.annual', ['year' => $year])],
+                    $this->ex('tv_pct', [], $this->eq($this->pct($T['a'], $T['t']),
+                        ['', $this->m($T['a']), 'achieved'], ['÷', $this->m($T['t']), 'target']))),
             ],
             'columns' => [
                 [__('rpt.c_level')], [__('rpt.c_name')], [__('rpt.k_target'), 'num'], [__('rpt.k_achieved'), 'num'],
                 [__('rpt.k_gap'), 'num'], [__('rpt.k_achieved_pct'), 'num'], [__('rpt.k_year_target'), 'num'],
+                [__('uib2.c_in_total')],
             ],
             'rows' => $rows,
             // النسبة في كارت «نسبة التحقيق» فوق — صف الإجمالي فلوس بس (٢٢/٩)
-            'totals' => [$totalLabel, '', $this->m($T['t']), $this->m($T['a']), $this->m($T['a'] - $T['t']), '', ''],
+            'totals' => [$totalLabel, '', $this->m($T['t']), $this->m($T['a']), $this->m($T['a'] - $T['t']), '', '', ''],
         ];
     }
 
@@ -1648,10 +1956,15 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
-                [__('rpt.k_lines'), $this->f0($rows->count()), '', $this->scr('ops.merch', $merchQ)],
-                [__('rpt.k_oos_times'), $this->f0($rows->sum('oos')), 'neg', $this->scr('ops.merch', $merchQ)],
-                [__('rpt.k_branches'), $this->f0($rows->pluck('client_id')->unique()->count()), '', $this->to('merch_performance')],
-                [__('rpt.k_products'), $this->f0($rows->pluck('product_id')->unique()->count()), '', $this->scr('ops.replenishments', [], false)],
+                $this->k([__('rpt.k_lines'), $this->f0($rows->count()), '', $this->scr('ops.merch', $merchQ)],
+                    $this->ex('of_lines')),
+                $this->k([__('rpt.k_oos_times'), $this->f0($rows->sum('oos')), 'neg', $this->scr('ops.merch', $merchQ)],
+                    $this->ex('of_times', [], $this->eq($this->pct($rows->sum('oos'), $rows->sum('seen'), 0),
+                        ['', $this->f0($rows->sum('oos')), 'oos'], ['÷', $this->f0($rows->sum('seen')), 'seen']))),
+                $this->k([__('rpt.k_branches'), $this->f0($rows->pluck('client_id')->unique()->count()), '', $this->to('merch_performance')],
+                    $this->ex('of_branches')),
+                $this->k([__('rpt.k_products'), $this->f0($rows->pluck('product_id')->unique()->count()), '', $this->scr('ops.replenishments', [], false)],
+                    $this->ex('of_products')),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.c_product')],
@@ -1719,12 +2032,21 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
-                [__('rpt.k_net'), $this->m($T['net']), '', $this->to('sales_by_client')],
-                [__('rpt.k_cost'), $this->m($T['cost']), '', $this->to('sales_by_product')],
-                [__('rpt.k_profit'), $this->m($profitT), 'pos', $this->to('sales_by_product')],
-                [__('rpt.k_margin'), $T['cov'] > 0 ? number_format($profitT / $T['cov'] * 100, 1).'%' : '—', 'mid', $this->to('sales_by_product')],
+                $this->k([__('rpt.k_net'), $this->m($T['net']), '', $this->to('sales_by_client')],
+                    $this->ex('pf_net', [], $this->eq($this->m($T['net']),
+                        ['', $this->m($T['cov']), 'covered'], ['+', $this->m($T['unc']), 'uncosted']))),
+                $this->k([__('rpt.k_cost'), $this->m($T['cost']), '', $this->to('sales_by_product')],
+                    $this->ex('pf_cost')),
+                $this->k([__('rpt.k_profit'), $this->m($profitT), 'pos', $this->to('sales_by_product')],
+                    $this->ex('pf_profit', [], $this->eq($this->m($profitT),
+                        ['', $this->m($T['cov']), 'covered'], ['−', $this->m($T['cost']), 'cost']))),
+                $this->k([__('rpt.k_margin'), $T['cov'] > 0 ? number_format($profitT / $T['cov'] * 100, 1).'%' : '—', 'mid', $this->to('sales_by_product')],
+                    $this->ex('pf_margin', [], $this->eq($this->pct($profitT, $T['cov']),
+                        ['', $this->m($profitT), 'profit'], ['÷', $this->m($T['cov']), 'covered']))),
                 // الأصناف اللي من غير تكلفة بتتصلّح من شاشة الأصناف
-                [__('rpt.k_uncosted'), $this->m($T['unc']), 'neg', $this->scr('erp.stock', [], false)],
+                $this->k([__('rpt.k_uncosted'), $this->m($T['unc']), 'neg', $this->scr('erp.stock', [], false)],
+                    $this->ex('pf_uncosted', [], $this->eq($this->pct($T['unc'], $T['net']),
+                        ['', $this->m($T['unc']), 'uncosted'], ['÷', $this->m($T['net']), 'net']))),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.k_net'), 'num'], [__('rpt.k_cost'), 'num'],
@@ -1871,16 +2193,34 @@ class ReportController extends Controller
                     collect($reasons)->mapWithKeys(fn ($k) => [$k => __('rpt.rc_'.$k)])->all()],
             ],
             'kpis' => [
-                [__('rpt.rc_docs_total'), $this->m($docsTotal), '', $this->scr('ops.invoices')],
-                [__('rpt.rc_ledger_total'), $this->m($ledgerTotal), '', $this->to('sales_by_client')],
-                [__('rpt.k_diff'), $this->m($docsTotal - $ledgerTotal), 'neg', request()->fullUrlWithQuery(['reason' => null, 'export' => null])],
-                [__('rpt.rc_consignment'), $this->m($sum['consignment']), 'mid', ...$this->flt('reason', 'consignment')],
-                [__('rpt.rc_no_entry'), $this->m($sum['no_entry']), 'neg', ...$this->flt('reason', 'no_entry')],
-                [__('rpt.rc_other_date'), $this->m($sum['other_date']), 'mid', ...$this->flt('reason', 'other_date')],
-                [__('rpt.rc_amount'), $this->m($sum['amount']), 'mid', ...$this->flt('reason', 'amount')],
-                [__('rpt.rc_ledger_only'), $this->m($sum['ledger_only']), 'mid', ...$this->flt('reason', 'ledger_only')],
-                [__('rpt.rc_coll_dash'), $this->m($collDash), '', ...$this->flt('reason', 'coll_date')],
-                [__('rpt.rc_coll_ledger'), $this->m($collLedger), '', $this->to('collections')],
+                $this->k([__('rpt.rc_docs_total'), $this->m($docsTotal), '', $this->scr('ops.invoices')],
+                    $this->ex('rc_docs', [], $this->eq($this->m($docsTotal),
+                        ['', $this->m($docs->where('kind', 'invoice')->sum('grand_total')), 'inv'],
+                        ['+', $this->m($docs->where('kind', 'po')->sum('grand_total')), 'po']))),
+                $this->k([__('rpt.rc_ledger_total'), $this->m($ledgerTotal), '', $this->to('sales_by_client')],
+                    $this->ex('rc_ledger', ['n' => $this->f0($ledger->count())])),
+                $this->k([__('rpt.k_diff'), $this->m($docsTotal - $ledgerTotal), 'neg', request()->fullUrlWithQuery(['reason' => null, 'export' => null])],
+                    $this->ex('rc_diff', [], $this->eq($this->m($docsTotal - $ledgerTotal),
+                        ['', $this->m($sum['consignment']), 'rc_consignment'], ['+', $this->m($sum['no_entry']), 'rc_no_entry'],
+                        ['+', $this->m($sum['other_date']), 'rc_other_date'], ['+', $this->m($sum['amount']), 'rc_amount'],
+                        ['−', $this->m($sum['ledger_only']), 'rc_ledger_only'],
+                        // الباقي اللي الأسباب الخمسة مافسّرتهوش — بيتكتب صريح عشان المعادلة تقفل
+                        ['+', $this->m($docsTotal - $ledgerTotal - $sum['consignment'] - $sum['no_entry'] - $sum['other_date'] - $sum['amount'] + $sum['ledger_only']), 'unexplained']))),
+                $this->k([__('rpt.rc_consignment'), $this->m($sum['consignment']), 'mid', ...$this->flt('reason', 'consignment')],
+                    $this->ex('rc_x_consignment')),
+                $this->k([__('rpt.rc_no_entry'), $this->m($sum['no_entry']), 'neg', ...$this->flt('reason', 'no_entry')],
+                    $this->ex('rc_x_no_entry')),
+                $this->k([__('rpt.rc_other_date'), $this->m($sum['other_date']), 'mid', ...$this->flt('reason', 'other_date')],
+                    $this->ex('rc_x_other_date')),
+                $this->k([__('rpt.rc_amount'), $this->m($sum['amount']), 'mid', ...$this->flt('reason', 'amount')],
+                    $this->ex('rc_x_amount')),
+                $this->k([__('rpt.rc_ledger_only'), $this->m($sum['ledger_only']), 'mid', ...$this->flt('reason', 'ledger_only')],
+                    $this->ex('rc_x_ledger_only')),
+                $this->k([__('rpt.rc_coll_dash'), $this->m($collDash), '', ...$this->flt('reason', 'coll_date')],
+                    $this->ex('rc_coll_dash', [], $this->eq($this->m($collDash - $collLedger),
+                        ['', $this->m($collDash), 'by_created'], ['−', $this->m($collLedger), 'by_date']))),
+                $this->k([__('rpt.rc_coll_ledger'), $this->m($collLedger), '', $this->to('collections')],
+                    $this->ex('rc_coll_ledger')),
             ],
             'columns' => [
                 [__('rpt.c_doc_type')], [__('rpt.c_doc')], [__('rpt.c_client')], [__('rpt.rc_doc_date')],
@@ -2056,12 +2396,23 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
-                [__('rpt.k_clients'), $this->f0(count($rows)), '', $this->to('sales_by_client')],
-                [__('rpt.k_disc_total'), $this->m($T['all']), 'neg', $this->to('sales_by_client')],
-                [__('rpt.c_disc_custom'), $this->m($T['custom']), '', $this->scr('ops.invoices')],
-                [__('rpt.c_disc_contract'), $this->m($T['contract']), '', $this->to('contract_schedule')],
-                [__('rpt.c_disc_po_lines'), $this->m($T['pl']), '', $this->scr('ops.pos')],
-                [__('rpt.k_disc_share'), $T['net'] + $T['all'] > 0 ? number_format($T['all'] * 100 / ($T['net'] + $T['all']), 1).'%' : '—', 'mid', $this->to('sales_by_channel')],
+                $this->k([__('rpt.k_clients'), $this->f0(count($rows)), '', $this->to('sales_by_client')],
+                    $this->ex('dg_clients')),
+                $this->k([__('rpt.k_disc_total'), $this->m($T['all']), 'neg', $this->to('sales_by_client')],
+                    $this->ex('dg_total', [], $this->eq($this->m($T['all']), ['', $this->m($T['custom']), 'disc_custom'],
+                        ['+', $this->m($T['contract']), 'disc_contract'], ['+', $this->m($T['pl']), 'disc_po']))),
+                $this->k([__('rpt.c_disc_custom'), $this->m($T['custom']), '', $this->scr('ops.invoices')],
+                    $this->ex('dg_custom', [], $this->eq($this->pct($T['custom'], $T['all']),
+                        ['', $this->m($T['custom']), ''], ['÷', $this->m($T['all']), 'disc_all']))),
+                $this->k([__('rpt.c_disc_contract'), $this->m($T['contract']), '', $this->to('contract_schedule')],
+                    $this->ex('dg_contract', [], $this->eq($this->pct($T['contract'], $T['all']),
+                        ['', $this->m($T['contract']), ''], ['÷', $this->m($T['all']), 'disc_all']))),
+                $this->k([__('rpt.c_disc_po_lines'), $this->m($T['pl']), '', $this->scr('ops.pos')],
+                    $this->ex('dg_po', [], $this->eq($this->pct($T['pl'], $T['all']),
+                        ['', $this->m($T['pl']), ''], ['÷', $this->m($T['all']), 'disc_all']))),
+                $this->k([__('rpt.k_disc_share'), $T['net'] + $T['all'] > 0 ? number_format($T['all'] * 100 / ($T['net'] + $T['all']), 1).'%' : '—', 'mid', $this->to('sales_by_channel')],
+                    $this->ex('dg_share', [], $this->eq($this->pct($T['all'], $T['net'] + $T['all']),
+                        ['', $this->m($T['all']), 'disc_all'], ['÷', $this->m($T['net'] + $T['all']), 'before_disc']))),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_channel')], [__('rpt.k_net'), 'num'],
@@ -2115,10 +2466,16 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'kpis' => [
-                [__('rpt.k_returns'), $this->m($all), 'neg', $this->to('returns_docs')],
-                [__('rpt.k_ret_damaged'), $this->m($damaged->sum('v')).' · '.$this->f0($damaged->sum('qty')), 'neg', ...$this->flt('condition', 'damaged')],
-                [__('rpt.k_ret_good'), $this->m($good->sum('v')).' · '.$this->f0($good->sum('qty')), 'pos', ...$this->flt('condition', 'good')],
-                [__('rpt.k_ret_damaged_share'), $all > 0 ? number_format($damaged->sum('v') * 100 / $all, 1).'%' : '—', 'mid', $this->scr('ops.returns')],
+                $this->k([__('rpt.k_returns'), $this->m($all), 'neg', $this->to('returns_docs')],
+                    $this->ex('rq_total', [], $this->eq($this->m($all),
+                        ['', $this->m($damaged->sum('v')), 'damaged'], ['+', $this->m($good->sum('v')), 'good']))),
+                $this->k([__('rpt.k_ret_damaged'), $this->m($damaged->sum('v')).' · '.$this->f0($damaged->sum('qty')), 'neg', ...$this->flt('condition', 'damaged')],
+                    $this->ex('rq_damaged', ['v' => $this->m($damaged->sum('v')), 'n' => $this->f0($damaged->sum('qty'))])),
+                $this->k([__('rpt.k_ret_good'), $this->m($good->sum('v')).' · '.$this->f0($good->sum('qty')), 'pos', ...$this->flt('condition', 'good')],
+                    $this->ex('rq_good', ['v' => $this->m($good->sum('v')), 'n' => $this->f0($good->sum('qty'))])),
+                $this->k([__('rpt.k_ret_damaged_share'), $all > 0 ? number_format($damaged->sum('v') * 100 / $all, 1).'%' : '—', 'mid', $this->scr('ops.returns')],
+                    $this->ex('rq_share', [], $this->eq($this->pct($damaged->sum('v'), $all),
+                        ['', $this->m($damaged->sum('v')), 'damaged'], ['÷', $this->m($all), 'returns']))),
             ],
             'columns' => [
                 [__('rpt.c_client')], [__('rpt.c_product')], [__('rpt.c_condition')],
@@ -2178,10 +2535,16 @@ class ReportController extends Controller
         return [
             'filters' => ['range', 'rep'],
             'kpis' => [
-                [__('rpt.k_gifts_loaded'), $this->f0($in), '', $this->scr('wh.picks')],
-                [__('rpt.k_gifts_given'), $this->f0($out), 'pos', $this->to('gifts_log')],
-                [__('rpt.k_gifts_unlogged'), $this->f0($in - $out), 'neg', $this->to('gifts_log')],
-                [__('rpt.k_gifts_logged_share'), $in > 0 ? number_format($out * 100 / $in, 0).'%' : '—', 'mid', $this->to('gifts_log')],
+                $this->k([__('rpt.k_gifts_loaded'), $this->f0($in), '', $this->scr('wh.picks')],
+                    $this->ex('gb_loaded')),
+                $this->k([__('rpt.k_gifts_given'), $this->f0($out), 'pos', $this->to('gifts_log')],
+                    $this->ex('gb_given')),
+                $this->k([__('rpt.k_gifts_unlogged'), $this->f0($in - $out), 'neg', $this->to('gifts_log')],
+                    $this->ex('gb_unlogged', [], $this->eq($this->f0($in - $out),
+                        ['', $this->f0($in), 'loaded'], ['−', $this->f0($out), 'given']))),
+                $this->k([__('rpt.k_gifts_logged_share'), $in > 0 ? number_format($out * 100 / $in, 0).'%' : '—', 'mid', $this->to('gifts_log')],
+                    $this->ex('gb_share', [], $this->eq($this->pct($out, $in, 0),
+                        ['', $this->f0($out), 'given'], ['÷', $this->f0($in), 'loaded']))),
             ],
             'columns' => [
                 [__('rpt.c_rep')], [__('rpt.c_gift_picks'), 'num'], [__('rpt.c_gift_items'), 'num'],
@@ -2329,13 +2692,23 @@ class ReportController extends Controller
 
         return [
             'filters' => ['channel', 'q'],
+            'note' => __('uib2.note_contracts', ['d' => $today->toDateString()]),
             'kpis' => [
-                [__('rpt.k_cs_clauses'), $this->f0(count($rows)), '', $this->scr('erp.contracts', [], false)],
-                [__('rpt.k_cs_accrued'), $this->m($T['accrued']), 'neg', $this->scr('erp.contracts', [], false)],
-                [__('rpt.k_cs_booked'), $this->m($T['booked']), '', $this->scr('erp.dues', [], false)],
-                [__('rpt.k_cs_settled'), $this->m($T['settled']), 'pos', $this->scr('erp.dues', ['status' => 'settled'], false)],
-                [__('rpt.k_cs_gap'), $this->m($T['accrued'] - $T['booked']), 'neg', ...$this->flt('gap', 'open')],
-                [__('rpt.k_cs_conditional'), $this->f0($conditional), 'mid', ...$this->flt('gap', 'conditional')],
+                $this->k([__('rpt.k_cs_clauses'), $this->f0(count($rows)), '', $this->scr('erp.contracts', [], false)],
+                    $this->ex('cs_clauses')),
+                $this->k([__('rpt.k_cs_accrued'), $this->m($T['accrued']), 'neg', $this->scr('erp.contracts', [], false)],
+                    $this->ex('cs_accrued')),
+                $this->k([__('rpt.k_cs_booked'), $this->m($T['booked']), '', $this->scr('erp.dues', [], false)],
+                    $this->ex('cs_booked', [], $this->eq($this->m($T['booked']),
+                        ['', $this->m($T['settled']), 'settled'], ['+', $this->m($T['booked'] - $T['settled']), 'unsettled']))),
+                $this->k([__('rpt.k_cs_settled'), $this->m($T['settled']), 'pos', $this->scr('erp.dues', ['status' => 'settled'], false)],
+                    $this->ex('cs_settled', [], $this->eq($this->pct($T['settled'], $T['booked']),
+                        ['', $this->m($T['settled']), 'settled'], ['÷', $this->m($T['booked']), 'booked']))),
+                $this->k([__('rpt.k_cs_gap'), $this->m($T['accrued'] - $T['booked']), 'neg', ...$this->flt('gap', 'open')],
+                    $this->ex('cs_gap', [], $this->eq($this->m($T['accrued'] - $T['booked']),
+                        ['', $this->m($T['accrued']), 'accrued'], ['−', $this->m($T['booked']), 'booked']))),
+                $this->k([__('rpt.k_cs_conditional'), $this->f0($conditional), 'mid', ...$this->flt('gap', 'conditional')],
+                    $this->ex('cs_conditional')),
             ],
             'columns' => [
                 [__('rpt.c_contract')], [__('rpt.c_party')], [__('rpt.c_clause_kind')], [__('rpt.c_clause')],

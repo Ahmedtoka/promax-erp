@@ -354,6 +354,23 @@ class RepSettlementController extends Controller
      * الليدجر: اللي العميل دفعه فعلاً) − Σ قيود `refund` (مرتجع كاش
      * اتردّ نقدي) على زيارات المندوب في نفس النافذة.
      */
+    /**
+     * «المندوب عليه كام كاش دلوقتي» — نفس أرقام شاشة التصفية بالظبط، للشاشات التانية
+     * (صفحة المندوب ويومه، ٢٢/٩). من غير الصفوف التفصيلية عشان الكارت خفيف.
+     *
+     * @return array{cash_sales: float, cash_collections: float, cash_refunds: float, expected: float, prev_balance: float, due_total: float, from_at: mixed}
+     */
+    public static function cashDueFor(User $rep): array
+    {
+        $f = app(self::class)->openFigures($rep);
+
+        return [
+            'cash_sales' => $f['cash_sales'], 'cash_collections' => $f['cash_collections'],
+            'cash_refunds' => $f['cash_refunds'], 'expected' => $f['expected'],
+            'prev_balance' => $f['prev_balance'], 'due_total' => $f['due_total'], 'from_at' => $f['from_at'],
+        ];
+    }
+
     private function openFigures(User $rep): array
     {
         $last = RepSettlement::lastFor($rep->id);

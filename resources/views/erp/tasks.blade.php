@@ -35,18 +35,22 @@
 {{-- ═══ صف الإحصائيات ═══ --}}
 <div class="tk-stats">
     <div class="tk-stat"><span class="ic" style="background:#E8EFFD">📌</span>
-        <div><b>{{ $today->count() }}</b><i>{{ __('tasks.col_today') }}</i></div></div>
+        <div><b>{{ $today->count() }}</b><i>{{ __('tasks.col_today') }}</i><small class="tk-sub">{{ __('uib.tk_mine') }}</small></div></div>
     <div class="tk-stat"><span class="ic" style="background:#FDECEC">⏰</span>
-        <div><b @if($late->count()) style="color:#DC2626" @endif>{{ $late->count() }}</b><i>{{ __('tasks.col_late') }}</i></div></div>
+        <div><b @if($late->count()) style="color:#DC2626" @endif>{{ $late->count() }}</b><i>{{ __('tasks.col_late') }}</i><small class="tk-sub">{{ __('uib.tk_mine') }}</small></div></div>
     <div class="tk-stat"><span class="ic" style="background:#FDF1E3">⏳</span>
-        <div><b @if($waiting) style="color:#B96C0A" @endif>{{ $waiting }}</b><i>{{ __('tasks.k_waiting') }}</i></div></div>
+        <div><b @if($waiting) style="color:#B96C0A" @endif>{{ $waiting }}</b><i>{{ __('tasks.k_waiting') }}</i><small class="tk-sub">{{ __('uib.tk_assigned') }}</small></div></div>
+    {{-- (٢٢/٩) المدير مهامه هو صفر غالباً — المتأخر عند الفريق هو اللي محتاج يشوفه أول حاجة (نفس أرقام بورد الفريق) --}}
+    @php $teamLate = collect($team)->sum('late'); $teamOpen = collect($team)->sum('open'); @endphp
+    <a class="tk-stat" href="#tk-team" style="text-decoration:none;color:inherit"><span class="ic" style="background:#FDECEC">👥</span>
+        <div><b @if($teamLate) style="color:#DC2626" @endif>{{ $teamLate }}</b><i>{{ __('uib.tk_team_late') }}</i><small class="tk-sub">{{ __('uib.tk_team_late_sub', ['n' => $teamOpen]) }}</small></div></a>
     <div class="tk-stat"><span class="ic" style="background:#E7F7EE">🏁</span>
-        <div><b style="color:#0F7A38">{{ $done->count() }}</b><i>{{ __('tasks.col_done') }}</i></div></div>
+        <div><b style="color:#0F7A38">{{ $done->count() }}</b><i>{{ __('tasks.col_done') }}</i><small class="tk-sub">{{ __('uib.tk_mine') }}</small></div></div>
 </div>
 
 {{-- ═══ بورد الفريق — كارت لكل موظف بسامري مهامه، والضغط بيفلتر ═══ --}}
 @if ($team->isNotEmpty())
-<div class="card" style="margin-bottom:14px">
+<div id="tk-team" class="card" style="margin-bottom:14px">
     <h3 style="margin:0 0 10px">👥 {{ __('tasks.team_title') }}
         <span class="side">{{ __('tasks.team_hint') }}</span></h3>
     <div class="tk-team">
@@ -265,6 +269,7 @@
     justify-content:center;font-size:20px;flex-shrink:0}
 .tk-stat b{display:block;font-size:24px;font-weight:900;letter-spacing:-.5px;line-height:1.05;
     font-variant-numeric:tabular-nums}
+.tk-stat .tk-sub{display:block;font-size:10px;color:var(--muted);font-weight:500;margin-top:1px}
 .tk-stat i{display:block;font-style:normal;font-size:11px;font-weight:800;color:var(--muted);margin-top:2px}
 
 /* ═══ بورد الفريق ═══ */

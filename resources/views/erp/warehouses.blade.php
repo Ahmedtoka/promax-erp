@@ -27,10 +27,13 @@
     <a class="kpi" href="#whList">
         <div class="lbl">{{ __('stock.total_units') }}</div>
         <div class="val">{{ $fmt($warehouses->sum('qty_total')) }}</div>
+        {{-- الإجمالي = مجموع المخازن بالاسم — لحد 4 مخازن، أكتر من كده السطر بيطول (٢٢/٩) --}}
+        <div class="sub2">{{ __('uid.units_how') }}@if ($warehouses->count() <= 4)<br><span dir="ltr">{{ $fmt($warehouses->sum('qty_total')) }} = {{ $warehouses->map(fn ($w) => $w->displayName().' '.$fmt($w->qty_total))->implode(' + ') }}</span>@endif</div>
     </a>
     <a class="kpi" href="#whList">
         <div class="lbl">{{ __('stock.hold') }}</div>
         <div class="val mid">{{ $fmt($warehouses->sum('hold_total')) }}</div>
+        <div class="sub2">{{ __('uid.na_hold_tip') }} — {{ __('uid.wh_hold_part') }}</div>
     </a>
     <a class="kpi" href="{{ route('wh.transfers', ['status' => 'sent', 'kind' => 'wh_wh']) }}">
         <div class="lbl">{{ __('stock.in_transit') }}</div>

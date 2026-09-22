@@ -191,13 +191,14 @@
             {{-- جدول إدخال (محافظة/زون في كل صف) — التصدير الكامل من قايمة العملاء بفلتر الحالة --}}
             <table data-noxl>
                 <tr>
-                    <th style="width:34px">
+                    {{-- التعليم + الاسم + الكود في عمود واحد (٢٢/٩) — العمود الأول بيتثبّت لما الجدول يفيض،
+                         فلازم يبقى اسم العميل؛ وكمان بيوفّر عرض فعمود «الناقص» مايتقصّش --}}
+                    <th style="white-space:nowrap">
                         {{-- الشغّال بقى بيتعلّم عليه برضو — للتوزيع
                              (منطقة/مندوب/مدير) من غير ما حالته تتلمس --}}
-                        <input type="checkbox" id="allBox" onchange="toggleAll(this)">
+                        <input type="checkbox" id="allBox" onchange="toggleAll(this)" style="margin-inline-end:8px">
+                        {!! $sortLink('name', __('client.client')) !!} · {!! $sortLink('code', __('common.code')) !!}
                     </th>
-                    <th>{!! $sortLink('code', __('common.code')) !!}</th>
-                    <th>{!! $sortLink('name', __('client.client')) !!}</th>
                     <th>{!! $sortLink('group', __('nav.chains')) !!}</th>
                     <th>{!! $sortLink('gov', __('geo.governorate')) !!}</th>
                     <th>{!! $sortLink('zone', __('client.zone')) !!}</th>
@@ -222,13 +223,11 @@
                         if (! $c->zone_id) $miss[] = __('client.zone');
                     @endphp
                     <tr>
-                        <td>
+                        <td style="min-width:190px">
                             <input type="checkbox" name="ids[]" value="{{ $c->id }}"
-                                   class="rowBox" onchange="syncCount()">
-                        </td>
-                        <td class="num"><b>{{ $c->code }}</b></td>
-                        <td>
+                                   class="rowBox" onchange="syncCount()" style="float:inline-start;margin:3px 0 0;margin-inline-end:8px">
                             <a href="{{ route('erp.clients.show', $c) }}"><b>{{ $c->displayName() }}</b></a>
+                            <span class="num" style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $c->code }}</span>
                             @if ($c->name_en && $c->name !== $c->name_en)
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $c->name }}</div>
                             @endif
@@ -300,7 +299,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ $showingActive ? 11 : 10 }}" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="{{ $showingActive ? 9 : 8 }}" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('client.no_waiting') }}
                     </td></tr>
                 @endforelse

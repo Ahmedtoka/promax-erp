@@ -472,6 +472,8 @@ class Access
             // اليومية، بعدين التقارير التلاتة، وبعدين السندات، والإعدادات
             // آخر حاجة — مش أبجدي ولا بترتيب ما اتكتبوا.
             ['gl.accounts', '🌳', 'nav.gl_accounts', 'gl.accounts*', null],
+            // (٢٢/٩) مسودة شجرة العميل — ورقة شغل قبل اعتماد الشجرة وربطها
+            ['gl.coa', '📝', 'coa.page', 'gl.coa*', null],
             ['gl.entries', '📒', 'nav.gl_entries', 'gl.entries*', null],
             ['gl.trial_balance', '⚖️', 'nav.gl_trial_balance', 'gl.trial_balance*', null],
             ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],

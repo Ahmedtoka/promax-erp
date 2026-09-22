@@ -62,6 +62,14 @@
                                    value="{{ (int) ($t?->pieces_target ?? 0) ?: '' }}" style="width:100%;text-align:center"></td>
                     </tr>
                 @endforeach
+                {{-- (٢٢/٩) إجمالي التارجت وهو بيتكتب — اللي بيوزّع لازم يشوف مجموع الفريق قبل ما يحفظ --}}
+                <tfoot><tr class="tg-sum">
+                    <td style="text-align:start"><b>Σ {{ __('common.total') }}</b>
+                        <div style="font-size:10px;color:var(--muted)">{{ __('uib.tgm_total_sub') }}</div></td>
+                    @foreach (['money', 'clients', 'visits', 'pieces'] as $col)
+                        <td class="num" dir="ltr"><b data-tg-sum="{{ $col }}">0</b></td>
+                    @endforeach
+                </tr></tfoot>
             </table>
         </div>
         <div style="display:flex;justify-content:flex-end;margin-top:12px">
@@ -73,5 +81,21 @@
 @endsection
 
 @section('scripts')
-<style>.tg-tbl th, .tg-tbl td { text-align: center; vertical-align: middle; }</style>
+<style>.tg-tbl th, .tg-tbl td { text-align: center; vertical-align: middle; }
+.tg-tbl .tg-sum td { border-top: 2px solid var(--royal-blue); background: var(--card2); }</style>
+<script>
+(function () {
+    // مجموع كل عمود لايف من خانات الإدخال نفسها
+    function sum() {
+        ['money', 'clients', 'visits', 'pieces'].forEach(function (c) {
+            var t = 0;
+            document.querySelectorAll('.tg-tbl input[name$="[' + c + ']"]').forEach(function (i) { t += parseFloat(i.value) || 0; });
+            var el = document.querySelector('[data-tg-sum="' + c + '"]');
+            if (el) el.textContent = t.toLocaleString('en-US');
+        });
+    }
+    document.querySelectorAll('.tg-tbl input').forEach(function (i) { i.addEventListener('input', sum); });
+    sum();
+})();
+</script>
 @endsection

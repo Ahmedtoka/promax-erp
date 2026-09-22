@@ -18,6 +18,8 @@
     $collections = $branches->sum('collections');
     $balance = $branches->sum('balance');
     $returns = $branches->sum('returns');
+    // الباقي من معادلة الرصيد (٢٢/٩): خصومات وتسويات وافتتاحي — من نفس مجاميع الفروع
+    $otherNet = round($balance) - round($purchases) + round($returns) + round($collections);   // من الأرقام المقرّبة المعروضة — المعادلة تقفل بالجنيه
 
     // سامري إضافي (2026-08-06) — كله من الكولكشن المحمّل، صفر استعلامات زيادة
     $zonesCovered = $branches->pluck('zone_id')->filter()->unique()->count();
@@ -97,63 +99,31 @@
     <a class="kpi" href="#branches"><div class="lbl">{{ __('client.branch_count') }}</div><div class="val">{{ $branches->count() }}</div>
         <div class="sub2">{{ __('client.branches_with_contract', ['count' => $contracts->count()]) }}</div></a>
     <a @class(['kpi', 'on' => $kind === 'sale']) href="{{ $stUrl($kind === 'sale' ? null : 'sale') }}"><div class="lbl">{{ __('report.total_purchases') }}</div>
-        <div class="val" style="color:var(--primary)">{{ $fmt($purchases) }} {{ __('common.currency') }}</div></a>
+        <div class="val" style="color:var(--primary)">{{ $fmt($purchases) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.eq_chain_purchases', ['n' => $branches->where('purchases', '>', 0)->count(), 'all' => $branches->count()]) }}</div></a>
     <a @class(['kpi', 'on' => $kind === 'collection']) href="{{ $stUrl($kind === 'collection' ? null : 'collection') }}"><div class="lbl">{{ __('client.collected') }}</div><div class="val pos">{{ $fmt($collections) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ $purchases > 0 ? number_format($collections / $purchases * 100, 1) : 0 }}% {{ __('client.collection_rate') }}</div></a>
+        <div class="sub2">{{ __('uia.eq_coll_rate') }} <span dir="ltr">{{ $purchases > 0 ? number_format($collections / $purchases * 100, 1) : 0 }}% = {{ $fmt($collections) }} ÷ {{ $fmt($purchases) }}</span></div></a>
     <a class="kpi" href="#branches" onclick="sortBranchesBy('bal')"><div class="lbl">{{ __('client.outstanding') }}</div>
         <div class="val {{ $balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($balance) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('uia.by_branch') }}</div></a>
-    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($returns) }} {{ __('common.currency') }}</div></a>
-    <a class="kpi" href="{{ route('erp.groups.show', ['group' => $g, 'kind' => 'sale', 'from' => today()->toDateString(), 'to' => today()->toDateString()]) }}#chainStatement"><div class="lbl">{{ __('report.sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div></a>
+        <div class="sub2">{{ __('uia.eq_balance', ['s' => $fmt($purchases), 'r' => $fmt($returns), 'c' => $fmt($collections)]) }}@if (abs($otherNet) >= 0.5) {{ __($otherNet > 0 ? 'uia.eq_other_plus' : 'uia.eq_other_minus', ['o' => $fmt(abs($otherNet))]) }}@endif · {{ __('uia.by_branch') }}</div></a>
+    <a @class(['kpi', 'on' => $kind === 'return']) href="{{ $stUrl($kind === 'return' ? null : 'return') }}"><div class="lbl">{{ __('client.returns') }}</div><div class="val mid">{{ $fmt($returns) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.eq_return_rate') }} <span dir="ltr">{{ $purchases > 0 ? number_format($returns / $purchases * 100, 1) : 0 }}% = {{ $fmt($returns) }} ÷ {{ $fmt($purchases) }}</span></div></a>
+    <a class="kpi" href="{{ route('erp.groups.show', ['group' => $g, 'kind' => 'sale', 'from' => today()->toDateString(), 'to' => today()->toDateString()]) }}#chainStatement"><div class="lbl">{{ __('report.sales_today') }}</div><div class="val pos">{{ $fmt($todaySales) }} {{ __('common.currency') }}</div>
+        <div class="sub2">{{ __('uia.eq_today_sales', ['date' => today()->toDateString()]) }}</div></a>
     <a class="kpi" href="#branches" onclick="sortBranchesBy('zone')"><div class="lbl">{{ __('client.zones_covered') }}</div><div class="val">{{ $zonesCovered }}</div>
         <div class="sub2">{{ __('client.governorates_covered', ['count' => $govsCovered]) }}</div></a>
     <a class="kpi" href="#branches" onclick="sortBranchesBy('pur')"><div class="lbl">{{ __('client.avg_branch_purchases') }}</div>
         <div class="val" style="color:var(--primary)">{{ $fmt($avgPurchases) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('uia.by_branch') }}</div></a>
+        <div class="sub2"><span dir="ltr">{{ $fmt($avgPurchases) }} = {{ $fmt($purchases) }} ÷ {{ $branches->count() }}</span> {{ __('uia.eq_branches_word') }}</div></a>
     @if ($topBranch)
         <a class="kpi" href="{{ route('erp.clients.show', $topBranch) }}"><div class="lbl">{{ __('client.biggest_branch') }}</div>
             <div class="val" style="font-size:15px">{{ $topBranch->displayName() }}</div>
-            <div class="sub2">{{ $fmt($topBranch->purchases) }} {{ __('common.currency') }}</div></a>
+            <div class="sub2">{{ __('uia.eq_top_branch', ['v' => $fmt($topBranch->purchases), 'p' => $purchases > 0 ? number_format($topBranch->purchases / $purchases * 100, 1) : 0]) }}</div></a>
     @endif
 </div>
 
-<div class="grid2">
-    <div class="card">
-        <h3>🗺️ {{ __('client.chain_branches_map') }}
-            <span class="side">{{ __('client.branch_located', ['count' => $branches->filter(fn ($b) => $b->hasLocation())->count()]) }}</span></h3>
-        <div class="mapbox" id="mapGroup"></div>
-    </div>
-    <div class="card">
-        <h3>{{ __('client.chain_monthly_movement') }}</h3>
-        <div class="chartbox"><canvas id="chG"></canvas></div>
-    </div>
-</div>
-
-{{-- ═══ مسحوبات السلسلة بالكمية (٨/٩/٢٠٢٦): كام قطعة من كل صنف، بكام، وإمتى ═══ --}}
-@include('partials._movements_table', [
-    'movements' => $movements,
-    'exportUrl' => route('erp.groups.movements', ['group' => $g] + $range->query()),
-    'title' => __('client.movements_title_chain'),
-    'hint' => __('client.movements_hint_chain'),
-    'range' => $range,
-])
-
-<div class="grid2">
-    <div class="card">
-        <h3>🗾 {{ __('client.by_governorate') }}</h3>
-        <div class="chartbox"><canvas id="chGov"></canvas></div>
-    </div>
-    <div class="card">
-        <h3>🏷️ {{ __('client.category_split') }}</h3>
-        <div class="chartbox"><canvas id="chCat"></canvas></div>
-    </div>
-</div>
-
-<div class="card">
-    <h3>🏆 {{ __('client.top_branches') }}</h3>
-    <div class="chartbox"><canvas id="chTop"></canvas></div>
-</div>
-
+{{-- ═══ ترتيب الصفحة (٢٢/٩): اللي بيطارد فلوس السلسلة محتاج أرصدة الفروع والقيود الأول،
+     والخريطة والمسحوبات والرسوم بعدهم ═══ --}}
 <div class="card" id="branches">
     <h3>🏬 {{ __('client.branches') }} <span class="side">{{ __('client.branch_countable', ['count' => $branches->count()]) }}</span></h3>
     {{-- ⚠️ فلتر «من — إلى» (٩/٩/٢٠٢٦) — الجدول ده أرقامه مجمّعة مالوش صف
@@ -351,6 +321,43 @@
             @endif
         </table>
     </div>
+</div>
+
+<div class="grid2">
+    <div class="card">
+        <h3>🗺️ {{ __('client.chain_branches_map') }}
+            <span class="side">{{ __('client.branch_located', ['count' => $branches->filter(fn ($b) => $b->hasLocation())->count()]) }}</span></h3>
+        <div class="mapbox" id="mapGroup"></div>
+    </div>
+    <div class="card">
+        <h3>{{ __('client.chain_monthly_movement') }}</h3>
+        <div class="chartbox"><canvas id="chG"></canvas></div>
+    </div>
+</div>
+
+{{-- ═══ مسحوبات السلسلة بالكمية (٨/٩/٢٠٢٦): كام قطعة من كل صنف، بكام، وإمتى ═══ --}}
+@include('partials._movements_table', [
+    'movements' => $movements,
+    'exportUrl' => route('erp.groups.movements', ['group' => $g] + $range->query()),
+    'title' => __('client.movements_title_chain'),
+    'hint' => __('client.movements_hint_chain'),
+    'range' => $range,
+])
+
+<div class="grid2">
+    <div class="card">
+        <h3>🗾 {{ __('client.by_governorate') }}</h3>
+        <div class="chartbox"><canvas id="chGov"></canvas></div>
+    </div>
+    <div class="card">
+        <h3>🏷️ {{ __('client.category_split') }}</h3>
+        <div class="chartbox"><canvas id="chCat"></canvas></div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>🏆 {{ __('client.top_branches') }}</h3>
+    <div class="chartbox"><canvas id="chTop"></canvas></div>
 </div>
 
 <style>

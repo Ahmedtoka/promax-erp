@@ -29,12 +29,31 @@
 @section('content')
 
 <div class="card">
-    <h3>🧑‍💼 {{ __('team.users_and_roles') }}</h3>
-    <div class="tablewrap">
+    <h3>🧑‍💼 {{ __('team.users_and_roles') }}
+        <span class="side"><span id="tmCount">{{ $users->count() }}</span> / {{ $users->count() }}</span></h3>
+    {{-- (٢٢/٩) فلتر رول + حالة على الصفوف — القايمة طولت والموقوفين مخلوطين بالشغالين --}}
+    <div class="searchbar" data-noprint>
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" id="tmQ" oninput="tmFilter()" placeholder="{{ __('common.search') }}"></label>
+        <label class="fl"><span>{{ __('team.role') }}</span>
+            <select id="tmRole" onchange="tmFilter()">
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.roles')]) }}</option>
+                @foreach ($users->pluck('role')->unique()->sort() as $rk)
+                    <option value="{{ $rk }}">{{ __('enums.role.'.$rk) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('ui.l_status') }}</span>
+            <select id="tmActive" onchange="tmFilter()">
+                <option value="">{{ __('ui.all_of', ['x' => __('uib.statuses')]) }}</option>
+                <option value="1">{{ __('team.active') }}</option>
+                <option value="0">{{ __('team.inactive') }}</option>
+            </select></label>
+    </div>
+    <div class="tablewrap" id="tmUsers">
         <table>
             <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canSetPassword)<th></th>@endif</tr>
             @foreach ($users as $u)
-                <tr>
+                <tr data-role="{{ $u->role }}" data-active="{{ $u->active ? 1 : 0 }}">
                     <td>
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 32])
@@ -43,7 +62,8 @@
                     </td>
                     <td class="num">{{ $u->code ?? '—' }}</td>
                     <td><span class="badge {{ match($u->role) { 'admin' => 'b-red', 'manager' => 'b-purple', 'branch_manager' => 'b-gold', 'driver' => 'b-blue', 'promoter' => 'b-orange', default => 'b-green' } }}">{{ $u->roleLabel() }}</span></td>
-                    <td style="color:var(--muted)">{{ $u->email }}</td>
+                    {{-- الإيميل الطويل كان بيزقّ زراير التعديل بره الشاشة --}}
+                    <td style="color:var(--muted);max-width:170px;overflow:hidden;text-overflow:ellipsis" dir="ltr" title="{{ $u->email }}">{{ $u->email }}</td>
                     <td>{{ $u->zone?->displayName() ?? '—' }}</td>
                     <td class="s">{{ $u->branch?->displayName() ?? __('branch.central') }}</td>
                     <td class="num s">
@@ -366,6 +386,20 @@
 @endsection
 
 @section('scripts')
+<script>
+// فلتر الرول/الحالة — على الصفوف الموجودة، من غير ريلود
+function tmFilter() {
+    var r = document.getElementById('tmRole').value, a = document.getElementById('tmActive').value, n = 0;
+    var q = document.getElementById('tmQ').value.trim().toLowerCase();
+    document.querySelectorAll('#tmUsers tr[data-role]').forEach(function (tr) {
+        var ok = (!r || tr.dataset.role === r) && (a === '' || tr.dataset.active === a)
+            && (!q || tr.textContent.toLowerCase().indexOf(q) !== -1);
+        tr.style.display = ok ? '' : 'none';
+        if (ok) n++;
+    });
+    document.getElementById('tmCount').textContent = n;
+}
+</script>
 @if ($canSetPassword)
 <script>
 const PASS_URL = @js(route('erp.team.password', ['user' => '__ID__']));

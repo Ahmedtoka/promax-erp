@@ -42,6 +42,8 @@
                 <th>{{ __('channel.units_sold') }}</th>
                 <th>{{ __('client.purchases') }}</th>
                 <th>{{ __('client.collected') }}</th>
+                {{-- المرتجعات (٢٢/٩): من غيرها الرصيد مايتفهمش من الصف --}}
+                <th>{{ __('client.returns') }}</th>
                 <th>{{ __('client.balance') }}</th>
                 <th>{{ __('report.sales_today') }}</th>
                 <th data-nosum>{{ __('channel.discount_spread') }}</th>
@@ -102,6 +104,7 @@
                             <br><span style="font-size:10px;color:var(--muted)">{{ number_format($s['collections'] / $s['purchases'] * 100, 1) }}%</span>
                         @endif
                     </td>
+                    <td class="num mid">{{ $fmt($s['returns']) }}</td>
                     <td class="num {{ $s['balance'] > 0 ? 'neg' : 'pos' }}">
                         {{ $fmt($s['balance']) }}
                         @if ($s['owing'])
@@ -135,8 +138,29 @@
                     @endif
                 </tr>
             @endforeach
+            {{-- صف «بدون قناة» (٢٢/٩): بيه إجمالي الجدول يقفل على إجمالي شاشة العملاء --}}
+            @if (($orphanStats->n_clients ?? 0) > 0)
+                <tr>
+                    <td><span class="badge b-gray">{{ __('uia.no_channel_row') }}</span>
+                        <br><span style="font-size:10.5px;color:var(--muted)">{{ __('uia.no_channel_hint') }}</span></td>
+                    <td class="num"><b style="font-size:15px">{{ (int) $orphanStats->n_active }}</b>
+                        @if ($orphanStats->n_clients > $orphanStats->n_active)
+                            <br><span style="font-size:10px;color:var(--muted)">{{ __('client.out_of_clients', ['count' => $orphanStats->n_clients]) }}</span>
+                        @endif</td>
+                    <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                    <td class="num">{{ $fmt($orphanStats->purchases) }}</td>
+                    <td class="num pos">{{ $fmt($orphanStats->collections) }}</td>
+                    <td class="num mid">{{ $fmt($orphanStats->n_returns) }}</td>
+                    <td class="num {{ $orphanStats->balance > 0 ? 'neg' : 'pos' }}">{{ $fmt($orphanStats->balance) }}
+                        @if ($orphanStats->n_owing)<br><span style="font-size:10px;color:var(--muted)">{{ __('client.client_countable', ['count' => $orphanStats->n_owing]) }}</span>@endif</td>
+                    <td class="num">—</td><td class="num">—</td>
+                    @if ($manager)<td></td>@endif
+                </tr>
+            @endif
         </table>
     </div>
+    {{-- نطاق الأرقام (٢٢/٩) — عشان اللي بيقارن بشاشة العملاء يعرف هو بيقارن إيه بإيه --}}
+    <div style="font-size:11.5px;color:var(--muted);margin-top:8px">{{ __('uia.channels_scope') }}</div>
 
     <div class="alerts" style="margin-top:14px">
         <div class="alert info">
@@ -157,7 +181,7 @@
 
 <div class="grid2">
     <div class="card">
-        <h3>🏪 {{ __('client.key_account_segments') }}</h3>
+        <h3>🏪 {{ __('client.key_account_segments') }} <span class="side">{{ __('uia.segments_scope') }}</span></h3>
         <div class="tablewrap">
             <table>
                 <tr><th>{{ __('client.segment') }}</th><th>{{ __('client.client_count') }}</th></tr>
@@ -167,6 +191,15 @@
                         <td class="num">{{ $subCounts[$code] ?? 0 }}</td>
                     </tr>
                 @endforeach
+                {{-- كي أكاونت من غير قسم (٢٢/٩) — بيه مجموع الأقسام يقفل على عدد عملاء القناة فوق --}}
+                @php
+                    $kaCh = $channels->firstWhere('code', 'key_account');
+                    $kaAll = $kaCh ? ($stats[$kaCh->id]['clients'] ?? 0) : 0;
+                    $noSeg = $kaAll - array_sum(array_intersect_key($subCounts, Channel::SUB_CHANNELS));
+                @endphp
+                @if ($kaCh && $noSeg > 0)
+                    <tr><td style="color:var(--muted)">{{ __('uia.no_segment_row') }}</td><td class="num">{{ $noSeg }}</td></tr>
+                @endif
             </table>
         </div>
     </div>

@@ -49,9 +49,11 @@
         <div class="lbl">✏️ {{ __('activity.c_work') }}</div><div class="val" style="color:var(--primary)">{{ $fmt($sum['work']) }}</div>
         <div class="sub2">+{{ $sum['created'] }} · ✎{{ $sum['updated'] }} · ⚡{{ $sum['actions'] }} · {{ $sum['work_ratio'] }}%</div></a>
     <a class="kpi @if(($filters['event'] ?? '') === 'viewed') on @endif" href="{{ $fq(['event' => ($filters['event'] ?? '') === 'viewed' ? null : 'viewed']) }}#timeline">
-        <div class="lbl">👁 {{ __('activity.c_views') }}</div><div class="val">{{ $fmt($sum['views']) }}</div></a>
+        <div class="lbl">👁 {{ __('activity.c_views') }}</div><div class="val">{{ $fmt($sum['views']) }}</div>
+        <div class="sub2">{{ __('activity.x_views', ['n' => $fmt($sum['total'])]) }}</div></a>
     <a class="kpi @if(($filters['event'] ?? '') === 'deleted') on @endif" href="{{ $fq(['event' => ($filters['event'] ?? '') === 'deleted' ? null : 'deleted']) }}#timeline">
-        <div class="lbl">🗑 {{ __('activity.e_deleted') }}</div><div class="val" @if($sum['deleted']) style="color:var(--red)" @endif>{{ $fmt($sum['deleted']) }}</div></a>
+        <div class="lbl">🗑 {{ __('activity.e_deleted') }}</div><div class="val" @if($sum['deleted']) style="color:var(--red)" @endif>{{ $fmt($sum['deleted']) }}</div>
+        <div class=\"sub2\">{{ __('activity.x_deleted') }}</div></a>
     <a class="kpi" href="#sessions"><div class="lbl">⚡ {{ __('activity.c_pace') }}</div>
         <div class="val">{{ AS_::gap($sum['pace']) }}</div><div class="sub2">{{ __('activity.k_pace_hint') }}</div></a>
     <a class="kpi" href="#sessions"><div class="lbl">☕ {{ __('activity.c_break') }}</div>

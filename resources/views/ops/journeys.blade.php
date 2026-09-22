@@ -762,7 +762,8 @@
     renderPulse();
 </script>
 <style>
-.jb{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start}
+/* (٢٢/٩) minmax(0,1fr): العمود كان بيتمدد بعرض أيام الأسبوع السبعة فالصفحة كلها بتطلع بره الشاشة */
+.jb{display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;align-items:start}
 @media(max-width:1100px){.jb{grid-template-columns:1fr}}
 .jb-grow{flex:1}
 

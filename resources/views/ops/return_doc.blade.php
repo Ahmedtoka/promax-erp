@@ -46,7 +46,12 @@
         {{-- ⚠️ **ده الرقم اللي اتقيّد في الليدجر** — شامل الضريبة،
              زي `grand_total` بتاع الفاتورة بالظبط. --}}
         <div class="kpi" data-explain onclick="document.getElementById('retItems').scrollIntoView({behavior:'smooth'})"><div class="lbl">{{ __('common.total') }}</div>
-            <div class="val neg"><b>{{ $fmt($r->grand_total) }}</b></div></div>
+            <div class="val neg"><b>{{ $fmt($r->grand_total) }}</b></div>
+            {{-- (٢٢/٩) معادلة الإجمالي — بتتكتب لما تقفل بالظبط على الأرقام المخزّنة --}}
+            @if (abs((float) $r->subtotal - (float) $r->discount + (float) $r->tax_total - (float) $r->grand_total) < 0.01)
+                <div class="sub2"><span dir="ltr" style="display:inline-block">{{ preg_replace('/(\p{Arabic}+(?:[ \/]\p{Arabic}+)*)/u', '$1'.html_entity_decode('&lrm;'), __('uic.ret_total_eq', ['t' => $fmt($r->grand_total), 's' => $fmt($r->subtotal), 'd' => $fmt($r->discount), 'x' => $fmt($r->tax_total)])) }}</span></div>
+            @endif
+            <div class="sub2">{{ __('uic.ret_total_sub') }}</div></div>
     </div>
 
     @if ($r->note)

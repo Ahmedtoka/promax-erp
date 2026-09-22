@@ -86,7 +86,8 @@
 @section('content')
 
 {{-- الكروت: الأمر والحالة بيرجّعوا للقايمة مفلترة، المخزن والمندوب بيفتحوا صفحتهم، والكميات على قايمة التجهيز (٢٢/٩) --}}
-<div class="kpis">
+{{-- 7 كروت: العرض الأدنى أصغر عشان السابع ماينزلش لوحده في سطر (٢٢/٩) --}}
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
     <a class="kpi" href="{{ route('wh.picks') }}">
         <div class="lbl">{{ __('stock.pick_order') }}</div>
         <div class="val">{{ $o->number }}</div>
@@ -129,12 +130,14 @@
     <a class="kpi" href="#pickList">
         <div class="lbl">{{ __('stock.qty_requested') }}</div>
         <div class="val">{{ $fmt($requested) }}</div>
-        <div class="sub2">{{ __('stock.units') }}</div>
+        <div class="sub2">{{ __('uid.pk_req_how') }}</div>
     </a>
     <a class="kpi" href="#pickList">
         <div class="lbl">{{ __('stock.qty_picked') }}</div>
         <div class="val pos">{{ $fmt($picked) }}</div>
-        <div class="sub2">{{ __('stock.qty_received_col') }}: {{ $fmt($received) }}</div>
+        <div class="sub2">{{ __('stock.qty_received_col') }}: {{ $fmt($received) }}<br>
+            {{-- الناقص بالأرقام — من نفس متغيرات الكروت (٢٢/٩) --}}
+            <span dir="ltr">{{ __('uid.pk_short') }} {{ $fmt($requested - $picked) }} = {{ $fmt($requested) }} − {{ $fmt($picked) }}</span></div>
     </a>
 </div>
 

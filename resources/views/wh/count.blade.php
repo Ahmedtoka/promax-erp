@@ -43,7 +43,11 @@
         <span class="badge {{ $count->statusClass() }}">{{ $count->statusLabel() }}</span>
     </h3>
 
-    @if (! $open)
+    {{-- ⚠️ «مش مفتوح» ≠ «معتمد» (٢٢/٩): الجرد الملغي كان بيقول «اتعتمد وأرصدة المخزون اتحدّثت»
+         وهو ملمسش الرصيد — رسالة غلط على شاشة فلوس وبضاعة. --}}
+    @if ($count->status === 'cancelled')
+        <div class="alert warn">{{ __('uid.count_cancelled_note') }}</div>
+    @elseif (! $open)
         <div class="alert info">{{ __('count.approved_note') }}</div>
     @else
         @if ($pending > 0)
@@ -61,7 +65,8 @@
     <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.lines') }}</div>
         <div class="val">{{ $fmt($items->count()) }}</div>
-        <div class="sub2">{{ $count->warehouse->displayName() }}</div>
+        {{-- السطور = اللي اتعد + اللي لسه — بالأرقام (٢٢/٩) --}}
+        <div class="sub2">{{ __('uid.cnt_lines_how', ['wh' => $count->warehouse->displayName()]) }}<br><span dir="ltr">{{ $fmt($items->count()) }} = {{ __('uid.cnt_done') }} {{ $fmt($items->count() - $pending) }} + {{ __('count.not_counted') }} {{ $fmt($pending) }}</span></div>
     </a>
     <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.pending_lines') }}</div>
@@ -71,7 +76,7 @@
     <a class="kpi" href="#cntSheet">
         <div class="lbl">{{ __('count.diff_lines') }}</div>
         <div class="val {{ $diffs > 0 ? 'neg' : 'pos' }}">{{ $fmt($diffs) }}</div>
-        <div class="sub2">{{ __('count.difference') }}</div>
+        <div class="sub2">{{ __('uid.cnt_diff_how') }}</div>
     </a>
     @if (! $open)
         <a class="kpi" href="#cntSheet">
@@ -79,14 +84,14 @@
             <div class="val num {{ $count->qty_diff < 0 ? 'neg' : ($count->qty_diff > 0 ? 'pos' : '') }}">
                 {{ $count->qty_diff > 0 ? '+' : '' }}{{ $fmt($count->qty_diff) }}
             </div>
-            <div class="sub2">{{ __('common.qty') }}</div>
+            <div class="sub2">{{ __('uid.cnt_qty_how') }}</div>
         </a>
         <a class="kpi" href="#cntSheet">
             <div class="lbl">{{ __('count.value_diff') }}</div>
             <div class="val num {{ $count->value_diff < 0 ? 'neg' : ($count->value_diff > 0 ? 'pos' : '') }}">
                 {{ $money($count->value_diff) }}
             </div>
-            <div class="sub2">{{ __('common.currency') }}</div>
+            <div class="sub2">{{ __('uid.cnt_val_how') }}</div>
         </a>
     @endif
 </div>
@@ -99,7 +104,7 @@
 
         <div class="tablewrap">
             {{-- ⚠️ وهي مفتوحة للعد «المعدود» خانات إدخال، وإكسيل الجدول بيقرا النص بس — فبيتقفل لحد ما تتقفل الورقة --}}
-            <table @if ($editable) data-noxl @endif>
+            <table @if ($editable) data-noxl data-page="0" @endif>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
                     <th>{{ __('stock.batch_no') }}</th>

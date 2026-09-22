@@ -25,6 +25,7 @@
     <a class="kpi {{ empty($filters['owed']) && empty($filters['q']) ? 'on' : '' }}" href="{{ route('erp.suppliers') }}">
         <div class="lbl">{{ __('supplier.suppliers') }}</div>
         <div class="val">{{ $supplierCount }}</div>
+        <div class="sub2">{{ __('uid.sup_count_how') }}</div>
     </a>
     <a class="kpi {{ ! empty($filters['owed']) ? 'on' : '' }}" href="{{ route('erp.suppliers', ['owed' => 1]) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">{{ __('supplier.total_owed') }}</div>

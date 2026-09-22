@@ -129,7 +129,12 @@
         <a class="kpi" href="#pLists">
             <div class="lbl">{{ __('stock.cost') }}</div>
             <div class="val">{{ $money($p->cost) }} {{ __('common.currency') }}</div>
-            <div class="sub2 {{ $mgCls($margin) }}">{{ __('stock.margin') }} {{ number_format($margin * 100, 1) }}%</div>
+            {{-- تكلفة 0 = هامش 100% مضلّل — بنقولها صريحة، وغير كده المعادلة بأرقامها (٢٢/٩) --}}
+            @if ((float) $p->cost <= 0)
+                <div class="sub2 neg">⚠ {{ __('uid.no_cost_tip') }}</div>
+            @else
+                <div class="sub2 {{ $mgCls($margin) }}"><span dir="ltr">{{ __('stock.margin') }} {{ number_format($margin * 100, 1) }}% = ({{ $money($p->sellingPrice()) }} − {{ $money($p->cost) }}) ÷ {{ $money($p->sellingPrice()) }}</span></div>
+            @endif
         </a>
     @endif
 
@@ -160,13 +165,13 @@
     <div class="kpi" data-explain onclick="openDlg('dlgWhBreak')" title="{{ __('ui.click_to_explain') }}">
         <div class="lbl">{{ __('stock.value') }}</div>
         <div class="val pos">{{ $fmt($qty * $p->sellingPrice()) }} {{ __('common.currency') }}</div>
-        <div class="sub2">{{ __('stock.value_at_new') }}</div>
+        <div class="sub2">{{ __('stock.value_at_new') }}<br><span dir="ltr">{{ $fmt($qty * $p->sellingPrice()) }} = {{ $fmt($qty) }} × {{ $money($p->sellingPrice()) }}</span></div>
     </div>
 
     <a class="kpi" href="#pBatches">
         <div class="lbl">{{ __('stock.shelf_life') }}</div>
         <div class="val">{{ $p->shelfLife() }}</div>
-        <div class="sub2">{{ __('stock.shelf_life_months') }}</div>
+        <div class="sub2">{{ __('stock.shelf_life_months') }} — {{ __('uid.shelf_life_how') }}</div>
     </a>
 </div>
 
@@ -273,6 +278,7 @@
         {{-- فلتر «من — إلى» على `expires_on` (٩/٩/٢٠٢٦): «إيه اللي بينتهي في الفترة دي؟» --}}
         <form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
             @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+            <span style="font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:9px">ℹ️ {{ __('uid.exp_range_note') }}</span>
         </form>
         <div class="tablewrap">
             <table>
@@ -305,7 +311,13 @@
                          الأصناف القديمة اتسجّل مخزونها إجمالي من الشيت
                          قبل ما نظام الباتشات يشتغل. --}}
                     <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">
-                        {{ __('stock.no_batches') }}
+                        {{-- فترة متحددة ومفيش نتيجة ≠ «مفيش باتشات» — الصنف فيه رصيد وباتشاته بره الفترة (٢٢/٩) --}}
+                        @if ($range->fromValue() || $range->toValue())
+                            {{ __('uid.no_batches_in_window') }}
+                            <a href="{{ route('erp.products.show', $p) }}#pBatches"><b>{{ __('stock.view_all') }}</b></a>
+                        @else
+                            {{ __('stock.no_batches') }}
+                        @endif
                     </td></tr>
                 @endforelse
             </table>

@@ -27,10 +27,15 @@
 {{-- (٢٢/٩) كل كارت فلتر على طريقته (دوسة تانية بتشيله)، و«الإجمالي» بيرجّع كل الطرق --}}
 @php $kq = fn (?string $m) => request()->fullUrlWithQuery(['method' => $m, 'page' => null, 'export' => null]); @endphp
 <div class="kpis">
-    <a @class(['kpi', 'on' => $method === '']) href="{{ $kq(null) }}" title="{{ __('ui.click_to_filter') }}">
+    <a @class(['kpi', 'on' => $method === '']) style="grid-column:span 2" href="{{ $kq(null) }}" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">{{ __('common.total') }}</div>
         <div class="val pos">{{ $fmt($totals->sum('total')) }}</div>
         <div class="sub2">{{ number_format($totals->sum('cnt')) }} {{ __('ops.entries') }}</div>
+        {{-- (٢٢/٩) الإجمالي مفرود مرتين: بوسيلة التحصيل وبالمصدر — الاتنين لازم يقفلوا على نفس الرقم --}}
+        <div class="sub2">@include('erp._eq', ['total' => $totals->sum('total'), 'parts' => collect(\App\Models\Transaction::METHODS)->map(fn ($m) => [__('client.pay_method_'.$m), $totals[$m]->total ?? 0])->all()])</div>
+        @unless ($direct)
+            <div class="sub2">@include('erp._eq', ['total' => $totals->sum('total'), 'parts' => collect(['field', 'rep', 'direct'])->map(fn ($k) => [__('ops.source_'.$k), $bySource[$k] ?? 0])->push([__('uib.other'), $bySource['other'] ?? 0])->all()])</div>
+        @endunless
     </a>
     @foreach (\App\Models\Transaction::METHODS as $m)
         <a @class(['kpi', 'on' => $method === $m]) href="{{ $kq($method === $m ? null : $m) }}" title="{{ __('ui.click_to_filter') }}">
@@ -46,9 +51,10 @@
             <div class="val">{{ $fmt($invoiceCash) }}</div>
             <div class="sub2">{{ __('uib.invoice_cash_sub') }}</div>
         </a>
-        <a class="kpi" href="{{ route('erp.reports.show', array_filter(['key' => 'collections', 'from' => $from ?: '2000-01-01', 'to' => $to ?: today()->toDateString()])) }}">
+        <a class="kpi" style="grid-column:span 2" href="{{ route('erp.reports.show', array_filter(['key' => 'collections', 'from' => $from ?: '2000-01-01', 'to' => $to ?: today()->toDateString()])) }}">
             <div class="lbl">{{ __('uib.ledger_total') }}</div>
             <div class="val pos">{{ $fmt($totals->sum('total') + $invoiceCash) }}</div>
+            <div class="sub2">@include('erp._eq', ['total' => $totals->sum('total') + $invoiceCash, 'parts' => [[__('uib.recorded_total'), $totals->sum('total')], [__('uib.invoice_cash'), $invoiceCash]], 'zeros' => true])</div>
             <div class="sub2">{{ __('uib.ledger_total_sub') }}</div>
         </a>
     @endif
@@ -217,7 +223,7 @@
         </table>
     </div>
 
-    <div style="margin-top:12px">{{ $rows->links() }}</div>
+    @include('partials._pagination', ['p' => $rows])
 </div>
 
 @endsection

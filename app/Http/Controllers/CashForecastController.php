@@ -37,7 +37,9 @@ class CashForecastController extends Controller
         $from = $range->from !== null && $range->from->gte(today()) ? $range->from : today();
         $to = $range->to ?? $from->copy()->addDays(60);
         if ($to->lt($from)) {
-            $to = $from->copy();
+            // (٢٢/٩) فترة كلها في الماضي (اختصار «الشهر اللي فات» مثلاً) كانت بتقفل الشاشة
+            // على يوم واحد فاضي — بنرجع للافتراضي +60 يوم بدل كده
+            $to = $from->copy()->addDays(60);
         }
         $range = DateRange::fromRequest(new Request(['from' => $from->toDateString(), 'to' => $to->toDateString()]), 'open');
 

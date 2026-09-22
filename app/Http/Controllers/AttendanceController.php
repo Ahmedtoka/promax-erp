@@ -102,13 +102,22 @@ class AttendanceController extends Controller
 
         $rows = $q->orderByDesc('date')->orderBy('user_id')->get();
 
+        // ⚠️ (٢٢/٩) يوم قديم فضل «مفتوح» (الموظف ماعملش انصراف) كان عدّاده اللايف بيفضل يعدّ
+        // لحد دلوقتي — 441 يوم طلّعوا 40 ألف ساعة ومتوسط 92 ساعة في اليوم. العدّ اللايف
+        // لليوم الحالي بس؛ أي يوم فات بياخد المعتمد أو الدقايق المسجّلة فعلاً.
+        $today = today()->toDateString();
+        $mins = fn (AttendanceDay $d) => $d->date->toDateString() < $today
+            ? (int) ($d->approved_minutes ?? $d->worked_minutes)
+            : $d->payableMinutes();
+
         return view('erp.attendance_log', [
             'from' => $from,
             'to' => $to,
             'rows' => $rows,
             'users' => User::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
-            'totalMinutes' => $rows->sum(fn ($d) => $d->payableMinutes()),
-            'avgMinutes' => $rows->isEmpty() ? 0 : (int) round($rows->avg(fn ($d) => $d->payableMinutes())),
+            'totalMinutes' => $rows->sum($mins),
+            'avgMinutes' => $rows->isEmpty() ? 0 : (int) round($rows->avg($mins)),
+            'mins' => $mins,
             'needsReview' => AttendanceDay::needsReview()->count(),
         ]);
     }

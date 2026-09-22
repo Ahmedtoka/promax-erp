@@ -10,7 +10,12 @@
     $manager = auth()->user()->canWorkWarehouse();
     $totalQty = $receipt->totalQty();
     $unshelved = $receipt->unshelvedQty();
-    $shelved = max($totalQty - $unshelved, 0);
+    // ⚠️ «مترصف» = اللي على الأرفف فعلاً (٢٢/٩). كان «المستلم − اللي لسه» فبيعدّ اللي خرج واللي تلف
+    // كأنه مترصف: الكارت يقول 23,027 وعمود «مترصف» في الجدول تحته إجماليه 0.
+    $shelved = (int) $receipt->batches->sum(fn ($b) => $b->shelvedQty());
+    $issuedQ = (int) $receipt->batches->sum('qty_issued');
+    $damagedQ = (int) $receipt->batches->sum('qty_damaged');
+    $otherQ = $totalQty - $shelved - $unshelved - $issuedQ - $damagedQ;
 @endphp
 
 @section('actions')
@@ -71,12 +76,13 @@
     <a class="kpi" href="#grnLines">
         <div class="lbl">{{ __('stock.total_units') }}</div>
         <div class="val">{{ $fmt($totalQty) }}</div>
-        <div class="sub2">{{ __('stock.batch_countable', ['count' => $receipt->batches->count()]) }}</div>
+        <div class="sub2">{{ __('uid.grn_total_how', ['n' => $receipt->batches->count()]) }}<br>
+            <span dir="ltr">{{ $fmt($totalQty) }} = {{ __('stock.shelved') }} {{ $fmt($shelved) }} + {{ __('stock.unshelved') }} {{ $fmt($unshelved) }} + {{ __('uid.grn_issued') }} {{ $fmt($issuedQ) }} + {{ __('uid.grn_damaged') }} {{ $fmt($damagedQ) }}@if ($otherQ !== 0) {{ $otherQ < 0 ? '−' : '+' }} {{ __('uid.grn_other') }} {{ $fmt(abs($otherQ)) }}@endif</span></div>
     </a>
     <a class="kpi" href="#grnLines">
         <div class="lbl">{{ __('stock.shelved') }}</div>
         <div class="val pos">{{ $fmt($shelved) }}</div>
-        <div class="sub2">{{ __('stock.unshelved') }}: {{ $fmt($unshelved) }}</div>
+        <div class="sub2">{{ __('uid.grn_shelved_how') }} — {{ __('stock.unshelved') }}: {{ $fmt($unshelved) }}</div>
     </a>
 </div>
 

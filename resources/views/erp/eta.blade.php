@@ -60,12 +60,17 @@
     <a class="kpi" href="{{ request()->fullUrlWithQuery(['st' => null]) }}#eta-invoices">
         <div class="lbl">{{ __('tax.net_sales') }}</div>
         <div class="val num">{{ $fmt($netTotal) }}</div>
-        <div class="sub2">{{ __('common.currency') }}</div>
+        {{-- (٢٢/٩) الرقم بيقول هو إيه: صافي قبل الضريبة لكل فواتير الفترة --}}
+        <div class="sub2">{{ __('uib.eta_net_sub', ['n' => number_format($invoices->count())]) }}</div>
+        <div class="sub2">@include('erp._eq', ['total' => $invoices->count(), 'dec' => 0, 'parts' => [[__('tax.eta_status_ready'), $ready], [__('tax.eta_status_exported'), $exported], [__('tax.eta_status_submitted'), $submitted]]])</div>
     </a>
-    <a class="kpi" href="{{ request()->fullUrlWithQuery(['st' => null]) }}#eta-invoices">
+    <a class="kpi" style="grid-column:span 2" href="{{ request()->fullUrlWithQuery(['st' => null]) }}#eta-invoices">
         <div class="lbl">{{ __('tax.tax_collected') }}</div>
         <div class="val num">{{ $fmt($taxTotal) }}</div>
-        <div class="sub2">{{ __('common.currency') }}</div>
+        @if ($netTotal > 0)
+            <div class="sub2">@include('erp._eq', ['totalLabel' => __('uib.eta_rate'), 'total' => $taxTotal / $netTotal * 100, 'dec' => 1, 'suffix' => '%', 'zeros' => true, 'parts' => [[__('tax.tax'), $taxTotal, '+', 2], [__('tax.net_sales'), $netTotal, '÷', 2]]])</div>
+        @endif
+        <div class="sub2">@include('erp._eq', ['totalLabel' => __('tax.total_due'), 'total' => $netTotal + $taxTotal, 'zeros' => true, 'parts' => [[__('tax.net_sales'), $netTotal], [__('tax.tax'), $taxTotal]]])</div>
     </a>
 </div>
 
@@ -74,6 +79,19 @@
 <div class="card">
     <h3>⚠️ {{ __('tax.blocked_rows') }} <span class="side">{{ $blocked->count() }}</span></h3>
     <div class="alert warn">{{ __('tax.blocked_hint') }}</div>
+    {{-- (٢٢/٩) الأسباب مجمّعة بعددها — لو السبب واحد في الشركة كلها بيبان من أول نظرة بدل 101 صف شبه بعض --}}
+    @php $reasonCounts = collect($problems)->flatten()->countBy()->sortDesc(); @endphp
+    @if ($reasonCounts->isNotEmpty())
+        <div class="tablewrap" style="margin-top:10px"><table data-noxl>
+            <thead><tr><th style="text-align:start">{{ __('uib.eta_reason') }}</th><th class="num" data-nosum>{{ __('uib.k_invoices') }}</th></tr></thead>
+            <tbody>
+            @foreach ($reasonCounts as $reason => $cnt)
+                <tr><td style="text-align:start;white-space:normal">{{ $reason }}</td><td class="num"><b>{{ number_format($cnt) }}</b></td></tr>
+            @endforeach
+            </tbody>
+        </table></div>
+        <div style="margin-top:10px"><a class="btn sm" href="{{ route('erp.tax.settings') }}">⚙️ {{ __('tax.settings') }}</a></div>
+    @endif
 </div>
 @endif
 
@@ -124,9 +142,10 @@
                     <td class="num">{{ $fmt($inv->total) }}</td>
                     <td class="num">{{ $fmt($inv->tax_total) }}</td>
                     <td class="num"><b>{{ $fmt($inv->payable()) }}</b></td>
-                    <td>
+                    <td style="white-space:normal;max-width:260px">
                         @if ($rowProblems)
-                            <span class="badge b-red">{{ $rowProblems[0] }}</span>
+                            {{-- السبب الطويل بيلفّ جوه الخانة، وباقي الأسباب في الـtitle --}}
+                            <span class="badge b-red" style="white-space:normal;text-align:start;line-height:1.5" title="{{ implode(' · ', $rowProblems) }}">{{ $rowProblems[0] }}@if (count($rowProblems) > 1) (+{{ count($rowProblems) - 1 }})@endif</span>
                         @else
                             <span class="badge {{ $inv->etaStatusClass() }}">{{ $inv->etaStatusLabel() }}</span>
                         @endif

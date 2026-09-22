@@ -35,10 +35,15 @@
 <div class="kpis">
     {{-- (٢٢/٩) العدد والقيمة هما الجدول اللي تحت، و«الشهر ده» فلتر على الشهر الحالي --}}
     @php $mFrom = today()->startOfMonth()->toDateString(); $mTo = today()->toDateString(); @endphp
-    <a class="kpi" href="#qt-list"><div class="lbl">{{ __('rpt.qts_count') }}</div><div class="val">{{ $kCount }}</div></a>
-    <a class="kpi" href="#qt-list"><div class="lbl">{{ __('rpt.qts_value') }}</div><div class="val pos">{{ $kValue }}</div></a>
+    <a class="kpi" href="#qt-list"><div class="lbl">{{ __('rpt.qts_count') }}</div><div class="val">{{ $kCount }}</div>
+        {{-- (٢٢/٩) الأجزاء من صفوف الجدول نفسها — بتتكتب بس لو الجدول شايل كل النتيجة (مش مقصوص بالحد الأقصى) --}}
+        @php $qAll = number_format($rows->count()) === $kCount; $qExp = $rows->filter(fn ($r) => $r->valid_until?->isPast())->count(); @endphp
+        @if ($qAll)<div class="sub2">@include('erp._eq', ['total' => $rows->count(), 'dec' => 0, 'zeros' => true, 'parts' => [[__('uib.qt_valid'), $rows->count() - $qExp], [__('rpt.qts_expired'), $qExp]]])</div>@endif
+        <div class="sub2">{{ __('uib.qt_count_sub') }}</div></a>
+    <a class="kpi" style="grid-column:span 2" href="#qt-list"><div class="lbl">{{ __('rpt.qts_value') }}</div><div class="val pos">{{ $kValue }}</div>
+        @if ($qAll)<div class="sub2">@include('erp._eq', ['total' => $rows->sum('grand'), 'zeros' => true, 'parts' => [[__('rpt.qt_subtotal'), $rows->sum('subtotal')], [__('rpt.qt_disc'), $rows->sum('discount'), '-'], [__('uib.dc_vat'), $rows->sum('tax')]]])</div>@endif</a>
     <a @class(['kpi', 'on' => $periodFrom === $mFrom && $periodTo === $mTo && ! request('q') && ! request('creator_id')])
-       href="{{ route('erp.reports.quotations', ['from' => $mFrom, 'to' => $mTo]) }}"><div class="lbl">{{ __('rpt.qts_month') }}</div><div class="val mid">{{ $kMonth }}</div></a>
+       href="{{ route('erp.reports.quotations', ['from' => $mFrom, 'to' => $mTo]) }}"><div class="lbl">{{ __('rpt.qts_month') }}</div><div class="val mid">{{ $kMonth }}</div><div class="sub2">{{ __('uib.qt_month_sub', ['from' => $mFrom]) }}</div></a>
 </div>
 
 {{-- ═══ الليستة ═══ --}}

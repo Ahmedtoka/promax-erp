@@ -746,6 +746,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/accounts/{account}', [$a, 'show'])->name('accounts.show');
         Route::post('/accounts/{account}', [$a, 'update'])->name('accounts.update');
 
+        // ═══ مسودة شجرة حسابات العميل (٢٢/٩) — ورقة شغل: الملف زي ما هو، من غير ربط ولا قيود ═══
+        $d = \App\Http\Controllers\Gl\CoaDraftController::class;
+        Route::get('/coa', [$d, 'index'])->name('coa');
+        Route::post('/coa', [$d, 'store'])->name('coa.store');
+        Route::post('/coa/import', [$d, 'import'])->name('coa.import');
+        Route::post('/coa/{account}', [$d, 'update'])->name('coa.update');
+        Route::post('/coa/{account}/move', [$d, 'move'])->name('coa.move');
+        Route::delete('/coa/{account}', [$d, 'destroy'])->name('coa.destroy');
+
         // ═══ اليومية — القيود وسطورها ═══
         $e = \App\Http\Controllers\Gl\EntryController::class;
         Route::get('/entries', [$e, 'index'])->name('entries');

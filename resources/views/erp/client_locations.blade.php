@@ -52,7 +52,8 @@
         <div class="val">{{ number_format($counts['from_app']) }}</div>
         <div class="sub2">{{ __('geo.f_from_app_hint') }}</div></a>
     <a @class(['kpi', 'on' => $filter === 'done']) href="{{ route('erp.client_locations', ['show' => 'done']) }}#locList"><div class="lbl">{{ __('geo.confirmed') }}</div>
-        <div class="val">{{ number_format($counts['done']) }}</div></a>
+        <div class="val">{{ number_format($counts['done']) }}</div>
+        <div class="sub2">{{ __('uia.eq_loc_done') }}</div></a>
 </div>
 
 <div class="card" id="locList">
@@ -73,7 +74,7 @@
             'all' => __('common.all'),
         ] as $k => $label)
             <a class="btn sm {{ $filter === $k ? 'gold' : '' }}"
-               href="{{ route('erp.client_locations', ['show' => $k]) }}">
+               href="{{ route('erp.client_locations', array_filter(['show' => $k, 'q' => $search])) }}">
                 {{ $label }}
                 @if (($counts[$k] ?? 0) > 0)
                     <b style="margin-inline-start:5px">{{ number_format($counts[$k]) }}</b>
@@ -81,6 +82,14 @@
             </a>
         @endforeach
     </div>
+    {{-- بحث (٢٢/٩) — الطابور مئات الصفوف والمراجع بيدوّر على عميل بعينه --}}
+    <form method="GET" class="searchbar" style="margin-bottom:10px" data-noprint>
+        <input type="hidden" name="show" value="{{ $filter }}">
+        <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
+            <input type="search" name="q" value="{{ $search }}" placeholder="🔍 {{ __('client.search_client') }}"></label>
+        <button class="btn gold">{{ __('common.search') }}</button>
+        @if ($search)<a class="btn" href="{{ route('erp.client_locations', ['show' => $filter]) }}">{{ __('common.clear') }}</a>@endif
+    </form>
 
     <div class="tablewrap">
         <table>

@@ -96,6 +96,8 @@
 @endsection
 
 @section('content')
+{{-- (٢٢/٩) أزرار الفاتورة ١٣ زرار — من غير لف كانت بتزق الصفحة كلها بره الشاشة --}}
+<style>@media screen{.topbar .meta{flex-wrap:wrap;justify-content:flex-end}}</style>
 
 {{-- ═══ حارس التسعيرة (٢٢/٨) — بلاغ INV-1065 ═══
      الفاتورة بتتسعّر لحظة البيع وبتخزّن اسم القايمة عليها. لو

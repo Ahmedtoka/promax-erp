@@ -161,7 +161,9 @@
     background:color-mix(in srgb, var(--kc) 16%, transparent);
     box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--kc) 35%, transparent);
 }
-.lv-kpi .v{font-size:21px;font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px;line-height:1.1}
+/* (٢٢/٩) رقم قيمة العهدة (٧ خانات) كان بيتقص أوله جوه البلاطة — الخط بيصغر مع العرض والرقم مايتكسرش */
+.lv-kpi > div:last-child{min-width:0}
+.lv-kpi .v{font-size:clamp(14px,1.25vw,21px);font-weight:800;color:var(--kc-b,var(--txt));letter-spacing:.3px;line-height:1.1;white-space:nowrap}
 .lv-kpi .l{font-size:10.5px;color:var(--dim);white-space:nowrap;margin-top:1px}
 .k-royal{--kc:#5B7BE8;--kc-b:#8FA5F0} .k-green{--kc:#22C55E;--kc-b:#4ADE80}
 .k-red{--kc:#F43F5E;--kc-b:#FB7185}  .k-orange{--kc:#F59E0B;--kc-b:#FBBF24}

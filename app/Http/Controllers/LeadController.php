@@ -303,6 +303,8 @@ class LeadController extends Controller
                 'overdue' => $overdue,
                 'strong' => $strong,
                 'pipeline' => round($open->sum(fn ($s) => (float) ($counts[$s]->v ?? 0)), 2),
+                // أجزاء «فرص مفتوحة» بالحالة (٢٢/٩) — من نفس `$counts`، عشان الكارت يكتب معادلته
+                'open_parts' => $open->mapWithKeys(fn ($s) => [$s => (int) ($counts[$s]->n ?? 0)])->filter()->all(),
             ],
             'sort' => $sort,
             'filters' => $request->only(['status', 'zone', 'rep', 'mgr', 'search', 'source', 'sort', 'cat', 'unassigned', 'dup', 'per', 'from', 'to', 'focus']),

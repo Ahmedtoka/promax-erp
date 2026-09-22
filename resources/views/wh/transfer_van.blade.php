@@ -139,7 +139,7 @@
 
         <div class="tablewrap" id="vtLines" style="margin-top:12px;max-height:52vh;overflow-y:auto">
             {{-- جدول إدخال — من غير إكسيل --}}
-            <table data-noxl>
+            <table data-noxl data-page="0">{{-- فورم إدخال: كل السطور ظاهرة، صفحات الجدول كانت بتخبّي خانات من غير ما حد ياخد باله (٢٢/٩) --}}
                 <thead>
                     <tr>
                         <th>{{ __('stock.item') }}</th>

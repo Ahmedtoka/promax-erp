@@ -53,13 +53,12 @@
     <a @class(['kpi', 'on' => ! ($f['missing'] ?? false)]) href="{{ route('erp.prices.show', $list) }}">
         <div class="lbl">{{ __('price.priced') }}</div>
         <div class="val pos">{{ $total - $missing }} <span style="font-size:13px;color:var(--muted)">/ {{ $total }}</span></div>
+        <div class="sub2">{{ __('uia.eq_priced') }} <span dir="ltr">{{ $total > 0 ? number_format(($total - $missing) / $total * 100, 1) : 0 }}% = {{ $total - $missing }} ÷ {{ $total }}</span></div>
     </a>
     <a @class(['kpi', 'on' => (bool) ($f['missing'] ?? false)]) href="{{ route('erp.prices.show', ['priceList' => $list, 'missing' => 1]) }}">
         <div class="lbl">{{ __('price.missing') }}</div>
         <div class="val {{ $missing > 0 ? 'neg' : 'pos' }}">{{ $missing }}</div>
-        @if ($missing > 0)
-            <div class="sub2">{{ __('price.missing_blocks_activation') }}</div>
-        @endif
+        <div class="sub2"><span dir="ltr">{{ $missing }} = {{ $total }} − {{ $total - $missing }}</span> {{ __('uia.eq_missing') }}@if ($missing > 0) — {{ __('price.missing_blocks_activation') }}@endif</div>
     </a>
 </div>
 
@@ -188,7 +187,7 @@
                          من غير عرض، المتصفح بيدي «الصنف» كل المساحة
                          الفاضلة والسعر بيتزنق — وخانة السعر هي اللي
                          الشاشة كلها موجودة عشانها. --}}
-                    <th style="width:64px"></th>
+                    <th style="width:64px" data-nosum>{{ __('uia.c_photo') }}</th>
                     <th style="width:130px" data-nosum>{{ __('common.code') }}</th>
                     <th>{{ __('stock.item') }}</th>
                     <th style="width:120px">{{ __('stock.family') }}</th>
@@ -220,7 +219,9 @@
                                 <img src="{{ $p->imageSrc() }}" loading="lazy"
                                      alt="{{ $p->displayName() }}"
                                      data-zoom="{{ $p->displayName() }}"
-                                     style="width:110px;height:110px;object-fit:contain;border-radius:6px;
+                                     {{-- الملف ناقص من storage ← أيقونة بدل نص الـalt الطويل، و٧٢ بدل ١١٠ (٢٢/٩): الصف كان بارتفاع ١١٠ في جدول تسعير من ٢٧ صف --}}
+                                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📦',style:'color:var(--muted);font-size:18px'}))"
+                                     style="width:72px;height:72px;object-fit:contain;border-radius:6px;
                                             border:1px solid var(--border);background:#fff">
                             @else
                                 <span style="color:var(--muted);font-size:18px">📦</span>
