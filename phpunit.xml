@@ -40,7 +40,14 @@
               CREATE DATABASE promax_test;
         -->
         <env name="DB_CONNECTION" value="mysql"/>
-        <env name="DB_DATABASE" value="promax_test"/>
+        <!-- ⚠️ السيرفر واليوزر متثبتين هنا مش من .env (٢٦/٩): .env اللوكال
+             اتبدّل مرة بنسخة اللايف، والتيست راح يعمل RefreshDatabase على
+             سيرفر اللايف. التيستات على MySQL المحلي وبس. -->
+        <env name="DB_HOST" value="127.0.0.1" force="true"/>
+        <env name="DB_PORT" value="3306" force="true"/>
+        <env name="DB_USERNAME" value="root" force="true"/>
+        <env name="DB_PASSWORD" value="" force="true"/>
+        <env name="DB_DATABASE" value="promax_test" force="true"/>
 
         <!-- الإنجليزي هو الافتراضي، والتيست بيتأكد من اللغتين -->
         <env name="APP_LOCALE" value="en"/>
