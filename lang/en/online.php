@@ -250,4 +250,15 @@ return [
     'confirm_title' => 'Confirm order',
     'prep_note' => 'Note for prep',
     'prep_note_ph' => 'Optional — shown to the store keeper on the prep screen',
+    // Bundles (26/9)
+    'bundle' => 'Bundle',
+    'bundle_btn' => 'Bundle',
+    'bundle_edit' => 'Edit bundle',
+    'bundle_title' => 'Bundle contents',
+    'bundle_hint' => 'Pick every product in the bundle and how many pieces of it one bundle holds. Prep deducts each product × the order quantity. A single product = a normal link.',
+    'bundle_add' => 'Another product',
+    'bundle_units' => 'Pieces per bundle',
+    'bundle_saved' => 'Bundle ":title" saved with :n products — open orders updated ✓',
+    'bundle_empty' => 'Pick at least one product',
+    'bundle_pcs' => ':n pieces per bundle',
 ];

@@ -1321,5 +1321,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('products.fetch');
         Route::post('/products/save', [$c, 'productsSave'])
             ->middleware('role:admin,manager')->name('products.save');
+        // باندل: فاريانت واحد بكذا منتج (٢٦/٩)
+        Route::post('/products/{link}/bundle', [$c, 'productsBundle'])
+            ->middleware('role:admin,manager')->name('products.bundle');
     });
 });

@@ -124,11 +124,20 @@
         @foreach ($order->items as $i)
             <tr>
                 {{-- الاسم الإنجليزي مباشرة — الريسيت إنجليزي مهما كان لوكيل الداشبورد --}}
+                @if ($i->isBundle())
+                    {{-- باندل (٢٦/٩): اسمه من شوبيفاي والمكونات تحته عشان العميل يطابق الكرتونة --}}
+                    <td class="col-item">{{ $i->title }}
+                        @foreach ($i->componentRows() as $c)
+                            <div style="font-size:9.5px">{{ $c['units'] * (int) $i->qty }} × {{ $c['product']?->name_en ?: ($c['product']?->name ?? '—') }}</div>
+                        @endforeach
+                    </td>
+                @else
                 <td class="col-item">{{ $i->product?->name_en ?: ($i->product?->name ?? $i->title) }}
                     @if ((int) $i->units_per > 1)
                         <span style="font-size:9.5px">({{ $i->pieces() }} pcs)</span>
                     @endif
                 </td>
+                @endif
                 <td class="col-qty">{{ $i->qty }}</td>
                 <td class="col-price">{{ $money($i->total) }}</td>
             </tr>

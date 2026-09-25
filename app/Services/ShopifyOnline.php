@@ -194,7 +194,7 @@ class ShopifyOnline
 
         foreach ($lines as $l) {
             $m = self::matchLine($l);
-            $itemsCount += (int) ($l['quantity'] ?? 0) * $m['units'];
+            $itemsCount += (int) ($l['quantity'] ?? 0) * $m['pieces'];
         }
 
         // أوردر ملغي في شوبيفاي بيدخل ملغي عندنا على طول —
@@ -231,6 +231,7 @@ class ShopifyOnline
                     'title' => mb_substr((string) ($l['title'] ?? '—'), 0, 250),
                     'product_id' => $m['product_id'],
                     'units_per' => $m['units'],
+                    'bundle' => $m['bundle'],
                     'qty' => (int) ($l['quantity'] ?? 1),
                     'price' => (float) ($l['price'] ?? 0),
                     // ⚠️ خصم البند (total_discount) لازم يتخصم — من غيره
@@ -251,7 +252,10 @@ class ShopifyOnline
      * ٢) الـSKU على كود المنتج — باك مجهول = قطعة واحدة
      * لو مفيش منتج → null، والأوردر مايتأكدش لحد ما الربط يتعمل.
      *
-     * @return array{product_id: ?int, units: int}
+     * ⚠️ **الباندل** (٢٦/٩): `bundle` بيتنسخ على البند كسنابشوت، و`pieces`
+     * = مجموع قطع مكوناته (للـitems_count).
+     *
+     * @return array{product_id: ?int, units: int, bundle: ?array, pieces: int}
      */
     private static function matchLine(array $line): array
     {
@@ -259,12 +263,16 @@ class ShopifyOnline
 
         if ($variantId !== null) {
             $link = ShopifyProductLink::where('shopify_variant_id', $variantId)
-                ->first(['product_id', 'units']);
+                ->first(['product_id', 'units', 'bundle']);
 
             if ($link?->product_id !== null) {
+                $parts = $link->components();
+
                 return [
                     'product_id' => (int) $link->product_id,
                     'units' => max((int) $link->units, 1),
+                    'bundle' => $link->isBundle() ? $parts : null,
+                    'pieces' => max(array_sum(array_column($parts, 'units')), 1),
                 ];
             }
         }
@@ -275,11 +283,11 @@ class ShopifyOnline
             $byCode = Product::where('code', $sku)->value('id');
 
             if ($byCode !== null) {
-                return ['product_id' => (int) $byCode, 'units' => 1];
+                return ['product_id' => (int) $byCode, 'units' => 1, 'bundle' => null, 'pieces' => 1];
             }
         }
 
-        return ['product_id' => null, 'units' => 1];
+        return ['product_id' => null, 'units' => 1, 'bundle' => null, 'pieces' => 1];
     }
 
     /** إعادة محاولة المطابقة للبنود الفاضية — بعد أي حفظ في شاشة الربط */
@@ -299,7 +307,9 @@ class ShopifyOnline
                     ]);
 
                     if ($m['product_id'] !== null) {
-                        $item->update(['product_id' => $m['product_id'], 'units_per' => $m['units']]);
+                        $item->update([
+                            'product_id' => $m['product_id'], 'units_per' => $m['units'], 'bundle' => $m['bundle'],
+                        ]);
                         $touchedOrders[$item->online_order_id] = true;
                         $fixed++;
                     }

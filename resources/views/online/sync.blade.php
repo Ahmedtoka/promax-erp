@@ -144,9 +144,18 @@
                     <td style="min-width:230px;max-width:280px;white-space:normal">
                         @foreach ($o->items as $i)
                             <div style="font-size:11px">
+                                @if ($i->isBundle())
+                                    {{-- باندل (٢٦/٩): اسمه من شوبيفاي ومكوناته تحته --}}
+                                    {{ $i->qty }} × <span class="badge b-purple" style="font-size:9px">🧩</span> {{ $i->title }}
+                                    @foreach ($i->componentRows() as $c)
+                                        <div style="font-size:10px;color:var(--muted);padding-inline-start:14px">
+                                            {{ $c['units'] * (int) $i->qty }} × {{ $c['product']?->displayName() ?? '—' }}</div>
+                                    @endforeach
+                                @else
                                 {{ $i->qty }} × {{ $i->product?->displayName() ?? $i->title }}
+                                @endif
                                 {{-- باك متعدد القطع — الكمية الفعلية اللي هتتجهز --}}
-                                @if ((int) $i->units_per > 1)
+                                @if (! $i->isBundle() && (int) $i->units_per > 1)
                                     <span class="badge b-purple" style="font-size:9px">
                                         = {{ $i->pieces() }} {{ __('online.pcs') }}</span>
                                 @endif

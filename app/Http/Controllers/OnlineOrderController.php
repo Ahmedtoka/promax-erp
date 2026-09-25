@@ -168,8 +168,11 @@ class OnlineOrderController extends Controller
         // من منتج السيستم تتجهز وتتخصم (units_per من شاشة الربط)
         $qtyByProduct = [];
 
+        // ⚠️ الباندل (٢٦/٩) بيتفك لمكوناته — كل منتج بقطعه × كمية الباندل
         foreach ($order->items as $item) {
-            $qtyByProduct[$item->product_id] = ($qtyByProduct[$item->product_id] ?? 0) + $item->pieces();
+            foreach ($item->piecesByProduct() as $pid => $pieces) {
+                $qtyByProduct[$pid] = ($qtyByProduct[$pid] ?? 0) + $pieces;
+            }
         }
 
         // ⚠️ **الادعاء الذري الأول** (مراجعة ٣/٩): ضغطتين تأكيد ورا
@@ -788,9 +791,9 @@ class OnlineOrderController extends Controller
                 // قيمة الباك = إجمالي البند ÷ كميته (بعد خصم شوبيفاي)
                 $value += round(((float) $item->total / max((int) $item->qty, 1)) * $qty, 2);
 
-                if ($item->product_id !== null) {
-                    $pieces = $qty * max((int) $item->units_per, 1);
-                    $moves[$item->product_id] = ($moves[$item->product_id] ?? 0) + $pieces;
+                // باندل راجع = كل مكوّناته راجعة (٢٦/٩)
+                foreach ($item->piecesByProduct($qty) as $pid => $pieces) {
+                    $moves[$pid] = ($moves[$pid] ?? 0) + $pieces;
                 }
 
                 $item->update(['returned_qty' => (int) $item->returned_qty + $qty]);
@@ -1101,7 +1104,7 @@ class OnlineOrderController extends Controller
                 continue;
             }
 
-            $link->update(['product_id' => $productId, 'units' => $units]);
+            $link->update(['product_id' => $productId, 'units' => $units, 'bundle' => null]);
             $changed++;
 
             if ($productId !== null) {
@@ -1130,7 +1133,7 @@ class OnlineOrderController extends Controller
                 ->get()
                 ->each(function ($item) use ($changedVariants, &$touched) {
                     [$pid, $units] = $changedVariants[(int) $item->shopify_variant_id];
-                    $item->update(['product_id' => $pid, 'units_per' => $units]);
+                    $item->update(['product_id' => $pid, 'units_per' => $units, 'bundle' => null]);
                     $touched[$item->online_order_id] = true;
                 });
 
@@ -1154,6 +1157,68 @@ class OnlineOrderController extends Controller
         return back()->with('ok', __('online.links_saved', [
             'n' => $changed, 'm' => $rematched,
         ]));
+    }
+
+    /**
+     * ═══ باندل — فاريانت واحد بكذا منتج (٢٦/٩) ═══
+     *
+     * بيستلم parts[] = [{product_id, units}] — القطع من كل منتج في
+     * الباندل الواحد. مكوّن واحد = ربط عادي (الباندل بيتلغي).
+     *
+     * ⚠️ البنود **المفتوحة** بس بتاخد التكوين الجديد (نفس قاعدة الحفظ
+     * الجماعي) — المؤكد اتجهز بتكوينه والمخزن اتخصم على أساسه.
+     *
+     * ⚠️ مابنكتبش SKU في شوبيفاي للباندل — مفيش كود منتج واحد يمثله.
+     */
+    public function productsBundle(Request $request, ShopifyProductLink $link)
+    {
+        $data = $request->validate([
+            'parts' => ['required', 'array', 'min:1', 'max:20'],
+            'parts.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
+            'parts.*.units' => ['nullable', 'integer', 'min:1', 'max:1000'],
+        ]);
+
+        $parts = ShopifyProductLink::normalize($data['parts']);
+
+        if ($parts === []) {
+            return back()->withErrors(['products' => __('online.bundle_empty')]);
+        }
+
+        $bundle = count($parts) > 1 ? $parts : null;
+        $first = $parts[0];
+
+        DB::transaction(function () use ($link, $bundle, $first) {
+            $link->update([
+                'product_id' => $first['product_id'],
+                'units' => $first['units'],
+                'bundle' => $bundle,
+            ]);
+
+            $touched = [];
+
+            OnlineOrderItem::where('shopify_variant_id', $link->shopify_variant_id)
+                ->whereHas('order', fn ($q) => $q->whereIn('status', ['new', 'postponed']))
+                ->get()
+                ->each(function ($item) use ($bundle, $first, &$touched) {
+                    $item->update([
+                        'product_id' => $first['product_id'],
+                        'units_per' => $first['units'],
+                        'bundle' => $bundle,
+                    ]);
+                    $touched[$item->online_order_id] = true;
+                });
+
+            foreach (array_keys($touched) as $orderId) {
+                $order = OnlineOrder::with('items')->find($orderId);
+                $order?->update(['items_count' => $order->items->sum(fn ($i) => $i->pieces())]);
+            }
+        });
+
+        ShopifyOnline::rematchUnlinked();
+
+        return back()->with('ok', $bundle !== null
+            ? __('online.bundle_saved', ['title' => $link->title, 'n' => count($parts)])
+            : __('online.links_saved', ['n' => 1, 'm' => 0]));
     }
 
     /**
@@ -1181,6 +1246,7 @@ class OnlineOrderController extends Controller
         $item->update([
             'product_id' => (int) $data['product_id'],
             'units_per' => (int) $data['units'],
+            'bundle' => null,
         ]);
 
         // عدد قطع الأوردر بيتحسب تاني بالباك الجديد
@@ -1200,6 +1266,7 @@ class OnlineOrderController extends Controller
                     'sku' => $item->sku,
                     'product_id' => (int) $data['product_id'],
                     'units' => (int) $data['units'],
+                    'bundle' => null,
                 ],
             );
         }
