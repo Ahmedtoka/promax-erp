@@ -48,6 +48,12 @@ class Location extends Model
     /** إجمالي اللي على الرف ده */
     public function qty(): int
     {
+        // ⚠️ شاشة الأرفف بتحمّل البنود مقدماً — من غير الفرع ده كانت
+        // بتعمل كويري لكل رف (٩٣ كويري على promax_qa، ٢٥/٩)
+        if ($this->relationLoaded('batchLocations')) {
+            return (int) $this->batchLocations->sum('qty');
+        }
+
         return (int) $this->batchLocations()->sum('qty');
     }
 
@@ -67,11 +73,11 @@ class Location extends Model
      */
     public function worstExpiryState(): string
     {
-        $batch = $this->batchLocations()
-            ->where('qty', '>', 0)
-            ->with('batch')
-            ->get()
-            ->pluck('batch')
+        $rows = $this->relationLoaded('batchLocations')
+            ? $this->batchLocations->where('qty', '>', 0)
+            : $this->batchLocations()->where('qty', '>', 0)->with('batch')->get();
+
+        $batch = $rows->pluck('batch')
             ->filter()
             ->sortBy('expires_on')
             ->first();
