@@ -40,6 +40,12 @@ final class Push
         return config('services.fcm.project') && $file !== '' && is_file($file);
     }
 
+    /** جوجل بيدّينا توكن وصول بالملف ده؟ — لـ`promax:push-test` */
+    public static function authOk(): bool
+    {
+        return self::configured() && self::accessToken() !== null;
+    }
+
     /**
      * إرسال لكل أجهزة يوزر.
      *
