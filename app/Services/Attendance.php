@@ -59,6 +59,30 @@ final class Attendance
         );
     }
 
+    /**
+     * حالة النهارده لمجموعة موظفين — **قراءة بس** (٢٥/٩).
+     *
+     * ⚠️ **مش `state()` في لوب.** `state()` بتنده `today()` اللي بتعمل
+     * `firstOrCreate` — فبورد عهد المناديب كان بيفتح يوم حضور فاضي لكل
+     * مندوب بمجرد ما حد يبص عليه، وده عكس قاعدة شاشات العرض
+     * (`JourneyController`). اليوم اللي مالوش صف = مفيش بانش = `off`،
+     * وده نفس اللي `state()` كانت هترجّعه لصف لسه متعمل.
+     *
+     * @param  \Illuminate\Support\Collection<int, User>  $users
+     * @return array<int, string> [user_id => working|break|off]
+     */
+    public static function peekStates(\Illuminate\Support\Collection $users): array
+    {
+        $days = AttendanceDay::with('punches')
+            ->whereIn('user_id', $users->pluck('id'))
+            ->whereDate('date', today())
+            ->get()->keyBy('user_id');
+
+        return $users->mapWithKeys(fn ($u) => [
+            $u->id => $days->get($u->id)?->state() ?? 'off',
+        ])->all();
+    }
+
     /** الحالة دلوقتي: working · break · off */
     public static function state(User $user): string
     {

@@ -43,12 +43,17 @@ class OpsController extends Controller
         // وللأدمن كل الميدان. رقم فوق وكروت تحت من نطاقين = شاشة بتكدب.
         $teamIds = $field->pluck('id');
 
+        // ⚠️ كويري مجمّعة لكل رقم بمفتاح المندوب (٢٥/٩) — `userStats`
+        // كانت بتعمل ~١٠ كويري لكل مندوب (١٥٦ على promax_qa)
+        User::primeBoard($field, ['items.product']);
+        $agg = $this->boardTotals($teamIds);
+
         // ⚠️ `grand_total` مش `total` (توحيد ١١/٨ مساءً): الكروت دي
         // «باع/سلّم بكام» — نفس عقيدة اللايف وعهد المناديب (اللي
         // العميل بيدفعه). قبل كده كانت صافي قبل الضريبة، فمجموع
         // صفوف المناديب تحت ماكانش بيطابق الكارت فوق.
         return view('ops.dashboard', [
-            'field' => $field->map(fn ($u) => $this->userStats($u)),
+            'field' => $field->map(fn ($u) => $this->userStats($u, $agg)),
             'todaySales' => Invoice::whereIn('user_id', $teamIds)->whereDate('created_at', today())->sum('grand_total'),
             'todayPos' => PurchaseOrder::whereIn('assigned_to', $teamIds)->where('status', 'delivered')
                 ->whereDate('delivered_at', today())->sum('grand_total'),
@@ -60,10 +65,34 @@ class OpsController extends Controller
         ]);
     }
 
-    private function userStats(User $u): array
+    /**
+     * أرقام النهارده لكل مندوب في كويري واحدة لكل رقم — نفس شروط
+     * `userStats` القديمة بالحرف.
+     *
+     * @return array<string, \Illuminate\Support\Collection<int, mixed>>
+     */
+    private function boardTotals(\Illuminate\Support\Collection $ids): array
+    {
+        $by = fn ($q, string $key, string $agg) => $q->whereIn($key, $ids)
+            ->selectRaw("$key as k, $agg as v")->groupBy($key)->pluck('v', 'k');
+
+        return [
+            'inv' => $by(Invoice::whereDate('created_at', today()), 'user_id', 'COALESCE(SUM(grand_total),0)'),
+            'poVal' => $by(PurchaseOrder::where('status', 'delivered')->whereDate('delivered_at', today()),
+                'assigned_to', 'COALESCE(SUM(grand_total),0)'),
+            'poDone' => $by(PurchaseOrder::where('status', 'delivered')->whereDate('delivered_at', today()),
+                'assigned_to', 'COUNT(*)'),
+            'pos' => $by(PurchaseOrder::whereDate('created_at', today()), 'assigned_to', 'COUNT(*)'),
+            'visits' => $by(DB::table('visits')->whereDate('created_at', today()), 'user_id', 'COUNT(*)'),
+            'visitsDone' => $by(DB::table('visits')->whereDate('created_at', today())->whereNotNull('checked_out_at'),
+                'user_id', 'COUNT(*)'),
+        ];
+    }
+
+    private function userStats(User $u, array $agg): array
     {
         $custody = $u->currentCustody();
-        $custody?->load('items.product');
+        $custody?->loadMissing('items.product');
 
         // ⚠️ العقيدة: **مبيعات المندوب = فواتيره (user_id) + أوامر
         // التوريد المسلَّمة (assigned_to)؛ مبيعات العميل = قيوده؛
@@ -72,21 +101,18 @@ class OpsController extends Controller
         // واتسلّمت كان «أداء النهارده» بتاعه ناقص الآجل ده، والكارت
         // كان بيتفرّع سواق/غيره فمبيعات جنب فاتورة بتختفي. الرقم
         // الموحّد بالـ`grand_total` زي اللايف وعهد المناديب.
-        $posValue = (float) PurchaseOrder::where('assigned_to', $u->id)->where('status', 'delivered')
-            ->whereDate('delivered_at', today())->sum('grand_total');
+        $posValue = (float) ($agg['poVal'][$u->id] ?? 0);
 
         return [
             'user' => $u,
             'custody' => $custody,
             'remaining' => $custody?->remainingUnits() ?? 0,
             'remainingValue' => $custody?->remainingValue($u->isDriver() ? 'old' : 'new') ?? 0,
-            'sales' => round((float) Invoice::where('user_id', $u->id)
-                ->whereDate('created_at', today())->sum('grand_total') + $posValue, 2),
-            'visits' => $u->visits()->whereDate('created_at', today())->count(),
-            'visitsDone' => $u->visits()->whereDate('created_at', today())->whereNotNull('checked_out_at')->count(),
-            'pos' => PurchaseOrder::where('assigned_to', $u->id)->whereDate('created_at', today())->count(),
-            'posDone' => PurchaseOrder::where('assigned_to', $u->id)->where('status', 'delivered')
-                ->whereDate('delivered_at', today())->count(),
+            'sales' => round((float) ($agg['inv'][$u->id] ?? 0) + $posValue, 2),
+            'visits' => (int) ($agg['visits'][$u->id] ?? 0),
+            'visitsDone' => (int) ($agg['visitsDone'][$u->id] ?? 0),
+            'pos' => (int) ($agg['pos'][$u->id] ?? 0),
+            'posDone' => (int) ($agg['poDone'][$u->id] ?? 0),
             // ⚠️ «قيمة التسليمات» = اللي السواق حصّله فعلاً، فبالإجمالي
             // شامل الضريبة. الصافي مكانه تقارير المبيعات.
             'posValue' => $posValue,
@@ -932,9 +958,14 @@ class OpsController extends Controller
             ->selectRaw('assigned_to, COALESCE(SUM(grand_total),0) as s')
             ->groupBy('assigned_to')->pluck('s', 'assigned_to');
 
-        $rows = $reps->map(function (User $u) use ($invToday, $poToday) {
+        // ⚠️ العهدة والزيارة المفتوحة والحضور مجمّعين (٢٥/٩) — كانوا
+        // ~٦ كويري لكل مندوب، والحضور كان **بيكتب** يوم لكل مندوب
+        User::primeBoard($reps, ['items.product', 'items.batch', 'vehicle']);
+        $att = \App\Services\Attendance::peekStates($reps);
+
+        $rows = $reps->map(function (User $u) use ($invToday, $poToday, $att) {
             $c = $u->currentCustody();
-            $c?->load(['items.product', 'items.batch', 'vehicle']);
+            $c?->loadMissing(['items.product', 'items.batch', 'vehicle']);
             $mode = $u->isDriver() ? 'old' : 'new';
 
             $assigned = (int) ($c?->items->sum('assigned') ?? 0);
@@ -966,7 +997,7 @@ class OpsController extends Controller
                 'expiring' => $c?->expiringItems(30)->count() ?? 0,
                 'active_client' => $openVisit?->client?->displayName(),
                 'active_client_id' => $openVisit?->client_id,
-                'att' => \App\Services\Attendance::state($u),
+                'att' => $att[$u->id] ?? 'off',
                 // فواتيره + أوامره المسلَّمة — من الكويريز المجمّعة فوق
                 'sales_today' => round((float) ($invToday[$u->id] ?? 0)
                     + (float) ($poToday[$u->id] ?? 0), 2),

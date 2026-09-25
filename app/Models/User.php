@@ -496,6 +496,10 @@ class User extends Authenticatable
      */
     public function currentCustody(): ?Custody
     {
+        if (array_key_exists('custody', $this->primed)) {
+            return $this->primed['custody'];
+        }
+
         return $this->todayCustody()
             ?? $this->custodies()
                 ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
@@ -506,8 +510,60 @@ class User extends Authenticatable
     /** الزيارة المفتوحة حالياً */
     public function openVisit(): ?Visit
     {
+        if (array_key_exists('openVisit', $this->primed)) {
+            return $this->primed['openVisit'];
+        }
+
         return $this->visits()->whereNull('checked_out_at')->latest()->first();
     }
+
+    /**
+     * ═══ تجهيز البوردات — صف لكل موظف من غير كويري لكل صف (٢٥/٩) ═══
+     *
+     * بتحسب `currentCustody()` و`openVisit()` لمجموعة موظفين بكويريتين
+     * لكل واحدة، وبتخلّي الميثودين يرجّعوا الناتج ده. لوحة العمليات
+     * وعهد المناديب كانوا بيعملوا ~١٠ كويري لكل مندوب (١٥٦ و٩٠ على
+     * promax_qa).
+     *
+     * ⚠️ **نفس ترتيب `currentCustody()` بالحرف**: عهدة النهارده (حتى
+     * لو مقفولة) وإلا آخر عهدة مفتوحة بالتاريخ.
+     *
+     * ⚠️ **للشاشات اللي بتقرا بس.** الناتج لقطة وقت التجهيز — أي كود
+     * بيعمل عهدة أو يقفل زيارة بعدها لازم يسأل على موديل جديد.
+     *
+     * @param  \Illuminate\Support\Collection<int, self>  $users
+     * @param  list<string>  $with  علاقات العهدة المطلوبة (items.product ...)
+     */
+    public static function primeBoard(\Illuminate\Support\Collection $users, array $with = []): void
+    {
+        $ids = $users->pluck('id')->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $today = Custody::with($with)->whereIn('user_id', $ids)
+            ->whereDate('date', today())
+            ->orderBy('id')->get()->groupBy('user_id');
+
+        $open = Custody::with($with)->whereIn('user_id', $ids)
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '<>', 'closed'))
+            ->orderByDesc('date')->orderBy('id')->get()->groupBy('user_id');
+
+        $visits = Visit::with('client')->whereIn('user_id', $ids)
+            ->whereNull('checked_out_at')
+            ->latest()->orderByDesc('id')->get()->groupBy('user_id');
+
+        foreach ($users as $u) {
+            $u->primed = [
+                'custody' => $today->get($u->id)?->first() ?? $open->get($u->id)?->first(),
+                'openVisit' => $visits->get($u->id)?->first(),
+            ];
+        }
+    }
+
+    /** @var array<string, mixed> ناتج `primeBoard` — فاضي = اسأل الداتابيز */
+    private array $primed = [];
 
     public function issueToken(string $name = 'mobile'): ApiToken
     {
