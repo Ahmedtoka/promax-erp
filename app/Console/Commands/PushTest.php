@@ -80,7 +80,7 @@ class PushTest extends Command
             ->groupBy('v')->orderByDesc('n')->pluck('n', 'v');
 
         $this->line('  الأجهزة المسجّلة: '.$versions->sum().'  '
-            .$versions->map(fn ($n, $v) => "$v×$n")->implode('  '));
+            .$versions->map(fn ($n, $v) => "{$v}×{$n}")->implode('  '));
 
         $key = (string) $this->argument('user');
 
