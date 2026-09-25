@@ -42,8 +42,11 @@ class OnlineOrderController extends Controller
 
     public function sync(Request $request)
     {
-        $orders = OnlineOrder::with('items.product')
-            ->whereIn('status', ['new', 'postponed'])
+        $base = fn () => OnlineOrder::whereIn('status', ['new', 'postponed']);
+        [$applyArea, $areaFilter] = $this->areaFilter($request, $base);
+
+        $orders = $base()->with('items.product')
+            ->tap($applyArea)
             // المؤجل اللي جه يومه بيطفو فوق، وبعده الأجدد
             // ⚠️ التاريخ من PHP مش CURDATE() — عقيدة التايم زون:
             // MySQL ممكن يبقى على توقيت مختلف حوالين نص الليل
@@ -56,6 +59,7 @@ class OnlineOrderController extends Controller
 
         return view('online.sync', [
             'orders' => $orders,
+            'areaFilter' => $areaFilter,
             'ready' => ShopifyOnline::ready(),
             // للربط اليدوي للبند — أوردر قديم SKUه فاضي وفاريانته
             // مش في جدول الربط مالوش غير الطريق ده
@@ -144,6 +148,12 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['order' => __('online.no_warehouse')]);
         }
 
+        // نوت للتجهيز (٢٥/٩) — اختياري، بيتكتب في ديالوج التأكيد وبيظهر
+        // لأمين المخزن في شاشة التجهيز (على الأوردر وعلى أمر التجهيز)
+        $note = trim((string) ($request->validate([
+            'note' => ['nullable', 'string', 'max:500'],
+        ])['note'] ?? '')) ?: null;
+
         $order->load('items');
 
         // ⚠️ بند مش مربوط بمنتج = مفيش تأكيد. أمر تجهيز ناقص صنف
@@ -190,7 +200,7 @@ class OnlineOrderController extends Controller
             qtyByProduct: $qtyByProduct,
             purpose: PickOrder::PURPOSE_ONLINE,
             requestedBy: $request->user(),
-            extra: ['number' => $number],
+            extra: ['number' => $number, 'notes' => $note],
         );
 
         if ($result['error'] !== null) {
@@ -206,6 +216,7 @@ class OnlineOrderController extends Controller
             'confirmed_by' => $request->user()->id,
             'confirmed_at' => now(),
             'postponed_to' => null,
+            'notes' => $note,
         ]);
 
         // «الابديت يسمع في شوبيفاي» — تاج pmx-preparing على الأوردر
@@ -413,13 +424,15 @@ class OnlineOrderController extends Controller
 
     // ==================== ٤. جاهزة للشحن → بيك اب ====================
 
-    public function readyList()
+    public function readyList(Request $request)
     {
+        // المتراجع بس (٥/٩) — الجاهز الغير متراجع لسه في شاشة التجهيز
+        $base = fn () => OnlineOrder::status('ready')->whereNotNull('reviewed_at');
+        [$applyArea, $areaFilter] = $this->areaFilter($request, $base);
+
         return view('online.ready', [
-            // المتراجع بس (٥/٩) — الجاهز الغير متراجع لسه في شاشة التجهيز
-            'orders' => OnlineOrder::status('ready')
-                ->whereNotNull('reviewed_at')
-                ->orderBy('ready_at')->get(),
+            'orders' => $base()->tap($applyArea)->orderBy('ready_at')->get(),
+            'areaFilter' => $areaFilter,
             'couriers' => OnlineCourier::where('active', true)->orderBy('name')->get(),
         ]);
     }
@@ -1248,6 +1261,95 @@ class OnlineOrderController extends Controller
     }
 
     /** فلاش نجاح + تحذير دفع شوبيفاي لو فيه — من غير ما يبوّظ الفلو */
+    /**
+     * ═══ فلتر المناطق — السينك وجاهزة للشحن (٢٥/٩) ═══
+     *
+     * طلب المالك: «أجمع مناطق التجمع كلها» في شيت مندوب واحد.
+     *
+     * ⚠️ **المنطقة نص حر من شوبيفاي** («المدينة - المحافظة»): المدينة
+     * بيكتبها العميل (التجمع الخامس / قسم أول القاهرة الجديدة /
+     * Mustaqbal el sherouk)، والمحافظة من ليستة شوبيفاي فنضيفة. عشان
+     * كده الفلتر **اختيار متعدد** من المناطق الموجودة فعلاً بعدّادها —
+     * دروب داون واحدة كانت هتجيب «التجمع الخامس» بس وتسيب الباقي.
+     *
+     * الخيارات بتتحسب من نفس القايمة **قبل** الفلتر، فالعدّادات
+     * مابتتغيرش وانت بتختار.
+     *
+     * @param  \Closure(): \Illuminate\Database\Eloquent\Builder  $base
+     * @return array{0: \Closure, 1: array<string, mixed>}
+     */
+    private const NO_AREA = '__none__';
+
+    private function areaFilter(Request $request, \Closure $base): array
+    {
+        // ⚠️ `?gov[]=x` بيوصل مصفوفة — `(string)` عليها كان هيرمي 500
+        $str = fn (string $k) => is_string($v = $request->query($k)) ? trim($v) : '';
+        $gov = $str('gov');
+        $q = $str('q');
+        $areas = array_values(array_filter((array) $request->query('areas', []), 'is_string'));
+
+        // ⚠️ «من غير منطقة» بقيمة صريحة مش '' — لارافيل بيحوّل النص
+        // الفاضي لـnull في الريكوست (ConvertEmptyStringsToNull) فكان بيضيع
+        $none = self::NO_AREA;
+        $match = array_map(fn ($a) => $a === $none ? '' : $a, $areas);
+
+        $govOf = function (string $a) use ($none) {
+            $g = str_contains($a, ' - ') ? trim(\Illuminate\Support\Str::afterLast($a, ' - ')) : $a;
+
+            return $g !== '' ? $g : $none;
+        };
+
+        $counts = $base()->selectRaw("COALESCE(area, '') as a, COUNT(*) as n")
+            ->groupBy('a')->pluck('n', 'a');
+
+        $govs = [];
+        $options = [];
+
+        foreach ($counts as $a => $n) {
+            $g = $govOf((string) $a);
+            $govs[$g] = ($govs[$g] ?? 0) + (int) $n;
+
+            if ($gov === '' || $g === $gov) {
+                $options[] = ['area' => (string) $a, 'value' => $a !== '' ? (string) $a : $none, 'n' => (int) $n];
+            }
+        }
+
+        arsort($govs);
+        usort($options, fn ($x, $y) => [$y['n'], $x['area']] <=> [$x['n'], $y['area']]);
+
+        $apply = function ($query) use ($gov, $match, $q, $none) {
+            if ($gov === $none) {
+                $query->where(fn ($w) => $w->whereNull('area')->orWhere('area', ''));
+            } elseif ($gov !== '') {
+                $like = '% - '.addcslashes($gov, '%_\\');
+                $query->where(fn ($w) => $w->where('area', $gov)->orWhere('area', 'like', $like));
+            }
+
+            if ($match !== []) {
+                $query->whereIn(DB::raw("COALESCE(area, '')"), $match);
+            }
+
+            if ($q !== '') {
+                $like = '%'.addcslashes($q, '%_\\').'%';
+                $query->where(fn ($w) => $w->where('area', 'like', $like)
+                    ->orWhere('address', 'like', $like)
+                    ->orWhere('customer_name', 'like', $like)
+                    ->orWhere('number', 'like', $like));
+            }
+        };
+
+        return [$apply, [
+            'govs' => $govs,
+            'options' => $options,
+            'gov' => $gov,
+            'areas' => $areas,
+            'q' => $q,
+            'none' => $none,
+            'active' => $gov !== '' || $areas !== [] || $q !== '',
+            'total' => (int) $counts->sum(),
+        ]];
+    }
+
     private function okWithPushWarn(string $ok, ?string $warn)
     {
         $redirect = back()->with('ok', $ok);

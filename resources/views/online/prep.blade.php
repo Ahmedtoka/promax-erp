@@ -47,6 +47,7 @@
                         'customer' => $o?->customer_name,
                         'phone' => $o?->phone,
                         'area' => $o?->area,
+                        'note' => $pick->notes,
                         'status' => $pick->status,
                         'items' => $pick->items->map(fn ($i) => [
                             'img' => $i->product?->imageSrc(),
@@ -60,7 +61,12 @@
                 <tr style="cursor:pointer" onclick='openPrep({{ $pick->id }}, {!! $payload !!})'>
                     {{-- رقم الأوردر بيفتح فاتورته — والصف نفسه بيفتح التجهيز (٢٢/٩) --}}
                     <td class="num s">@if ($o !== null)<a href="{{ route('online.invoice', $o) }}" onclick="event.stopPropagation()"><b>#{{ $o->number }}</b></a>@else<b>{{ $pick->number }}</b>@endif</td>
-                    <td>{{ $o?->customer_name ?: '—' }}</td>
+                    <td>{{ $o?->customer_name ?: '—' }}
+                        {{-- نوت التأكيد (٢٥/٩) — لازم تبان من غير ما حد يفتح البوب اب --}}
+                        @if ($pick->notes)
+                            <div class="pp-note-row">📝 {{ $pick->notes }}</div>
+                        @endif
+                    </td>
                     <td class="num s" dir="ltr">{{ $o?->phone ?: '—' }}</td>
                     <td class="s">{{ $o?->area ?: '—' }}</td>
                     <td class="num">{{ $pick->items->count() }}</td>
@@ -108,6 +114,8 @@
             <div id="ppCustomer" style="font-size:12px;color:var(--muted)"></div>
         </div>
 
+        <div id="ppNote" class="pp-note" style="display:none"></div>
+
         <div id="ppItems" style="display:flex;flex-direction:column;gap:10px;margin:14px 0;
              max-height:60vh;overflow-y:auto"></div>
 
@@ -154,6 +162,9 @@
     font-size:26px;font-weight:900;color:var(--royal-blue,#12399B);min-width:64px;
 }
 .pp-qty small{display:block;font-size:10px;color:var(--muted);font-weight:700}
+/* نوت التأكيد — أصفر عشان عين أمين المخزن تقع عليها قبل الأصناف */
+.pp-note{margin-top:12px;padding:10px 14px;border-radius:12px;background:#FFF8D6;border:1.5px solid #E6C200;font-weight:800;font-size:14px;white-space:pre-line}
+.pp-note-row{margin-top:4px;font-size:11.5px;font-weight:700;color:#8A6D00;background:#FFF8D6;border-radius:8px;padding:3px 8px;white-space:normal;max-width:280px}
 </style>
 <script>
     const PREP_DONE_MSG = @js(__('online.prep_done_msg'));
@@ -173,6 +184,10 @@
             (p.order_no ? '#' + p.order_no : p.number);
         document.getElementById('ppCustomer').textContent =
             [p.customer, p.phone, p.area].filter(Boolean).join(' · ');
+
+        var note = document.getElementById('ppNote');
+        note.textContent = p.note ? '📝 ' + p.note : '';
+        note.style.display = p.note ? '' : 'none';
 
         var box = document.getElementById('ppItems');
         box.innerHTML = '';

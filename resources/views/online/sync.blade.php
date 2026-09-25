@@ -113,6 +113,8 @@
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.sync_hint') }}</div>
 
+    @include('online._area_filter', ['af' => $areaFilter, 'shown' => $orders->total()])
+
     <div class="tablewrap">
         <table>
             <tr>
@@ -175,14 +177,12 @@
                         @if ($canAct)
                             {{-- الزراير كانت بتتقص على طرف الجدول: عمود واحد بعرض ثابت بدل لفّ بيضيّق الخانة (٢٢/٩) --}}
                             <div style="display:flex;gap:4px;flex-direction:column;align-items:stretch;min-width:104px;white-space:nowrap">
-                                <form method="POST" action="{{ route('online.confirm', $o) }}"
-                                      onsubmit="return confirm(CONFIRM_MSG)">
-                                    @csrf
-                                    <button class="btn sm green" type="submit"
-                                            @disabled($o->hasUnmatchedItems())
-                                            @if ($o->hasUnmatchedItems()) title="{{ __('online.unlinked_hint') }}" @endif>
-                                        ✅ {{ __('online.act_confirm') }}</button>
-                                </form>
+                                {{-- ديالوج بدل confirm() — فيه نوت للتجهيز (٢٥/٩) --}}
+                                <button class="btn sm green" type="button"
+                                        @disabled($o->hasUnmatchedItems())
+                                        @if ($o->hasUnmatchedItems()) title="{{ __('online.unlinked_hint') }}" @endif
+                                        onclick="openConfirm({{ $o->id }}, '{{ $o->number }}')">
+                                    ✅ {{ __('online.act_confirm') }}</button>
                                 <button class="btn sm" type="button"
                                         onclick="openPostpone({{ $o->id }}, '{{ $o->number }}')">
                                     ⏳ {{ __('online.act_postpone') }}</button>
@@ -203,6 +203,23 @@
 
     @include('partials._pagination', ['p' => $orders])
 </div>
+
+{{-- ═══ ديالوج التأكيد + نوت التجهيز (٢٥/٩) ═══ --}}
+<dialog id="dlgConfirm">
+    <form class="dlg" method="POST" id="formConfirm" style="min-width:380px"
+          onsubmit="this.querySelector('[type=submit]').disabled = true">
+        @csrf
+        <h4>✅ {{ __('online.confirm_title') }} <span id="cfNum"></span></h4>
+        <div class="dash-hint" style="margin-bottom:10px">{{ __('online.confirm_msg') }}</div>
+        <label class="f">{{ __('online.prep_note') }}</label>
+        <textarea name="note" rows="3" maxlength="500" style="width:100%;margin-bottom:12px"
+                  placeholder="{{ __('online.prep_note_ph') }}"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgConfirm')">{{ __('common.cancel') }}</button>
+            <button class="btn green" type="submit">✅ {{ __('online.act_confirm') }}</button>
+        </div>
+    </form>
+</dialog>
 
 {{-- ═══ ديالوج التأجيل ═══ --}}
 <dialog id="dlgPostpone">
@@ -261,6 +278,15 @@
     const CONFIRM_MSG = @js(__('online.confirm_msg'));
     const RESET_MSG = @js(__('online.reset_confirm'));
     const POSTPONE_URL = @js(url('erp/online/orders'));
+
+    function openConfirm(id, num) {
+        var f = document.getElementById('formConfirm');
+        f.action = POSTPONE_URL + '/' + id + '/confirm';
+        f.note.value = '';
+        document.getElementById('cfNum').textContent = '#' + num;
+        openDlg('dlgConfirm');
+        f.note.focus();
+    }
 
     function openPostpone(id, num) {
         document.getElementById('formPostpone').action = POSTPONE_URL + '/' + id + '/postpone';

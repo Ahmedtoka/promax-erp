@@ -23,6 +23,9 @@
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.ready_hint') }}</div>
 
+    {{-- فلتر المناطق (٢٥/٩) — «علّم الكل» بيعلّم المعروض بس، فشيت المندوب بيطلع بمنطقة واحدة --}}
+    @include('online._area_filter', ['af' => $areaFilter, 'shown' => $orders->count()])
+
     @if ($canAct)
         {{-- ═══ بار الشحن: مسدس + مندوب + زرار ═══ --}}
         <form method="POST" action="{{ route('online.ship') }}" id="shipForm"

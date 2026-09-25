@@ -238,4 +238,16 @@ return [
 
     // Collections KPI
     'k_outstanding_hint' => 'Shipped, not collected',
+    // Area filter + confirm note (25/9)
+    'f_gov' => 'Governorate',
+    'f_gov_all' => 'All governorates',
+    'f_areas' => 'Areas',
+    'f_areas_n' => ':n areas selected',
+    'f_q' => 'Search area, address, name or number',
+    'f_no_area' => 'No area',
+    'f_showing' => 'Showing :n of :total',
+    'f_hint' => 'Tick every spelling of the same area together — customers type the city by hand (5th Settlement / New Cairo / Tagamoa).',
+    'confirm_title' => 'Confirm order',
+    'prep_note' => 'Note for prep',
+    'prep_note_ph' => 'Optional — shown to the store keeper on the prep screen',
 ];

@@ -58,6 +58,7 @@ class FormStarIntegrityTest extends TestCase
         'online/pickup#formCancel' => ['online.cancel'],
         'online/prep#ppDoneForm' => ['online.prep.done'],
         'online/prep#ppReviewForm' => ['online.prep.review'],
+        'online/sync#formConfirm' => ['online.confirm'],
         'online/sync#formPostpone' => ['online.postpone'],
         'online/sync#formCancel' => ['online.cancel'],
         'online/sync#formItemLink' => ['online.item.link'],
