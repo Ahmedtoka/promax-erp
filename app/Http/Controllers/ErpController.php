@@ -371,8 +371,12 @@ class ErpController extends Controller
         // ⚠️ وسكوب التشانل مانجر: عملاءه المسكّنين له بس (2026-08-05)
         // ⚠️ **`manager` eager** (١٥ أغسطس ٢٠٢٦) — عمود «مدير القناة»
         // بيقرا العلاقة لكل صف، ومن غيرها 40 صف = 40 كويري زيادة.
+        // ⚠️ **وقوايم السعر** (٢٥/٩) — عمود القايمة بيمشي على
+        // `Pricing::listRowFor` لكل صف، وكانت ٤٠ كويري `price_lists`.
         $q = Client::visibleTo(\App\Models\Branch::scope(
-            Client::query()->with(['zone', 'contract', 'group.contract', 'manager']),
+            Client::query()->with([
+                'zone', 'contract.priceListRow', 'group.contract.priceListRow', 'manager', 'priceListRow',
+            ]),
         ));
 
         // ⚠️ **الافتراضي الكل مش الشغّال بس.** بعد استيراد الـ455،

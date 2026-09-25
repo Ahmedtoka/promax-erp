@@ -192,6 +192,25 @@ class PriceList extends Model
     protected static array $codeCache = [];
 
     /**
+     * أي قايمة بالكود — مفعّلة أو موقوفة — لعرض اسمها بس.
+     *
+     * ⚠️ **مش للتسعير.** التسعير بيمشي على `byCode` اللي بتشترط
+     * `active`. دي عشان شاشة العملاء كانت بتسأل عن اسم القايمة
+     * كويري لكل صف (٢٥/٩).
+     */
+    public static function anyByCode(string $code): ?self
+    {
+        if (! array_key_exists($code, static::$labelCache)) {
+            static::$labelCache[$code] = static::where('code', $code)->first();
+        }
+
+        return static::$labelCache[$code];
+    }
+
+    /** @var array<string, ?self> */
+    protected static array $labelCache = [];
+
+    /**
      * تصفير الميمو — التيستات بتلف على داتابيز بتترجّع بين كل تيست
      * والتاني، والموديل المكاش بيفضل شايل صف اتشال.
      */
@@ -200,6 +219,7 @@ class PriceList extends Model
         static::$defaultResolved = false;
         static::$defaultCache = null;
         static::$codeCache = [];
+        static::$labelCache = [];
     }
 
     public function setDefault(): ?string

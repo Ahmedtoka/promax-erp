@@ -355,7 +355,7 @@ class Pricing
             return __('stock.price_list_'.$list);
         }
 
-        return PriceList::where('code', $list)->first()?->displayName()
+        return PriceList::anyByCode($list)?->displayName()
             ?? __('stock.price_list_'.self::LIST_NEW);
     }
 }
