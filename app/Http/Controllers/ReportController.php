@@ -58,7 +58,6 @@ class ReportController extends Controller
         // مسحوبات العميل بالصنف — سطر العميل بإجماليه وأصنافه تحته (٢٦/٩)
         'client_draws' => '🗂️',
         'client_draws_family' => '🧩',
-        'client_draws_clients' => '👤',
         // المجمّع: إكسيل بـ٣ شيتات (العملاء · بالعائلة · بالصنف)
         'client_draws_all' => '📚',
         'sales_decline' => '📉',
@@ -85,7 +84,7 @@ class ReportController extends Controller
      */
     private const GROUPS = [
         'sales' => ['📈', ['sales_docs', 'sales_by_rep', 'sales_by_client', 'sales_by_product', 'sales_by_channel',
-            'client_products', 'client_draws', 'client_draws_family', 'client_draws_clients', 'client_draws_all',
+            'client_products', 'client_draws', 'client_draws_family', 'client_draws_all',
             'sales_decline', 'new_clients']],
         'money' => ['💰', ['collections', 'debts', 'returns_docs', 'returns_quality', 'discounts_given',
             'profitability', 'sales_reconcile']],
@@ -148,6 +147,11 @@ class ReportController extends Controller
 
         // ═══ تصدير CSV — نفس الصفوف بالظبط، بالـBOM عشان إكسيل عربي ═══
         if ($request->boolean('export')) {
+            // «إجماليات» = سطور المجموعات بس (٢٦/٩) — من غيرها أو `detail=1` = تفصيلي
+            if ($request->has('detail') && ! $request->boolean('detail')) {
+                $data = $this->totalsOnly($data);
+            }
+
             // التقرير المجمّع (سطر عميل وتحته أصنافه) بينزل xlsx منسّق بنفس
             // الترتيب — الـCSV مابيعرفش يلوّن سطر العميل (٢٦/٩)
             return ! empty($data['groupRows']) || ! empty($data['xlsx']) ? $this->xlsx($data) : $this->csv($data);
@@ -359,6 +363,52 @@ class ReportController extends Controller
         }
 
         return $x->download($d['key'].'-'.now()->format('Y-m-d-Hi').'.xlsx');
+    }
+
+    /**
+     * نسخة «إجماليات» من تقرير مجمّع: سطور المجموعات بس (العميل/السلسلة)
+     * من غير التفصيل تحتها. الشيت اللي بيطلع نسخة من شيت قبله (بالعائلة
+     * وبالصنف من غير تفصيلهم = شيت العملاء) بيتشال — مالوش لازمة مرتين.
+     */
+    private function totalsOnly(array $d): array
+    {
+        $strip = function (array $sh): array {
+            if (empty($sh['groupRows'])) {
+                return $sh;
+            }
+
+            $sh['rows'] = array_values(array_intersect_key($sh['rows'], array_flip($sh['groupRows'])));
+            $sh['groupRows'] = [];
+
+            return $sh;
+        };
+
+        $d = $strip($d);
+
+        if (! empty($d['sheets'])) {
+            $seen = [];
+            $out = [];
+
+            foreach ($d['sheets'] as $sh) {
+                // ⚠️ اللي بيتشال بس شيت **اتقص تفصيله** وطلع نسخة — شيت العملاء نفسه
+                // مايتشالش حتى لو شيت السلاسل طابقه (داتا من غير سلاسل)
+                $hadDetail = ! empty($sh['groupRows']);
+                $sh = $strip($sh);
+                $sig = md5(serialize(array_map(fn ($r) => array_map(fn ($c) => self::cellText($c), $r), $sh['rows'])));
+
+                if (! $hadDetail || ! isset($seen[$sig])) {
+                    $seen[$sig] = true;
+                    $out[] = $sh;
+                }
+            }
+
+            $d['sheets'] = $out;
+        }
+
+        // من غير سطور مجموعات الـxlsx لسه مطلوب (الملف المنسّق مش CSV)
+        $d['xlsx'] = true;
+
+        return $d;
     }
 
     /** ورقة واحدة: عنوانها · الفترة ووقت السحب · الهيدر · الصفوف · الإجمالي */
@@ -1826,11 +1876,6 @@ class ReportController extends Controller
         return $this->cdReport($r, 'family');
     }
 
-    private function rClientDrawsClients(Request $r): array
-    {
-        return $this->cdReport($r, 'client');
-    }
-
     /**
      * المجمّع (٢٦/٩): الشاشة بالسلاسل، والإكسيل ٤ شيتات بنفس الفلاتر —
      * السلاسل · العملاء · بالعائلة · بالصنف. **الترتيب بكود العميل** (طلب
@@ -1852,6 +1897,8 @@ class ReportController extends Controller
         }
 
         $out['note'] = __('rpt.cd_all_note');
+        // السلسلة سطر واحد، والدوسة على + بتفتح فروعها (طلب المالك ٢٦/٩)
+        $out['collapsed'] = true;
 
         return $out;
     }

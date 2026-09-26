@@ -353,8 +353,6 @@ return [
     'cd_clients_n' => ":n clients",
     'client_draws_family' => "Client draws by family",
     'client_draws_family_sub' => "Each client's total with its product families underneath",
-    'client_draws_clients' => "Client draws, totals only",
-    'client_draws_clients_sub' => "One line per client with its total draws",
     'client_draws_all' => "Client draws, combined",
     'client_draws_all_sub' => "One Excel file with four sheets: chains, clients, by family, by product, ordered by client code",
     'cd_client_family' => "Client / family",
@@ -365,4 +363,9 @@ return [
     'cd_all_note' => "The screen shows each chain with its branches underneath. The Excel export is one file with four sheets under the same filters: chains, clients, client by family, client by product, ordered by client code.",
     'cd_sheet_chain' => "Chains",
     'cd_chain_client' => "Chain / branch",
+    'export_ask' => "Totals only, or detailed with each line's breakdown underneath?",
+    'export_totals' => "Totals only",
+    'export_detail' => "Detailed",
+    'grp_open_all' => "Expand all",
+    'grp_shut_all' => "Collapse all",
 ];

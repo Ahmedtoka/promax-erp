@@ -189,19 +189,38 @@ class ClientDrawsReportTest extends TestCase
             ->assertDontSee('Choco Bar Two');
     }
 
-    public function test_clients_level_is_one_line_per_client(): void
+    public function test_totals_export_is_group_lines_only_and_drops_duplicate_sheets(): void
     {
         $this->seedDraws();
 
+        // «إجماليات»: السلاسل + العملاء بس — بالعائلة وبالصنف من غير تفصيلهم = نسخة من العملاء فبيتشالوا
         $res = $this->actingAs($this->admin)
-            ->get(route('erp.reports.show', ['key' => 'client_draws_clients', 'export' => 1] + self::RANGE))
+            ->get(route('erp.reports.show', ['key' => 'client_draws_all', 'export' => 1, 'detail' => 0] + self::RANGE))
             ->assertOk();
+        $path = $res->baseResponse->getFile()->getPathname();
 
+        $this->assertSame([__('rpt.cd_sheet_chain'), __('rpt.cd_sheet_client')], Sheet::sheets($path));
+
+        foreach (Sheet::sheets($path) as $name) {
+            $rows = Sheet::rows($path, $name);
+            $clients = array_filter($rows, fn ($r) => in_array('CL-BIG', $r, true) || in_array('CL-SMALL', $r, true));
+            $this->assertCount(2, $clients, "two clients = two lines on $name");
+            $this->assertSame([], array_filter($rows, fn ($r) => str_starts_with((string) ($r[1] ?? ''), '↳')), "no detail on $name");
+        }
+
+        // تقرير الصنف بالإجماليات = سطر لكل عميل بس
+        $res = $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws', 'export' => 1, 'detail' => 0] + self::RANGE));
         $rows = Sheet::rows($res->baseResponse->getFile()->getPathname());
-        $data = array_values(array_filter($rows, fn ($r) => in_array('CL-BIG', $r, true) || in_array('CL-SMALL', $r, true)));
-
-        $this->assertCount(2, $data, 'two clients = two lines, no product lines');
         $this->assertSame([], array_filter($rows, fn ($r) => str_starts_with((string) ($r[1] ?? ''), '↳')));
+
+        // الشاشة: زرار التصدير بيسأل، والمجمّع مقفول افتراضياً، وتقرير «بالإجمالي» اتشال
+        $this->actingAs($this->admin)->get(route('erp.reports.show', ['key' => 'client_draws_all'] + self::RANGE))
+            ->assertOk()->assertSee('dlgExport', false)->assertSee('data-collapsed="1"', false)
+            ->assertSee(__('rpt.export_totals'))->assertSee(__('rpt.export_detail'));
+        $this->actingAs($this->admin)->get(route('erp.reports.show', ['key' => 'client_draws'] + self::RANGE))
+            ->assertOk()->assertSee('data-collapsed="0"', false);
+        $this->actingAs($this->admin)->get(route('erp.reports.show', ['key' => 'client_draws_clients']))->assertNotFound();
     }
 
     public function test_the_combined_excel_has_four_sheets_with_matching_totals(): void

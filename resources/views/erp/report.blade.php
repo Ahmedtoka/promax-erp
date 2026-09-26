@@ -5,7 +5,12 @@
 @section('actions')
     <a class="btn" href="{{ route('erp.reports.hub') }}">← {{ __('rpt.hub_title') }}</a>
     {{-- التصدير بنفس الفلاتر الحالية بالظبط — نفس الكويري ونفس الصفوف --}}
-    <a class="btn gold" href="{{ request()->fullUrlWithQuery(['export' => 1]) }}">⬇️ {{ __('rpt.export') }}</a>
+    @if (! empty($groupRows))
+        {{-- التقرير المجمّع بيسأل: إجماليات ولا تفصيلي (٢٦/٩) --}}
+        <button class="btn gold" type="button" onclick="openDlg('dlgExport')">⬇️ {{ __('rpt.export') }}</button>
+    @else
+        <a class="btn gold" href="{{ request()->fullUrlWithQuery(['export' => 1]) }}">⬇️ {{ __('rpt.export') }}</a>
+    @endif
     <button class="btn" type="button" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
 @endsection
 
@@ -135,8 +140,17 @@
         <div class="rpt-note">ℹ️ {{ $note }}</div>
     @endif
 
+    @if (! empty($groupRows))
+        <div style="display:flex;gap:6px;margin-bottom:8px" data-noprint>
+            <button class="btn sm" type="button" data-grp-all="open">➕ {{ __('rpt.grp_open_all') }}</button>
+            <button class="btn sm" type="button" data-grp-all="shut">➖ {{ __('rpt.grp_shut_all') }}</button>
+        </div>
+    @endif
+
     <div class="tablewrap rpt-wrap">
-        <table>
+        {{-- ⚠️ الجدول المجمّع بره أدوات الجداول العامة (`data-plain`): السورت كان هيفرّق
+             الفروع عن سلسلتها، والصفحات المحلية كانت بتعدّ الصفوف المطوية --}}
+        <table @if (! empty($groupRows)) data-plain data-collapsed="{{ ! empty($collapsed) ? '1' : '0' }}" id="rptGrouped" @endif>
             <thead>
             <tr>
                 @foreach ($columns as $c)
@@ -174,6 +188,24 @@
     </div>
 </div>
 
+@if (! empty($groupRows))
+<dialog id="dlgExport">
+    <div class="dlg">
+        <h4>⬇️ {{ __('rpt.export') }}</h4>
+        <div class="dash-hint" style="margin-bottom:12px">{{ __('rpt.export_ask') }}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <a class="btn" href="{{ request()->fullUrlWithQuery(['export' => 1, 'detail' => 0]) }}"
+               onclick="closeDlg('dlgExport')">📋 {{ __('rpt.export_totals') }}</a>
+            <a class="btn gold" href="{{ request()->fullUrlWithQuery(['export' => 1, 'detail' => 1]) }}"
+               onclick="closeDlg('dlgExport')">🧾 {{ __('rpt.export_detail') }}</a>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgExport')">{{ __('common.cancel') }}</button>
+        </div>
+    </div>
+</dialog>
+@endif
+
 @endsection
 
 @section('scripts')
@@ -199,17 +231,51 @@
 .rpt-grp td{background:var(--blue-050);font-weight:800;border-top:2px solid var(--border);cursor:pointer}
 .rpt-sub td:nth-child(2){padding-inline-start:22px;font-size:12.5px}
 .rpt-sub.rpt-hide{display:none}
+.rpt-tg{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-inline-end:6px;
+  border-radius:5px;background:var(--royal-blue);color:#fff;font-weight:900;font-size:13px;line-height:1;vertical-align:middle}
+.rpt-tg-none{visibility:hidden}
 @media print{.rpt-sub.rpt-hide{display:table-row}}
 </style>
 <script>
-/* دوسة على سطر العميل بتطوي أصنافه لحد سطر العميل اللي بعده */
-document.querySelectorAll('tr.rpt-grp').forEach(function (g) {
-    g.addEventListener('click', function (e) {
-        if (e.target.closest('a')) return;
-        for (var r = g.nextElementSibling; r && r.classList.contains('rpt-sub'); r = r.nextElementSibling) {
-            r.classList.toggle('rpt-hide');
+/* ═══ التقارير المجمّعة (٢٦/٩): سطر المجموعة عليه + / − بيفتح ويقفل سطوره ═══ */
+(function () {
+    var table = document.getElementById('rptGrouped');
+    if (!table) return;
+
+    var groups = [];
+
+    table.querySelectorAll('tr.rpt-grp').forEach(function (g) {
+        var subs = [];
+        for (var r = g.nextElementSibling; r && r.classList.contains('rpt-sub'); r = r.nextElementSibling) subs.push(r);
+
+        var tg = document.createElement('span');
+        tg.className = 'rpt-tg';
+        if (subs.length === 0) tg.classList.add('rpt-tg-none');
+        g.cells[0].insertBefore(tg, g.cells[0].firstChild);
+
+        var set = function (open) {
+            subs.forEach(function (s) { s.classList.toggle('rpt-hide', !open); });
+            tg.textContent = subs.length === 0 ? '' : (open ? '−' : '+');
+            g.classList.toggle('rpt-open', open);
+        };
+
+        if (subs.length) {
+            g.addEventListener('click', function (e) {
+                if (e.target.closest('a')) return;
+                set(!g.classList.contains('rpt-open'));
+            });
         }
+
+        groups.push(set);
+        set(table.dataset.collapsed !== '1');
     });
-});
+
+    document.querySelectorAll('[data-grp-all]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var open = b.dataset.grpAll === 'open';
+            groups.forEach(function (set) { set(open); });
+        });
+    });
+})();
 </script>
 @endsection
