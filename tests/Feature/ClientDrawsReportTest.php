@@ -34,6 +34,7 @@ class ClientDrawsReportTest extends TestCase
     private User $rep;
     private Product $choco;
     private Product $nuts;
+    private Product $choco2;
 
     protected function setUp(): void
     {
@@ -42,7 +43,10 @@ class ClientDrawsReportTest extends TestCase
         $this->admin = $this->makeAdmin();
         $this->rep = $this->makeRep();
         $this->choco = $this->makeProduct(['code' => 'CHOCO1', 'name_en' => 'Choco Bar']);
-        $this->nuts = $this->makeProduct(['code' => 'NUTS1', 'name_en' => 'Nuts Bar']);
+        $this->choco->update(['family' => 'promax_bar']);
+        $this->nuts = $this->makeProduct(['code' => 'NUTS1', 'name_en' => 'Nuts Bar', 'family' => 'spreads']);
+        // صنف تاني في نفس عائلة الشوكولاتة — لازم يتجمع معاها في تقرير العائلة
+        $this->choco2 = $this->makeProduct(['code' => 'CHOCO2', 'name_en' => 'Choco Bar Two', 'family' => 'promax_bar']);
     }
 
     /** فاتورة بقيد بيع بتاريخها — البنود [منتج, كمية, صافي, ضريبة] */
@@ -161,5 +165,65 @@ class ClientDrawsReportTest extends TestCase
         $this->actingAs($this->admin)->get(route('erp.reports.show', ['key' => 'client_draws', 'from' => 'garbage']))
             ->assertOk();
         $this->actingAs($this->admin)->get(route('erp.reports.hub'))->assertOk()->assertSee(__('rpt.client_draws'));
+    }
+
+    // ═══ بالعائلة · بالإجمالي · المجمّع (٢٦/٩) ═══
+
+    private function familyLabel(string $key): string
+    {
+        return \App\Models\ProductFamily::label($key);
+    }
+
+    public function test_family_level_sums_every_product_of_a_family_under_the_client(): void
+    {
+        [$big] = $this->seedDraws();
+        // صنف تاني من عائلة الشوكولاتة للعميل الكبير: 100 + 14 ضريبة
+        $this->sale($big, '2026-08-21', [[$this->choco2, 1, 100, 14]]);
+
+        // الكبير: 1596 + 114 = 1710 · عائلة الشوكولاتة 1368 + 114 = 1482 · السبريدز 228
+        $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_family'] + self::RANGE))
+            ->assertOk()
+            ->assertSeeInOrder(['Big Client', '1,710.00', '↳ '.$this->familyLabel('promax_bar'), '1,482.00',
+                '↳ '.$this->familyLabel('spreads'), '228.00', 'Small Client', '350.00', __('rpt.cd_unlined'), '50.00'], false)
+            ->assertDontSee('Choco Bar Two');
+    }
+
+    public function test_clients_level_is_one_line_per_client(): void
+    {
+        $this->seedDraws();
+
+        $res = $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_clients', 'export' => 1] + self::RANGE))
+            ->assertOk();
+
+        $rows = Sheet::rows($res->baseResponse->getFile()->getPathname());
+        $data = array_values(array_filter($rows, fn ($r) => in_array('CL-BIG', $r, true) || in_array('CL-SMALL', $r, true)));
+
+        $this->assertCount(2, $data, 'two clients = two lines, no product lines');
+        $this->assertSame([], array_filter($rows, fn ($r) => str_starts_with((string) ($r[1] ?? ''), '↳')));
+    }
+
+    public function test_the_combined_excel_has_three_sheets_with_matching_totals(): void
+    {
+        $this->seedDraws();
+
+        $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_all'] + self::RANGE))
+            ->assertOk()->assertSee(__('rpt.cd_all_note'));
+
+        $res = $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_all', 'export' => 1] + self::RANGE))
+            ->assertOk();
+        $path = $res->baseResponse->getFile()->getPathname();
+
+        $sheets = Sheet::sheets($path);
+        $this->assertSame([__('rpt.cd_sheet_client'), __('rpt.cd_sheet_family'), __('rpt.cd_sheet_product')], $sheets);
+
+        // سطر الإجمالي في آخر كل شيت = نفس الرقم (1596 + 350 = 1946)
+        foreach ($sheets as $name) {
+            $rows = array_values(array_filter(Sheet::rows($path, $name), fn ($r) => ($r[0] ?? null) === __('common.total')));
+            $this->assertEquals(1946.0, Sheet::number(end($rows)[7] ?? null), "total on sheet $name");
+        }
     }
 }

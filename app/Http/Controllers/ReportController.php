@@ -57,6 +57,10 @@ class ReportController extends Controller
         'client_products' => '🧺',
         // مسحوبات العميل بالصنف — سطر العميل بإجماليه وأصنافه تحته (٢٦/٩)
         'client_draws' => '🗂️',
+        'client_draws_family' => '🧩',
+        'client_draws_clients' => '👤',
+        // المجمّع: إكسيل بـ٣ شيتات (العملاء · بالعائلة · بالصنف)
+        'client_draws_all' => '📚',
         'sales_decline' => '📉',
         'target_vs_actual' => '🎯',
         'oos_frequency' => '🕳️',
@@ -81,7 +85,8 @@ class ReportController extends Controller
      */
     private const GROUPS = [
         'sales' => ['📈', ['sales_docs', 'sales_by_rep', 'sales_by_client', 'sales_by_product', 'sales_by_channel',
-            'client_products', 'client_draws', 'sales_decline', 'new_clients']],
+            'client_products', 'client_draws', 'client_draws_family', 'client_draws_clients', 'client_draws_all',
+            'sales_decline', 'new_clients']],
         'money' => ['💰', ['collections', 'debts', 'returns_docs', 'returns_quality', 'discounts_given',
             'profitability', 'sales_reconcile']],
         'field' => ['🚐', ['reps_overview', 'visits_log', 'inactive_clients', 'pos_status', 'gifts_log', 'gifts_balance']],
@@ -145,7 +150,7 @@ class ReportController extends Controller
         if ($request->boolean('export')) {
             // التقرير المجمّع (سطر عميل وتحته أصنافه) بينزل xlsx منسّق بنفس
             // الترتيب — الـCSV مابيعرفش يلوّن سطر العميل (٢٦/٩)
-            return ! empty($data['groupRows']) ? $this->xlsx($data) : $this->csv($data);
+            return ! empty($data['groupRows']) || ! empty($data['xlsx']) ? $this->xlsx($data) : $this->csv($data);
         }
 
         return view('erp.report', $data);
@@ -339,16 +344,35 @@ class ReportController extends Controller
      */
     private function xlsx(array $d)
     {
-        $cols = $d['columns'];
-        $n = count($cols);
-        $grp = array_flip($d['groupRows']);
-        $x = new \App\Services\SheetWriter(mb_substr((string) $d['title'], 0, 31));
+        // `sheets` = تقرير مجمّع بأكتر من ورقة؛ غير كده الورقة هي التقرير نفسه
+        $sheets = $d['sheets'] ?? [['title' => $d['title']] + $d];
+        $x = null;
 
-        foreach ($cols as $i => $c) {
-            $x->width($i, $d['xlsxWidths'][$i] ?? (($c[1] ?? null) === 'num' ? 15 : 22));
+        foreach ($sheets as $sh) {
+            if ($x === null) {
+                $x = new \App\Services\SheetWriter($sh['title']);
+            } else {
+                $x->addSheet($sh['title']);
+            }
+
+            $this->xlsxSheet($x, $sh, $d);
         }
 
-        $x->row([['v' => $d['title'], 'style' => 'title']]);
+        return $x->download($d['key'].'-'.now()->format('Y-m-d-Hi').'.xlsx');
+    }
+
+    /** ورقة واحدة: عنوانها · الفترة ووقت السحب · الهيدر · الصفوف · الإجمالي */
+    private function xlsxSheet(\App\Services\SheetWriter $x, array $sh, array $d): void
+    {
+        $cols = $sh['columns'];
+        $n = count($cols);
+        $grp = array_flip($sh['groupRows'] ?? []);
+
+        foreach ($cols as $i => $c) {
+            $x->width($i, $sh['xlsxWidths'][$i] ?? (($c[1] ?? null) === 'num' ? 15 : 22));
+        }
+
+        $x->row([['v' => $sh['title'], 'style' => 'title']]);
         $x->merge(0, $n - 1);
 
         foreach (\App\Support\Csv::meta($d['title'], $d['periodFrom'] ?? null, $d['periodTo'] ?? null) as $m) {
@@ -367,7 +391,7 @@ class ReportController extends Controller
                 : ['v' => $t === '—' ? '' : $t, 'style' => $textStyle];
         };
 
-        foreach ($d['rows'] as $ri => $row) {
+        foreach ($sh['rows'] as $ri => $row) {
             $isGrp = isset($grp[$ri]);
             $out = [];
 
@@ -378,12 +402,10 @@ class ReportController extends Controller
             $x->row($out);
         }
 
-        if (! empty($d['totals'])) {
-            $x->row(array_map(fn ($raw, $i) => $cell($raw, $i, 'total', 'total'),
-                array_values($d['totals']), array_keys(array_values($d['totals']))));
+        if (! empty($sh['totals'])) {
+            $tot = array_values($sh['totals']);
+            $x->row(array_map(fn ($raw, $i) => $cell($raw, $i, 'total', 'total'), $tot, array_keys($tot)));
         }
-
-        return $x->download($d['key'].'-'.now()->format('Y-m-d-Hi').'.xlsx');
     }
 
     /** فلترة نص البحث على أعمدة معيّنة في كويري */
@@ -1781,17 +1803,55 @@ class ReportController extends Controller
         ];
     }
 
-    // ═══════════════════ ١٧ب. مسحوبات العميل بالصنف ═══════════════════
+    // ═══════════════════ ١٧ب. مسحوبات العميل — ٣ مستويات + المجمّع ═══════════════════
+    //
+    // طلب المالك (٢٦/٩): سطر العميل بإجمالي مسحوباته، وتحته إما أصنافه أو
+    // عائلاته، أو سطر العميل لوحده — ومجمّع بيطلّع الـ٣ شيتات في إكسيل واحد.
+    //
+    // ⚠️ **الإجمالي من القيود** (`SalesSource::docs` = مدين قيود البيع بتاريخ
+    // القيد) والتفصيل من `SalesSource::lines` (بنود نفس القيود). عميل عنده
+    // قيد من غير بنود (استيراد/قيد يدوي) بيطلع تحته سطر «قيود بلا بنود»
+    // بالفرق — فسطوره بتقفل على إجماليه في كل المستويات.
+    //
+    // ⚠️ الـ٤ تقارير بيقروا من `cdData` واحدة — المجمّع بيبني الـ٣ شيتات من
+    // نفس الداتا فأرقامهم مايختلفوش أبداً.
 
-    /**
-     * سطر لكل عميل بإجمالي مسحوباته، وتحته أصنافه (طلب المالك ٢٦/٩).
-     *
-     * ⚠️ **الإجمالي من القيود** (`SalesSource::docs` = مدين قيود البيع بتاريخ
-     * القيد) والأصناف من `SalesSource::lines` (بنود نفس القيود). لو عميل
-     * عنده قيد من غير بنود (استيراد/قيد يدوي) الفرق بيطلع سطر «قيود بلا
-     * بنود» تحته — فمجموع سطوره بيقفل على إجماليه دايماً.
-     */
     private function rClientDraws(Request $r): array
+    {
+        return $this->cdReport($r, 'product');
+    }
+
+    private function rClientDrawsFamily(Request $r): array
+    {
+        return $this->cdReport($r, 'family');
+    }
+
+    private function rClientDrawsClients(Request $r): array
+    {
+        return $this->cdReport($r, 'client');
+    }
+
+    /** المجمّع: الشاشة ملخص العملاء، والإكسيل ٣ شيتات بنفس الفلاتر */
+    private function rClientDrawsAll(Request $r): array
+    {
+        $D = $this->cdData($r);
+        $out = $this->cdReport($r, 'client', $D);
+        $keep = array_flip(['columns', 'rows', 'groupRows', 'totals', 'xlsxWidths']);
+
+        $out['sheets'] = [];
+
+        foreach (['client', 'family', 'product'] as $lv) {
+            $one = $lv === 'client' ? $out : $this->cdReport($r, $lv, $D);
+            $out['sheets'][] = ['title' => __('rpt.cd_sheet_'.$lv)] + array_intersect_key($one, $keep);
+        }
+
+        $out['note'] = __('rpt.cd_all_note');
+
+        return $out;
+    }
+
+    /** داتا الفترة: العملاء بإجماليهم من القيود وبنودهم بالصنف */
+    private function cdData(Request $r): array
     {
         [$a, $b] = $this->range($r);
         $reps = $r->filled('user_id') ? [$r->integer('user_id')] : null;
@@ -1822,7 +1882,7 @@ class ReportController extends Controller
                 'name' => $c?->fullName() ?? '#'.$cid, 'code' => $c?->code ?? '',
                 'g' => (float) $d->g, 'net' => (float) $d->net, 'tax' => (float) $d->tax, 'n' => (int) $d->n,
                 'ret' => (float) ($rets[$cid] ?? 0),
-                'lines' => collect($lines->get($cid, []))->sortByDesc(fn ($l) => (float) $l->net + (float) $l->tax)->values(),
+                'lines' => collect($lines->get($cid, [])),
             ];
         });
 
@@ -1832,18 +1892,72 @@ class ReportController extends Controller
         }
 
         $list = $list->sortByDesc('g')->values();
-        $G = (float) $list->sum('g');
 
+        return [
+            'list' => $list, 'products' => $products,
+            'G' => (float) $list->sum('g'), 'NET' => (float) $list->sum('net'),
+            'TAX' => (float) $list->sum('tax'), 'RET' => (float) $list->sum('ret'),
+            'Q' => (float) $list->sum(fn ($x) => $x['lines']->sum('q')),
+        ];
+    }
+
+    /**
+     * سطور التفصيل تحت عميل: بالصنف أو بالعائلة.
+     *
+     * @return list<array{code: string, label: array|string, q: float, net: float, tax: float, g: float}>
+     */
+    private function cdDetail(array $x, $products, string $level): array
+    {
+        $out = [];
+
+        foreach ($x['lines'] as $l) {
+            $p = $products->get($l->product_id);
+            $key = $level === 'family' ? 'f:'.($p?->family ?? '') : 'p:'.$l->product_id;
+
+            if (! isset($out[$key])) {
+                $out[$key] = $level === 'family'
+                    ? ['code' => '', 'label' => '↳ '.(($p?->family ?? '') !== ''
+                        ? \App\Models\ProductFamily::label($p->family) : __('rpt.cd_no_family')),
+                        'q' => 0.0, 'net' => 0.0, 'tax' => 0.0]
+                    : ['code' => $p?->code ?? '',
+                        'label' => $this->cProduct($p, $p ? '↳ '.$p->displayName() : '↳ #'.$l->product_id),
+                        'q' => 0.0, 'net' => 0.0, 'tax' => 0.0];
+            }
+
+            $out[$key]['q'] += (float) $l->q;
+            $out[$key]['net'] += (float) $l->net;
+            $out[$key]['tax'] += (float) $l->tax;
+        }
+
+        foreach ($out as &$row) {
+            $row['g'] = round($row['net'] + $row['tax'], 2);
+        }
+        unset($row);
+
+        usort($out, fn ($a, $b) => $b['g'] <=> $a['g']);
+
+        return $out;
+    }
+
+    /** تقرير بمستوى تفصيل: `product` · `family` · `client` (سطر العميل بس) */
+    private function cdReport(Request $r, string $level, ?array $D = null): array
+    {
+        $D ??= $this->cdData($r);
+        $G = $D['G'];
         $rows = [];
         $groupRows = [];
 
-        foreach ($list as $x) {
+        foreach ($D['list'] as $x) {
             if (count($rows) >= self::MAX_ROWS) {
                 break;
             }
 
             $c = $x['c'];
-            $groupRows[] = count($rows);
+
+            if ($level !== 'client') {
+                $groupRows[] = count($rows);
+            }
+
             $rows[] = [
                 $this->lk($x['code'], $c ? route('erp.clients.show', $x['cid']) : null),
                 $this->lk($x['name'], $c ? route('erp.clients.show', $x['cid']) : null),
@@ -1856,40 +1970,37 @@ class ReportController extends Controller
                 $this->pct($x['g'], $G),
             ];
 
-            $linesG = 0.0;
+            if ($level === 'client') {
+                continue;
+            }
 
-            foreach ($x['lines'] as $l) {
-                $lg = (float) $l->net + (float) $l->tax;
-                $linesG += $lg;
-                $p = $products->get($l->product_id);
-                $rows[] = [
-                    $p?->code ?? '',
-                    $this->cProduct($p, $p ? '↳ '.$p->displayName() : '↳ #'.$l->product_id),
-                    '', '',
-                    $this->f0((float) $l->q), $this->m((float) $l->net), $this->m((float) $l->tax), $this->m($lg),
-                    '', '', $this->pct($lg, $x['g']),
-                ];
+            $sum = 0.0;
+
+            foreach ($this->cdDetail($x, $D['products'], $level) as $d) {
+                $sum += $d['g'];
+                $rows[] = [$d['code'], $d['label'], '', '', $this->f0($d['q']), $this->m($d['net']),
+                    $this->m($d['tax']), $this->m($d['g']), '', '', $this->pct($d['g'], $x['g'])];
             }
 
             // قيد من غير بنود — عشان سطور العميل تقفل على إجماليه
-            $gap = round($x['g'] - $linesG, 2);
+            $gap = round($x['g'] - $sum, 2);
 
             if (abs($gap) >= 0.01) {
                 $rows[] = ['', '↳ '.__('rpt.cd_unlined'), '', '', '', '', '', $this->m($gap), '', '', $this->pct($gap, $x['g'])];
             }
         }
 
-        $NET = (float) $list->sum('net');
-        $TAX = (float) $list->sum('tax');
-        $RET = (float) $list->sum('ret');
-        $Q = (float) $list->sum(fn ($x) => $x['lines']->sum('q'));
+        $second = ['product' => 'rpt.cd_client_product', 'family' => 'rpt.cd_client_family', 'client' => 'rpt.c_client'][$level];
+        [$NET, $TAX, $RET] = [$D['NET'], $D['TAX'], $D['RET']];
 
         return [
             'filters' => ['range', 'rep', 'channel', 'q'],
             'groupRows' => $groupRows,
+            // ⚠️ حتى من غير مجموعات (مستوى العميل) الإكسيل xlsx مش CSV — المالك عاوز ملف مرتب
+            'xlsx' => true,
             'xlsxWidths' => [16, 42, 14, 18, 11, 16, 13, 16, 14, 18, 9],
             'kpis' => [
-                $this->k([__('rpt.k_clients'), $this->f0($list->count()), '', $this->to('sales_by_client')],
+                $this->k([__('rpt.k_clients'), $this->f0($D['list']->count()), '', $this->to('sales_by_client')],
                     $this->ex('cd_clients')),
                 $this->k([__('rpt.k_grand'), $this->m($G), 'pos', $this->to('sales_docs')],
                     $this->ex('cd_grand', [], $this->eq($this->m($G), ['', $this->m($NET), 'net'], ['+', $this->m($TAX), 'tax']))),
@@ -1899,13 +2010,13 @@ class ReportController extends Controller
                     $this->ex('cd_after', [], $this->eq($this->m($G - $RET), ['', $this->m($G), 'grand'], ['−', $this->m($RET), 'returns']))),
             ],
             'columns' => [
-                [__('rpt.c_code')], [__('rpt.cd_client_product')], [__('rpt.c_channel')], [__('rpt.c_rep')],
+                [__('rpt.c_code')], [__($second)], [__('rpt.c_channel')], [__('rpt.c_rep')],
                 [__('rpt.k_qty'), 'num'], [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'],
                 [__('rpt.k_returns'), 'num'], [__('rpt.cd_after_returns'), 'num'], [__('rpt.k_share'), 'num'],
             ],
             'rows' => $rows,
-            'totals' => [__('common.total'), __('rpt.cd_clients_n', ['n' => $list->count()]), '', '',
-                $this->f0($Q), $this->m($NET), $this->m($TAX), $this->m($G), $this->m($RET), $this->m($G - $RET),
+            'totals' => [__('common.total'), __('rpt.cd_clients_n', ['n' => $D['list']->count()]), '', '',
+                $this->f0($D['Q']), $this->m($NET), $this->m($TAX), $this->m($G), $this->m($RET), $this->m($G - $RET),
                 $G > 0 ? '100%' : '—'],
         ];
     }
