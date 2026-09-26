@@ -209,4 +209,9 @@ return [
     'cs_settled' => 'Settled out of booked — share:',
     'cs_gap' => 'Accrued and not booked yet',
     'cs_conditional' => 'Conditional clauses (per invoice / new branch / event) — no schedule',
+    // Client draws by product (26/9)
+    'cd_clients' => 'Clients with sale entries in the period',
+    'cd_grand' => 'Debit of sale entries in the ledger by entry date — the same figure as the client balance',
+    'cd_returns' => 'Credit of return entries for the same clients in the period',
+    'cd_after' => 'Draws minus returns',
 ];

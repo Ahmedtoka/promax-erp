@@ -344,4 +344,11 @@ return [
     'c_next_due' => "Next due",
     'conditional' => "conditional",
     'c_store_qty' => "Backroom stock (last visit)",
+    // Client draws by product (26/9)
+    'client_draws' => "Client draws by product",
+    'client_draws_sub' => "Each client's total from the ledger, with its products underneath",
+    'cd_client_product' => "Client / product",
+    'cd_after_returns' => "Net after returns",
+    'cd_unlined' => "Entries without lines",
+    'cd_clients_n' => ":n clients",
 ];

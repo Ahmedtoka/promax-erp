@@ -55,6 +55,8 @@ class ReportController extends Controller
         'merch_performance' => '🛍️',
         // تقارير القرار (٢١ سبتمبر ٢٠٢٦)
         'client_products' => '🧺',
+        // مسحوبات العميل بالصنف — سطر العميل بإجماليه وأصنافه تحته (٢٦/٩)
+        'client_draws' => '🗂️',
         'sales_decline' => '📉',
         'target_vs_actual' => '🎯',
         'oos_frequency' => '🕳️',
@@ -79,7 +81,7 @@ class ReportController extends Controller
      */
     private const GROUPS = [
         'sales' => ['📈', ['sales_docs', 'sales_by_rep', 'sales_by_client', 'sales_by_product', 'sales_by_channel',
-            'client_products', 'sales_decline', 'new_clients']],
+            'client_products', 'client_draws', 'sales_decline', 'new_clients']],
         'money' => ['💰', ['collections', 'debts', 'returns_docs', 'returns_quality', 'discounts_given',
             'profitability', 'sales_reconcile']],
         'field' => ['🚐', ['reps_overview', 'visits_log', 'inactive_clients', 'pos_status', 'gifts_log', 'gifts_balance']],
@@ -141,7 +143,9 @@ class ReportController extends Controller
 
         // ═══ تصدير CSV — نفس الصفوف بالظبط، بالـBOM عشان إكسيل عربي ═══
         if ($request->boolean('export')) {
-            return $this->csv($data);
+            // التقرير المجمّع (سطر عميل وتحته أصنافه) بينزل xlsx منسّق بنفس
+            // الترتيب — الـCSV مابيعرفش يلوّن سطر العميل (٢٦/٩)
+            return ! empty($data['groupRows']) ? $this->xlsx($data) : $this->csv($data);
         }
 
         return view('erp.report', $data);
@@ -324,6 +328,62 @@ class ReportController extends Controller
 
             fclose($out);
         }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * ═══ إكسيل منسّق للتقارير المجمّعة (٢٦/٩) ═══
+     *
+     * نفس صفوف الشاشة بنفس الترتيب: سطر المجموعة (العميل) بخلفية وبولد،
+     * وسطورها تحته، والإجمالي في الآخر. أعمدة الأرقام بتتكتب أرقام خام
+     * (مش نص بفاصلة) عشان إكسيل يجمعها — نفس قاعدة الـCSV.
+     */
+    private function xlsx(array $d)
+    {
+        $cols = $d['columns'];
+        $n = count($cols);
+        $grp = array_flip($d['groupRows']);
+        $x = new \App\Services\SheetWriter(mb_substr((string) $d['title'], 0, 31));
+
+        foreach ($cols as $i => $c) {
+            $x->width($i, $d['xlsxWidths'][$i] ?? (($c[1] ?? null) === 'num' ? 15 : 22));
+        }
+
+        $x->row([['v' => $d['title'], 'style' => 'title']]);
+        $x->merge(0, $n - 1);
+
+        foreach (\App\Support\Csv::meta($d['title'], $d['periodFrom'] ?? null, $d['periodTo'] ?? null) as $m) {
+            $x->row(array_map(fn ($v) => ['v' => $v, 'style' => 'label'], array_values($m)));
+        }
+        $x->blank();
+
+        $x->row(array_map(fn ($c) => ['v' => $c[0], 'style' => 'header'], $cols));
+
+        $cell = function ($raw, int $i, string $numStyle, string $textStyle) use ($cols) {
+            $t = self::cellText($raw);
+            $isNum = ($cols[$i][1] ?? null) === 'num' && preg_match('/^-?[\d,]+(\.\d+)?$/', $t);
+
+            return $isNum
+                ? ['v' => (float) str_replace(',', '', $t), 'style' => $numStyle]
+                : ['v' => $t === '—' ? '' : $t, 'style' => $textStyle];
+        };
+
+        foreach ($d['rows'] as $ri => $row) {
+            $isGrp = isset($grp[$ri]);
+            $out = [];
+
+            foreach (array_values($row) as $i => $raw) {
+                $out[] = $isGrp ? $cell($raw, $i, 'total', 'total') : $cell($raw, $i, 'money', 'default');
+            }
+
+            $x->row($out);
+        }
+
+        if (! empty($d['totals'])) {
+            $x->row(array_map(fn ($raw, $i) => $cell($raw, $i, 'total', 'total'),
+                array_values($d['totals']), array_keys(array_values($d['totals']))));
+        }
+
+        return $x->download($d['key'].'-'.now()->format('Y-m-d-Hi').'.xlsx');
     }
 
     /** فلترة نص البحث على أعمدة معيّنة في كويري */
@@ -1718,6 +1778,135 @@ class ReportController extends Controller
                 $this->m($x['net']), $this->m($x['tax']), $this->m($x['net'] + $x['tax']), $x['last'] ?: '—'])->all(),
             'totals' => [__('common.total'), '', '', $this->f0($rows->sum('q')), $this->m($rows->sum('net')),
                 $this->m($rows->sum('tax')), $this->m($rows->sum('net') + $rows->sum('tax')), ''],
+        ];
+    }
+
+    // ═══════════════════ ١٧ب. مسحوبات العميل بالصنف ═══════════════════
+
+    /**
+     * سطر لكل عميل بإجمالي مسحوباته، وتحته أصنافه (طلب المالك ٢٦/٩).
+     *
+     * ⚠️ **الإجمالي من القيود** (`SalesSource::docs` = مدين قيود البيع بتاريخ
+     * القيد) والأصناف من `SalesSource::lines` (بنود نفس القيود). لو عميل
+     * عنده قيد من غير بنود (استيراد/قيد يدوي) الفرق بيطلع سطر «قيود بلا
+     * بنود» تحته — فمجموع سطوره بيقفل على إجماليه دايماً.
+     */
+    private function rClientDraws(Request $r): array
+    {
+        [$a, $b] = $this->range($r);
+        $reps = $r->filled('user_id') ? [$r->integer('user_id')] : null;
+
+        $visible = Client::visibleTo(Client::query(), $r->user())
+            ->when($r->filled('channel_id'), fn ($w) => $w->where('channel_id', $r->integer('channel_id')))
+            ->select('clients.id');
+
+        $docs = \App\Services\SalesSource::docs($a, $b, $reps)->whereIn('client_id', $visible)
+            ->selectRaw('client_id, SUM(grand_total) g, SUM(total) net, SUM(tax_total) tax, COUNT(*) n')
+            ->groupBy('client_id')->get()->keyBy('client_id');
+
+        $lines = \App\Services\SalesSource::lines($a, $b, $reps)->whereIn('client_id', $visible)
+            ->selectRaw('client_id, product_id, SUM(qty) q, SUM(total) net, SUM(tax) tax')
+            ->groupBy('client_id', 'product_id')->get()->groupBy('client_id');
+
+        $rets = \App\Services\SalesSource::returns($a, $b, $reps)->whereIn('client_id', $visible)
+            ->selectRaw('client_id, SUM(amount) r')->groupBy('client_id')->pluck('r', 'client_id');
+
+        $clients = Client::with(['group', 'channel', 'rep'])->whereIn('id', $docs->keys())->get()->keyBy('id');
+        $products = \App\Models\Product::whereIn('id', $lines->flatten()->pluck('product_id')->unique())->get()->keyBy('id');
+
+        $list = $docs->map(function ($d, $cid) use ($clients, $lines, $rets) {
+            $c = $clients->get($cid);
+
+            return [
+                'cid' => (int) $cid, 'c' => $c,
+                'name' => $c?->fullName() ?? '#'.$cid, 'code' => $c?->code ?? '',
+                'g' => (float) $d->g, 'net' => (float) $d->net, 'tax' => (float) $d->tax, 'n' => (int) $d->n,
+                'ret' => (float) ($rets[$cid] ?? 0),
+                'lines' => collect($lines->get($cid, []))->sortByDesc(fn ($l) => (float) $l->net + (float) $l->tax)->values(),
+            ];
+        });
+
+        if ($r->filled('q')) {
+            $s = mb_strtolower($r->string('q')->trim());
+            $list = $list->filter(fn ($x) => str_contains(mb_strtolower($x['name'].' '.$x['code']), $s));
+        }
+
+        $list = $list->sortByDesc('g')->values();
+        $G = (float) $list->sum('g');
+
+        $rows = [];
+        $groupRows = [];
+
+        foreach ($list as $x) {
+            if (count($rows) >= self::MAX_ROWS) {
+                break;
+            }
+
+            $c = $x['c'];
+            $groupRows[] = count($rows);
+            $rows[] = [
+                $this->lk($x['code'], $c ? route('erp.clients.show', $x['cid']) : null),
+                $this->lk($x['name'], $c ? route('erp.clients.show', $x['cid']) : null),
+                $c?->channel?->displayName() ?? '—',
+                $c?->rep?->displayName() ?? '—',
+                $this->f0($x['lines']->sum('q')),
+                $this->m($x['net']), $this->m($x['tax']), $this->m($x['g']),
+                $x['ret'] > 0 ? $this->m($x['ret']) : '—',
+                $this->m($x['g'] - $x['ret']),
+                $this->pct($x['g'], $G),
+            ];
+
+            $linesG = 0.0;
+
+            foreach ($x['lines'] as $l) {
+                $lg = (float) $l->net + (float) $l->tax;
+                $linesG += $lg;
+                $p = $products->get($l->product_id);
+                $rows[] = [
+                    $p?->code ?? '',
+                    $this->cProduct($p, $p ? '↳ '.$p->displayName() : '↳ #'.$l->product_id),
+                    '', '',
+                    $this->f0((float) $l->q), $this->m((float) $l->net), $this->m((float) $l->tax), $this->m($lg),
+                    '', '', $this->pct($lg, $x['g']),
+                ];
+            }
+
+            // قيد من غير بنود — عشان سطور العميل تقفل على إجماليه
+            $gap = round($x['g'] - $linesG, 2);
+
+            if (abs($gap) >= 0.01) {
+                $rows[] = ['', '↳ '.__('rpt.cd_unlined'), '', '', '', '', '', $this->m($gap), '', '', $this->pct($gap, $x['g'])];
+            }
+        }
+
+        $NET = (float) $list->sum('net');
+        $TAX = (float) $list->sum('tax');
+        $RET = (float) $list->sum('ret');
+        $Q = (float) $list->sum(fn ($x) => $x['lines']->sum('q'));
+
+        return [
+            'filters' => ['range', 'rep', 'channel', 'q'],
+            'groupRows' => $groupRows,
+            'xlsxWidths' => [16, 42, 14, 18, 11, 16, 13, 16, 14, 18, 9],
+            'kpis' => [
+                $this->k([__('rpt.k_clients'), $this->f0($list->count()), '', $this->to('sales_by_client')],
+                    $this->ex('cd_clients')),
+                $this->k([__('rpt.k_grand'), $this->m($G), 'pos', $this->to('sales_docs')],
+                    $this->ex('cd_grand', [], $this->eq($this->m($G), ['', $this->m($NET), 'net'], ['+', $this->m($TAX), 'tax']))),
+                $this->k([__('rpt.k_returns'), $this->m($RET), 'neg', $this->to('returns_docs')],
+                    $this->ex('cd_returns')),
+                $this->k([__('rpt.cd_after_returns'), $this->m($G - $RET), '', null],
+                    $this->ex('cd_after', [], $this->eq($this->m($G - $RET), ['', $this->m($G), 'grand'], ['−', $this->m($RET), 'returns']))),
+            ],
+            'columns' => [
+                [__('rpt.c_code')], [__('rpt.cd_client_product')], [__('rpt.c_channel')], [__('rpt.c_rep')],
+                [__('rpt.k_qty'), 'num'], [__('rpt.k_net'), 'num'], [__('rpt.k_tax'), 'num'], [__('rpt.k_grand'), 'num'],
+                [__('rpt.k_returns'), 'num'], [__('rpt.cd_after_returns'), 'num'], [__('rpt.k_share'), 'num'],
+            ],
+            'rows' => $rows,
+            'totals' => [__('common.total'), __('rpt.cd_clients_n', ['n' => $list->count()]), '', '',
+                $this->f0($Q), $this->m($NET), $this->m($TAX), $this->m($G), $this->m($RET), $this->m($G - $RET),
+                $G > 0 ? '100%' : '—'],
         ];
     }
 

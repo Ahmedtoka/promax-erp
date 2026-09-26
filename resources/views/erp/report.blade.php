@@ -147,8 +147,10 @@
             </tr>
             </thead>
             <tbody>
-            @forelse ($rows as $row)
-                <tr>
+            @php $grpSet = array_flip($groupRows ?? []); @endphp
+            @forelse ($rows as $ri => $row)
+                {{-- سطر مجموعة (العميل) بلون ودوسته بتطوي سطوره تحته (٢٦/٩) --}}
+                <tr @if (isset($grpSet[$ri])) class="rpt-grp" @elseif ($grpSet !== []) class="rpt-sub" @endif>
                     @foreach ($row as $i => $cell)
                         {{-- الخلية نص عادي أو `['text' => …, 'url' => …]` — اللي بيسمّي سجل بيفتحه --}}
                         <td @if (($columns[$i][1] ?? null) === 'num') class="num" dir="ltr" @endif>@if (is_array($cell) && ! empty($cell['url']))<a href="{{ $cell['url'] }}">{{ $cell['text'] }}</a>@elseif (is_array($cell) && ! empty($cell['badge']))<span class="badge {{ $cell['badge'] }}">{{ $cell['text'] ?? '' }}</span>@else{{ is_array($cell) ? ($cell['text'] ?? '') : $cell }}@endif</td>
@@ -193,5 +195,21 @@
 .kpi .sub2 .rpt-eq{display:block;unicode-bidi:isolate;font-variant-numeric:tabular-nums;text-align:start}
 [dir="rtl"] .kpi .sub2 .rpt-eq{text-align:right}
 @media print{.rpt-wrap{max-height:none;overflow:visible}}
+/* التقارير المجمّعة (٢٦/٩): سطر العميل ملوّن وبولد، وسطوره تحته بإزاحة */
+.rpt-grp td{background:var(--blue-050);font-weight:800;border-top:2px solid var(--border);cursor:pointer}
+.rpt-sub td:nth-child(2){padding-inline-start:22px;font-size:12.5px}
+.rpt-sub.rpt-hide{display:none}
+@media print{.rpt-sub.rpt-hide{display:table-row}}
 </style>
+<script>
+/* دوسة على سطر العميل بتطوي أصنافه لحد سطر العميل اللي بعده */
+document.querySelectorAll('tr.rpt-grp').forEach(function (g) {
+    g.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
+        for (var r = g.nextElementSibling; r && r.classList.contains('rpt-sub'); r = r.nextElementSibling) {
+            r.classList.toggle('rpt-hide');
+        }
+    });
+});
+</script>
 @endsection
