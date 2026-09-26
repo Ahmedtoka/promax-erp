@@ -204,7 +204,7 @@ class ClientDrawsReportTest extends TestCase
         $this->assertSame([], array_filter($rows, fn ($r) => str_starts_with((string) ($r[1] ?? ''), '↳')));
     }
 
-    public function test_the_combined_excel_has_three_sheets_with_matching_totals(): void
+    public function test_the_combined_excel_has_four_sheets_with_matching_totals(): void
     {
         $this->seedDraws();
 
@@ -218,12 +218,40 @@ class ClientDrawsReportTest extends TestCase
         $path = $res->baseResponse->getFile()->getPathname();
 
         $sheets = Sheet::sheets($path);
-        $this->assertSame([__('rpt.cd_sheet_client'), __('rpt.cd_sheet_family'), __('rpt.cd_sheet_product')], $sheets);
+        $this->assertSame([__('rpt.cd_sheet_chain'), __('rpt.cd_sheet_client'), __('rpt.cd_sheet_family'),
+            __('rpt.cd_sheet_product')], $sheets);
 
         // سطر الإجمالي في آخر كل شيت = نفس الرقم (1596 + 350 = 1946)
         foreach ($sheets as $name) {
             $rows = array_values(array_filter(Sheet::rows($path, $name), fn ($r) => ($r[0] ?? null) === __('common.total')));
             $this->assertEquals(1946.0, Sheet::number(end($rows)[7] ?? null), "total on sheet $name");
         }
+    }
+
+    public function test_the_combined_report_groups_a_chain_across_codes_and_orders_by_client_code(): void
+    {
+        [$big, $small] = $this->seedDraws();
+
+        // سلسلة بفرعين بكودين مختلفين خالص — لازم يتجمعوا تحت اسمها
+        $chain = \App\Models\ClientGroup::create(['code' => 'CRK', 'name' => 'سيركل كيه', 'name_en' => 'Circle K', 'active' => true]);
+        $b1 = $this->makeClient(['code' => 'CRK-009', 'name_en' => 'Airport', 'group_id' => $chain->id, 'rep_id' => $this->rep->id]);
+        $b2 = $this->makeClient(['code' => 'CL-170', 'name_en' => 'Sixth October', 'group_id' => $chain->id, 'rep_id' => $this->rep->id]);
+        $this->sale($b1, '2026-08-11', [[$this->choco, 1, 100, 0]]);
+        $this->sale($b2, '2026-08-12', [[$this->nuts, 2, 400, 0]]);
+
+        // الترتيب بالكود: CL-BIG · CL-SMALL · CRK (السلسلة وفروعها بالكود جوّاها) — مش بالقيمة
+        $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_all'] + self::RANGE))
+            ->assertOk()
+            ->assertSeeInOrder(['CL-BIG', 'CL-SMALL', 'CRK', 'Circle K', '500.00',
+                'CL-170', '↳ Sixth October', '400.00', 'CRK-009', '↳ Airport', '100.00'], false);
+
+        // وشيت العملاء في المجمّع بالكود برضه — حتى لو الصغير أقل قيمة
+        $res = $this->actingAs($this->admin)
+            ->get(route('erp.reports.show', ['key' => 'client_draws_all', 'export' => 1] + self::RANGE));
+        $codes = array_values(array_filter(array_map(fn ($r) => $r[0] ?? null,
+            Sheet::rows($res->baseResponse->getFile()->getPathname(), __('rpt.cd_sheet_client'))),
+            fn ($c) => in_array($c, ['CL-BIG', 'CL-SMALL', 'CL-170', 'CRK-009'], true)));
+        $this->assertSame(['CL-170', 'CL-BIG', 'CL-SMALL', 'CRK-009'], $codes);
     }
 }

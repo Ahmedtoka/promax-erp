@@ -1831,17 +1831,23 @@ class ReportController extends Controller
         return $this->cdReport($r, 'client');
     }
 
-    /** المجمّع: الشاشة ملخص العملاء، والإكسيل ٣ شيتات بنفس الفلاتر */
+    /**
+     * المجمّع (٢٦/٩): الشاشة بالسلاسل، والإكسيل ٤ شيتات بنفس الفلاتر —
+     * السلاسل · العملاء · بالعائلة · بالصنف. **الترتيب بكود العميل** (طلب
+     * المالك) مش بالقيمة زي التقارير الفردية.
+     */
     private function rClientDrawsAll(Request $r): array
     {
         $D = $this->cdData($r);
-        $out = $this->cdReport($r, 'client', $D);
+        $D['list'] = $D['list']->sort(fn ($a, $b) => self::codeCmp($a['code'], $b['code'], $a['name'], $b['name']))->values();
+
+        $out = $this->cdReport($r, 'chain', $D);
         $keep = array_flip(['columns', 'rows', 'groupRows', 'totals', 'xlsxWidths']);
 
         $out['sheets'] = [];
 
-        foreach (['client', 'family', 'product'] as $lv) {
-            $one = $lv === 'client' ? $out : $this->cdReport($r, $lv, $D);
+        foreach (['chain', 'client', 'family', 'product'] as $lv) {
+            $one = $lv === 'chain' ? $out : $this->cdReport($r, $lv, $D);
             $out['sheets'][] = ['title' => __('rpt.cd_sheet_'.$lv)] + array_intersect_key($one, $keep);
         }
 
@@ -1939,7 +1945,91 @@ class ReportController extends Controller
         return $out;
     }
 
-    /** تقرير بمستوى تفصيل: `product` · `family` · `client` (سطر العميل بس) */
+    /**
+     * ترتيب الأكواد طبيعي: CL-9 قبل CL-10، والكود الفاضي في الآخر بالاسم.
+     */
+    private static function codeCmp(string $a, string $b, string $na = '', string $nb = ''): int
+    {
+        if (($a === '') !== ($b === '')) {
+            return $a === '' ? 1 : -1;
+        }
+
+        return strnatcasecmp($a, $b) ?: strnatcasecmp($na, $nb);
+    }
+
+    /**
+     * ═══ شيت السلاسل (٢٦/٩) ═══
+     *
+     * «كل سيركل كيه مع بعض تحت سيركل كيه حتى لو أكتر من كود»: سطر لكل
+     * سلسلة بمجموع فروعها، والفروع تحته بأكوادها. العميل اللي مالوش
+     * سلسلة بيطلع سطر لوحده.
+     *
+     * @return array{0: list<array>, 1: list<int>}
+     */
+    private function cdChainRows(array $D): array
+    {
+        $G = $D['G'];
+        $rows = [];
+        $groupRows = [];
+
+        $blocks = $D['list']
+            ->groupBy(fn ($x) => $x['c']?->group_id ? 'g'.$x['c']->group_id : 'c'.$x['cid'])
+            ->map(function ($members) {
+                $first = $members->first();
+                $grp = $first['c']?->group;
+                $uniq = fn ($f) => $members->map($f)->filter()->unique();
+
+                return [
+                    'chain' => $grp,
+                    'code' => $grp ? (string) ($grp->code ?? '') : $first['code'],
+                    'name' => $grp ? $grp->displayName() : $first['name'],
+                    'channel' => ($ch = $uniq(fn ($x) => $x['c']?->channel?->displayName()))->count() === 1 ? $ch->first() : '—',
+                    'rep' => ($rp = $uniq(fn ($x) => $x['c']?->rep?->displayName()))->count() === 1 ? $rp->first() : '—',
+                    'q' => (float) $members->sum(fn ($x) => $x['lines']->sum('q')),
+                    'net' => (float) $members->sum('net'), 'tax' => (float) $members->sum('tax'),
+                    'g' => (float) $members->sum('g'), 'ret' => (float) $members->sum('ret'),
+                    'members' => $members->sort(fn ($a, $b) => self::codeCmp($a['code'], $b['code'], $a['name'], $b['name']))->values(),
+                    'solo' => $grp ? null : $first,
+                ];
+            })
+            ->sort(fn ($a, $b) => self::codeCmp($a['code'], $b['code'], $a['name'], $b['name']))
+            ->values();
+
+        foreach ($blocks as $blk) {
+            if (count($rows) >= self::MAX_ROWS) {
+                break;
+            }
+
+            $solo = $blk['solo'];
+            $url = $solo && $solo['c'] ? route('erp.clients.show', $solo['cid']) : null;
+
+            $groupRows[] = count($rows);
+            $rows[] = [
+                $this->lk($blk['code'], $url), $this->lk($blk['name'], $url), $blk['channel'], $blk['rep'],
+                $this->f0($blk['q']), $this->m($blk['net']), $this->m($blk['tax']), $this->m($blk['g']),
+                $blk['ret'] > 0 ? $this->m($blk['ret']) : '—', $this->m($blk['g'] - $blk['ret']), $this->pct($blk['g'], $G),
+            ];
+
+            if ($solo !== null) {
+                continue;
+            }
+
+            foreach ($blk['members'] as $x) {
+                $c = $x['c'];
+                $rows[] = [
+                    $this->lk($x['code'], $c ? route('erp.clients.show', $x['cid']) : null),
+                    $this->lk('↳ '.($c?->displayName() ?? $x['name']), $c ? route('erp.clients.show', $x['cid']) : null),
+                    $c?->channel?->displayName() ?? '—', $c?->rep?->displayName() ?? '—',
+                    $this->f0($x['lines']->sum('q')), $this->m($x['net']), $this->m($x['tax']), $this->m($x['g']),
+                    $x['ret'] > 0 ? $this->m($x['ret']) : '—', $this->m($x['g'] - $x['ret']), $this->pct($x['g'], $blk['g']),
+                ];
+            }
+        }
+
+        return [$rows, $groupRows];
+    }
+
+    /** تقرير بمستوى تفصيل: `chain` · `product` · `family` · `client` (سطر العميل بس) */
     private function cdReport(Request $r, string $level, ?array $D = null): array
     {
         $D ??= $this->cdData($r);
@@ -1947,7 +2037,11 @@ class ReportController extends Controller
         $rows = [];
         $groupRows = [];
 
-        foreach ($D['list'] as $x) {
+        if ($level === 'chain') {
+            [$rows, $groupRows] = $this->cdChainRows($D);
+        }
+
+        foreach ($level === 'chain' ? [] : $D['list'] as $x) {
             if (count($rows) >= self::MAX_ROWS) {
                 break;
             }
@@ -1990,7 +2084,8 @@ class ReportController extends Controller
             }
         }
 
-        $second = ['product' => 'rpt.cd_client_product', 'family' => 'rpt.cd_client_family', 'client' => 'rpt.c_client'][$level];
+        $second = ['product' => 'rpt.cd_client_product', 'family' => 'rpt.cd_client_family',
+            'client' => 'rpt.c_client', 'chain' => 'rpt.cd_chain_client'][$level];
         [$NET, $TAX, $RET] = [$D['NET'], $D['TAX'], $D['RET']];
 
         return [
