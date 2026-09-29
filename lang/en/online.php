@@ -261,4 +261,6 @@ return [
     'bundle_saved' => 'Bundle ":title" saved with :n products — open orders updated ✓',
     'bundle_empty' => 'Pick at least one product',
     'bundle_pcs' => ':n pieces per bundle',
+    // Return note sent to Shopify (29/9) — required with reason "Other"
+    'shopify_return_note' => 'Return received at the PROMAX warehouse for order #:number',
 ];

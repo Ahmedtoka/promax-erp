@@ -665,6 +665,12 @@ class OnlineOrderController extends Controller
         $warns = [];
 
         foreach ($pickup->orders as $o) {
+            // المرتجع اللي ماوصلش شوبيفاي بيتبعت تاني — الفرق بس (٢٩/٩).
+            // قبل فلتر الحالة: الأوردر اللي رجع كله حالته «رجع» مش «اتشحن»
+            if ($w = ShopifyOnline::syncReturn($o)) {
+                $warns[] = $w;
+            }
+
             if (! in_array($o->status, ['shipped', 'completed'], true)) {
                 continue;
             }

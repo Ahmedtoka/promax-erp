@@ -589,6 +589,11 @@ class ShopifyOnline
                         'fulfillmentLineItemId' => $slot['fid'],
                         'quantity' => $take,
                         'returnReason' => 'OTHER',
+                        // ⚠️ شوبيفاي بيرفض سبب OTHER من غير نوت (٢٩/٩ — «The note
+                        // is required when the return reason is Other»)
+                        'returnReasonNote' => mb_substr(__('online.shopify_return_note', [
+                            'number' => $order->number,
+                        ]), 0, 250),
                     ];
                     $need -= $take;
                 }
@@ -636,6 +641,81 @@ class ShopifyOnline
         );
 
         return null;
+    }
+
+    /**
+     * ═══ إعادة دفع المرتجع لشوبيفاي — الفرق بس (٢٩/٩) ═══
+     *
+     * مرتجع اتسجل عندنا وشوبيفاي رفضه (زي أوردر #1059 قبل إصلاح النوت)
+     * بيفضل عندنا «رجع» وفي شوبيفاي «اتشحن». الدالة دي بتقرا المرتجعات
+     * اللي وصلت شوبيفاي فعلاً لكل بند (من غير الملغي والمرفوض)، وبتبعت
+     * **الفرق بس** عن `returned_qty` عندنا — فتتنده أي عدد مرات من غير ما
+     * ترجّع نفس القطعة مرتين.
+     */
+    public static function syncReturn(OnlineOrder $order): ?string
+    {
+        if (! self::ready() || ! $order->shopify_id) {
+            return null;
+        }
+
+        $order->loadMissing('items');
+        $local = [];
+
+        foreach ($order->items as $item) {
+            if ($item->shopify_line_id !== null && (int) $item->returned_qty > 0) {
+                $local[(int) $item->shopify_line_id] = ($local[(int) $item->shopify_line_id] ?? 0) + (int) $item->returned_qty;
+            }
+        }
+
+        if ($local === []) {
+            return null;
+        }
+
+        [$data, $err] = self::gql(
+            'query($oid: ID!) {
+                order(id: $oid) {
+                    returns(first: 50) { edges { node {
+                        status
+                        returnLineItems(first: 100) { edges { node {
+                            ... on ReturnLineItem { quantity fulfillmentLineItem { lineItem { id } } }
+                        } } }
+                    } } }
+                }
+            }',
+            ['oid' => 'gid://shopify/Order/'.$order->shopify_id],
+        );
+
+        if ($err !== null) {
+            return __('online.return_push_failed', ['number' => $order->number]).' ('.$err.')';
+        }
+
+        $pushed = [];
+
+        foreach ($data['order']['returns']['edges'] ?? [] as $r) {
+            if (in_array($r['node']['status'] ?? '', ['CANCELED', 'DECLINED'], true)) {
+                continue;
+            }
+
+            foreach ($r['node']['returnLineItems']['edges'] ?? [] as $li) {
+                $gid = $li['node']['fulfillmentLineItem']['lineItem']['id'] ?? '';
+
+                if (preg_match('~/LineItem/(\d+)$~', $gid, $m)) {
+                    $pushed[(int) $m[1]] = ($pushed[(int) $m[1]] ?? 0) + (int) ($li['node']['quantity'] ?? 0);
+                }
+            }
+        }
+
+        $diff = [];
+
+        foreach ($local as $lineId => $qty) {
+            $missing = $qty - ($pushed[$lineId] ?? 0);
+
+            if ($missing > 0) {
+                $diff[$lineId] = $missing;
+            }
+        }
+
+        return $diff === [] ? null : self::createReturn($order, $diff);
     }
 
     // ==================== دفع الحالة لشوبيفاي ====================
