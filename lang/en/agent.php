@@ -134,4 +134,6 @@ return [
     'st_ok' => 'OK',
     'st_refused' => 'Refused',
     'st_failed' => 'Failed',
+    // Locked to Jad only (29/9)
+    'not_allowed' => 'The assistant is locked for your account — top management only.',
 ];

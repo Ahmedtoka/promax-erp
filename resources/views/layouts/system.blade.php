@@ -2242,7 +2242,8 @@ document.addEventListener('DOMContentLoaded', function () {
 {{-- ═══ مساعد بروماكس (٧/٩) — زرار عائم + بانل شات في كل الشاشات ═══
      ⚠️ متحرس بنفس مفتاح شاشة العميل — أمين المخزن والسواق ممنوعين
      من كارت العميل فمايشوفوش الزرار أصلاً (وأدواته متحرسة برضو) --}}
-@if (\App\Support\Access::allows(auth()->user(), 'erp.clients.show'))
+{{-- ⚠️ وجاد بس (٢٩/٩) — `AiGate`، والراوتات نفسها بترفض غيره --}}
+@if (\App\Support\AiGate::allows(auth()->user()) && \App\Support\Access::allows(auth()->user(), 'erp.clients.show'))
     @include('partials._agent_chat')
 @endif
 @endauth

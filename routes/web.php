@@ -40,7 +40,8 @@ Route::post('/locale/{locale}', [LocaleController::class, 'switch'])->name('loca
 // ═══ مساعد بروماكس (٧/٩) — شات قراءة لكل مسجّل دخول ═══
 // ⚠️ auth بس من غير `screen` — المساعد متاح لكل الرولز، والسكوب
 // الحقيقي جوه الأدوات نفسها (نفس حراس الشاشات بالحرف)
-Route::middleware('auth')->group(function () {
+// ⚠️ **جاد بس** (قرار المالك ٢٩/٩) — `AiOnly` بيرفض أي كود مش في `AiGate`
+Route::middleware(['auth', \App\Http\Middleware\AiOnly::class])->group(function () {
     Route::post('/agent/ask',
         [\App\Http\Controllers\AgentChatController::class, 'ask'])->name('agent.ask');
     // الأكشنات بموافقة (٧/٩) — التأكيد لصاحب الاقتراح بس، والبوابة
