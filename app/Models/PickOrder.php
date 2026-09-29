@@ -411,14 +411,23 @@ class PickOrder extends Model
      *
      * @return array<int, array{product_id:int, batch_id:int, location_id:int, qty:int}>|null
      */
-    private static function planFefo(Warehouse $warehouse, int $productId, int $qty): ?array
+    /**
+     * صفوف الصنف المتاحة للسحب في المخزن بترتيب الـFEFO — نفس الكويري
+     * للتخطيط (`planFefo`) وللتنفيذ لما الرف المخطط يطلع فاضي
+     * (`PickOrderItem::pull`، ٢٩/٩).
+     */
+    public static function sellableRows(Warehouse $warehouse, int $productId): \Illuminate\Database\Eloquent\Builder
     {
-        $rows = BatchLocation::query()
+        return BatchLocation::query()
             ->where('batch_locations.product_id', $productId)
             ->inWarehouse($warehouse->id)
             ->sellable()
-            ->fefo()
-            ->get();
+            ->fefo();
+    }
+
+    private static function planFefo(Warehouse $warehouse, int $productId, int $qty): ?array
+    {
+        $rows = self::sellableRows($warehouse, $productId)->get();
 
         $lines = [];
         $left = $qty;
