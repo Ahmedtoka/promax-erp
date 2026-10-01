@@ -129,6 +129,12 @@ class OnlineReshipTest extends TestCase
         $this->actingAs($this->admin)->get(route('online.returns'))->assertOk()
             ->assertSee(__('online.return_reshipped'))->assertDontSee(route('online.reship', $o), false);
 
+        // شاشة التجهيز: الأمر الجديد ظاهر باسم العميل، والقديم (جاهز ومالوش أوردر) مش ظاهر
+        $oldNumber = PickOrder::find($oldPick)->number;
+        $this->actingAs($this->admin)->get(route('online.prep'))->assertOk()
+            ->assertSee('#'.$o->number)->assertSee('عميل مرتجع')
+            ->assertDontSee('<b>'.$oldNumber.'</b>', false);
+
         // والتجهيز الجديد بيخرّج البضاعة تاني
         $this->actingAs($this->admin)->post(route('online.prep.done', $pick))->assertSessionHasNoErrors();
         $this->assertSame(47, $this->onShelf());

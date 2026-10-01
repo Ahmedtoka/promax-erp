@@ -449,11 +449,14 @@ class OnlineOrderController extends Controller
         $orders = OnlineOrder::whereIn('pick_order_id', $picks->pluck('id'))
             ->get()->keyBy('pick_order_id');
 
-        // الجاهز **المتراجع** خلص من هنا — شيله من القايمة
+        // الجاهز **المتراجع** خلص من هنا — شيله من القايمة.
+        // ⚠️ وكمان الجاهز اللي **مالوش أوردر** (١/١٠): أمر التجهيز القديم بتاع
+        // أوردر اتعاد شحنه — الأوردر اتنقل على أمر جديد، والقديم كان بيفضل هنا
+        // من غير اسم وزرار المراجعة مابيلاقيش أوردر يراجعه.
         $picks = $picks->reject(function ($pick) use ($orders) {
             $o = $orders[$pick->id] ?? null;
 
-            return $pick->status === 'ready' && $o !== null && $o->reviewed_at !== null;
+            return $pick->status === 'ready' && ($o === null || $o->reviewed_at !== null);
         })->values();
 
         return view('online.prep', ['picks' => $picks, 'orders' => $orders]);
