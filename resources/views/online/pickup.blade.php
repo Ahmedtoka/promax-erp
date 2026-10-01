@@ -144,6 +144,9 @@
                                         ✖ {{ __('online.act_cancel') }}</button>
                                 @endif
                             </div>
+                        @elseif ($o->status === 'returned')
+                            {{-- رجع كله → إعادة شحن (١/١٠) — بيطلع من الشيت ده لشيت جديد --}}
+                            @include('online._reship_btn', ['o' => $o])
                         @endif
                     </td>
                 </tr>

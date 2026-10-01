@@ -1312,6 +1312,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('return');
         Route::get('/collections', [$c, 'collections'])->name('collections');
 
+        // ٥ب. المرتجعات + إعادة الشحن (١/١٠)
+        Route::get('/returns', [$c, 'returnsIndex'])->name('returns');
+        Route::post('/orders/{order}/reship', [$c, 'reship'])
+            ->middleware('role:admin,manager')->name('reship');
+
         // ٦. كل الأوردرات + الحسابات
         Route::get('/orders', [$c, 'orders'])->name('orders');
         Route::get('/accounts', [$c, 'accounts'])->name('accounts');

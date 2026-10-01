@@ -80,6 +80,10 @@
                         @if ($o->status === 'postponed' && $o->postponed_to)
                             <br><span style="font-size:10.5px;color:var(--muted)">📅 {{ $o->postponed_to->format('Y-m-d') }}</span>
                         @endif
+                        {{-- رجع كله → إعادة شحن (١/١٠) --}}
+                        @if ($o->status === 'returned')
+                            <div style="margin-top:4px">@include('online._reship_btn', ['o' => $o])</div>
+                        @endif
                     </td>
                     <td class="s">{{ $o->ordered_at?->format('Y-m-d') ?: '—' }}</td>
                 </tr>

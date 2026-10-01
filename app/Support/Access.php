@@ -161,7 +161,7 @@ class Access
             // الأونلاين (٣/٩): التحصيل والحسابات والمتابعة — فلوس مش
             // تشغيل. السينك والتأكيد والشحن والربط قرارات تشغيلية مش له.
             'online.collections', 'online.collect', 'online.accounts',
-            'online.orders', 'online.pickups', 'online.pickup',
+            'online.orders', 'online.pickups', 'online.pickup', 'online.returns',
             'ops.invoices', 'ops.invoice',
             // ⚠️ **المرتجع من الـERP شغل الحسابات** (٨/٨/٢٠٢٦):
             // مرتجع بييجي المخزن مباشرة أو باتفاق مع سلسلة مالوش
@@ -519,6 +519,7 @@ class Access
             ['online.ready', '🚚', 'online.nav_ready', 'online.ready', null],
             ['online.pickups', '📋', 'online.nav_pickups', 'online.pickup*', null],
             ['online.collections', '💰', 'online.nav_collections', 'online.collections', null],
+            ['online.returns', '↩️', 'online.nav_returns', 'online.returns', null],
             ['online.orders', '🧾', 'online.nav_orders', 'online.orders', null],
             ['online.accounts', '🧮', 'online.nav_accounts', 'online.accounts', null],
             ['online.products', '🔗', 'online.nav_products', 'online.products*', null],

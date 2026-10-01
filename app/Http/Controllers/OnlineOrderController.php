@@ -6,6 +6,7 @@ use App\Models\OnlineCourier;
 use App\Models\OnlineOrder;
 use App\Models\OnlineOrderItem;
 use App\Models\OnlinePickup;
+use App\Models\OnlineReturn;
 use App\Models\PickOrder;
 use App\Models\Product;
 use App\Models\Setting;
@@ -226,6 +227,141 @@ class OnlineOrderController extends Controller
         $warn = ShopifyOnline::pushStatus($order->fresh());
 
         return $this->okWithPushWarn(__('online.confirmed', ['number' => $order->number]), $warn);
+    }
+
+    /**
+     * ═══ إعادة شحن أوردر رجع كله (١/١٠/٢٠٢٦) ═══
+     *
+     * طلب المالك: العميل رفض/مالقيناهوش والأوردر رجع — نبعته تاني.
+     * الأوردر بيرجع «بيتجهز» بأمر تجهيز **جديد** من المخزن (البضاعة
+     * رجعت المخزن وقت المرتجع)، وبيمشي السايكل العادي: تجهيز ← مراجعة ←
+     * جاهز للشحن ← شيت بيك اب جديد ← تحصيل.
+     *
+     * ⚠️ بيطلع من الشيت القديم (`pickup_id = null`) — الشيت أصلاً مش
+     * بيحسب الراجع في أرقامه، وصف المرتجع في السجل بيفضل شايل رقم الشيت
+     * اللي رجع منه. والمرتجع اتصفّر على البنود لأن البضاعة هتخرج تاني.
+     *
+     * ⚠️ نفس الادعاء الذري بتاع التأكيد: ضغطتين = أمر تجهيز واحد.
+     */
+    public function reship(Request $request, OnlineOrder $order)
+    {
+        if ($order->status !== 'returned') {
+            return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
+
+        $warehouse = Warehouse::find((int) Setting::read('online_warehouse_id'));
+
+        if ($warehouse === null) {
+            return back()->withErrors(['order' => __('online.no_warehouse')]);
+        }
+
+        $order->load('items');
+
+        if ($order->hasUnmatchedItems()) {
+            return back()->withErrors(['order' => __('online.unmatched_items', ['number' => $order->number])]);
+        }
+
+        // الكمية كاملة (الأوردر رجع كله) — والباندل بيتفك لمكوناته زي التأكيد
+        $qtyByProduct = [];
+
+        foreach ($order->items as $item) {
+            foreach ($item->piecesByProduct() as $pid => $pieces) {
+                $qtyByProduct[$pid] = ($qtyByProduct[$pid] ?? 0) + $pieces;
+            }
+        }
+
+        $claimed = OnlineOrder::whereKey($order->id)->where('status', 'returned')
+            ->update(['status' => 'preparing']);
+
+        if ($claimed === 0) {
+            return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
+
+        $number = 'ON-'.$order->number;
+
+        while (PickOrder::where('number', $number)->exists()) {
+            $number .= 'R';
+        }
+
+        $result = PickOrder::raise(
+            warehouse: $warehouse,
+            rep: $request->user(),
+            qtyByProduct: $qtyByProduct,
+            purpose: PickOrder::PURPOSE_ONLINE,
+            requestedBy: $request->user(),
+            extra: ['number' => $number, 'notes' => __('online.reship_pick_note', ['number' => $order->number])],
+        );
+
+        if ($result['error'] !== null) {
+            OnlineOrder::whereKey($order->id)->update(['status' => 'returned']);
+
+            return back()->withErrors(['order' => $result['error']]);
+        }
+
+        DB::transaction(function () use ($order, $result, $request) {
+            OnlineOrderItem::where('online_order_id', $order->id)->update(['returned_qty' => 0]);
+
+            $order->update([
+                'status' => 'preparing',
+                'pick_order_id' => $result['order']->id,
+                'pickup_id' => null,
+                'returned_total' => 0,
+                'cost_total' => 0,
+                'ready_at' => null,
+                'reviewed_at' => null,
+                'shipped_at' => null,
+                'collected_at' => null,
+                'confirmed_by' => $request->user()->id,
+                'confirmed_at' => now(),
+            ]);
+
+            OnlineReturn::where('online_order_id', $order->id)->whereNull('reshipped_at')
+                ->update([
+                    'reshipped_at' => now(),
+                    'reshipped_by' => $request->user()->id,
+                    'reship_pick_order_id' => $result['order']->id,
+                ]);
+        });
+
+        $warn = ShopifyOnline::pushStatus($order->fresh());
+
+        return $this->okWithPushWarn(__('online.reshipped_ok', ['number' => $order->number]), $warn);
+    }
+
+    /**
+     * ═══ صفحة المرتجعات (١/١٠/٢٠٢٦) ═══
+     *
+     * كل مرتجع بشيته وبنوده وقيمته، ولسه في المخزن ولا اتشحن تاني —
+     * والأوردر اللي رجع كله عليه زرار «إعادة شحن» من هنا.
+     */
+    public function returnsIndex(Request $request)
+    {
+        $q = OnlineReturn::with(['order', 'pickup', 'creator', 'reshipPick']);
+
+        $q->when($request->filled('search'), function ($x) use ($request) {
+            $s = '%'.$request->input('search').'%';
+            $x->whereHas('order', fn ($w) => $w->where('number', 'like', $s)
+                ->orWhere('customer_name', 'like', $s)->orWhere('phone', 'like', $s));
+        });
+
+        $state = (string) $request->query('state', '');
+        $q->when($state === 'stock', fn ($x) => $x->whereNull('reshipped_at'))
+            ->when($state === 'reshipped', fn ($x) => $x->whereNotNull('reshipped_at'))
+            ->when(in_array($state, ['full', 'partial'], true), fn ($x) => $x->where('kind', $state));
+
+        $range = DateRange::fromRequest($request);
+        $q->tap(fn ($x) => $range->apply($x, 'created_at'));
+
+        $totals = (clone $q)->reorder()->toBase()->selectRaw('COUNT(*) n, COALESCE(SUM(value),0) v, COALESCE(SUM(pieces),0) p,
+            SUM(CASE WHEN reshipped_at IS NULL THEN 1 ELSE 0 END) stock_n,
+            SUM(CASE WHEN reshipped_at IS NOT NULL THEN 1 ELSE 0 END) reshipped_n')->first();
+
+        return view('online.returns', [
+            'rows' => $q->orderByDesc('created_at')->orderByDesc('id')->paginate(50)->withQueryString(),
+            'totals' => $totals,
+            'range' => $range,
+            'state' => $state,
+        ]);
     }
 
     /** «كلمت العميل — أجّل» */
@@ -780,6 +916,7 @@ class OnlineOrderController extends Controller
 
             $value = 0.0;
             $moves = [];   // [product_id => قطع ترجع]
+            $logLines = []; // سجل المرتجعات (١/١٠)
 
             foreach ($fresh->items as $item) {
                 $qty = (int) ($data['items'][$item->id] ?? 0);
@@ -803,6 +940,7 @@ class OnlineOrderController extends Controller
                 }
 
                 $item->update(['returned_qty' => (int) $item->returned_qty + $qty]);
+                $logLines[] = ['item_id' => $item->id, 'title' => $item->title, 'qty' => $qty];
 
                 if ($item->shopify_line_id !== null) {
                     $shopifyQty[(int) $item->shopify_line_id] = $qty;
@@ -848,6 +986,17 @@ class OnlineOrderController extends Controller
             $fresh->update([
                 'returned_total' => $newReturned,
                 'status' => $allBack ? 'returned' : 'shipped',
+            ]);
+
+            // صف في سجل المرتجعات — صفحة المرتجعات وإعادة الشحن بيقروا منه (١/١٠)
+            OnlineReturn::create([
+                'online_order_id' => $fresh->id,
+                'pickup_id' => $fresh->pickup_id,
+                'kind' => $allBack ? 'full' : 'partial',
+                'pieces' => (int) array_sum($moves),
+                'value' => round($value, 2),
+                'lines' => $logLines,
+                'created_by' => auth()->id(),
             ]);
 
             return null;
