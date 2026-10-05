@@ -216,6 +216,11 @@ class StockCounting
                 ]);
 
                 if ($difference === 0) {
+                    // ⚠️ العدد مطابق للباتش — بس الأرفف ممكن تكون مش مطابقة
+                    // من قبل الجرد (باتش رصيده 14 ومش مترصّف على أي رف). العد
+                    // هو الحقيقة للأرفف كمان (٥/١٠ — بلاغ العسل)
+                    self::resyncLocations($batch);
+
                     continue;
                 }
 
@@ -232,7 +237,7 @@ class StockCounting
                 // يساوي مجموع `batch_locations.qty`. لو عدّلنا الباتش
                 // بس، شاشة المخزن وأوامر التجهيز بيفضلوا يشوفوا
                 // الكمية القديمة على الرف ويحجزوا بضاعة الجرد شطبها.
-                self::resyncLocations($batch, $difference);
+                self::resyncLocations($batch->refresh());
 
                 $diffLines++;
                 $qtyDiff += $difference;
@@ -292,26 +297,60 @@ class StockCounting
      * `Warehouse::availableFor()` بيرجع كمية مش موجودة فأمر التجهيز
      * بيتقبل وبيفشل عند التنفيذ.
      */
-    private static function resyncLocations(Batch $batch, int $difference): void
+    /**
+     * ═══ الأرفف = المعدود (٥/١٠/٢٠٢٦) ═══
+     *
+     * بلاغ المالك: «بعد الجرد أمر توريد العسل بيقول مفيش على الرف وهو
+     * موجود». الباتش C71.303 كان رصيده 14 **ومش مترصّف على أي رف**؛ الجرد
+     * كتب 37 على الباتش والدالة القديمة كانت بترجع لو مفيش صفوف أرفف
+     * («لسه مااترصّفش») — فالـ37 بقوا رصيد باتش مش ظاهر لأوامر التجهيز
+     * (اللي بتقرا الأرفف بس). وكانت بتزوّد **الفرق** على الأرفف، فأي خلل
+     * قديم بين الباتش والأرفف كان بيفضل زي ما هو.
+     *
+     * دلوقتي: مجموع أرفف الباتش بيتظبط على رصيده بعد الاعتماد بالظبط.
+     * الزيادة على أول رف للباتش، ولو مالوش رف خالص على رف السحب
+     * (`OpeningStock::pickShelf`) — بـ`putAway` الأول، ولو رفض (بلوك عمر
+     * الرف) على رف السحب مباشرة: العد حقيقة، ومكان الرف يتعدّل بعدين من
+     * شاشة الأرفف. العجز بيتشال من الأرفف بالترتيب.
+     */
+    private static function resyncLocations(Batch $batch): void
     {
         $rows = BatchLocation::where('batch_id', $batch->id)
             ->lockForUpdate()
             ->orderBy('id')
             ->get();
 
-        if ($rows->isEmpty()) {
-            return;   // باتش لسه مااترصّفش على رف — مفيش حاجة نزامنها
+        $gap = (int) $batch->qty_remaining - (int) $rows->sum('qty');
+
+        if ($gap === 0) {
+            return;
         }
 
-        if ($difference > 0) {
+        if ($gap > 0) {
             $first = $rows->first();
-            $first->update(['qty' => (int) $first->qty + $difference]);
+
+            if ($first !== null) {
+                $first->update(['qty' => (int) $first->qty + $gap]);
+
+                return;
+            }
+
+            $shelf = OpeningStock::pickShelf($batch->warehouse);
+
+            if (BatchLocation::putAway($batch, $shelf, $gap) !== null) {
+                BatchLocation::create([
+                    'batch_id' => $batch->id,
+                    'location_id' => $shelf->id,
+                    'product_id' => $batch->product_id,
+                    'qty' => $gap,
+                ]);
+            }
 
             return;
         }
 
         // عجز: بنشيل من الأرفف لحد ما نغطّي الفرق
-        $left = -$difference;
+        $left = -$gap;
 
         foreach ($rows as $row) {
             if ($left <= 0) {

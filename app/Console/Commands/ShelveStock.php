@@ -22,24 +22,32 @@ use Illuminate\Support\Facades\DB;
  * اتصلحت (بقت بتعدّي على `OpeningStock`)، والأمر ده بيصلّح الداتا
  * اللي اتكتبت قبل الإصلاح.
  *
- * بيعمل حاجتين مع `--fix`:
- *   1. صف `stocks` مختلف عن مجموع الباتشات ← الرقم اليدوي هو الحقيقة
- *      (ده اللي الإدارة كتبته) — باتش تسوية بيتعمل ويترصّف على رف سحب
- *   2. باتش فيه كمية لسه مااترصّفتش على رف ← بتترصّف على رف السحب
+ * بيعمل مع `--fix`:
+ *   • باتش فيه كمية لسه مااترصّفتش على رف ← بتترصّف على رف السحب
+ *   • ومع `--trust-stocks` كمان: صف `stocks` مختلف عن مجموع الباتشات ←
+ *     الرقم اليدوي هو الحقيقة — باتش تسوية بيتعمل ويترصّف
+ *
+ * ⚠️⚠️ **`--trust-stocks` بقت اختيارية (٥/١٠/٢٠٢٦).** `stocks` تجميعة
+ * بتتأخر: أمر تجهيز اتسحب ولسه ماتسلّمش بيخصم من الباتش والرف ومش من
+ * `stocks` لحد التسليم — فالتسوية على `stocks` كانت بتخلق بضاعة مش
+ * موجودة (العسل: stocks 127 والباتشات 115، والـ12 في أمر تحميل جاهز).
+ * المصدر هو الباتشات؛ `stocks` بيتعاد حسابه منها في الآخر.
  *
  * التشغيل:
- *   promax:shelve          تقرير بس — مفيش أي كتابة
- *   promax:shelve --fix    التصليح الفعلي
+ *   promax:shelve                       تقرير بس — مفيش أي كتابة
+ *   promax:shelve --fix                 رصّف الكميات اللي مش على رف
+ *   promax:shelve --fix --trust-stocks  + اعتبر `stocks` هو الحقيقة (للأرصدة اليدوية القديمة بس)
  */
 class ShelveStock extends Command
 {
-    protected $signature = 'promax:shelve {--fix}';
+    protected $signature = 'promax:shelve {--fix} {--trust-stocks : اعتبر رقم stocks هو الحقيقة وسوّي الباتشات عليه}';
 
     protected $description = 'مصالحة stocks/batches/الأرفف — وترصيف الأرصدة اليدوية عشان تبان في تسليم العهدة';
 
     public function handle(): int
     {
         $fix = (bool) $this->option('fix');
+        $trustStocks = (bool) $this->option('trust-stocks');
         $rows = [];
         $fixed = 0;
 
@@ -73,11 +81,11 @@ class ShelveStock extends Command
                 $clean = true;
 
                 try {
-                    DB::transaction(function () use ($w, $p, $stock, $stockQty, $stockHold, $batchQty, &$clean) {
+                    DB::transaction(function () use ($w, $p, $stock, $stockQty, $stockHold, $batchQty, $trustStocks, &$clean) {
                     // ١) الرقم اليدوي في `stocks` هو الحقيقة — باتشات
                     //    التسوية بتتظبط عليه (لو مفيش صف stocks أصلاً،
                     //    الباتشات هي المصدر ومفيش رقم يدوي نمشي وراه)
-                    if ($stock !== null && $stockQty !== $batchQty) {
+                    if ($trustStocks && $stock !== null && $stockQty !== $batchQty) {
                         OpeningStock::apply($w, $p, $stockQty, $stockHold);
                     }
 
