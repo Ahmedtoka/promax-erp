@@ -1284,6 +1284,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/prep', [$c, 'prep'])->name('prep');
         Route::post('/prep/{pick}/start', [$c, 'prepStart'])
             ->middleware('role:admin,manager,warehouse_keeper')->name('prep.start');
+        // تحديث ربط أوردر مؤكد لسه مااتجهزش (٧/١٠) — أمر تجهيز جديد بالربط الحالي
+        Route::post('/orders/{order}/relink', [$c, 'relink'])
+            ->middleware('role:admin,manager')->name('relink');
         Route::post('/prep/{pick}/done', [$c, 'prepDone'])
             ->middleware('role:admin,manager,warehouse_keeper')->name('prep.done');
         // «مراجعة → تمام» — بتنزّل الأوردر جاهزة للشحن وتفتح الفاتورة

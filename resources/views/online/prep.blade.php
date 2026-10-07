@@ -92,6 +92,14 @@
                                     @csrf
                                     <button class="btn sm green" type="submit">✅ {{ __('online.prep_finish') }}</button>
                                 </form>
+                                {{-- ربط منتج اتصلّح بعد التأكيد (٧/١٠) — للتيم بس زي الراوت --}}
+                                @if ($o !== null && in_array(auth()->user()->role, ['admin', 'manager'], true))
+                                    <form method="POST" action="{{ route('online.relink', $o) }}" style="display:inline"
+                                          onsubmit="if (!confirm(RELINK_MSG)) return false; this.querySelector('button').disabled = true;">
+                                        @csrf
+                                        <button class="btn sm" type="submit" title="{{ __('online.relink_hint') }}">🔄 {{ __('online.act_relink') }}</button>
+                                    </form>
+                                @endif
                             @endif
                         @endif
                     </td>
@@ -168,6 +176,7 @@
 </style>
 <script>
     const PREP_DONE_MSG = @js(__('online.prep_done_msg'));
+    const RELINK_MSG = @js(__('online.relink_confirm'));
     const T_BATCH = @js(__('online.batch'));
     const T_SHELF = @js(__('online.shelf'));
     const T_QTY = @js(__('common.qty'));

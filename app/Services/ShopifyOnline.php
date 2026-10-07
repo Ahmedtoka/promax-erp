@@ -257,6 +257,16 @@ class ShopifyOnline
      *
      * @return array{product_id: ?int, units: int, bundle: ?array, pieces: int}
      */
+    /**
+     * مطابقة بند أوردر موجود بالربط **الحالي** — لزرار «تحديث الربط» (٧/١٠).
+     *
+     * @return array{product_id: ?int, units: int, bundle: ?array, pieces: int}
+     */
+    public static function matchItem(OnlineOrderItem $item): array
+    {
+        return self::matchLine(['variant_id' => $item->shopify_variant_id, 'sku' => $item->sku]);
+    }
+
     private static function matchLine(array $line): array
     {
         $variantId = $line['variant_id'] ?? null;

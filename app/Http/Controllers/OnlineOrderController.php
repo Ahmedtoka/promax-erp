@@ -364,6 +364,98 @@ class OnlineOrderController extends Controller
         ]);
     }
 
+    /**
+     * ═══ «تحديث الربط» لأوردر اتأكد ولسه مااتجهزش (٧/١٠/٢٠٢٦) ═══
+     *
+     * بلاغ المالك: «عدّلت ربط منتجات كانت غلط وعملت سينك — الأوردر نازل
+     * بالقديم». البند بعد التأكيد **سنابشوت** (عن قصد: البضاعة اتحسبت على
+     * أساسه)، والسينك بيجيب الأوردرات الجديدة بس. فالأوردر المؤكد اللي لسه
+     * مااتجهزش محتاج طريق صريح ياخد الربط الجديد.
+     *
+     * الترتيب: المطابقة الجديدة في الذاكرة ← أمر تجهيز جديد بيها ← بعد نجاحه
+     * بس: البنود بتتكتب، والأمر القديم بيتلغي (لسه ماطلعش منه بضاعة —
+     * `requested`/`picking`)، والأوردر بيتربط بالجديد. فشل الرفع (نقص مخزون)
+     * = مفيش أي تغيير.
+     *
+     * ⚠️ الأمر اللي اتجهز (`ready`) خلاص — البضاعة خرجت؛ ده مكانه مرتجع/إلغاء.
+     */
+    public function relink(Request $request, OnlineOrder $order)
+    {
+        $pick = $order->pickOrder;
+
+        if ($order->status !== 'preparing' || ($pick !== null && ! in_array($pick->status, ['requested', 'picking'], true))) {
+            return back()->withErrors(['order' => __('online.relink_too_late', ['number' => $order->number])]);
+        }
+
+        $warehouse = Warehouse::find((int) Setting::read('online_warehouse_id'));
+
+        if ($warehouse === null) {
+            return back()->withErrors(['order' => __('online.no_warehouse')]);
+        }
+
+        $order->load('items');
+        $matches = [];
+        $qtyByProduct = [];
+
+        foreach ($order->items as $item) {
+            $m = ShopifyOnline::matchItem($item);
+
+            // بند مالوش ربط دلوقتي بيفضل على ربطه القديم (اليدوي مثلاً)
+            if ($m['product_id'] === null) {
+                $m = ['product_id' => $item->product_id, 'units' => (int) $item->units_per, 'bundle' => $item->bundle];
+            }
+
+            if ($m['product_id'] === null) {
+                return back()->withErrors(['order' => __('online.unmatched_items', ['number' => $order->number])]);
+            }
+
+            $matches[$item->id] = $m;
+
+            $probe = (new OnlineOrderItem)->forceFill([
+                'qty' => $item->qty, 'product_id' => $m['product_id'], 'units_per' => $m['units'], 'bundle' => $m['bundle'],
+            ]);
+
+            foreach ($probe->piecesByProduct() as $pid => $pieces) {
+                $qtyByProduct[$pid] = ($qtyByProduct[$pid] ?? 0) + $pieces;
+            }
+        }
+
+        $number = 'ON-'.$order->number;
+
+        while (PickOrder::where('number', $number)->exists()) {
+            $number .= 'R';
+        }
+
+        $result = PickOrder::raise(
+            warehouse: $warehouse,
+            rep: $request->user(),
+            qtyByProduct: $qtyByProduct,
+            purpose: PickOrder::PURPOSE_ONLINE,
+            requestedBy: $request->user(),
+            extra: ['number' => $number, 'notes' => $pick?->notes ?? $order->notes],
+        );
+
+        if ($result['error'] !== null) {
+            return back()->withErrors(['order' => $result['error']]);
+        }
+
+        DB::transaction(function () use ($order, $pick, $matches, $result) {
+            foreach ($order->items as $item) {
+                $m = $matches[$item->id];
+                $item->update(['product_id' => $m['product_id'], 'units_per' => $m['units'], 'bundle' => $m['bundle']]);
+            }
+
+            $pick?->update(['status' => 'cancelled']);
+
+            $order->update([
+                'pick_order_id' => $result['order']->id,
+                'items_count' => $order->items->fresh()->sum(fn ($i) => $i->pieces()),
+            ]);
+        });
+
+        return back()->with('ok', __('online.relinked_ok', ['number' => $order->number]));
+    }
+
     /** «كلمت العميل — أجّل» */
     public function postpone(Request $request, OnlineOrder $order)
     {

@@ -287,4 +287,10 @@ return [
     'k_in_stock_how' => 'Not reshipped yet',
     'k_reshipped' => 'Reshipped',
     'k_reshipped_how' => 'Back to prep with a new pick order',
+    // Refresh link (7/10)
+    'act_relink' => 'Refresh link',
+    'relink_hint' => 'If you fixed a product link after the order was confirmed: takes the current link and raises a new pick order instead of the old one.',
+    'relink_confirm' => 'Refresh this order\'s products from the current product links? The current pick order is cancelled and a new one is raised with the right products.',
+    'relinked_ok' => 'Order #:number updated from the current links and its pick order raised again ✓',
+    'relink_too_late' => 'Order #:number is already prepared or not in preparation — refresh the link before «Prepared» only.',
 ];
