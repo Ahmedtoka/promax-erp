@@ -61,6 +61,7 @@ class FormStarIntegrityTest extends TestCase
         'online/products#formBundle' => ['online.products.bundle'],
         'online/sync#formConfirm' => ['online.confirm'],
         'online/sync#formManualShip' => ['online.manualship'],
+        'online/prep#formManualShip' => ['online.manualship'],
         'online/sync#formPostpone' => ['online.postpone'],
         'online/sync#formCancel' => ['online.cancel'],
         'online/sync#formItemLink' => ['online.item.link'],

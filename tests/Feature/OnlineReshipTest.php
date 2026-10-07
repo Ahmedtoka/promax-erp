@@ -188,4 +188,78 @@ class OnlineReshipTest extends TestCase
         $this->actingAs($acc)->post(route('online.reship', $o))->assertForbidden();
         $this->assertSame('returned', $o->fresh()->status);
     }
+
+    // ═══ إعادة الشحن بوضعين + «اتسلّم خارج السيستم» من التجهيز (٧/١٠) ═══
+
+    private function returnedFully(int $qty = 3): OnlineOrder
+    {
+        $o = $this->shipped($qty);
+        $this->actingAs($this->admin)->post(route('online.return', $o), ['items' => [$o->items()->first()->id => $qty]]);
+        $this->assertSame('returned', $o->fresh()->status);
+
+        return $o->fresh();
+    }
+
+    public function test_reship_with_the_parcel_in_hand_deducts_now_and_lands_in_ready_to_ship(): void
+    {
+        $o = $this->returnedFully(3);
+        $this->assertSame(50, $this->onShelf());                      // المرتجع رجّعها الرف
+
+        $this->actingAs($this->admin)->post(route('online.reship', $o), ['mode' => 'ready'])
+            ->assertSessionDoesntHaveErrors(['order']);
+
+        $o->refresh();
+        $this->assertSame('ready', $o->status);
+        $this->assertNotNull($o->reviewed_at);
+        $this->assertSame(47, $this->onShelf(), 'goods leave the shelf again');
+        $this->assertSame('ready', PickOrder::find($o->pick_order_id)->status);
+
+        // نازل في «جاهزة للشحن» ومش في التجهيز
+        $this->actingAs($this->admin)->get(route('online.ready'))->assertOk()->assertSee('#'.$o->number);
+        $this->actingAs($this->admin)->get(route('online.prep'))->assertOk()->assertDontSee('#'.$o->number);
+    }
+
+    public function test_reship_default_still_goes_back_to_prep(): void
+    {
+        $o = $this->returnedFully(2);
+
+        $this->actingAs($this->admin)->post(route('online.reship', $o), ['mode' => 'prep'])->assertSessionHasNoErrors();
+
+        $this->assertSame('preparing', $o->fresh()->status);
+        $this->assertSame(50, $this->onShelf(), 'nothing pulled until «Prepared»');
+    }
+
+    public function test_a_reshipped_order_in_prep_can_be_delivered_outside_the_system_with_or_without_deduction(): void
+    {
+        $pu = OnlinePickup::create(['number' => OnlinePickup::nextNumber(), 'date' => today(), 'created_by' => $this->admin->id]);
+
+        // ١) اخصم البضاعة: الرف بيقل، والأوردر كامل في الشيت
+        $a = $this->returnedFully(3);
+        $this->actingAs($this->admin)->post(route('online.reship', $a), ['mode' => 'prep']);
+        $this->actingAs($this->admin)->get(route('online.prep'))->assertOk()->assertSee(__('online.act_manual_ship'));
+
+        $this->actingAs($this->admin)->post(route('online.manualship', $a->fresh()), [
+            'pickup_id' => $pu->id, 'amount' => 300, 'note' => 'خرج مع المندوب', 'deduct' => 1,
+        ])->assertSessionDoesntHaveErrors(['order', 'deduct']);
+
+        $a->refresh();
+        $this->assertSame('completed', $a->status);
+        $this->assertSame($pu->id, $a->pickup_id);
+        $this->assertSame('ready', PickOrder::find($a->pick_order_id)->status);
+        $this->assertSame(47, $this->onShelf());
+
+        // ٢) ماتخصمش: أمر التجهيز بيتلغي والرف زي ما هو
+        $b = $this->returnedFully(2);
+        $this->actingAs($this->admin)->post(route('online.reship', $b), ['mode' => 'prep']);
+        $shelfBefore = $this->onShelf();
+
+        $this->actingAs($this->admin)->post(route('online.manualship', $b->fresh()), [
+            'pickup_id' => $pu->id, 'amount' => 200, 'note' => 'المخزن اتظبط بالجرد', 'deduct' => 0,
+        ])->assertSessionDoesntHaveErrors(['order', 'deduct']);
+
+        $b->refresh();
+        $this->assertSame('completed', $b->status);
+        $this->assertSame('cancelled', PickOrder::find($b->pick_order_id)->status);
+        $this->assertSame($shelfBefore, $this->onShelf());
+    }
 }

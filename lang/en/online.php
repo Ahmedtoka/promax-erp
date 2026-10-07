@@ -338,4 +338,14 @@ return [
     'manual_ship_reason' => 'Reason (saved on the order)',
     'manual_ship_note' => 'Delivered outside the system, no stock movement: :note',
     'manual_shipped_ok' => 'Order #:number recorded on :pickup with no stock movement ✓',
+    // Reship modes + delivered from prep (7/10)
+    'reship_ask' => 'Order #:number came back. What now?',
+    'reship_mode_prep' => 'Prepare it again',
+    'reship_mode_ready' => 'Parcel in hand, ready to ship now',
+    'reshipped_ready_ok' => 'Order #:number had its goods deducted and is in "Ready to ship" — put it on a pickup sheet ✓',
+    'reship_ready_failed' => 'The order is back in preparation with a new pick order, but its goods could not be deducted now: :err',
+    'manual_ship_prep_hint' => 'The order left with the courier without being prepared in the system: it is recorded as shipped on the sheet and collected.',
+    'manual_ship_stock' => 'Stock',
+    'manual_ship_deduct' => 'Deduct the goods from the shelves now (FEFO)',
+    'manual_ship_no_deduct' => 'Do not deduct — stock is already adjusted (count or manual)',
 ];

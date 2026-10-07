@@ -92,6 +92,12 @@
                                     @csrf
                                     <button class="btn sm green" type="submit">✅ {{ __('online.prep_finish') }}</button>
                                 </form>
+                                {{-- خرج مع المندوب من غير ما يتجهز في السيستم (٧/١٠) — أدمن بس --}}
+                                @if ($o !== null && auth()->user()->role === 'admin')
+                                    <button class="btn sm" type="button"
+                                            onclick="openManualShip({{ $o->id }}, '{{ $o->number }}', {{ (float) $o->subtotal }}, {{ $pick->qtyRequested() }})">
+                                        📦 {{ __('online.act_manual_ship') }}</button>
+                                @endif
                                 {{-- ربط منتج اتصلّح بعد التأكيد (٧/١٠) — للتيم بس زي الراوت --}}
                                 @if ($o !== null && in_array(auth()->user()->role, ['admin', 'manager'], true))
                                     <form method="POST" action="{{ route('online.relink', $o) }}" style="display:inline"
@@ -146,6 +152,38 @@
     </div>
 </dialog>
 
+@if (auth()->user()->role === 'admin')
+<dialog id="dlgManualShip">
+    <form class="dlg" method="POST" id="formManualShip" style="min-width:400px"
+          onsubmit="this.querySelector('[type=submit]').disabled = true">
+        @csrf
+        <h4>📦 {{ __('online.manual_ship_title') }} <span id="msNum"></span></h4>
+        <div class="dash-hint" style="margin-bottom:10px">{{ __('online.manual_ship_prep_hint') }}</div>
+        <label class="f">{{ __('online.pickup_no') }}</label>
+        <select name="pickup_id" required style="width:100%;margin-bottom:8px">
+            @foreach ($pickupOptions as $pu)
+                <option value="{{ $pu->id }}">{{ $pu->number }} · {{ $pu->date->format('Y-m-d') }}</option>
+            @endforeach
+        </select>
+        <label class="f">{{ __('online.collect_amount') }}</label>
+        <input type="number" name="amount" id="msAmount" step="0.01" min="0" required style="width:100%;margin-bottom:8px">
+        <label class="f">{{ __('online.manual_ship_stock') }}</label>
+        <label style="display:flex;gap:6px;align-items:flex-start;margin-bottom:4px">
+            <input type="radio" name="deduct" value="1" required>
+            <span>{{ __('online.manual_ship_deduct') }} <b id="msPcs"></b></span></label>
+        <label style="display:flex;gap:6px;align-items:flex-start;margin-bottom:8px">
+            <input type="radio" name="deduct" value="0" required>
+            <span>{{ __('online.manual_ship_no_deduct') }}</span></label>
+        <label class="f">{{ __('online.manual_ship_reason') }}</label>
+        <input type="text" name="note" required maxlength="250" style="width:100%;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgManualShip')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">📦 {{ __('online.act_manual_ship') }}</button>
+        </div>
+    </form>
+</dialog>
+@endif
+
 @endsection
 
 @section('scripts')
@@ -177,6 +215,18 @@
 <script>
     const PREP_DONE_MSG = @js(__('online.prep_done_msg'));
     const RELINK_MSG = @js(__('online.relink_confirm'));
+    const MS_URL = @js(url('erp/online/orders'));
+    const T_PCS = @js(__('online.pcs'));
+
+    function openManualShip(id, num, goods, pcs) {
+        var f = document.getElementById('formManualShip');
+        f.action = MS_URL + '/' + id + '/manual-ship';
+        f.reset();
+        document.getElementById('msNum').textContent = '#' + num;
+        document.getElementById('msAmount').value = goods;
+        document.getElementById('msPcs').textContent = '(' + pcs + ' ' + T_PCS + ')';
+        openDlg('dlgManualShip');
+    }
     const T_BATCH = @js(__('online.batch'));
     const T_SHELF = @js(__('online.shelf'));
     const T_QTY = @js(__('common.qty'));

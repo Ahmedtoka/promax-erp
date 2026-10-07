@@ -247,6 +247,11 @@ class OnlineOrderController extends Controller
      */
     public function reship(Request $request, OnlineOrder $order)
     {
+        // ⚠️ الوضعين (٧/١٠ — سؤال المالك): `prep` = يتجهز من جديد (الافتراضي
+        // القديم) · `ready` = الطرد في إيدي: البضاعة بتتخصم دلوقتي (المرتجع
+        // كان رجّعها الرف) والأوردر بينزل «جاهز للشحن» على طول
+        $mode = $request->input('mode') === 'ready' ? 'ready' : 'prep';
+
         if ($order->status !== 'returned') {
             return back()->withErrors(['order' => __('online.wrong_status')]);
         }
@@ -325,9 +330,60 @@ class OnlineOrderController extends Controller
                 ]);
         });
 
+        if ($mode === 'ready') {
+            // التجهيز والمراجعة بيتعدّوا — البضاعة بتتسحب بالـFEFO دلوقتي
+            if ($err = $this->pullForOrder($order->fresh(), $result['order']->fresh(), $request->user(), reviewed: true)) {
+                // ماقدرش يسحب — الأوردر فاضل «بيتجهز» بأمره الجديد وبيتقال السبب
+                return back()->withErrors(['order' => __('online.reship_ready_failed', ['err' => $err])]);
+            }
+
+            $warn = ShopifyOnline::pushStatus($order->fresh());
+
+            return $this->okWithPushWarn(__('online.reshipped_ready_ok', ['number' => $order->number]), $warn);
+        }
+
         $warn = ShopifyOnline::pushStatus($order->fresh());
 
         return $this->okWithPushWarn(__('online.reshipped_ok', ['number' => $order->number]), $warn);
+    }
+
+    /**
+     * سحب أمر تجهيز أوردر أونلاين (بدء + جاهز بالـFEFO) والأوردر يبقى
+     * «جاهز» بتكلفة الباتشات اللي خرجت. `reviewed` = يتعدّى المراجعة وينزل
+     * «جاهز للشحن» على طول. بيرجّع الخطأ أو null.
+     */
+    private function pullForOrder(OnlineOrder $order, PickOrder $pick, $user, bool $reviewed = false): ?string
+    {
+        if ($pick->status === 'requested' && ($err = $pick->startPicking($user))) {
+            return $err;
+        }
+
+        if ($err = $pick->fresh()->markReady($user)) {
+            return $err;
+        }
+
+        $order->update(array_filter([
+            'status' => 'ready',
+            'ready_at' => now(),
+            'cost_total' => $this->pickCost($pick),
+            'reviewed_at' => $reviewed ? now() : null,
+        ], fn ($v) => $v !== null));
+
+        return null;
+    }
+
+    /** التكلفة من الباتشات اللي البضاعة خرجت منها فعلاً */
+    private function pickCost(PickOrder $pick): float
+    {
+        $cost = 0.0;
+
+        foreach ($pick->fresh(['items.product', 'items.batch'])->items as $item) {
+            if ($item->product !== null) {
+                $cost += (int) $item->qty_picked * Pricing::costFor($item->product, $item->batch);
+            }
+        }
+
+        return round($cost, 2);
     }
 
     /**
@@ -560,17 +616,51 @@ class OnlineOrderController extends Controller
             'pickup_id' => ['required', 'integer', 'exists:online_pickups,id'],
             'amount' => ['required', 'numeric', 'min:0'],
             'note' => ['required', 'string', 'max:250'],
+            // للي في التجهيز بس (٧/١٠): اخصم البضاعة ولا المخزن اتظبط خلاص
+            'deduct' => ['nullable', 'boolean'],
         ]);
+
+        // ⚠️ أوردر في التجهيز (زي المعاد شحنه) — أمره لازم يكون لسه مااتجهزش
+        $pick = $order->status === 'preparing' ? $order->pickOrder : null;
+
+        if ($order->status === 'preparing' && $pick !== null && ! in_array($pick->status, ['requested', 'picking'], true)) {
+            return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
 
         if ((float) $data['amount'] > (float) $order->subtotal + 0.009) {
             return back()->withErrors(['order' => __('online.collect_too_much', ['v' => number_format((float) $order->subtotal, 2)])]);
         }
 
-        $claimed = OnlineOrder::whereKey($order->id)->whereIn('status', ['new', 'postponed'])
+        $from = $order->status;
+        $claimed = OnlineOrder::whereKey($order->id)->whereIn('status', ['new', 'postponed', 'preparing'])
             ->update(['status' => 'shipped']);
 
         if ($claimed === 0) {
             return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
+
+        $cost = 0.0;
+
+        if ($pick !== null) {
+            if ($request->boolean('deduct')) {
+                // البضاعة بتتسحب من الرف بالـFEFO زي «تم التجهيز» بالظبط
+                if ($pick->status === 'requested' && ($err = $pick->startPicking($request->user()))) {
+                    OnlineOrder::whereKey($order->id)->update(['status' => $from]);
+
+                    return back()->withErrors(['order' => $err]);
+                }
+
+                if ($err = $pick->fresh()->markReady($request->user())) {
+                    OnlineOrder::whereKey($order->id)->update(['status' => $from]);
+
+                    return back()->withErrors(['order' => $err]);
+                }
+
+                $cost = $this->pickCost($pick);
+            } else {
+                // المخزن اتظبط خلاص — أمر التجهيز بيتلغي من غير ما يطلّع حاجة
+                $pick->update(['status' => 'cancelled']);
+            }
         }
 
         $done = (float) $data['amount'] >= (float) $order->subtotal - 0.009;
@@ -586,6 +676,7 @@ class OnlineOrderController extends Controller
             'postponed_to' => null,
             'collected_total' => round((float) $data['amount'], 2),
             'collected_at' => $done ? now() : null,
+            'cost_total' => $cost,
             'notes' => trim(($order->notes ? $order->notes."\n" : '').$note),
         ]);
 
@@ -699,7 +790,12 @@ class OnlineOrderController extends Controller
             return $pick->status === 'ready' && ($o === null || $o->reviewed_at !== null);
         })->values();
 
-        return view('online.prep', ['picks' => $picks, 'orders' => $orders]);
+        return view('online.prep', [
+            'picks' => $picks,
+            'orders' => $orders,
+            // «اتسلّم خارج السيستم» (أدمن) — أحدث شيتات البيك اب
+            'pickupOptions' => OnlinePickup::orderByDesc('date')->orderByDesc('id')->limit(30)->get(['id', 'number', 'date']),
+        ]);
     }
 
     public function prepStart(Request $request, PickOrder $pick)
@@ -745,18 +841,10 @@ class OnlineOrderController extends Controller
         if ($order !== null) {
             // التكلفة من الباتشات اللي البضاعة خرجت منها فعلاً —
             // Pricing::costFor بياخد تكلفة الباتش لو > 0 وإلا المنتج
-            $cost = 0.0;
-
-            foreach ($pick->fresh(['items.product', 'items.batch'])->items as $item) {
-                if ($item->product !== null) {
-                    $cost += (int) $item->qty_picked * Pricing::costFor($item->product, $item->batch);
-                }
-            }
-
             $order->update([
                 'status' => 'ready',
                 'ready_at' => now(),
-                'cost_total' => round($cost, 2),
+                'cost_total' => $this->pickCost($pick),
             ]);
 
             ShopifyOnline::pushStatus($order->fresh());
