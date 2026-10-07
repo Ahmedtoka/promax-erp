@@ -1299,14 +1299,16 @@ class OnlineOrderController extends Controller
         $q->when($request->filled('search'), function ($x) use ($request) {
             $s = '%'.$request->input('search').'%';
             $x->where(fn ($w) => $w->where('title', 'like', $s)->orWhere('sku', 'like', $s));
-        })->when($request->boolean('unlinked'), fn ($x) => $x->whereNull('product_id'));
+        })->when($request->boolean('unlinked'), fn ($x) => $x->whereNull('product_id'))
+            ->when($request->boolean('stale'), fn ($x) => $x->stale());
 
         return view('online.products', [
+            'staleCount' => ShopifyProductLink::stale()->count(),
             'links' => $q->orderBy('title')->orderBy('id')->paginate(100)->withQueryString(),
             'products' => Product::where('active', true)
                 ->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'unlinkedCount' => ShopifyProductLink::whereNull('product_id')->count(),
-            'filters' => $request->only(['search', 'unlinked']),
+            'filters' => $request->only(['search', 'unlinked', 'stale']),
         ]);
     }
 
@@ -1319,7 +1321,29 @@ class OnlineOrderController extends Controller
             return back()->withErrors(['products' => $result['error']]);
         }
 
-        return back()->with('ok', __('online.products_fetched', ['n' => $result['fetched']]));
+        return back()->with('ok', __('online.products_fetched', ['n' => $result['fetched']])
+            .(($result['stale'] ?? 0) > 0 ? ' '.__('online.products_stale_found', ['n' => $result['stale']]) : ''));
+    }
+
+    /**
+     * مسح صف ربط (٧/١٠) — منتج اتشال من شوبيفاي.
+     * ⚠️ مابيلمسش أي أوردر: البند شايل نسخته من المنتج/الباندل. الأوردرات
+     * الجديدة اللي فيها الفاريانت ده هتنزل «مش مربوط» لو رجع يتباع.
+     */
+    public function productsDelete(ShopifyProductLink $link)
+    {
+        $title = $link->title;
+        $link->delete();
+
+        return back()->with('ok', __('online.link_deleted', ['title' => $title]));
+    }
+
+    /** مسح كل اللي مارجعش في آخر «هات المنتجات» (مش أكتيف في شوبيفاي) */
+    public function productsPruneStale()
+    {
+        $n = ShopifyProductLink::stale()->delete();
+
+        return back()->with('ok', __('online.links_pruned', ['n' => $n]));
     }
 
     /**

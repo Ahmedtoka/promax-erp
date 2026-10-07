@@ -55,6 +55,19 @@
         <a class="btn {{ ($filters['unlinked'] ?? false) ? 'gold' : '' }}"
            href="{{ route('online.products', array_filter(['search' => $filters['search'] ?? null, 'unlinked' => ($filters['unlinked'] ?? false) ? null : 1])) }}">
             ⚠️ {{ __('online.only_unlinked') }}</a>
+        {{-- مش أكتيف في شوبيفاي (٧/١٠) — فلتر + مسح الكل --}}
+        @if ($staleCount > 0)
+            <a class="btn {{ ($filters['stale'] ?? false) ? 'gold' : '' }}"
+               href="{{ route('online.products', array_filter(['search' => $filters['search'] ?? null, 'stale' => ($filters['stale'] ?? false) ? null : 1])) }}">
+                🚫 {{ __('online.only_stale', ['n' => $staleCount]) }}</a>
+            @if ($canAct)
+                <form method="POST" action="{{ route('online.products.prune') }}" style="display:inline"
+                      onsubmit="return confirm(@js(__('online.prune_confirm', ['n' => $staleCount])))">
+                    @csrf
+                    <button class="btn red" type="submit">🗑 {{ __('online.prune_btn', ['n' => $staleCount]) }}</button>
+                </form>
+            @endif
+        @endif
     </div>
 
     <form method="POST" action="{{ route('online.products.save') }}">
@@ -70,6 +83,7 @@
                     {{-- قطع الباك: فاريانت «pcs 12» = 12 قطعة من المنتج --}}
                     <th class="num" data-nosum title="{{ __('online.units_hint') }}">{{ __('online.units') }}</th>
                     <th>{{ __('online.sku_pushed') }}</th>
+                    @if ($canAct)<th></th>@endif
                 </tr>
                 @forelse ($links as $link)
                     <tr>
@@ -81,6 +95,9 @@
                         </td>
                         <td>
                             <b>{{ $link->title }}</b>
+                            @if ($link->isStale())
+                                <span class="badge b-red" style="font-size:10px">🚫 {{ __('online.stale_badge') }}</span>
+                            @endif
                             @if ($link->variant_title)
                                 <br><span style="font-size:11px;color:var(--muted)">{{ $link->variant_title }}</span>
                             @endif
@@ -140,9 +157,17 @@
                                 —
                             @endif
                         </td>
+                        @if ($canAct)
+                            {{-- ⚠️ جوه فورم الحفظ — فالزرار بيتبعت بفورم المسح اللي بره (form=) --}}
+                            <td class="num">
+                                <button class="btn sm red" type="submit" form="delLinkForm"
+                                        formaction="{{ route('online.products.delete', $link) }}"
+                                        onclick="return confirm(@js(__('online.delete_link_confirm', ['title' => $link->title])))">🗑</button>
+                            </td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('online.products_empty') }}
                     </td></tr>
                 @endforelse
@@ -175,6 +200,9 @@
         </div>
     </form>
 </dialog>
+
+{{-- فورم مسح صف — بره فورم الحفظ (ممنوع فورم جوه فورم)، والزراير بتشاور عليه --}}
+<form method="POST" id="delLinkForm" style="display:none">@csrf</form>
 
 {{-- قايمة المنتجات مرة واحدة — بتتنسخ لكل سيلكت بالجافاسكريبت --}}
 <template id="prodOpts">{!! $optsHtml !!}</template>

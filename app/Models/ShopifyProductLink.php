@@ -17,12 +17,40 @@ class ShopifyProductLink extends Model
 {
     protected $fillable = [
         'shopify_variant_id', 'shopify_product_id', 'title', 'variant_title',
-        'sku', 'image', 'product_id', 'units', 'bundle', 'sku_pushed_at',
+        'sku', 'image', 'product_id', 'units', 'bundle', 'sku_pushed_at', 'seen_at',
     ];
+
+    /** وقت آخر «هات المنتجات» نجح — مرجع «مش أكتيف في شوبيفاي» (٧/١٠) */
+    public const FETCHED_AT = 'shopify_products_fetched_at';
+
+    /**
+     * الفاريانتات اللي مارجعتش في آخر جلب (اتمسحت/اتأرشفت/درافت في شوبيفاي).
+     * ⚠️ `shopify_product_id = 0` = فاريانت اتعرف من أوردر (ربط بند يدوي) مش
+     * من الجلب — مالوش «آخر ظهور» فمايتحسبش هنا (بيتمسح بزرار الصف بس).
+     */
+    public function scopeStale($q)
+    {
+        $at = Setting::read(self::FETCHED_AT);
+
+        if ($at === null) {
+            return $q->whereRaw('1 = 0');
+        }
+
+        return $q->where('shopify_product_id', '>', 0)
+            ->where(fn ($w) => $w->whereNull('seen_at')->orWhere('seen_at', '<', $at));
+    }
+
+    public function isStale(): bool
+    {
+        $at = Setting::read(self::FETCHED_AT);
+
+        return $at !== null && (int) $this->shopify_product_id > 0
+            && ($this->seen_at === null || $this->seen_at->lt(\Illuminate\Support\Carbon::parse($at)));
+    }
 
     protected function casts(): array
     {
-        return ['sku_pushed_at' => 'datetime', 'bundle' => 'array'];
+        return ['sku_pushed_at' => 'datetime', 'bundle' => 'array', 'seen_at' => 'datetime'];
     }
 
     /**

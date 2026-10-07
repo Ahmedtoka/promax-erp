@@ -299,4 +299,13 @@ return [
     'ret_orders' => 'Orders returned',
     'ret_value' => 'Returned value',
     'pickups_equation' => 'Value out = collected + returned + remaining. When remaining is zero the sheet is settled. These are goods amounts; shipping belongs to the courier.',
+    // Remove products dropped from Shopify (7/10)
+    'stale_badge' => 'Not active in Shopify',
+    'only_stale' => 'Not active in Shopify (:n)',
+    'prune_btn' => 'Delete inactive (:n)',
+    'prune_confirm' => 'Delete :n products that did not come back in the last fetch (deleted, archived or draft in Shopify)? Past orders are not affected.',
+    'links_pruned' => ':n products not active in Shopify deleted ✓',
+    'delete_link_confirm' => 'Delete ":title" from the product mapping? Past orders are not affected.',
+    'link_deleted' => '":title" deleted from the product mapping ✓',
+    'products_stale_found' => 'and :n products did not come back (not active in Shopify) — remove them with "Delete inactive".',
 ];

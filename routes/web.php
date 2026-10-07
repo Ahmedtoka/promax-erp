@@ -1330,6 +1330,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,manager')->name('products.fetch');
         Route::post('/products/save', [$c, 'productsSave'])
             ->middleware('role:admin,manager')->name('products.save');
+        // مسح ربط منتج اتشال من شوبيفاي — صف واحد أو كل اللي مش أكتيف (٧/١٠)
+        // ⚠️ الثابت قبل البارامتري
+        Route::post('/products/prune-stale', [$c, 'productsPruneStale'])
+            ->middleware('role:admin,manager')->name('products.prune');
+        Route::post('/products/{link}/delete', [$c, 'productsDelete'])
+            ->middleware('role:admin,manager')->name('products.delete');
         // باندل: فاريانت واحد بكذا منتج (٢٦/٩)
         Route::post('/products/{link}/bundle', [$c, 'productsBundle'])
             ->middleware('role:admin,manager')->name('products.bundle');

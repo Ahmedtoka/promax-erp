@@ -830,11 +830,16 @@ class ShopifyOnline
     {
         $fetched = 0;
         $sinceId = 0;
+        // ⚠️ ثانية كاملة قبل البداية — `seen_at` بيتخزن من غير كسور
+        $startedAt = now()->subSecond();
 
         for ($page = 0; $page < 20; $page++) {
+            // ⚠️ **الأكتيف بس** (٧/١٠ — طلب المالك): الدرافت والمؤرشف كانوا
+            // بيرجعوا جدول الربط مع كل جلب بعد ما اتشالوا من المتجر
             [$data, $err] = self::api('get', 'products.json', [
                 'limit' => 250,
                 'since_id' => $sinceId,
+                'status' => 'active',
             ]);
 
             if ($err !== null) {
@@ -861,6 +866,7 @@ class ShopifyOnline
                         'variant_title' => $vTitle,
                         'sku' => ($v['sku'] ?? '') !== '' ? mb_substr($v['sku'], 0, 100) : null,
                         'image' => $image !== null ? mb_substr($image, 0, 500) : null,
+                        'seen_at' => now(),
                     ];
 
                     $link = ShopifyProductLink::where('shopify_variant_id', $v['id'])->first();
@@ -894,7 +900,10 @@ class ShopifyOnline
             }
         }
 
-        return ['fetched' => $fetched, 'error' => null];
+        // الجلب كمل من غير خطأ — يبقى اللي مارجعش فيه «مش أكتيف في شوبيفاي»
+        Setting::writeMany([ShopifyProductLink::FETCHED_AT => $startedAt->toDateTimeString()]);
+
+        return ['fetched' => $fetched, 'error' => null, 'stale' => ShopifyProductLink::stale()->count()];
     }
 
     /**
