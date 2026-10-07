@@ -74,7 +74,7 @@
                 @php $o = $r->order; @endphp
                 <tr>
                     <td class="s">{{ $r->created_at?->format('Y-m-d h:i A') ?: '—' }}</td>
-                    <td class="num s">@if ($o)<a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a>@else — @endif</td>
+                    <td class="num s">@if ($o)<a href="{{ route('online.view', $o) }}"><b>#{{ $o->number }}</b></a>@else — @endif</td>
                     <td>{{ $o?->customer_name ?: '—' }}</td>
                     <td class="s">{{ $o?->area ?: '—' }}</td>
                     <td class="num s">

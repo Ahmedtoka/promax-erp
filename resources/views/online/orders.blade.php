@@ -56,7 +56,7 @@
             @forelse ($orders as $o)
                 <tr>
                     {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
-                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
+                    <td class="num s"><a href="{{ route('online.view', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td>{{ $o->customer_name ?: '—' }}
                         @if ($o->cancel_reason)
                             <br><span style="font-size:10.5px;color:var(--muted)">✖ {{ $o->cancel_reason }}</span>

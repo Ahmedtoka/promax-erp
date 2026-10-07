@@ -1293,6 +1293,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/prep/{pick}/review', [$c, 'prepReview'])
             ->middleware('role:admin,manager,warehouse_keeper')->name('prep.review');
         Route::get('/orders/{order}/invoice', [$c, 'invoice'])->name('invoice');
+        // صفحة الأوردر بالهيستوري (٧/١٠) — الدوس على رقم الأوردر في أي شاشة
+        Route::get('/orders/{order}/view', [$c, 'view'])->name('view');
+        // «اتسلّم خارج السيستم» — شحن + تحصيل من غير حركة مخزون (أدمن بس)
+        Route::post('/orders/{order}/manual-ship', [$c, 'manualShip'])
+            ->middleware('role:admin')->name('manualship');
 
         // ٤. جاهزة للشحن → بيك اب
         Route::get('/ready', [$c, 'readyList'])->name('ready');

@@ -72,7 +72,7 @@
             @forelse ($orders as $o)
                 <tr>
                     {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
-                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
+                    <td class="num s"><a href="{{ route('online.view', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td class="num s">
                         @if ($o->pickup)
                             <a href="{{ route('online.pickup', $o->pickup) }}"

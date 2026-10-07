@@ -132,7 +132,7 @@
             </tr>
             @forelse ($orders as $o)
                 <tr @if ($o->status === 'postponed' && $o->postponed_to?->lte(today())) style="background:#FFF8EC" @endif>
-                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a>
+                    <td class="num s"><a href="{{ route('online.view', $o) }}"><b>#{{ $o->number }}</b></a>
                         @if ($o->ordered_at)
                             <br><span style="font-size:10.5px;color:var(--muted)">{{ $o->ordered_at->format('d/m h:i A') }}</span>
                         @endif
@@ -198,6 +198,12 @@
                                 <button class="btn sm red" type="button"
                                         onclick="openCancel({{ $o->id }}, '{{ $o->number }}')">
                                     ✖ {{ __('online.act_cancel') }}</button>
+                                @if (auth()->user()->role === 'admin')
+                                    {{-- خرج يدوي من بدري (٧/١٠) — شحن + تحصيل من غير حركة مخزون --}}
+                                    <button class="btn sm" type="button"
+                                            onclick="openManualShip({{ $o->id }}, '{{ $o->number }}', {{ (float) $o->subtotal }})">
+                                        📦 {{ __('online.act_manual_ship') }}</button>
+                                @endif
                             </div>
                         @endif
                     </td>
@@ -226,6 +232,30 @@
         <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" type="button" onclick="closeDlg('dlgConfirm')">{{ __('common.cancel') }}</button>
             <button class="btn green" type="submit">✅ {{ __('online.act_confirm') }}</button>
+        </div>
+    </form>
+</dialog>
+
+{{-- ═══ ديالوج «اتسلّم خارج السيستم» (٧/١٠) ═══ --}}
+<dialog id="dlgManualShip">
+    <form class="dlg" method="POST" id="formManualShip" style="min-width:380px"
+          onsubmit="this.querySelector('[type=submit]').disabled = true">
+        @csrf
+        <h4>📦 {{ __('online.manual_ship_title') }} <span id="msNum"></span></h4>
+        <div class="alert warn" style="margin-bottom:10px">{{ __('online.manual_ship_hint') }}</div>
+        <label class="f">{{ __('online.pickup_no') }}</label>
+        <select name="pickup_id" required style="width:100%;margin-bottom:8px">
+            @foreach ($pickupOptions as $pu)
+                <option value="{{ $pu->id }}">{{ $pu->number }} · {{ $pu->date->format('Y-m-d') }}</option>
+            @endforeach
+        </select>
+        <label class="f">{{ __('online.collect_amount') }}</label>
+        <input type="number" name="amount" id="msAmount" step="0.01" min="0" required style="width:100%;margin-bottom:8px">
+        <label class="f">{{ __('online.manual_ship_reason') }}</label>
+        <input type="text" name="note" required maxlength="250" style="width:100%;margin-bottom:12px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" type="button" onclick="closeDlg('dlgManualShip')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">📦 {{ __('online.act_manual_ship') }}</button>
         </div>
     </form>
 </dialog>
@@ -295,6 +325,14 @@
         document.getElementById('cfNum').textContent = '#' + num;
         openDlg('dlgConfirm');
         f.note.focus();
+    }
+
+    function openManualShip(id, num, goods) {
+        var f = document.getElementById('formManualShip');
+        f.action = POSTPONE_URL + '/' + id + '/manual-ship';
+        document.getElementById('msNum').textContent = '#' + num;
+        document.getElementById('msAmount').value = goods;
+        openDlg('dlgManualShip');
     }
 
     function openPostpone(id, num) {

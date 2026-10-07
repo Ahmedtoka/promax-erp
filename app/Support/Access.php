@@ -161,7 +161,7 @@ class Access
             // الأونلاين (٣/٩): التحصيل والحسابات والمتابعة — فلوس مش
             // تشغيل. السينك والتأكيد والشحن والربط قرارات تشغيلية مش له.
             'online.collections', 'online.collect', 'online.accounts',
-            'online.orders', 'online.pickups', 'online.pickup', 'online.returns',
+            'online.orders', 'online.pickups', 'online.pickup', 'online.returns', 'online.view',
             'ops.invoices', 'ops.invoice',
             // ⚠️ **المرتجع من الـERP شغل الحسابات** (٨/٨/٢٠٢٦):
             // مرتجع بييجي المخزن مباشرة أو باتفاق مع سلسلة مالوش
@@ -214,7 +214,7 @@ class Access
             'wh.',
             // تجهيز أوردرات الأونلاين + طباعة فاتورتها (٣/٩) —
             // ده شغل المخزن؛ السينك والشحن والتحصيل مش له
-            'online.prep', 'online.invoice',
+            'online.prep', 'online.invoice', 'online.view',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
             // ورقة الأمر بتتطبع مع التجهيز (٨/٩)

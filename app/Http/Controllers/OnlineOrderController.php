@@ -59,6 +59,8 @@ class OnlineOrderController extends Controller
             ->paginate(50)->withQueryString();
 
         return view('online.sync', [
+            // للتسجيل اليدوي (أدمن) — أحدث شيتات البيك اب
+            'pickupOptions' => OnlinePickup::orderByDesc('date')->orderByDesc('id')->limit(30)->get(['id', 'number', 'date']),
             'orders' => $orders,
             'areaFilter' => $areaFilter,
             'ready' => ShopifyOnline::ready(),
@@ -454,6 +456,152 @@ class OnlineOrderController extends Controller
         });
 
         return back()->with('ok', __('online.relinked_ok', ['number' => $order->number]));
+    }
+
+    /**
+     * ═══ صفحة الأوردر (٧/١٠/٢٠٢٦) ═══
+     *
+     * طلب المالك: الدوس على رقم الأوردر في أي شاشة أونلاين يفتح الأوردر
+     * نفسه — بنوده ومنتجاته وفلوسه، وتحت **الهيستوري**: نزل إمتى، اتأكد،
+     * اتجهز، اتشحن، اتحصّل، رجع — ومين عمل كل خطوة. الفاتورة زرار لوحدها.
+     *
+     * الهيستوري من مصدرين:
+     *   • **المراحل** من أعمدة الأوردر وأوامر تجهيزه وشيته وسجل مرتجعاته
+     *     (التواريخ مضمونة، والفاعل لما يكون متسجّل على الصف)
+     *   • **سجل العمليات** من مركز النشاط: كل زرار اتداس على الأوردر أو على
+     *     أوامر تجهيزه، باسم اللي داسه ووقته — ده اللي بيقول «مين»
+     */
+    public function view(OnlineOrder $order)
+    {
+        $order->load(['items.product', 'pickup.courier', 'pickup.creator', 'confirmer']);
+
+        // كل أوامر تجهيز الأوردر — الحالي واللي اتلغى واللي قبل إعادة الشحن
+        $picks = PickOrder::with('picker')->where('purpose', PickOrder::PURPOSE_ONLINE)
+            ->where(fn ($q) => $q->where('number', 'ON-'.$order->number)
+                ->orWhere('number', 'like', 'ON-'.$order->number.'R%')
+                ->orWhere('id', $order->pick_order_id))
+            ->orderBy('id')->get();
+
+        $returns = OnlineReturn::with(['pickup', 'creator', 'reshipper'])
+            ->where('online_order_id', $order->id)->orderBy('id')->get();
+
+        $names = fn ($ids) => \App\Models\User::whereIn('id', array_filter($ids))->get()->keyBy('id');
+
+        $ev = [];
+        $add = function ($at, string $key, ?string $who = null, ?string $detail = null) use (&$ev) {
+            if ($at !== null) {
+                $ev[] = ['at' => \Illuminate\Support\Carbon::parse($at), 'label' => __('online.hist_'.$key), 'who' => $who, 'detail' => $detail];
+            }
+        };
+
+        $add($order->ordered_at, 'ordered');
+        $add($order->created_at, 'synced');
+
+        foreach ($picks as $p) {
+            $add($p->created_at, 'pick_raised', null, $p->number);
+            if ($p->status === 'cancelled') {
+                $add($p->updated_at, 'pick_cancelled', null, $p->number);
+            } else {
+                $add($p->ready_at, 'prepared', $p->picker?->displayName(), $p->number);
+            }
+        }
+
+        $add($order->confirmed_at, 'confirmed', $order->confirmer?->displayName());
+        $add($order->reviewed_at, 'reviewed');
+        $add($order->shipped_at, 'shipped', $order->pickup?->creator?->displayName(),
+            trim(($order->pickup?->number ?? '').' · '.($order->pickup?->courier?->name ?? ''), ' ·'));
+        $add($order->collected_at, 'completed', null, number_format((float) $order->collected_total, 2));
+
+        foreach ($returns as $r) {
+            $add($r->created_at, 'returned_'.$r->kind, $r->creator?->displayName(),
+                number_format((float) $r->value, 2).($r->pickup ? ' · '.$r->pickup->number : ''));
+            $add($r->reshipped_at, 'reshipped', $r->reshipper?->displayName());
+        }
+
+        if ($order->status === 'cancelled') {
+            $add($order->updated_at, 'cancelled', null, $order->cancel_reason);
+        }
+
+        usort($ev, fn ($a, $b) => $a['at'] <=> $b['at']);
+
+        // سجل العمليات — زراير اتداست على الأوردر نفسه أو على أوامر تجهيزه
+        $actions = \App\Models\ActivityLog::query()
+            ->where('method', 'POST')
+            ->where(function ($q) use ($order, $picks) {
+                $q->where('url', 'like', 'erp/online/orders/'.$order->id.'/%');
+                foreach ($picks as $p) {
+                    $q->orWhere('url', 'like', 'erp/online/prep/'.$p->id.'/%');
+                }
+            })
+            ->orderBy('id')->get(['route', 'user_name', 'created_at', 'url']);
+
+        return view('online.order', [
+            'order' => $order,
+            'picks' => $picks,
+            'returns' => $returns,
+            'events' => $ev,
+            'actions' => $actions,
+        ]);
+    }
+
+    /**
+     * ═══ «اتسلّم خارج السيستم» (٧/١٠/٢٠٢٦ — أوردر #1055) ═══
+     *
+     * أوردر البضاعة بتاعته خرجت يدوي من بدري والمخزن اتظبط بالجرد — لو
+     * اتأكد واتجهز هيتخصم مرتين. فالأوردر بيتسجّل **مشحون في شيت بيك اب
+     * ومتحصّل** من غير أمر تجهيز ومن غير أي حركة مخزون.
+     *
+     * ⚠️ أدمن بس + سبب إجباري بيتكتب على الأوردر وبيظهر في الهيستوري.
+     * ⚠️ مفيش تكلفة على الأوردر (`cost_total` صفر) لأن مفيش باتش اتسحب.
+     */
+    public function manualShip(Request $request, OnlineOrder $order)
+    {
+        $data = $request->validate([
+            'pickup_id' => ['required', 'integer', 'exists:online_pickups,id'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'note' => ['required', 'string', 'max:250'],
+        ]);
+
+        if ((float) $data['amount'] > (float) $order->subtotal + 0.009) {
+            return back()->withErrors(['order' => __('online.collect_too_much', ['v' => number_format((float) $order->subtotal, 2)])]);
+        }
+
+        $claimed = OnlineOrder::whereKey($order->id)->whereIn('status', ['new', 'postponed'])
+            ->update(['status' => 'shipped']);
+
+        if ($claimed === 0) {
+            return back()->withErrors(['order' => __('online.wrong_status')]);
+        }
+
+        $done = (float) $data['amount'] >= (float) $order->subtotal - 0.009;
+        $note = __('online.manual_ship_note', ['note' => trim($data['note'])]);
+
+        $order->update([
+            'status' => $done ? 'completed' : 'shipped',
+            'pickup_id' => (int) $data['pickup_id'],
+            'shipped_at' => now(),
+            'reviewed_at' => now(),
+            'confirmed_by' => $request->user()->id,
+            'confirmed_at' => now(),
+            'postponed_to' => null,
+            'collected_total' => round((float) $data['amount'], 2),
+            'collected_at' => $done ? now() : null,
+            'notes' => trim(($order->notes ? $order->notes."\n" : '').$note),
+        ]);
+
+        // شوبيفاي زي الشحن والتحصيل العاديين — Fulfilled + Paid
+        $fresh = $order->fresh();
+        $warn = ShopifyOnline::fulfillOrder($fresh);
+
+        if ($done) {
+            $warn = ShopifyOnline::markPaid($fresh) ?? $warn;
+        }
+
+        ShopifyOnline::pushStatus($fresh);
+
+        return $this->okWithPushWarn(__('online.manual_shipped_ok', [
+            'number' => $order->number, 'pickup' => $fresh->pickup?->number,
+        ]), $warn);
     }
 
     /** «كلمت العميل — أجّل» */

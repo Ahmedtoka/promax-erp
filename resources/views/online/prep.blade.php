@@ -60,7 +60,7 @@
                 @endphp
                 <tr style="cursor:pointer" onclick='openPrep({{ $pick->id }}, {!! $payload !!})'>
                     {{-- رقم الأوردر بيفتح فاتورته — والصف نفسه بيفتح التجهيز (٢٢/٩) --}}
-                    <td class="num s">@if ($o !== null)<a href="{{ route('online.invoice', $o) }}" onclick="event.stopPropagation()"><b>#{{ $o->number }}</b></a>@else<b>{{ $pick->number }}</b>@endif</td>
+                    <td class="num s">@if ($o !== null)<a href="{{ route('online.view', $o) }}" onclick="event.stopPropagation()"><b>#{{ $o->number }}</b></a>@else<b>{{ $pick->number }}</b>@endif</td>
                     <td>{{ $o?->customer_name ?: '—' }}
                         {{-- نوت التأكيد (٢٥/٩) — لازم تبان من غير ما حد يفتح البوب اب --}}
                         @if ($pick->notes)

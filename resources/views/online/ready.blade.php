@@ -71,7 +71,7 @@
                                    name="ids[]" value="{{ $o->id }}"></td>
                     @endif
                     {{-- رقم الأوردر بيفتح فاتورته (٢٢/٩) --}}
-                    <td class="num s"><a href="{{ route('online.invoice', $o) }}"><b>#{{ $o->number }}</b></a></td>
+                    <td class="num s"><a href="{{ route('online.view', $o) }}"><b>#{{ $o->number }}</b></a></td>
                     <td>{{ $o->customer_name ?: '—' }}</td>
                     <td class="num s" dir="ltr">{{ $o->phone ?: '—' }}</td>
                     <td class="s">{{ $o->area ?: '—' }}</td>
