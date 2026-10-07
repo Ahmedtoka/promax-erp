@@ -29,6 +29,12 @@ class OnlinePickup extends Model
         return $this->hasMany(OnlineOrder::class, 'pickup_id');
     }
 
+    /** مرتجعات رجعت من الشيت ده — حتى لو الأوردر اتعاد شحنه وطلع منه (٧/١٠) */
+    public function returnLogs(): HasMany
+    {
+        return $this->hasMany(OnlineReturn::class, 'pickup_id');
+    }
+
     public function courier(): BelongsTo
     {
         return $this->belongsTo(OnlineCourier::class, 'courier_id');
@@ -68,7 +74,22 @@ class OnlinePickup extends Model
             fn ($o) => (float) $o->subtotal - (float) $o->returned_total,
         ), 2);
 
+        // ═══ معادلة الشيت (٧/١٠/٢٠٢٦ — طلب المالك) ═══
+        // «طلّعت بـ50 ألف، استلمت 40 ورجع 10 يبقى صفر»:
+        //   الطالع = المتحصّل + المرتجع + الباقي
+        // الطالع = أوردرات الشيت (من غير الملغي) + الأوردرات اللي رجعت منه
+        // واتعاد شحنها فطلعت من الشيت (سجل المرتجعات شايل رقم الشيت).
+        // المرتجع من السجل — جزئي وكامل، حتى بعد إعادة الشحن.
+        $logs = $this->relationLoaded('returnLogs') ? $this->returnLogs : $this->returnLogs()->get();
+        $onSheet = $orders->pluck('id')->flip();
+        $out = $orders->where('status', '!=', 'cancelled');
+        $gone = $logs->reject(fn ($r) => isset($onSheet[$r->online_order_id]));
+
         return [
+            'out_orders' => $out->count() + $gone->pluck('online_order_id')->unique()->count(),
+            'out_goods' => round((float) $out->sum('subtotal') + (float) $gone->sum('value'), 2),
+            'returned_orders' => $logs->pluck('online_order_id')->unique()->count(),
+            'returned_value' => round((float) $logs->sum('value'), 2),
             'orders' => $orders->count(),
             'live' => $live->count(),
             'pieces' => (int) $orders->sum('items_count'),

@@ -126,6 +126,16 @@ class OnlineReshipTest extends TestCase
 
         // الشيت القديم مابقاش فيه الأوردر — والمرتجعات بتقول «اتشحن تاني» من غير زرار
         $this->assertSame(0, OnlinePickup::find($oldPickup)->orders()->count());
+
+        // ومعادلة الشيت لسه شايفاه (٧/١٠): طلع 300 = اتحصل 0 + رجع 300 + باقي 0
+        $t = OnlinePickup::find($oldPickup)->totals();
+        $this->assertSame(1, $t['out_orders']);
+        $this->assertEquals(300.0, $t['out_goods']);
+        $this->assertSame(1, $t['returned_orders']);
+        $this->assertEquals(300.0, $t['returned_value']);
+        $this->assertEquals(0.0, $t['remaining']);
+        $this->actingAs($this->admin)->get(route('online.pickups'))->assertOk()
+            ->assertSee(__('online.ret_value'))->assertSee('300.00');
         $this->actingAs($this->admin)->get(route('online.returns'))->assertOk()
             ->assertSee(__('online.return_reshipped'))->assertDontSee(route('online.reship', $o), false);
 
@@ -151,6 +161,13 @@ class OnlineReshipTest extends TestCase
 
         $log = OnlineReturn::where('online_order_id', $o->id)->sole();
         $this->assertSame('partial', $log->kind);
+
+        // المعادلة: طلع 300 = اتحصل 0 + رجع 100 + باقي 200
+        $t = $o->fresh()->pickup->totals();
+        $this->assertEquals(300.0, $t['out_goods']);
+        $this->assertEquals(100.0, $t['returned_value']);
+        $this->assertEquals(200.0, $t['remaining']);
+        $this->assertEquals($t['out_goods'], $t['collected'] + $t['returned_value'] + $t['remaining']);
         $this->assertSame('shipped', $o->fresh()->status);
         $this->assertFalse($log->canReship());
 

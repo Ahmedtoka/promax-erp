@@ -28,6 +28,7 @@
         </form>
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.pickups_hint2') }}</div>
+    <div class="dash-hint" style="margin-bottom:10px"><b>{{ __('online.pickups_equation') }}</b></div>
 
     {{-- هيدر مثبت — نفس نمط مركز التقارير --}}
     <div class="tablewrap frz" style="max-height:68vh;overflow:auto">
@@ -37,13 +38,16 @@
                 <th data-nosum>{{ __('common.date') }}</th>
                 <th>{{ __('online.courier') }}</th>
                 <th>{{ __('online.by_user') }}</th>
-                <th class="num" data-nosum>{{ __('online.orders_count') }}</th>
+                {{-- معادلة الشيت (٧/١٠): الطالع = اتحصل + المرتجع + الباقي --}}
+                <th class="num" data-nosum>{{ __('online.out_orders') }}</th>
                 <th class="num" data-nosum>{{ __('online.pieces') }}</th>
-                <th class="num">{{ __('online.goods_amount') }}</th>
+                <th class="num">{{ __('online.out_goods') }}</th>
+                <th class="num">{{ __('online.collected') }}</th>
+                <th class="num" data-nosum>{{ __('online.ret_orders') }}</th>
+                <th class="num">{{ __('online.ret_value') }}</th>
+                <th class="num">{{ __('online.remaining') }}</th>
                 <th class="num">{{ __('online.shipping') }}</th>
                 <th class="num">{{ __('common.total') }}</th>
-                <th class="num">{{ __('online.collected') }}</th>
-                <th class="num">{{ __('online.remaining') }}</th>
                 <th>{{ __('common.status') }}</th>
                 <th></th>
             </tr>
@@ -56,13 +60,15 @@
                     <td class="s">{{ $p->date->format('Y-m-d') }}</td>
                     <td>{{ $p->courier?->name ?: '—' }}</td>
                     <td class="s">{{ $p->creator?->displayName() ?: '—' }}</td>
-                    <td class="num">{{ $t['orders'] }}</td>
+                    <td class="num">{{ $t['out_orders'] }}</td>
                     <td class="num">{{ $t['pieces'] }}</td>
-                    <td class="num">{{ $money($t['goods']) }}</td>
-                    <td class="num">{{ $money($t['ship']) }}</td>
-                    <td class="num"><b>{{ $money($t['amount']) }}</b></td>
+                    <td class="num"><b>{{ $money($t['out_goods']) }}</b></td>
                     <td class="num pos">{{ $money($t['collected']) }}</td>
+                    <td class="num">{{ $t['returned_orders'] ?: '—' }}</td>
+                    <td class="num {{ $t['returned_value'] > 0 ? 'mid' : '' }}">{{ $t['returned_value'] > 0 ? $money($t['returned_value']) : '—' }}</td>
                     <td class="num {{ $t['remaining'] > 0 ? 'neg' : '' }}">{{ $money($t['remaining']) }}</td>
+                    <td class="num">{{ $money($t['ship']) }}</td>
+                    <td class="num">{{ $money($t['amount']) }}</td>
                     <td>
                         @if ($t['remaining'] <= 0)
                             <span class="badge b-green">{{ __('online.settled') }}</span>
@@ -76,7 +82,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:28px">
+                <tr><td colspan="15" style="text-align:center;color:var(--muted);padding:28px">
                     {{ $search !== '' ? __('online.pu_search_none') : __('online.pickups_empty') }}
                 </td></tr>
             @endforelse
@@ -84,13 +90,15 @@
             @if ($pickups->total() > 0)
                 <tfoot><tr>
                     <td colspan="4"><b>{{ __('common.total') }}</b> <span class="s" style="color:var(--muted)">({{ __('ui.rows_n', ['n' => $pickups->total()]) }})</span></td>
-                    <td class="num"><b>{{ number_format($sum['orders']) }}</b></td>
+                    <td class="num"><b>{{ number_format($sum['out_orders']) }}</b></td>
                     <td class="num"><b>{{ number_format($sum['pieces']) }}</b></td>
-                    <td class="num"><b>{{ $money($sum['goods']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['out_goods']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['collected']) }}</b></td>
+                    <td class="num"><b>{{ number_format($sum['returned_orders']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['returned_value']) }}</b></td>
+                    <td class="num"><b>{{ $money($sum['remaining']) }}</b></td>
                     <td class="num"><b>{{ $money($sum['ship']) }}</b></td>
                     <td class="num"><b>{{ $money($sum['amount']) }}</b></td>
-                    <td class="num"><b>{{ $money($sum['collected']) }}</b></td>
-                    <td class="num"><b>{{ $money($sum['remaining']) }}</b></td>
                     <td colspan="2"></td>
                 </tr></tfoot>
             @endif

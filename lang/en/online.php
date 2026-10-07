@@ -293,4 +293,10 @@ return [
     'relink_confirm' => 'Refresh this order\'s products from the current product links? The current pick order is cancelled and a new one is raised with the right products.',
     'relinked_ok' => 'Order #:number updated from the current links and its pick order raised again ✓',
     'relink_too_late' => 'Order #:number is already prepared or not in preparation — refresh the link before «Prepared» only.',
+    // Pickup sheet equation (7/10)
+    'out_orders' => 'Orders out',
+    'out_goods' => 'Value out',
+    'ret_orders' => 'Orders returned',
+    'ret_value' => 'Returned value',
+    'pickups_equation' => 'Value out = collected + returned + remaining. When remaining is zero the sheet is settled. These are goods amounts; shipping belongs to the courier.',
 ];

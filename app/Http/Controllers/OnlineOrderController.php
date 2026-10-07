@@ -747,7 +747,7 @@ class OnlineOrderController extends Controller
 
     public function pickups(Request $request)
     {
-        $q = OnlinePickup::with(['courier', 'creator', 'orders']);
+        $q = OnlinePickup::with(['courier', 'creator', 'orders', 'returnLogs']);
 
         // بحث شامل (٤/٩): رقم أوردر / اسم عميل / موبايل → كل
         // البيك ابات اللي فيها أوردر مطابق
@@ -770,7 +770,8 @@ class OnlineOrderController extends Controller
         // القايمة صفحات — فالمجموع بيتحسب على كل النتيجة مش الصفحة.
         $all = (clone $q)->orderBy('date')->orderBy('id')->get();
         $rows = $all->map(fn ($p) => ['p' => $p, 't' => $p->totals()]);
-        $keys = ['orders', 'pieces', 'goods', 'ship', 'amount', 'collected', 'remaining'];
+        $keys = ['orders', 'pieces', 'goods', 'ship', 'amount', 'collected', 'remaining',
+            'out_orders', 'out_goods', 'returned_orders', 'returned_value'];
         $sum = [];
         foreach ($keys as $k) {
             $sum[$k] = $rows->sum(fn ($r) => $r['t'][$k]);
@@ -781,17 +782,20 @@ class OnlineOrderController extends Controller
 
             return \App\Support\Csv::download(
                 'online-pickups.csv',
-                [__('online.pickup_no'), __('common.date'), __('online.courier'), __('online.by_user'), __('online.orders_count'),
-                    __('online.pieces'), __('online.goods_amount'), __('online.shipping'), __('common.total'),
-                    __('online.collected'), __('online.remaining'), __('common.status')],
+                // معادلة الشيت (٧/١٠): اللي طلع = اتحصل + المرتجع + الباقي
+                [__('online.pickup_no'), __('common.date'), __('online.courier'), __('online.by_user'), __('online.out_orders'),
+                    __('online.pieces'), __('online.out_goods'), __('online.collected'), __('online.ret_orders'),
+                    __('online.ret_value'), __('online.remaining'), __('online.shipping'), __('common.total'), __('common.status')],
                 $rows->map(fn ($r) => [
                     $r['p']->number, $r['p']->date->format('Y-m-d'), $r['p']->courier?->name ?? '', $r['p']->creator?->displayName() ?? '',
-                    $r['t']['orders'], $r['t']['pieces'], $m($r['t']['goods']), $m($r['t']['ship']), $m($r['t']['amount']),
-                    $m($r['t']['collected']), $m($r['t']['remaining']),
+                    $r['t']['out_orders'], $r['t']['pieces'], $m($r['t']['out_goods']), $m($r['t']['collected']),
+                    $r['t']['returned_orders'], $m($r['t']['returned_value']), $m($r['t']['remaining']),
+                    $m($r['t']['ship']), $m($r['t']['amount']),
                     $r['t']['remaining'] <= 0 ? __('online.settled') : __('online.open'),
                 ]),
-                [__('common.total'), $rows->count(), '', '', $sum['orders'], $sum['pieces'], $m($sum['goods']), $m($sum['ship']),
-                    $m($sum['amount']), $m($sum['collected']), $m($sum['remaining']), ''],
+                [__('common.total'), $rows->count(), '', '', $sum['out_orders'], $sum['pieces'], $m($sum['out_goods']),
+                    $m($sum['collected']), $sum['returned_orders'], $m($sum['returned_value']), $m($sum['remaining']),
+                    $m($sum['ship']), $m($sum['amount']), ''],
                 \App\Support\Csv::meta(__('online.pickups_title'), $range->fromValue() ?: null, $range->toValue() ?: null),
             );
         }
