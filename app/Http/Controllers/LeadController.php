@@ -313,12 +313,27 @@ class LeadController extends Controller
             // ⚠️ `isManager()` بتشمل مدير الفرع، وكل أكشنات الليدز `role:admin,manager` —
             // الفيو كان بيوريه التحويل والمسح والتوزيع وبيترفض (زحف ٨/٩)
             'canConvert' => \App\Support\Access::action($user, 'act.leads.manage'),
+            // زرار «إضافة» و«تعديل» بنفس حارس store/update — زرار بيودّي 403 ممنوع
+            'canWrite' => $this->canWrite($user),
+            'canEditLead' => fn (Lead $l) => $this->canTouch($user, $l),
         ]);
     }
 
     public function store(Request $request)
     {
+        $user = $request->user();
+
+        // ⚠️ مدير الفرع زي الزرار (`act.leads.manage`) — مش أي حد شايف الشاشة
+        abort_unless($this->canWrite($user), 403, __('lead.edit_not_yours'));
+
         $data = $this->rules($request);
+
+        // ⚠️ `exists:users,id` بس كانت بتسكّن الليد لأي يوزر في الشركة
+        // (١٧/١٠/٢٠٢٦) — المدير على فريقه، ومدير الفرع على فرعه
+        if (! $user->isFieldUser()) {
+            $this->assertAssignee($user, $data['assigned_to'] ?? null);
+            $this->assertZone($user, $data['zone_id'] ?? null);
+        }
 
         Lead::create($data + [
             'number' => Lead::nextNumber(),
@@ -340,6 +355,12 @@ class LeadController extends Controller
             abort(403);
         }
 
+        // ⚠️ **والمدير على ليدات فريقه بس** (١٧/١٠/٢٠٢٦). القايمة كانت
+        // الحارس الوحيد — أي مدير يبعت PUT على ليد مدير تاني ويسكّنه لنفسه.
+        if (! $user->isFieldUser()) {
+            abort_unless($this->canTouch($user, $lead), 403, __('lead.edit_not_yours'));
+        }
+
         // ⚠️ الليد المتحوّل مايتعدلش — بياناته اتنقلت لعميل فعلي
         // وأي تعديل هنا بيخلّي الاتنين مختلفين من غير ما حد يعرف.
         if ($lead->isConverted()) {
@@ -351,6 +372,17 @@ class LeadController extends Controller
         // ⚠️ المندوب مايغيّرش المسؤول عن الليد — ده قرار المدير
         if ($user->isFieldUser()) {
             unset($data['assigned_to']);
+        } else {
+            // الفورم بيبعت المسؤول الحالي دايماً — بنفحص التغيير بس
+            if (array_key_exists('assigned_to', $data)
+                && (int) $data['assigned_to'] !== (int) $lead->assigned_to) {
+                $this->assertAssignee($user, $data['assigned_to']);
+            }
+
+            if (array_key_exists('zone_id', $data)
+                && (int) $data['zone_id'] !== (int) $lead->zone_id) {
+                $this->assertZone($user, $data['zone_id']);
+            }
         }
 
         $data['status'] = $data['status'] ?? $lead->status;
@@ -1012,6 +1044,82 @@ class LeadController extends Controller
         ]);
 
         return back()->with('ok', __('lead.dup_merged', ['code' => $client?->code ?? '']));
+    }
+
+    /**
+     * ═══ سكوب الكتابة على الليدات (١٧/١٠/٢٠٢٦) ═══
+     *
+     * الأدمن الكل · الميداني بالفحص القديم في `update` · المدير والمدير
+     * الفرع بزرار `act.leads.manage` — نفس المفتاح اللي بيوري التحويل
+     * والتسكين، فمدير الفرع من غير المنحة مابيكتبش (وزراره مستخبي).
+     */
+    private function canWrite(User $user): bool
+    {
+        return $user->isAdmin() || $user->isFieldUser()
+            || \App\Support\Access::action($user, 'act.leads.manage');
+    }
+
+    /**
+     * الفاعل يقدر يعدّل الليد ده؟ — نفس محفظة `destroy` + ليد البول.
+     *
+     * المدير: متوزع له، أو لواحد من مناديبه، أو هو نفسه المسؤول — أو
+     * ليد في البول (مالوش مدير ولا مندوب)، زي ما `bulkSet`/`bulkAssign`
+     * بياخدوا من البول. مدير الفرع: زون الليد في فرعه أو مركزي.
+     */
+    private function canTouch(User $user, Lead $lead): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if ($user->isFieldUser()) {
+            return (int) $lead->assigned_to === (int) $user->id;
+        }
+
+        if (! $this->canWrite($user)) {
+            return false;
+        }
+
+        if (! $user->seesAllBranches()) {
+            $branchId = $lead->zone?->branch_id;
+
+            if ($branchId !== null && (int) $branchId !== (int) $user->branch_id) {
+                return false;
+            }
+        }
+
+        if ($user->role === 'manager') {
+            $pool = $lead->manager_id === null && $lead->assigned_to === null;
+
+            return $pool
+                || (int) $lead->manager_id === (int) $user->id
+                || (int) $lead->assigned_to === (int) $user->id
+                || ($lead->assigned_to !== null && (int) $lead->assignee?->manager_id === (int) $user->id);
+        }
+
+        return true;
+    }
+
+    /** المسؤول الجديد من الريكوست: ميداني أكتيف من فريق/فرع الفاعل */
+    private function assertAssignee(User $actor, $assignedTo): void
+    {
+        if ($assignedTo === null || $assignedTo === '' || $actor->isAdmin()) {
+            return;
+        }
+
+        Scope::assertRep($actor, User::find((int) $assignedTo));
+    }
+
+    /** الزون من الريكوست: مدير الفرع على زونات فرعه أو المركزية بس */
+    private function assertZone(User $actor, $zoneId): void
+    {
+        if ($zoneId === null || $zoneId === '' || $actor->seesAllBranches()) {
+            return;
+        }
+
+        $branchId = Zone::find((int) $zoneId)?->branch_id;
+
+        abort_unless($branchId === null || (int) $branchId === (int) $actor->branch_id, 403, __('lead.edit_not_yours'));
     }
 
     private function rules(Request $request): array

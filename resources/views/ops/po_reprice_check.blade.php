@@ -78,7 +78,7 @@
                                     @else <b>—</b> @endif
                                 </td>
                                 <td>
-                                    <span class="badge {{ $po->statusColor() }}">{{ $po->statusLabel() }}</span>
+                                    <span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span>
                                 </td>
                                 @if ($r['error'] !== null)
                                     <td colspan="3" style="color:var(--red,#DC2626);font-size:11.5px">

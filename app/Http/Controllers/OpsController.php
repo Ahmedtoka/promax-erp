@@ -2763,6 +2763,14 @@ class OpsController extends Controller
             'orders.*.skip' => ['nullable', 'boolean'],
         ]);
 
+        // ⚠️ **المندوب والمخزن من الريكوست** (١٧/١٠/٢٠٢٦) — `exists` بس
+        // كانت بتخلّي مدير يرفع شيت على سواق مدير تاني أو مخزن فرع تاني.
+        // الفحص هنا قبل اللوب عشان الدفعة كلها تترفض مرة واحدة، واتساق
+        // كل فرع مع المندوب بيتفحص جوه ترانزاكشنه.
+        $rep = User::find($data['assigned_to']);
+        Scope::assertRep($request->user(), $rep);
+        $this->assertPoWarehouse($request->user(), (int) $data['warehouse_id']);
+
         $created = 0;
         $errors = [];
 
@@ -2789,10 +2797,13 @@ class OpsController extends Controller
                 ->filter(fn ($q, $pid) => $pid > 0 && $q > 0)->all();
 
             try {
-                DB::transaction(function () use ($order, $qty, $data, $request) {
+                DB::transaction(function () use ($order, $qty, $data, $request, $rep) {
                     $client = Client::findOrFail($order['client_id']);
 
                     abort_unless($client->visibleBy($request->user()), 403);
+
+                    // نفس حارس storePurchaseOrder: الفرع والمندوب تحت نفس المدير
+                    Scope::assertRep($request->user(), $rep, $client);
 
                     $po = PurchaseOrder::create([
                         'number' => PurchaseOrder::nextNumber(),
@@ -2879,6 +2890,10 @@ class OpsController extends Controller
                 // ⚠️ سكوب التشانل مانجر — حارس الراوت زي الرفع الجماعي
                 abort_unless($client->visibleBy($request->user()), 403);
 
+                // ⚠️ المندوب والمخزن من الريكوست — نفس حارس storePurchaseOrder
+                Scope::assertRep($request->user(), User::find($data['assigned_to']), $client);
+                $this->assertPoWarehouse($request->user(), (int) $data['warehouse_id']);
+
                 $po = PurchaseOrder::create([
                     'number' => PurchaseOrder::nextNumber(),
                     'client_id' => $client->id,
@@ -2913,6 +2928,17 @@ class OpsController extends Controller
      * ⚠️ المرفوض والملغي مش بيمنعوا — رفض الحسابات لازم يسمح
      * بإعادة رفع الشيت بعد التصحيح.
      */
+    /**
+     * مخزن التجهيز اللي جاي من الريكوست: شغّال وفي فرع الفاعل.
+     * `exists:warehouses,id` بتقول «موجود» بس — زي `exists:users,id`.
+     */
+    private function assertPoWarehouse(User $actor, int $warehouseId): void
+    {
+        $wh = Warehouse::find($warehouseId);
+
+        abort_unless($wh && $wh->active && $actor->canSeeBranch($wh->branch_id), 403, __('ops.po_wh_denied'));
+    }
+
     private function duplicatePoError(int $clientId, ?string $source): ?string
     {
         $source = trim((string) $source);
