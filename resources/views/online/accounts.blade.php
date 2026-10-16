@@ -85,6 +85,8 @@
     {{-- «من — إلى» (٩/٩/٢٠٢٦) على تاريخ البيك اب — للجدول ده بس، السامريهات فوق أرصدة حية --}}
     <form method="GET" class="searchbar" style="margin-bottom:12px" data-noprint>
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        {{-- الملف الكامل: السامريهات + الحالات + البيك ابات المفتوحة بالفلتر (١٧/١٠) --}}
+        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
     <div class="tablewrap">
         <table>
