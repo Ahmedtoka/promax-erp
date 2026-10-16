@@ -206,4 +206,7 @@ return [
 
     'rep_expenses_row' => 'Expenses approved out of the rep cash in this window',
     'rep_expenses_hint' => 'Display only — the settlement is unchanged; the difference sits in the rep cash account in the GL.',
+    // تصدير الشجرة (١٧/١٠)
+    'exp_group' => 'Group',
+    'exp_accounts' => 'Chart of Accounts',
 ];
