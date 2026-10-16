@@ -75,7 +75,7 @@ class DataHealth extends Command
         $add('invoices: zero total', $n('SELECT id FROM invoices WHERE grand_total<=0'));
 
         $add('custody: negative remaining lines', $n('SELECT id FROM custody_items WHERE assigned - sold - returned - IFNULL(transferred_out,0) - IFNULL(gift_given,0) < -0.001'));
-        $dbl = DB::select("SELECT u.code, GROUP_CONCAT(c.id ORDER BY c.date) ids FROM custodies c JOIN users u ON u.id=c.user_id WHERE c.$open GROUP BY u.id, u.code HAVING COUNT(*)>1");
+        $dbl = DB::select("SELECT u.code, GROUP_CONCAT(c.id ORDER BY c.date) ids FROM custodies c JOIN users u ON u.id=c.user_id WHERE (c.status IS NULL OR c.status<>'closed') GROUP BY u.id, u.code HAVING COUNT(*)>1");
         $add('custody: users with >1 open custody', count($dbl), collect($dbl)->map(fn ($r) => "{$r->code}: #{$r->ids}")->implode(', '));
 
         $add('picks: ready without started_at', $n("SELECT id FROM pick_orders WHERE status='ready' AND started_at IS NULL"));
