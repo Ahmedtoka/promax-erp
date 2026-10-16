@@ -174,6 +174,11 @@ class ManualDocController extends Controller
         }
         Scope::assertClient($request->user(), $client);
 
+        // المندوب والعميل تحت نفس المدير والفرع (الخط ٢، ١٧/١٠)
+        if ($rep !== null) {
+            Scope::assertSameTeam($rep, $client);
+        }
+
         // ⚠️ نص النهار مش منتصف الليل — فروق التوقيت ماتنقلش
         // المستند ليوم تاني في أي عرض
         $date = Carbon::parse($data['doc_date'])->setTime(12, 0);

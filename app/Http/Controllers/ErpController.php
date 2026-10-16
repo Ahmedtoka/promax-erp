@@ -1972,6 +1972,17 @@ class ErpController extends Controller
      * نفس الوقت بيتحسب مرتين في `liveContract()` — الفرع بياخده من
      * نفسه ومن سلسلته.
      */
+    /**
+     * سكوب العقد (الخط ٢، ١٧/١٠): عقد عميل مفرد بيعدّي على
+     * `Scope::assertClient`. عقد السلسلة زي سياسة `groups.contract`.
+     */
+    private function assertContractScope(Request $request, Contract $contract): void
+    {
+        if ($contract->client_id !== null) {
+            \App\Support\Scope::assertClient($request->user(), $contract->client);
+        }
+    }
+
     public function linkContract(Request $request, Contract $contract)
     {
         $data = $request->validate([
@@ -1981,6 +1992,12 @@ class ErpController extends Controller
 
         if (! empty($data['group_id']) && ! empty($data['client_id'])) {
             return back()->withErrors(['group_id' => __('client.link_pick_one')]);
+        }
+
+        $this->assertContractScope($request, $contract);
+
+        if (! empty($data['client_id'])) {
+            \App\Support\Scope::assertClient($request->user(), Client::find($data['client_id']));
         }
 
         $contract->update([
@@ -2007,6 +2024,8 @@ class ErpController extends Controller
             'ends_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
         ]);
+        \App\Support\Scope::assertClient($request->user(), Client::find($data['client_id']));
+
         $data['discount'] = $data['discount'] / 100;
 
         // العقد لازم يبقى active عشان effectiveDiscount() تشوفه
@@ -2054,6 +2073,8 @@ class ErpController extends Controller
             return back()->withErrors(['kind' => __('client.clause_kind_invalid')]);
         }
 
+        $this->assertContractScope($request, $contract);
+
         DB::transaction(function () use ($data, $contract, $request) {
             $clause = ($data['clause_id'] ?? null)
                 ? $contract->contractClauses()->findOrFail($data['clause_id'])
@@ -2093,6 +2114,8 @@ class ErpController extends Controller
 
     public function destroyClause(Request $request, Contract $contract)
     {
+        $this->assertContractScope($request, $contract);
+
         $id = $request->integer('clause_id');
 
         DB::transaction(function () use ($id, $contract) {
@@ -2148,8 +2171,10 @@ class ErpController extends Controller
         ]);
     }
 
-    public function destroyContract(Contract $contract)
+    public function destroyContract(Request $request, Contract $contract)
     {
+        $this->assertContractScope($request, $contract);
+
         // مابنلمسش clients.discount — العميل ممكن يكون له خصم خاص مستقل
         // عن العقد، ومسح العقد مايصحّش يصفّره.
         $contract->delete();
