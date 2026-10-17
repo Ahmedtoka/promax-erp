@@ -51,6 +51,8 @@
                 <input type="text" name="search" value="{{ request('search') }}" placeholder="🔎 {{ __('common.search') }}"></label>
             @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
             <button class="btn gold" type="submit">{{ __('common.search') }}</button>
+            {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (١٧/١٠) --}}
+            <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
         </form>
     </div>
     <div class="dash-hint" style="margin-bottom:10px">{{ __('online.returns_hint') }}</div>

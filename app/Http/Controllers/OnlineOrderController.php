@@ -410,6 +410,32 @@ class OnlineOrderController extends Controller
         $range = DateRange::fromRequest($request);
         $q->tap(fn ($x) => $range->apply($x, 'created_at'));
 
+        // ═══ التصدير السيرفري (١٧/١٠) من نفس الكويري المفلترة قبل الصفحات ═══
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('created_at')->orderBy('id')->get();
+            $m = fn ($v) => \App\Support\Csv::money($v);
+
+            return \App\Support\Csv::download(
+                'online-returns.csv',
+                [__('common.date'), __('online.shopify_no'), __('common.name'), __('online.area'), __('online.pickup_no'),
+                    __('online.return_kind'), __('online.return_lines'), __('online.pieces'), __('online.return_value'), __('common.status')],
+                $all->map(fn ($r) => [
+                    $r->created_at?->format('Y-m-d H:i') ?? '',
+                    $r->order ? '#'.$r->order->number : '',
+                    (string) $r->order?->customer_name, (string) $r->order?->area,
+                    $r->pickup?->number ?? '',
+                    __('online.return_kind_'.$r->kind),
+                    collect($r->lines ?? [])->map(fn ($l) => (int) ($l['qty'] ?? 0).' × '.($l['title'] ?? '—'))->implode(' | '),
+                    (int) $r->pieces, $m($r->value),
+                    $r->reshipped_at
+                        ? trim(__('online.return_reshipped').' '.$r->reshipped_at->format('Y-m-d').' '.($r->reshipPick?->number ?? ''))
+                        : __('online.return_in_stock'),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', '', '', (int) $all->sum('pieces'), $m($all->sum('value')), ''],
+                \App\Support\Csv::meta(__('online.returns_title'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
         $totals = (clone $q)->reorder()->toBase()->selectRaw('COUNT(*) n, COALESCE(SUM(value),0) v, COALESCE(SUM(pieces),0) p,
             SUM(CASE WHEN reshipped_at IS NULL THEN 1 ELSE 0 END) stock_n,
             SUM(CASE WHEN reshipped_at IS NOT NULL THEN 1 ELSE 0 END) reshipped_n')->first();
@@ -1516,6 +1542,41 @@ class OnlineOrderController extends Controller
             ->tap(fn ($q) => $range->apply($q, 'date'))
             ->orderByDesc('date')->get()
             ->filter(fn ($p) => ! $p->isSettled())->values();
+
+        // ═══ التصدير السيرفري (١٧/١٠): الجدول المفلتر (البيك ابات المفتوحة) هو
+        // جسم الملف، والسامريهات والحالات سطور تعريف فوقه — أرصدة حية مش فترة ═══
+        if ($request->boolean('export')) {
+            $m = fn ($v) => \App\Support\Csv::money($v);
+            $t = $openPickups->map(fn ($p) => $p->totals());
+
+            $meta = \App\Support\Csv::meta(__('online.accounts_title'), $range->fromValue() ?: null, $range->toValue() ?: null);
+            $meta[] = [];
+            foreach ([
+                'k_outstanding' => $sum->outstanding, 'k_collected' => $sum->collected, 'k_returned' => $sum->returned_amount,
+                'k_shipping' => $sum->shipping_sum, 'k_cost' => $sum->cost_sum,
+                'k_margin' => (float) $sum->completed_amount - (float) $sum->completed_cost,
+            ] as $key => $v) {
+                $meta[] = [__('online.'.$key), $m($v)];
+            }
+            $meta[] = [];
+            $meta[] = [__('online.by_status'), __('online.orders_count'), __('online.amount')];
+            foreach (array_keys(OnlineOrder::STATUSES) as $s) {
+                $meta[] = [__('online.status_'.$s), (int) ($counts[$s]->n ?? 0), $m($counts[$s]->v ?? 0)];
+            }
+            $meta[] = [];
+            $meta[] = [__('online.open_pickups')];
+
+            return \App\Support\Csv::download(
+                'online-accounts.csv',
+                [__('online.pickup_no'), __('common.date'), __('online.amount'), __('online.collected'), __('online.remaining')],
+                $openPickups->values()->map(fn ($p, $i) => [
+                    $p->number, $p->date?->format('Y-m-d') ?? '',
+                    $m($t[$i]['amount']), $m($t[$i]['collected']), $m($t[$i]['remaining']),
+                ]),
+                [__('common.total'), $openPickups->count(), $m($t->sum('amount')), $m($t->sum('collected')), $m($t->sum('remaining'))],
+                $meta,
+            );
+        }
 
         return view('online.accounts', [
             'sum' => $sum,
