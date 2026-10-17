@@ -44,9 +44,8 @@ class SettingsController extends Controller
         'tx.refund' => ['debit_key', 'credit_key'],
         'cash.rep_advance' => ['debit_key', 'credit_key'],
         'cash.rep_return' => ['debit_key', 'credit_key'],
-        // الطرف التاني في القاعدتين دول متكتب في الكود على حساب المندوب
-        // (`Rules::settlement()` / `Rules::expense()`) — المفتاح على الطرف
-        // ده بس هو اللي ليه معنى
+        // القاعدتين دول بيتحلّوا لمندوب التصفية/السند — `rep_cash` مسموح
+        // على الدائن بس (المدين في التصفية خزنة، وفي المصروف حساب السند)
         'settle.received' => ['credit_key'],
         'expense.rep_cash' => ['credit_key'],
     ];

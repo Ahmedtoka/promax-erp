@@ -75,8 +75,15 @@
                         <b>{{ $e->number }}</b>
                         <div><span class="badge {{ $originBadge[$e->origin] ?? 'b-gray' }}">{{ __('gl.origin_'.$e->origin) }}</span></div>
                         @if ($e->needs_review)
-                            @php $inClosed = in_array($e->period_key, $closedPeriods ?? [], true); @endphp
-                            <div><span class="badge {{ $inClosed ? 'b-red' : 'b-orange' }}">{{ $inClosed ? __('gl.needs_review_closed') : __('gl.needs_review') }}</span></div>
+                            @php
+                                // السبب المتسجّل لحظة الترحيل · القيود القديمة (قبل العمود) بترجع للاستنتاج من حالة الفترة
+                                $reasons = $e->review_reason
+                                    ? explode(',', $e->review_reason)
+                                    : [in_array($e->period_key, $closedPeriods ?? [], true) ? 'closed_period' : 'rule'];
+                            @endphp
+                            @foreach ($reasons as $why)
+                                <div><span class="badge {{ $why === 'closed_period' ? 'b-red' : 'b-orange' }}">{{ $why === 'closed_period' ? __('gl.needs_review_closed') : __('gl.needs_review') }}</span></div>
+                            @endforeach
                         @endif
                     </td>
                     <td class="num" style="font-size:11px">{{ $e->date?->format('Y-m-d') }}</td>

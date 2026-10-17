@@ -58,6 +58,11 @@ class Ledger
         }
 
         return DB::transaction(function () use ($source, $date, $spec, $by) {
+            // السبب بيتسجّل دلوقتي — البادج مايستنتجوش من حالة الفترة بعدين
+            $reasons = array_keys(array_filter([
+                'rule' => $spec['needs_review'],
+                'closed_period' => GlPeriod::isClosed($date),
+            ]));
             $entry = GlEntry::create([
                 'number' => GlEntry::nextNumber(),
                 'date' => $date->toDateString(),
@@ -72,13 +77,27 @@ class Ledger
                 // قيد والفحص الثابت يقع. بدل المنع بيتعلّم `needs_review`
                 // عشان المحاسب يشوفه في اليومية ويقرر (قيد تسوية في شهر
                 // مفتوح غالباً).
-                'needs_review' => $spec['needs_review'] || GlPeriod::isClosed($date),
+                'needs_review' => $reasons !== [],
+            ] + (self::hasReviewReason() ? [
+                'review_reason' => $reasons !== [] ? implode(',', $reasons) : null,
+            ] : []) + [
                 'created_by' => $by?->id,
             ]);
             $this->writeLines($entry, $spec['lines']);
 
             return $entry->load('lines');
         });
+    }
+
+    private static ?bool $hasReviewReason = null;
+
+    /**
+     * ⚠️ الكود ممكن يترفع قبل `migrate` (السيرفر بيترفع بالإيد) — من غير
+     * الحارس ده أول ترحيل كان هيقع على عمود مش موجود.
+     */
+    private static function hasReviewReason(): bool
+    {
+        return self::$hasReviewReason ??= \Illuminate\Support\Facades\Schema::hasColumn('gl_entries', 'review_reason');
     }
 
     public function unpost(Model $source): void

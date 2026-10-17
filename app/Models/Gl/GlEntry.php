@@ -19,7 +19,7 @@ class GlEntry extends Model
 
     protected $fillable = [
         'number', 'date', 'period_key', 'memo', 'origin', 'source_type', 'source_id',
-        'rule_key', 'needs_review', 'reverses_entry_id', 'created_by', 'edited_at', 'edited_by',
+        'rule_key', 'needs_review', 'review_reason', 'reverses_entry_id', 'created_by', 'edited_at', 'edited_by',
     ];
 
     protected function casts(): array
