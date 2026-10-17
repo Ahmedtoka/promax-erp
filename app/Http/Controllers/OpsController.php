@@ -1418,18 +1418,47 @@ class OpsController extends Controller
             ])
             ->values();
 
+        // (١٧/١٠) فلتر «من — إلى» على `checked_in_at` = يوم فتح الزيارة.
+        // مفتوح لو فاضي (كل المفتوح أياً كان يومه — السلوك القديم). الحضور
+        // تحت يوم النهارده بطبيعته فمش داخل في الفلتر.
+        $range = \App\Support\DateRange::fromRequest($request);
+
+        $visits = \App\Models\Visit::whereNull('checked_out_at')
+            ->whereIn('user_id', $teamIds)
+            ->tap(fn ($q) => $range->apply($q, 'checked_in_at'))
+            ->with(['user', 'client.zone'])
+            ->orderBy('checked_in_at')
+            ->get();
+        $whVisits = \App\Models\WarehouseVisit::whereNull('checked_out_at')
+            ->whereIn('user_id', $teamIds)
+            ->tap(fn ($q) => $range->apply($q, 'checked_in_at'))
+            ->with(['user', 'warehouse'])
+            ->orderBy('checked_in_at')
+            ->get();
+
+        if ($request->boolean('export')) {
+            $mins = fn ($t) => $t ? (int) round(abs($t->diffInMinutes(now()))) : '';
+            $out = [];
+            foreach ($visits as $v) {
+                $out[] = [__('ops.ov_kind_client'), $v->user?->displayName() ?? '', $v->client?->displayName() ?? '',
+                    $v->client?->zone?->displayName() ?? '', $v->checked_in_at?->format('Y-m-d H:i') ?? '', $mins($v->checked_in_at)];
+            }
+            foreach ($whVisits as $w) {
+                $out[] = [__('ops.ov_kind_wh'), $w->user?->displayName() ?? '', $w->warehouse?->displayName() ?? '',
+                    '', $w->checked_in_at?->format('Y-m-d H:i') ?? '', $mins($w->checked_in_at)];
+            }
+
+            return \App\Support\Csv::download('open-visits-'.now()->format('Y-m-d-Hi').'.csv', [
+                __('ops.ov_kind'), __('ops.rep'), __('ops.ov_place'), __('client.zone'),
+                __('ops.ov_since'), __('ops.ov_minutes'),
+            ], $out, null, \App\Support\Csv::meta(__('nav.open_visits'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         return view('ops.open_visits', [
-            'visits' => \App\Models\Visit::whereNull('checked_out_at')
-                ->whereIn('user_id', $teamIds)
-                ->with(['user', 'client'])
-                ->orderBy('checked_in_at')
-                ->get(),
-            'whVisits' => \App\Models\WarehouseVisit::whereNull('checked_out_at')
-                ->whereIn('user_id', $teamIds)
-                ->with(['user', 'warehouse'])
-                ->orderBy('checked_in_at')
-                ->get(),
+            'visits' => $visits,
+            'whVisits' => $whVisits,
             'attRows' => $attRows,
+            'range' => $range,
         ]);
     }
 
@@ -3147,7 +3176,8 @@ class OpsController extends Controller
                 ->withErrors(['decision' => __('ops.po_already_decided')]);
         }
 
-        $data = $this->poHandout()->getData();
+        // داتا الفورم بس — من غير جدول «اللي اتبعت» (الفيو بيخبّيه في وضع التعديل)
+        $data = $this->poHandoutView(null, null)->getData();
         $data['editing'] = $purchaseOrder->load(['items', 'client']);
 
         return view('ops.po_handout', $data);
@@ -3496,7 +3526,40 @@ class OpsController extends Controller
         return $out;
     }
 
-    public function poHandout()
+    public function poHandout(Request $request)
+    {
+        // ═══ (١٧/١٠) جدول «الأوامر اللي اتبعتت للحسابات» تحت الفورم ═══
+        // أوامر فلو الكي أكاونت (`approval_status` مش null) — فلتر «من —
+        // إلى» على `created_at` = يوم ما الأمر اتبعت من الشاشة دي، بافتراضي
+        // الشهر الحالي، وسكوب مدير القناة على عملائه. التصدير من نفس الكويري.
+        $range = \App\Support\DateRange::fromRequest($request, 'month');
+        $sentQ = PurchaseOrder::with(['client', 'courier', 'warehouse', 'creator'])
+            ->whereNotNull('approval_status')
+            ->whereHas('client', fn ($c) => Client::visibleTo($c))
+            ->tap(fn ($q) => $range->apply($q, 'created_at'))
+            ->latest('id');
+
+        if ($request->boolean('export')) {
+            $all = (clone $sentQ)->get();
+            $out = $all->map(fn ($po) => [
+                $po->created_at?->format('Y-m-d H:i'), $po->number, $po->client?->fullName() ?? '',
+                $po->courier?->displayName() ?? '', $po->warehouse?->displayName() ?? '',
+                $po->due_at?->format('Y-m-d H:i') ?? '', $po->approvalLabel(), $po->statusLabel(),
+                \App\Support\Csv::money($po->grand_total), $po->creator?->displayName() ?? '',
+            ])->all();
+
+            return \App\Support\Csv::download('po-handout-'.now()->format('Y-m-d').'.csv', [
+                __('ops.ph_sent_on'), __('ops.po_number'), __('client.client'), __('ops.rep'),
+                __('stock.warehouse'), __('ops.due_at'), __('ops.ph_approval'), __('ops.ph_status'),
+                __('ops.ph_value'), __('ops.ph_by'),
+            ], $out, [__('common.total'), count($out), '', '', '', '', '', '', \App\Support\Csv::money($all->sum('grand_total')), ''],
+                \App\Support\Csv::meta(__('ops.ph_sent_title'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
+        return $this->poHandoutView($sentQ->paginate(25)->withQueryString(), $range);
+    }
+
+    private function poHandoutView($sent, $range)
     {
         // السلاسل ومين منها في أنهي قناة — نفس كاسكيد شاشة رفع الشيتات:
         // القناة ← السلسلة ← الفرع (طلب المالك 2026-08-06)
@@ -3516,6 +3579,8 @@ class OpsController extends Controller
         }
 
         return view('ops.po_handout', [
+            'sent' => $sent,
+            'range' => $range,
             'shelfAvail' => $this->shelfAvailability(),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(),

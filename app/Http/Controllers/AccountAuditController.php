@@ -224,6 +224,11 @@ class AccountAuditController extends Controller
             });
         }
 
+        // تصدير سيرفري (١٧/١٠) — نفس الصفوف بعد الحالة والفترة والبحث
+        if ($request->boolean('export')) {
+            return $this->export($mode, $filtered->values(), $range);
+        }
+
         return view('erp.account_audit', [
             'mode' => $mode,
             'rows' => $filtered->values(),
@@ -232,6 +237,33 @@ class AccountAuditController extends Controller
             'q' => $s ?? '',
             'range' => $range,
         ]);
+    }
+
+    private function export(string $mode, $rows, DateRange $range)
+    {
+        $yn = fn (?bool $v) => $v === null ? '' : ($v ? __('audit.yes') : __('audit.no'));
+
+        $out = $rows->map(fn ($r) => [
+            $r['title'], $r['sub'],
+            __('audit.f_'.($r['audit']?->state() ?? 'pending')),
+            $yn($r['audit']?->has_account),
+            $r['audit']?->their_balance !== null ? \App\Support\Csv::money($r['audit']->their_balance) : '',
+            $yn($r['audit']?->has_statement),
+            $yn($r['audit']?->has_receipt),
+            $yn($r['audit']?->tax_invoice),
+            \App\Support\Csv::money($r['ours']),
+            $r['audit']?->reviewed_at?->format('Y-m-d') ?? '',
+            $r['audit']?->confirmed_at ? $r['audit']->confirmed_at->format('Y-m-d') : '',
+        ])->all();
+
+        $title = $mode === 'chains' ? __('audit.chains_title') : __('audit.clients_title');
+
+        return \App\Support\Csv::download('audit-'.$mode.'-'.now()->format('Y-m-d').'.csv', [
+            $mode === 'chains' ? __('audit.c_chain') : __('audit.c_client'), __('audit.exp_sub'),
+            __('audit.exp_state'), __('audit.c_has_account'), __('audit.c_their'), __('audit.c_has_statement'),
+            __('audit.c_has_receipt'), __('audit.c_tax'), __('audit.c_ours'), __('audit.exp_reviewed_at'),
+            __('audit.c_confirm'),
+        ], $out, null, \App\Support\Csv::meta($title, $range->fromValue() ?: null, $range->toValue() ?: null));
     }
 
     /**

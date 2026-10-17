@@ -15,6 +15,7 @@
 @endphp
 
 @section('actions')
+    <a class="btn" href="{{ route('gl.accounts', array_merge($range->query(), ['export' => 1])) }}">📊 {{ __('common.export_screen') }}</a>
     @if ($canPost)
         <button class="btn gold" type="button" onclick="glNewAccount()">＋ {{ __('gl.new_account') }}</button>
     @endif

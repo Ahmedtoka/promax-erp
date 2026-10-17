@@ -4,6 +4,7 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.reports.hub') }}">← {{ __('rpt.hub_title') }}</a>
+    <a class="btn" href="{{ route('erp.reports.quotations', array_filter(request()->only(['q', 'creator_id'])) + $range->query() + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
     <a class="btn gold" href="{{ route('erp.reports.quotation') }}">➕ {{ __('rpt.qts_new') }}</a>
 @endsection
 
@@ -24,7 +25,7 @@
         <label class="fl wide grow"><span>{{ __('ui.l_search') }}</span>
             <input type="search" name="q" value="{{ request('q') }}" dir="auto"
                    placeholder="{{ __('rpt.qts_search_ph') }}"></label>
-        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`ReportController::range`) --}}
+        {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` بافتراضي `month`) --}}
         @include('partials._range', ['from' => $periodFrom, 'to' => $periodTo, 'all' => false])
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('erp.reports.quotations') }}">{{ __('common.clear') }}</a>

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\ActivityStats;
 use App\Support\Access;
 use App\Support\Csv;
+use App\Support\DateRange;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -44,15 +45,23 @@ class ActivityController extends Controller
 
     private function now(Request $request)
     {
-        $start = today();
-        $rows = ActivityStats::rows($start, now());
+        // (١٧/١٠) كانت متثبتة على النهارده — دلوقتي `DateRange` على
+        // `created_at` بافتراضي `today`، فمن غير فلتر الشاشة زي ما هي بالحرف.
+        // الحالة (شغال/واقف/بعيد) لسه من آخر حركة لحد دلوقتي.
+        $range = DateRange::fromRequest($request, 'today');
+        $start = $range->from;
+        if ($start->diffInDays($range->to) > self::MAX_DAYS) {
+            $start = $range->to->copy()->subDays(self::MAX_DAYS)->startOfDay();
+        }
+        $end = $range->to->lt(now()) ? $range->to : now();
+        $rows = ActivityStats::rows($start, $end);
 
-        $lastIds = ActivityLog::where('created_at', '>=', $start)->whereNotNull('user_id')
+        $lastIds = ActivityLog::whereBetween('created_at', [$start, $end])->whereNotNull('user_id')
             ->selectRaw('MAX(id) id')->groupBy('user_id')->pluck('id');
         $last = ActivityLog::whereIn('id', $lastIds)->get()->keyBy('user_id');
 
         // آخر «شغل فعلي» لكل يوزر — اللي بيتفرج بس آخر حركته فتح صفحة
-        $lastWorkIds = ActivityLog::where('created_at', '>=', $start)->whereNotNull('user_id')
+        $lastWorkIds = ActivityLog::whereBetween('created_at', [$start, $end])->whereNotNull('user_id')
             ->whereIn('event', ActivityLog::WORK)
             ->selectRaw('MAX(id) id')->groupBy('user_id')->pluck('id');
         $lastWork = ActivityLog::whereIn('id', $lastWorkIds)->get()->keyBy('user_id');
@@ -85,7 +94,7 @@ class ActivityController extends Controller
         usort($board, fn ($x, $y) => [$order[$x['state']], -$x['sum']['last']] <=> [$order[$y['state']], -$y['sum']['last']]);
 
         $count = fn (string $s) => count(array_filter($board, fn ($b) => $b['state'] === $s));
-        $todayQ = fn () => ActivityLog::where('created_at', '>=', $start);
+        $todayQ = fn () => ActivityLog::whereBetween('created_at', [$start, $end]);
 
         $kpi = [
             'active' => $count('active'),
@@ -104,10 +113,32 @@ class ActivityController extends Controller
             $board = array_values(array_filter($board, fn ($b) => $b['state'] === $state));
         }
 
+        if ($request->boolean('export')) {
+            return $this->exportNow($board, $start, $end);
+        }
+
         return view('erp.activity', [
             'tab' => 'now', 'board' => $board, 'kpi' => $kpi, 'silent' => $silent,
             'state' => $state, 'filters' => [],
+            'from' => $start->toDateString(), 'to' => $range->to->toDateString(),
         ]);
+    }
+
+    private function exportNow(array $board, Carbon $a, Carbon $b)
+    {
+        $rows = array_map(fn ($r) => [
+            $r['user']->displayName(), $r['user']->roleLabel(), __('activity.s_'.$r['state']),
+            $r['last']?->created_at?->format('Y-m-d H:i') ?? '', $r['last']?->screenLabel() ?? '',
+            $r['last_work']?->created_at?->format('Y-m-d H:i') ?? '',
+            $r['session_start'] ? date('Y-m-d H:i', $r['session_start']) : '',
+            $r['sum']['minutes'], $r['sum']['views'], $r['sum']['work'], __('activity.v_'.$r['sum']['verdict']),
+        ], $board);
+
+        return Csv::download('activity-now-'.now()->format('Y-m-d-Hi').'.csv', [
+            __('activity.c_user'), __('activity.c_role'), __('activity.c_state'), __('activity.c_last'),
+            __('activity.c_where'), __('activity.c_last_work'), __('activity.c_session_start'),
+            __('activity.c_minutes'), __('activity.c_views'), __('activity.c_work'), __('activity.c_verdict'),
+        ], $rows, null, Csv::meta(__('activity.tab_now'), $a->toDateString(), $b->toDateString()));
     }
 
     // ═══════════════════ ٢. ملخص اليوزرات ═══════════════════
@@ -258,13 +289,10 @@ class ActivityController extends Controller
                 ->orWhere('url', 'like', "%$s%"));
         }
         // ⚠️ التاريخ بـwhereDate مش between على نص — «من» و«لحد»
-        // بيتكتبوا Y-m-d والمقارنة النصية بتسيب أحداث اليوم الأخير بره
-        if ($from = $request->date('from')) {
-            $q->whereDate('created_at', '>=', $from);
-        }
-        if ($to = $request->date('to')) {
-            $q->whereDate('created_at', '<=', $to);
-        }
+        // بيتكتبوا Y-m-d والمقارنة النصية بتسيب أحداث اليوم الأخير بره.
+        // (١٧/١٠) عن طريق `DateRange`: `$request->date()` كانت بترمي 500
+        // على `?from=garbage`
+        DateRange::fromRequest($request)->apply($q, 'created_at');
 
         return $q;
     }

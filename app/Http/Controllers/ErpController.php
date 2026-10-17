@@ -1866,15 +1866,24 @@ class ErpController extends Controller
             ->where(fn ($e) => $e->whereNull('ends_at')->orWhere('ends_at', '>=', today()));
     }
 
-    public function contracts()
+    public function contracts(Request $request)
     {
         // ⚠️ سكوب التشانل مانجر (2026-08-05): عقود عملائه + عقود السلاسل
         // (السلسلة مش مملوكة لمدير — عقدها بيغطي فروع عند كذا مدير).
         $u = auth()->user();
+
+        // (١٧/١٠) فلتر «من — إلى» — مفتوح لو فاضي (الشاشة زي ما هي).
+        // الافتراضي على `starts_at` = بداية سريان العقد، و`basis=ends`
+        // على `ends_at` («العقود اللي بتخلص في الفترة دي»). الفلتر على
+        // الكويري نفسها فالكروت والتنبيهات والجدول من نفس المجموعة.
+        $range = \App\Support\DateRange::fromRequest($request);
+        $basis = $request->query('basis') === 'ends' ? 'ends' : 'starts';
+
         $all = Contract::with(['client.zone', 'group', 'contractClauses'])
             ->when($u?->role === 'manager', fn ($q) => $q->where(fn ($w) => $w
                 ->whereHas('client', fn ($c) => Client::visibleTo($c, $u))
                 ->orWhereNotNull('group_id')))
+            ->tap(fn ($q) => $range->apply($q, $basis === 'ends' ? 'ends_at' : 'starts_at'))
             ->get()
             ->sortBy([
                 // المنتهي والمستعجل الأول — ده اللي محتاج قرار
@@ -1884,7 +1893,29 @@ class ErpController extends Controller
         // الإحصائيات على العقود السارية بس — عقد موقوف أو منتهي مايدخلش المتوسط
         $live = $all->filter(fn ($c) => $c->active && ! $c->isExpired())->values();
 
+        if ($request->boolean('export')) {
+            $out = $all->map(fn ($ct) => [
+                $ct->number, $ct->client?->displayName() ?? $ct->group?->displayName() ?? '',
+                $ct->displayChain() ?: '', $ct->typeLabel(),
+                round($ct->discount * 100, 2), round($ct->totalDeduction() * 100, 2),
+                $ct->contractClauses->count(), $ct->paymentDays() ?? '',
+                $ct->starts_at?->format('Y-m-d') ?? '', $ct->ends_at?->format('Y-m-d') ?? '',
+                $ct->active && ! $ct->isExpired() ? __('client.ct_live') : __('client.ct_off'),
+                $ct->client ? \App\Support\Csv::money($ct->client->purchases) : '',
+                $ct->client ? \App\Support\Csv::money($ct->client->balance) : '',
+            ])->all();
+
+            return \App\Support\Csv::download('contracts-'.now()->format('Y-m-d').'.csv', [
+                __('client.ct_number'), __('client.client'), __('client.chain'), __('client.type'),
+                __('client.invoice_discount').' %', __('client.total_deduction').' %', __('client.clause'),
+                __('client.ct_payment_days'), __('client.ct_starts_on'), __('client.expires_on'),
+                __('client.ct_state'), __('client.purchases'), __('client.balance'),
+            ], $out, null, \App\Support\Csv::meta(__('client.contracts_and_coverage'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         return view('erp.contracts', [
+            'range' => $range,
+            'basis' => $basis,
             'contracts' => $all,
             // ⚠️ التنبيهات دي كانت مش موجودة خالص: عقد بيتجدد تلقائياً
             // وميعاد الإخطار عدّى = التزمنا بسنة تانية من غير ما ناخد بالنا.

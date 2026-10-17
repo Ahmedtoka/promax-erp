@@ -51,7 +51,7 @@ class AccountController extends Controller
             return Csv::download('gl-accounts-'.now()->format('Y-m-d').'.csv',
                 [__('gl.code'), __('gl.name'), __('gl.type'), __('gl.balance')],
                 $rows, null,
-                Csv::meta(__('gl.exp_accounts'), $range->fromValue(), $range->toValue()));
+                Csv::meta(__('gl.exp_accounts'), $range->fromValue() ?: null, $range->toValue() ?: null));
         }
 
         return view('gl.accounts', [

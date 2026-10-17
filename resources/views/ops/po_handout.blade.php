@@ -226,6 +226,54 @@
     </form>
 </div>
 
+{{-- ═══ (١٧/١٠) الأوامر اللي اتبعتت للحسابات — مش في وضع التعديل ═══ --}}
+@if (! $edit && isset($sent))
+<div class="card" id="phSent">
+    <h3>📨 {{ __('ops.ph_sent_title') }}
+        <span class="side">{{ __('ops.ph_sent_hint') }}</span></h3>
+
+    <form class="searchbar" method="GET" action="{{ route('ops.po.handout') }}#phSent" style="align-items:flex-end">
+        @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+        <a class="btn" href="{{ route('ops.po.handout', $range->query() + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
+    </form>
+
+    <div class="tablewrap">
+        <table>
+            <thead>
+            <tr>
+                <th data-nosum>{{ __('ops.ph_sent_on') }}</th>
+                <th>{{ __('ops.po_number') }}</th>
+                <th style="text-align:start">{{ __('client.client') }}</th>
+                <th>{{ __('ops.rep') }}</th>
+                <th data-nosum>{{ __('ops.due_at') }}</th>
+                <th>{{ __('ops.ph_approval') }}</th>
+                <th>{{ __('ops.ph_status') }}</th>
+                <th class="num">{{ __('ops.ph_value') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            @forelse ($sent as $po)
+                <tr>
+                    <td class="num" dir="ltr">{{ $po->created_at?->format('Y-m-d h:i A') }}</td>
+                    <td class="num" dir="ltr"><a href="{{ route('ops.pos.show', $po) }}"><b>{{ $po->number }}</b></a></td>
+                    <td style="text-align:start">{{ $po->client?->fullName() ?? '—' }}</td>
+                    <td>{{ $po->courier?->displayName() ?? '—' }}</td>
+                    <td class="num" dir="ltr">{{ $po->due_at?->format('Y-m-d h:i A') ?? '—' }}</td>
+                    <td><span class="badge {{ $po->approvalClass() }}">{{ $po->approvalLabel() }}</span></td>
+                    <td><span class="badge {{ $po->statusClass() }}">{{ $po->statusLabel() }}</span></td>
+                    <td class="num">{{ $fmt($po->grand_total) }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="8"><div class="empty">{{ __('ops.ph_none') }}</div></td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+    {{ $sent->links() }}
+</div>
+@endif
+
 @endsection
 
 @section('scripts')
