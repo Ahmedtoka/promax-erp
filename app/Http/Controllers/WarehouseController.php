@@ -128,7 +128,10 @@ class WarehouseController extends Controller
             'totals' => Batch::whereIn('goods_receipt_id', $base()->select('id'))
                 ->selectRaw('COUNT(*) as batches, COALESCE(SUM(qty_received),0) as qty')->toBase()->first(),
             'receipts' => $base()
-                ->with(['batches.product', 'creator', 'sourceWarehouse'])
+                // ⚠️ `shelved_qty` بـ`withSum` (١٧/١٠): `isFullyShelved()` كانت بتعمل
+                // `SUM` على `batch_locations` لكل باتش — 108 كويري في صفحة المعادي
+                ->with(['batches' => fn ($q) => $q->withSum('locations as shelved_qty', 'qty'),
+                    'batches.product', 'creator', 'sourceWarehouse'])
                 ->latest()->paginate(20)->withQueryString(),
             'products' => Product::where('active', true)->orderBy('code')->get(),
         ]);
@@ -290,7 +293,10 @@ class WarehouseController extends Controller
         // بتاعته — ويرصّفها كمان.
         $this->guardWarehouse($request, $receipt->warehouse_id);
 
-        $receipt->load(['batches.product', 'batches.locations.location', 'warehouse', 'creator']);
+        // ⚠️ `shelved_qty` بـ`withSum` (١٧/١٠) — الكارت والجدول والديالوجات
+        // بينادوا `shelvedQty()` كذا مرة لكل باتش، وكانت كويري كل مرة
+        $receipt->load(['batches' => fn ($q) => $q->withSum('locations as shelved_qty', 'qty'),
+            'batches.product', 'batches.locations.location', 'warehouse', 'creator']);
 
         return view('wh.receipt', [
             'receipt' => $receipt,
