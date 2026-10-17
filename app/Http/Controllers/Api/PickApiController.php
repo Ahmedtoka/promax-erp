@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PickOrder;
+use App\Support\Idempotency;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -79,19 +80,45 @@ class PickApiController extends Controller
             'items.*.id' => ['required_with:items', 'integer'],
             'items.*.qty' => ['required_with:items', 'integer', 'min:0'],
             'note' => ['nullable', 'string', 'max:500'],
+            // ⚠️ منع التكرار (الخط ١، ١٧/١٠) — اختياري
+            'idem_key' => Idempotency::RULES,
         ]);
+
+        $idemKey = $data['idem_key'] ?? null;
+
+        // إعادة إرسال بنفس المفتاح = نفس الاستلام
+        if ($this->sameReceipt($request, $pick, $idemKey)) {
+            return $this->receivedResponse($pick);
+        }
 
         $received = null;
         if (! empty($data['items'])) {
             $received = collect($data['items'])->pluck('qty', 'id')->all();
         }
 
-        $error = $pick->handOver($request->user(), $received, $data['note'] ?? null);
+        $error = $pick->handOver($request->user(), $received, $data['note'] ?? null, $idemKey);
 
         if ($error) {
+            // ريكوست تاني بنفس المفتاح استلم الأمر في نفس اللحظة
+            if ($this->sameReceipt($request, $pick, $idemKey)) {
+                return $this->receivedResponse($pick);
+            }
+
             return response()->json(['message' => $error], 422);
         }
 
+        return $this->receivedResponse($pick);
+    }
+
+    private function sameReceipt(Request $request, PickOrder $pick, ?string $idemKey): bool
+    {
+        $prev = Idempotency::find($request->user(), Idempotency::PICK_RECEIVE, $idemKey, PickOrder::class);
+
+        return $prev !== null && (int) $prev->id === (int) $pick->id;
+    }
+
+    private function receivedResponse(PickOrder $pick): JsonResponse
+    {
         $pick->refresh()->load(['items.product', 'items.batch', 'warehouse']);
 
         return response()->json([

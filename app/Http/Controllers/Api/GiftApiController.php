@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Custody;
 use App\Models\GiftHandout;
+use App\Models\Visit;
+use App\Support\Idempotency;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +80,33 @@ class GiftApiController extends Controller
             'visit_id' => ['nullable', 'exists:visits,id'],
             'reason' => ['nullable', 'string', 'max:40'],
             'note' => ['nullable', 'string', 'max:500'],
+            // ⚠️ منع التكرار (الخط ١، ١٧/١٠) — الهدية بتخصم عهدة
+            'idem_key' => Idempotency::RULES,
         ]);
+
+        $user = $request->user();
+        $idemKey = $data['idem_key'] ?? null;
+
+        // إعادة إرسال بنفس المفتاح = نفس التوزيعة، من غير خصم تاني
+        if (Idempotency::find($user, Idempotency::GIFT, $idemKey, GiftHandout::class) !== null) {
+            return response()->json(['ok' => true]);
+        }
+
+        // ⚠️ **مرساة الزيارة** (الخط ١): `visit_id` كان رقم بيتحط في
+        // عمود بس. لو اتبعت لازم تكون زيارة **مفتوحة**، **بتاعته**، وعلى
+        // **نفس العميل** — نفس حارس الفاتورة والمرتجع.
+        if (isset($data['visit_id'])) {
+            $visit = Visit::find($data['visit_id']);
+
+            if ($visit === null || (int) $visit->user_id !== (int) $user->id) {
+                return response()->json(['message' => __('api.not_your_visit')], 403);
+            }
+
+            if (! $visit->isOpen()
+                || (isset($data['client_id']) && (int) $visit->client_id !== (int) $data['client_id'])) {
+                return response()->json(['message' => __('idem.gift_needs_open_visit')], 422);
+            }
+        }
 
         // ⚠️ الطلب لازم يكون **بتاعه هو** — من غير الفحص ده أي مندوب
         // يقدر يسجل هدايا على طلبات زمايله ويبوّظ حساب الحملة
@@ -101,44 +130,55 @@ class GiftApiController extends Controller
 
         $error = null;
 
-        DB::transaction(function () use ($data, $custody, $request, &$error) {
-            // ⚠️ **القفل قبل الفحص.** توزيعتين في نفس اللحظة كانوا
-            // بيقروا نفس الرصيد ويوزّعوا الاتنين، فالمندوب يوزّع
-            // أكتر من اللي معاه والرقم يطلع بالسالب.
-            // ⚠️ **الصف اللي فيه هدايا فعلاً، مش أول صف** (١٤/٨).
-            // العهدة فيها صف لكل (صنف + باتش + **مصدر**)، والهدايا
-            // بتنزل على بنود تحميل العهدة بس — بند بضاعة أمر توريد
-            // أو بند جه بتحويل هداياه صفر. `first()` الجاف كان بيقع
-            // على أول صف بالـid ويرجّع «مفيش هدايا» والمندوب شايلها.
-            $line = $custody->items()
-                ->where('product_id', $data['product_id'])
-                ->orderByRaw('(gift_assigned - gift_given) DESC')
-                ->lockForUpdate()
-                ->first();
+        try {
+            DB::transaction(function () use ($data, $custody, $request, &$error, $idemKey) {
+                // ⚠️ **القفل قبل الفحص.** توزيعتين في نفس اللحظة كانوا
+                // بيقروا نفس الرصيد ويوزّعوا الاتنين، فالمندوب يوزّع
+                // أكتر من اللي معاه والرقم يطلع بالسالب.
+                // ⚠️ **الصف اللي فيه هدايا فعلاً، مش أول صف** (١٤/٨).
+                // العهدة فيها صف لكل (صنف + باتش + **مصدر**)، والهدايا
+                // بتنزل على بنود تحميل العهدة بس — بند بضاعة أمر توريد
+                // أو بند جه بتحويل هداياه صفر. `first()` الجاف كان بيقع
+                // على أول صف بالـid ويرجّع «مفيش هدايا» والمندوب شايلها.
+                $line = $custody->items()
+                    ->where('product_id', $data['product_id'])
+                    ->orderByRaw('(gift_assigned - gift_given) DESC')
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($line === null || $line->giftLeft() < $data['qty']) {
-                $error = __('field.gift_not_enough', [
-                    'left' => $line?->giftLeft() ?? 0,
+                if ($line === null || $line->giftLeft() < $data['qty']) {
+                    $error = __('field.gift_not_enough', [
+                        'left' => $line?->giftLeft() ?? 0,
+                    ]);
+
+                    return;
+                }
+
+                $line->increment('gift_given', $data['qty']);
+
+                $handout = GiftHandout::create([
+                    'custody_id' => $custody->id,
+                    'user_id' => $request->user()->id,
+                    'product_id' => $data['product_id'],
+                    'client_id' => $data['client_id'] ?? null,
+                    'client_request_id' => $data['client_request_id'] ?? null,
+                    'visit_id' => $data['visit_id'] ?? null,
+                    'batch_id' => $line->batch_id,
+                    'qty' => $data['qty'],
+                    'reason' => $data['reason'] ?? null,
+                    'note' => $data['note'] ?? null,
                 ]);
 
-                return;
+                Idempotency::remember($request->user(), Idempotency::GIFT, $idemKey, $handout);
+            });
+        } catch (QueryException $e) {
+            // ريكوست تاني بنفس المفتاح سبق — ترانزاكشننا رجعت كلها
+            if (! Idempotency::isDuplicate($e)) {
+                throw $e;
             }
 
-            $line->increment('gift_given', $data['qty']);
-
-            GiftHandout::create([
-                'custody_id' => $custody->id,
-                'user_id' => $request->user()->id,
-                'product_id' => $data['product_id'],
-                'client_id' => $data['client_id'] ?? null,
-                'client_request_id' => $data['client_request_id'] ?? null,
-                'visit_id' => $data['visit_id'] ?? null,
-                'batch_id' => $line->batch_id,
-                'qty' => $data['qty'],
-                'reason' => $data['reason'] ?? null,
-                'note' => $data['note'] ?? null,
-            ]);
-        });
+            return response()->json(['ok' => true]);
+        }
 
         if ($error !== null) {
             return response()->json(['message' => $error], 422);

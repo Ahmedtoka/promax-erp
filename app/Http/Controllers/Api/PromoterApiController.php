@@ -11,6 +11,8 @@ use App\Models\ReplenishmentItem;
 use App\Models\ReplenishmentRequest;
 use App\Models\ShelfRefill;
 use App\Models\TrackEvent;
+use App\Support\Idempotency;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -352,7 +354,17 @@ class PromoterApiController extends Controller
             // ⚠️ الموقع مع الحدث — الأبلكيشن بقى بيبعته (٨/٨/٢٠٢٦)
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
+            // ⚠️ منع التكرار (الخط ١، ١٧/١٠) — اختياري. الحفظ نفسه
+            // upsert لكل (زيارة + صنف) فالتكرار مابيضاعفش رقم، بس إعادة
+            // إرسال قديمة كانت بتكتب فوق تعديل أحدث منها.
+            'idem_key' => Idempotency::RULES,
         ]);
+
+        $idemKey = $data['idem_key'] ?? null;
+        $prev = Idempotency::find($request->user(), Idempotency::REFILL, $idemKey, MerchVisit::class);
+        if ($prev !== null && (int) $prev->id === (int) $merchVisit->id) {
+            return response()->json(['visit' => $this->visitPayload($merchVisit->refresh())]);
+        }
 
         foreach ($data['lines'] as $line) {
             $moved = (int) ($line['moved_qty'] ?? 0);
@@ -393,6 +405,15 @@ class PromoterApiController extends Controller
                     'out_of_stock' => (bool) ($line['out_of_stock'] ?? false),
                 ],
             );
+        }
+
+        try {
+            Idempotency::remember($request->user(), Idempotency::REFILL, $idemKey, $merchVisit);
+        } catch (QueryException $e) {
+            // نفس المفتاح اتسجل في ريكوست موازي — الكتابة upsert فمفيش ضرر
+            if (! Idempotency::isDuplicate($e)) {
+                throw $e;
+            }
         }
 
         $merchVisit->refresh();

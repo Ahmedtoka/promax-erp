@@ -9,11 +9,14 @@ use App\Models\Channel;
 use App\Models\Client;
 use App\Models\ClientRequest;
 use App\Models\Invoice;
+use App\Models\PickOrder;
 use App\Models\PurchaseOrder;
 use App\Models\ReplenishmentRequest;
 use App\Models\TrackEvent;
 use App\Models\User;
 use App\Models\Visit;
+use App\Support\Idempotency;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -405,22 +408,63 @@ class ManagerApiController extends Controller
             // اللي لسه على تليفونات المناديب. الاتنين بيدّوا نفس
             // النتيجة: تسعيرة العميل.
             'price_mode' => ['nullable', 'in:client,channel,old,new'],
+            // ⚠️ منع التكرار (الخط ١، ١٧/١٠) — اختياري
+            'idem_key' => Idempotency::RULES,
         ]);
 
-        if ($err = $this->guardReplenishment($request->user(), $replenishmentRequest)) {
+        $manager = $request->user();
+        $idemKey = $data['idem_key'] ?? null;
+
+        // إعادة إرسال بنفس المفتاح = نفس أمر التجهيز
+        $prev = Idempotency::find($manager, Idempotency::REPLENISH_ASSIGN, $idemKey, PickOrder::class);
+        if ($prev !== null && (int) $prev->replenishment_request_id === (int) $replenishmentRequest->id) {
+            return $this->assignedResponse($replenishmentRequest->fresh(), $prev);
+        }
+
+        if ($err = $this->guardReplenishment($manager, $replenishmentRequest)) {
             return $err;
         }
 
         try {
-            $pick = $replenishmentRequest->assignTo(
-                User::findOrFail($data['assigned_to']),
-                $data['price_mode'] ?? 'client',
-                $request->user(),
-            );
+            $pick = DB::transaction(function () use ($data, $manager, $replenishmentRequest, $idemKey) {
+                // ⚠️ **الحالة تتقري تاني جوه القفل** (الخط ١): `pending` كان
+                // بيتفحص بره، فضغطتين من المدير = أمرين تجهيز لنفس الطلب
+                // وبضاعة بتتحجز مرتين.
+                $locked = ReplenishmentRequest::whereKey($replenishmentRequest->id)->lockForUpdate()->first();
+                if ($locked === null || $locked->status !== 'pending') {
+                    throw new Rejected(__('api.request_already_assigned'));
+                }
+
+                $pick = $locked->assignTo(
+                    User::findOrFail($data['assigned_to']),
+                    $data['price_mode'] ?? 'client',
+                    $manager,
+                );
+
+                Idempotency::remember($manager, Idempotency::REPLENISH_ASSIGN, $idemKey, $pick);
+
+                return $pick;
+            });
         } catch (Rejected $e) {
             // رفض متوقّع بس — خطأ SQL بيكمّل لـ 500 عن قصد
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (QueryException $e) {
+            $prev = Idempotency::isDuplicate($e)
+                ? Idempotency::find($manager, Idempotency::REPLENISH_ASSIGN, $idemKey, PickOrder::class)
+                : null;
+
+            if ($prev === null) {
+                throw $e;
+            }
+
+            return $this->assignedResponse($replenishmentRequest->fresh(), $prev);
         }
+
+        return $this->assignedResponse($replenishmentRequest->fresh(), $pick);
+    }
+
+    private function assignedResponse(ReplenishmentRequest $replenishmentRequest, PickOrder $pick): JsonResponse
+    {
 
         // ⚠️ **`po_number` و`po_total` باقيين في الرد عن قصد** — النسخ
         // القديمة من الأبلكيشن بتقراهم وبتعرضهم، وشيلهم كان هيوقّع
