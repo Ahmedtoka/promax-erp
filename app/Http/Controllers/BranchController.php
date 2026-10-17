@@ -93,11 +93,7 @@ class BranchController extends Controller
 
             // ⚠️ السواق والمندوب الاتنين ينفع يتحطوا — في عربيات
             // المندوب فيها بيسوق بنفسه، والقايمة لازم تسمح بده.
-            'crew' => Branch::scope(User::query(), $request->user())
-                ->whereIn('role', ['sales_agent', 'driver'])
-                ->where('active', true)
-                ->orderBy('name')
-                ->get(),
+            'crew' => $this->crewQuery($request)->orderBy('name')->get(),
             // ⚠️ `isManager()` بقت بتشمل مدير الفرع — لازم نفس شرط
             // شاشة الفروع بالظبط، وإلا بيشوف أزرار بترجّع 403.
             'canEdit' => $request->user()->isAdmin() || $request->user()->role === 'manager',
@@ -160,7 +156,12 @@ class BranchController extends Controller
             'name_en' => ['nullable', 'string', 'max:190'],
             'address' => ['nullable', 'string', 'max:190'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'manager_id' => ['nullable', 'exists:users,id'],
+            // ⚠️ من نفس دروب داون الشاشة (الخط ٢، ١٧/١٠) — `exists` كانت
+            // بتقبل مندوب أو محاسب مدير فرع. القيمة الحالية بتعدّي.
+            'manager_id' => ['nullable', 'integer', $this->pickedFrom(
+                User::whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)->where('active', true),
+                $request->route('branch')?->manager_id,
+            )],
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -178,8 +179,10 @@ class BranchController extends Controller
             'kind' => ['nullable', 'string', 'max:190'],
             'kind_en' => ['nullable', 'string', 'max:190'],
             'branch_id' => ['nullable', 'exists:branches,id'],
-            'rep_id' => ['nullable', 'exists:users,id'],
-            'driver_id' => ['nullable', 'exists:users,id'],
+            // ⚠️ من نفس قايمة `crew` (الخط ٢، ١٧/١٠) — مندوب/سواق شغّال
+            // في نطاق فرع الفاعل. القيمة الحالية على العربية بتعدّي.
+            'rep_id' => ['nullable', 'integer', $this->pickedFrom($this->crewQuery($request), $vehicle?->rep_id)],
+            'driver_id' => ['nullable', 'integer', $this->pickedFrom($this->crewQuery($request), $vehicle?->driver_id)],
             'model_year' => ['nullable', 'integer', 'min:1990', 'max:2100'],
             // ⚠️ العداد بيتفحص هنا بس **مابيتكتبش** من التحديث الجماعي —
             // بيعدّي على `VehicleAssignment::assign()` اللي بترفض الرجوع
@@ -190,5 +193,32 @@ class BranchController extends Controller
             'is_fridge' => $request->boolean('is_fridge'),
             'active' => $request->boolean('active', true),
         ];
+    }
+
+    /** طاقم العربيات — مصدر واحد للدروب داون والفاليديشن */
+    private function crewQuery(Request $request)
+    {
+        return Branch::scope(User::query(), $request->user())
+            ->whereIn('role', ['sales_agent', 'driver'])
+            ->where('active', true);
+    }
+
+    /**
+     * القيمة لازم تكون من قايمة الشاشة أو القيمة المحفوظة حالياً.
+     *
+     * ⚠️ الحالية بتعدّي عشان سجل قديم على موظف اتوقف مايترفضش عند
+     * تعديل أي حاجة تانية فيه.
+     */
+    private function pickedFrom($query, ?int $current): \Closure
+    {
+        return function (string $attr, $value, \Closure $fail) use ($query, $current) {
+            if ($value === null || $value === '' || ($current !== null && (int) $value === $current)) {
+                return;
+            }
+
+            if (! (clone $query)->whereKey((int) $value)->exists()) {
+                $fail(__('perm.scope_staff_denied'));
+            }
+        };
     }
 }

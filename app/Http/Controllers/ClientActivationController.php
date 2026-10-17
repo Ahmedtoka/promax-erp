@@ -178,7 +178,14 @@ class ClientActivationController extends Controller
             return back()->withErrors(['zone_id' => __('client.geo_nothing')]);
         }
 
-        $zone = ! empty($data['zone_id']) ? Zone::find((int) $data['zone_id']) : null;
+        // ⚠️ الزون من نطاق فرع الفاعل (الخط ٢، ١٧/١٠)
+        $zone = ! empty($data['zone_id'])
+            ? \App\Models\Branch::scope(Zone::query(), $request->user())->find((int) $data['zone_id'])
+            : null;
+
+        if (! empty($data['zone_id']) && $zone === null) {
+            return back()->withErrors(['zone_id' => __('perm.scope_zone_branch_denied')]);
+        }
 
         $client->update(array_filter([
             'zone_id' => $zone?->id,
@@ -232,9 +239,39 @@ class ClientActivationController extends Controller
             'zone_id' => ['nullable', 'exists:zones,id'],
             'rep_id' => ['nullable', 'exists:users,id'],
             'manager_id' => ['nullable', 'exists:users,id'],
+            // ⚠️ القايمة بالـid من `price_lists` (الخط ٢، ١٧/١٠). النص
+            // القديم (`old`/`new`) لسه مقبول للفورمات المفتوحة، وبيتترجم
+            // لقايمته بالكود — الفاتورة بتقرا `price_list_id` الأول.
+            'price_list_id' => ['nullable', 'integer', 'exists:price_lists,id'],
             'price_list' => ['nullable', 'string', 'max:40'],
             'category' => ['nullable', 'string', 'max:20'],
         ]);
+
+        // ⚠️ الزون من نطاق فرع الفاعل — نفس قايمة فورم العميل
+        if (! empty($data['zone_id']) && ! \App\Models\Branch::scope(
+            Zone::query(), $request->user())->whereKey((int) $data['zone_id'])->exists()) {
+            return back()->withErrors(['zone_id' => __('perm.scope_zone_branch_denied')])->withInput();
+        }
+
+        // ⚠️ المدير المختار تشانل مانجر شغّال — نفس دروب داون الشاشة.
+        // `exists:users,id` كانت بتقبل مندوب أو محاسب كـ«مدير حساب».
+        if (! empty($data['manager_id']) && ! User::whereKey((int) $data['manager_id'])
+            ->where('role', 'manager')->where('active', true)->exists()) {
+            return back()->withErrors(['manager_id' => __('perm.scope_staff_denied')])->withInput();
+        }
+
+        // والمندوب ميداني شغّال ومن فريق الفاعل — نفس دروب داون الشاشة
+        if (! empty($data['rep_id']) && ! User::fieldVisibleTo(
+            User::whereKey((int) $data['rep_id'])->whereIn('role', ['sales_agent', 'promoter'])
+                ->where('active', true), $request->user())->exists()) {
+            abort(403, __('perm.scope_rep_denied'));
+        }
+
+        $list = ! empty($data['price_list_id'])
+            ? \App\Models\PriceList::find((int) $data['price_list_id'])
+            : (filled($data['price_list'] ?? null)
+                ? \App\Models\PriceList::where('code', $data['price_list'])->first()
+                : null);
 
         // ⚠️ **الشاشة بقت تفعيل وتوزيع** (قرار المالك 2026-08-05):
         // المستني بيتفعّل بالقيم المختارة، والشغّال أصلاً بتتطبّق عليه
@@ -273,7 +310,12 @@ class ClientActivationController extends Controller
             'zone_id' => $data['zone_id'] ?? null,
             'rep_id' => $data['rep_id'] ?? null,
             'manager_id' => $data['manager_id'] ?? null,
-            'price_list' => $data['price_list'] ?? null,
+            // ⚠️ `price_list_id` هو المرجع، والعمود النصي بيتزامن معاه
+            // بنفس قاعدة `ErpController::clientFields` (المسمّاة = `new`).
+            'price_list_id' => $list?->id,
+            'price_list' => $list === null ? ($data['price_list'] ?? null)
+                : (in_array($list->code, \App\Services\Pricing::LISTS, true)
+                    ? $list->code : \App\Services\Pricing::LIST_NEW),
             'category' => $data['category'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
@@ -477,13 +519,12 @@ class ClientActivationController extends Controller
     }
 
     /**
-     * قوايم الأسعار المتاحة.
-     *
-     * ⚠️ مؤقتة لحد ما جدول `price_lists` ينزل — بترجّع الاتنين
-     * الموجودين في الدوكترين الحالي.
+     * قوايم الأسعار المفعّلة من `price_lists` (الخط ٢، ١٧/١٠) — نفس
+     * مصدر فورم العميل. الدالة المؤقتة (قديم/جديد) كانت بتكتب النص بس
+     * فاختيار المستخدم كان بيتجاهل لما العميل له `price_list_id`.
      */
-    private function priceLists(): array
+    private function priceLists()
     {
-        return ['old' => __('stock.price_old'), 'new' => __('stock.price_new')];
+        return \App\Models\PriceList::where('active', true)->orderBy('id')->get();
     }
 }
