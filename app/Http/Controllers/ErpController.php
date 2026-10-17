@@ -1073,8 +1073,41 @@ class ErpController extends Controller
         return \App\Models\Branch::scope(User::query(), $request->user())
             ->whereIn('role', User::ASSIGNABLE_MANAGER_ROLES)
             ->where('active', true)
+            // ⚠️ التشانل مانجر بيسكّن على نفسه بس (الخط ٢، ١٧/١٠) — نفس
+            // حارس `guardManager()`، عشان الدروب داون مايعرضش اسم يترفض.
+            ->when($request->user()?->role === 'manager',
+                fn ($q) => $q->whereKey($request->user()->id))
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * ═══ `manager_id` من قايمة مديرين الفاعل (الخط ٢، ١٧/١٠) ═══
+     *
+     * ⚠️ `exists:users,id` كانت بتقبل أي يوزر، فمدير يقدر ينقل عميله
+     * لمدير تاني (يختفي من بوله ويظهر في بول غيره) أو مدير فرع يسكّن
+     * على مدير فرع تاني. المسموح: `managerOptions()` + المدير الحالي
+     * للعميل (عشان الحفظ من غير تغيير مايترفضش لو مديره اتوقف).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function guardManager(Request $request, array $data, ?Client $client): void
+    {
+        $wanted = $data['manager_id'] ?? null;
+
+        if (blank($wanted)) {
+            return;
+        }
+
+        if ($client !== null && (int) $client->manager_id === (int) $wanted) {
+            return;
+        }
+
+        if (! $this->managerOptions($request)->contains('id', (int) $wanted)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'manager_id' => __('perm.scope_staff_denied'),
+            ]);
+        }
     }
 
     /** الداتا المشتركة لفورم العميل — إضافة أو استنساخ */
@@ -1293,6 +1326,7 @@ class ErpController extends Controller
 
         $data = $this->guardBranch($request, $request->validate($this->clientRules()), creating: false);
         $this->checkContractDuration($data);
+        $this->guardManager($request, $data, $client);
 
         // ⚠️ **التعديل محتاج نفس الحارس** — تغيير اسم عميل لاسم عميل
         // تاني موجود بيعمل نفس التكرار بالظبط، والمسار ده كان مفتوح
@@ -1574,6 +1608,7 @@ class ErpController extends Controller
         }
 
         $data = $this->guardBranch($request, $data, creating: true);
+        $this->guardManager($request, $data, null);
 
         // ⚠️ **مدير بيعمل عميل كان بيضيّعه** (تدقيق ٨/٨/٢٠٢٦):
         // `manager_id` اختياري في الفورم وبلا افتراضي، و`Client::visibleTo`
@@ -1972,6 +2007,17 @@ class ErpController extends Controller
      * نفس الوقت بيتحسب مرتين في `liveContract()` — الفرع بياخده من
      * نفسه ومن سلسلته.
      */
+    /**
+     * سكوب العقد (الخط ٢، ١٧/١٠): عقد عميل مفرد بيعدّي على
+     * `Scope::assertClient`. عقد السلسلة زي سياسة `groups.contract`.
+     */
+    private function assertContractScope(Request $request, Contract $contract): void
+    {
+        if ($contract->client_id !== null) {
+            \App\Support\Scope::assertClient($request->user(), $contract->client);
+        }
+    }
+
     public function linkContract(Request $request, Contract $contract)
     {
         $data = $request->validate([
@@ -1981,6 +2027,12 @@ class ErpController extends Controller
 
         if (! empty($data['group_id']) && ! empty($data['client_id'])) {
             return back()->withErrors(['group_id' => __('client.link_pick_one')]);
+        }
+
+        $this->assertContractScope($request, $contract);
+
+        if (! empty($data['client_id'])) {
+            \App\Support\Scope::assertClient($request->user(), Client::find($data['client_id']));
         }
 
         $contract->update([
@@ -2007,6 +2059,8 @@ class ErpController extends Controller
             'ends_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
         ]);
+        \App\Support\Scope::assertClient($request->user(), Client::find($data['client_id']));
+
         $data['discount'] = $data['discount'] / 100;
 
         // العقد لازم يبقى active عشان effectiveDiscount() تشوفه
@@ -2054,6 +2108,8 @@ class ErpController extends Controller
             return back()->withErrors(['kind' => __('client.clause_kind_invalid')]);
         }
 
+        $this->assertContractScope($request, $contract);
+
         DB::transaction(function () use ($data, $contract, $request) {
             $clause = ($data['clause_id'] ?? null)
                 ? $contract->contractClauses()->findOrFail($data['clause_id'])
@@ -2093,6 +2149,8 @@ class ErpController extends Controller
 
     public function destroyClause(Request $request, Contract $contract)
     {
+        $this->assertContractScope($request, $contract);
+
         $id = $request->integer('clause_id');
 
         DB::transaction(function () use ($id, $contract) {
@@ -2148,8 +2206,10 @@ class ErpController extends Controller
         ]);
     }
 
-    public function destroyContract(Contract $contract)
+    public function destroyContract(Request $request, Contract $contract)
     {
+        $this->assertContractScope($request, $contract);
+
         // مابنلمسش clients.discount — العميل ممكن يكون له خصم خاص مستقل
         // عن العقد، ومسح العقد مايصحّش يصفّره.
         $contract->delete();

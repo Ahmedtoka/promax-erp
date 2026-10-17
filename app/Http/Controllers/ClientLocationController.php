@@ -326,6 +326,9 @@ class ClientLocationController extends Controller
     /** التأكيد — النقطة والعنوان بيتكتبوا على العميل مع بصمة المراجع */
     public function confirm(Request $request, Client $client)
     {
+        // ⚠️ سكوب العميل والزون (الخط ٢، ١٧/١٠) — الراوت كان بيقبل أي
+        // عميل بالـid وأي زون بـ`exists` بس، والزون بيجرّ التغطية وراه.
+        \App\Support\Scope::assertClient($request->user(), $client);
         $data = $request->validate([
             'lat' => ['required', 'numeric', 'between:-90,90'],
             'lng' => ['required', 'numeric', 'between:-180,180'],
@@ -348,6 +351,15 @@ class ClientLocationController extends Controller
         if (! MapLink::inEgypt((float) $data['lat'], (float) $data['lng'])) {
             return back()->withErrors(['lat' => __('geo.bad_point')]);
         }
+
+        // الزون من نفس قايمة فورم العميل (`Branch::scope`) — مدير فرع
+        // مايسكّنش عميل على زون فرع تاني.
+        if (! empty($data['zone_id']) && ! \App\Models\Branch::scope(
+            \App\Models\Zone::query(), $request->user())->whereKey((int) $data['zone_id'])->exists()) {
+            return back()->withErrors(['zone_id' => __('perm.scope_zone_branch_denied')]);
+        }
+
+        $zoneChanged = ! empty($data['zone_id']) && (int) $data['zone_id'] !== (int) $client->zone_id;
 
         $client->forceFill([
             'lat' => round((float) $data['lat'], 7),
@@ -372,6 +384,11 @@ class ClientLocationController extends Controller
                 ?? $client->location_source
                 ?? Client::LOC_SRC_VISIT,
         ])->save();
+
+        // تغيير الزون = تسكين، والتسكين بيجرّ التغطية وراه (إضافة بس)
+        if ($zoneChanged) {
+            \App\Services\Coverage::sync($client->fresh());
+        }
 
         return back()->with('ok', __('geo.confirmed_ok', ['client' => $client->displayName()]));
     }

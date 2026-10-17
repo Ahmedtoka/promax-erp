@@ -95,6 +95,7 @@ return [
     'scope_client_denied' => 'This client is outside your scope.',
     'scope_team_denied' => 'The client and the rep are not under the same manager or branch.',
     'scope_zone_denied' => "This client is not in the rep's zones.",
+    'scope_zone_branch_denied' => 'This zone is outside your branch.',
     'scope_staff_denied' => 'This employee is not on your team.',
 
     // ═══ Custody correction (Aug 12, 2026) ═══

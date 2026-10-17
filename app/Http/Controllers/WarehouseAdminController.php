@@ -226,7 +226,19 @@ class WarehouseAdminController extends Controller
             'name_en' => ['nullable', 'string', 'max:190'],
             'type' => ['required', Rule::in([Warehouse::TYPE_FACTORY, Warehouse::TYPE_BRANCH])],
             'address' => ['nullable', 'string', 'max:190'],
-            'manager_id' => ['nullable', 'exists:users,id'],
+            // ⚠️ من نفس دروب داون الشاشة (الخط ٢، ١٧/١٠): مدير أو أمين
+            // مخزن شغّال. `exists` كانت بتقبل أي يوزر. الحالي بيعدّي.
+            'manager_id' => ['nullable', 'integer', function (string $attr, $value, \Closure $fail) use ($warehouse) {
+                if ($value === null || $value === ''
+                    || ($warehouse?->manager_id !== null && (int) $value === (int) $warehouse->manager_id)) {
+                    return;
+                }
+
+                if (! \App\Models\User::whereKey((int) $value)
+                    ->whereIn('role', ['manager', 'warehouse_keeper'])->where('active', true)->exists()) {
+                    $fail(__('perm.scope_staff_denied'));
+                }
+            }],
         ])
             // ⚠️ **الاتحاد بيكسب لأن `validate()` عمرها ما بترجّع
             // `active`** — مش في القواعد أصلاً. عند الإضافة الديفولت

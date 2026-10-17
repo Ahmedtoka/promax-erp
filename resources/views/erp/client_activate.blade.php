@@ -168,10 +168,10 @@
                 </div>
                 <div>
                     <label class="f">{{ __('client.price_list') }}</label>
-                    <select name="price_list" style="width:100%">
+                    <select name="price_list_id" style="width:100%">
                         <option value="">— {{ __('client.keep_current') }} —</option>
-                        @foreach ($lists as $k => $lbl)
-                            <option value="{{ $k }}">{{ $lbl }}</option>
+                        @foreach ($lists as $pl)
+                            <option value="{{ $pl->id }}">{{ $pl->displayName() }}</option>
                         @endforeach
                     </select>
                 </div>
