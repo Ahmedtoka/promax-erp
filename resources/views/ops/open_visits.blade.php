@@ -20,7 +20,17 @@
     };
 @endphp
 
+@section('actions')
+    <a class="btn" href="{{ route('ops.open_visits', $range->query() + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
+@endsection
+
 @section('content')
+
+{{-- (١٧/١٠) فلتر يوم فتح الزيارة — فاضي = كل المفتوح أياً كان يومه --}}
+<form class="searchbar" method="GET" style="margin-bottom:10px;align-items:flex-end">
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+    <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+</form>
 
 <div class="kpis" style="margin-bottom:14px">
     {{-- (٢٢/٩) كل كارت بينزل على جدوله في نفس الصفحة --}}

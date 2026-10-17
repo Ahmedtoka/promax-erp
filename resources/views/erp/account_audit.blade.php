@@ -55,6 +55,7 @@
     <a class="btn {{ $isChains ? 'gold' : '' }}" href="{{ route('erp.audit.chains') }}">🔗 {{ __('audit.chains_title') }}</a>
     <a class="btn {{ $isChains ? '' : 'gold' }}" href="{{ route('erp.audit.clients') }}">👤 {{ __('audit.clients_title') }}</a>
     <a class="btn" href="{{ route('erp.audit.report') }}">📊 {{ __('audit.report_title') }}</a>
+    <a class="btn" href="{{ route($isChains ? 'erp.audit.chains' : 'erp.audit.clients', array_filter(['show' => $show, 'q' => $q] + $range->query()) + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
 @endsection
 
 @section('content')

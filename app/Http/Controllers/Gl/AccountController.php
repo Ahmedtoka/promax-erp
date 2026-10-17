@@ -39,11 +39,26 @@ class AccountController extends Controller
             $children[(int) $a->parent_id][] = $a;
         }
 
+        $balances = $this->reports->balancesByAccount($range->from, $range->to);
+
+        // تصدير سيرفري (١٧/١٠) — نفس الشجرة ونفس أرصدة الفترة اللي على الشاشة
+        if ($request->boolean('export')) {
+            $rows = $accounts->map(fn ($a) => [
+                $a->code, $a->displayName(), $a->is_postable ? '' : __('gl.exp_group'),
+                Csv::money($balances[$a->id] ?? 0),
+            ])->all();
+
+            return Csv::download('gl-accounts-'.now()->format('Y-m-d').'.csv',
+                [__('gl.code'), __('gl.name'), __('gl.type'), __('gl.balance')],
+                $rows, null,
+                Csv::meta(__('gl.exp_accounts'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
         return view('gl.accounts', [
             'range' => $range,
             'roots' => $children[0] ?? [],
             'children' => $children,
-            'balances' => $this->reports->balancesByAccount($range->from, $range->to),
+            'balances' => $balances,
             'parents' => $accounts->where('is_postable', false)->values(),
         ]);
     }

@@ -98,4 +98,7 @@ return [
     'confirmed_ok' => 'Account confirmed as correct ✓',
     'unconfirmed_ok' => 'Confirmation removed.',
 
+    'exp_sub' => 'Details',
+    'exp_state' => 'Status',
+    'exp_reviewed_at' => 'Reviewed On',
 ];

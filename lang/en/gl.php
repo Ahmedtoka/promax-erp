@@ -217,4 +217,8 @@ return [
     'opening_status_bad_date' => 'Date not understood (YYYY-MM-DD or DD/MM/YYYY)',
     'opening_status_duplicate_code' => 'Client repeated in the file',
     'opening_status_already_posted' => 'Already posted — will be skipped',
+
+    // تصدير الشجرة (١٧/١٠)
+    'exp_group' => 'Group',
+    'exp_accounts' => 'Chart of Accounts',
 ];

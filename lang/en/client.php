@@ -808,4 +808,11 @@ return [
     'export_statement' => 'Export statement (Excel)',
     'exp_quiet' => 'Clients with no movement in the period (their balance)',
     'exp_balance_all' => 'Total balance — all clients (as on screen)',
+    'ct_live' => 'Active',
+    'ct_off' => 'Inactive',
+    'ct_number' => 'Contract No.',
+    'ct_payment_days' => 'Payment Days',
+    'ct_starts_on' => 'Starts On',
+    'ct_state' => 'Status',
+    'ct_basis' => 'Date Basis',
 ];

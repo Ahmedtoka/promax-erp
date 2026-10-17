@@ -18,10 +18,22 @@
     $manager = auth()->user()->canDecideOps(); @endphp
 
 @section('actions')
+    <a class="btn" href="{{ route('erp.contracts', $range->query() + ($basis === 'ends' ? ['basis' => 'ends'] : []) + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
     @if ($manager)<button class="btn gold" onclick="openDlg('dlgNewC')">+ {{ __('client.new_contract') }}</button>@endif
 @endsection
 
 @section('content')
+
+{{-- (١٧/١٠) فلتر الفترة على بداية العقد أو نهايته — فاضي = كل العقود --}}
+<form class="searchbar" method="GET" style="margin-bottom:10px;align-items:flex-end">
+    <label class="fl"><span>{{ __('client.ct_basis') }}</span>
+        <select name="basis">
+            <option value="starts" @selected($basis === 'starts')>{{ __('client.ct_starts_on') }}</option>
+            <option value="ends" @selected($basis === 'ends')>{{ __('client.expires_on') }}</option>
+        </select></label>
+    @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
+    <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+</form>
 
 {{-- الكروت بتنزّل على الجدول اللي بيفصّل رقمها (٢٢/٩) — والمشتريات المتغطية بتفتح عملاءها --}}
 <div class="kpis">

@@ -98,4 +98,7 @@ return [
     'confirmed_ok' => 'اتأكد إن الحساب مظبوط ✓',
     'unconfirmed_ok' => 'التأكيد اتشال.',
 
+    'exp_sub' => 'التفاصيل',
+    'exp_state' => 'الحالة',
+    'exp_reviewed_at' => 'تاريخ المراجعة',
 ];

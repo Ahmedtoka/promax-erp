@@ -217,4 +217,8 @@ return [
     'opening_status_bad_date' => 'التاريخ مش مفهوم (YYYY-MM-DD أو DD/MM/YYYY)',
     'opening_status_duplicate_code' => 'العميل متكرر في الملف',
     'opening_status_already_posted' => 'مسجّل قبل كده — هيتخطّى',
+
+    // تصدير الشجرة (١٧/١٠)
+    'exp_group' => 'مجموعة',
+    'exp_accounts' => 'شجرة الحسابات',
 ];

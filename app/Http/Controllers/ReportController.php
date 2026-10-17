@@ -3222,14 +3222,16 @@ class ReportController extends Controller
      */
     public function quotationsIndex(Request $request)
     {
-        [$a, $b] = $this->range($request);
+        // (١٧/١٠) `DateRange` على `created_at` = يوم إصدار العرض — الافتراضي
+        // الشهر الحالي زي `range()` القديمة بالظبط
+        $range = \App\Support\DateRange::fromRequest($request, 'month');
 
         // ⚠️ السكوب بينداه على الكويري نفسها — لارافيل بتحقن الـbuilder
         // أول حجة لوحدها (إصلاح ٢٢/٨: النداء الستاتيك كان بيبعت
         // builder مكان الـuser ويرمي TypeError)
         $q = \App\Models\Quotation::with(['creator', 'items'])
             ->visibleTo($request->user())
-            ->whereBetween('created_at', [$a, $b])
+            ->tap(fn ($w) => $range->apply($w, 'created_at'))
             // فلتر «مين طلّعه» — للأدمن بس، غيره مقفول على نفسه أصلاً
             ->when($request->user()?->isAdmin() && $request->filled('creator_id'),
                 fn ($w) => $w->where('created_by', $request->integer('creator_id')));
@@ -3240,13 +3242,19 @@ class ReportController extends Controller
                 ->orWhere('client_name', 'like', $s));
         }
 
+        // تصدير سيرفري (١٧/١٠) — نفس الكويري المفلترة كاملة، مش أول MAX_ROWS
+        if ($request->boolean('export')) {
+            return $this->exportQuotations((clone $q)->latest()->get(), $range);
+        }
+
         $all = (clone $q)->get(['id', 'grand', 'created_by']);
         $rows = $q->latest()->take(self::MAX_ROWS)->get();
 
         return view('erp.quotations', [
             'rows' => $rows,
-            'periodFrom' => $a->toDateString(),
-            'periodTo' => $b->toDateString(),
+            'range' => $range,
+            'periodFrom' => $range->fromValue(),
+            'periodTo' => $range->toValue(),
             'kCount' => number_format($all->count()),
             'kValue' => $this->m($all->sum('grand')),
             'kMonth' => number_format(
@@ -3260,6 +3268,27 @@ class ReportController extends Controller
                     ->orderBy('name')->get(['id', 'name', 'name_en'])
                 : collect(),
         ]);
+    }
+
+    private function exportQuotations($rows, \App\Support\DateRange $range)
+    {
+        $out = $rows->map(fn ($qt) => [
+            $qt->created_at->format('Y-m-d'), $qt->number, $qt->client_name,
+            $qt->creator?->displayName() ?? '', $qt->items->count(), (int) $qt->items->sum('qty'),
+            \App\Support\Csv::money($qt->subtotal), \App\Support\Csv::money($qt->discount),
+            \App\Support\Csv::money($qt->tax), \App\Support\Csv::money($qt->grand),
+            $qt->valid_until?->format('Y-m-d') ?? '',
+        ])->all();
+
+        return \App\Support\Csv::download('quotations-'.now()->format('Y-m-d').'.csv', [
+            __('rpt.c_date'), __('rpt.c_number'), __('rpt.qt_to'), __('rpt.qts_creator'), __('rpt.qts_items'),
+            __('rpt.k_qty'), __('rpt.qt_subtotal'), __('rpt.qt_disc'), __('uib.dc_vat'), __('rpt.qt_grand'),
+            __('rpt.qt_valid_until'),
+        ], $out, [
+            __('common.total'), '', '', '', '', (int) $rows->sum(fn ($qt) => $qt->items->sum('qty')),
+            \App\Support\Csv::money($rows->sum('subtotal')), \App\Support\Csv::money($rows->sum('discount')),
+            \App\Support\Csv::money($rows->sum('tax')), \App\Support\Csv::money($rows->sum('grand')), '',
+        ], \App\Support\Csv::meta(__('rpt.qts_title'), $range->fromValue() ?: null, $range->toValue() ?: null));
     }
 
     /**

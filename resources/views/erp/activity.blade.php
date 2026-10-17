@@ -20,9 +20,8 @@
 @endphp
 
 @section('actions')
-    @if ($tab !== 'now')
-        <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
-    @endif
+    {{-- (١٧/١٠) تاب «دلوقتي» بقى له تصدير وفترة زي التابين التانيين --}}
+    <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
 @endsection
 
 @section('content')
@@ -37,14 +36,21 @@
 {{-- ═══════════════════════ ١. مين شغال دلوقتي ═══════════════════════ --}}
 @if ($tab === 'now')
 
+<form class="searchbar" method="GET" style="margin-bottom:10px;align-items:flex-end">
+    <input type="hidden" name="tab" value="now">
+    @if ($state)<input type="hidden" name="state" value="{{ $state }}">@endif
+    @include('partials._range', ['from' => $from, 'to' => $to, 'all' => false, 'auto' => true])
+    <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
+</form>
+
 <div class="kpis">
-    <a class="kpi @if($state === 'active') on @endif" href="{{ $tabUrl('now', $state === 'active' ? [] : ['state' => 'active']) }}">
+    <a class="kpi @if($state === 'active') on @endif" href="{{ $tabUrl('now', ($state === 'active' ? [] : ['state' => 'active']) + request()->only(['from', 'to'])) }}">
         <div class="lbl">🟢 {{ __('activity.k_active') }}</div><div class="val" style="color:var(--green)">{{ $fmt($kpi['active']) }}</div>
         <div class="sub2">{{ __('activity.k_active_hint', ['m' => ActivityLog::ACTIVE_MIN]) }}</div></a>
-    <a class="kpi @if($state === 'idle') on @endif" href="{{ $tabUrl('now', $state === 'idle' ? [] : ['state' => 'idle']) }}">
+    <a class="kpi @if($state === 'idle') on @endif" href="{{ $tabUrl('now', ($state === 'idle' ? [] : ['state' => 'idle']) + request()->only(['from', 'to'])) }}">
         <div class="lbl">🟠 {{ __('activity.k_idle') }}</div><div class="val">{{ $fmt($kpi['idle']) }}</div>
         <div class="sub2">{{ __('activity.k_idle_hint', ['a' => ActivityLog::ACTIVE_MIN, 'b' => ActivityLog::IDLE_MIN]) }}</div></a>
-    <a class="kpi @if($state === 'away') on @endif" href="{{ $tabUrl('now', $state === 'away' ? [] : ['state' => 'away']) }}">
+    <a class="kpi @if($state === 'away') on @endif" href="{{ $tabUrl('now', ($state === 'away' ? [] : ['state' => 'away']) + request()->only(['from', 'to'])) }}">
         <div class="lbl">⚪ {{ __('activity.k_away') }}</div><div class="val">{{ $fmt($kpi['away']) }}</div>
         <div class="sub2">{{ __('activity.k_away_hint') }}</div></a>
     <a class="kpi" href="{{ $tabUrl('log', ['event' => 'work', 'from' => $todayStr, 'to' => $todayStr]) }}">
