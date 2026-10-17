@@ -63,7 +63,9 @@
         {{-- راسم خط السير التفاعلي --}}
         <a class="btn" href="{{ route('erp.leads.route') }}">🧭 {{ __('lead.route_title') }}</a>
     @endif
-    <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>
+    @if ($canWrite)
+        <button class="btn gold" onclick="openDlg('dlgNewLead')">➕ {{ __('lead.new_lead') }}</button>
+    @endif
 @endsection
 
 @section('content')
@@ -460,7 +462,9 @@
                                     'notes' => $l->notes ?? '',
                                 ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                             @endphp
-                            <button class="btn sm" onclick='editLead({!! $lJson !!})'>{{ __('common.edit') }}</button>
+                            @if ($canEditLead($l))
+                                <button class="btn sm" onclick='editLead({!! $lJson !!})'>{{ __('common.edit') }}</button>
+                            @endif
 
                             @if ($canConvert)
                                 <form method="POST" action="{{ route('erp.leads.convert', $l) }}"

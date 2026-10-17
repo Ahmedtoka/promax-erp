@@ -86,6 +86,7 @@ return [
     'notifications' => 'Notifications',
     'mark_all_read' => 'Mark all read',
     'no_notifications' => 'No notifications yet',
+    'notif_no_access' => 'This notification opens a screen you do not have access to - it was marked as read.',
     'unit' => 'Unit',
 
     // الفترة ووقت السحب في التقارير والملفات (٢١ سبتمبر ٢٠٢٦)

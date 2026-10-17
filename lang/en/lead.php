@@ -190,6 +190,7 @@ return [
     'deleted' => 'Prospect ":name" deleted.',
     'del_converted' => 'This prospect became a real client - its history cannot be deleted.',
     'del_not_yours' => 'This lead is not in your portfolio - only the admin can delete it.',
+    'edit_not_yours' => 'This lead is outside your team or branch - you cannot edit or assign it.',
     'f_source' => 'Source',
     'f_cat' => 'Section / activity',
     'f_sort' => 'Sort',
