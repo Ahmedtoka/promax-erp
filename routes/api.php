@@ -246,6 +246,11 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         // شغل الشارع فوق (تدقيق ١٥/٩): `open-account` بيعمل عميل، ومكانها
         // مع حارس الحضور ورولز الميدان زي `leads/{lead}/action` بالحرف.
         Route::get('/my-incentives', [\App\Http\Controllers\Api\IncentiveApiController::class, 'myIncentives']);
+
+        // ═══ المناطق لوحدها + المزامنة التفاضلية (١٧/١٠) ═══
+        // من غير `updated_since` = مفتاح `zones` بتاع البوت ستراب بالحرف؛
+        // بيه = اللي اتغيّر بس + كل الـids عشان الحذف. قراءة، فبره حارس الحضور.
+        Route::get('/zones', [\App\Http\Controllers\Api\ZonesApiController::class, 'index']);
     });
 
     // ═══ توكن الجهاز لإشعارات فاير بيز (2026-08-07) — **لكل اللي عنده توكن** ═══
