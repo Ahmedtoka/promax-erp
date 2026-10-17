@@ -90,7 +90,22 @@ Route::middleware(['auth', 'screen'])->group(function () {
         abort_unless((int) $note->user_id === (int) auth()->id(), 403);
         $note->update(['read_at' => now()]);
 
-        return redirect($note->webUrl() ?? url()->previous());
+        $url = $note->webUrl();
+
+        // ⚠️ **الوجهة بتتحدد بالنوع مش بالمستقبِل** (١٧/١٠/٢٠٢٦): المستلم
+        // بيتختار بـ`manager_id` وقت الإرسال، ورولّه ممكن يكون غير كده أو
+        // اتغيّر بعدها — محاسب كان واصله «طلب عميل» و«زيارة بدون تصوير»
+        // (`ops.requests`/`ops.merch`) والزرار يوديه 403. بنسأل البوابة نفسها.
+        if ($url !== null) {
+            $target = app('router')->getRoutes()
+                ->match(\Illuminate\Http\Request::create(strtok($url, '#')))->getName();
+
+            if ($target !== null && ! \App\Support\Access::allows(auth()->user(), $target)) {
+                return redirect(url()->previous())->withErrors(['note' => __('common.notif_no_access')]);
+            }
+        }
+
+        return redirect($url ?? url()->previous());
     })->name('notifications.go');
 
     // ================= الـ ERP =================
