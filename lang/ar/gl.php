@@ -206,4 +206,15 @@ return [
 
     'rep_expenses_row' => 'مصروفات معتمدة من نقدية المندوب في النافذة',
     'rep_expenses_hint' => 'عرض بس — التصفية مابتتغيّرش، الفرق ماشي في حساب نقدية المندوب في الشجرة.',
+
+    // استيراد الأرصدة الافتتاحية للعملاء (promax:gl-opening)
+    'opening_import_memo' => 'رصيد افتتاحي — مديونية ما قبل السيستم (استيراد :user)',
+    'opening_import_has_errors' => 'الملف فيه :n سطر مش سليم — ولا سطر اتسجّل. صلّح الملف وجرّب تاني.',
+    'opening_status_ok' => 'جاهز',
+    'opening_status_missing_code' => 'كود العميل فاضي',
+    'opening_status_unknown_client' => 'كود عميل مش موجود',
+    'opening_status_bad_amount' => 'المبلغ مش رقم أو صفر',
+    'opening_status_bad_date' => 'التاريخ مش مفهوم (YYYY-MM-DD أو DD/MM/YYYY)',
+    'opening_status_duplicate_code' => 'العميل متكرر في الملف',
+    'opening_status_already_posted' => 'مسجّل قبل كده — هيتخطّى',
 ];

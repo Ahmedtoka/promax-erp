@@ -206,4 +206,15 @@ return [
 
     'rep_expenses_row' => 'Expenses approved out of the rep cash in this window',
     'rep_expenses_hint' => 'Display only — the settlement is unchanged; the difference sits in the rep cash account in the GL.',
+
+    // Client opening balances import (promax:gl-opening)
+    'opening_import_memo' => 'Opening balance — pre-system receivable (imported by :user)',
+    'opening_import_has_errors' => 'The file has :n invalid rows — nothing was posted. Fix the file and try again.',
+    'opening_status_ok' => 'Ready',
+    'opening_status_missing_code' => 'Client code is empty',
+    'opening_status_unknown_client' => 'Unknown client code',
+    'opening_status_bad_amount' => 'Amount is not a number or is zero',
+    'opening_status_bad_date' => 'Date not understood (YYYY-MM-DD or DD/MM/YYYY)',
+    'opening_status_duplicate_code' => 'Client repeated in the file',
+    'opening_status_already_posted' => 'Already posted — will be skipped',
 ];

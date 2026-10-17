@@ -57,9 +57,8 @@ class Rules
      * (مش `is_postable`) مايتكتبش عليه سطر — الأرصدة بتتجمع تحت المجموعة
      * من أولادها، فسطر عليها مباشرة بيتعدّ مرتين في الشجرة.
      */
-    private function safeAccount(?int $accountId, bool &$needsReview): int
+    private function safeAccount(?GlAccount $acc, bool &$needsReview): int
     {
-        $acc = $accountId !== null ? GlAccount::find($accountId) : null;
         if ($acc !== null && $acc->is_postable && $acc->active) {
             return $acc->id;
         }
@@ -72,12 +71,16 @@ class Rules
      * مفتاح قاعدة → حساب. `rep_cash` بيتحل لحساب المندوب؛ من غير مندوب
      * بيرجع للخزنة الرئيسية والقيد بيتعلّم `needs_review` (المبلغ موجود
      * فعلاً في إيد حد، بس مش عارفين إيد مين).
+     * `$rep` بيتجاهل لأي مفتاح غير `rep_cash`.
+     *
+     * كويري واحدة للحساب — الموديل نفسه بيتفحص (`safeAccount`) بدل ما
+     * يتجاب تاني بالـid (كانت كويريتين لكل سطر في إعادة البناء).
      */
     private function keyAccount(?string $key, ?User $rep, bool &$needsReview): int
     {
         if ($key === 'rep_cash') {
             if ($rep !== null) {
-                return $this->safeAccount(GlAccount::repCash($rep)->id, $needsReview);
+                return $this->safeAccount(GlAccount::repCash($rep), $needsReview);
             }
             $needsReview = true;
             $key = 'cash_main';
@@ -85,7 +88,7 @@ class Rules
 
         $acc = $key !== null && $key !== '' ? GlAccount::where('system_key', $key)->first() : null;
 
-        return $this->safeAccount($acc?->id, $needsReview);
+        return $this->safeAccount($acc, $needsReview);
     }
 
     /** مندوب التحصيل من مصدر القيد */
@@ -185,9 +188,14 @@ class Rules
         }
 
         $needsReview = false;
+        // الطرفين من القاعدة — `rep_cash` بيتحل لمندوب التصفية (كان الدائن
+        // مكتوب في الكود على حساب المندوب وبيتجاهل القاعدة)
+        $res = function (?string $k) use ($s, &$needsReview): int {
+            return $this->keyAccount($k, $s->user, $needsReview);
+        };
         $lines = [
-            ['slot' => 'dr', 'account_id' => $this->keyAccount($rule->debit_key, null, $needsReview), 'debit' => $received, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $this->keyAccount('rep_cash', $s->user, $needsReview), 'debit' => 0.0, 'credit' => $received],
+            ['slot' => 'dr', 'account_id' => $res($rule->debit_key), 'debit' => $received, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $res($rule->credit_key), 'debit' => 0.0, 'credit' => $received],
         ];
 
         return [
@@ -250,12 +258,11 @@ class Rules
         if ($x->paid_from === 'rep_cash' && $rep === null) {
             $needsReview = true;
         }
-        $creditId = $rep !== null
-            ? $this->keyAccount('rep_cash', $rep, $needsReview)
-            : $this->keyAccount($rule->credit_key, null, $needsReview);
+        // الدائن من القاعدة — `rep_cash` بيتحل لمندوب السند
+        $creditId = $this->keyAccount($rule->credit_key, $rep, $needsReview);
         // حساب المصروف نفسه جاي من السند (مش من القاعدة) — بيعدّي على نفس
         // الحارس: حساب موقوف أو مجموعة بيروح المعلّق
-        $debitId = $this->safeAccount($x->account_id, $needsReview);
+        $debitId = $this->safeAccount($x->account_id ? GlAccount::find($x->account_id) : null, $needsReview);
         $amount = round((float) $x->amount, 2);
 
         return [
