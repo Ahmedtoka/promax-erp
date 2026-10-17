@@ -79,14 +79,14 @@ class DataHealth extends Command
         $add('custody: users with >1 open custody', count($dbl), collect($dbl)->map(fn ($r) => "{$r->code}: #{$r->ids}")->implode(', '));
 
         $add('picks: ready without started_at', $n("SELECT id FROM pick_orders WHERE status='ready' AND started_at IS NULL"));
-        $stale = DB::select("SELECT purpose, COUNT(*) n FROM pick_orders WHERE status='ready' AND ready_at < ? GROUP BY purpose", [$d7]);
+        $stale = DB::select("SELECT purpose, COUNT(*) n FROM pick_orders WHERE status='ready' AND ready_at < ? GROUP BY purpose ORDER BY purpose", [$d7]);
         $add('picks: ready > 7 days', collect($stale)->sum('n'), collect($stale)->map(fn ($r) => "{$r->purpose}={$r->n}")->implode(', '));
 
         $rpl = DB::select("SELECT number FROM replenishment_requests WHERE status IN ('assigned','delivered','ready') AND purchase_order_id IS NULL");
         $add('refills: assigned/delivered without PO', count($rpl), collect($rpl)->pluck('number')->implode(', '));
 
         $add('POs: delivered without delivered_at', $n("SELECT id FROM purchase_orders WHERE status='delivered' AND delivered_at IS NULL"));
-        $po = DB::select("SELECT status, COUNT(*) n FROM purchase_orders WHERE status NOT IN ('delivered','cancelled','canceled') AND created_at < ? GROUP BY status", [$d14]);
+        $po = DB::select("SELECT status, COUNT(*) n FROM purchase_orders WHERE status NOT IN ('delivered','cancelled','canceled') AND created_at < ? GROUP BY status ORDER BY CAST(status AS CHAR)", [$d14]);
         $add('POs: open > 14 days', collect($po)->sum('n'), collect($po)->map(fn ($r) => "{$r->status}={$r->n}")->implode(', '));
 
         foreach (['zone_id' => 'no zone', 'channel_id' => 'no channel', 'price_list_id' => 'no price list', 'manager_id' => 'no manager', 'rep_id' => 'no rep'] as $col => $label) {
