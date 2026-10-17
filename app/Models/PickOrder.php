@@ -612,8 +612,9 @@ class PickOrder extends Model
      * وبيتسجل عليه ملاحظة، والمدير بيوصله إشعار.
      *
      * @param  array<int, int>|null  $receivedByItem  [pick_order_item_id => qty]
+     * @param  string|null  $idemKey  مفتاح منع التكرار من الأبلكيشن (الخط ١) — اختياري
      */
-    public function handOver(User $rep, ?array $receivedByItem = null, ?string $note = null): ?string
+    public function handOver(User $rep, ?array $receivedByItem = null, ?string $note = null, ?string $idemKey = null): ?string
     {
         if ($this->status !== 'ready') {
             return __('stock.pick_not_ready');
@@ -638,7 +639,15 @@ class PickOrder extends Model
         $custody = null;
 
         try {
-            DB::transaction(function () use ($receivedByItem, $rep, &$custody, &$variance, $note) {
+            DB::transaction(function () use ($receivedByItem, $rep, &$custody, &$variance, $note, $idemKey) {
+                // ⚠️ **الحالة تتقري تاني جوه القفل** (الخط ١، ١٧/١٠): فحص
+                // `ready` فوق بره الترانزاكشن، فضغطتين في نفس اللحظة كانوا
+                // بيعدّوه الاتنين وينزّلوا البضاعة في العهدة مرتين.
+                $locked = static::whereKey($this->id)->lockForUpdate()->first();
+                if ($locked === null || $locked->status !== 'ready') {
+                    throw new StockShortage(__('stock.pick_not_ready'));
+                }
+
                 // ⚠️⚠️ **الاستلام بيكمّل على العهدة المفتوحة — مش بيفتح
                 // صف جديد بتاريخ النهارده** (إصلاح ١٠ أغسطس ٢٠٢٦).
                 // `firstOrCreate(date: today)` كانت بتعمل عهدة تانية
@@ -731,6 +740,8 @@ class PickOrder extends Model
                     'status' => 'delivered',
                     'delivered_at' => now(),
                 ]);
+
+                \App\Support\Idempotency::remember($rep, \App\Support\Idempotency::PICK_RECEIVE, $idemKey, $this);
             });
         } catch (StockShortage $e) {
             // العهدة اتقفلت — مفيش بضاعة خرجت ومفيش عهدة يتيمة
