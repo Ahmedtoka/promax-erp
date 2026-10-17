@@ -109,10 +109,16 @@ class IncentiveController extends Controller
     {
         $month = $this->month($request);
 
-        $rows = $this->reps()->map(fn (User $rep) => [
+        // ⚠️ المؤشرات لكل المناديب مرة واحدة (١٧/١٠) — `forMonth` لكل مندوب
+        // كانت ~13 كويري × المناديب (103 كويري)
+        $reps = $this->reps();
+        $kpis = RepKpis::forMonthMany($reps, $month);
+        $km = RepKpis::kmForDayMany($reps, now());
+
+        $rows = $reps->map(fn (User $rep) => [
             'rep' => $rep,
-            'kpi' => RepKpis::forMonth($rep, $month),
-            'km_today' => RepKpis::kmForDay($rep, now()),
+            'kpi' => $kpis[$rep->id],
+            'km_today' => $km[$rep->id],
         ]);
 
         return view('erp.performance', [
