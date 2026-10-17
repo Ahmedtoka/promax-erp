@@ -274,6 +274,51 @@ class ClientScopeTest extends TestCase
         $this->assertSame((int) $list->id, (int) $client->fresh()->price_list_id);
     }
 
+    /** قرار المالك ١٧/١٠: مفيش عميل يتفعّل من غير قايمة سعر حقيقية مفعّلة */
+    public function test_activation_without_a_price_list_is_refused(): void
+    {
+        $admin = $this->makeAdmin();
+        $client = $this->makeClient(['status' => 'pending', 'zone_id' => $this->makeZone()->id]);
+
+        $this->actingAs($admin)
+            ->post(route('erp.clients.activate.do'), ['ids' => [$client->id]])
+            ->assertSessionHasErrors('price_list_id');
+
+        $this->assertSame('pending', $client->fresh()->status);
+    }
+
+    public function test_activation_refuses_an_inactive_price_list(): void
+    {
+        $admin = $this->makeAdmin();
+        $off = $this->makePriceList('L-OFF');
+        $off->update(['active' => false]);
+        $client = $this->makeClient(['status' => 'pending', 'zone_id' => $this->makeZone()->id]);
+
+        $this->actingAs($admin)
+            ->post(route('erp.clients.activate.do'), ['ids' => [$client->id], 'price_list_id' => $off->id])
+            ->assertSessionHasErrors('price_list_id');
+
+        $this->assertSame('pending', $client->fresh()->status);
+    }
+
+    /** العميل اللي عليه قايمة مفعّلة أصلاً بيتفعّل من غير ما تختار تاني */
+    public function test_activation_keeps_an_existing_active_list(): void
+    {
+        $admin = $this->makeAdmin();
+        $list = $this->makePriceList('new');
+        $client = $this->makeClient([
+            'status' => 'pending',
+            'zone_id' => $this->makeZone()->id,
+            'price_list_id' => $list->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('erp.clients.activate.do'), ['ids' => [$client->id]])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('active', $client->fresh()->status);
+    }
+
     public function test_activation_rejects_non_manager_as_account_manager(): void
     {
         $admin = $this->makeAdmin();

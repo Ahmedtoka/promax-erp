@@ -694,6 +694,8 @@ return [
     'nothing_to_apply' => 'All selected are already active - pick a value (zone/rep/manager/list) to distribute.',
     'geo_counts' => 'Geo distribution',
     'activate_needs_zone' => ':count of them have no zone. Pick a zone to apply, or unselect them.',
+    'activate_needs_list' => ':count of them have no active price list. Pick a list to apply, or unselect them.',
+    'activate_list_inactive' => 'This price list does not exist or is inactive. Pick an active list.',
     'activated' => ':count clients activated.',
     'deactivated' => '":name" was deactivated.',
     'cannot_stop_with_balance' => 'This client has a balance of :balance — deactivating hides them from every screen while the debt stays in the totals. Settle the account first.',

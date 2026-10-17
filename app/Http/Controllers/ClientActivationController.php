@@ -273,6 +273,13 @@ class ClientActivationController extends Controller
                 ? \App\Models\PriceList::where('code', $data['price_list'])->first()
                 : null);
 
+        // ⚠️ القايمة المختارة لازم تكون **مفعّلة** — قايمة موقوفة
+        // ممكن يكون ليها أصناف من غير سعر، والفاتورة تطلع بصفر.
+        if ((filled($data['price_list_id'] ?? null) || filled($data['price_list'] ?? null))
+            && ($list === null || ! $list->active)) {
+            return back()->withErrors(['price_list_id' => __('client.activate_list_inactive')])->withInput();
+        }
+
         // ⚠️ **الشاشة بقت تفعيل وتوزيع** (قرار المالك 2026-08-05):
         // المستني بيتفعّل بالقيم المختارة، والشغّال أصلاً بتتطبّق عليه
         // القيم بس — منطقة/مندوب/تشانل مانجر/قايمة — من غير ما نلمس
@@ -280,7 +287,7 @@ class ClientActivationController extends Controller
         // ⚠️ وسكوب التشانل مانجر — مايوزّعش عميل مش بتاعه حتى لو بعت
         // الـid. نفس سكوب الشاشة (عملاءه + غير المسكّنين المش مفعّلين).
         $rows = $this->activationScope($request->user(),
-            Client::whereIn('id', $data['ids']))->get(['id', 'status', 'zone_id']);
+            Client::whereIn('id', $data['ids']))->get(['id', 'status', 'zone_id', 'price_list_id']);
 
         // ═══ المدير بيسكّن على نفسه وبس (١٨/٨) ═══
         //
@@ -330,6 +337,24 @@ class ClientActivationController extends Controller
             return back()->withErrors([
                 'zone_id' => __('client.activate_needs_zone', ['count' => $noZone]),
             ])->withInput();
+        }
+
+        // ═══ قايمة السعر إجبارية في التفعيل (قرار المالك ١٧/١٠) ═══
+        // ⚠️ نفس قاعدة ميلاد العميل من الاعتماد: عميل بيتفعّل من غير
+        // قايمة حقيقية مفعّلة بياخد سعر محدش أقرّه. الشرط على اللي
+        // بيتفعّل بس، وبيعدّي لو اتختارت قايمة تتطبّق عليهم.
+        if ($list === null) {
+            $liveLists = \App\Models\PriceList::where('active', true)->pluck('id')->all();
+            $noList = $rows->where('status', '!=', 'active')
+                ->filter(fn ($r) => $r->price_list_id === null
+                    || ! in_array((int) $r->price_list_id, array_map('intval', $liveLists), true))
+                ->count();
+
+            if ($noList > 0) {
+                return back()->withErrors([
+                    'price_list_id' => __('client.activate_needs_list', ['count' => $noList]),
+                ])->withInput();
+            }
         }
 
         // التوزيع على الشغّالين من غير قيم مختارة مالوش معنى
