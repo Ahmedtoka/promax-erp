@@ -211,12 +211,15 @@ class ErpController extends Controller
 
         // ═══ أفضل المناديب والعملاء في الفترة ═══
         $topReps = $sales()->whereNotNull('user_id')->selectRaw('user_id, COUNT(*) n, SUM(grand_total) v')
-            ->groupBy('user_id')->orderByDesc('v')->take(8)->get()
-            ->map(function ($r) {
-                $r->rep = User::find($r->user_id);
+            ->groupBy('user_id')->orderByDesc('v')->take(8)->get();
+        // ⚠️ المناديب بكويري واحدة (١٧/١٠) — كانت `User::find` لكل صف
+        $topRepUsers = $topReps->isEmpty() ? collect()
+            : User::whereIn('id', $topReps->pluck('user_id'))->get()->keyBy('id');
+        $topReps = $topReps->map(function ($r) use ($topRepUsers) {
+            $r->rep = $topRepUsers->get($r->user_id);
 
-                return $r;
-            });
+            return $r;
+        });
 
         $topClients = $sales()->selectRaw('client_id, COUNT(*) n, SUM(grand_total) v')
             ->groupBy('client_id')->orderByDesc('v')->take(10)->get();

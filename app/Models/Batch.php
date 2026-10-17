@@ -96,7 +96,9 @@ class Batch extends Model
     /** أكواد الأرفف مفصولة بفاصلة — للعرض في الجداول */
     public function locationCodes(): string
     {
-        $codes = $this->locations()->with('location')->get()
+        // العلاقة المحمّلة لو موجودة (صفحة الإذن بتعمل eager load) — من غيرها كويري لكل باتش
+        $rows = $this->relationLoaded('locations') ? $this->locations : $this->locations()->with('location')->get();
+        $codes = $rows
             ->filter(fn (BatchLocation $bl) => $bl->qty > 0)
             ->map(fn (BatchLocation $bl) => $bl->location?->code.' ('.$bl->qty.')')
             ->filter();

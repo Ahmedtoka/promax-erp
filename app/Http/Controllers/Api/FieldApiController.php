@@ -397,7 +397,20 @@ class FieldApiController extends Controller
         return ['zones' => $zones->count(), 'clients' => (int) $zones->sum('visible_n')];
     }
 
-    public static function zonesPayload($user): array
+    /**
+     * ═══ المزامنة التفاضلية (١٧/١٠) — `$since` ═══
+     *
+     * من غيره (null) الدالة **زي ما كانت بالحرف** وبترجّع ليستة المناطق.
+     * بيه بترجّع `['zones' => …, 'zone_ids' => …, 'client_ids' => …]`:
+     * `zones` فيها العملاء اللي اتغيّروا من ساعتها بس (المنطقة اللي اتغيّرت
+     * بكل عملائها)، و`zone_ids`/`client_ids` = **كل** الظاهر دلوقتي عشان
+     * الأبلكيشن يشيل اللي اختفى (اتنقل/اتقفل) — الحذف مالوش `updated_at`.
+     * «اتغيّر» = أي جدول بيدخل في كارت العميل: العميل نفسه، زيارة (آخر زيارة
+     * وحالة النهارده)، عقده أو عقد سلسلته، السلسلة، القناة، المنطقة، المحافظة.
+     * الإعدادات (الضريبة) وانتهاء العقد بالتاريخ بيتحسموا في `ZonesApiController`
+     * برد كامل.
+     */
+    public static function zonesPayload($user, ?\Carbon\CarbonInterface $since = null): array
     {
         // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): عملاؤه = المتسكّنين له ═══
         // نفس مرساة `ownsClient` و`Client::visibleTo` — `manager_id`
@@ -406,13 +419,33 @@ class FieldApiController extends Controller
 
         $zoneIds = self::visibleZoneIds($user, $isManager);
 
+        // `>=` مش `>`: التعديل اللي حصل في نفس ثانية الريكوست اللي فات
+        // بيرجع تاني بدل ما يضيع — التكرار مابيضرّش
+        $at = $since?->copy()->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s');
+        $changedZoneIds = $since === null ? collect()
+            : Zone::whereIn('id', $zoneIds)->where('updated_at', '>=', $at)->pluck('id');
+
         $zones = Zone::with([
-            'clients' => function ($q) use ($user, $isManager) {
+            'clients' => function ($q) use ($user, $isManager, $at, $changedZoneIds) {
                 // ⚠️ contract و group.contract ضروريين: effectiveDiscount()
                 // بتنادي liveContract() لكل عميل. من غيرهم ~300 كويري زيادة
                 // على /api/home وهو أكتر إندبوينت بيتنادى في الأبلكيشن.
                 $q->with(['channel', 'contract', 'group.contract'])->orderBy('name');
                 self::scopeVisibleClients($q, $user, $isManager);
+
+                if ($at !== null) {
+                    $q->where(fn ($w) => $w->where('clients.updated_at', '>=', $at)
+                        ->orWhereIn('clients.zone_id', $changedZoneIds)
+                        ->orWhereExists(fn ($e) => $e->selectRaw('1')->from('visits')
+                            ->whereColumn('visits.client_id', 'clients.id')->where('visits.updated_at', '>=', $at))
+                        ->orWhereExists(fn ($e) => $e->selectRaw('1')->from('contracts')
+                            ->where(fn ($c) => $c->whereColumn('contracts.client_id', 'clients.id')
+                                ->orWhereColumn('contracts.group_id', 'clients.group_id'))
+                            ->where('contracts.updated_at', '>=', $at))
+                        ->orWhereIn('clients.group_id', fn ($s) => $s->select('id')->from('client_groups')->where('updated_at', '>=', $at))
+                        ->orWhereIn('clients.channel_id', fn ($s) => $s->select('id')->from('channels')->where('updated_at', '>=', $at))
+                        ->orWhereIn('clients.governorate', fn ($s) => $s->select('key')->from('governorates')->where('updated_at', '>=', $at)));
+                }
             },
         ])->whereIn('id', $zoneIds)->where('active', true)->orderBy('code')->get();
 
@@ -446,7 +479,7 @@ class FieldApiController extends Controller
         // زحمة بلا فايدة. أول ما يتسكن عليه عميل في منطقة هتظهر لوحدها.
         $zones = $zones->filter(fn ($z) => $z->clients->isNotEmpty())->values();
 
-        return $zones->map(fn ($z) => [
+        $payload = $zones->map(fn ($z) => [
             'id' => $z->id,
             'code' => $z->code,
             'name' => $z->displayName(),
@@ -542,6 +575,23 @@ class FieldApiController extends Controller
                 ];
             })->values(),
         ])->values()->all();
+
+        if ($since === null) {
+            return $payload;
+        }
+
+        // كل الظاهر دلوقتي (ids بس) — نفس قيد الظهور ونفس فلتر «المنطقة
+        // اللي فيها عملاء له»، عشان الأبلكيشن يشيل اللي ماعادش ظاهر
+        $visible = Client::query()
+            ->whereIn('zone_id', Zone::whereIn('id', $zoneIds)->where('active', true)->select('id'))
+            ->tap(fn ($q) => self::scopeVisibleClients($q, $user, $isManager))
+            ->get(['id', 'zone_id']);
+
+        return [
+            'zones' => $payload,
+            'zone_ids' => $visible->pluck('zone_id')->unique()->sort()->values()->all(),
+            'client_ids' => $visible->pluck('id')->sort()->values()->all(),
+        ];
     }
 
     public static function posPayload($user): array
