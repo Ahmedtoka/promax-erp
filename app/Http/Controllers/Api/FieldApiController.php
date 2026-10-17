@@ -2060,9 +2060,20 @@ class FieldApiController extends Controller
             'items.*.product_id' => ['required', new \App\Rules\SellableProduct],
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'items.*.unit' => ['nullable', 'in:piece,box,case'],
+            // ⚠️ منع التكرار (الخط ١، ١٧/١٠) — INV-1167/1168 اتعملوا
+            // مرتين بينهم 37 ثانية. اختياري: الأبلكيشن القديم شغال.
+            'idem_key' => \App\Support\Idempotency::RULES,
         ]);
 
         $user = $request->user();
+        $idemKey = $data['idem_key'] ?? null;
+
+        // إعادة إرسال بنفس المفتاح = نفس الفاتورة، من غير أي حارس تاني
+        // (الزيارة ممكن تكون اتقفلت في الثواني دي)
+        if ($prev = \App\Support\Idempotency::find($user, \App\Support\Idempotency::INVOICE, $idemKey, Invoice::class)) {
+            return $this->invoiceResponse($prev, 200);
+        }
+
         $client = Client::findOrFail($data['client_id']);
         $custody = $user->currentCustody();
 
@@ -2121,7 +2132,30 @@ class FieldApiController extends Controller
         // لو كان بره وحصل خطأ في إنشاء الفاتورة، العهدة تتخصم من غير فاتورة
         // والمندوب يخسر بضاعة على الورق.
         try {
-            $invoice = DB::transaction(function () use ($data, $user, $client, $custody, $qtyByProduct) {
+            $invoice = DB::transaction(function () use ($data, $user, $client, $custody, $qtyByProduct, $idemKey) {
+                // ⚠️ **قفل العهدة الأول** (الخط ١): بيرتّب فواتير نفس المندوب
+                // ورا بعض، فالفحص اللي تحت مايتسابقش مع نفسه.
+                \App\Models\Custody::whereKey($custody->id)->lockForUpdate()->first();
+
+                // ⚠️ **الورقية المكررة** لنفس المندوب والعميل في نفس اليوم =
+                // نفس الفاتورة اتبعتت تاني (L-6). الأبلكيشن القديم مابيبعتش
+                // مفتاح، فده الحارس الوحيد اللي بيمسكه.
+                $paperRef = trim((string) ($data['paper_ref'] ?? ''));
+                if ($paperRef !== '' && \Illuminate\Support\Facades\Schema::hasColumn('invoices', 'paper_ref')) {
+                    $dup = Invoice::where('user_id', $user->id)
+                        ->where('client_id', $client->id)
+                        ->where('paper_ref', $paperRef)
+                        ->whereDate('created_at', today())
+                        ->value('number');
+
+                    if ($dup !== null) {
+                        throw new \App\Exceptions\Rejected(__('idem.paper_ref_taken', [
+                            'ref' => $paperRef,
+                            'number' => $dup,
+                        ]));
+                    }
+                }
+
                 // الخصم بالـ FEFO — بيرجّع كل بند بالباتش اللي خرج منه
                 $deduction = $custody->deductWithBatches($qtyByProduct);
                 if ($deduction['error']) {
@@ -2278,6 +2312,8 @@ class FieldApiController extends Controller
                     __('common.money', ['amount' => number_format($grandTotal)]),
                     $evLat, $evLng);
 
+                \App\Support\Idempotency::remember($user, \App\Support\Idempotency::INVOICE, $idemKey, $invoice);
+
                 return $invoice;
             });
         } catch (\App\Exceptions\Rejected $e) {
@@ -2286,8 +2322,26 @@ class FieldApiController extends Controller
             // فبتتلقف هنا برضه. أي خطأ تاني (SQL مثلاً) بيكمّل لـ500
             // عن قصد.
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // ريكوست تاني بنفس المفتاح سبقنا — ترانزاكشننا رجعت كلها،
+            // نرجّع فاتورته. أي خطأ SQL تاني بيكمّل لـ500 زي الأول.
+            $prev = \App\Support\Idempotency::isDuplicate($e)
+                ? \App\Support\Idempotency::find($user, \App\Support\Idempotency::INVOICE, $idemKey, Invoice::class)
+                : null;
+
+            if ($prev === null) {
+                throw $e;
+            }
+
+            return $this->invoiceResponse($prev, 200);
         }
 
+        return $this->invoiceResponse($invoice, 201);
+    }
+
+    /** رد الفاتورة — نفس الشكل للإنشاء ولإعادة الإرسال بنفس المفتاح */
+    private function invoiceResponse(Invoice $invoice, int $status): JsonResponse
+    {
         $invoice->load('items.product');
 
         return response()->json([
@@ -2304,7 +2358,7 @@ class FieldApiController extends Controller
                 'payment' => $invoice->payment,
                 'time' => $invoice->created_at->toIso8601String(),
             ],
-        ], 201);
+        ], $status);
     }
 
     /**
@@ -2653,6 +2707,16 @@ class FieldApiController extends Controller
         if ($purchaseOrder->assigned_to !== $user->id) {
             return response()->json(['message' => __('api.order_not_yours')], 403);
         }
+
+        // ⚠️ منع التكرار (الخط ١): إعادة الإرسال بعد تايم أوت بترجّع
+        // نفس ملخص التسليم بدل «لازم توصل الأول».
+        $request->validate(['idem_key' => \App\Support\Idempotency::RULES]);
+        $idemKey = $request->input('idem_key');
+        $prev = \App\Support\Idempotency::find($user, \App\Support\Idempotency::PO_DELIVER, $idemKey, PurchaseOrder::class);
+        if ($prev !== null && (int) $prev->id === (int) $purchaseOrder->id) {
+            return $this->deliverResponse($purchaseOrder);
+        }
+
         if ($purchaseOrder->status !== 'arrived') {
             return response()->json(['message' => __('field.must_arrive_first')], 422);
         }
@@ -2718,7 +2782,15 @@ class FieldApiController extends Controller
         // ⚠️ نفس قاعدة storeInvoice: الخصم من العهدة جوه الترانزاكشن،
         // مايصحّش تخرج البضاعة من العربية وأمر التوريد يفضل مش متسلّم.
         try {
-            DB::transaction(function () use ($purchaseOrder, $user, $request, $custody, $qty, $delivered) {
+            DB::transaction(function () use ($purchaseOrder, $user, $request, $custody, $qty, $delivered, $idemKey) {
+                // ⚠️ **الحالة تتقري تاني جوه القفل** (الخط ١): الفحص اللي
+                // فوق بره الترانزاكشن، فضغطتين في نفس اللحظة كانوا
+                // بيعدّوه الاتنين = خصمين من العهدة وقيدين على العميل.
+                $locked = PurchaseOrder::whereKey($purchaseOrder->id)->lockForUpdate()->first();
+                if ($locked === null || $locked->status !== 'arrived') {
+                    throw new \App\Exceptions\Rejected(__('field.must_arrive_first'));
+                }
+
                 if ($err = $custody->deduct($qty)) {
                     throw new StockShortage($err);
                 }
@@ -2820,12 +2892,25 @@ class FieldApiController extends Controller
                         'amount' => number_format($grand),
                     ]),
                     ...$this->eventPoint($request->only(['lat', 'lng']), $purchaseOrder->client));
+
+                \App\Support\Idempotency::remember($user, \App\Support\Idempotency::PO_DELIVER, $idemKey, $purchaseOrder);
             });
-        } catch (StockShortage $e) {
-            // نقص في عهدة العربية — مفيش حاجة اتغيرت
+        } catch (\App\Exceptions\Rejected $e) {
+            // نقص في عهدة العربية، أو الأمر اتسلّم في ريكوست تاني —
+            // مفيش حاجة اتغيرت (StockShortage وريثة Rejected)
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (! \App\Support\Idempotency::isDuplicate($e)) {
+                throw $e;
+            }
         }
 
+        return $this->deliverResponse($purchaseOrder);
+    }
+
+    /** ملخص التسليم — نفس الشكل للتسليم ولإعادة الإرسال بنفس المفتاح */
+    private function deliverResponse(PurchaseOrder $purchaseOrder): JsonResponse
+    {
         $purchaseOrder->refresh()->load('items');
 
         // السامري: سلم إيه وإيه الفرق — من السيرفر مش من حساب الأبلكيشن
