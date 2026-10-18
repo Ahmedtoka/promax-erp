@@ -501,6 +501,11 @@ return [
     // ═══ كارت الصنف ═══
     'product_card' => 'كارت الصنف',
     'identity' => 'التعريف',
+    'product_kind' => 'نوع الصنف',
+    'product_kind_finished' => 'منتج تام',
+    'product_kind_raw' => 'خامة',
+    'product_kind_packaging' => 'مادة تعبئة',
+    'product_kind_hint' => 'الخامة ومادة التعبئة مابيظهروش في أي شاشة بيع.',
     'specs' => 'المواصفات',
     'image' => 'صورة الصنف',
     'image_hint' => 'JPG أو PNG أو WEBP — 4 ميجا كحد أقصى. الصورة بتبان في الكتالوج وفي أبلكيشن المندوب.',

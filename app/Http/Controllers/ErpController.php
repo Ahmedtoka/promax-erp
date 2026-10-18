@@ -2384,6 +2384,9 @@ class ErpController extends Controller
             // معدّل) بيعدّي. والإنجليزي هو الافتراضي في كل الشاشات
             // والمطبوعات، فعميل من غيره اسمه بيطلع فاضي قدام العميل.
             'name_en' => ['required', 'string', 'max:190'],
+            // نوع الصنف (١٩/١٠) — `sometimes` عشان الفورم القديم/الاستيراد
+            // اللي مابيبعتهوش مايكتبش null على عمود NOT NULL
+            'kind' => ['sometimes', 'required', Rule::in(Product::KINDS)],
             'unit' => ['required', 'string', 'max:40'],
             'unit_en' => ['nullable', 'string', 'max:40'],
 

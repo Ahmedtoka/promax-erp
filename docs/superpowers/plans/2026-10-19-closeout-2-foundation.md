@@ -58,7 +58,7 @@
 - Column `products.kind` varchar(20) NOT NULL default `'finished'`.
 - `Product::KINDS = ['finished','raw','packaging']`, `'kind'` in `$fillable`.
 - `Product::scopeSellable($q)` → `where('active', true)->where('kind','finished')` (D1); `Product::isSellable(): bool` same rule.
-- `Product::kindLabel(): string` → `__('stock.kind_'.$kind)`.
+- `Product::kindLabel(): string` → `__('stock.product_kind_'.$kind)` (`stock.kind` already means transfer direction).
 - `App\Rules\SellableProduct::__construct(bool $anyKind = false)`; raw/packaging fails with `__('api.product_not_for_sale', ['product' => name])` unless `anyKind`.
 
 - [ ] **Step 1: failing tests** `tests/Feature/ProductKindTest.php`:
@@ -70,7 +70,7 @@
   - `test_receipt_accepts_a_raw_material` → admin POST `wh.receipts.store` with a raw line → no `lines.0.product_id` error (Review Focus 2)
   - `test_product_form_saves_kind` → admin POST `erp.products.store` with `kind=raw` → row kind raw; invalid `kind=xyz` → session error `kind`
 - [ ] **Step 2:** `php artisan test --filter=ProductKindTest` → FAIL (column missing).
-- [ ] **Step 3:** migration (guarded), model, rule, `WarehouseController` receipt/transfer `new SellableProduct(anyKind: true)`, `ErpController::productRules` `'kind' => ['nullable', Rule::in(Product::KINDS)]` + saved on store/update, form select, lang keys `stock.kind`, `stock.kind_finished|raw|packaging`, `api.product_not_for_sale` (ar+en).
+- [ ] **Step 3:** migration (guarded), model, rule, `WarehouseController` receipt/transfer `new SellableProduct(anyKind: true)`, `ErpController::productRules` `'kind' => ['sometimes','required', Rule::in(Product::KINDS)]` + saved on store/update, form select, lang keys `stock.product_kind`, `stock.product_kind_finished|raw|packaging|hint`, `api.product_not_for_sale` (ar+en).
 - [ ] **Step 4:** filter → PASS; `--filter="PricingTest|UnitsOfMeasureTest|CoreFlowsTest"` still green.
 - [ ] **Step 5: commit** `feat(products): kind (finished/raw/packaging) and sellable scope filters it`.
 

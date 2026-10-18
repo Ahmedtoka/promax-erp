@@ -36,6 +36,13 @@ use Illuminate\Contracts\Validation\ValidationRule;
  */
 class SellableProduct implements ValidationRule
 {
+    /**
+     * `anyKind: true` (١٩/١٠) = الاستلام والتحويل بين المخازن — دي حركة
+     * بضاعة مش بيع، والخامات والتعبئة لازم تعدّي منها (مخزن الخامات).
+     * الدرافت مرفوض في الحالتين.
+     */
+    public function __construct(public bool $anyKind = false) {}
+
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         $product = Product::find($value);
@@ -50,8 +57,16 @@ class SellableProduct implements ValidationRule
             return;
         }
 
-        if (! $product->isSellable()) {
+        if (! $product->active) {
             $fail(__('api.product_draft', [
+                'product' => $product->displayName(),
+            ]));
+
+            return;
+        }
+
+        if (! $this->anyKind && ! $product->isSellable()) {
+            $fail(__('api.product_not_for_sale', [
                 'product' => $product->displayName(),
             ]));
         }
