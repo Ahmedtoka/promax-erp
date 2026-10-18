@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\HandoverModule;
 use App\Models\HandoverScreen;
+use App\Support\Access;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -37,6 +39,90 @@ class Handover
             HandoverScreen::query()->marked()->count(),
             HandoverScreen::query()->count(),
         );
+    }
+
+    /**
+     * يولّد الموديولز من مجموعات `Access::NAV` والشاشات من بنودها.
+     *
+     * ⚠️ **إضافة بس** — مابيمسحش ولا بيغيّر اسم: المالك بيعدّل الأسامي
+     * والحالات بعد أول توليد، وإعادة التشغيل (بعد ما شاشة جديدة اتضافت
+     * للسايدبار) بتزوّد الناقص وتسيب تعديلاته زي ما هي.
+     *
+     * @return array{modules_added:int,screens_added:int}
+     */
+    public static function seedFromNav(bool $dryRun = false): array
+    {
+        $modulesAdded = 0;
+        $screensAdded = 0;
+
+        $work = function () use ($dryRun, &$modulesAdded, &$screensAdded) {
+            $groupSort = 0;
+
+            foreach (Access::NAV as $groupKey => $links) {
+                $groupSort += 10;
+                $module = HandoverModule::query()->where('key', $groupKey)->first();
+
+                if ($module === null) {
+                    $modulesAdded++;
+
+                    if (! $dryRun) {
+                        $module = HandoverModule::create([
+                            'key' => $groupKey,
+                            'nav_group_key' => $groupKey,
+                            'name_ar' => __($groupKey, [], 'ar'),
+                            'name_en' => __($groupKey, [], 'en'),
+                            'sort' => $groupSort,
+                        ]);
+                    }
+                }
+
+                $existing = $module
+                    ? HandoverScreen::query()->where('module_id', $module->id)->pluck('route')->all()
+                    : [];
+                $itemSort = 0;
+
+                foreach ($links as $link) {
+                    [$route, , $label] = $link;
+                    $itemSort += 10;
+
+                    if (in_array($route, $existing, true)) {
+                        continue;
+                    }
+
+                    $existing[] = $route;   // نفس الراوت مرتين في نفس المجموعة = شاشة واحدة
+                    $screensAdded++;
+
+                    if (! $dryRun) {
+                        HandoverScreen::create([
+                            'module_id' => $module->id,
+                            'route' => $route,
+                            'title_ar' => __($label, [], 'ar'),
+                            'title_en' => __($label, [], 'en'),
+                            'sort' => $itemSort,
+                        ]);
+                    }
+                }
+            }
+        };
+
+        $dryRun ? $work() : DB::transaction($work);
+
+        return ['modules_added' => $modulesAdded, 'screens_added' => $screensAdded];
+    }
+
+    /**
+     * «الشاشة اتغيّرت» — `touched_at = now()` على الشاشات اللي راوتها في القايمة.
+     * التعليم نفسه فاضل، والشاشة بتاخد «اتعدلت بعد الاستلام».
+     *
+     * @param  list<string>  $routes
+     */
+    public static function touch(array $routes): int
+    {
+        if ($routes === []) {
+            return 0;
+        }
+
+        return HandoverScreen::query()->whereIn('route', $routes)->update(['touched_at' => now()]);
     }
 
     /** @return array{marked:int,total:int,pct:int} */

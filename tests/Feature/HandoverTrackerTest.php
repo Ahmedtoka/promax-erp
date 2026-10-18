@@ -7,6 +7,7 @@ use App\Models\HandoverModule;
 use App\Models\HandoverScreen;
 use App\Models\User;
 use App\Services\Handover;
+use App\Support\Access;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -86,5 +87,82 @@ class HandoverTrackerTest extends TestCase
         $this->assertTrue($screen->isStale());
         $this->assertSame(50, Handover::moduleProgress($m)['pct']);
         $this->assertSame(['marked' => 1, 'total' => 2, 'pct' => 50], Handover::overall());
+    }
+
+    // ═══════════════ 1.2 التوليد من السايدبار + «اتلمست» ═══════════════
+
+    public function test_seed_creates_one_module_per_nav_group_and_one_screen_per_item(): void
+    {
+        $out = Handover::seedFromNav();
+
+        $items = array_sum(array_map('count', Access::NAV));
+
+        $this->assertSame(count(Access::NAV), HandoverModule::count());
+        $this->assertSame($items, HandoverScreen::count());
+        $this->assertSame(['modules_added' => count(Access::NAV), 'screens_added' => $items], $out);
+
+        // المفتاح = مفتاح المجموعة، والراوت = اسم راوت البند، والعناوين باللغتين
+        $clients = HandoverModule::where('key', 'nav.group_clients')->firstOrFail();
+        $this->assertSame('nav.group_clients', $clients->nav_group_key);
+        $this->assertSame(__('nav.group_clients', [], 'ar'), $clients->name_ar);
+        $this->assertSame(__('nav.group_clients', [], 'en'), $clients->name_en);
+
+        $screen = $clients->screens()->where('route', 'erp.clients')->firstOrFail();
+        $this->assertSame(__('nav.clients', [], 'ar'), $screen->title_ar);
+        $this->assertSame(__('nav.clients', [], 'en'), $screen->title_en);
+    }
+
+    public function test_seed_dry_run_writes_nothing(): void
+    {
+        $out = Handover::seedFromNav(true);
+
+        $this->assertSame(count(Access::NAV), $out['modules_added']);
+        $this->assertSame(0, HandoverModule::count());
+        $this->assertSame(0, HandoverScreen::count());
+    }
+
+    public function test_seed_twice_adds_nothing(): void
+    {
+        Handover::seedFromNav();
+
+        $this->assertSame(['modules_added' => 0, 'screens_added' => 0], Handover::seedFromNav());
+    }
+
+    public function test_seed_keeps_owner_edits(): void
+    {
+        Handover::seedFromNav();
+
+        $m = HandoverModule::where('key', 'nav.group_clients')->firstOrFail();
+        $m->update(['name_ar' => 'اسم المالك', 'name_en' => 'Owner Name']);
+        $s = $m->screens()->firstOrFail();
+        $s->update(['title_en' => 'Owner Title']);
+
+        $this->artisan('promax:handover-seed')->assertSuccessful();
+
+        $this->assertSame('اسم المالك', $m->fresh()->name_ar);
+        $this->assertSame('Owner Name', $m->fresh()->name_en);
+        $this->assertSame('Owner Title', $s->fresh()->title_en);
+    }
+
+    public function test_touch_marks_screen_stale(): void
+    {
+        Handover::seedFromNav();
+        $screen = HandoverScreen::where('route', 'erp.clients')->firstOrFail();
+        $screen->marks()->create(['user_id' => $this->makeAdmin()->id, 'marked_at' => now()->subMinute()]);
+
+        $this->assertFalse($screen->fresh()->isStale());
+
+        $this->artisan('promax:handover-touch', ['route' => ['erp.clients']])->assertSuccessful();
+
+        $this->assertTrue($screen->fresh()->isStale());
+        // التعليم فاضل — العلامة تنبيه بس
+        $this->assertNotNull($screen->fresh()->activeMark());
+    }
+
+    public function test_touch_fails_when_no_screen_matches(): void
+    {
+        Handover::seedFromNav();
+
+        $this->artisan('promax:handover-touch', ['route' => ['erp.no_such_screen']])->assertFailed();
     }
 }
