@@ -14,7 +14,7 @@
 @endphp
 
 @section('actions')
-    <a class="btn" href="{{ route('gl.balance_sheet', ['to' => $asOf->toDateString(), 'export' => 1]) }}">
+    <a class="btn" href="{{ route('gl.balance_sheet', ['to' => $asOf->toDateString(), 'cost_center_id' => $centerId, 'export' => 1]) }}">
         📊 {{ __('common.export_screen') }}
     </a>
 @endsection
@@ -46,6 +46,7 @@
     <form method="GET" class="searchbar" data-noprint>
         <label class="fl"><span>{{ __('gl.as_of') }}</span>
             <input type="date" name="to" value="{{ $asOf->toDateString() }}" onchange="this.form.submit()"></label>
+        @include('gl._cost_center_filter')
     </form>
 
     <div class="tablewrap">

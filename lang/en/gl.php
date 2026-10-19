@@ -295,4 +295,9 @@ return [
     'period_closed_reject' => 'The month :month is closed. Reopen the period from the settings.',
     'needs_review_late_sync' => 'Late sync from mobile',
     'renumber_skipped_closed' => ':n invoices in closed months kept their numbers.',
+
+    // Cost center filter on the reports (lane 3)
+    'cost_center' => 'Cost center',
+    'all_centers' => 'All centers',
+    'center_filter_note' => 'The filter shows only lines that carry a center. Clients, suppliers and safes have no center, so a balance sheet by center may not balance.',
 ];
