@@ -305,4 +305,26 @@ class SellableKindTest extends TestCase
         $item = new OnlineOrderItem(['shopify_variant_id' => 424243, 'sku' => $this->fin->code]);
         $this->assertSame($this->fin->id, ShopifyOnline::matchItem($item)['product_id']);
     }
+
+    public function test_pick_update_still_edits_an_order_holding_a_later_drafted_line(): void
+    {
+        $pick = $this->makePick();
+        $old = $this->makeProduct(['code' => 'OLD-'.strtoupper(uniqid())]);
+        $pick->items()->create(['product_id' => $old->id, 'qty_requested' => 4]);
+        $old->update(['active' => false]);   // اتوقف بعد ما الأمر اترفع
+
+        $this->actingAs($this->makeAdmin())
+            ->post(route('wh.picks.update', $pick), ['qty' => [$old->id => 4, $this->fin->id => 0]])
+            // (المخزن فاضي في التيست فممكن يطلع خطأ رصيد — المهم مش رفض الصنف)
+            ->assertSessionDoesntHaveErrors(['qty' => $old->fresh()->notSellableReason()]);
+    }
+
+    public function test_existing_shopify_link_to_a_reclassified_raw_product_no_longer_matches(): void
+    {
+        ShopifyProductLink::create(['shopify_variant_id' => 515151, 'shopify_product_id' => 51, 'title' => 'Old link',
+            'product_id' => $this->raw->id, 'units' => 1]);
+
+        $item = new OnlineOrderItem(['shopify_variant_id' => 515151, 'sku' => '']);
+        $this->assertNull(ShopifyOnline::matchItem($item)['product_id']);
+    }
 }

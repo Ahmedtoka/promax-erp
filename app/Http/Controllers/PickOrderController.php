@@ -225,8 +225,12 @@ class PickOrderController extends Controller
         ]);
 
         // ⚠️ إذن الصرف ده للبيع (عربية/توريد/ريفيل/أونلاين) — مفيش خامة
-        // ولا تعبئة ولا درافت (١٩/١٠)
-        if ($bad = Product::firstNotSellable(array_keys(array_filter($data['qty'], fn ($q) => (int) $q > 0)))) {
+        // ولا تعبئة ولا درافت **في الأصناف المضافة** (١٩/١٠). البنود اللي
+        // على الأمر أصلاً بتفضل تتعدّل حتى لو صنفها اتوقف بعد الرفع —
+        // وإلا الأمين مايقدرش يحفظ أي تعديل على الأمر كله.
+        $existing = $pick->items()->pluck('product_id')->map(fn ($id) => (int) $id)->all();
+        $added = array_diff(array_map('intval', array_keys(array_filter($data['qty'], fn ($q) => (int) $q > 0))), $existing);
+        if ($bad = Product::firstNotSellable($added)) {
             return back()->withErrors(['qty' => $bad->notSellableReason()])->withInput();
         }
 

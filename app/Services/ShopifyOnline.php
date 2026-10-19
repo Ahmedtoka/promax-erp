@@ -275,8 +275,14 @@ class ShopifyOnline
             $link = ShopifyProductLink::where('shopify_variant_id', $variantId)
                 ->first(['product_id', 'units', 'bundle']);
 
-            if ($link?->product_id !== null) {
-                $parts = $link->components();
+            // ⚠️ ربط قديم على صنف اتصنّف خامة/تعبئة بعدين (١٩/١٠) = كأنه
+            // مش مربوط — البند يفضل «مش مربوط» ويتصلّح من شاشة الربط بدل ما
+            // يطلع أمر تجهيز بخامة
+            $parts = $link?->product_id !== null ? $link->components() : [];
+            $allFinished = $parts !== [] && Product::whereKey(array_column($parts, 'product_id'))
+                ->where('kind', '!=', Product::KIND_FINISHED)->doesntExist();
+
+            if ($link?->product_id !== null && $allFinished) {
 
                 return [
                     'product_id' => (int) $link->product_id,
