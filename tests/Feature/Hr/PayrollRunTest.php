@@ -396,6 +396,26 @@ class PayrollRunTest extends TestCase
         $this->actingAs($acc)->post('/hr/payroll', ['period' => '2026-09'])->assertForbidden();
     }
 
+    /** قرار المالك (١٩/١٠): شغل يوم الإجازة الأسبوعية مش بيتحسب إضافي */
+    public function test_weekend_work_is_not_overtime(): void
+    {
+        $e = $this->emp(['attendance_required' => true]);
+
+        for ($d = \Carbon\Carbon::parse('2026-09-01'); $d->lte(\Carbon\Carbon::parse('2026-09-30')); $d->addDay()) {
+            AttendanceDay::create([
+                'employee_id' => $e->id, 'date' => $d->toDateString(), 'sessions' => 1,
+                'first_in_at' => $d->toDateString().' 09:00:00',
+                // الجمعة ٤ سبتمبر: ١٠ ساعات شغل في يوم الإجازة
+                'worked_minutes' => $d->isFriday() ? 600 : 480, 'status' => 'closed',
+            ]);
+        }
+
+        $s = $this->slip(Payroll::draft('2026-09', $this->admin), $e);
+
+        $this->assertSame(0.0, $s->amountOf('overtime'));
+        $this->assertSame(0.0, $s->amountOf('absence'));
+    }
+
     public function test_payslip_print_shows_net(): void
     {
         $e = $this->emp(['name' => 'سامي الطباعة']);

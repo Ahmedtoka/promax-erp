@@ -33,6 +33,14 @@
 
 ---
 
+## Owner decisions (Ahmed, 2026-10-19, after the lane report)
+
+- **Who pays the payroll:** the accountant or the admin (`hr.payroll.pay` = `role:admin,accountant`, `act.hr.payroll_pay` default `['accountant']`). Approval stays admin only.
+- **Weekend work is not overtime:** only working days (not in `hr_weekend_days`) are checked for overtime, absence and lateness. Pinned by `PayrollRunTest::test_weekend_work_is_not_overtime`.
+- **No social insurance in a partial hire month:** when the hire date falls after the 1st of the payroll month, that month has no insurance (neither share); full insurance from the next month. Pinned by `test_no_insurance_in_a_partial_hire_month`.
+
+---
+
 ## File structure
 
 - `database/migrations/2026_10_19_000700_hr_employees.php` — employees.
