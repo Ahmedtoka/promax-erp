@@ -81,6 +81,12 @@ class GlSeeder extends Seeder
         foreach (self::ACCOUNTS as [$code, $name, $en, $parentCode, $key, $postable]) {
             $parent = $parentCode ? self::seeded($parentCode, null) : null;
             $type = GlAccount::ROOT_TYPES[$code[0]];
+            // المفتاح اتنقل بشاشة الربط على حساب تاني (معتمد أو حر) ⇒ ده مكانه
+            // دلوقتي: مانلمسش الحساب ده ولا نولّد نسخة تانية للمفتاح
+            $holder = $key ? GlAccount::where('system_key', $key)->first() : null;
+            if ($holder && ($holder->coa_draft_id !== null || ! in_array($holder->code, [$code, 'S-'.$code], true))) {
+                continue;
+            }
             $acc = self::seeded($code, $key);
             $attrs = [
                 'parent_id' => $parent?->id, 'type' => $type,

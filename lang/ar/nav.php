@@ -72,6 +72,7 @@ return [
     'gl_expenses' => 'المصروفات',
     'gl_cash' => 'حركة النقدية',
     'gl_settings' => 'إعدادات الدفتر',
+    'gl_mapping' => 'ربط الحسابات',
 
     'repclose' => 'تصفية المناديب',
     'dayclose' => 'قفل اليوم',

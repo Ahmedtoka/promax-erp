@@ -485,6 +485,8 @@ class Access
             ['gl.accounts', '🌳', 'nav.gl_accounts', 'gl.accounts*', null],
             // (٢٢/٩) مسودة شجرة العميل — ورقة شغل قبل اعتماد الشجرة وربطها
             ['gl.coa', '📝', 'coa.page', 'gl.coa*', null],
+            // (١٩/١٠) ربط مفاتيح النظام وخانات القواعد بالشجرة المعتمدة
+            ['gl.mapping', '🔗', 'nav.gl_mapping', 'gl.mapping*', null],
             ['gl.entries', '📒', 'nav.gl_entries', 'gl.entries*', null],
             ['gl.trial_balance', '⚖️', 'nav.gl_trial_balance', 'gl.trial_balance*', null],
             ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],
@@ -708,6 +710,7 @@ class Access
         'act.gl.admin' => ['perm.act_gl_admin', 'gl.settings', [], [
             'gl.settings.rules', 'gl.settings.general', 'gl.periods.reopen',
             'gl.rebuild.preview', 'gl.rebuild', 'gl.coa.accept', 'gl.coa.adopt',
+            'gl.mapping.keys', 'gl.mapping.rules',
         ]],
 
         // ═══ الإعدادات ═══

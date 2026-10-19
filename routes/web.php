@@ -774,6 +774,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/coa/{account}/move', [$d, 'move'])->name('coa.move');
         Route::delete('/coa/{account}', [$d, 'destroy'])->name('coa.destroy');
 
+        // ═══ الربط (D1) — مفاتيح النظام وخانات القواعد على الشجرة المعتمدة ═══
+        $m = \App\Http\Controllers\Gl\MappingController::class;
+        Route::get('/mapping', [$m, 'index'])->name('mapping');
+        Route::post('/mapping/keys', [$m, 'saveKeys'])->middleware('role:admin')->name('mapping.keys');
+        Route::post('/mapping/rules', [$m, 'saveRules'])->middleware('role:admin')->name('mapping.rules');
+
         // ═══ اليومية — القيود وسطورها ═══
         $e = \App\Http\Controllers\Gl\EntryController::class;
         Route::get('/entries', [$e, 'index'])->name('entries');

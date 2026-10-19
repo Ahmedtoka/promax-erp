@@ -86,6 +86,10 @@ class CoaAdopter
                         'coa_draft_id' => $d->id,
                     ];
                     $g = $existing[$d->id] ?? null;
+                    // مجموعة المناديب (شاشة الربط) بتفضل مجموعة — حسابات المناديب تحتها
+                    if ($g && $g->system_key === 'rep_cash') {
+                        $attrs['is_postable'] = false;
+                    }
                     if ($g) {
                         $g->fill($attrs)->save();
                         $out['updated']++;

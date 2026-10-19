@@ -123,6 +123,22 @@ class Rules
         return $this->safeAccount($acc, $needsReview);
     }
 
+    /**
+     * خانة قاعدة → حساب (D1). الخانة المثبّتة (`<side>_account_id`) بتتقدّم
+     * على المفتاح وبتعدّي على نفس الحارس (`safeAccount`): حساب موقوف أو
+     * مجموعة ⇒ المعلّق + مراجعة. من غير تثبيت ⇒ المفتاح زي ما هو.
+     * `$side` = `debit` | `credit` | `tax`.
+     */
+    private function slotAccount(GlPostingRule $rule, string $side, ?User $rep, bool &$needsReview): int
+    {
+        $pinned = $rule->{$side.'_account_id'};
+        if ($pinned !== null) {
+            return $this->safeAccount(GlAccount::find($pinned), $needsReview);
+        }
+
+        return $this->keyAccount($rule->{$side.'_key'}, $rep, $needsReview);
+    }
+
     /** مندوب التحصيل من مصدر القيد */
     public function repFor(Transaction $tx): ?User
     {
@@ -161,28 +177,27 @@ class Rules
         $needsReview = false;
         // `repFor()` بيعمل كويري على المستند — مانناديهاش غير لما المفتاح
         // يكون `rep_cash` فعلاً
-        $resolve = function (?string $k) use ($tx, &$needsReview): int {
-            return $this->keyAccount($k, $k === 'rep_cash' ? $this->repFor($tx) : null, $needsReview);
+        $resolve = function (string $side) use ($rule, $tx, &$needsReview): int {
+            $rep = $rule->{$side.'_account_id'} === null && $rule->{$side.'_key'} === 'rep_cash' ? $this->repFor($tx) : null;
+
+            return $this->slotAccount($rule, $side, $rep, $needsReview);
         };
 
-        $drKey = $rule->debit_key;
-        $crKey = $rule->credit_key;
-
-        $lines = [['slot' => 'dr', 'account_id' => $resolve($drKey), 'debit' => $amount, 'credit' => 0.0]];
-        if ($rule->tax_key && $tax > 0) {
+        $lines = [['slot' => 'dr', 'account_id' => $resolve('debit'), 'debit' => $amount, 'credit' => 0.0]];
+        if (($rule->tax_key || $rule->tax_account_id) && $tax > 0) {
             // الضريبة بتتفصل عن الطرف «الإيراد/المرتجع» مش عن العملاء
             if ($tx->kind === 'sale') {
-                $lines[] = ['slot' => 'cr', 'account_id' => $resolve($crKey), 'debit' => 0.0, 'credit' => round($amount - $tax, 2)];
-                $lines[] = ['slot' => 'tax', 'account_id' => $resolve($rule->tax_key), 'debit' => 0.0, 'credit' => $tax];
+                $lines[] = ['slot' => 'cr', 'account_id' => $resolve('credit'), 'debit' => 0.0, 'credit' => round($amount - $tax, 2)];
+                $lines[] = ['slot' => 'tax', 'account_id' => $resolve('tax'), 'debit' => 0.0, 'credit' => $tax];
             } else { // return: المدين هو المرتجعات + الضريبة، الدائن العملاء
                 $lines = [
-                    ['slot' => 'dr', 'account_id' => $resolve($drKey), 'debit' => round($amount - $tax, 2), 'credit' => 0.0],
-                    ['slot' => 'tax', 'account_id' => $resolve($rule->tax_key), 'debit' => $tax, 'credit' => 0.0],
-                    ['slot' => 'cr', 'account_id' => $resolve($crKey), 'debit' => 0.0, 'credit' => $amount],
+                    ['slot' => 'dr', 'account_id' => $resolve('debit'), 'debit' => round($amount - $tax, 2), 'credit' => 0.0],
+                    ['slot' => 'tax', 'account_id' => $resolve('tax'), 'debit' => $tax, 'credit' => 0.0],
+                    ['slot' => 'cr', 'account_id' => $resolve('credit'), 'debit' => 0.0, 'credit' => $amount],
                 ];
             }
         } else {
-            $lines[] = ['slot' => 'cr', 'account_id' => $resolve($crKey), 'debit' => 0.0, 'credit' => $amount];
+            $lines[] = ['slot' => 'cr', 'account_id' => $resolve('credit'), 'debit' => 0.0, 'credit' => $amount];
         }
 
         // ═══ الاتجاه ═══
@@ -222,12 +237,9 @@ class Rules
         $needsReview = false;
         // الطرفين من القاعدة — `rep_cash` بيتحل لمندوب التصفية (كان الدائن
         // مكتوب في الكود على حساب المندوب وبيتجاهل القاعدة)
-        $res = function (?string $k) use ($s, &$needsReview): int {
-            return $this->keyAccount($k, $s->user, $needsReview);
-        };
         $lines = [
-            ['slot' => 'dr', 'account_id' => $res($rule->debit_key), 'debit' => $received, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $res($rule->credit_key), 'debit' => 0.0, 'credit' => $received],
+            ['slot' => 'dr', 'account_id' => $this->slotAccount($rule, 'debit', $s->user, $needsReview), 'debit' => $received, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $this->slotAccount($rule, 'credit', $s->user, $needsReview), 'debit' => 0.0, 'credit' => $received],
         ];
 
         return [
@@ -255,16 +267,17 @@ class Rules
         }
         // في دفتر المورد: credit = علينا له (فاتورة)، debit = دفعنا له. المفاتيح مكتوبة
         // على الاتجاه الطبيعي لكل نوع؛ opening/adjust بيتقلبوا لو الإشارة معكوسة
-        $dr = $rule->debit_key;
-        $cr = $rule->credit_key;
+        // الخانة المثبّتة بتتقلب مع مفتاحها
+        $needsReview = false;
+        $dr = $this->slotAccount($rule, 'debit', null, $needsReview);
+        $cr = $this->slotAccount($rule, 'credit', null, $needsReview);
         if (in_array($st->kind, ['opening', 'adjust'], true) && (float) $st->debit > 0) {
             [$dr, $cr] = [$cr, $dr];
         }
 
-        $needsReview = false;
         $lines = [
-            ['slot' => 'dr', 'account_id' => $this->keyAccount($dr, null, $needsReview), 'debit' => $amount, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $this->keyAccount($cr, null, $needsReview), 'debit' => 0.0, 'credit' => $amount],
+            ['slot' => 'dr', 'account_id' => $dr, 'debit' => $amount, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $cr, 'debit' => 0.0, 'credit' => $amount],
         ];
 
         return [
@@ -291,7 +304,7 @@ class Rules
             $needsReview = true;
         }
         // الدائن من القاعدة — `rep_cash` بيتحل لمندوب السند
-        $creditId = $this->keyAccount($rule->credit_key, $rep, $needsReview);
+        $creditId = $this->slotAccount($rule, 'credit', $rep, $needsReview);
         // حساب المصروف نفسه جاي من السند (مش من القاعدة) — بيعدّي على نفس
         // الحارس: حساب موقوف أو مجموعة بيروح المعلّق
         $debitId = $this->safeAccount($x->account_id ? GlAccount::find($x->account_id) : null, $needsReview);
@@ -322,13 +335,13 @@ class Rules
         if (in_array($m->kind, ['rep_advance', 'rep_return'], true) && ! $m->user) {
             $needsReview = true;
         }
-        $res = function (?string $k) use ($m, &$needsReview): int {
-            return $this->keyAccount($k, $k === 'rep_cash' ? $m->user : null, $needsReview);
+        $res = function (string $side) use ($rule, $m, &$needsReview): int {
+            return $this->slotAccount($rule, $side, $rule->{$side.'_key'} === 'rep_cash' ? $m->user : null, $needsReview);
         };
         $amount = round((float) $m->amount, 2);
         $lines = [
-            ['slot' => 'dr', 'account_id' => $res($rule->debit_key), 'debit' => $amount, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $res($rule->credit_key), 'debit' => 0.0, 'credit' => $amount],
+            ['slot' => 'dr', 'account_id' => $res('debit'), 'debit' => $amount, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $res('credit'), 'debit' => 0.0, 'credit' => $amount],
         ];
 
         return [

@@ -72,6 +72,7 @@ return [
     'gl_expenses' => 'Expenses',
     'gl_cash' => 'Cash Movements',
     'gl_settings' => 'Ledger Settings',
+    'gl_mapping' => 'Account mapping',
 
     'repclose' => 'Rep Settlements',
     'dayclose' => 'Day Close',
