@@ -69,21 +69,22 @@ class CostingGlSeed
 
     /**
      * سبب رفض التشغيل الحقيقي، أو null: الشجرة فاضية، أو جذر ٤/٥ مفقود، أو
-     * مفتاح `inventory` / `payables` (هدف القواعد) مش موجود.
+     * مفتاح `inventory` / `payables` (هدف القواعد) مش موجود. الرسالة مترجمة
+     * (`costing.seed_*`) عشان خطوة ٧ في المعالج بتعرضها.
      */
     public static function blocker(): ?string
     {
         if (! GlAccount::query()->exists()) {
-            return 'The chart of accounts is empty - set up the GL tree first (GL wizard or GlSeeder), then run this again. Nothing written.';
+            return __('costing.seed_empty_tree');
         }
         foreach (['4', '5'] as $code) {
             if (! GlAccount::where('code', $code)->exists()) {
-                return "Root {$code} is missing from the chart of accounts - set up the GL tree first. Nothing written.";
+                return __('costing.seed_root_missing', ['code' => $code]);
             }
         }
         foreach (['inventory', 'payables'] as $key) {
             if (! GlAccount::where('system_key', $key)->exists()) {
-                return "The system account [{$key}] is missing - set up the GL tree first. Nothing written.";
+                return __('costing.seed_key_missing', ['key' => $key]);
             }
         }
 

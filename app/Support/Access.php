@@ -851,6 +851,8 @@ class Access
             'gl.golive.safes.link', 'gl.golive.opening.lines.add', 'gl.golive.opening.lines.delete',
             'gl.golive.opening.client', 'gl.golive.opening.supplier', 'gl.golive.opening.post',
             'gl.golive.preview', 'gl.golive.preview.approve',
+            // الخط ٩: خطوة ٧ والتشغيل الفعلي
+            'gl.golive.costing.save', 'gl.golive.costing.seed', 'gl.golive.run',
             // L4-D8: بنود المصروف
             'gl.expense_categories.store', 'gl.expense_categories.update',
             // L4-D11: تشغيل الإهلاك الشهري

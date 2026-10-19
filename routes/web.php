@@ -853,8 +853,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 Route::post('/opening/post', [$gw, 'postOpening'])->name('opening.post');
                 Route::post('/preview', [$gw, 'preview'])->name('preview');
                 Route::post('/preview/{run}/approve', [$gw, 'approve'])->name('preview.approve');
+                // الخط ٩ — خطوة ٧ (إعدادات التكاليف) وخطوة ٩ (التشغيل الفعلي)
+                $gc = \App\Http\Controllers\Gl\GoLiveCostingController::class;
+                Route::post('/costing', [$gc, 'save'])->name('costing.save');
+                Route::post('/costing/seed', [$gc, 'seed'])->name('costing.seed');
+                Route::post('/run', [$gc, 'run'])->name('run');
                 Route::post('/{n}/confirm', [$gw, 'confirm'])->whereNumber('n')->name('confirm');
             });
+            // تقدّم التشغيل (JSON) — مقروء للمحاسب كمان، وقبل `{n}`
+            Route::get('/run/progress', [\App\Http\Controllers\Gl\GoLiveCostingController::class, 'progress'])->name('run.progress');
             Route::get('/{n}', [$gw, 'show'])->whereNumber('n')->name('show');
         });
 

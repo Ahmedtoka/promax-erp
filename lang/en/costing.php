@@ -11,6 +11,8 @@ return [
     'flag_no_transfer_price' => 'No transfer price',
     'tp_price_required' => 'Enter a transfer price greater than zero.',
     'seed_empty_tree' => 'The chart of accounts is empty - set up the GL tree first, then try again.',
+    'seed_root_missing' => 'Root :code is missing from the chart of accounts - set up the GL tree first. Nothing written.',
+    'seed_key_missing' => 'The system account [:key] is missing - set up the GL tree first. Nothing written.',
     'flag_no_hours' => 'No line hours',
     'flag_no_history' => 'No rate history',
     'flag_no_rate' => 'No default kg rate',
