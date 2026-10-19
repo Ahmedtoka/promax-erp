@@ -5,6 +5,7 @@ namespace App\Services\Costing;
 use App\Models\CostCenter;
 use App\Models\CostEntry;
 use App\Models\Gl\GlPostingRule;
+use App\Models\StockTransfer;
 use App\Models\Transaction;
 use App\Services\Gl\Rules;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +39,7 @@ final class CostGl
     public static function lines(CostEntry $e): array
     {
         $none = ['rule' => '', 'memo' => '', 'needs_review' => false, 'lines' => []];
-        if (! in_array($e->kind, ['sale', 'return'], true)) {
+        if (! in_array($e->kind, ['sale', 'return', 'transfer'], true)) {
             return $none;
         }
 
@@ -73,15 +74,25 @@ final class CostGl
             }
         };
 
-        $pair('cost.sale', 'dr', 'cr', $official, $center, $center);
-        $pair('cost.markup', 'mk_dr', 'mk_cr', $markup, $center, $company);
+        if ($e->kind === 'transfer') {
+            // البيع الداخلي: R الرسمي على المصنع، والهامش مدين الاستبعاد [الشركة] / دائن المبيعات الداخلية [المصنع]
+            $pair('cost.transfer', 'dr', 'cr', $official, $center, $center);
+            $pair('cost.transfer_markup', 'mk_dr', 'mk_cr', $markup, $company, $center);
+        } else {
+            $pair('cost.sale', 'dr', 'cr', $official, $center, $center);
+            $pair('cost.markup', 'mk_dr', 'mk_cr', $markup, $center, $company);
+        }
 
         if ($lines === []) {
             return $none;
         }
 
         $isTx = $e->origin_type === (new Transaction)->getMorphClass();
-        $ref = ! $isTx ? null : ($e->relationLoaded('origin') ? $e->origin?->memo : Transaction::whereKey($e->origin_id)->value('memo'));
+        $ref = match (true) {
+            $isTx => $e->relationLoaded('origin') ? $e->origin?->memo : Transaction::whereKey($e->origin_id)->value('memo'),
+            $e->origin_type === (new StockTransfer)->getMorphClass() => StockTransfer::whereKey($e->origin_id)->value('number'),
+            default => null,
+        };
 
         return [
             'rule' => $ruleKey,
@@ -133,6 +144,11 @@ final class CostGl
         if ($entry->origin_type === (new Transaction)->getMorphClass()) {
             $tx = Transaction::find($entry->origin_id);
             if ($tx === null || ! CostSync::costable($tx)) {
+                return true;
+            }
+        } elseif ($entry->origin_type === (new StockTransfer)->getMorphClass()) {
+            $t = StockTransfer::find($entry->origin_id);
+            if ($t === null || ! CostSync::internalTransfer($t)) {
                 return true;
             }
         }

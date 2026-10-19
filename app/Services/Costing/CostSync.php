@@ -10,6 +10,9 @@ use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Setting;
+use App\Models\StockTransfer;
+use App\Models\StockTransferItem;
+use App\Models\Warehouse;
 use App\Models\Transaction;
 use App\Services\Gl\CostCenterResolver;
 use App\Services\Gl\Ledger;
@@ -17,6 +20,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -165,6 +169,21 @@ final class CostSync
             }
         }
 
+        // التحويلات الداخلية المستلمة
+        $trs = StockTransfer::where('kind', 'wh_wh')->where('status', 'received')->whereDate('received_on', '>=', $d);
+        foreach ($trs->lazyById(500) as $t) {
+            $r = self::doSyncTransfer($t);
+            $out['deleted'] += $r['deleted'];
+            if ($r['entry'] === null) {
+                continue;
+            }
+            $kept[$r['entry']->id] = true;
+            $out['synced']++;
+            if ($post) {
+                $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+            }
+        }
+
         // قيود أصلها اختفى (أو بقى مش قابل للتكلفة) في نفس النافذة
         $morph = (new Transaction)->getMorphClass();
         $orphans = CostEntry::whereIn('kind', self::TX_KINDS)->where('origin_type', $morph)
@@ -185,6 +204,151 @@ final class CostSync
             if (DB::transaction(fn () => self::drop($e))) {
                 $out['deleted']++;
             }
+        }
+
+        // قيود تحويل أصلها اختفى أو بقى مش داخلي (ملغي مثلاً) أو تاريخه اتنقل برا النافذة
+        $tmorph = (new StockTransfer)->getMorphClass();
+        $torphans = CostEntry::where('kind', 'transfer')->where('origin_type', $tmorph)
+            ->whereDate('date', '>=', $d)->get()->reject(fn ($e) => isset($kept[$e->id]));
+        $transfers = StockTransfer::whereIn('id', $torphans->pluck('origin_id')->unique())->get()->keyBy('id');
+        foreach ($torphans as $e) {
+            $t = $transfers->get($e->origin_id);
+            if ($t !== null && self::internalTransfer($t)) {
+                $r = self::doSyncTransfer($t);
+                $out['deleted'] += $r['deleted'];
+                if ($r['entry'] !== null && $post) {
+                    $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+                }
+
+                continue;
+            }
+            if (DB::transaction(fn () => self::drop($e))) {
+                $out['deleted']++;
+            }
+        }
+
+        return $out;
+    }
+
+    // ═══ التحويل الداخلي (المهمة ٤): مصنع/خط ← فرع بسعر التحويل ═══
+
+    /** شرط D4 الهيكلي: wh_wh + مستلم + مركز المرسل مصنع/خط + مركز المستلم فرع */
+    public static function internalTransfer(StockTransfer $t): bool
+    {
+        if ($t->kind !== 'wh_wh' || $t->status !== 'received' || ! $t->received_on) {
+            return false;
+        }
+        $from = CostCenter::forWarehouse(Warehouse::find($t->from_warehouse_id));
+        $to = CostCenter::forWarehouse(Warehouse::find($t->to_warehouse_id));
+
+        return $from !== null && $to !== null
+            && in_array($from->kind, ['factory', 'line'], true) && $to->kind === 'branch';
+    }
+
+    public static function forTransfer(StockTransfer $t): ?CostEntry
+    {
+        return self::syncTransfer($t)['entry'];
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool} */
+    public static function syncTransfer(StockTransfer $t): array
+    {
+        if (! self::ready()) {
+            return ['entry' => null, 'changed' => false];
+        }
+        self::flush();
+        $r = self::doSyncTransfer($t);
+
+        return ['entry' => $r['entry'], 'changed' => $r['changed']];
+    }
+
+    /**
+     * بعد استلام التحويل: زامن الطبقة ورحّل (repost لو اتغير، post لو لأ).
+     * مابيرميش أبداً — الاستلام نفسه خلص، والمزامنة/إعادة البناء بيصلّحوا.
+     */
+    public static function settleTransfer(StockTransfer $t): void
+    {
+        try {
+            ['entry' => $entry, 'changed' => $changed] = self::syncTransfer($t);
+            if ($entry !== null) {
+                $ledger = app(Ledger::class);
+                $changed ? $ledger->repost($entry) : $ledger->post($entry);
+            }
+        } catch (\Throwable $e) {
+            Log::error('costing.transfer failed', ['transfer' => $t->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool, deleted:int} */
+    private static function doSyncTransfer(StockTransfer $t): array
+    {
+        $morph = $t->getMorphClass();
+        $existing = CostEntry::where('origin_type', $morph)->where('origin_id', $t->id)->where('kind', 'transfer')->get();
+        if ($existing->contains(fn (CostEntry $e) => self::frozen($e))) {
+            return ['entry' => $existing->first(), 'changed' => false, 'deleted' => 0];
+        }
+
+        $date = Carbon::parse($t->received_on)->startOfDay();
+        $lines = self::internalTransfer($t) ? self::transferLines($t, $date) : [];
+
+        return self::store($morph, (int) $t->id, 'transfer', $lines, $existing, function () use ($t, $lines, $date) {
+            $from = CostCenter::forWarehouse(Warehouse::find($t->from_warehouse_id));
+            $to = CostCenter::forWarehouse(Warehouse::find($t->to_warehouse_id));
+
+            return [
+                'date' => $date->toDateString(),
+                'cost_center_id' => $from->id,
+                'other_center_id' => $to->id,
+                'qty' => round(array_sum(array_column($lines, 'qty')), 3),
+                'revenue' => 0,
+                'amount_batch' => round(array_sum(array_column($lines, 'amount_batch')), 2),
+                'amount_wavg' => round(array_sum(array_column($lines, 'amount_wavg')), 2),
+                'amount_transfer' => round(array_sum(array_column($lines, 'amount_transfer')), 2),
+                'materials' => 0,
+                'overhead' => 0,
+                'flags' => collect($lines)->contains(fn ($l) => $l['unit_transfer'] === null) ? 'no_transfer_price'
+                    : (collect($lines)->contains(fn ($l) => $l['zero_cost']) ? 'zero_cost' : null),
+            ];
+        });
+    }
+
+    /**
+     * سطور التحويل: الأصناف التامة بكمية مستلمة > 0 بس. R الباتش = تكلفة بند
+     * التحويل (وإلا تكلفة الصنف)، وسعر التحويل بتاريخ الاستلام. صنف من غير
+     * سعر تحويل: `unit_transfer` فاضي (من غير هامش) ومبلغ التحويل = R الباتش.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function transferLines(StockTransfer $t, Carbon $date): array
+    {
+        $items = StockTransferItem::where('stock_transfer_id', $t->id)->where('qty_received', '>', 0)->orderBy('id')->get();
+        $products = Product::whereIn('id', $items->pluck('product_id')->unique())->get()->keyBy('id');
+        $out = [];
+        foreach ($items as $it) {
+            $p = $products->get($it->product_id);
+            if ($p === null || ($p->kind ?? 'finished') !== 'finished') {
+                continue;
+            }
+            $qty = round((float) $it->qty_received, 3);
+            $unitBatch = round((float) ($it->cost ?? $p->cost), 4);
+            $unitWavg = Valuation::wavg($p, $date);
+            $tp = TransferPrice::effective((int) $p->id, $date);
+            $unitTp = $tp === null ? null : round((float) $tp->price, 4);
+            $amountBatch = round($qty * $unitBatch, 2);
+
+            $out[] = [
+                'product_id' => (int) $p->id,
+                'batch_id' => $it->source_batch_id ? (int) $it->source_batch_id : null,
+                'qty' => $qty,
+                'revenue' => 0,
+                'unit_batch' => $unitBatch,
+                'unit_wavg' => $unitWavg,
+                'unit_transfer' => $unitTp,
+                'amount_batch' => $amountBatch,
+                'amount_wavg' => round($qty * $unitWavg, 2),
+                'amount_transfer' => $unitTp === null ? $amountBatch : round($qty * $unitTp, 2),
+                'zero_cost' => $unitBatch <= 0 || $unitWavg <= 0,
+            ];
         }
 
         return $out;
@@ -218,7 +382,21 @@ final class CostSync
         $date = Carbon::parse($tx->date)->startOfDay();
         $lines = $kind === null ? [] : self::linesFor($tx, $kind, $date);
 
-        return DB::transaction(function () use ($tx, $kind, $lines, $date, $morph, $existing) {
+        return self::store($morph, (int) $tx->id, $kind, $lines, $existing,
+            fn () => self::entryAttrs($tx, $kind, $lines, $date));
+    }
+
+    /**
+     * كتابة القيد في مكانه (مشتركة بين المعاملات والتحويلات): مسح القيد
+     * القديم لو الأصل مابقاش قابل للتكلفة، وإلا upsert بتوقيع يحافظ على الـid.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @param  \Closure():array<string, mixed>  $attrsFn
+     * @return array{entry:?CostEntry, changed:bool, deleted:int}
+     */
+    private static function store(string $morph, int $originId, ?string $kind, array $lines, $existing, \Closure $attrsFn): array
+    {
+        return DB::transaction(function () use ($originId, $kind, $lines, $morph, $existing, $attrsFn) {
             // قيد بنوع تاني لنفس الأصل (أو الأصل بقى مش قابل للتكلفة) بيتشال
             $stale = $existing->filter(fn (CostEntry $e) => $lines === [] || $e->kind !== $kind);
             $deleted = 0;
@@ -229,15 +407,15 @@ final class CostSync
                 return ['entry' => null, 'changed' => $deleted > 0, 'deleted' => $deleted];
             }
 
-            $attrs = self::entryAttrs($tx, $kind, $lines, $date);
-            $entry = CostEntry::where('kind', $kind)->where('origin_type', $morph)->where('origin_id', $tx->id)
+            $attrs = $attrsFn();
+            $entry = CostEntry::where('kind', $kind)->where('origin_type', $morph)->where('origin_id', $originId)
                 ->lockForUpdate()->first();
             if ($entry !== null && self::signature($entry->only(array_keys($attrs)), $entry->lines()->orderBy('id')->get()->map->only(array_keys($lines[0]))->all())
                 === self::signature($attrs, $lines)) {
                 return ['entry' => $entry, 'changed' => false, 'deleted' => $deleted];
             }
 
-            $entry ??= new CostEntry(['kind' => $kind, 'origin_type' => $morph, 'origin_id' => $tx->id]);
+            $entry ??= new CostEntry(['kind' => $kind, 'origin_type' => $morph, 'origin_id' => $originId]);
             $entry->fill($attrs)->save();
             $entry->lines()->delete();
             $entry->lines()->createMany($lines);
