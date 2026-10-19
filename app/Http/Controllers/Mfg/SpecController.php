@@ -146,7 +146,7 @@ class SpecController extends Controller
         $stored = null;
 
         if ($file = $request->file('attachment')) {
-            $ext = strtolower($file->getClientOriginalExtension() ?: (string) $file->guessExtension());
+            $ext = strtolower((string) $file->guessExtension() ?: $file->getClientOriginalExtension());
             $stored = $file->storeAs(Specs::DIR, Str::uuid().($ext !== '' ? '.'.$ext : ''), 'local');
             $fields['attachment_path'] = $stored;
             $fields['attachment_name'] = Str::limit($file->getClientOriginalName(), 250, '');

@@ -170,6 +170,7 @@ class Specs
             fn () => __('mfg.spec_sent_back_title', ['product' => $product?->displayName() ?? '', 'version' => $version]),
             $note !== '' ? $note : null,
             good: false,
+            link: route('mfg.specs.show', $s->id, false),
         );
     }
 
