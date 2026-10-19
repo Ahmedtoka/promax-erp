@@ -34,17 +34,49 @@ class Rules
     /** الأنواع اللي اتجاهها الطبيعي دائن — القواعد مكتوبة على الاتجاه ده */
     public const NATURAL_CREDIT = ['collection', 'return', 'rebate', 'settlement', 'taxded'];
 
-    /** @return array{rule:string, memo:string, needs_review:bool, lines:list<array{slot:string,account_id:int,debit:float,credit:float}>} */
+    /** @return array{rule:string, memo:string, needs_review:bool, lines:list<array{slot:string,account_id:int,cost_center_id:?int,debit:float,credit:float}>} */
     public function linesFor(Model $source): array
     {
-        return match (true) {
+        return $this->withCostCenter($source, match (true) {
             $source instanceof Transaction => $this->transaction($source),
             $source instanceof RepSettlement => $this->settlement($source),
             $source instanceof SupplierTransaction => $this->supplier($source),
             $source instanceof Expense => $this->expense($source),
             $source instanceof CashMovement => $this->cash($source),
             default => $this->none(),
-        };
+        });
+    }
+
+    /**
+     * مركز التكلفة على كل سطر مالوش مركز (خطة القفل ١٩/١٠) — نداء واحد
+     * للريزولفر لكل مستند، ومفيش نداء لو مفيش سطور. السطر اللي جاي بمركز
+     * (حتى لو null صريح) بيفضل زي ما هو.
+     *
+     * ⚠️ فشل الريزولفر = سطور من غير مركز، مش قيد ضايع.
+     */
+    protected function withCostCenter(Model $source, array $result): array
+    {
+        if (($result['lines'] ?? []) === []) {
+            return $result;
+        }
+        try {
+            $center = $this->costCenterFor($source);
+        } catch (\Throwable $e) {
+            report($e);
+            $center = null;
+        }
+        foreach ($result['lines'] as $i => $line) {
+            if (! array_key_exists('cost_center_id', $line)) {
+                $result['lines'][$i]['cost_center_id'] = $center;
+            }
+        }
+
+        return $result;
+    }
+
+    protected function costCenterFor(Model $source): ?int
+    {
+        return CostCenterResolver::for($source);
     }
 
     private function none(): array
