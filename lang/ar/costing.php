@@ -9,5 +9,6 @@ return [
     'alloc_qty' => 'حسب الكميات',
     'flag_zero_cost' => 'بدون تكلفة',
     'flag_no_transfer_price' => 'بدون سعر تحويل',
+    'tp_price_required' => 'اكتب سعر تحويل أكبر من صفر.',
     'seed_empty_tree' => 'شجرة الحسابات فاضية — جهّز الشجرة الأول ثم أعد المحاولة.',
 ];

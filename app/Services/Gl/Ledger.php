@@ -118,6 +118,33 @@ class Ledger
 
     public function repost(Model $source, ?User $by = null): ?GlEntry
     {
+        // Lane 9 (D12): أدوات الفاتورة الإدارية بتعدّل البنود من ورا
+        // الموديل وبتنادي repost — طبقة التكلفة لازم تتزامن **قبل** حارس
+        // السويتش (التكلفة شغالة حتى من غير دفتر). فشلها مايوقفش الـrepost.
+        $costEntry = null;
+        if ($source instanceof \App\Models\Transaction) {
+            try {
+                $costEntry = \App\Services\Costing\CostSync::forTransaction($source);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('costing.sync failed in repost', ['tx' => $source->getKey(), 'error' => $e->getMessage()]);
+            }
+        }
+
+        $entry = $this->repostOwn($source, $by);
+
+        if ($costEntry !== null) {
+            try {
+                $this->repost($costEntry, $by);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('costing.repost failed', ['tx' => $source->getKey(), 'entry' => $costEntry->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return $entry;
+    }
+
+    private function repostOwn(Model $source, ?User $by): ?GlEntry
+    {
         // ⚠️ السويتش مقفول = مفيش لمس خالص — أدوات الفاتورة الإدارية
         // (redate/reprice/...) بتنادي repost() دايماً بعد التعديل حتى
         // لو الشجرة أصلاً مقفولة، ولو سبنا unpost() يشتغل هنا كانت
@@ -503,6 +530,9 @@ class Ledger
             ->concat(\App\Models\FixedAssetDepreciation::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
             // Lane 7: مسيرات المرتبات المعتمدة + دفعات الصرف + السلف
             ->concat(\App\Services\Hr\PayrollGl::sources($d))
+            // Lane 9: قيود التكلفة — بتزامن الطبقة الأول (جوه ترانزاكشن إعادة
+            // البناء، من غير ترحيل) وبعدين بتمشي عليها؛ الـids ثابتة
+            ->concat(\App\Services\Costing\CostGl::sources($d))
             ->sortBy(fn ($m) => self::dateOf($m)->format('Y-m-d').'-'.str_pad((string) $m->getKey(), 10, '0', STR_PAD_LEFT));
         foreach ($all as $m) {
             yield $m;
@@ -638,6 +668,8 @@ class Ledger
             // مصدر ضاع (باگ ترتيب/فلترة زي مصدر تاريخه من غير COALESCE) أو
             // قاعدة اتقفلت بيفضل ظاهر في $missing حتى لو الأعداد اتصادفت
             $missing = array_diff_key($deletedKeys, $createdSourceKeys);
+            // Lane 9: قيد تكلفة أصله اختفى أو مبلغه بقى صفر غيابه صح مش ضياع
+            $missing = array_filter($missing, fn ($_, $k) => ! \App\Services\Costing\CostGl::absentOk((string) $k), ARRAY_FILTER_USE_BOTH);
             $report->missingSources = array_slice(array_keys($missing), 0, 50);
             $report->invariants['entries'] = [
                 'deleted' => $report->deleted,

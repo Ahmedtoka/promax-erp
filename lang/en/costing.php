@@ -9,5 +9,6 @@ return [
     'alloc_qty' => 'By quantity',
     'flag_zero_cost' => 'Zero cost',
     'flag_no_transfer_price' => 'No transfer price',
+    'tp_price_required' => 'Enter a transfer price greater than zero.',
     'seed_empty_tree' => 'The chart of accounts is empty - set up the GL tree first, then try again.',
 ];

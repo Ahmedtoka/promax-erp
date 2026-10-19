@@ -51,6 +51,8 @@ class Rules
             $source instanceof FixedAssetDepreciation => $this->depreciation($source),
             // Lane 7: المرتبات والسلف (مسير معتمد/مصروف، دفعة صرف، سلفة مش ملغية)
             \App\Services\Hr\PayrollGl::handles($source) => \App\Services\Hr\PayrollGl::lines($source),
+            // Lane 9: قيود التكلفة (بيع/مرتجع، وبعدين تحويل/إنتاج/انحراف)
+            \App\Services\Costing\CostGl::handles($source) => \App\Services\Costing\CostGl::lines($source),
             default => $this->none(),
         });
     }
@@ -137,7 +139,7 @@ class Rules
      * مجموعة ⇒ المعلّق + مراجعة. من غير تثبيت ⇒ المفتاح زي ما هو.
      * `$side` = `debit` | `credit` | `tax`.
      */
-    private function slotAccount(GlPostingRule $rule, string $side, ?User $rep, bool &$needsReview): int
+    public function slotAccount(GlPostingRule $rule, string $side, ?User $rep, bool &$needsReview): int
     {
         $pinned = $rule->{$side.'_account_id'};
         if ($pinned !== null) {
@@ -264,6 +266,11 @@ class Rules
             return $this->none();
         }
         $key = 'sup.'.$st->kind;
+        // Lane 9 (D1): المخزون الدائم — القاعدة دي بيعملها seed التكاليف بس،
+        // ولو موقوفة أو مش موجودة الفاتورة بتفضل مصروف مشتريات زي الأول
+        if ($st->kind === 'invoice' && ($stock = GlPostingRule::forKey('sup.invoice.stock')) !== null && $stock->active) {
+            $key = 'sup.invoice.stock';
+        }
         if ($st->kind === 'payment') {
             $method = $st->source_type === \App\Models\SupplierPayment::class
                 ? (\App\Models\SupplierPayment::find($st->source_id)?->method ?? 'cash') : 'cash';

@@ -1,0 +1,372 @@
+<?php
+
+namespace Tests\Feature\Costing;
+
+use App\Models\Batch;
+use App\Models\ClientReturn;
+use App\Models\CostCenter;
+use App\Models\CostEntry;
+use App\Models\Gl\GlAccount;
+use App\Models\Gl\GlEntry;
+use App\Models\GoodsReceipt;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\Product;
+use App\Models\ProductTransferPrice;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\ReturnItem;
+use App\Models\Setting;
+use App\Models\Supplier;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Services\Costing\CostingGlSeed;
+use App\Services\Costing\Valuation;
+use App\Services\Gl\Ledger;
+use App\Services\Gl\RebuildDiff;
+use Database\Seeders\GlSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Tests\TestCase;
+
+/**
+ * تكلفة البيع والمرتجع (الخط ٩ — المهمة ٣): قيد التكلفة بالطريقتين،
+ * ترحيله في الدفتر، وإعادة البناء من غير ما الـids تتغير.
+ */
+class SaleCostTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $rep;
+
+    private int $n = 0;
+
+    private function world(bool $costing = true): void
+    {
+        $this->seed(GlSeeder::class);
+        if ($costing) {
+            CostingGlSeed::run();
+        }
+        Setting::write('gl_enabled', '1');
+        Setting::write('gl_start_date', '2026-08-01');
+        Setting::flushCache();
+        Valuation::flush();
+        $this->rep = $this->makeRep();
+    }
+
+    /** @param list<array{0:Product,1:int,2:float,3?:float}> $lines [product, qty, unit_cost, price] */
+    private function sale(array $lines, string $date = '2026-08-10'): array
+    {
+        $client = $this->makeClient();
+        $total = 0.0;
+        foreach ($lines as $l) {
+            $total += $l[1] * ($l[3] ?? 20);
+        }
+        $inv = Invoice::create([
+            'number' => 'INV-'.(90000 + ++$this->n), 'client_id' => $client->id, 'user_id' => $this->rep->id,
+            'payment' => 'credit', 'subtotal' => $total, 'discount' => 0, 'total' => $total, 'tax_total' => 0, 'grand_total' => $total,
+        ]);
+        $items = [];
+        foreach ($lines as $l) {
+            $price = $l[3] ?? 20;
+            $items[] = InvoiceItem::create(['invoice_id' => $inv->id, 'product_id' => $l[0]->id, 'qty' => $l[1],
+                'list_price' => $price, 'price' => $price, 'unit_cost' => $l[2], 'total' => $l[1] * $price, 'tax_rate' => 0, 'tax' => 0]);
+        }
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => $date, 'memo' => $inv->number, 'debit' => $total,
+            'credit' => 0, 'tax' => 0, 'kind' => 'sale', 'source_type' => Invoice::class, 'source_id' => $inv->id]);
+
+        return [$inv, $tx, $items, $client];
+    }
+
+    private function entryFor(Transaction $tx, string $kind = 'sale'): ?CostEntry
+    {
+        return CostEntry::where('kind', $kind)->where('origin_type', $tx->getMorphClass())->where('origin_id', $tx->id)->first();
+    }
+
+    private function bal(string $key): float
+    {
+        return GlAccount::findKey($key)->balanceBetween(null, null);
+    }
+
+    private function receipt(string $on, ?int $sourceWarehouse = null): GoodsReceipt
+    {
+        return GoodsReceipt::create(['number' => 'GRN-'.(70000 + ++$this->n), 'warehouse_id' => $this->makeWarehouse()->id,
+            'source_warehouse_id' => $sourceWarehouse, 'received_on' => $on, 'status' => 'posted']);
+    }
+
+    private function batch(Product $p, int $qty, float $cost, ?GoodsReceipt $gr): Batch
+    {
+        return Batch::create(['product_id' => $p->id, 'warehouse_id' => $gr?->warehouse_id ?? $this->makeWarehouse()->id,
+            'goods_receipt_id' => $gr?->id, 'batch_no' => 'B-'.++$this->n, 'expires_on' => '2027-06-01',
+            'qty_received' => $qty, 'qty_remaining' => $qty, 'cost' => $cost]);
+    }
+
+    public function test_invoice_sale_posts_cogs_at_batch_cost(): void
+    {
+        $this->world();
+        [, $tx] = $this->sale([[$this->makeProduct(), 3, 10], [$this->makeProduct(), 5, 4]]);
+
+        $e = $this->entryFor($tx);
+        $this->assertNotNull($e);
+        $this->assertSame(50.0, $e->amount('batch'));
+        $this->assertCount(2, $e->lines);
+        $this->assertSame(160.0, (float) $e->revenue);
+
+        $gl = app(Ledger::class)->autoEntryFor($e);
+        $this->assertNotNull($gl, 'قيد التكلفة اترحّل');
+        $this->assertSame('cost.sale', $gl->rule_key);
+        $maadi = CostCenter::maadi()->id;
+        $cogs = $gl->lines->firstWhere('account_id', GlAccount::findKey('cogs')->id);
+        $inv = $gl->lines->firstWhere('account_id', GlAccount::findKey('inventory')->id);
+        $this->assertSame(50.0, (float) $cogs->debit);
+        $this->assertSame(50.0, (float) $inv->credit);
+        $this->assertSame($maadi, $cogs->cost_center_id);
+        $this->assertSame($maadi, $inv->cost_center_id);
+    }
+
+    public function test_weighted_average_amount_is_stored_and_used_when_official(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['cost' => 5]);
+        $gr = $this->receipt('2026-08-02');
+        $this->batch($p, 10, 8, $gr);
+        $this->batch($p, 30, 12, $gr);
+        [, $tx] = $this->sale([[$p, 4, 8]]);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame(32.0, $e->amount('batch'));
+        $this->assertSame(44.0, $e->amount('wavg'));
+        $this->assertSame(11.0, (float) $e->lines->first()->unit_wavg);
+        $this->assertSame(32.0, $this->bal('cogs'), 'الباتش هو الرسمي افتراضياً');
+
+        Setting::write('cost_method', 'wavg');
+        Setting::flushCache();
+        app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'));
+
+        $this->assertSame(44.0, $this->bal('cogs'));
+        $this->assertSame(-44.0, $this->bal('inventory'));
+    }
+
+    public function test_transfer_twin_batches_do_not_count_in_the_average(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['cost' => 5]);
+        $gr = $this->receipt('2026-08-02');
+        $this->batch($p, 10, 8, $gr);
+        $this->batch($p, 30, 12, $gr);
+        // توأم تحويل (إذن باستلام من مخزن تاني) — مايتعدّش
+        $this->batch($p, 50, 100, $this->receipt('2026-08-03', $this->makeWarehouse()->id));
+        // باتش بعد التاريخ — مايتعدّش
+        $this->batch($p, 50, 100, $this->receipt('2026-08-20'));
+        // باتش من غير تكلفة — مايتعدّش
+        $this->batch($p, 50, 0, $gr);
+
+        $this->assertSame(11.0, Valuation::wavg($p, Carbon::parse('2026-08-10')));
+        Valuation::flush();
+        $this->assertSame(5.0, Valuation::wavg($p->id, Carbon::parse('2026-08-01')), 'مفيش باتشات قبل التاريخ = تكلفة الصنف');
+    }
+
+    public function test_po_delivery_partial_uses_delivered_qty_and_product_cost(): void
+    {
+        $this->world();
+        $a = $this->makeProduct(['cost' => 7]);
+        $b = $this->makeProduct(['cost' => 3]);
+        $client = $this->makeClient();
+        $po = PurchaseOrder::create(['number' => 'PO-90001', 'client_id' => $client->id, 'status' => 'delivered',
+            'assigned_to' => $this->rep->id, 'total' => 275, 'tax_total' => 0, 'grand_total' => 275]);
+        PurchaseOrderItem::create(['purchase_order_id' => $po->id, 'product_id' => $a->id, 'qty' => 10, 'delivered_qty' => 6,
+            'price' => 20, 'total' => 200, 'list_price' => 20, 'discount_pct' => 0, 'tax_rate' => 0, 'tax' => 0]);
+        PurchaseOrderItem::create(['purchase_order_id' => $po->id, 'product_id' => $b->id, 'qty' => 5, 'delivered_qty' => 5,
+            'price' => 15, 'total' => 75, 'list_price' => 15, 'discount_pct' => 0, 'tax_rate' => 0, 'tax' => 0]);
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-12', 'memo' => 'PO', 'debit' => 195, 'credit' => 0,
+            'tax' => 0, 'kind' => 'sale', 'source_type' => PurchaseOrder::class, 'source_id' => $po->id]);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame(57.0, $e->amount('batch'));   // 6×7 + 5×3
+        $this->assertSame(11.0, (float) $e->qty);
+        $this->assertSame(195.0, (float) $e->revenue); // 6×20 + 75
+        $this->assertSame(57.0, $this->bal('cogs'));
+    }
+
+    public function test_sound_return_reverses_cost_damaged_does_not(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['cost' => 6]);
+        [$inv, , $items, $client] = $this->sale([[$p, 10, 10]]);
+        $this->assertSame(100.0, $this->bal('cogs'));
+
+        $ret = ClientReturn::create(['number' => 'RET-90001', 'client_id' => $client->id, 'source' => 'erp', 'policy' => 'account',
+            'subtotal' => 100, 'discount' => 0, 'total' => 100, 'tax_total' => 0, 'grand_total' => 100]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 2, 'condition' => 'good', 'list_price' => 20, 'price' => 20, 'total' => 40, 'tax_rate' => 0, 'tax' => 0]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => null, 'invoice_item_id' => null,
+            'qty' => 1, 'condition' => 'good', 'list_price' => 20, 'price' => 20, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 3, 'condition' => 'damaged', 'list_price' => 20, 'price' => 20, 'total' => 60, 'tax_rate' => 0, 'tax' => 0]);
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-15', 'memo' => 'RET', 'debit' => 0, 'credit' => 120,
+            'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret->id]);
+
+        $e = $this->entryFor($tx, 'return');
+        $this->assertNotNull($e);
+        $this->assertSame(26.0, $e->amount('batch'));   // 2×10 (البند الأصلي) + 1×6 (تكلفة الصنف)
+        $this->assertSame(-60.0, (float) $e->revenue);
+        $this->assertCount(2, $e->lines, 'التالف مالوش سطر');
+        $this->assertSame(74.0, $this->bal('cogs'));
+        $this->assertSame(-74.0, $this->bal('inventory'));
+
+        // مرتجع كله تالف = مفيش قيد تكلفة
+        $ret2 = ClientReturn::create(['number' => 'RET-90002', 'client_id' => $client->id, 'source' => 'erp', 'policy' => 'account',
+            'subtotal' => 20, 'discount' => 0, 'total' => 20, 'tax_total' => 0, 'grand_total' => 20]);
+        ReturnItem::create(['return_id' => $ret2->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 1, 'condition' => 'damaged', 'list_price' => 20, 'price' => 20, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
+        $tx2 = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-16', 'memo' => 'RET2', 'debit' => 0, 'credit' => 20,
+            'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret2->id]);
+        $this->assertNull($this->entryFor($tx2, 'return'));
+        $this->assertSame(74.0, $this->bal('cogs'));
+    }
+
+    public function test_sale_with_transfer_price_posts_markup_pair(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['kind' => 'finished']);
+        ProductTransferPrice::create(['product_id' => $p->id, 'price' => 15, 'unit_cost' => 10, 'markup_pct' => 50,
+            'effective_from' => '2026-08-01', 'approved_by' => $this->makeAdmin()->id, 'approved_at' => now()]);
+        [, $tx] = $this->sale([[$p, 2, 10], [$this->makeProduct(['kind' => 'finished']), 1, 4]]);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame(30.0, (float) $e->amount_transfer, 'مجموع سطور سعر التحويل بس');
+        $this->assertSame(15.0, (float) $e->lines->firstWhere('product_id', $p->id)->unit_transfer);
+
+        $gl = app(Ledger::class)->autoEntryFor($e);
+        $cogs = GlAccount::findKey('cogs')->id;
+        $elim = $gl->lines->firstWhere('account_id', GlAccount::findKey('internal_elim')->id);
+        $this->assertSame(34.0, round((float) $gl->lines->where('account_id', $cogs)->sum('debit'), 2)); // 24 + 10
+        $this->assertSame(24.0, (float) $gl->lines->firstWhere('account_id', GlAccount::findKey('inventory')->id)->credit);
+        $this->assertSame(10.0, (float) $elim->credit);
+        $this->assertSame(CostCenter::company()->id, $elim->cost_center_id);
+        $this->assertSame('mk_cr', $elim->slot);
+    }
+
+    public function test_zero_cost_line_is_flagged(): void
+    {
+        $this->world();
+        [, $tx] = $this->sale([[$this->makeProduct(['cost' => 0]), 2, 0], [$this->makeProduct(), 1, 10]]);
+
+        $e = $this->entryFor($tx);
+        $this->assertTrue($e->hasFlag('zero_cost'));
+        $this->assertTrue((bool) $e->lines->firstWhere('amount_batch', '0.00')->zero_cost);
+        $this->assertFalse($e->hasFlag('no_transfer_price'));
+        $this->assertSame(10.0, $this->bal('cogs'));
+    }
+
+    public function test_rebuild_twice_with_cost_entries_gives_empty_diff_and_keeps_ids(): void
+    {
+        $this->world();
+        $admin = $this->makeAdmin();
+        $p = $this->makeProduct(['cost' => 6]);
+        [$inv, , $items, $client] = $this->sale([[$p, 10, 10]]);
+        $this->sale([[$this->makeProduct(), 4, 3]], '2026-09-03');
+        $ret = ClientReturn::create(['number' => 'RET-90003', 'client_id' => $client->id, 'source' => 'erp', 'policy' => 'account',
+            'subtotal' => 20, 'discount' => 0, 'total' => 20, 'tax_total' => 0, 'grand_total' => 20]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 1, 'condition' => 'good', 'list_price' => 20, 'price' => 20, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
+        Transaction::create(['client_id' => $client->id, 'date' => '2026-08-20', 'memo' => 'RET', 'debit' => 0, 'credit' => 20,
+            'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret->id]);
+        $ids = CostEntry::orderBy('id')->pluck('id')->all();
+        $this->assertCount(3, $ids);
+
+        $svc = app(RebuildDiff::class);
+        $run = function () use ($svc, $admin) {
+            $p = $svc->preview($admin);
+            $this->assertSame('ok', $p->status, (string) $p->error);
+            $svc->approve($p, $admin);
+            $x = $svc->execute($p->fresh(), $admin);
+            $this->assertSame('ok', $x->status, (string) $x->error);
+
+            return $x;
+        };
+        $run();
+        $second = $run();
+
+        $this->assertSame(0, $second->summary['created']);
+        $this->assertSame(0, $second->summary['deleted']);
+        $this->assertSame(0, $second->summary['changed']);
+        $this->assertSame($ids, CostEntry::orderBy('id')->pluck('id')->all());
+        $this->assertSame(3, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
+        $this->assertSame(102.0, $this->bal('cogs')); // 100 + 12 − 10
+    }
+
+    public function test_rebuild_drops_a_cost_entry_whose_origin_is_no_longer_costable(): void
+    {
+        $this->world();
+        [$inv, $tx] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        $this->assertNotNull($this->entryFor($tx));
+        // بنود اتشالت من ورا الموديل — القيد مابقاش له تكلفة
+        InvoiceItem::where('invoice_id', $inv->id)->delete();
+
+        $report = app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'));
+
+        $this->assertTrue($report->ok);
+        $this->assertNull($this->entryFor($tx));
+        $this->assertSame(0.0, $this->bal('cogs'));
+    }
+
+    public function test_admin_invoice_repost_resyncs_the_cost_entry(): void
+    {
+        $this->world();
+        [, $tx, $items] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        $id = $this->entryFor($tx)->id;
+
+        // أداة تعديل البنود بتكتب من ورا الموديل وبعدين بتنادي repost
+        InvoiceItem::whereKey($items[0]->id)->update(['qty' => 5, 'total' => 100]);
+        app(Ledger::class)->repost($tx->fresh());
+
+        $e = $this->entryFor($tx);
+        $this->assertSame($id, $e->id);
+        $this->assertSame(50.0, $e->amount('batch'));
+        $this->assertSame(50.0, $this->bal('cogs'));
+    }
+
+    public function test_without_costing_seed_nothing_posts_and_supplier_invoice_stays_expense(): void
+    {
+        $this->world(costing: false);
+        [, $tx] = $this->sale([[$this->makeProduct(), 3, 10]]);
+
+        $e = $this->entryFor($tx);
+        $this->assertNotNull($e, 'طبقة التكلفة شغالة حتى من غير الدفتر');
+        $this->assertNull(app(Ledger::class)->autoEntryFor($e));
+        $this->assertSame(0, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
+
+        $sup = Supplier::create(['code' => 'SUP-L9', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        $st = $sup->post('invoice', '2026-08-10', 0, 500, 'فاتورة مورد');
+        $this->assertSame('sup.invoice', app(Ledger::class)->autoEntryFor($st)->rule_key);
+        $this->assertSame(500.0, $this->bal('expense_purchases'));
+    }
+
+    public function test_supplier_invoice_debits_inventory_with_the_stock_rule(): void
+    {
+        $this->world();
+        $sup = Supplier::create(['code' => 'SUP-L9', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        $st = $sup->post('invoice', '2026-08-10', 0, 500, 'فاتورة مورد');
+
+        $this->assertSame('sup.invoice.stock', app(Ledger::class)->autoEntryFor($st)->rule_key);
+        $this->assertSame(500.0, $this->bal('inventory'));
+        $this->assertSame(0.0, $this->bal('expense_purchases'));
+        $this->assertSame(500.0, $this->bal('payables'));
+    }
+
+    public function test_costing_sync_command_dry_run_writes_nothing(): void
+    {
+        $this->world();
+        $this->sale([[$this->makeProduct(), 3, 10]]);
+        CostEntry::query()->delete();
+
+        $this->artisan('promax:costing-sync', ['--from' => '2026-08-01', '--dry-run' => true])->assertSuccessful();
+        $this->assertSame(0, CostEntry::count());
+
+        $this->artisan('promax:costing-sync', ['--from' => '2026-08-01'])->assertSuccessful();
+        $e = CostEntry::first();
+        $this->assertNotNull($e);
+        $this->assertNotNull(app(Ledger::class)->autoEntryFor($e), 'التشغيل الحقيقي بيرحّل');
+    }
+}
