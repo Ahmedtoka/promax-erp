@@ -520,6 +520,7 @@ class Access
             // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
+            ['wh.raw', '🧪', 'nav.raw_store', 'wh.raw', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══

@@ -42,6 +42,11 @@ class RawStockMove extends Model
         return $this->belongsTo(Product::class);
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);

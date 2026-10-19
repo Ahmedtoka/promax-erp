@@ -876,6 +876,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayForm'])->name('receipt.putaway.form');
         Route::get('/shelves', [WarehouseController::class, 'locations'])->name('locations');
         Route::get('/expiry', [WarehouseController::class, 'expiryReport'])->name('expiry');
+        // مخزن الخامات والتعبئة: باتشات FEFO وسجل الصرف
+        Route::get('/raw', [\App\Http\Controllers\RawStoreController::class, 'index'])->name('raw');
         Route::get('/transfers', [WarehouseController::class, 'transfers'])->name('transfers');
         // ⚠️ قبل `{transfer}` — وإلا «new» بتتفسر كـid ياخد 404
         Route::get('/transfers/new', [WarehouseController::class, 'newTransfer'])
