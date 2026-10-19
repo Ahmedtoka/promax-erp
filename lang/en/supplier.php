@@ -151,7 +151,6 @@ return [
     'pr_status_ordered' => 'Ordered',
     'pr_status_cancelled' => 'Cancelled',
     'pr_added' => 'Purchase request :number created.',
-    'pr_from_order' => 'From production order :number',
     'pr_cancel' => 'Cancel request',
     'pr_cancel_confirm' => 'Cancel this purchase request?',
     'pr_cancelled' => 'Purchase request cancelled.',

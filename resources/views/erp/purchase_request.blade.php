@@ -43,9 +43,6 @@
         @if ($r->costCenter)
             <span class="badge b-gray">{{ __('supplier.cost_center') }}: {{ $r->costCenter->displayName() }}</span>
         @endif
-        @if ($r->source instanceof \App\Models\ProductionOrder && \App\Support\Access::allows($user, 'mfg.orders.show'))
-            <a class="badge b-blue" href="{{ route('mfg.orders.show', $r->source) }}">🏭 {{ __('supplier.pr_from_order', ['number' => $r->source->number]) }}</a>
-        @endif
         @if ($r->order && \App\Support\Access::allows($user, 'erp.purchasing.show'))
             <a class="badge b-green" href="{{ route('erp.purchasing.show', $r->order) }}">🧺 {{ $r->order->number }}</a>
         @endif
