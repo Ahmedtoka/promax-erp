@@ -108,4 +108,17 @@ return [
     'check_pick_row' => "Pick the account to accept",
     'checks_badge_red' => "Has a check that must be fixed",
     'checks_badge_yellow' => "Has a warning awaiting acceptance",
+
+    // ═══ Adopt the tree into the general ledger (structure only) ═══
+    'adopt_title' => "Adopt the Chart",
+    'adopt_side' => "Writes the accounts into the general ledger — structure only, no entries",
+    'adopt_btn' => "Adopt the Chart",
+    'adopt_again_btn' => "Adopt the Chart Again",
+    'adopt_confirm' => "Adopt the chart into the general ledger? Accounts are created or updated, and a colliding system account code gets an S- prefix.",
+    'adopt_blocked' => "Adoption is blocked: :n red checks must be fixed first",
+    'adopted_ok' => "Chart adopted: :created created, :updated updated, :deactivated deactivated, :recoded system codes moved",
+    'adopted_recoded' => "moved: :list",
+    'adopted_at' => "Adopted at",
+    'adopted_by' => "By",
+    'adopt_go_mapping' => "Go to account mapping",
 ];

@@ -769,6 +769,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/coa/import', [$d, 'import'])->name('coa.import');
         // ⚠️ قبل `/coa/{account}` عشان «checks» مايتقريش كرقم حساب
         Route::post('/coa/checks/accept', [$d, 'accept'])->middleware('role:admin')->name('coa.accept');
+        Route::post('/coa/adopt', [$d, 'adopt'])->middleware('role:admin')->name('coa.adopt');
         Route::post('/coa/{account}', [$d, 'update'])->name('coa.update');
         Route::post('/coa/{account}/move', [$d, 'move'])->name('coa.move');
         Route::delete('/coa/{account}', [$d, 'destroy'])->name('coa.destroy');

@@ -79,10 +79,9 @@ class GlSeeder extends Seeder
     public function run(): void
     {
         foreach (self::ACCOUNTS as [$code, $name, $en, $parentCode, $key, $postable]) {
-            $parent = $parentCode ? GlAccount::where('code', $parentCode)->first() : null;
+            $parent = $parentCode ? self::seeded($parentCode, null) : null;
             $type = GlAccount::ROOT_TYPES[$code[0]];
-            $acc = GlAccount::where('code', $code)->first()
-                ?? ($key ? GlAccount::where('system_key', $key)->first() : null);
+            $acc = self::seeded($code, $key);
             $attrs = [
                 'parent_id' => $parent?->id, 'type' => $type,
                 'normal_side' => GlAccount::normalSideFor($type),
@@ -92,7 +91,9 @@ class GlSeeder extends Seeder
                 // الاسم اللي المالك غيّره مايتداسش
                 $acc->fill($attrs)->save();
             } else {
-                GlAccount::create($attrs + ['code' => $code, 'name' => $name, 'name_en' => $en, 'active' => true]);
+                // كود اتاخد من شجرة المحاسب المعتمدة ⇒ حساب النظام بيتعمل بـ`S-<code>` (D2)
+                $free = GlAccount::where('code', $code)->exists() ? 'S-'.$code : $code;
+                GlAccount::create($attrs + ['code' => $free, 'name' => $name, 'name_en' => $en, 'active' => true]);
             }
         }
 
@@ -102,5 +103,16 @@ class GlSeeder extends Seeder
             ]);
         }
         GlPostingRule::flush();
+    }
+
+    /**
+     * حساب النظام المتولد بكوده — بالمفتاح الأول، وإلا بالكود من غير ما يلمس حساب
+     * اتعتمد من شجرة المحاسب، وإلا بكوده المنقول `S-<code>` بعد الاعتماد (D2).
+     */
+    private static function seeded(string $code, ?string $key): ?GlAccount
+    {
+        return ($key ? GlAccount::where('system_key', $key)->first() : null)
+            ?? GlAccount::where('code', $code)->whereNull('coa_draft_id')->first()
+            ?? GlAccount::where('code', 'S-'.$code)->whereNull('coa_draft_id')->first();
     }
 }

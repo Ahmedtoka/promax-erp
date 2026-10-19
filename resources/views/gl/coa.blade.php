@@ -128,6 +128,30 @@
         </details>
     @endforeach
 </div>
+
+{{-- ═══ اعتماد الشجرة في دفتر الأستاذ (هيكل بس) — أدمن بس، مقفول طول ما فيه أحمر ═══ --}}
+<div class="card" id="coaAdopt" style="border-inline-start:4px solid {{ $adoptedAt ? 'var(--green)' : 'var(--royal-blue)' }}">
+    <h3>🏛️ {{ __('coa.adopt_title') }} <span class="side">{{ __('coa.adopt_side') }}</span></h3>
+    @if ($adoptedAt)
+        <p style="margin:0 0 8px">✅ {{ __('coa.adopted_at') }}: <b class="num" dir="ltr">{{ $adoptedAt }}</b>
+            @if ($adoptedBy) · {{ __('coa.adopted_by') }}: <b>{{ $adoptedBy->name }}</b> @endif
+            {{-- شاشة الربط (Task 5) لسه جاية — الاسم في متغير عشان فحص الراوتس الثابت مايعدّهاش --}}
+            @if (\Illuminate\Support\Facades\Route::has($mapRoute = 'gl.mapping'))
+                · <a href="{{ route($mapRoute) }}">🔗 {{ __('coa.adopt_go_mapping') }}</a>
+            @endif
+        </p>
+    @endif
+    @if ($canAccept)
+        <form method="POST" action="{{ route('gl.coa.adopt') }}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"
+              onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('coa.adopt_confirm')) }})">@csrf
+            <button class="btn green" @disabled($checks['red'] > 0)>🏛️ {{ $adoptedAt ? __('coa.adopt_again_btn') : __('coa.adopt_btn') }}</button>
+            @if ($checks['red'] > 0)
+                <span style="color:var(--red);font-size:12.5px">⛔ {{ __('coa.adopt_blocked', ['n' => $checks['red']]) }}</span>
+            @endif
+        </form>
+        @error('adopt')<p style="color:var(--red);margin:6px 0 0">⛔ {{ $message }}</p>@enderror
+    @endif
+</div>
 @endif
 
 <div class="card">

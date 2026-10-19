@@ -6,7 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Gl\CoaDraftAccount;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
+use App\Models\Setting;
+use App\Models\User;
+use App\Services\Gl\CoaAdopter;
 use App\Services\Gl\CoaChecks;
+use App\Services\Gl\CoaHasRed;
 use App\Services\Gl\CoaDraftImporter;
 use App\Support\Csv;
 use App\Support\DateRange;
@@ -83,7 +87,31 @@ class CoaDraftController extends Controller
             'filter' => $request->string('show')->value(),
             'checks' => $checks,
             'rowChecks' => collect($checks['items'])->groupBy('draft_id'),
+            'adoptedAt' => Setting::read('gl_coa_adopted_at'),
+            'adoptedBy' => ($by = Setting::read('gl_coa_adopted_by')) ? User::find((int) $by) : null,
         ]);
+    }
+
+    /**
+     * اعتماد الشجرة في دفتر الأستاذ (هيكل بس، مفيش قيود) — أدمن بس، وممنوع طول ما فيه أحمر.
+     */
+    public function adopt(Request $request)
+    {
+        try {
+            $r = CoaAdopter::adopt($request->user());
+        } catch (CoaHasRed $e) {
+            return back()->withErrors(['adopt' => $e->getMessage()]);
+        }
+
+        $msg = __('coa.adopted_ok', [
+            'created' => $r['created'], 'updated' => $r['updated'],
+            'deactivated' => $r['deactivated'], 'recoded' => count($r['recoded']),
+        ]);
+        if ($r['recoded']) {
+            $msg .= ' — '.__('coa.adopted_recoded', ['list' => implode(', ', array_map(fn ($c) => $c.' → S-'.$c, $r['recoded']))]);
+        }
+
+        return redirect()->route('gl.coa')->with('ok', $msg);
     }
 
     /**
