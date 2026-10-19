@@ -13,6 +13,12 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.purchasing') }}">← {{ __('supplier.purchase_orders') }}</a>
+    @if ($o->isPendingApproval() && \App\Support\Access::action(auth()->user(), 'act.purchasing.approve'))
+        <form method="POST" action="{{ route('erp.purchasing.approve', $o) }}" style="display:inline">
+            @csrf
+            <button class="btn green" type="submit">{{ __('supplier.approve_order') }}</button>
+        </form>
+    @endif
     @if ($manager && $o->isOpen())
         @if ($o->items->sum('received_qty') === 0)
             <form method="POST" action="{{ route('erp.purchasing.cancel', $o) }}" style="display:inline"
@@ -57,6 +63,29 @@
         <div style="font-size:12px;color:var(--muted);margin-top:8px">{{ $o->notes }}</div>
     @endif
 </div>
+
+@if ($o->approval_status && $reasonTexts !== [])
+    <div class="card">
+        <h3>{{ $o->isPendingApproval() ? __('supplier.approval_needed') : __('supplier.approval_reasons') }}
+            <span class="badge {{ $o->isPendingApproval() ? 'b-orange' : ($o->approval_status === 'approved' ? 'b-green' : 'b-red') }}">{{ __('supplier.approval_reasons') }}</span>
+        </h3>
+        <ul style="margin:0;padding-inline-start:18px;font-size:13px">
+            @foreach ($reasonTexts as $text)
+                <li>{{ $text }}</li>
+            @endforeach
+        </ul>
+        @if ($o->approval_status !== 'pending' && $o->approved_at)
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">{{ __('supplier.approved_by_on', ['name' => $approverName ?? '', 'at' => $o->approved_at->format('Y-m-d H:i')]) }}</div>
+        @endif
+        @if ($o->isPendingApproval() && \App\Support\Access::action(auth()->user(), 'act.purchasing.approve'))
+            <form method="POST" action="{{ route('erp.purchasing.reject', $o) }}" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                @csrf
+                <input type="text" name="note" maxlength="500" placeholder="{{ __('supplier.reject_note') }}" style="flex:1;min-width:180px">
+                <button class="btn red" type="submit">{{ __('supplier.reject_order') }}</button>
+            </form>
+        @endif
+    </div>
+@endif
 
 @if ($errors->any())
     <div class="card"><div class="alert" style="flex-direction:column;align-items:stretch;gap:4px">
