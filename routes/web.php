@@ -1429,6 +1429,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware($lvRoles)->name('leave.decide');
         Route::post('/leave/{leaveRequest}/cancel', [$lv, 'cancel'])->whereNumber('leaveRequest')
             ->middleware($lvRoles)->name('leave.cancel');
+
+        // إعدادات المرتبات (المهمة ٤): قراءة للموارد البشرية، الحفظ أدمن + `act.hr.settings`
+        $hs = \App\Http\Controllers\Hr\HrSettingsController::class;
+        Route::get('/settings', [$hs, 'index'])->middleware('role:admin,hr')->name('settings');
+        Route::post('/settings', [$hs, 'save'])->middleware('role:admin')->name('settings.save');
     });
 
 });

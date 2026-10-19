@@ -92,6 +92,7 @@ return [
     'act_handover_meta' => 'Handover module status (test, live, deadline)',
     'act_hr_employees' => 'Add and edit employee files',
     'act_hr_leave_balances' => 'Edit leave balances',
+    'act_hr_settings' => 'Edit payroll settings (insurance and tax)',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
     'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',

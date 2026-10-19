@@ -612,6 +612,7 @@ class Access
             ['hr.attendance.supervisor', '👷', 'hrm.nav_supervisor', 'hr.attendance.supervisor*', null],
             ['hr.attendance.punches', '📍', 'hrm.nav_punches', 'hr.attendance.punches*', null],
             ['hr.leave', '🌴', 'hrm.nav_leave', 'hr.leave*', null],
+            ['hr.settings', '⚙️', 'hrm.nav_settings', 'hr.settings*', null],
         ],
 
         'nav.group_settings' => [
@@ -759,6 +760,8 @@ class Access
         // ═══ الموارد البشرية (Lane 7) ═══
         'act.hr.employees' => ['perm.act_hr_employees', 'hr.employees', ['hr'], ['hr.employees.store', 'hr.employees.update']],
         'act.hr.leave_balances' => ['perm.act_hr_leave_balances', 'hr.leave.balances', ['hr'], ['hr.leave.balances.update', 'hr.leave.balances.seed']],
+        // ⚠️ أدمن بس: نسب التأمينات وشرايح الضريبة بتأثر على كل مرتب
+        'act.hr.settings' => ['perm.act_hr_settings', 'hr.settings', [], ['hr.settings.save']],
     ];
 
     /**
