@@ -15,7 +15,7 @@
     {{-- فلتر «من — إلى» على `marked_at` — وقت التعليم مش وقت الإدخال --}}
     <form class="searchbar" method="GET">
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
-        <a class="btn" href="{{ route('handover.log') }}">{{ __('common.clear') }}</a>
+        <a class="btn" href="{{ route('handover.index.log') }}">{{ __('common.clear') }}</a>
         <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
 

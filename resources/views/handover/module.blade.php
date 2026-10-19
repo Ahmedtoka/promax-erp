@@ -4,13 +4,18 @@
 
 @php
     $u = auth()->user();
-    $canMark = \App\Support\Access::allows($u, 'handover.mark');
+    // ⚠️ كل زرار متحرس براوته هو (promax-system §3) — الصف بيبعت mark أو unmark،
+    // والهيدر mark_all أو unmark_all
+    $canMark = \App\Support\Access::allows($u, 'handover.index.mark') && \App\Support\Access::allows($u, 'handover.index.unmark');
+    $canMarkAll = \App\Support\Access::allows($u, 'handover.index.mark_all') && \App\Support\Access::allows($u, 'handover.index.unmark_all');
     $allMarked = $progress['total'] > 0 && $progress['marked'] === $progress['total'];
 @endphp
 
 @section('actions')
     <a class="btn" href="{{ route('handover.index') }}">← {{ __('handover.back') }}</a>
-    <a class="btn" href="{{ route('handover.log') }}">📋 {{ __('handover.log') }}</a>
+    @if (\App\Support\Access::allows($u, 'handover.index.log'))
+        <a class="btn" href="{{ route('handover.index.log') }}">📋 {{ __('handover.log') }}</a>
+    @endif
 @endsection
 
 @section('content')
@@ -45,9 +50,9 @@
     <h3>{{ __('handover.screen') }} <span class="side">{{ __('handover.screens_n', ['n' => $progress['total']]) }}</span></h3>
 
     {{-- فورمز الهيدر بره الجدول — مايتداخلوش مع فورم كل صف --}}
-    @if ($canMark && $progress['total'] > 0)
+    @if ($canMarkAll && $progress['total'] > 0)
         <form id="hoAll" method="POST"
-              action="{{ $allMarked ? route('handover.unmark_all', $module) : route('handover.mark_all', $module) }}">
+              action="{{ $allMarked ? route('handover.index.unmark_all', $module) : route('handover.index.mark_all', $module) }}">
             @csrf
         </form>
     @endif
@@ -56,7 +61,7 @@
         <table>
             <tr>
                 <th class="act" data-noexport style="width:36px">
-                    @if ($canMark && $progress['total'] > 0)
+                    @if ($canMarkAll && $progress['total'] > 0)
                         <input type="checkbox" class="ho-chk" form="hoAll" @checked($allMarked)
                                title="{{ $allMarked ? __('handover.unmark_all') : __('handover.mark_all') }}"
                                aria-label="{{ $allMarked ? __('handover.unmark_all') : __('handover.mark_all') }}"
@@ -74,7 +79,7 @@
                     <td class="act" data-noexport>
                         @if ($canMark)
                             <form id="hoS{{ $s->id }}" method="POST"
-                                  action="{{ $mark ? route('handover.unmark', $s) : route('handover.mark', $s) }}">
+                                  action="{{ $mark ? route('handover.index.unmark', $s) : route('handover.index.mark', $s) }}">
                                 @csrf
                                 <input type="checkbox" class="ho-chk" @checked($mark) onchange="this.form.submit()"
                                        aria-label="{{ $mark ? __('handover.unmark') : __('handover.mark') }}: {{ $s->displayTitle() }}">
@@ -112,7 +117,7 @@
 @if ($canMeta)
     <div class="card">
         <h3>⚙️ {{ __('handover.meta_title') }} <span class="side">{{ __('handover.meta_hint') }}</span></h3>
-        <form method="POST" action="{{ route('handover.meta', $module) }}">
+        <form method="POST" action="{{ route('handover.index.meta', $module) }}">
             @csrf
             <div class="frow">
                 <div><label class="f">{{ __('handover.name_ar') }}</label>

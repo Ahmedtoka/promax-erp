@@ -247,9 +247,9 @@ class Access
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
         // ⚠️ **ولا شاشة تانية خالص** — لوجين الشركة المستلمة بيعلّم على
         // الشاشات ويشوف النسب. حالة التيست واللايف والديدلاين قرار المالك
-        // (`handover.meta` `role:admin` + `act.handover.meta`).
+        // (`handover.index.meta` `role:admin` + `act.handover.meta`).
         'handover_reviewer' => [
-            'handover.', '!handover.meta',
+            'handover.', '!handover.index.meta',
         ],
     ];
 
@@ -720,7 +720,7 @@ class Access
         'act.import.run' => ['perm.act_import_run', 'erp.import', [], ['erp.import.upload', 'erp.import.apply']],
 
         // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
-        'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.meta']],
+        'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.index.meta']],
     ];
 
     /**

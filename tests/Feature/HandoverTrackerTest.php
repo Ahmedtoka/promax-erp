@@ -179,7 +179,7 @@ class HandoverTrackerTest extends TestCase
         $screen = $m->screens->first();
         $rev = $this->reviewer();
 
-        $this->actingAs($rev)->post(route('handover.mark', $screen), ['note' => 'تمام'])->assertRedirect();
+        $this->actingAs($rev)->post(route('handover.index.mark', $screen), ['note' => 'تمام'])->assertRedirect();
 
         $mark = HandoverMark::where('screen_id', $screen->id)->firstOrFail();
         $this->assertSame($rev->id, $mark->user_id);
@@ -187,10 +187,10 @@ class HandoverTrackerTest extends TestCase
         $this->assertNull($mark->unmarked_at);
 
         // تعليم تاني على شاشة معلّمة مابيعملش صف تاني
-        $this->actingAs($rev)->post(route('handover.mark', $screen))->assertRedirect();
+        $this->actingAs($rev)->post(route('handover.index.mark', $screen))->assertRedirect();
         $this->assertSame(1, HandoverMark::where('screen_id', $screen->id)->count());
 
-        $this->actingAs($rev)->post(route('handover.unmark', $screen))->assertRedirect();
+        $this->actingAs($rev)->post(route('handover.index.unmark', $screen))->assertRedirect();
 
         $mark->refresh();
         $this->assertNotNull($mark->unmarked_at);
@@ -205,12 +205,12 @@ class HandoverTrackerTest extends TestCase
 
         $this->mark($m->screens->first(), $rev);   // معلّمة قبل كده — مابتتكررش
 
-        $this->actingAs($rev)->post(route('handover.mark_all', $m))->assertRedirect();
+        $this->actingAs($rev)->post(route('handover.index.mark_all', $m))->assertRedirect();
 
         $this->assertSame(['marked' => 3, 'total' => 3, 'pct' => 100], Handover::moduleProgress($m));
         $this->assertSame(3, HandoverMark::count());
 
-        $this->actingAs($rev)->post(route('handover.unmark_all', $m))->assertRedirect();
+        $this->actingAs($rev)->post(route('handover.index.unmark_all', $m))->assertRedirect();
 
         $this->assertSame(0, Handover::moduleProgress($m)['pct']);
         $this->assertSame(3, HandoverMark::whereNotNull('unmarked_at')->count());
@@ -220,7 +220,7 @@ class HandoverTrackerTest extends TestCase
     {
         $m = $this->module();
 
-        $this->actingAs($this->reviewer())->post(route('handover.meta', $m), [
+        $this->actingAs($this->reviewer())->post(route('handover.index.meta', $m), [
             'test_status' => 'done', 'live_status' => 'yes', 'deadline' => '2026-11-01',
         ])->assertForbidden();
 
@@ -251,12 +251,12 @@ class HandoverTrackerTest extends TestCase
         $rev = $this->reviewer();
 
         $this->actingAs($rev)->get(route('handover.index'))->assertOk()->assertSee($m->name_en);
-        $this->actingAs($rev)->get(route('handover.show', $m))->assertOk()
+        $this->actingAs($rev)->get(route('handover.index.show', $m))->assertOk()
             ->assertSee($screen->title_en)
             ->assertSee(__('handover.stale'))
             // فورم الإعدادات للأدمن بس
-            ->assertDontSee(route('handover.meta', $m));
-        $this->actingAs($rev)->get(route('handover.log'))->assertOk();
+            ->assertDontSee(route('handover.index.meta', $m));
+        $this->actingAs($rev)->get(route('handover.index.log'))->assertOk();
     }
 
     /**
@@ -289,10 +289,10 @@ class HandoverTrackerTest extends TestCase
         $m = $this->module();
         $admin = $this->makeAdmin();
 
-        $this->actingAs($admin)->get(route('handover.show', $m))->assertOk()
-            ->assertSee(route('handover.meta', $m));
+        $this->actingAs($admin)->get(route('handover.index.show', $m))->assertOk()
+            ->assertSee(route('handover.index.meta', $m));
 
-        $this->actingAs($admin)->post(route('handover.meta', $m), [
+        $this->actingAs($admin)->post(route('handover.index.meta', $m), [
             'test_status' => 'in_progress', 'live_status' => 'partial',
             'deadline' => '2026-11-15', 'notes' => 'بعد التدريب',
         ])->assertRedirect();
@@ -304,7 +304,7 @@ class HandoverTrackerTest extends TestCase
         $this->assertSame('بعد التدريب', $m->notes);
 
         // قيمة برّه القايمة بترفض
-        $this->actingAs($admin)->post(route('handover.meta', $m), ['test_status' => 'x', 'live_status' => 'yes'])
+        $this->actingAs($admin)->post(route('handover.index.meta', $m), ['test_status' => 'x', 'live_status' => 'yes'])
             ->assertSessionHasErrors('test_status');
     }
 
@@ -314,7 +314,7 @@ class HandoverTrackerTest extends TestCase
         $b = $this->module('nav.group_b', 4);
         $this->mark($a->screens->first(), $this->makeAdmin());
 
-        $res = $this->actingAs($this->reviewer())->get(route('handover.export'));
+        $res = $this->actingAs($this->reviewer())->get(route('handover.index.export'));
         $res->assertOk();
         $csv = $res->streamedContent();
 
@@ -330,13 +330,58 @@ class HandoverTrackerTest extends TestCase
         $s1->marks()->create(['user_id' => $admin->id, 'marked_at' => '2026-10-01 10:00:00', 'note' => 'OLD-NOTE']);
         $s2->marks()->create(['user_id' => $admin->id, 'marked_at' => '2026-10-18 10:00:00', 'note' => 'NEW-NOTE']);
 
-        $this->actingAs($admin)->get(route('handover.log', ['from' => '2026-10-15', 'to' => '2026-10-19']))
+        $this->actingAs($admin)->get(route('handover.index.log', ['from' => '2026-10-15', 'to' => '2026-10-19']))
             ->assertOk()->assertSee('NEW-NOTE')->assertDontSee('OLD-NOTE');
 
         $csv = $this->actingAs($admin)
-            ->get(route('handover.log', ['from' => '2026-10-15', 'to' => '2026-10-19', 'export' => 1]))
+            ->get(route('handover.index.log', ['from' => '2026-10-15', 'to' => '2026-10-19', 'export' => 1]))
             ->streamedContent();
         $this->assertStringContainsString('NEW-NOTE', $csv);
         $this->assertStringNotContainsString('OLD-NOTE', $csv);
+    }
+
+    /**
+     * ⚠️ الراوتس الفرعية تحت `handover.index.*` — إخفاء الصفحة أو المجموعة
+     * من شاشة الصلاحيات بيقفل الموديول والسجل والتصدير والتعليم كمان، مش
+     * الإندكس بس (كانت `handover.show`/`handover.mark` بره بادئة بند المنيو).
+     */
+    public function test_hiding_the_page_or_group_closes_every_handover_route(): void
+    {
+        $m = $this->module();
+        $screen = $m->screens->first();
+
+        foreach (['handover.index', 'nav.group_handover'] as $perm) {
+            $rev = $this->reviewer();
+            $rev->permissions()->create(['perm' => $perm, 'allow' => false]);
+
+            $this->actingAs($rev)->get(route('handover.index'))->assertForbidden();
+            $this->actingAs($rev)->get(route('handover.index.show', $m))->assertForbidden();
+            $this->actingAs($rev)->get(route('handover.index.log'))->assertForbidden();
+            $this->actingAs($rev)->get(route('handover.index.export'))->assertForbidden();
+            $this->actingAs($rev)->post(route('handover.index.mark', $screen))->assertForbidden();
+            $this->actingAs($rev)->post(route('handover.index.unmark', $screen))->assertForbidden();
+            $this->actingAs($rev)->post(route('handover.index.mark_all', $m))->assertForbidden();
+            $this->actingAs($rev)->post(route('handover.index.unmark_all', $m))->assertForbidden();
+        }
+
+        $this->assertSame(0, HandoverMark::count());
+    }
+
+    /** منح الصفحة لرول تاني بيفتح الموديول والسجل — والـmeta لسه للأدمن بس */
+    public function test_granting_the_page_opens_its_sub_routes_but_not_meta(): void
+    {
+        $m = $this->module();
+        $acc = $this->makeAdmin(['role' => 'accountant', 'email' => 'acc'.uniqid().'@promax.test']);
+        $acc->permissions()->create(['perm' => 'handover.index', 'allow' => true]);
+
+        $this->actingAs($acc)->get(route('handover.index.show', $m))->assertOk()
+            ->assertDontSee(route('handover.index.meta', $m));
+        $this->actingAs($acc)->get(route('handover.index.log'))->assertOk();
+        $this->actingAs($acc)->post(route('handover.index.mark', $m->screens->first()))->assertRedirect();
+        $this->actingAs($acc)->post(route('handover.index.meta', $m), [
+            'test_status' => 'done', 'live_status' => 'yes',
+        ])->assertForbidden();
+
+        $this->assertSame('pending', $m->fresh()->test_status);
     }
 }

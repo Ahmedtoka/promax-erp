@@ -3,9 +3,13 @@
 @section('title', __('handover.title'))
 
 @section('actions')
-    <a class="btn" href="{{ route('handover.log') }}">📋 {{ __('handover.log') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'handover.index.log'))
+        <a class="btn" href="{{ route('handover.index.log') }}">📋 {{ __('handover.log') }}</a>
+    @endif
     {{-- تصدير سيرفري — كلمة export في اللينك بتخفي زرار إكسيل الشاشة --}}
-    <a class="btn sm green" href="{{ route('handover.export') }}">⬇ {{ __('ui.export_all') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'handover.index.export'))
+        <a class="btn sm green" href="{{ route('handover.index.export') }}">⬇ {{ __('ui.export_all') }}</a>
+    @endif
 @endsection
 
 @section('content')
@@ -46,7 +50,7 @@
                     $p = $m->progress;
                     $late = $m->deadline && $m->deadline->lt(today()) && $p['pct'] < 100;
                 @endphp
-                <a class="card ho-card" href="{{ route('handover.show', $m) }}">
+                <a class="card ho-card" href="{{ route('handover.index.show', $m) }}">
                     <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
                         <b>{{ \App\Support\Access::GROUP_ICONS[$m->nav_group_key ?? ''] ?? '•' }} {{ $m->displayName() }}</b>
                         <span class="ho-pct">{{ $p['pct'] }}%</span>
