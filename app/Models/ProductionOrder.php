@@ -55,6 +55,8 @@ class ProductionOrder extends Model
             'material_cost' => 'decimal:2',
             'std_material_cost' => 'decimal:2',
             'overhead_cost' => 'decimal:2',
+            'overhead_rate' => 'decimal:4',
+            'overhead_kg' => 'decimal:3',
             'total_cost' => 'decimal:2',
             'unit_cost' => 'decimal:4',
             'hours' => 'decimal:2',

@@ -11,11 +11,15 @@ use App\Models\ProductionIssue;
 use App\Models\ProductionOrder;
 use App\Models\ProductSpec;
 use App\Models\User;
+use App\Services\Costing\CostSync;
+use App\Services\Costing\Overhead;
+use App\Services\Costing\TransferPrice;
 use App\Services\OpeningStock;
 use App\Services\StockCounting;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * قفل أمر الإنتاج (التصنيع ١٩/١٠، spec §3.5، D6 + D9):
@@ -27,8 +31,10 @@ use Illuminate\Support\Facades\DB;
  * وعمره ما يعمل باتش تاني (Review Focus 3).
  * ⚠️ الصلاحية: مواصفة معتمدة فيها `shelf_life_days` ← تاريخ الإنتاج + الأيام
  * (`expiry_source = spec`)، غير كده `Product::expiryFrom()` (`product`).
- * ⚠️ مفيش قيود GL هنا — التكاليف غير المباشرة والقيود بتاعة الخط ٩
- * (`overhead_cost` بيتحسب في الإجمالي بقيمته الحالية، صفر هنا).
+ * ⚠️ الخط ٩ (D8/D10/D12): التحميل (`Costing\Overhead::forClosing`) بيتحسب
+ * جوه الترانزاكشن قبل الباتش (تكلفة الباتش = (مواد + تحميل) ÷ الإنتاج)، وبعد
+ * الـcommit قيد الإنتاج (`CostSync::settleProduction`) وتنبيه سعر التحويل.
+ * من غير سعر كيلو افتراضي التحميل صفر (`no_rate`) والتكلفة = المواد بس.
  */
 class Closing
 {
@@ -74,6 +80,11 @@ class Closing
 
             $materialCost = $row->materialCost();
 
+            // الخط ٩ (D8): التحميل بيتحسب **قبل** الباتش — تكلفة الباتش = (مواد + تحميل) ÷ الإنتاج
+            $row->produced_on = $producedOn->toDateString();
+            $oh = Overhead::forClosing($row, $outputQty);
+            $total = round($materialCost + $oh['amount'], 2);
+
             $batch = Batch::create([
                 'product_id' => $product->id,
                 'warehouse_id' => $fg->id,
@@ -82,7 +93,7 @@ class Closing
                 'expires_on' => $expires->toDateString(),
                 'qty_received' => $outputQty,
                 'qty_remaining' => $outputQty,
-                'cost' => round($materialCost / $outputQty, 2),
+                'cost' => round($total / $outputQty, 2),
                 'blocked' => true,
                 'notes' => $row->number,
             ]);
@@ -129,7 +140,6 @@ class Closing
                 $sumBase += $baseValue;
             }
 
-            $total = round($materialCost + (float) $row->overhead_cost, 2);
 
             $row->forceFill([
                 'output_qty' => $outputQty,
@@ -139,6 +149,11 @@ class Closing
                 'fg_batch_id' => $batch->id,
                 'material_cost' => $materialCost,
                 'std_material_cost' => round($sumStd, 2),
+                'overhead_cost' => $oh['amount'],
+                'overhead_method' => $oh['method'],
+                'overhead_flag' => $oh['flag'] === '' ? null : $oh['flag'],
+                'overhead_rate' => $oh['rate'],
+                'overhead_kg' => $oh['kg'],
                 'total_cost' => $total,
                 'unit_cost' => round($total / $outputQty, 4),
                 'waste_pct' => $sumActual > 0.005 ? round(($sumActual - $sumBase) / $sumActual * 100, 2) : null,
@@ -156,6 +171,10 @@ class Closing
 
         self::notifyQuality($row);
 
+        // الخط ٩ (D12): قيد الإنتاج بعد الـcommit — مابيرميش (بيسجّل بس)
+        CostSync::settleProduction($row);
+        self::alertCost($row);
+
         return $row;
     }
 
@@ -172,6 +191,45 @@ class Closing
             ->pluck('net', 'product_id')
             ->map(fn ($v) => (float) $v)
             ->all();
+    }
+
+    /**
+     * D10: تكلفة الوحدة وصلت لـ`near`/`above` سعر التحويل الساري ← تنبيه
+     * للأدمن. بيتبعت من القفل بس (القفل مرة واحدة للأمر) فالتنبيه مرة واحدة.
+     * مابيرميش أبداً.
+     */
+    private static function alertCost(ProductionOrder $o): void
+    {
+        try {
+            $on = Carbon::parse($o->produced_on ?? today());
+            $tp = TransferPrice::effective((int) $o->product_id, $on);
+            $unit = round((float) $o->unit_cost, 4);
+            $level = TransferPrice::alertLevel($unit, $tp);
+            if (! in_array($level, ['near', 'above'], true)) {
+                return;
+            }
+            $o->loadMissing('product');
+            $number = $o->number;
+            $product = $o->product;
+            $price = (float) $tp->price;
+            $link = route('mfg.orders.show', $o, false);
+
+            User::query()->where('role', 'admin')->where('active', true)->get()
+                ->each(fn (User $u) => AppNotification::send(
+                    $u,
+                    fn () => __('costing.alert_'.$level.'_title', ['number' => $number]),
+                    fn () => __('costing.alert_body', [
+                        'number' => $number,
+                        'product' => $product?->displayName() ?? '',
+                        'cost' => number_format($unit, 2),
+                        'price' => number_format($price, 2),
+                    ]),
+                    good: false,
+                    link: $link,
+                ));
+        } catch (\Throwable $e) {
+            Log::error('costing.alert failed', ['order' => $o->id, 'error' => $e->getMessage()]);
+        }
     }
 
     /** الجودة بتتبلّغ إن فيه باتش في الحجر مستني قرارها */

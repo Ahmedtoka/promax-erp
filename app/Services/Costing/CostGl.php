@@ -4,9 +4,12 @@ namespace App\Services\Costing;
 
 use App\Models\CostCenter;
 use App\Models\CostEntry;
+use App\Models\CostMonthLine;
 use App\Models\Gl\GlPostingRule;
+use App\Models\ProductionOrder;
 use App\Models\StockTransfer;
 use App\Models\Transaction;
+use App\Models\Warehouse;
 use App\Services\Gl\Rules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -23,7 +26,11 @@ use Illuminate\Support\Facades\Log;
  *               المبلغ = Σ على السطور اللي ليها سعر تحويل (مبلغ التحويل − الرسمي)؛
  *               سالب = الزوج بيتقلب. السطر من غير سعر تحويل مالوش دعوة.
  * المرتجع = نفس الأزواج مقلوبة (المدين دائن والعكس) — الخانات بأساميها.
- * `oh_dr`/`oh_cr` محجوزة لتحميل التشغيل على الإنتاج (المهمة ٥).
+ * الإنتاج (المهمة ٥): dr/cr = `cost.production` بالمواد (مدين المخزون [مركز
+ * التام = other_center] / دائن المخزون [مركز مخزن الخامات، وإلا الخط])، و
+ * oh_dr/oh_cr = `cost.overhead` بالتحميل (مدين المخزون [التام] / دائن المحمّل [الخط]).
+ * الانحراف: dr/cr = `cost.variance` على الخط (أو المصنع للغير موزّع)، السالب بيتقلب.
+ * مبلغ صفر = مفيش سطور (و`absentOk` بيقبل الغياب).
  *
  * قاعدة ناقصة أو موقوفة = الزوج بتاعها بيتشال (من غير الـseed مفيش قيود).
  * حساب ناقص/موقوف = «المعلّق» + مراجعة (نفس `Rules::slotAccount`).
@@ -39,7 +46,7 @@ final class CostGl
     public static function lines(CostEntry $e): array
     {
         $none = ['rule' => '', 'memo' => '', 'needs_review' => false, 'lines' => []];
-        if (! in_array($e->kind, ['sale', 'return', 'transfer'], true)) {
+        if (! in_array($e->kind, ['sale', 'return', 'transfer', 'production', 'variance'], true)) {
             return $none;
         }
 
@@ -74,7 +81,18 @@ final class CostGl
             }
         };
 
-        if ($e->kind === 'transfer') {
+        if ($e->kind === 'production') {
+            // مواد: مدين المخزون [مركز التام] / دائن المخزون [مركز الخامات، وإلا الخط]
+            // تحميل: مدين المخزون [مركز التام] / دائن المحمّل [الخط]
+            $order = ProductionOrder::find($e->origin_id);
+            $fg = $e->other_center_id ?? $center;
+            $raw = $order?->raw_warehouse_id ? CostCenter::forWarehouse(Warehouse::find($order->raw_warehouse_id))?->id : null;
+            $pair('cost.production', 'dr', 'cr', round((float) $e->materials, 2), $fg, $raw ?? $center);
+            $pair('cost.overhead', 'oh_dr', 'oh_cr', round((float) $e->overhead, 2), $fg, $center);
+        } elseif ($e->kind === 'variance') {
+            // الحوض − المحمّل: مدين الانحرافات / دائن المحمّل على الخط (أو المصنع) — السالب بيتقلب
+            $pair('cost.variance', 'dr', 'cr', $official, $center, $center);
+        } elseif ($e->kind === 'transfer') {
             // البيع الداخلي: R الرسمي على المصنع، والهامش مدين الاستبعاد [الشركة] / دائن المبيعات الداخلية [المصنع]
             $pair('cost.transfer', 'dr', 'cr', $official, $center, $center);
             $pair('cost.transfer_markup', 'mk_dr', 'mk_cr', $markup, $company, $center);
@@ -91,6 +109,8 @@ final class CostGl
         $ref = match (true) {
             $isTx => $e->relationLoaded('origin') ? $e->origin?->memo : Transaction::whereKey($e->origin_id)->value('memo'),
             $e->origin_type === (new StockTransfer)->getMorphClass() => StockTransfer::whereKey($e->origin_id)->value('number'),
+            $e->origin_type === (new ProductionOrder)->getMorphClass() => ProductionOrder::whereKey($e->origin_id)->value('number'),
+            $e->origin_type === (new CostMonthLine)->getMorphClass() => self::varianceRef($e),
             default => null,
         };
 
@@ -151,10 +171,27 @@ final class CostGl
             if ($t === null || ! CostSync::internalTransfer($t)) {
                 return true;
             }
+        } elseif ($entry->kind === 'production') {
+            // أمر اتشال/مابقاش مقفول، أو مواد وتحميل الاتنين صفر
+            $o = ProductionOrder::find($entry->origin_id);
+
+            return $o === null || ! CostSync::producible($o)
+                || (round((float) $entry->materials, 2) == 0.0 && round((float) $entry->overhead, 2) == 0.0);
+        } elseif ($entry->kind === 'variance') {
+            // انحراف صفر = مفيش سطور (مقصود)
+            return CostMonthLine::find($entry->origin_id) === null || $entry->official() == 0.0;
         }
         [$official, $markup] = self::amounts($entry);
 
         return $official == 0.0 && $markup == 0.0;
+    }
+
+    /** مرجع قيد الانحراف: الشهر + كود الخط/المصنع */
+    private static function varianceRef(CostEntry $e): ?string
+    {
+        $ml = CostMonthLine::with(['month', 'line'])->find($e->origin_id);
+
+        return $ml === null ? null : trim(($ml->month?->period ?? '').' '.($ml->line?->code ?? ''));
     }
 
     /**

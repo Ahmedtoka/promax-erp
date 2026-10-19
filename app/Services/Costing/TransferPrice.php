@@ -33,6 +33,24 @@ final class TransferPrice
             ->first();
     }
 
+    /**
+     * مستوى التنبيه (D10): `above` التكلفة > سعر التحويل، `near` التكلفة ≥
+     * `cost_alert_pct`% منه، `ok`، أو `none` لو مفيش سعر تحويل.
+     */
+    public static function alertLevel(float $unitCost, ?ProductTransferPrice $tp): string
+    {
+        if ($tp === null || (float) $tp->price <= 0) {
+            return 'none';
+        }
+        $price = (float) $tp->price;
+
+        return match (true) {
+            $unitCost > $price => 'above',
+            $unitCost >= round($price * CostingSettings::alertPct() / 100, 4) => 'near',
+            default => 'ok',
+        };
+    }
+
     public static function flush(): void
     {
         self::$memo = [];

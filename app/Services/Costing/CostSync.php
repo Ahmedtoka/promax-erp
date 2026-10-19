@@ -8,6 +8,7 @@ use App\Models\CostEntry;
 use App\Models\Gl\GlPeriod;
 use App\Models\Invoice;
 use App\Models\Product;
+use App\Models\ProductionOrder;
 use App\Models\PurchaseOrder;
 use App\Models\Setting;
 use App\Models\StockTransfer;
@@ -227,7 +228,138 @@ final class CostSync
             }
         }
 
+        // أوامر الإنتاج المقفولة (بالقيم المخزّنة — التحميل عمره ما يتحسب تاني)
+        $orders = ProductionOrder::where('status', 'closed')->whereNotNull('closed_at')
+            ->where('closed_at', '>=', Carbon::parse($d)->startOfDay());
+        foreach ($orders->lazyById(500) as $o) {
+            $r = self::doSyncProduction($o);
+            $out['deleted'] += $r['deleted'];
+            if ($r['entry'] === null) {
+                continue;
+            }
+            $kept[$r['entry']->id] = true;
+            $out['synced']++;
+            if ($post) {
+                $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+            }
+        }
+
+        // قيود إنتاج أصلها اختفى أو مابقاش مقفول — أو تاريخه اتنقل
+        $pmorph = (new ProductionOrder)->getMorphClass();
+        $porphans = CostEntry::where('kind', 'production')->where('origin_type', $pmorph)
+            ->whereDate('date', '>=', $d)->get()->reject(fn ($e) => isset($kept[$e->id]));
+        $pos = ProductionOrder::whereIn('id', $porphans->pluck('origin_id')->unique())->get()->keyBy('id');
+        foreach ($porphans as $e) {
+            $o = $pos->get($e->origin_id);
+            if ($o !== null && self::producible($o)) {
+                $r = self::doSyncProduction($o);
+                $out['deleted'] += $r['deleted'];
+                if ($r['entry'] !== null && $post) {
+                    $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+                }
+
+                continue;
+            }
+            if (DB::transaction(fn () => self::drop($e))) {
+                $out['deleted']++;
+            }
+        }
+        // قيود الانحراف (أصلها سطر شهر تكاليف مقفول) تاريخ متخزّن — مابتتلمسش
+
         return $out;
+    }
+
+    // ═══ الإنتاج (المهمة ٥): أمر مقفول = مواد + تحميل على مخزن التام ═══
+
+    /** أمر مقفول بإنتاج > ٠ */
+    public static function producible(ProductionOrder $o): bool
+    {
+        return $o->status === 'closed' && $o->closed_at !== null && (int) $o->output_qty > 0 && (int) $o->product_id > 0;
+    }
+
+    public static function forProduction(ProductionOrder $o): ?CostEntry
+    {
+        return self::syncProduction($o)['entry'];
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool} */
+    public static function syncProduction(ProductionOrder $o): array
+    {
+        if (! self::ready()) {
+            return ['entry' => null, 'changed' => false];
+        }
+        self::flush();
+        $r = self::doSyncProduction($o);
+
+        return ['entry' => $r['entry'], 'changed' => $r['changed']];
+    }
+
+    /** بعد قفل الأمر: زامن ورحّل. مابيرميش أبداً — القفل نفسه خلص */
+    public static function settleProduction(ProductionOrder $o): void
+    {
+        try {
+            ['entry' => $entry, 'changed' => $changed] = self::syncProduction($o);
+            if ($entry !== null) {
+                $ledger = app(Ledger::class);
+                $changed ? $ledger->repost($entry) : $ledger->post($entry);
+            }
+        } catch (\Throwable $e) {
+            Log::error('costing.production failed', ['order' => $o->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * قيد الإنتاج: تاريخه يوم القفل (`closed_at` — نفس شهر «المحمّل» في
+     * إقفال الشهر)، المركز = الخط، والمقابل = مركز مخزن التام. المبلغ
+     * بالطريقتين = الإجمالي المخزّن (مواد + تحميل).
+     *
+     * @return array{entry:?CostEntry, changed:bool, deleted:int}
+     */
+    private static function doSyncProduction(ProductionOrder $o): array
+    {
+        $morph = $o->getMorphClass();
+        $existing = CostEntry::where('origin_type', $morph)->where('origin_id', $o->id)->where('kind', 'production')->get();
+        if ($existing->contains(fn (CostEntry $e) => self::frozen($e))) {
+            return ['entry' => $existing->first(), 'changed' => false, 'deleted' => 0];
+        }
+
+        $lines = [];
+        if (self::producible($o)) {
+            $qty = (int) $o->output_qty;
+            $total = round((float) $o->total_cost, 2);
+            $unit = round((float) ($o->unit_cost ?? ($total / $qty)), 4);
+            $lines[] = [
+                'product_id' => (int) $o->product_id,
+                'batch_id' => $o->fg_batch_id ? (int) $o->fg_batch_id : null,
+                'qty' => (float) $qty,
+                'revenue' => 0,
+                'unit_batch' => $unit,
+                'unit_wavg' => $unit,
+                'unit_transfer' => null,
+                'amount_batch' => $total,
+                'amount_wavg' => $total,
+                'amount_transfer' => null,
+                'zero_cost' => $total <= 0,
+            ];
+        }
+
+        return self::store($morph, (int) $o->id, 'production', $lines, $existing, function () use ($o, $lines) {
+            $fg = CostCenter::forWarehouse(Warehouse::find($o->warehouse_id));
+
+            return [
+                'date' => Carbon::parse($o->closed_at)->toDateString(),
+                'cost_center_id' => $o->line_id ? (int) $o->line_id : null,
+                'other_center_id' => $fg?->id,
+                'qty' => $lines[0]['qty'],
+                'revenue' => 0,
+                'amount_batch' => $lines[0]['amount_batch'],
+                'amount_wavg' => $lines[0]['amount_wavg'],
+                'amount_transfer' => null,
+                'materials' => round((float) $o->material_cost, 2),
+                'overhead' => round((float) $o->overhead_cost, 2),
+                'flags' => $o->overhead_flag ?: null,
+            ];
+        });
     }
 
     // ═══ التحويل الداخلي (المهمة ٤): مصنع/خط ← فرع بسعر التحويل ═══
