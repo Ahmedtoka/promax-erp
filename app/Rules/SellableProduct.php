@@ -57,18 +57,10 @@ class SellableProduct implements ValidationRule
             return;
         }
 
-        if (! $product->active) {
-            $fail(__('api.product_draft', [
-                'product' => $product->displayName(),
-            ]));
-
-            return;
-        }
-
-        if (! $this->anyKind && ! $product->isSellable()) {
-            $fail(__('api.product_not_for_sale', [
-                'product' => $product->displayName(),
-            ]));
+        if (! $product->active || ! $this->anyKind) {
+            if ($reason = $product->notSellableReason()) {
+                $fail($reason);
+            }
         }
     }
 }

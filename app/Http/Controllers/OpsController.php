@@ -2589,10 +2589,8 @@ class OpsController extends Controller
             // التخطي في صمت هنا كان هيخلّي أمر التوريد يتحفظ **ناقص
             // سطر** والمستخدم فاكر إنه اتحفظ كامل — والعميل يستلم أقل
             // مما اتفق عليه. الرفض بيوقف الحفظ كله ويقول اسم الصنف.
-            if (! $product->isSellable()) {
-                throw new \App\Exceptions\Rejected(
-                    __('api.product_draft', ['product' => $product->displayName()])
-                );
+            if ($reason = $product->notSellableReason()) {
+                throw new \App\Exceptions\Rejected($reason);
             }
 
             $price = $priceMode === 'channel'

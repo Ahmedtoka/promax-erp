@@ -52,6 +52,16 @@ class ProductKindTest extends TestCase
         $this->assertSame(__('api.product_not_for_sale', ['product' => $raw->displayName()]), $v->errors()->first('p'));
     }
 
+    public function test_not_sellable_reason_names_the_real_cause(): void
+    {
+        $raw = $this->makeProduct(['kind' => 'raw']);
+        $draft = $this->makeProduct(['active' => false]);
+
+        $this->assertSame(__('api.product_not_for_sale', ['product' => $raw->displayName()]), $raw->notSellableReason());
+        $this->assertSame(__('api.product_draft', ['product' => $draft->displayName()]), $draft->notSellableReason());
+        $this->assertNull($this->makeProduct()->notSellableReason());
+    }
+
     public function test_any_kind_rule_accepts_raw_but_still_rejects_drafts(): void
     {
         $raw = $this->makeProduct(['kind' => 'raw']);

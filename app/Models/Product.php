@@ -106,6 +106,20 @@ class Product extends Model
         return (bool) $this->active && ($this->kind ?? self::KIND_FINISHED) === self::KIND_FINISHED;
     }
 
+    /**
+     * ليه الصنف مينفعش يتباع — بالسبب الحقيقي: الدرافت يتقاله «فعّله»،
+     * والخامة يتقالها «مش منتج تام» (تفعيلها مابيغيّرش حاجة).
+     * `null` = ينفع يتباع.
+     */
+    public function notSellableReason(): ?string
+    {
+        if (! $this->active) {
+            return __('api.product_draft', ['product' => $this->displayName()]);
+        }
+
+        return $this->isSellable() ? null : __('api.product_not_for_sale', ['product' => $this->displayName()]);
+    }
+
     /** اسم النوع للعرض */
     public function kindLabel(): string
     {
