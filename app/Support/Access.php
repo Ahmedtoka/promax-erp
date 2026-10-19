@@ -218,7 +218,7 @@ class Access
             'hr.leave', '!hr.leave.balances',
             // Lane 7: السلف — قراءة بس (الإضافة والإلغاء للموارد البشرية)
             'hr.advances', '!hr.advances.store', '!hr.advances.void',
-            // Lane 7: مسير المرتبات — قراءة وطباعة القسايم (الصرف والاعتماد للأدمن)
+            // Lane 7: مسير المرتبات — قراءة وطباعة القسايم والصرف (الاعتماد للأدمن)
             // ⚠️ الصرف للمحاسب كمان (قرار المالك ١٩/١٠) — الاعتماد للأدمن بس
             'hr.payroll', '!hr.payroll.draft', '!hr.payroll.line', '!hr.payroll.approve',
         ],
@@ -769,7 +769,7 @@ class Access
         'act.hr.leave_balances' => ['perm.act_hr_leave_balances', 'hr.leave.balances', ['hr'], ['hr.leave.balances.update', 'hr.leave.balances.seed']],
         'act.hr.advances' => ['perm.act_hr_advances', 'hr.advances', ['hr'], ['hr.advances.store', 'hr.advances.void', 'hr.penalties.store', 'hr.penalties.delete']],
         'act.hr.payroll' => ['perm.act_hr_payroll', 'hr.payroll', ['hr'], ['hr.payroll.draft', 'hr.payroll.line']],
-        // ⚠️ أدمن بس: الاعتماد بيرحّل قيد المرتبات، والصرف بيطلّع فلوس من الخزنة
+        // ⚠️ أدمن بس: الاعتماد بيرحّل قيد المرتبات
         'act.hr.payroll_approve' => ['perm.act_hr_payroll_approve', 'hr.payroll', [], ['hr.payroll.approve']],
         // الصرف: المحاسب أو الأدمن (قرار المالك ١٩/١٠)
         'act.hr.payroll_pay' => ['perm.act_hr_payroll_pay', 'hr.payroll', ['accountant'], ['hr.payroll.pay']],

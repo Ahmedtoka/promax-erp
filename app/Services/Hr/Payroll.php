@@ -277,7 +277,7 @@ final class Payroll
             && $e->hire_date->format('Y-m') === $period && (int) $e->hire_date->day > 1;
 
         if ($e->insured && ! $partialHireMonth) {
-            $wage =$e->insurable_wage !== null ? (float) $e->insurable_wage : (float) $e->basic_salary + (float) $e->allowances;
+            $wage = $e->insurable_wage !== null ? (float) $e->insurable_wage : (float) $e->basic_salary + (float) $e->allowances;
             // ⚠️ ملف لسه مرتبه ماتكتبش (صفر) مايتحسبلوش تأمين على الحد الأدنى —
             // كان بيطلّع صافي بالسالب لمندوب قسيمته عمولة بس (QA ١٩/١٠)
             if ($wage > 0) {
