@@ -17,6 +17,7 @@ return [
         'driver' => 'سواق توزيع',
         'promoter' => 'بروموتر',
         'handover_reviewer' => 'مستلم النظام',
+        'hr' => 'موارد بشرية',
     ],
 
     'channel' => [

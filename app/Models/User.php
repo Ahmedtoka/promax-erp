@@ -29,6 +29,8 @@ class User extends Authenticatable
         'promoter' => 'بروموتر',
         // الشركة المستلمة (الإغلاق ١٩/١٠) — شاشات التسليم بس (`Access::SCREENS`)
         'handover_reviewer' => 'مستلم النظام',
+        // الموارد البشرية (Lane 7) — ملفات الموظفين والحضور (`Access::SCREENS`)
+        'hr' => 'موارد بشرية',
     ];
 
     /**

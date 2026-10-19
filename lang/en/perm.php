@@ -90,6 +90,7 @@ return [
     'act_wh_pick_raise' => 'Raise a pick from a PO/replenishment and cancel picks',
     'act_import_run' => 'Sheet imports',
     'act_handover_meta' => 'Handover module status (test, live, deadline)',
+    'act_hr_employees' => 'Add and edit employee files',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
     'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',

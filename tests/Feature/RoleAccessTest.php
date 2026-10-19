@@ -144,7 +144,7 @@ class RoleAccessTest extends TestCase
 
             // شاشات السيستم بس — مش اللوجين ولا تبديل اللغة ولا الـAPI
             // ⚠️ `online.` و`notifications.` اتضافوا (٨/٩) — كانوا بره الفحص
-            if (! preg_match('/^(erp|wh|ops|online|notifications|gl|handover)\./', $name)) {
+            if (! preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr)\./', $name)) {
                 continue;
             }
 
@@ -385,6 +385,8 @@ class RoleAccessTest extends TestCase
             'أمين مخزن' => ['warehouse_keeper'],
             // مستلم النظام (١٩/١٠) — شاشات التسليم بس، ولا لينك لغيرها
             'مستلم النظام' => ['handover_reviewer'],
+            // الموارد البشرية (Lane 7) — ملفات الموظفين والحضور
+            'موارد بشرية' => ['hr'],
         ];
     }
 
@@ -509,7 +511,7 @@ class RoleAccessTest extends TestCase
 
     private function isScreenRoute(string $name): bool
     {
-        return preg_match('/^(erp|wh|ops|online|notifications|gl|handover)\./', $name) === 1;
+        return preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr)\./', $name) === 1;
     }
 
     /** المسار من غير الكويري — `?page=2` و`?status=x` نفس الشاشة */
@@ -815,12 +817,18 @@ class RoleAccessTest extends TestCase
         $hoScreen->marks()->create(['user_id' => $reviewer->id, 'marked_at' => now()->subHour(), 'note' => 'crawl']);
         $hoScreen->update(['touched_at' => now()]);
 
+        // ═══ الموارد البشرية (Lane 7): رول `hr` + موظف بلوجين وموظف من غيره ═══
+        $hr = $this->makeAdmin(['role' => 'hr', 'email' => 'hr.crawl@test.local']);
+        $boss = \App\Models\Employee::create(['code' => 'EMP-1001', 'name' => 'مدير', 'user_id' => $manager->id, 'hire_date' => '2026-01-01']);
+        \App\Models\Employee::create(['code' => 'EMP-1002', 'name' => 'عامل', 'manager_id' => $boss->id]);
+
         return [
             'manager' => $manager,
             'branch_manager' => $branchManager,
             'accountant' => $accountant,
             'warehouse_keeper' => $keeper,
             'handover_reviewer' => $reviewer,
+            'hr' => $hr,
         ];
     }
 

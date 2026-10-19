@@ -17,6 +17,7 @@ return [
         'driver' => 'Delivery Driver',
         'promoter' => 'Merchandiser',
         'handover_reviewer' => 'Handover Reviewer',
+        'hr' => 'HR',
     ],
 
     'channel' => [

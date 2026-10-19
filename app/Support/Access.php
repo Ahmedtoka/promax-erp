@@ -201,6 +201,9 @@ class Access
             // وحده، والراوتس كلها `role:admin,accountant` أصلاً — فالبادئة
             // مابتوسّعش على حد تاني.
             'gl.',
+            // ═══ ملف الموظف (Lane 7) — قراءة: المرتبات من هنا. الإضافة والتعديل
+            // `act.hr.employees` (الموارد البشرية)، وفورم التعديل فيه الرقم القومي ═══
+            'hr.employees', '!hr.employees.edit',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -251,6 +254,15 @@ class Access
         'handover_reviewer' => [
             'handover.', '!handover.index.meta',
         ],
+
+        // ═══ الموارد البشرية (Lane 7، الإغلاق ١٩/١٠) — ملفات الموظفين والحضور ═══
+        // ⚠️ اعتماد ساعات الحضور فاضل للأدمن والمدير (`role:admin,manager`)
+        // زي المحاسب بالظبط — والمرتبات: الاعتماد والصرف وحفظ الإعدادات أدمن.
+        'hr' => [
+            'hr.', 'erp.attendance', 'attendance.punch',
+            '!erp.attendance.approve',
+            '!hr.payroll.approve', '!hr.payroll.pay', '!hr.settings.save',
+        ],
     ];
 
     /**
@@ -267,12 +279,13 @@ class Access
         'accountant' => 'erp.overview',
         'warehouse_keeper' => 'wh.index',
         'handover_reviewer' => 'handover.index',
+        'hr' => 'hr.employees',
     ];
 
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
-        'handover_reviewer',
+        'handover_reviewer', 'hr',
     ];
 
     /**
@@ -578,6 +591,8 @@ class Access
             ['erp.attendance', '📊', 'hr.today_board', 'erp.attendance', null],
             ['erp.attendance.log', '📋', 'hr.log', 'erp.attendance.log', null],
             ['erp.attendance.review', '⏰', 'hr.review', 'erp.attendance.review', 'attendance_review'],
+            // ملف الموظف (Lane 7) — باقي شاشات الموارد البشرية بتتزوّد مع مهامها
+            ['hr.employees', '🪪', 'hrm.nav_employees', 'hr.employees*', null],
         ],
 
         'nav.group_settings' => [
@@ -721,6 +736,9 @@ class Access
 
         // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
         'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.index.meta']],
+
+        // ═══ الموارد البشرية (Lane 7) ═══
+        'act.hr.employees' => ['perm.act_hr_employees', 'hr.employees', ['hr'], ['hr.employees.store', 'hr.employees.update']],
     ];
 
     /**

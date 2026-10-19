@@ -485,14 +485,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ═════ الحضور والانصراف — أول موديول HR (2026-08-08) ═════
         // ⚠️ المحاسب داخل معاهم: الساعات دي بتروح للمرتبات
         Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'board'])
-            ->middleware('role:admin,manager,accountant')->name('attendance');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance');
         Route::get('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.log');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.log');
         // تصدير السجل إكسيل — موظف واحد أو الكل، بنفس فلاتر الشاشة
         Route::get('/attendance/export', [\App\Http\Controllers\AttendanceController::class, 'export'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.export');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.export');
         Route::get('/attendance/review', [\App\Http\Controllers\AttendanceController::class, 'review'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.review');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.review');
         // ⚠️ الاعتماد للأدمن والمدير بس — المحاسب بيقرا مايعتمدش
         Route::post('/attendance/{day}/approve', [\App\Http\Controllers\AttendanceController::class, 'approve'])
             ->middleware('role:admin,manager')->name('attendance.approve');
@@ -1381,5 +1381,22 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/{module}/meta', [$h, 'meta'])->whereNumber('module')
                 ->middleware('role:admin')->name('index.meta');
         });
+
+    // ═══ الموارد البشرية (Lane 7، الإغلاق ١٩/١٠) ═══
+    // ⚠️ القايمة والعقد قراءة للمحاسب كمان؛ الكتابة والتعديل `role:admin,hr`
+    // + `act.hr.employees`. الثابت قبل البارامتري. المهام الجاية بتزوّد هنا.
+    Route::prefix('hr')->name('hr.')->group(function () {
+        $emp = \App\Http\Controllers\Hr\EmployeeController::class;
+        Route::get('/employees', [$emp, 'index'])
+            ->middleware('role:admin,hr,accountant')->name('employees');
+        Route::post('/employees', [$emp, 'store'])
+            ->middleware('role:admin,hr')->name('employees.store');
+        Route::get('/employees/{employee}/edit', [$emp, 'edit'])->whereNumber('employee')
+            ->middleware('role:admin,hr')->name('employees.edit');
+        Route::get('/employees/{employee}/contract', [$emp, 'contract'])->whereNumber('employee')
+            ->middleware('role:admin,hr,accountant')->name('employees.contract');
+        Route::put('/employees/{employee}', [$emp, 'update'])->whereNumber('employee')
+            ->middleware('role:admin,hr')->name('employees.update');
+    });
 
 });
