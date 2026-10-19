@@ -37,7 +37,7 @@ final class PayrollGl
         ['2102', 'مرتبات مستحقة', 'Salaries payable', '21', 'salaries_payable'],
         ['2202', 'تأمينات اجتماعية مستحقة', 'Social insurance payable', '22', 'social_insurance_payable'],
         ['2203', 'ضريبة كسب العمل مستحقة', 'Payroll tax payable', '22', 'payroll_tax_payable'],
-        ['5108', 'حصة الشركة في التأمينات', 'Employer social insurance', '5', 'expense_social_insurance'],
+        ['5109', 'حصة الشركة في التأمينات', 'Employer social insurance', '5', 'expense_social_insurance'],
     ];
 
     /** [key, label, debit_key, credit_key] — `safe` = حساب الخزنة من المستند */
