@@ -34,14 +34,30 @@ class CostCenterResolver
 
     private static ?bool $ready = null;
 
+    private static ?bool $employeeReady = null;
+
     public static function for(Model $source): ?int
     {
-        // ⚠️ الكود ممكن يترفع على اللايف قبل المايجريشن — مفيش جدول = مفيش مركز، مش 500
-        if (! (self::$ready ??= Schema::hasTable('cost_centers'))) {
+        // ⚠️ الكود ممكن يترفع على اللايف قبل المايجريشن — مفيش جدول = مفيش مركز، مش 500.
+        // **الإيجابي بس بيتكاش**: worker قام قبل الـmigrate يشوف الجدول أول ما يتعمل.
+        if (self::$ready !== true && ! (self::$ready = Schema::hasTable('cost_centers'))) {
             return null;
         }
 
-        if ($center = CostCenter::forWarehouse(self::warehouseOf($source))) {
+        $sales = self::isSales($source);
+
+        // ⚠️ أي فشل في الاكتشاف (مصدر بكلاس اتشال، علاقة مكسورة) = مفيش مخزن،
+        // مش exception — الريزولفر جوه `Rules::linesFor` ورميه كان هيضيّع القيد كله
+        try {
+            $center = CostCenter::forWarehouse(self::warehouseOf($source));
+        } catch (\Throwable $e) {
+            report($e);
+            $center = null;
+        }
+
+        // ⚠️ البيع للمعادي دلوقتي (التصميم §٣.١.٢) — مخزن مركزه مصنع أو خط
+        // مابياخدش مبيعات (المصنع بيبيع داخلي بس، Lane 9). مخزن فرع بياخدها.
+        if ($center && (! $sales || $center->kind === 'branch')) {
             return $center->id;
         }
 
@@ -49,7 +65,7 @@ class CostCenterResolver
             return $id;
         }
 
-        return self::isSales($source) ? CostCenter::maadi()->id : null;
+        return $sales ? CostCenter::maadi()->id : null;
     }
 
     /** المخزن اللي المستند خرج منه — أو null */
@@ -88,8 +104,11 @@ class CostCenterResolver
         $employeeId = $source->getAttribute('employee_id');
         $class = 'App\\Models\\Employee';
 
-        if (! $employeeId || ! class_exists($class)
-            || ! Schema::hasColumn((new $class)->getTable(), 'cost_center_id')) {
+        if (! $employeeId || ! class_exists($class)) {
+            return null;
+        }
+        if (self::$employeeReady !== true
+            && ! (self::$employeeReady = Schema::hasColumn((new $class)->getTable(), 'cost_center_id'))) {
             return null;
         }
 

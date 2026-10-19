@@ -180,20 +180,60 @@ class CostCenterTest extends TestCase
         return [$wh->fresh(), $fac];
     }
 
+    /** @return array{0: Warehouse, 1: CostCenter} */
+    private function branchWarehouse(): array
+    {
+        $br = $this->center('NASR', 'branch', CostCenter::company());
+        $wh = $this->makeWarehouse();
+        $wh->update(['cost_center_id' => $br->id]);
+
+        return [$wh->fresh(), $br];
+    }
+
     public function test_resolver_uses_the_source_warehouse_center(): void
     {
-        [$wh, $fac] = $this->factoryWarehouse();
+        [$wh, $br] = $this->branchWarehouse();
         $po = \App\Models\PurchaseOrder::create([
             'number' => 'PO-CC-1', 'client_id' => $this->makeClient()->id, 'status' => 'pending',
             'warehouse_id' => $wh->id, 'total' => 0, 'tax_total' => 0, 'grand_total' => 0,
         ]);
 
-        $this->assertSame($fac->id, CostCenterResolver::for($po));
+        $this->assertSame($br->id, CostCenterResolver::for($po));
+    }
+
+    public function test_a_sale_out_of_a_factory_warehouse_still_counts_for_maadi(): void
+    {
+        // التصميم §٣.١.٢: البيع للمعادي دلوقتي — المصنع بيبيع داخلي بس (Lane 9)
+        [$wh] = $this->factoryWarehouse();
+        $po = \App\Models\PurchaseOrder::create([
+            'number' => 'PO-CC-F', 'client_id' => $this->makeClient()->id, 'status' => 'pending',
+            'warehouse_id' => $wh->id, 'total' => 0, 'tax_total' => 0, 'grand_total' => 0,
+        ]);
+
+        $this->assertSame(CostCenter::maadi()->id, CostCenterResolver::for($po));
+    }
+
+    public function test_a_return_follows_its_custody_warehouse(): void
+    {
+        [$wh, $br] = $this->branchWarehouse();
+        $rep = $this->makeRep();
+        $custody = \App\Models\Custody::create(['user_id' => $rep->id, 'warehouse_id' => $wh->id, 'date' => today(), 'status' => 'open']);
+        $ret = new \App\Models\ClientReturn(['custody_id' => $custody->id]);
+
+        $this->assertSame($br->id, CostCenterResolver::for($ret));
+    }
+
+    public function test_a_transaction_pointing_at_a_missing_class_does_not_throw(): void
+    {
+        $tx = new \App\Models\Transaction(['kind' => 'sale']);
+        $tx->forceFill(['source_type' => 'App\Models\GoneModel', 'source_id' => 5]);
+
+        $this->assertSame(CostCenter::maadi()->id, CostCenterResolver::for($tx));
     }
 
     public function test_resolver_follows_invoice_batch_warehouse(): void
     {
-        [$wh, $fac] = $this->factoryWarehouse();
+        [$wh, $fac] = $this->branchWarehouse();
         $p = $this->makeProduct();
         $batch = \App\Models\Batch::create([
             'product_id' => $p->id, 'warehouse_id' => $wh->id, 'batch_no' => 'B-CC', 'produced_on' => today()->subMonth(),
@@ -211,7 +251,7 @@ class CostCenterTest extends TestCase
 
     public function test_resolver_follows_transaction_source(): void
     {
-        [$wh, $fac] = $this->factoryWarehouse();
+        [$wh, $fac] = $this->branchWarehouse();
         $client = $this->makeClient();
         $po = \App\Models\PurchaseOrder::create([
             'number' => 'PO-CC-2', 'client_id' => $client->id, 'status' => 'delivered',
