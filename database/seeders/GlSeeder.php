@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlPostingRule;
+use App\Services\Cash\CashGlSeed;
 use Illuminate\Database\Seeder;
 
 /**
@@ -100,5 +101,8 @@ class GlSeeder extends Seeder
             ]);
         }
         GlPostingRule::flush();
+
+        // حسابات وقواعد وبنود Lane 4 — بالمفتاح، مابتلمسش حساب موجود
+        CashGlSeed::run();
     }
 }

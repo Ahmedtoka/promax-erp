@@ -6,6 +6,7 @@ use App\Models\Concerns\HasBilingualName;
 use App\Models\Gl\GlAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -83,5 +84,15 @@ class Safe extends Model
     public function glAccount(): BelongsTo
     {
         return $this->belongsTo(GlAccount::class);
+    }
+
+    public function counts(): HasMany
+    {
+        return $this->hasMany(SafeCount::class);
+    }
+
+    public function statements(): HasMany
+    {
+        return $this->hasMany(BankStatement::class);
     }
 }

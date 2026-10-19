@@ -28,6 +28,8 @@ class GlAccount extends Model
         'sales', 'sales_returns', 'discounts_allowed',
         'expense_purchases', 'expense_fuel', 'expense_maintenance', 'expense_salaries',
         'expense_commissions', 'expense_rent', 'expense_gifts', 'expense_other',
+        // Lane 4 — بتتزرع من CashGlSeed بالمفتاح مش بالكود (L4-D13)
+        'fixed_assets', 'accum_depreciation', 'expense_depreciation', 'cash_over_short', 'expense_factory',
     ];
 
     protected $table = 'gl_accounts';
