@@ -88,6 +88,16 @@ class CashSchemaTest extends TestCase
         $this->assertSame($accounts, GlAccount::count());
     }
 
+    public function test_cash_setup_refuses_an_empty_chart_of_accounts(): void
+    {
+        $this->assertSame(0, GlAccount::count());
+        $this->artisan('promax:cash-setup')->assertFailed();
+        $this->assertSame(0, GlAccount::count());
+        $this->assertSame(0, GlPostingRule::count());
+        $this->assertSame(0, ExpenseCategory::count());
+        $this->artisan('promax:cash-setup', ['--dry-run' => true])->assertSuccessful();
+    }
+
     public function test_cash_setup_dry_run_writes_nothing(): void
     {
         $root = GlAccount::create(['code' => '1', 'name' => 'الأصول', 'type' => 'asset', 'normal_side' => 'debit', 'is_postable' => false, 'active' => true]);

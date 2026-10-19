@@ -20,7 +20,18 @@ class CashSetup extends Command
     public function handle(): int
     {
         $dry = (bool) $this->option('dry-run');
+        // ⚠️ من غير شجرة الحسابات (الإعداد/المعالج لسه ماتعملش) الحسابات
+        // الجديدة كانت هتتولد يتيمة من غير أب — الشجرة الأول
+        $empty = ! \App\Models\Gl\GlAccount::query()->exists();
+        if ($empty && ! $dry) {
+            $this->error('The chart of accounts is empty - set up the GL tree first (GL wizard or GlSeeder), then run this again. Nothing written.');
+
+            return self::FAILURE;
+        }
         $r = CashGlSeed::run($dry);
+        if ($empty) {
+            $this->warn('  * chart of accounts is empty - a real run is refused until the GL tree exists');
+        }
 
         $this->info($dry ? 'DRY RUN - nothing written' : 'Done');
         $this->line('Accounts created: '.$r['accounts_created']);
