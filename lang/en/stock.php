@@ -634,4 +634,9 @@ return [
     'map_hint' => 'Each column is a stand as you face it - shelf 5 on top, shelf 1 at the bottom, the number is pieces. Darker means fuller; a red/orange dot flags near-expiry. Click any shelf to see its details below.',
     'shelf_pop_empty' => 'This shelf is empty.',
     'map_pack' => 'This shelf holds :c cartons, :b boxes and :p pieces',
+
+    // ---------- Raw store ----------
+    'raw_kind_only' => 'Only raw and packaging materials can be issued from the raw store.',
+    'raw_qty_not_whole' => 'The quantity must be a whole number (define materials in their smallest stock unit, e.g. grams).',
+    'raw_not_enough' => 'Not enough :product in stock: available :available.',
 ];
