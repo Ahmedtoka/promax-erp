@@ -300,6 +300,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             // لارافيل بيطابق بالترتيب و«new» كانت هتتقري كـid.
             Route::get('/purchasing/new', [\App\Http\Controllers\SupplierController::class, 'createOrder'])
                 ->middleware('role:admin,manager')->name('purchasing.new');
+            // مرتجعات الموردين — ⚠️ قبل `/purchasing/{supplierOrder}` عشان «returns» ماتتقريش id
+            Route::get('/purchasing/returns', [\App\Http\Controllers\SupplierController::class, 'returns'])
+                ->name('purchasing.returns');
+            Route::get('/purchasing/returns/{supplierReturn}', [\App\Http\Controllers\SupplierController::class, 'returnShow'])
+                ->name('purchasing.returns.show');
             Route::get('/purchasing/{supplierOrder}', [\App\Http\Controllers\SupplierController::class, 'order'])
                 ->name('purchasing.show');
             // الاستلام بيدخل بضاعة للمخزن — شغل أمين المخزن

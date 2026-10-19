@@ -527,6 +527,7 @@ class Access
             ['erp.purchase_requests', '📝', 'supplier.purchase_requests', 'erp.purchase_requests*', null],
             ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
+            ['erp.purchasing.returns', '↩️', 'supplier.supplier_returns', 'erp.purchasing.returns*', null],
             ['erp.supplier_contracts', '📜', 'supplier.contracts', 'erp.supplier_contracts*', null],
         ],
 

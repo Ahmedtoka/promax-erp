@@ -355,7 +355,7 @@ class SupplierController extends Controller
     {
         $supplierOrder->load([
             'supplier', 'warehouse', 'creator',
-            'items.product', 'receipts', 'invoices', 'purchaseRequest',
+            'items.product', 'receipts', 'invoices', 'purchaseRequest', 'returns',
         ]);
 
         // ⚠️ أسماء الأصناف هنا مش في الـBlade (ممنوع كويري في الفيو)
@@ -428,6 +428,9 @@ class SupplierController extends Controller
             'lines.*.batch_no' => ['nullable', 'string', 'max:60'],
             'lines.*.produced_on' => ['nullable', 'date'],
             'lines.*.expires_on' => ['nullable', 'date'],
+            'lines.*.qc' => ['nullable', 'in:pass,fail'],
+            'lines.*.qc_note' => ['nullable', 'string', 'max:500'],
+            'lines.*.qc_photo' => ['nullable', 'image', 'max:8192'],
         ]);
 
         $lines = array_filter($data['lines'], fn ($l) => (int) ($l['qty'] ?? 0) > 0);
@@ -436,15 +439,81 @@ class SupplierController extends Controller
             return back()->withErrors(['lines' => __('supplier.no_lines')])->withInput();
         }
 
+        // صور الفحص بتتخزن قبل الاستلام (المسار بيدخل في الجدول) وبتتمسح لو اترفض
+        $stored = [];
+        foreach ($lines as $pid => $line) {
+            $file = $request->file("lines.$pid.qc_photo");
+            unset($lines[$pid]['qc_photo']);
+
+            if ($file) {
+                $lines[$pid]['qc_photo'] = $stored[] = $file->store('receipt-qc', 'public');
+            }
+        }
+
         try {
             $receipt = $supplierOrder->receive($lines, $request->user());
         } catch (Rejected $e) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($stored);
+
             return back()->withErrors(['lines' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($stored);
+
+            throw $e;
         }
 
         return back()->with('ok', __('supplier.received_ok', [
             'number' => $receipt->number,
         ]));
+    }
+
+    /** مرتجعات الموردين (الأصناف الراسبة في فحص الاستلام) — أمين المخزن بيشوف مخزنه بس */
+    public function returns(Request $request)
+    {
+        $user = $request->user();
+        $q = \App\Models\SupplierReturn::with(['supplier', 'order.warehouse']);
+
+        if ($user->isWarehouseKeeper() && $user->warehouse_id) {
+            $q->whereHas('order', fn ($w) => $w->where('warehouse_id', $user->warehouse_id));
+        }
+        if ($sup = $request->integer('supplier')) {
+            $q->where('supplier_id', $sup);
+        }
+
+        $range = DateRange::fromRequest($request);
+        $range->apply($q, 'returned_on');
+
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('returned_on')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'supplier-returns.csv',
+                [__('common.number'), __('supplier.supplier'), __('supplier.purchase_orders'), __('supplier.return_receipt'),
+                    __('supplier.returned_on'), __('common.total')],
+                $all->map(fn ($r) => [
+                    $r->number, $r->supplier?->displayName() ?? '', $r->order?->number ?? '',
+                    $r->receipt?->number ?? '', $r->returned_on->format('Y-m-d'), \App\Support\Csv::money($r->total),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', \App\Support\Csv::money($all->sum('total'))],
+                \App\Support\Csv::meta(__('supplier.supplier_returns'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        return view('erp.supplier_returns', [
+            'returns' => $q->orderByDesc('returned_on')->orderByDesc('id')->paginate(30)->withQueryString(),
+            'returnsTotal' => (float) (clone $q)->sum('total'),
+            'range' => $range,
+            'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
+            'filters' => $request->only(['supplier']),
+        ]);
+    }
+
+    public function returnShow(Request $request, \App\Models\SupplierReturn $supplierReturn)
+    {
+        $supplierReturn->load(['supplier', 'order.warehouse', 'receipt', 'items.product']);
+        $this->guardWarehouse($request, $supplierReturn->order?->warehouse_id);
+
+        return view('erp.supplier_return', ['r' => $supplierReturn]);
     }
 
     /** فاتورة المورد على الأمر — بالمستلَم فعلاً */

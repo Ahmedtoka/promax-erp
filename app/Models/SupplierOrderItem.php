@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SupplierOrderItem extends Model
 {
     protected $fillable = [
-        'supplier_order_id', 'product_id', 'qty', 'unit_cost', 'received_qty', 'contract_price',
+        'supplier_order_id', 'product_id', 'qty', 'unit_cost', 'received_qty', 'contract_price', 'rejected_qty',
     ];
 
     protected function casts(): array

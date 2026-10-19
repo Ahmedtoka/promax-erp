@@ -74,6 +74,11 @@ class SupplierOrder extends Model
         return $this->hasMany(GoodsReceipt::class);
     }
 
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SupplierReturn::class);
+    }
+
     public function invoices(): HasMany
     {
         return $this->hasMany(SupplierInvoice::class);
@@ -196,6 +201,8 @@ class SupplierOrder extends Model
                 'created_by' => $by->id,
             ]);
 
+            $return = null;
+
             foreach ($lines as $productId => $line) {
                 $qty = (int) ($line['qty'] ?? 0);
 
@@ -221,6 +228,61 @@ class SupplierOrder extends Model
                 }
 
                 $product = $item->product;
+                $fail = ($line['qc'] ?? 'pass') === 'fail';
+                $note = trim((string) ($line['qc_note'] ?? '')) ?: null;
+                $photo = ($line['qc_photo'] ?? null) ?: null;
+
+                // ⚠️ **فحص الجودة**: السطر الراسب مابيدخلش مخزن ومابيتحسبش
+                // مستلَم ومابيتفوترش — بيتسجل على مرتجع مورد واحد للإذن
+                // (بيتعمل عند أول سطر راسب). الأمر يفضل مفتوح والمورد يبعت بدله.
+                if ($fail) {
+                    $return ??= SupplierReturn::create([
+                        'number' => SupplierReturn::nextNumber(),
+                        'supplier_id' => $order->supplier_id,
+                        'supplier_order_id' => $order->id,
+                        'goods_receipt_id' => $receipt->id,
+                        'returned_on' => today(),
+                        'total' => 0,
+                        'created_by' => $by->id,
+                    ]);
+
+                    $return->items()->create([
+                        'supplier_order_item_id' => $item->id,
+                        'product_id' => $product->id,
+                        'qty' => $qty,
+                        'unit_cost' => (float) $item->unit_cost,
+                        'note' => $note,
+                        'photo_path' => $photo,
+                    ]);
+                    $return->increment('total', round($qty * (float) $item->unit_cost, 2));
+
+                    $item->increment('rejected_qty', $qty);
+
+                    ReceiptInspection::create([
+                        'goods_receipt_id' => $receipt->id,
+                        'supplier_order_item_id' => $item->id,
+                        'product_id' => $product->id,
+                        'qty' => $qty,
+                        'result' => 'fail',
+                        'note' => $note,
+                        'photo_path' => $photo,
+                        'supplier_return_id' => $return->id,
+                        'inspected_by' => $by->id,
+                    ]);
+
+                    continue;
+                }
+
+                // ⚠️ الخامات والتغليف لازم لوت وانتهاء صريحين (D7) —
+                // التشغيلة الافتراضية ومدة الصلاحية للمنتج التام بس.
+                if (in_array($product->kind, ['raw', 'packaging'], true)) {
+                    if (trim((string) ($line['batch_no'] ?? '')) === '') {
+                        throw new Rejected(__('supplier.lot_required', ['product' => $product->displayName()]));
+                    }
+                    if (trim((string) ($line['expires_on'] ?? '')) === '') {
+                        throw new Rejected(__('supplier.expiry_required', ['product' => $product->displayName()]));
+                    }
+                }
 
                 $batch = Batch::firstOrNew([
                     'product_id' => $product->id,
@@ -246,6 +308,18 @@ class SupplierOrder extends Model
                 $batch->save();
 
                 $item->increment('received_qty', $qty);
+
+                ReceiptInspection::create([
+                    'goods_receipt_id' => $receipt->id,
+                    'supplier_order_item_id' => $item->id,
+                    'product_id' => $product->id,
+                    'qty' => $qty,
+                    'result' => 'pass',
+                    'note' => $note,
+                    'photo_path' => $photo,
+                    'batch_id' => $batch->id,
+                    'inspected_by' => $by->id,
+                ]);
 
                 StockCounting::resync($product->id, $order->warehouse_id);
             }

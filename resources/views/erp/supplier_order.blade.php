@@ -111,7 +111,7 @@
     </h3>
 
     @if ($canReceive && $outstanding !== [])
-    <form method="POST" action="{{ route('erp.purchasing.receive', $o) }}">
+    <form method="POST" action="{{ route('erp.purchasing.receive', $o) }}" enctype="multipart/form-data">
         @csrf
     @endif
 
@@ -122,12 +122,16 @@
                     <th class="num">{{ __('supplier.qty_ordered') }}</th>
                     <th class="num" data-nosum>{{ __('supplier.unit_cost') }}</th>
                     <th class="num">{{ __('supplier.qty_received') }}</th>
+                    <th class="num">{{ __('supplier.qty_rejected') }}</th>
                     <th class="num">{{ __('supplier.qty_left') }}</th>
                     @if ($canReceive && $outstanding !== [])
                         <th style="width:110px">{{ __('supplier.receive_now') }}</th>
                         <th style="width:130px">{{ __('stock.batch_no') }}</th>
                         <th style="width:140px" data-nosum>{{ __('stock.produced_on') }}</th>
                         <th style="width:140px" data-nosum>{{ __('stock.expires_on') }}</th>
+                        <th style="width:110px" data-nosum>{{ __('supplier.qc') }}</th>
+                        <th style="width:160px" data-nosum>{{ __('supplier.qc_note') }}</th>
+                        <th style="width:150px" data-nosum>{{ __('supplier.qc_photo') }}</th>
                     @endif
                 </tr>
                 @foreach ($o->items as $it)
@@ -138,6 +142,7 @@
                         <td class="num">{{ $fmt($it->qty) }}</td>
                         <td class="num">{{ $money($it->unit_cost) }}</td>
                         <td class="num pos">{{ $fmt($it->received_qty) }}</td>
+                        <td class="num {{ $it->rejected_qty > 0 ? 'neg' : '' }}">{{ $fmt($it->rejected_qty) }}</td>
                         <td class="num {{ $left > 0 ? 'mid' : 'pos' }}">{{ $fmt($left) }}</td>
                         @if ($canReceive && $outstanding !== [])
                             @if ($left > 0)
@@ -149,8 +154,14 @@
                                            placeholder="{{ __('supplier.batch_ph') }}"></td>
                                 <td><input type="date" name="lines[{{ $it->product_id }}][produced_on]" style="width:100%"></td>
                                 <td><input type="date" name="lines[{{ $it->product_id }}][expires_on]" style="width:100%"></td>
+                                <td><select name="lines[{{ $it->product_id }}][qc]" style="width:100%">
+                                    <option value="pass">{{ __('supplier.qc_pass') }}</option>
+                                    <option value="fail">{{ __('supplier.qc_fail') }}</option>
+                                </select></td>
+                                <td><input type="text" name="lines[{{ $it->product_id }}][qc_note]" maxlength="500" style="width:100%"></td>
+                                <td><input type="file" name="lines[{{ $it->product_id }}][qc_photo]" accept="image/*" style="width:100%"></td>
                             @else
-                                <td colspan="4" style="text-align:center;color:var(--muted)">✓</td>
+                                <td colspan="7" style="text-align:center;color:var(--muted)">✓</td>
                             @endif
                         @endif
                     </tr>
@@ -161,12 +172,30 @@
     @if ($canReceive && $outstanding !== [])
         {{-- ⚠️ الانتهاء لو اتساب فاضي بيتحسب من الإنتاج + مدة صلاحية الصنف --}}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-            <span style="font-size:11.5px;color:var(--muted)">{{ __('supplier.expiry_auto_hint') }}</span>
+            <span style="font-size:11.5px;color:var(--muted)">{{ __('supplier.expiry_auto_hint') }}<br>{{ __('supplier.raw_fields_hint') }}<br>{{ __('supplier.qc_hint') }}</span>
             <button class="btn gold" type="submit">📦 {{ __('supplier.receive_now') }}</button>
         </div>
     </form>
     @endif
 </div>
+
+@if ($o->returns->isNotEmpty() && \App\Support\Access::allows(auth()->user(), 'erp.purchasing.returns'))
+<div class="card">
+    <h3>↩️ {{ __('supplier.supplier_returns') }} <span class="side">{{ $o->returns->count() }}</span></h3>
+    <div class="tablewrap">
+        <table>
+            <tr><th>{{ __('common.number') }}</th><th data-nosum>{{ __('supplier.returned_on') }}</th><th class="num">{{ __('common.total') }}</th></tr>
+            @foreach ($o->returns as $ret)
+                <tr class="clickable" onclick="location.href='{{ route('erp.purchasing.returns.show', $ret) }}'">
+                    <td class="num"><a href="{{ route('erp.purchasing.returns.show', $ret) }}"><b>{{ $ret->number }}</b></a></td>
+                    <td class="num s">{{ $ret->returned_on->format('Y-m-d') }}</td>
+                    <td class="num">{{ $money($ret->total) }}</td>
+                </tr>
+            @endforeach
+        </table>
+    </div>
+</div>
+@endif
 
 <div class="grid2">
     {{-- ═══════════ أذون الاستلام ═══════════ --}}
