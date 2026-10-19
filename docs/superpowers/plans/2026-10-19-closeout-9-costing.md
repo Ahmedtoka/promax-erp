@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cost every sale, return, internal transfer and production order with both valuation methods (batch and weighted average, the owner picks the official one), absorb factory overhead by line hours (kg default when there are no hours), post the results through `Ledger`, show a 5-level P&L (company → factory / each branch → family → product), finish the go-live wizard (step 7 settings, step 9 run), and raise purchase requests for production shortages.
+**Goal:** Cost every sale, return, internal transfer and production order with both valuation methods (batch and weighted average, the owner picks the official one), absorb factory overhead by line hours (kg default when there are no hours), post the results through `Ledger`, show a 5-level P&L (company → factory / each branch → family → product), finish the go-live wizard (step 7 settings, step 9 run).
+
+> **Owner decision 2026-10-19:** no automatic purchase request on a production shortage. The extra task (D14, Task 2) was built, then reverted; the shortage flow stays notification-only exactly as Lane 6 left it.
 
 **Architecture:** A derived **cost layer** in `app/Services/Costing/`:
 - `cost_entries` (one row per costed origin: a sale/return `Transaction`, a received factory→branch `StockTransfer`, a closed `ProductionOrder`, a closed month's line variance) with `cost_lines` per product. Rows are keyed by `(kind, origin_type, origin_id)` and updated in place, so a re-sync never changes ids. Both methods' amounts are stored on every row; the official one is chosen at posting time.
@@ -44,7 +46,7 @@
 - **D11 Branch overhead allocation** to families/products: by net sales share (`cost_branch_alloc = sales`, alternative `qty`).
 - **D12 Live sync.** `CostTransactionObserver` (`$afterCommit = true`) syncs the entry of every sale/return transaction with an Invoice / PurchaseOrder / ClientReturn source and reposts it; `Ledger::repost(Transaction)` also re-syncs (admin invoice tools use repost); `StockTransfer::receive` and `Mfg\Closing::close` call the sync after commit. Full rebuild re-syncs everything from the start date first.
 - **D13 Step 9** runs the approved preview's `RebuildDiff::execute` inside one outer transaction that also sets `gl_enabled=1` and `gl_golive_run_at`; any failure rolls everything back and the step shows the phase and reason. Progress goes to `Cache` key `golive_run_progress` (polled JSON).
-- **D14 `PurchaseRequest::raiseFor`** creates one request per short material, `qty = ceil`, `cost_center_id` = the order's line, `status = open`, `source_type/source_id` = the order; an active (`open|quoting`) request for the same product and source is reused (qty raised to the new need while `open`), never duplicated.
+- **D14 (withdrawn)** Automatic purchase requests on shortage: declined by the owner on 2026-10-19.
 
 ## Review Focus
 
@@ -66,7 +68,7 @@
 - Controllers `app/Http/Controllers/Costing/`: `OverheadController.php`, `CardController.php`, `PnlController.php`; wizard: `app/Http/Controllers/Gl/GoLiveCostingController.php`.
 - Steps: `app/Services/Gl/GoLive/Steps/CostingStep.php`, `RunStep.php`.
 - Views: `resources/views/costing/{overhead,cards,pnl}.blade.php`, `resources/views/gl/golive/steps/{costing,run}.blade.php`.
-- Modified: `app/Services/Gl/Rules.php` (one arm + supplier key), `app/Services/Gl/Ledger.php` (sources concat, repost hook), `app/Services/Mfg/Closing.php` (overhead before the batch cost), `app/Models/StockTransfer.php` (sync after receive), `app/Models/PurchaseRequest.php` (`raiseFor`), `app/Services/Mfg/PurchaseLink.php`, `routes/web.php`, `app/Support/Access.php`, `lang/{ar,en}/{costing,nav,golive,perm,gl,supplier}.php`.
+- Modified: `app/Services/Gl/Rules.php` (one arm + supplier key), `app/Services/Gl/Ledger.php` (sources concat, repost hook), `app/Services/Mfg/Closing.php` (overhead before the batch cost), `app/Models/StockTransfer.php` (sync after receive), `routes/web.php`, `app/Support/Access.php`, `lang/{ar,en}/{costing,nav,golive,perm,gl,supplier}.php`.
 - Tests `tests/Feature/Costing/*Test.php`.
 
 ---
@@ -82,7 +84,6 @@
 - `cost_month_lines`: id, cost_month_id FK cascade, line_id FK cost_centers, direct, shared, payroll, depreciation, pool, applied, variance decimal(14,2), hours decimal(10,2), output_kg decimal(14,3), rate decimal(14,4) null, timestamps; unique(cost_month_id, line_id).
 - `product_transfer_prices`: id, product_id FK, price decimal(10,2), unit_cost decimal(14,4), markup_pct decimal(7,2) null, effective_from date, approved_by FK users, approved_at dateTime, note varchar(255) null, timestamps; index(product_id, effective_from).
 - `production_orders` += `overhead_rate` decimal(14,4) null, `overhead_kg` decimal(14,3) null.
-- `purchase_requests` += `source_type` varchar(120) null, `source_id` bigint null, index(source_type, source_id).
 - `CostEntry`: casts, `lines(): HasMany`, `costCenter()`, `otherCenter()`, `origin(): MorphTo`, `amount(string $method): float` (`batch`|`wavg`), `official(): float` (`amount(CostingSettings::method())`), `hasFlag(string): bool`.
 - `CostingSettings` (all via `Setting::read`): `method(): string` (`cost_method`, `batch` default), `defaultKgRate(): ?float` (`cost_default_kg_rate`, null when blank/≤0), `unitKgFallback(): float` (0.1), `markupPct(): float` (20), `alertPct(): float` (90), `allocBasis(): string` (`sales`|`qty`), `save(array $values, User $by): void` (writes the six keys + `cost_settings_saved_at`), `KEYS` const.
 - `CostingGlSeed::run(bool $dryRun = false): array{accounts_created:int, rules_created:int, notes:list<string>}` — D2/D3, `CashGlSeed` pattern (by key, existing account never changed, rules `firstOrCreate`, refuses a real run on an empty tree with the same message style as `promax:cash-setup`). `CostingGlSeed::ready(): bool` = every D2 key exists and every D3 rule exists and is active.
@@ -94,18 +95,7 @@
 - [ ] **Step 4:** Same filter → PASS; `php artisan promax:i18n-check` clean.
 - [ ] **Step 5: Commit** `feat(costing): schema, settings and costing GL seed`.
 
-### Task 2: Purchase requests for production shortages
-
-**Files:** `app/Models/PurchaseRequest.php`, `app/Services/Mfg/PurchaseLink.php`, `lang/{ar,en}/supplier.php` (`pr_from_order`), purchase-request list/show view (source link line). Test: `tests/Feature/Costing/ShortageRequestTest.php`.
-
-**Interfaces:**
-- Consumes: `purchase_requests.source_type/source_id` (Task 1), `Mfg\Requirement::forOrder()`.
-- Produces: `PurchaseRequest::raiseFor(array $lines, Model $for, User $by): \Illuminate\Support\Collection` (of `PurchaseRequest`, one per line `{product_id:int, qty:float}`; D14; must be called inside the caller's transaction, locks matching rows with `lockForUpdate`); `PurchaseRequest::source(): MorphTo`.
-- `PurchaseLink::raise()` keeps its signature and notification; stores the first request id on the order; refuses with `mfg.shortage_already_requested` only when **every** short material already has an active request for this order (otherwise raises the missing ones).
-
-- [ ] **Step 1: Failing tests:** `test_shortage_raises_one_request_per_material_rounded_up` (needs 12.4 and 3 → qty 13 and 3, `status=open`, `cost_center_id` = order line, source = order, `requested_by` = actor); `test_rerun_does_not_duplicate_open_requests` (raise twice for the same order → 2 rows total; a larger shortage raises qty of the open one); `test_quoting_request_is_reused_not_resized`; `test_cancelled_request_allows_a_new_one`; `test_order_page_shortage_button_creates_requests_and_still_notifies_admins` (POST `mfg.orders.shortage` → requests exist + `AppNotification` for the admin); `test_requests_wait_for_normal_approval` (no `supplier_order_id`, admin quote approval path unchanged).
-- [ ] **Step 2–4:** filter `ShortageRequestTest|PurchaseRequest|Mfg` FAIL → implement → PASS.
-- [ ] **Step 5: Commit** `feat(purchasing): purchase requests raised for production shortages`.
+### Task 2: (withdrawn — owner decision 2026-10-19, no automatic purchase request on shortage)
 
 ### Task 3: Valuation, sale/return cost entries and the Ledger arm
 
@@ -251,7 +241,7 @@
 
 ## UAT additions (Task 10 writes them)
 
-COST cases: costing seed and settings in step 7; sale COGS both methods; switching official method then preview/run; factory→Maadi transfer at TP and the elimination; order without hours costed by kg and flagged; month close variance; cost card alert and TP approval (admin only); 5-level P&L drill-down and export; step 9 run and failure rollback; production shortage → purchase requests without duplicates.
+COST cases: costing seed and settings in step 7; sale COGS both methods; switching official method then preview/run; factory→Maadi transfer at TP and the elimination; order without hours costed by kg and flagged; month close variance; cost card alert and TP approval (admin only); 5-level P&L drill-down and export; step 9 run and failure rollback.
 
 ## Live rollout notes (for the report)
 
