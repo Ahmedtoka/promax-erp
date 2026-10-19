@@ -20,14 +20,14 @@ use Illuminate\Support\Facades\DB;
  */
 class CashGlSeed
 {
-    /** مجموعة الأصول الثابتة — بتتعمل تحت الجذر 1 لو الكود 13 فاضي */
-    private const GROUP = ['13', 'الأصول الثابتة', 'Fixed assets'];
+    /** مجموعة الأصول الثابتة — بتتعمل تحت الجذر 1 لو الكود 14 فاضي (13 = المخزون من الخط ٣) */
+    private const GROUP = ['14', 'الأصول الثابتة', 'Fixed assets'];
 
     /** [system_key, code, name, name_en, parent code, type, normal_side] */
     private const ACCOUNTS = [
-        ['fixed_assets', '1301', 'الأصول الثابتة', 'Fixed assets', '13', 'asset', 'debit'],
+        ['fixed_assets', '1401', 'الأصول الثابتة', 'Fixed assets', '14', 'asset', 'debit'],
         // مجمع الإهلاك: أصل مقابل (contra) — طبيعته دائنة
-        ['accum_depreciation', '1309', 'مجمع الإهلاك', 'Accumulated depreciation', '13', 'asset', 'credit'],
+        ['accum_depreciation', '1409', 'مجمع الإهلاك', 'Accumulated depreciation', '14', 'asset', 'credit'],
         ['expense_depreciation', '5108', 'إهلاك الأصول الثابتة', 'Depreciation', '5', 'expense', 'debit'],
         ['cash_over_short', '5120', 'عجز وزيادة الخزنة', 'Cash over / short', '5', 'expense', 'debit'],
         ['expense_factory', '5130', 'مصاريف المصنع', 'Factory overheads', '5', 'expense', 'debit'],
@@ -125,7 +125,7 @@ class CashGlSeed
         $out['accounts_created']++;
     }
 
-    /** مجموعة 13 — بالكود؛ بتتعمل بس لو الكود فاضي */
+    /** مجموعة 14 — بالكود؛ بتتعمل بس لو الكود فاضي */
     private static function group(array &$out): ?GlAccount
     {
         [$code, $name, $en] = self::GROUP;

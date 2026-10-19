@@ -51,18 +51,18 @@ class CashSchemaTest extends TestCase
 
     public function test_cash_setup_is_idempotent_and_never_takes_an_existing_code(): void
     {
-        // شجرة محاسب مستوردة: الكود 1301 متاخد بحساب من غير مفتاح
+        // شجرة محاسب مستوردة: الكود 1401 متاخد بحساب من غير مفتاح
         $root = GlAccount::create(['code' => '1', 'name' => 'الأصول', 'type' => 'asset', 'normal_side' => 'debit', 'is_postable' => false, 'active' => true]);
-        $taken = GlAccount::create(['code' => '1301', 'name' => 'سيارات المحاسب', 'parent_id' => $root->id, 'type' => 'asset', 'normal_side' => 'debit', 'is_postable' => true, 'active' => true]);
+        $taken = GlAccount::create(['code' => '1401', 'name' => 'سيارات المحاسب', 'parent_id' => $root->id, 'type' => 'asset', 'normal_side' => 'debit', 'is_postable' => true, 'active' => true]);
 
         $this->seed(GlSeeder::class); // بيشغّل CashGlSeed في الآخر
 
         $fa = GlAccount::where('system_key', 'fixed_assets')->first();
         $this->assertNotNull($fa);
         $this->assertNotSame($taken->id, $fa->id);
-        $this->assertSame('1301.L4', $fa->code);
+        $this->assertSame('1401.L4', $fa->code);
         $fresh = $taken->fresh();
-        $this->assertSame('1301', $fresh->code);
+        $this->assertSame('1401', $fresh->code);
         $this->assertNull($fresh->system_key);
         $this->assertSame('سيارات المحاسب', $fresh->name);
 
@@ -73,7 +73,7 @@ class CashSchemaTest extends TestCase
         $this->assertSame('5108', GlAccount::findKey('expense_depreciation')->code);
         $this->assertSame('expense', GlAccount::findKey('cash_over_short')->type);
         $this->assertSame('asset', GlAccount::findKey('accum_depreciation')->type);
-        $this->assertSame('13', GlAccount::findKey('accum_depreciation')->parent->code);
+        $this->assertSame('14', GlAccount::findKey('accum_depreciation')->parent->code);
         foreach (['cash.safe_transfer', 'cash.bank_transfer', 'cash.count', 'asset.depreciation'] as $key) {
             $this->assertNotNull(GlPostingRule::forKey($key), $key);
         }
