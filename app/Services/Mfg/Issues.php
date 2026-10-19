@@ -61,7 +61,8 @@ class Issues
             $net = $row->netIssuedAll();
             $count = 0;
 
-            foreach ($row->lines()->with('product')->get() as $line) {
+            // ترتيب ثابت بالمنتج — أمرين بيصرفوا في نفس الوقت يقفلوا الخامات بنفس الترتيب (مفيش deadlock)
+            foreach ($row->lines()->with('product')->orderBy('product_id')->orderBy('id')->get() as $line) {
                 $remaining = round((float) $line->std_qty - ($net[$line->product_id] ?? 0.0), 3);
 
                 if ($remaining <= 0.0005 || $line->product === null) {
@@ -114,7 +115,10 @@ class Issues
                 ->whereIn('batch_id', array_keys($held))
                 ->orderByDesc('id')->get()->unique('batch_id');
 
+            // القفل بنفس ترتيب RawStock (expires_on, id) عشان مايحصلش deadlock مع صرف شغال؛
+            // اللفّ تحت لسه بترتيب الأحدث صرفاً ($latest)
             $batches = Batch::query()->whereIn('id', $latest->pluck('batch_id'))
+                ->orderBy('expires_on')->orderBy('id')
                 ->lockForUpdate()->get()->keyBy('id');
 
             $rows = collect();

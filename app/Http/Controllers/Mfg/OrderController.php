@@ -117,10 +117,14 @@ class OrderController extends Controller
     {
         $order->load(['product', 'bom', 'line', 'warehouse', 'rawWarehouse', 'creator', 'lines.product', 'fgBatch']);
 
+        $issues = $order->issues()->with(['product', 'batch', 'user'])->get();
+
         return view('mfg.order', [
             'order' => $order,
             'req' => Requirement::forOrder($order),
-            'issues' => $order->issues()->with(['product', 'batch', 'user'])->get(),
+            'issues' => $issues,
+            // صافي تكلفة الخامات من الحركات المحمّلة (المرتجع بيتطرح) — نفس ProductionOrder::materialCost من غير query في الـview
+            'materialCost' => round((float) $issues->sum(fn ($i) => $i->kind === 'return' ? -(float) $i->value : (float) $i->value), 2),
         ]);
     }
 

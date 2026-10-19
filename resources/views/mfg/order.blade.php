@@ -249,7 +249,7 @@
                 <tfoot>
                     <tr>
                         <td colspan="6"><b>{{ __('mfg.material_cost_net') }}</b></td>
-                        <td class="num"><b>{{ number_format($order->materialCost(), 2) }}</b></td>
+                        <td class="num"><b>{{ number_format($materialCost, 2) }}</b></td>
                         <td colspan="2"></td>
                     </tr>
                 </tfoot>
