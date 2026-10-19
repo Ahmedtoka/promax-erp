@@ -272,7 +272,11 @@ final class Payroll
         $ins = ['wage' => 0.0, 'employee' => 0.0, 'employer' => 0.0];
         if ($e->insured) {
             $wage = $e->insurable_wage !== null ? (float) $e->insurable_wage : (float) $e->basic_salary + (float) $e->allowances;
-            $ins = PayrollMath::insurance($wage, $set['si_emp'], $set['si_er'], $set['si_min'], $set['si_max']);
+            // ⚠️ ملف لسه مرتبه ماتكتبش (صفر) مايتحسبلوش تأمين على الحد الأدنى —
+            // كان بيطلّع صافي بالسالب لمندوب قسيمته عمولة بس (QA ١٩/١٠)
+            if ($wage > 0) {
+                $ins = PayrollMath::insurance($wage, $set['si_emp'], $set['si_er'], $set['si_min'], $set['si_max']);
+            }
         }
         $insE = $ins['employee'];
 
@@ -359,6 +363,15 @@ final class Payroll
                 throw new Rejected(__('hrm.payroll_not_draft'));
             }
 
+            if ($code === 'advance') {
+                // ⚠️ القسط اليدوي مايعدّيش المتبقي على السلف المفتوحة — الزيادة كانت بتضيع في الصرف
+                $open = round((float) EmployeeAdvance::query()->where('employee_id', $s->employee_id)->where('status', 'open')
+                    ->where('start_period', '<=', $run->period)->get()->sum(fn (EmployeeAdvance $a) => $a->remaining()), 2);
+                if ($amount - $open > 0.001) {
+                    throw new Rejected(__('hrm.payroll_advance_too_high', ['max' => number_format($open, 2)]));
+                }
+            }
+
             $s->lines()->where('code', $code)->delete();
             $s->lines()->create([
                 'code' => $code, 'kind' => PayslipLine::kindOf($code), 'amount' => round($amount, 2),
@@ -384,6 +397,13 @@ final class Payroll
             if (! $run->payslips()->exists()) {
                 throw new Rejected(__('hrm.payroll_empty'));
             }
+            // صافي بالسالب = الاستقطاعات أكبر من المستحق (تأمين شهر كامل على أيام قليلة مثلاً) —
+            // الموارد البشرية تراجع القسيمة الأول، مش يتصرف رقم سالب
+            $neg = $run->payslips()->where('net', '<', 0)->with('employee:id,code')->first();
+            if ($neg !== null) {
+                throw new Rejected(__('hrm.payroll_negative_net', ['code' => $neg->employee?->code]));
+            }
+            self::assertFresh($run);
 
             $run->forceFill(['status' => 'approved', 'approved_by' => $by->id, 'approved_at' => now()])->save();
 
@@ -414,6 +434,9 @@ final class Payroll
             app(Ledger::class)->assertOpen($date->copy());
 
             $slips = $run->payslips()->with('lines')->get();
+            foreach ($slips as $slip) {
+                self::assertAdvancesCovered($slip, $run->period);
+            }
             $made = [];
 
             foreach ($slips->groupBy(fn (Payslip $s) => $s->pay_method === 'bank' ? 'bank' : 'cash') as $kind => $group) {
@@ -458,6 +481,43 @@ final class Payroll
         }
 
         return $r->fresh();
+    }
+
+    /**
+     * المسودة لسه مطابقة للسلف والجزاءات؟ جزاء أو سلفة اتضافت/اتلغت بعد آخر
+     * إعادة حساب = القسيمة قديمة — الاعتماد بيترفض لحد ما تتعاد. البنود اليدوية
+     * بتتساب (الموارد البشرية قررتها).
+     */
+    private static function assertFresh(PayrollRun $run): void
+    {
+        $start = self::periodStart($run->period);
+        $end = $start->copy()->endOfMonth();
+
+        foreach ($run->payslips()->with('lines', 'employee:id,code')->get() as $slip) {
+            $pen = $slip->lines->firstWhere('code', 'penalty');
+            if ($pen === null || ! $pen->manual) {
+                $now = round((float) HrPenalty::query()->where('employee_id', $slip->employee_id)->whereNull('payslip_id')
+                    ->whereBetween('date', [$start->toDateString(), $end->toDateString()])->sum('amount'), 2);
+                if (abs($now - $slip->amountOf('penalty')) > 0.001) {
+                    throw new Rejected(__('hrm.payroll_stale', ['code' => $slip->employee?->code]));
+                }
+            }
+            self::assertAdvancesCovered($slip, $run->period);
+        }
+    }
+
+    /** قسط القسيمة مايزيدش عن المتبقي على سلف الموظف المفتوحة (سلفة اتلغت بعد المسودة مثلاً) */
+    private static function assertAdvancesCovered(Payslip $slip, string $period): void
+    {
+        $adv = round((float) $slip->advances, 2);
+        if ($adv <= 0) {
+            return;
+        }
+        $open = round((float) EmployeeAdvance::query()->where('employee_id', $slip->employee_id)->where('status', 'open')
+            ->where('start_period', '<=', $period)->get()->sum(fn (EmployeeAdvance $a) => $a->remaining()), 2);
+        if ($adv - $open > 0.001) {
+            throw new Rejected(__('hrm.payroll_advance_uncovered', ['code' => $slip->employee?->code ?? $slip->employee_id]));
+        }
     }
 
     /** القسط بيتوزع على السلف: قسط كل سلفة الأول، وأي زيادة يدوية على الأقدم */

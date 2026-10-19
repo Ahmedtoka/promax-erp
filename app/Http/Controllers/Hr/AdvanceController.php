@@ -102,6 +102,10 @@ class AdvanceController extends Controller
             return back()->withErrors(['employee_id' => __('hrm.adv_employee_invalid')])->withInput();
         }
 
+        if ($locked = self::lockedPeriod($data['start_period'])) {
+            return back()->withErrors(['start_period' => __('hrm.adv_period_locked', ['period' => $locked])])->withInput();
+        }
+
         try {
             $adv = DB::transaction(function () use ($data, $emp, $request) {
                 $date = Carbon::parse($data['date']);
@@ -143,6 +147,13 @@ class AdvanceController extends Controller
                 }
                 // ⚠️ الإلغاء بيشيل قيد السلفة — ممنوع في شهر مقفول
                 app(Ledger::class)->assertOpen($a->date->copy());
+                // ⚠️ قسطها في مسير معتمد لسه ماتصرفش — الإلغاء كان هيضيّع الخصم ويكسر حساب السلف
+                $inRun = \App\Models\Payslip::query()->where('employee_id', $a->employee_id)->where('advances', '>', 0)
+                    ->whereHas('run', fn ($q) => $q->where('status', 'approved')->where('period', '>=', $a->start_period))
+                    ->exists();
+                if ($inRun) {
+                    throw new Rejected(__('hrm.adv_void_in_run'));
+                }
 
                 $a->status = 'void';
                 $a->save();
@@ -171,6 +182,10 @@ class AdvanceController extends Controller
             return back()->withErrors(['employee_id' => __('hrm.adv_employee_invalid')])->withInput();
         }
 
+        if ($locked = self::lockedPeriod(substr((string) $data['date'], 0, 7))) {
+            return back()->withErrors(['date' => __('hrm.pen_period_locked', ['period' => $locked])])->withInput();
+        }
+
         HrPenalty::create([
             'employee_id' => $emp->id,
             'date' => $data['date'],
@@ -180,6 +195,13 @@ class AdvanceController extends Controller
         ]);
 
         return back()->with('ok', __('hrm.pen_saved'));
+    }
+
+    /** آخر مسير معتمد/مصروف لو الشهر ده أو بعده — الإضافة فيه كانت هتعدّي من غير خصم */
+    private static function lockedPeriod(string $period): ?string
+    {
+        return \App\Models\PayrollRun::query()->whereIn('status', ['approved', 'paid'])
+            ->where('period', '>=', $period)->orderByDesc('period')->value('period');
     }
 
     public function deletePenalty(Request $request, HrPenalty $penalty)

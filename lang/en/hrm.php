@@ -308,4 +308,13 @@ return [
     'gl_payroll_pay_memo' => 'Payroll payment :period',
     'gl_advance_memo' => 'Advance :number - :name',
 
+    'payroll_negative_net' => 'Payslip :code has a negative net - review its lines before approving',
+
+    'payroll_stale' => 'Penalties or advances changed after the draft was calculated (employee :code) - press Recalculate first',
+    'payroll_advance_uncovered' => 'The advance installment on payslip :code is more than the open advances still owe - recalculate',
+    'payroll_advance_too_high' => 'The installment is more than the open advances still owe (:max)',
+    'adv_void_in_run' => 'This advance has an installment in an approved payroll - it cannot be voided now',
+    'adv_period_locked' => 'The payroll for :period is approved - the first deduction month must come after it',
+    'pen_period_locked' => 'The payroll for :period is approved - date the penalty in a later month',
+
 ];

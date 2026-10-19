@@ -101,7 +101,7 @@
                     <td class="num">{{ $fmt($s->insurance_employee) }}</td>
                     <td class="num">{{ $fmt($s->tax) }}</td>
                     <td class="num">{{ $fmt($s->advances) }}</td>
-                    <td class="num"><b>{{ $fmt($s->net) }}</b></td>
+                    <td class="num {{ (float) $s->net < 0 ? 'neg' : '' }}"><b>{{ $fmt($s->net) }}</b></td>
                     <td class="num">{{ $fmt($s->insurance_employer) }}</td>
                     <td data-noprint style="white-space:nowrap">
                         <details style="display:inline-block">

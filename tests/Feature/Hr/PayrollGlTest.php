@@ -152,6 +152,27 @@ class PayrollGlTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $acc->balanceBetween(null, null), 0.001);
     }
 
+    public function test_salaries_payable_clears_per_cost_center(): void
+    {
+        $this->emp();
+        $this->emp(['cost_center_id' => $this->maadi->id, 'basic_salary' => 5000, 'allowances' => 0]);
+        $run = Payroll::draft('2026-09', $this->admin);
+        Payroll::approve($run, $this->admin);
+        Payroll::pay($run, $this->safe(), null, Carbon::parse('2026-10-02'), $this->admin);
+
+        $acc = GlAccount::findKey('salaries_payable')->id;
+        $byCc = \App\Models\Gl\GlLine::query()->where('account_id', $acc)
+            ->selectRaw('cost_center_id, SUM(debit - credit) b')->groupBy('cost_center_id')->pluck('b', 'cost_center_id');
+        foreach ($byCc as $b) {
+            $this->assertEqualsWithDelta(0.0, (float) $b, 0.001);
+        }
+        $this->assertCount(2, $byCc);
+
+        // كل سطر بسلوت مختلف — تعديل حساب سطر مايترميش على الباقي بعد إعادة البناء
+        $e = $this->entry($run->fresh());
+        $this->assertSame($e->lines->count(), $e->lines->pluck('slot')->unique()->count());
+    }
+
     public function test_advance_posts_and_void_unposts(): void
     {
         $e = $this->emp();

@@ -210,17 +210,34 @@ final class PayrollGl
         $review = false;
         $safe = $p->safe;
         $amount = round((float) $p->amount, 2);
-        $cc = $safe?->cost_center_id;
         $dr = self::account(self::ruleKey('hr.payroll.pay', 'debit'), $review);
         $cr = self::safeAccount($safe, $p->kind, $review);
+
+        // ⚠️ المدين على «مرتبات مستحقة» بمركز كل قسيمة — نفس مراكز قيد
+        // الاستحقاق، فرصيد الحساب بيتقفل صفر لكل مركز مش للإجمالي بس
+        $byCc = Payslip::query()->where('payroll_payment_id', $p->id)
+            ->selectRaw('cost_center_id, COALESCE(SUM(net),0) n')->groupBy('cost_center_id')->get();
+        $lines = [];
+        $sum = 0.0;
+        foreach ($byCc as $row) {
+            $n = round((float) $row->n, 2);
+            if ($n <= 0) {
+                continue;
+            }
+            $cc = $row->cost_center_id === null ? null : (int) $row->cost_center_id;
+            $lines[] = ['slot' => self::slot('dr', $dr, $cc), 'account_id' => $dr, 'cost_center_id' => $cc, 'debit' => $n, 'credit' => 0.0];
+            $sum = round($sum + $n, 2);
+        }
+        if ($lines === [] || abs($sum - $amount) > 0.001) {
+            // دفعة قديمة من غير ربط قسايم — سطر واحد بمركز الخزنة
+            $lines = [['slot' => 'dr', 'account_id' => $dr, 'cost_center_id' => $safe?->cost_center_id, 'debit' => $amount, 'credit' => 0.0]];
+        }
+        $lines[] = ['slot' => 'cr', 'account_id' => $cr, 'cost_center_id' => $safe?->cost_center_id, 'debit' => 0.0, 'credit' => $amount];
 
         return [
             'rule' => 'hr.payroll.pay', 'needs_review' => $review,
             'memo' => __('hrm.gl_payroll_pay_memo', ['period' => $p->run?->period]),
-            'lines' => [
-                ['slot' => 'dr', 'account_id' => $dr, 'cost_center_id' => $cc, 'debit' => $amount, 'credit' => 0.0],
-                ['slot' => 'cr', 'account_id' => $cr, 'cost_center_id' => $cc, 'debit' => 0.0, 'credit' => $amount],
-            ],
+            'lines' => $lines,
         ];
     }
 
@@ -283,6 +300,11 @@ final class PayrollGl
         return self::account($kind === 'bank' ? 'bank' : 'cash_main', $review);
     }
 
+    private static function slot(string $side, int $accountId, ?int $cc): string
+    {
+        return substr($side.':'.$accountId.':'.($cc ?? 0), 0, 20);
+    }
+
     /** @param list<array> $lines */
     private static function net(array $lines): array
     {
@@ -298,7 +320,9 @@ final class PayrollGl
             }
             [$a, $cc] = explode('|', $k);
             $out[] = [
-                'slot' => $bal > 0 ? 'dr' : 'cr',
+                // ⚠️ سلوت لكل سطر (مش dr/cr بس) — تعديل حساب سطر واحد في اليومية
+                // كان هيترمي على كل سطور نفس الجانب بعد إعادة البناء
+                'slot' => self::slot($bal > 0 ? 'dr' : 'cr', (int) $a, $cc === '' ? null : (int) $cc),
                 'account_id' => (int) $a,
                 'cost_center_id' => $cc === '' ? null : (int) $cc,
                 'debit' => $bal > 0 ? $bal : 0.0,

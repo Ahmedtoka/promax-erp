@@ -205,6 +205,25 @@ class PayrollRunTest extends TestCase
         $this->assertEqualsWithDelta(3131.25, (float) $s->insurance_employer, 0.001);
     }
 
+    public function test_file_without_salary_gets_no_insurance(): void
+    {
+        $e = $this->emp(['basic_salary' => 0, 'allowances' => 0]);
+        $s = $this->slip(Payroll::draft('2026-09', $this->admin), $e);
+
+        $this->assertSame(0.0, (float) $s->insurance_employee);
+        $this->assertSame(0.0, (float) $s->net);
+    }
+
+    public function test_negative_net_blocks_approval(): void
+    {
+        $e = $this->emp(['hire_date' => '2026-09-30', 'basic_salary' => 3000, 'allowances' => 0]);
+        $run = Payroll::draft('2026-09', $this->admin);
+        $this->assertLessThan(0, (float) $this->slip($run, $e)->net);
+
+        $this->actingAs($this->admin)->post("/hr/payroll/{$run->id}/approve")->assertSessionHasErrors('run');
+        $this->assertSame('draft', $run->fresh()->status);
+    }
+
     public function test_commission_for_field_employee(): void
     {
         $rep = $this->makeRep();
@@ -286,6 +305,39 @@ class PayrollRunTest extends TestCase
         $p = PayrollPayment::firstOrFail();
         $this->assertEqualsWithDelta((float) $run->net, (float) $p->amount, 0.001);
         $this->assertSame($p->id, (int) $s->fresh()->payroll_payment_id);
+    }
+
+    public function test_review_guards_on_advances_and_penalties(): void
+    {
+        $e = $this->emp();
+        $adv = EmployeeAdvance::create([
+            'number' => 'ADV-1001', 'employee_id' => $e->id, 'date' => '2026-08-20', 'amount' => 2000,
+            'installments' => 2, 'installment_amount' => 1000, 'start_period' => '2026-09',
+        ]);
+        $run = Payroll::draft('2026-09', $this->admin);
+
+        // جزاء اتسجل بعد المسودة = القسيمة قديمة والاعتماد مرفوض لحد إعادة الحساب
+        HrPenalty::create(['employee_id' => $e->id, 'date' => '2026-09-20', 'amount' => 100, 'reason' => 'x']);
+        $this->actingAs($this->admin)->post("/hr/payroll/{$run->id}/approve")->assertSessionHasErrors('run');
+        Payroll::draft('2026-09', $this->admin);
+        $this->actingAs($this->admin)->post("/hr/payroll/{$run->id}/approve")->assertSessionHasNoErrors();
+
+        // السلفة في مسير معتمد: الإلغاء مرفوض، والجزاء/السلفة في شهر معتمد مرفوضين
+        $hr = $this->makeAdmin(['role' => 'hr']);
+        $this->actingAs($hr)->post("/hr/advances/{$adv->id}/void")->assertSessionHasErrors();
+        $this->assertSame('open', $adv->fresh()->status);
+        $this->actingAs($hr)->post('/hr/penalties', [
+            'employee_id' => $e->id, 'date' => '2026-09-25', 'amount' => 50, 'reason' => 'y',
+        ])->assertSessionHasErrors('date');
+        $this->actingAs($hr)->post('/hr/advances', [
+            'employee_id' => $e->id, 'date' => '2026-09-25', 'amount' => 500, 'installments' => 1,
+            'start_period' => '2026-09', 'safe_id' => $this->cashSafe()->id,
+        ])->assertSessionHasErrors('start_period');
+
+        // قسط يدوي أكبر من المتبقي على السلف المفتوحة مرفوض (مسودة شهر تاني)
+        $run10 = Payroll::draft('2026-10', $this->admin);
+        $this->expectException(Rejected::class);
+        Payroll::setLine($this->slip($run10, $e), 'advance', 5000, null, $this->admin);
     }
 
     public function test_paying_twice_is_refused(): void
