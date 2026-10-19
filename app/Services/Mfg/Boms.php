@@ -147,6 +147,20 @@ class Boms
                 throw new Rejected(__('mfg.bom_empty'));
             }
 
+            // ⚠️ إعادة فحص وقت الاعتماد: خامة اتوقفت أو اتغيّر نوعها بعد حفظ
+            // السطور، أو رأس اتغيّر نوعه — ماتتعتمدش (مراجعة مهمة ٣)
+            $head = Product::query()->whereKey($row->product_id)->lockForUpdate()->first();
+            if ($head === null || $head->kind !== Product::KIND_FINISHED) {
+                throw new Rejected(__('mfg.bom_finished_only'));
+            }
+
+            $ids = $row->lines()->pluck('product_id')->unique()->all();
+            $ok = Product::query()->whereIn('id', $ids)
+                ->whereIn('kind', self::LINE_KINDS)->where('active', true)->lockForUpdate()->count();
+            if ($ok !== count($ids)) {
+                throw new Rejected(__('mfg.bom_line_not_material'));
+            }
+
             Bom::query()->where('product_id', $row->product_id)
                 ->where('status', 'approved')->whereKeyNot($row->id)
                 ->lockForUpdate()->get()

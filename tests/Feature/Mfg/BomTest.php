@@ -155,6 +155,34 @@ class BomTest extends TestCase
         $this->assertSame('draft', $bom->fresh()->status);
     }
 
+    public function test_approve_refuses_a_deactivated_material(): void
+    {
+        $p = $this->finished();
+        $oats = $this->raw();
+        $bom = $this->bom($p);
+        Boms::saveLines($bom, [['product_id' => $oats->id, 'qty' => 0.035, 'basis' => 'per_unit']], 0, null);
+
+        $oats->forceFill(['active' => false])->save();
+
+        $this->actingAs($this->user('admin'))->post(route('mfg.boms.approve', $bom))
+            ->assertSessionHasErrors('bom');
+        $this->assertSame('draft', $bom->fresh()->status);
+
+        // رجعت نشطة بس نوعها بقى تام = برضه مرفوض
+        $oats->forceFill(['active' => true, 'kind' => 'finished'])->save();
+        try {
+            Boms::approve($bom, $this->user('admin'));
+            $this->fail('approve should refuse a line that is no longer a material');
+        } catch (Rejected $e) {
+            $this->assertSame(__('mfg.bom_line_not_material'), $e->getMessage());
+        }
+        $this->assertSame('draft', $bom->fresh()->status);
+
+        $oats->forceFill(['kind' => 'raw'])->save();
+        Boms::approve($bom, $this->user('admin'));
+        $this->assertSame('approved', $bom->fresh()->status);
+    }
+
     public function test_new_version_copies_lines(): void
     {
         $rnd = $this->user('rnd');
