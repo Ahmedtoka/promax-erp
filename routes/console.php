@@ -41,6 +41,12 @@ Schedule::command('contracts:dues')
 
 Schedule::command('promax:prune-activity')->weeklyOn(5, '03:00');
 
+// ═══ قفل شهور الدفتر أوتوماتيك (الخط ٣ — D11) ═══
+// مابيعملش حاجة إلا لو سياسة القفل `auto` من معالج التشغيل.
+Schedule::command('promax:gl-close-periods')
+    ->dailyAt('02:20')
+    ->withoutOverlapping();
+
 // ═══ بولينج أجهزة تتبع العربيات — iTrack (٢٦/٨) ═══
 // كل دقيقة: آخر موقع وحالة لكل جهاز مفعّل → gps_devices. لو الحساب
 // مش متظبط في شاشة «أجهزة التتبع» الأمر بيخرج فوراً من غير أي نداء.
