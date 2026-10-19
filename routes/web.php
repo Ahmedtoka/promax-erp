@@ -914,6 +914,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
 
     // ═══ التكاليف (الخط ٩) — محاسب وأدمن يشوفوا، والكتابة أدمن بس ═══
     Route::prefix('costing')->name('costing.')->middleware('role:admin,accountant')->group(function () {
+        Route::get('/pnl', [\App\Http\Controllers\Costing\PnlController::class, 'index'])->name('pnl');
         $co = \App\Http\Controllers\Costing\OverheadController::class;
         Route::get('/overhead', [$co, 'index'])->name('overhead');
         Route::post('/overhead/close', [$co, 'close'])->middleware('role:admin')->name('overhead.close');

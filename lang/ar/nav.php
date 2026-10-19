@@ -147,4 +147,5 @@ return [
     'group_costing' => "التكاليف",
     'costing_overhead' => "التكاليف غير المباشرة بالشهر",
     'costing_cards' => "كارت التكلفة وسعر التحويل",
+    'costing_pnl' => "قايمة الدخل الإدارية",
 ];

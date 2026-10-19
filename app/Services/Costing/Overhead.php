@@ -251,30 +251,49 @@ final class Overhead
     }
 
     /**
-     * مصروفات مرحّلة في الشهر على المراكز دي — `asset` مستبعد، و`payroll` بس
-     * لو مفيش مسير معتمد/مدفوع للشهر (D7). من غير بند = تشغيلي.
+     * مصروفات مرحّلة في الشهر على المراكز دي (D7) — `countedExpenses` على المراكز.
      *
      * @param  list<int>  $ids
      * @return array<int, float>
      */
     private static function expensesByCenter(array $ids, Carbon $from, Carbon $to): array
     {
-        if ($ids === []) {
-            return [];
-        }
-        $runApproved = PayrollRun::where('period', $from->format('Y-m'))->whereIn('status', ['approved', 'paid'])->exists();
-        $excluded = $runApproved ? ['asset', 'payroll'] : ['asset'];
+        return $ids === [] ? [] : self::countedExpenses($from, $to, $ids);
+    }
+
+    /**
+     * المصروفات اللي بتتحسب تكلفة في فترة (أي طول): مرحّلة، بند `asset`
+     * مستبعد (بيتهلك)، وبند `payroll` بس لو **شهر المصروف** مالوش مسير
+     * معتمد/مدفوع (عشان المرتب مايتحسبش مرتين). من غير بند = تشغيلي.
+     * المصدر الواحد للقاعدة دي — الأحواض هنا وقايمة الدخل (`ProfitLoss`).
+     *
+     * @param  list<int>|null  $ids  null = كل المراكز
+     * @return array<int|string, float> بالمركز، و`'none'` للمصروف من غير مركز
+     */
+    public static function countedExpenses(CarbonInterface $from, CarbonInterface $to, ?array $ids = null): array
+    {
+        $runs = PayrollRun::whereIn('status', ['approved', 'paid'])
+            ->whereBetween('period', [$from->format('Y-m'), $to->format('Y-m')])
+            ->pluck('period')->unique()->values()->all();
 
         return Expense::query()
             ->leftJoin('expense_categories as c', 'c.id', '=', 'expenses.category_id')
             ->where('expenses.status', 'posted')
             ->whereBetween('expenses.date', [$from->toDateString(), $to->toDateString()])
-            ->whereIn('expenses.cost_center_id', $ids)
-            ->where(fn ($q) => $q->whereNull('c.type')->orWhereNotIn('c.type', $excluded))
+            ->when($ids !== null, fn ($q) => $q->whereIn('expenses.cost_center_id', $ids))
+            ->where(function ($q) use ($runs) {
+                $q->whereNull('c.type')->orWhereNotIn('c.type', ['asset', 'payroll']);
+                if ($runs !== []) {
+                    $q->orWhere(fn ($p) => $p->where('c.type', 'payroll')
+                        ->whereNotIn(\Illuminate\Support\Facades\DB::raw("DATE_FORMAT(expenses.date, '%Y-%m')"), $runs));
+                } else {
+                    $q->orWhere('c.type', 'payroll');
+                }
+            })
             ->groupBy('expenses.cost_center_id')
             ->selectRaw('expenses.cost_center_id as center, COALESCE(SUM(expenses.amount),0) as amt')
-            ->pluck('amt', 'center')
-            ->map(fn ($v) => round((float) $v, 2))
+            ->get()
+            ->mapWithKeys(fn ($r) => [($r->center ?? 'none') => round((float) $r->amt, 2)])
             ->all();
     }
 
@@ -284,18 +303,25 @@ final class Overhead
      */
     private static function depreciationByCenter(array $ids, Carbon $from, Carbon $to): array
     {
-        if ($ids === []) {
-            return [];
-        }
+        return $ids === [] ? [] : self::depreciation($from, $to, $ids);
+    }
 
+    /**
+     * إهلاك الأصول في فترة بمركز الأصل.
+     *
+     * @param  list<int>|null  $ids  null = كل المراكز
+     * @return array<int|string, float> بالمركز، و`'none'` للأصل من غير مركز
+     */
+    public static function depreciation(CarbonInterface $from, CarbonInterface $to, ?array $ids = null): array
+    {
         return FixedAssetDepreciation::query()
             ->join('fixed_assets as a', 'a.id', '=', 'fixed_asset_depreciations.fixed_asset_id')
             ->whereBetween('fixed_asset_depreciations.date', [$from->toDateString(), $to->toDateString()])
-            ->whereIn('a.cost_center_id', $ids)
+            ->when($ids !== null, fn ($q) => $q->whereIn('a.cost_center_id', $ids))
             ->groupBy('a.cost_center_id')
             ->selectRaw('a.cost_center_id as center, COALESCE(SUM(fixed_asset_depreciations.amount),0) as amt')
-            ->pluck('amt', 'center')
-            ->map(fn ($v) => round((float) $v, 2))
+            ->get()
+            ->mapWithKeys(fn ($r) => [($r->center ?? 'none') => round((float) $r->amt, 2)])
             ->all();
     }
 

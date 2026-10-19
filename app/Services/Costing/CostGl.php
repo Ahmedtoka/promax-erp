@@ -133,12 +133,28 @@ final class CostGl
         $method = CostingSettings::method();
         $markup = 0.0;
         foreach ($e->relationLoaded('lines') ? $e->lines : $e->lines()->get() as $l) {
-            if ($l->unit_transfer !== null) {
-                $markup += (float) $l->amount_transfer - (float) ($method === 'wavg' ? $l->amount_wavg : $l->amount_batch);
-            }
+            $v = self::lineValue($l, $method);
+            $markup += $v['tp'] - $v['real'];
         }
 
         return [$e->amount($method), round($markup, 2)];
+    }
+
+    /**
+     * قيمة سطر تكلفة بطريقة معيّنة: `real` = R بالطريقة، و`tp` = مبلغ التحويل
+     * **بس** لو السطر ليه سعر تحويل (`unit_transfer` مش فاضي)، وإلا = R.
+     * ⚠️ سطر التحويل من غير سعر تحويل `amount_transfer` فيه R الباتش حتى
+     * تحت المتوسط — فمايتاخدش أبداً (قرار مراجعة المهمة ٤). الهامش = tp − real.
+     * المصدر الواحد للهامش: `amounts()` هنا وقايمة الدخل (`ProfitLoss`).
+     *
+     * @param  object  $l  سطر `CostLine` أو صف خام فيه نفس الأعمدة
+     * @return array{real:float, tp:float}
+     */
+    public static function lineValue(object $l, string $method): array
+    {
+        $real = (float) ($method === 'wavg' ? $l->amount_wavg : $l->amount_batch);
+
+        return ['real' => $real, 'tp' => $l->unit_transfer !== null ? (float) $l->amount_transfer : $real];
     }
 
     /**

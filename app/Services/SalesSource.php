@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\DB;
  *                 grand_total · payment (cash|credit|po|entry)
  *   lines()       بنود مستندات قيود الفترة: kind · doc_id · client_id ·
  *                 user_id · product_id · qty · total · tax · cost
- *   returns()     قيد مرتجع لكل صف: doc_id · client_id · user_id · doc_at · amount
+ *   returns()     قيد مرتجع لكل صف: doc_id · client_id · user_id · doc_at · amount · tax
  *   collections() قيد تحصيل لكل صف: src (invoice|visit|po|office) ·
  *                 client_id · user_id · doc_at · amount · method
  *
@@ -114,7 +114,7 @@ final class SalesSource
                 ->where('t.source_type', '=', ClientReturn::class))
             ->when($repIds, fn ($w) => $w->whereIn(DB::raw('COALESCE(r.user_id, c.rep_id)'), $repIds))
             ->selectRaw('t.source_id AS doc_id, t.client_id, COALESCE(r.user_id, c.rep_id) AS user_id,
-                t.date AS doc_at, t.credit AS amount');
+                t.date AS doc_at, t.credit AS amount, COALESCE(t.tax, 0) AS tax');
 
         return DB::query()->fromSub($q, 's');
     }

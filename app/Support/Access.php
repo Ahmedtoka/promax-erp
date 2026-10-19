@@ -586,6 +586,7 @@ class Access
 
         // ═══ التكاليف (الخط ٩) — بعد الحسابات العامة مباشرة ═══
         'nav.group_costing' => [
+            ['costing.pnl', '📊', 'nav.costing_pnl', 'costing.pnl*', null],
             ['costing.overhead', '🏭', 'nav.costing_overhead', 'costing.overhead*', null],
             ['costing.cards', '🧮', 'nav.costing_cards', 'costing.cards*', null],
         ],
