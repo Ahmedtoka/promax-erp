@@ -637,7 +637,7 @@ return [
     // ---------- Raw store ----------
     'raw_kind_only' => 'المخزن ده بيصرف الخامات ومواد التعبئة بس.',
     'raw_qty_not_whole' => 'الكمية لازم تكون عدد صحيح (عرّف الخامة بأصغر وحدة مخزون، زي الجرام).',
-    'raw_not_enough' => 'مفيش كمية كفاية من :product في المخزن: المتاح :available.',
+    'raw_not_enough' => 'مفيش كمية كفاية من :product في المخزن: المطلوب :need والمتاح :available.',
     'raw_tab_batches' => 'الباتشات (FEFO)',
     'raw_tab_moves' => 'سجل الصرف',
     'raw_kind_all' => 'كل الأنواع',

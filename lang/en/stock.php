@@ -638,7 +638,7 @@ return [
     // ---------- Raw store ----------
     'raw_kind_only' => 'Only raw and packaging materials can be issued from the raw store.',
     'raw_qty_not_whole' => 'The quantity must be a whole number (define materials in their smallest stock unit, e.g. grams).',
-    'raw_not_enough' => 'Not enough :product in stock: available :available.',
+    'raw_not_enough' => 'Not enough :product in stock: needed :need, available :available.',
     'raw_tab_batches' => 'Batches (FEFO)',
     'raw_tab_moves' => 'Issue log',
     'raw_kind_all' => 'All kinds',

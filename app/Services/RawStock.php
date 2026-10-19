@@ -62,7 +62,8 @@ class RawStock
             $available = (int) $batches->sum('qty_remaining');
             if ($need > $available) {
                 throw new Rejected(__('stock.raw_not_enough', [
-                    'product' => $p->name,
+                    'product' => $p->displayName(),
+                    'need' => $need,
                     'available' => $available,
                 ]));
             }

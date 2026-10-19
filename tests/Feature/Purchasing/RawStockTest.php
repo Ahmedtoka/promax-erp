@@ -92,7 +92,7 @@ class RawStockTest extends TestCase
             $this->fail('second issue must be refused');
         } catch (Rejected $e) {
             $this->assertStringContainsString('10', $e->getMessage());
-            $this->assertSame(__('stock.raw_not_enough', ['product' => $p->name, 'available' => 10]), $e->getMessage());
+            $this->assertSame(__('stock.raw_not_enough', ['product' => $p->displayName(), 'need' => 30, 'available' => 10]), $e->getMessage());
         }
 
         $this->assertSame(10, $b->fresh()->qty_remaining);
