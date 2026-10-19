@@ -213,6 +213,8 @@ class Access
             // وحده، والراوتس كلها `role:admin,accountant` أصلاً — فالبادئة
             // مابتوسّعش على حد تاني.
             'gl.',
+            // الخط ٩: التكاليف — الراوتس `role:admin,accountant` والكتابة أدمن بس
+            'costing.',
             // ═══ ملف الموظف (Lane 7) — قراءة: المرتبات من هنا. الإضافة والتعديل
             // `act.hr.employees` (الموارد البشرية)، وفورم التعديل فيه الرقم القومي ═══
             'hr.employees', '!hr.employees.edit',
@@ -394,6 +396,7 @@ class Access
         'nav.group_field' => '🗺️',
         'nav.group_money' => '💰',
         'nav.group_gl' => '📒',
+        'nav.group_costing' => '💹',
         'nav.group_hr' => '🕒',
         'nav.group_targets' => '🎯',
         'nav.group_reports' => '📑',
@@ -579,6 +582,11 @@ class Access
             ['gl.assets', '🖥️', 'nav.gl_assets', 'gl.assets*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
+        ],
+
+        // ═══ التكاليف (الخط ٩) — بعد الحسابات العامة مباشرة ═══
+        'nav.group_costing' => [
+            ['costing.overhead', '🏭', 'nav.costing_overhead', 'costing.overhead*', null],
         ],
 
         // ═══ ١. المنتجات والتسعير — أول السايكل: تعريف الصنف ═══
@@ -846,6 +854,9 @@ class Access
             // L4-D11: تشغيل الإهلاك الشهري
             'gl.assets.depreciate',
         ]],
+
+        // الخط ٩: قفل شهر التكاليف وإعادة حساب الطبقة — أدمن بس
+        'act.costing.admin' => ['perm.act_costing_admin', 'costing.overhead', [], ['costing.overhead.close', 'costing.sync']],
 
         // ═══ الإعدادات ═══
         'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password', 'erp.channels.manager']],

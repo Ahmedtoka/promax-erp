@@ -144,4 +144,6 @@ return [
     'mfg_trace' => 'Lot Trace & Recall',
     'mfg_variance' => 'Variance Report',
     'mfg_requirements' => 'Material Requirement',
+    'group_costing' => "Costing",
+    'costing_overhead' => "Overhead by month",
 ];

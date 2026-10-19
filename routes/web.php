@@ -912,6 +912,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/assets/depreciate', [$fa, 'depreciate'])->middleware('role:admin')->name('assets.depreciate');
     });
 
+    // ═══ التكاليف (الخط ٩) — محاسب وأدمن يشوفوا، والكتابة أدمن بس ═══
+    Route::prefix('costing')->name('costing.')->middleware('role:admin,accountant')->group(function () {
+        $co = \App\Http\Controllers\Costing\OverheadController::class;
+        Route::get('/overhead', [$co, 'index'])->name('overhead');
+        Route::post('/overhead/close', [$co, 'close'])->middleware('role:admin')->name('overhead.close');
+        Route::post('/sync', [$co, 'sync'])->middleware('role:admin')->name('sync');
+    });
+
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.
     // عقود موقّعة فيها أسعار وشروط، ممنوع تبقى متاحة بلينك مباشر.
     // ⚠️ **الراوت ده كان مفتوح لأي حد عامل لوجين.** كان جوه `auth` بس

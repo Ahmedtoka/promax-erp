@@ -144,4 +144,6 @@ return [
     'mfg_trace' => 'تتبع اللوطات والسحب',
     'mfg_variance' => 'تقرير الفروق',
     'mfg_requirements' => 'احتياج الخامات',
+    'group_costing' => "التكاليف",
+    'costing_overhead' => "التكاليف غير المباشرة بالشهر",
 ];

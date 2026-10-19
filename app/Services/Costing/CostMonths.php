@@ -9,6 +9,7 @@ use App\Models\CostMonthLine;
 use App\Models\Gl\GlPeriod;
 use App\Models\User;
 use App\Services\Gl\Ledger;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -45,6 +46,20 @@ final class CostMonths
             throw new Rejected(__('gl.period_closed', ['period' => $period]));
         }
 
+        // سباق قفل نفس الشهر مرتين: المفتاح الفريد على `period` يبقى رفض ودّي مش ٥٠٠
+        try {
+            return self::closeInTransaction($period, $month, $by);
+        } catch (QueryException $e) {
+            if ((string) $e->getCode() === '23000' && str_contains($e->getMessage(), 'period')) {
+                throw new Rejected(__('costing.month_closed'));
+            }
+
+            throw $e;
+        }
+    }
+
+    private static function closeInTransaction(string $period, Carbon $month, User $by): CostMonth
+    {
         return DB::transaction(function () use ($period, $month, $by) {
             if (CostMonth::where('period', $period)->lockForUpdate()->where('status', 'closed')->exists()) {
                 throw new Rejected(__('costing.month_closed'));
