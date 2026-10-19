@@ -71,6 +71,7 @@ return [
     'gl_balance_sheet' => 'المركز المالي',
     'gl_expenses' => 'المصروفات',
     'gl_cash' => 'حركة النقدية',
+    'gl_expense_categories' => 'بنود المصروف',
     'gl_safes' => 'الخزن والبنوك',
     'gl_recon' => 'مطابقة البنك',
     'gl_settings' => 'إعدادات الدفتر',

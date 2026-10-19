@@ -490,6 +490,7 @@ class Access
             ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],
             ['gl.balance_sheet', '🏛️', 'nav.gl_balance_sheet', 'gl.balance_sheet*', null],
             ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
+            ['gl.expense_categories', '🏷️', 'nav.gl_expense_categories', 'gl.expense_categories*', null],
             ['gl.safes', '💰', 'nav.gl_safes', 'gl.safes*', null],
             ['gl.recon', '🧮', 'nav.gl_recon', 'gl.recon*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
@@ -705,7 +706,12 @@ class Access
             // Lane 4: سجل الخزن والبنوك
             'gl.safes.store', 'gl.safes.update', 'gl.safes.counts.store', 'gl.safes.counts.void',
             'gl.recon.store', 'gl.recon.mark', 'gl.recon.close',
+            // L4-D7: دفع سند معتمد
+            'gl.expenses.pay',
         ]],
+        // L4-D7: اعتماد/رفض المصروف — أدمن بس (`[]`)، وبيتمنح ليوزر أو
+        // رول من شاشة الصلاحيات (أصحاب الاعتماد بيتحددوا من غير كود)
+        'act.gl.expense_approve' => ['perm.act_gl_expense_approve', 'gl.expenses', [], ['gl.expenses.approve', 'gl.expenses.reject']],
         // ⚠️ **أدمن بس** (`[]`): القواعد بتحدد كل قيد جاي، وفتح فترة
         // مقفولة بيرجّع شهر معتمد للتعديل، وإعادة البناء بتمسح كل القيود
         // الآلية وتولّدها تاني. الشاشة نفسها (`gl.settings`) مفتوحة
@@ -713,6 +719,8 @@ class Access
         'act.gl.admin' => ['perm.act_gl_admin', 'gl.settings', [], [
             'gl.settings.rules', 'gl.settings.general', 'gl.periods.reopen',
             'gl.rebuild.preview', 'gl.rebuild',
+            // L4-D8: بنود المصروف
+            'gl.expense_categories.store', 'gl.expense_categories.update',
         ]],
 
         // ═══ الإعدادات ═══

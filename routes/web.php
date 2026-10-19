@@ -755,6 +755,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/expenses', [$g, 'index'])->name('expenses');
         Route::post('/expenses', [$g, 'store'])->name('expenses.store');
         Route::post('/expenses/{expense}/void', [$g, 'void'])->name('expenses.void');
+        // L4-D7: الاعتماد والرفض أدمن (قابل للمنح من شاشة الصلاحيات) · الدفع `act.gl.post`
+        Route::post('/expenses/{expense}/approve', [$g, 'approve'])->middleware('role:admin')->name('expenses.approve');
+        Route::post('/expenses/{expense}/reject', [$g, 'reject'])->middleware('role:admin')->name('expenses.reject');
+        Route::post('/expenses/{expense}/pay', [$g, 'pay'])->name('expenses.pay');
+        // بنود المصروف (L4-D8) — الشاشة للمحاسب، الكتابة أدمن بس
+        $ec = \App\Http\Controllers\Gl\ExpenseCategoryController::class;
+        Route::get('/expense-categories', [$ec, 'index'])->name('expense_categories');
+        Route::post('/expense-categories', [$ec, 'store'])->middleware('role:admin')->name('expense_categories.store');
+        Route::post('/expense-categories/{category}', [$ec, 'update'])->middleware('role:admin')->name('expense_categories.update');
         // ═══ شجرة الحسابات وكشف الحساب ═══
         $a = \App\Http\Controllers\Gl\AccountController::class;
         Route::get('/accounts', [$a, 'index'])->name('accounts');

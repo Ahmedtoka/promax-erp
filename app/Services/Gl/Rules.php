@@ -261,8 +261,21 @@ class Rules
         if ($x->paid_from === 'rep_cash' && $rep === null) {
             $needsReview = true;
         }
-        // الدائن من القاعدة — `rep_cash` بيتحل لمندوب السند
-        $creditId = $this->keyAccount($rule->credit_key, $rep, $needsReview);
+        // الدائن: L4-D4/L4-D9 — الخزنة المسمّاة (أو خزنة `paid_from` القديمة)
+        // بحسابها في الشجرة؛ من غير حساب صالح بيرجع لمفتاح القاعدة زي الأول.
+        // `rep_cash` مش خزنة — بيتحل لمندوب السند من القاعدة.
+        $safe = $x->paid_from === 'rep_cash' ? null : $x->resolvedSafe();
+        $creditId = null;
+        if ($safe !== null) {
+            $acc = $safe->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+            if ($acc !== null && $acc->is_postable && $acc->active) {
+                $creditId = $acc->id;
+            } elseif ($x->safe_id) {
+                // خزنة اختارها المستخدم ومالهاش حساب صالح = المراجعة لازم تعرف
+                $needsReview = true;
+            }
+        }
+        $creditId ??= $this->keyAccount($rule->credit_key, $rep, $needsReview);
         // حساب المصروف نفسه جاي من السند (مش من القاعدة) — بيعدّي على نفس
         // الحارس: حساب موقوف أو مجموعة بيروح المعلّق
         $debitId = $this->safeAccount($x->account_id ? GlAccount::find($x->account_id) : null, $needsReview);
@@ -272,8 +285,8 @@ class Rules
             'rule' => 'expense.'.$x->paid_from, 'needs_review' => $needsReview,
             'memo' => $x->number.' — '.($x->note ?: $x->account?->displayName()),
             'lines' => [
-                ['slot' => 'dr', 'account_id' => $debitId, 'debit' => $amount, 'credit' => 0.0],
-                ['slot' => 'cr', 'account_id' => $creditId, 'debit' => 0.0, 'credit' => $amount],
+                ['slot' => 'dr', 'account_id' => $debitId, 'cost_center_id' => $x->cost_center_id, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $creditId, 'cost_center_id' => $safe?->cost_center_id ?? $x->cost_center_id, 'debit' => 0.0, 'credit' => $amount],
             ],
         ];
     }
