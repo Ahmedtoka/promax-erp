@@ -73,5 +73,4 @@ return [
     'sync_btn' => "Recompute",
     'sync_confirm' => "Recompute the cost layer from this date and post it?",
     'sync_done' => "Cost layer recomputed: :synced synced, :deleted deleted.",
-    'month_race' => "This costing month is already closed.",
 ];

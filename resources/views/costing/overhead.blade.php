@@ -105,7 +105,7 @@
         <input type="hidden" name="month" value="{{ $month->format('Y-m') }}">
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue()])
         <button class="btn gold">{{ __('common.search') }}</button>
-        <a class="btn" href="{{ route('costing.overhead') }}">{{ __('common.clear') }}</a>
+        <a class="btn" href="{{ route('costing.overhead', ['month' => $month->format('Y-m')]) }}">{{ __('common.clear') }}</a>
         <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1]) }}">⬇ {{ __('ui.export_all') }}</a>
     </form>
     <div class="tablewrap">
@@ -164,7 +164,7 @@
             </tr>
             @forelse ($closedMonths as $cm)
                 <tr>
-                    <td><a href="{{ route('costing.overhead', ['month' => $cm->period]) }}">{{ $cm->period }}</a></td>
+                    <td><a href="{{ route('costing.overhead', ['month' => $cm->period, 'from' => $cm->period.'-01', 'to' => \Illuminate\Support\Carbon::createFromFormat('Y-m-d', $cm->period.'-01')->endOfMonth()->toDateString()]) }}">{{ $cm->period }}</a></td>
                     <td class="num">{{ $m2($cm->summary['pool'] ?? 0) }}</td>
                     <td class="num">{{ $m2($cm->summary['applied'] ?? 0) }}</td>
                     <td class="num" style="{{ $vClass((float) ($cm->summary['variance'] ?? 0)) }}">{{ $m2($cm->summary['variance'] ?? 0) }}</td>

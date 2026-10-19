@@ -117,18 +117,53 @@ class OverheadScreenTest extends TestCase
         $this->actingAs($agent)->get(route('costing.overhead'))->assertForbidden();
     }
 
-    public function test_unique_violation_on_period_becomes_friendly_rejection(): void
+    private function dbError(int $driverCode, string $msg): QueryException
     {
-        // السباق الحقيقي صعب يتعمل في تيست واحد؛ بنتحقق من المسار بمحاكاة الاستثناء
-        $e = new QueryException('mysql', 'insert into cost_months', [], new \PDOException(
-            "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '2020-01' for key 'cost_months_period_unique'", 23000));
-        $this->assertSame('23000', (string) $e->getCode());
-        $this->assertStringContainsString('period', $e->getMessage());
+        $pdo = new \PDOException($msg, 23000);
+        $pdo->errorInfo = ['23000', $driverCode, $msg];
 
+        return new QueryException('mysql', 'insert into cost_months', [], $pdo);
+    }
+
+    public function test_only_the_period_unique_index_becomes_a_friendly_rejection(): void
+    {
+        $dup = "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '2020-01' for key 'cost_months_period_unique'";
+        $r = CostMonths::friendlyUniqueViolation($this->dbError(1062, $dup));
+        $this->assertInstanceOf(Rejected::class, $r);
+        $this->assertSame(__('costing.month_closed'), $r->getMessage());
+
+        $other = "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'x' for key 'cost_entries_origin_unique' (insert into cost_months period)";
+        $this->assertNull(CostMonths::friendlyUniqueViolation($this->dbError(1062, $other)));
+        $this->assertNull(CostMonths::friendlyUniqueViolation($this->dbError(1452, 'Cannot add or update a child row: cost_months_period_unique')));
+    }
+
+    public function test_closing_the_same_month_twice_gives_the_friendly_error(): void
+    {
         $period = today()->subMonths(2)->format('Y-m');
         CostMonths::close($period, $this->admin);
         $this->expectException(Rejected::class);
         $this->expectExceptionMessage(__('costing.month_closed'));
         CostMonths::close($period, $this->admin);
+    }
+
+    public function test_bad_month_param_falls_back_to_the_current_month(): void
+    {
+        foreach (['month=2026-13', 'month[]=x', 'month=abc'] as $q) {
+            $this->actingAs($this->admin)->get(route('costing.overhead').'?'.$q)->assertOk()
+                ->assertSee('value="'.today()->format('Y-m').'"', false);
+        }
+    }
+
+    public function test_date_range_filters_orders_by_closed_at(): void
+    {
+        $in = $this->closedOrder('');
+        $out = $this->closedOrder('');
+        $out->forceFill(['closed_at' => today()->subMonths(3)])->save();
+
+        $this->actingAs($this->admin)->get(route('costing.overhead'))->assertSee($in->number)->assertDontSee($out->number);
+        $from = today()->subMonths(3)->startOfMonth()->toDateString();
+        $to = today()->subMonths(3)->endOfMonth()->toDateString();
+        $this->actingAs($this->admin)->get(route('costing.overhead', ['from' => $from, 'to' => $to]))
+            ->assertSee($out->number)->assertDontSee($in->number);
     }
 }

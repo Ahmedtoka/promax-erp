@@ -50,12 +50,18 @@ final class CostMonths
         try {
             return self::closeInTransaction($period, $month, $by);
         } catch (QueryException $e) {
-            if ((string) $e->getCode() === '23000' && str_contains($e->getMessage(), 'period')) {
-                throw new Rejected(__('costing.month_closed'));
-            }
-
-            throw $e;
+            throw self::friendlyUniqueViolation($e) ?? $e;
         }
+    }
+
+    /** تكرار المفتاح الفريد لـ`cost_months.period` بس (1062 + اسم الفهرس) = رفض ودّي، وغيره null */
+    public static function friendlyUniqueViolation(QueryException $e): ?Rejected
+    {
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062 && str_contains($e->getMessage(), 'cost_months_period_unique')) {
+            return new Rejected(__('costing.month_closed'));
+        }
+
+        return null;
     }
 
     private static function closeInTransaction(string $period, Carbon $month, User $by): CostMonth
