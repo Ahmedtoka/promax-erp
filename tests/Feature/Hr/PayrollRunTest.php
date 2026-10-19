@@ -396,6 +396,28 @@ class PayrollRunTest extends TestCase
         $this->actingAs($acc)->post('/hr/payroll', ['period' => '2026-09'])->assertForbidden();
     }
 
+    /** قرار المالك (١٩/١٠): الصرف للمحاسب أو الأدمن، والاعتماد للأدمن بس */
+    public function test_accountant_can_pay_but_not_approve(): void
+    {
+        $acc = $this->makeAdmin(['role' => 'accountant']);
+        $rep = $this->makeRep();
+        $this->emp();
+        $run = Payroll::draft('2026-09', $this->admin);
+
+        $this->actingAs($acc)->post("/hr/payroll/{$run->id}/approve")->assertForbidden();
+        Payroll::approve($run, $this->admin);
+
+        $this->actingAs($acc)->get("/hr/payroll/{$run->id}")->assertOk()->assertSee('dlgPay', false);
+        $this->actingAs($rep)->post("/hr/payroll/{$run->id}/pay", ['date' => '2026-10-01', 'cash_safe_id' => $this->cashSafe()->id])
+            ->assertForbidden();
+        $this->assertSame('approved', $run->fresh()->status);
+
+        $this->actingAs($acc)->post("/hr/payroll/{$run->id}/pay", ['date' => '2026-10-01', 'cash_safe_id' => $this->cashSafe()->id])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('paid', $run->fresh()->status);
+        $this->assertSame(1, PayrollPayment::count());
+    }
+
     /** قرار المالك (١٩/١٠): شغل يوم الإجازة الأسبوعية مش بيتحسب إضافي */
     public function test_weekend_work_is_not_overtime(): void
     {

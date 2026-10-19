@@ -1458,7 +1458,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/payroll/{run}/approve', [$pr, 'approve'])->whereNumber('run')
             ->middleware('role:admin')->name('payroll.approve');
         Route::post('/payroll/{run}/pay', [$pr, 'pay'])->whereNumber('run')
-            ->middleware('role:admin')->name('payroll.pay');
+            ->middleware('role:admin,accountant')->name('payroll.pay');
     });
 
 });

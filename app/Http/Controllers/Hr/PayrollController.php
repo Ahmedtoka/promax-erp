@@ -22,7 +22,7 @@ use Illuminate\Validation\Rule;
  *
  * • القراءة: أدمن + موارد بشرية + محاسب.
  * • المسودة وتعديل البنود: `role:admin,hr` + `act.hr.payroll`.
- * • الاعتماد والصرف: أدمن بس (`act.hr.payroll_approve` / `act.hr.payroll_pay`).
+ * • الاعتماد: أدمن بس (`act.hr.payroll_approve`). الصرف: المحاسب أو الأدمن (`act.hr.payroll_pay`، قرار المالك ١٩/١٠).
  * • الحساب كله في `App\Services\Hr\Payroll` — الكنترولر بيمرّر ويرجّع رسالة.
  */
 class PayrollController extends Controller

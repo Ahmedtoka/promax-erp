@@ -219,7 +219,8 @@ class Access
             // Lane 7: السلف — قراءة بس (الإضافة والإلغاء للموارد البشرية)
             'hr.advances', '!hr.advances.store', '!hr.advances.void',
             // Lane 7: مسير المرتبات — قراءة وطباعة القسايم (الصرف والاعتماد للأدمن)
-            'hr.payroll', '!hr.payroll.draft', '!hr.payroll.line', '!hr.payroll.approve', '!hr.payroll.pay',
+            // ⚠️ الصرف للمحاسب كمان (قرار المالك ١٩/١٠) — الاعتماد للأدمن بس
+            'hr.payroll', '!hr.payroll.draft', '!hr.payroll.line', '!hr.payroll.approve',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -770,7 +771,8 @@ class Access
         'act.hr.payroll' => ['perm.act_hr_payroll', 'hr.payroll', ['hr'], ['hr.payroll.draft', 'hr.payroll.line']],
         // ⚠️ أدمن بس: الاعتماد بيرحّل قيد المرتبات، والصرف بيطلّع فلوس من الخزنة
         'act.hr.payroll_approve' => ['perm.act_hr_payroll_approve', 'hr.payroll', [], ['hr.payroll.approve']],
-        'act.hr.payroll_pay' => ['perm.act_hr_payroll_pay', 'hr.payroll', [], ['hr.payroll.pay']],
+        // الصرف: المحاسب أو الأدمن (قرار المالك ١٩/١٠)
+        'act.hr.payroll_pay' => ['perm.act_hr_payroll_pay', 'hr.payroll', ['accountant'], ['hr.payroll.pay']],
         // ⚠️ أدمن بس: نسب التأمينات وشرايح الضريبة بتأثر على كل مرتب
         'act.hr.settings' => ['perm.act_hr_settings', 'hr.settings', [], ['hr.settings.save']],
     ];
