@@ -1419,6 +1419,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,production_manager')->name('lines.update');
         Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
             ->middleware('role:admin,production_manager,quality')->name('qc');
+        // ═══ تتبع اللوطات والسحب + تقرير الفروق (مهمة ٧) ═══
+        Route::get('/trace', [\App\Http\Controllers\Mfg\TraceController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality')->name('trace');
+        Route::get('/variance', [\App\Http\Controllers\Mfg\VarianceController::class, 'index'])
+            ->middleware('role:admin,production_manager')->name('variance');
         // قرار الجودة (إفراج/رفض) — الجودة والأدمن بس؛ مدير الإنتاج `!mfg.qc.decide`
         Route::post('/qc/{order}', [\App\Http\Controllers\Mfg\QcController::class, 'decide'])->whereNumber('order')
             ->middleware('role:admin,quality')->name('qc.decide');

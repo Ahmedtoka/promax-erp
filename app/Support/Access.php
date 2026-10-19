@@ -265,13 +265,14 @@ class Access
         // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
             'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
-            'mfg.lines', 'mfg.requirements', '!mfg.lines.settings', '!mfg.qc.decide',
+            'mfg.lines', 'mfg.requirements', 'mfg.trace', 'mfg.variance',
+            '!mfg.lines.settings', '!mfg.qc.decide',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
         ],
         'quality' => [
-            'mfg.qc', 'mfg.specs', 'mfg.orders', 'notifications',
+            'mfg.qc', 'mfg.specs', 'mfg.orders', 'mfg.trace', 'notifications',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
@@ -561,6 +562,8 @@ class Access
             ['mfg.boms', '🧾', 'nav.mfg_boms', 'mfg.boms*', null],
             ['mfg.lines', '🛤️', 'nav.mfg_lines', 'mfg.lines*', null],
             ['mfg.requirements', '🧮', 'nav.mfg_requirements', 'mfg.requirements*', null],
+            ['mfg.trace', '🔎', 'nav.mfg_trace', 'mfg.trace*', null],
+            ['mfg.variance', '📉', 'nav.mfg_variance', 'mfg.variance*', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══

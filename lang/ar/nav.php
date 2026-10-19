@@ -134,5 +134,7 @@ return [
     'mfg_specs' => 'مواصفات المنتجات',
     'mfg_boms' => 'التركيبات (BOM)',
     'mfg_lines' => 'خطوط الإنتاج',
+    'mfg_trace' => 'تتبع اللوطات والسحب',
+    'mfg_variance' => 'تقرير الفروق',
     'mfg_requirements' => 'احتياج الخامات',
 ];

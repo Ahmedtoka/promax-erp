@@ -134,5 +134,7 @@ return [
     'mfg_specs' => 'Product Specs',
     'mfg_boms' => 'Bills of Materials',
     'mfg_lines' => 'Production Lines',
+    'mfg_trace' => 'Lot Trace & Recall',
+    'mfg_variance' => 'Variance Report',
     'mfg_requirements' => 'Material Requirement',
 ];
