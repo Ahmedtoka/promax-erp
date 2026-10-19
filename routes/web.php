@@ -809,6 +809,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/safes/counts', [$sf, 'storeCount'])->name('safes.counts.store');
         Route::post('/safes/counts/{safeCount}/void', [$sf, 'voidCount'])->name('safes.counts.void');
         Route::post('/safes/{safe}', [$sf, 'update'])->name('safes.update');
+
+        // تسوية البنك مع كشف الحساب (L4-D6) — ⚠️ `/recon` الثابت قبل `/recon/{statement}`
+        $br = \App\Http\Controllers\Gl\BankReconController::class;
+        Route::get('/recon', [$br, 'index'])->name('recon');
+        Route::post('/recon', [$br, 'store'])->name('recon.store');
+        Route::get('/recon/{statement}', [$br, 'show'])->name('recon.show');
+        Route::post('/recon/{statement}/mark', [$br, 'mark'])->name('recon.mark');
+        Route::post('/recon/{statement}/close', [$br, 'close'])->name('recon.close');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.

@@ -72,6 +72,7 @@ return [
     'gl_expenses' => 'Expenses',
     'gl_cash' => 'Cash Movements',
     'gl_safes' => 'Safes & Banks',
+    'gl_recon' => 'Bank reconciliation',
     'gl_settings' => 'Ledger Settings',
 
     'repclose' => 'Rep Settlements',

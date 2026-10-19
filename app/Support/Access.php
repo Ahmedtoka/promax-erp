@@ -491,6 +491,7 @@ class Access
             ['gl.balance_sheet', '🏛️', 'nav.gl_balance_sheet', 'gl.balance_sheet*', null],
             ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
             ['gl.safes', '💰', 'nav.gl_safes', 'gl.safes*', null],
+            ['gl.recon', '🧮', 'nav.gl_recon', 'gl.recon*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],
@@ -703,6 +704,7 @@ class Access
             'gl.accounts.store', 'gl.accounts.update', 'gl.periods.close',
             // Lane 4: سجل الخزن والبنوك
             'gl.safes.store', 'gl.safes.update', 'gl.safes.counts.store', 'gl.safes.counts.void',
+            'gl.recon.store', 'gl.recon.mark', 'gl.recon.close',
         ]],
         // ⚠️ **أدمن بس** (`[]`): القواعد بتحدد كل قيد جاي، وفتح فترة
         // مقفولة بيرجّع شهر معتمد للتعديل، وإعادة البناء بتمسح كل القيود
