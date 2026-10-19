@@ -21,6 +21,8 @@ class SupplierTransaction extends Model
     protected $fillable = [
         'supplier_id', 'date', 'kind', 'debit', 'credit', 'memo',
         'source_type', 'source_id',
+        // صف الافتتاحي اللي المعالج بيديره: `golive-opening:supplier:{id}`
+        'idem_key',
     ];
 
     protected function casts(): array

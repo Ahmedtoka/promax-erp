@@ -4,6 +4,8 @@ namespace App\Services\Gl;
 
 use App\Models\Client;
 use App\Models\Setting;
+use App\Models\Supplier;
+use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -132,6 +134,185 @@ class OpeningBalances
 
             return $n;
         });
+    }
+
+    // ═══ الافتتاحي بالاسم من المعالج (الخط ٣ — D6) ═══
+
+    /**
+     * رصيد افتتاحي لعميل بالاسم — صف `opening` واحد بمفتاح ثابت
+     * `golive-opening:client:{id}`. موجود = يتعدّل · صفر = يتمسح. الافتتاحي
+     * اللي اتسجّل من ملف الـCSV القديم مالوش دعوة (مفتاحه مختلف).
+     * `recalculate()` جوه نفس الترانزاكشن.
+     */
+    public function setClient(Client $c, float $amount, Carbon $date, User $by): ?Transaction
+    {
+        $amount = round($amount, 2);
+        $key = 'golive-opening:client:'.$c->id;
+
+        return DB::transaction(function () use ($c, $amount, $date, $by, $key) {
+            Client::whereKey($c->id)->lockForUpdate()->first();
+            $tx = Transaction::where('idem_key', $key)->lockForUpdate()->first();
+
+            if ($amount == 0.0) {
+                $tx?->delete();
+                $c->recalculate();
+
+                return null;
+            }
+
+            $attrs = [
+                'client_id' => $c->id,
+                'date' => $date->toDateString(),
+                'memo' => __('golive.opening_client_memo', ['user' => $by->name]),
+                'debit' => $amount > 0 ? $amount : 0,
+                'credit' => $amount < 0 ? -$amount : 0,
+                'tax' => 0,
+                'kind' => 'opening',
+            ];
+            if ($tx) {
+                $tx->update($attrs);
+            } else {
+                $tx = Transaction::create($attrs + ['idem_key' => $key]);
+            }
+            Transaction::whereKey($tx->id)->update(['created_at' => $date->toDateString().' 12:00:00']);
+            $c->recalculate();
+
+            return $tx->fresh();
+        });
+    }
+
+    /**
+     * رصيد افتتاحي لمورد بالاسم — موجب = علينا له (دائن)، سالب = مدين.
+     * صف `opening` واحد بمفتاح `golive-opening:supplier:{id}`، صفر = يتمسح.
+     */
+    public function setSupplier(Supplier $s, float $amount, Carbon $date, User $by): ?SupplierTransaction
+    {
+        $amount = round($amount, 2);
+        $key = 'golive-opening:supplier:'.$s->id;
+
+        return DB::transaction(function () use ($s, $amount, $date, $by, $key) {
+            Supplier::whereKey($s->id)->lockForUpdate()->first();
+            $tx = SupplierTransaction::where('idem_key', $key)->lockForUpdate()->first();
+
+            if ($amount == 0.0) {
+                $tx?->delete();
+                $s->recalculate();
+
+                return null;
+            }
+
+            $memo = __('golive.opening_supplier_memo', ['user' => $by->name]);
+            $debit = $amount < 0 ? -$amount : 0.0;
+            $credit = $amount > 0 ? $amount : 0.0;
+            if ($tx) {
+                $tx->update(['date' => $date->toDateString(), 'kind' => 'opening', 'debit' => $debit, 'credit' => $credit, 'memo' => $memo]);
+                $s->recalculate();
+
+                return $tx->fresh();
+            }
+
+            return $s->post('opening', $date->toDateString(), $debit, $credit, $memo, null, $key);
+        });
+    }
+
+    /**
+     * CSV موردين: (كود المورد أو اسمه بالظبط، المبلغ، التاريخ اختياري).
+     * التاريخ الفاضي = يوم قبل `gl_start_date` (أو النهارده لو مش متحدد).
+     * نفس حالات ملف العملاء (`unknown_supplier` بدل `unknown_client`).
+     *
+     * @return array{rows: list<array{line:int, code:string, supplier_id:?int, supplier:?string, amount:float, date:?string, status:string}>,
+     *               ok:int, errors:int, total:float}
+     */
+    public function previewSuppliers(string $path): array
+    {
+        $rows = [];
+        $seen = [];
+        $start = Setting::read('gl_start_date');
+        $default = $start ? Carbon::parse($start)->subDay()->toDateString() : today()->toDateString();
+
+        foreach ($this->read($path) as [$line, $cells]) {
+            $code = trim((string) ($cells[0] ?? ''));
+            $rawAmount = str_replace([',', ' ', "\u{00A0}"], '', trim((string) ($cells[1] ?? '')));
+            $rawDate = trim((string) ($cells[2] ?? ''));
+
+            $row = ['line' => $line, 'code' => $code, 'supplier_id' => null, 'supplier' => null,
+                'amount' => 0.0, 'date' => null, 'status' => self::STATUS_OK];
+
+            $supplier = null;
+            if ($code !== '') {
+                $supplier = Supplier::where('code', $code)->first()
+                    ?? Supplier::where('name', $code)->orWhere('name_en', $code)->orderBy('id')->first();
+            }
+            $date = $this->date($rawDate === '' ? $default : $rawDate);
+
+            if ($code === '') {
+                $row['status'] = 'missing_code';
+            } elseif ($supplier === null) {
+                $row['status'] = 'unknown_supplier';
+            } elseif (! is_numeric($rawAmount) || round((float) $rawAmount, 2) == 0.0) {
+                $row['status'] = 'bad_amount';
+            } elseif ($date === null) {
+                $row['status'] = 'bad_date';
+            } elseif (isset($seen[$supplier->id])) {
+                $row['status'] = 'duplicate_code';
+            }
+
+            if ($supplier !== null) {
+                $row['supplier_id'] = $supplier->id;
+                $row['supplier'] = $supplier->displayName();
+            }
+            if (is_numeric($rawAmount)) {
+                $row['amount'] = round((float) $rawAmount, 2);
+            }
+            $row['date'] = $date;
+
+            if ($row['status'] === self::STATUS_OK) {
+                $seen[$supplier->id] = true;
+                if (SupplierTransaction::where('idem_key', $this->supplierIdemKey($row))->exists()) {
+                    $row['status'] = 'already_posted';
+                }
+            }
+            $rows[] = $row;
+        }
+
+        $ok = array_values(array_filter($rows, fn ($r) => $r['status'] === self::STATUS_OK));
+
+        return [
+            'rows' => $rows,
+            'ok' => count($ok),
+            'errors' => count($rows) - count($ok),
+            'total' => round(array_sum(array_column($ok, 'amount')), 2),
+        ];
+    }
+
+    /** كل السطور أو ولا سطر — «مسجّل قبل كده» بيتخطّى. بيرجّع عدد القيود */
+    public function postSuppliers(string $path, User $by): int
+    {
+        $preview = $this->previewSuppliers($path);
+        $bad = array_filter($preview['rows'], fn ($r) => ! in_array($r['status'], [self::STATUS_OK, 'already_posted'], true));
+        if ($bad !== []) {
+            throw new \InvalidArgumentException(__('gl.opening_import_has_errors', ['n' => count($bad)]));
+        }
+
+        return DB::transaction(function () use ($preview, $by) {
+            $n = 0;
+            foreach ($preview['rows'] as $r) {
+                if ($r['status'] !== self::STATUS_OK) {
+                    continue;
+                }
+                $s = Supplier::findOrFail($r['supplier_id']);
+                $s->post('opening', $r['date'], $r['amount'] < 0 ? -$r['amount'] : 0.0, $r['amount'] > 0 ? $r['amount'] : 0.0,
+                    __('golive.opening_supplier_import_memo', ['user' => $by->name]), null, $this->supplierIdemKey($r));
+                $n++;
+            }
+
+            return $n;
+        });
+    }
+
+    private function supplierIdemKey(array $r): string
+    {
+        return 'sopening:'.sha1($r['supplier_id'].'|'.$r['date'].'|'.number_format($r['amount'], 2, '.', ''));
     }
 
     /** @return \Generator<array{0:int, 1:list<string>}> سطر برقمه — بيتخطى الفاضي والهيدر */

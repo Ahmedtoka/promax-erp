@@ -25,6 +25,13 @@ class AppServiceProvider extends ServiceProvider
         // كانت ملفات الكونفيج على أي سيرفر.
         date_default_timezone_set('Africa/Cairo');
         config(['app.timezone' => 'Africa/Cairo']);
+
+        // ═══ سجلات قيد الافتتاح (D6) — الخط ٤ يربط الأصول والخط ٧ السلف ═══
+        // `bindIf`: ربط الخط التاني بيكسب أياً كان ترتيب التسجيل
+        $this->app->bindIf(\App\Contracts\Gl\FixedAssetRegister::class, \App\Services\Gl\Opening\NullFixedAssetRegister::class);
+        $this->app->bindIf(\App\Contracts\Gl\AdvancesRegister::class, \App\Services\Gl\Opening\NullAdvancesRegister::class);
+        // سينجلتون عشان `register()` من أي خط يفضل موجود طول الطلب
+        $this->app->singletonIf(\App\Services\Gl\OpeningBuilder::class);
     }
 
     /**

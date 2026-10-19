@@ -34,4 +34,10 @@ class RebuildReport
     public bool $ok = false;
 
     public bool $dryRun = false;
+
+    /** ناتج المجس (`rebuild(..., probe:)`) — اتحسب جوه الترانزاكشن قبل الـrollback/commit */
+    public mixed $probe = null;
+
+    /** @var list<string> شهور مقفولة اتجمّدت (`skipClosed`) — قيودها ماتلمستش */
+    public array $frozenPeriods = [];
 }
