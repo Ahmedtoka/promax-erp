@@ -258,7 +258,113 @@
     </div>
 </div>
 
-{{-- ═══ مهمة ٦: لوحة قفل الأمر (باتش التام في الحجر، التكلفة، الانحراف) هنا ═══ --}}
+{{-- ═══ مهمة ٦: قفل الأمر ← باتش تام في الحجر (D6) ═══ --}}
+@if ($canManage && $order->status === 'finished')
+<div class="card" data-noprint>
+    <h3>🔒 {{ __('mfg.close_panel_title') }}</h3>
+    <div class="s" style="color:var(--muted);margin-bottom:8px">{{ __('mfg.close_panel_hint') }}</div>
+    <form method="POST" action="{{ route('mfg.orders.close', $order) }}"
+          onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('mfg.confirm_close')) }})">
+        @csrf
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('mfg.f_output_qty') }} *</label>
+                <input type="number" name="output_qty" step="1" min="1" required value="{{ old('output_qty', $order->output_qty) }}">
+                <div class="s" style="color:var(--muted)">{{ __('mfg.output_qty_hint') }}</div>
+            </div>
+            <div>
+                <label class="f">{{ __('mfg.f_produced_on') }} *</label>
+                <input type="date" name="produced_on" required max="{{ today()->toDateString() }}"
+                       value="{{ old('produced_on', ($order->finished_at ?? today())->format('Y-m-d')) }}">
+            </div>
+        </div>
+        <button class="btn green" type="submit" style="margin-top:8px">🔒 {{ __('mfg.btn_close_order') }}</button>
+    </form>
+</div>
+@endif
+
+{{-- ═══ بعد القفل: التكلفة والانحراف لكل خامة + باتش التام وحالة الجودة ═══ --}}
+@if ($order->status === 'closed')
+@php
+    $qcBadge = ['quarantine' => 'b-orange', 'released' => 'b-green', 'rejected' => 'b-red'];
+    $canBatches = \App\Support\Access::allows($user, 'erp.batches');
+    $sum = fn (string $col) => $order->lines->sum(fn ($l) => (float) $l->{$col});
+    $signed = fn ($v, $dp) => ((float) $v > 0 ? '+' : '').number_format((float) $v, $dp);
+@endphp
+<div class="card">
+    <h3>💰 {{ __('mfg.cost_card_title') }}
+        <span class="side"><span class="badge {{ $qcBadge[$order->qc_status] ?? 'b-gray' }}">{{ __('mfg.col_qc_status') }}: {{ $order->qcLabel() }}</span></span>
+    </h3>
+    <div class="frow" style="margin-bottom:12px">
+        <div><label class="f">{{ __('mfg.col_fg_batch') }}</label><div class="num"><b>
+            @if ($order->fgBatch && $canBatches)
+                <a href="{{ route('erp.batches', ['q' => $order->fgBatch->batch_no]) }}">{{ $order->fgBatch->batch_no }}</a>
+            @else
+                {{ $order->fgBatch?->batch_no ?? $order->batch_no }}
+            @endif
+        </b></div></div>
+        <div><label class="f">{{ __('mfg.col_produced_on') }}</label><div class="num">{{ $order->produced_on?->format('Y-m-d') ?? '—' }}</div></div>
+        <div><label class="f">{{ __('mfg.col_expires_on') }}</label><div class="num">{{ $order->expires_on?->format('Y-m-d') ?? '—' }}
+            <span class="s" style="color:var(--muted)">({{ __('mfg.expiry_source_'.($order->expiry_source ?? 'product')) }})</span></div></div>
+        <div><label class="f">{{ __('mfg.col_closed_at') }}</label><div class="num">{{ $order->closed_at?->format('Y-m-d H:i') ?? '—' }}</div></div>
+    </div>
+    <div class="frow" style="margin-bottom:12px">
+        <div><label class="f">{{ __('mfg.col_material_cost') }}</label><div class="num"><b>{{ number_format((float) $order->material_cost, 2) }}</b></div></div>
+        <div><label class="f">{{ __('mfg.col_std_material_cost') }}</label><div class="num">{{ number_format((float) $order->std_material_cost, 2) }}</div></div>
+        <div><label class="f">{{ __('mfg.col_unit_cost') }}</label><div class="num">{{ number_format((float) $order->unit_cost, 4) }}</div></div>
+        <div><label class="f">{{ __('mfg.col_waste_pct') }} / {{ __('mfg.col_yield_pct') }}</label><div class="num">
+            {{ $order->waste_pct !== null ? number_format((float) $order->waste_pct, 2).'%' : '—' }} /
+            {{ $order->yield_pct !== null ? number_format((float) $order->yield_pct, 2).'%' : '—' }}</div></div>
+    </div>
+
+    <div class="tablewrap">
+        <table>
+            <tr>
+                <th>{{ __('mfg.col_material') }}</th>
+                <th data-nosum>{{ __('mfg.col_unit') }}</th>
+                <th class="num">{{ __('mfg.col_base_qty') }}</th>
+                <th class="num">{{ __('mfg.col_std_qty') }}</th>
+                <th class="num">{{ __('mfg.col_actual_qty') }}</th>
+                <th class="num">{{ __('mfg.col_actual_cost') }}</th>
+                <th class="num">{{ __('mfg.col_std_cost') }}</th>
+                <th class="num">{{ __('mfg.col_variance_qty') }}</th>
+                <th class="num">{{ __('mfg.col_variance_value') }}</th>
+                <th class="num" data-nosum>{{ __('mfg.col_waste_pct') }}</th>
+            </tr>
+            @foreach ($order->lines as $l)
+                <tr>
+                    <td>{{ $l->product?->code }} — {{ $l->product?->displayName() ?? '—' }}</td>
+                    <td>{{ $l->product?->unitLabel() }}</td>
+                    <td class="num">{{ $num($l->base_qty_actual) }}</td>
+                    <td class="num">{{ $num($l->std_qty_actual) }}</td>
+                    <td class="num">{{ $num($l->actual_qty) }}</td>
+                    <td class="num">{{ number_format((float) $l->actual_cost, 2) }}</td>
+                    <td class="num">{{ number_format((float) $l->std_cost, 2) }}</td>
+                    <td class="num">{{ $signed($l->variance_qty, 3) }}</td>
+                    <td class="num">
+                        <span class="badge {{ (float) $l->variance_value > 0.005 ? 'b-red' : ((float) $l->variance_value < -0.005 ? 'b-green' : 'b-gray') }}">{{ $signed($l->variance_value, 2) }}</span>
+                    </td>
+                    <td class="num">{{ $l->waste_pct !== null ? number_format((float) $l->waste_pct, 2).'%' : '—' }}</td>
+                </tr>
+            @endforeach
+            {{-- الإجمالي من السيرفر — الكميات بوحدات مختلفة مابتتجمعش --}}
+            <tfoot>
+                <tr>
+                    <td colspan="5"><b>{{ __('mfg.total') }}</b></td>
+                    <td class="num"><b>{{ number_format($sum('actual_cost'), 2) }}</b></td>
+                    <td class="num"><b>{{ number_format($sum('std_cost'), 2) }}</b></td>
+                    <td></td>
+                    <td class="num"><b>{{ $signed($sum('variance_value'), 2) }}</b></td>
+                    <td class="num"><b>{{ $order->waste_pct !== null ? number_format((float) $order->waste_pct, 2).'%' : '—' }}</b></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    @if ($order->qc_note)
+        <div class="s" style="margin-top:12px">🔬 {{ __('mfg.f_qc_note') }}: {{ $order->qc_note }}</div>
+    @endif
+</div>
+@endif
 
 @if ($canManage && $order->status === 'in_progress')
 <dialog id="dlgFinish">

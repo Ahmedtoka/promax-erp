@@ -110,11 +110,13 @@ class Orders
      * رقم التشغيلة مستخدم للمنتج ده؟ — في أمر تاني (غير الملغي) أو في باتش موجود.
      *
      * ⚠️ الملغي مابيحجزش الرقم — ماعملش باتش ولا هيعمل.
+     * `$exceptOrderId` = الأمر نفسه مايتحسبش (القفل بيعيد الفحص قبل الباتش).
      */
-    public static function batchNoTaken(int $productId, string $batchNo): bool
+    public static function batchNoTaken(int $productId, string $batchNo, ?int $exceptOrderId = null): bool
     {
         return ProductionOrder::query()->where('product_id', $productId)->where('batch_no', $batchNo)
-            ->where('status', '!=', 'cancelled')->exists()
+            ->where('status', '!=', 'cancelled')
+            ->when($exceptOrderId, fn ($q) => $q->whereKeyNot($exceptOrderId))->exists()
             || Batch::query()->where('product_id', $productId)->where('batch_no', $batchNo)->exists();
     }
 

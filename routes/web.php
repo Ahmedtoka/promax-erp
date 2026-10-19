@@ -1396,7 +1396,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,production_manager')->name('orders.store');
         Route::get('/orders/{order}', [$order, 'show'])->whereNumber('order')
             ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders.show');
-        foreach (['start', 'finish', 'cancel', 'shortage'] as $step) {
+        foreach (['start', 'finish', 'cancel', 'shortage', 'close'] as $step) {
             Route::post('/orders/{order}/'.$step, [$order, $step])->whereNumber('order')
                 ->middleware('role:admin,production_manager')->name('orders.'.$step);
         }
@@ -1419,6 +1419,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,production_manager')->name('lines.update');
         Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
             ->middleware('role:admin,production_manager,quality')->name('qc');
+        // قرار الجودة (إفراج/رفض) — الجودة والأدمن بس؛ مدير الإنتاج `!mfg.qc.decide`
+        Route::post('/qc/{order}', [\App\Http\Controllers\Mfg\QcController::class, 'decide'])->whereNumber('order')
+            ->middleware('role:admin,quality')->name('qc.decide');
         // ═══ المواصفات — العرض للأربعة، الكتابة admin,rnd، الاعتماد/الإرجاع أدمن بس ═══
         // ⚠️ الثابت قبل البارامتري؛ `!mfg.specs.*` في Access للي مايكتبش.
         $spec = \App\Http\Controllers\Mfg\SpecController::class;

@@ -247,7 +247,7 @@ class Access
             // (`mfg.orders.issue*` / `mfg.orders.return`، مهمة ٥) شغله.
             'mfg.orders', 'mfg.requirements',
             '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
-            '!mfg.orders.cancel', '!mfg.orders.shortage',
+            '!mfg.orders.cancel', '!mfg.orders.shortage', '!mfg.orders.close',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -265,7 +265,7 @@ class Access
         // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
             'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
-            'mfg.lines', 'mfg.requirements', '!mfg.lines.settings',
+            'mfg.lines', 'mfg.requirements', '!mfg.lines.settings', '!mfg.qc.decide',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
@@ -275,7 +275,7 @@ class Access
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
-            '!mfg.orders.cancel', '!mfg.orders.shortage',
+            '!mfg.orders.cancel', '!mfg.orders.shortage', '!mfg.orders.close',
             '!mfg.orders.issue', '!mfg.orders.issue_standard', '!mfg.orders.return',
         ],
         'rnd' => [
@@ -779,9 +779,11 @@ class Access
         // ═══ التصنيع — خطوط الإنتاج وأوامر الإنتاج: مدير الإنتاج؛ مخازن التصنيع الافتراضية أدمن بس ═══
         'act.mfg.lines_manage' => ['perm.act_mfg_lines_manage', 'mfg.lines', ['production_manager'], ['mfg.lines.store', 'mfg.lines.update']],
         'act.mfg.lines_settings' => ['perm.act_mfg_lines_settings', 'mfg.lines', [], ['mfg.lines.settings']],
-        'act.mfg.orders_manage' => ['perm.act_mfg_orders_manage', 'mfg.orders', ['production_manager'], ['mfg.orders.store', 'mfg.orders.start', 'mfg.orders.finish', 'mfg.orders.cancel', 'mfg.orders.shortage']],
+        'act.mfg.orders_manage' => ['perm.act_mfg_orders_manage', 'mfg.orders', ['production_manager'], ['mfg.orders.store', 'mfg.orders.start', 'mfg.orders.finish', 'mfg.orders.cancel', 'mfg.orders.shortage', 'mfg.orders.close']],
         // ═══ التصنيع — صرف الخامات والمرتجع: مدير الإنتاج وأمين المخزن ═══
         'act.mfg.issue' => ['perm.act_mfg_issue', 'mfg.orders', ['production_manager', 'warehouse_keeper'], ['mfg.orders.issue', 'mfg.orders.issue_standard', 'mfg.orders.return']],
+        // ═══ التصنيع — قرار الجودة على باتش التام (إفراج/رفض): الجودة بس (D7) ═══
+        'act.mfg.qc_decide' => ['perm.act_mfg_qc_decide', 'mfg.qc', ['quality'], ['mfg.qc.decide']],
     ];
 
     /**

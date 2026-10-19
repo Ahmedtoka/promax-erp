@@ -8,6 +8,7 @@ use App\Models\CostCenter;
 use App\Models\Product;
 use App\Models\ProductionOrder;
 use App\Models\Warehouse;
+use App\Services\Mfg\Closing;
 use App\Services\Mfg\Issues;
 use App\Services\Mfg\Orders;
 use App\Services\Mfg\PurchaseLink;
@@ -16,6 +17,7 @@ use App\Support\Csv;
 use App\Support\DateRange;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * أوامر الإنتاج (التصنيع ١٩/١٠، spec §3.5) — القايمة والإنشاء والصفحة
@@ -113,7 +115,7 @@ class OrderController extends Controller
 
     public function show(ProductionOrder $order)
     {
-        $order->load(['product', 'bom', 'line', 'warehouse', 'rawWarehouse', 'creator', 'lines.product']);
+        $order->load(['product', 'bom', 'line', 'warehouse', 'rawWarehouse', 'creator', 'lines.product', 'fgBatch']);
 
         return view('mfg.order', [
             'order' => $order,
@@ -137,6 +139,26 @@ class OrderController extends Controller
     public function cancel(Request $request, ProductionOrder $order): RedirectResponse
     {
         return $this->run(fn () => Orders::cancel($order, $request->user()), 'mfg.flash_order_cancelled');
+    }
+
+    /**
+     * قفل الأمر المنتهي ← باتش تام في الحجر + التكلفة والانحراف (D6).
+     * الإنتاج بيتصحح هنا لو العدّ النهائي اختلف عن اللي اتسجل عند الانتهاء.
+     */
+    public function close(Request $request, ProductionOrder $order): RedirectResponse
+    {
+        $data = $request->validate([
+            'output_qty' => ['required', 'integer', 'min:1', 'max:10000000'],
+            'produced_on' => ['required', 'date', 'before_or_equal:today'],
+        ]);
+
+        try {
+            $closed = Closing::close($order, (int) $data['output_qty'], $request->user(), Carbon::parse($data['produced_on']));
+        } catch (Rejected $e) {
+            return back()->withErrors(['order' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('ok', __('mfg.flash_order_closed', ['batch' => $closed->batch_no]));
     }
 
     /** طلب شراء للعجز (D8) — الأدمن بيتبلّغ في الحالتين */
