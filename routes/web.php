@@ -780,6 +780,28 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/mapping/keys', [$m, 'saveKeys'])->middleware('role:admin')->name('mapping.keys');
         Route::post('/mapping/rules', [$m, 'saveRules'])->middleware('role:admin')->name('mapping.rules');
 
+        // ═══ معالج التشغيل (الخط ٣، ١٩/١٠) — القراءة للمحاسب، والكتابة أدمن بس ═══
+        $gw = \App\Http\Controllers\Gl\GoLiveController::class;
+        Route::prefix('golive')->name('golive.')->group(function () use ($gw) {
+            Route::get('/', [$gw, 'index'])->name('index');
+            // ⚠️ الثابت قبل `{n}` — و`whereNumber` على `{n}`
+            Route::middleware('role:admin')->group(function () use ($gw) {
+                Route::post('/start', [$gw, 'saveStart'])->name('start');
+                Route::post('/cost-centers', [$gw, 'addCenter'])->name('centers.add');
+                Route::post('/cost-centers/seed', [$gw, 'seedCenters'])->name('centers.seed');
+                Route::post('/safes/{safe}', [$gw, 'linkSafe'])->name('safes.link');
+                Route::post('/opening/lines', [$gw, 'addOpeningLine'])->name('opening.lines.add');
+                Route::post('/opening/lines/{line}/delete', [$gw, 'deleteOpeningLine'])->name('opening.lines.delete');
+                Route::post('/opening/client', [$gw, 'openingClient'])->name('opening.client');
+                Route::post('/opening/supplier', [$gw, 'openingSupplier'])->name('opening.supplier');
+                Route::post('/opening/post', [$gw, 'postOpening'])->name('opening.post');
+                Route::post('/preview', [$gw, 'preview'])->name('preview');
+                Route::post('/preview/{run}/approve', [$gw, 'approve'])->name('preview.approve');
+                Route::post('/{n}/confirm', [$gw, 'confirm'])->whereNumber('n')->name('confirm');
+            });
+            Route::get('/{n}', [$gw, 'show'])->whereNumber('n')->name('show');
+        });
+
         // ═══ اليومية — القيود وسطورها ═══
         $e = \App\Http\Controllers\Gl\EntryController::class;
         Route::get('/entries', [$e, 'index'])->name('entries');

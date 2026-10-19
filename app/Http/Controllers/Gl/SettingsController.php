@@ -247,6 +247,11 @@ class SettingsController extends Controller
         $old = Setting::read('gl_start_date');
         $new = ($data['gl_start_date'] ?? null) ? Carbon::parse($data['gl_start_date'])->toDateString() : null;
 
+        // البداية قدام شهر مقفول فيه قيود = الشهر ده هيتمسح — مرفوض قبل أي كتابة
+        if ($new !== null && ($old === null || $new > $old) && ($hit = $this->ledger->closedBefore($new)) !== null) {
+            return back()->withErrors(['gl_start_date' => __('gl.period_closed', ['period' => $hit])]);
+        }
+
         Setting::writeMany([
             'gl_start_date' => $new,
             'gl_bank_name' => ($data['gl_bank_name'] ?? null) ?: null,
@@ -261,9 +266,7 @@ class SettingsController extends Controller
         // القيد اليدوي/الافتتاحي مايتلمسش — ده قرار محاسب مش اشتقاق.
         $purged = 0;
         if ($new !== null && ($old === null || $new > $old)) {
-            $purged = (int) DB::transaction(
-                fn () => GlEntry::where('origin', 'auto')->whereDate('date', '<', $new)->delete()
-            );
+            $purged = $this->ledger->purgeBefore($new);
         }
 
         // اسم البنك بيتكتب على حساب البنك نفسه كمان — عشان كشف الحساب

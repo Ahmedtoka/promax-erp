@@ -482,6 +482,8 @@ class Access
             // ⚠️ الترتيب = ترتيب الشغل: الشجرة الأول (هي المرجع)، بعدين
             // اليومية، بعدين التقارير التلاتة، وبعدين السندات، والإعدادات
             // آخر حاجة — مش أبجدي ولا بترتيب ما اتكتبوا.
+            // (١٩/١٠) معالج التشغيل — أول حاجة: بيوصّل لكل الخطوات اللي تحت بالترتيب
+            ['gl.golive.index', '🚀', 'nav.gl_golive', 'gl.golive*', null],
             ['gl.accounts', '🌳', 'nav.gl_accounts', 'gl.accounts*', null],
             // (٢٢/٩) مسودة شجرة العميل — ورقة شغل قبل اعتماد الشجرة وربطها
             ['gl.coa', '📝', 'coa.page', 'gl.coa*', null],
@@ -711,6 +713,11 @@ class Access
             'gl.settings.rules', 'gl.settings.general', 'gl.periods.reopen',
             'gl.rebuild.preview', 'gl.rebuild', 'gl.coa.accept', 'gl.coa.adopt',
             'gl.mapping.keys', 'gl.mapping.rules',
+            // معالج التشغيل (الخط ٣)
+            'gl.golive.confirm', 'gl.golive.start', 'gl.golive.centers.add', 'gl.golive.centers.seed',
+            'gl.golive.safes.link', 'gl.golive.opening.lines.add', 'gl.golive.opening.lines.delete',
+            'gl.golive.opening.client', 'gl.golive.opening.supplier', 'gl.golive.opening.post',
+            'gl.golive.preview', 'gl.golive.preview.approve',
         ]],
 
         // ═══ الإعدادات ═══
