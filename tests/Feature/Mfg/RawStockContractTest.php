@@ -15,10 +15,11 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * صرف الخامات (STUB الخط ٦ — الخط ٥ صاحب `RawStock` الحقيقي).
+ * عقد صرف الخامات اللي التصنيع (الخط ٦) معتمد عليه — بيتشغّل على `RawStock`
+ * الحقيقي بتاع الخط ٥ بعد الدمج (كان مكتوب على الـSTUB).
  * FEFO على باتشات الخامة في المخزن، والرفوف والرصيد بيمشوا مع الباتش.
  */
-class RawStockStubTest extends TestCase
+class RawStockContractTest extends TestCase
 {
     use RefreshDatabase;
 
