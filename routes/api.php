@@ -349,6 +349,17 @@ Route::middleware(['api.token', 'locale'])->group(function () {
         Route::get('/kpi', [ManagerDashApiController::class, 'kpi']);
     });
 
+    // ═══ أوامر الإنتاج على الموبايل (التصنيع ١٩/١٠ — عقد الخط ٨) ═══
+    // مدير الإنتاج (والأدمن): قايمة الأوامر المفتوحة + ابدأ/خلص بـ`idem_key`.
+    // أي رول تاني 403 = الأبلكيشن بيخبّي الميزة.
+    Route::prefix('production')->middleware('api.role:production_manager,admin')->group(function () {
+        Route::get('/orders', [\App\Http\Controllers\Api\ProductionApiController::class, 'index']);
+        Route::post('/orders/{order}/start', [\App\Http\Controllers\Api\ProductionApiController::class, 'start'])
+            ->whereNumber('order');
+        Route::post('/orders/{order}/finish', [\App\Http\Controllers\Api\ProductionApiController::class, 'finish'])
+            ->whereNumber('order');
+    });
+
     // ═══ إدارة المهام على الموبايل (٢٨/٨) — نفس رولز الداشبورد
     // (TASK_ROLES: أدمن/مدير/مدير فرع/محاسب — مفيش مناديب ولا سواقين)،
     // والحراس جوه TaskApiController نفسها (طرفَي المهمة بس) ═══

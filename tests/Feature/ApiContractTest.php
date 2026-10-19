@@ -29,7 +29,7 @@ class ApiContractTest extends TestCase
 
     public function test_every_app_role_can_register_and_forget_a_device_token(): void
     {
-        foreach (['sales_agent', 'driver', 'promoter', 'manager', 'admin', 'warehouse_keeper', 'accountant'] as $role) {
+        foreach (['sales_agent', 'driver', 'promoter', 'manager', 'admin', 'warehouse_keeper', 'accountant', 'production_manager'] as $role) {
             $u = $this->user($role);
             $tok = 'fcm-'.$role.'-'.bin2hex(random_bytes(4));
 
@@ -83,5 +83,46 @@ class ApiContractTest extends TestCase
             ->assertJsonValidationErrors('lat');
 
         $this->assertSame('pending', $po->fresh()->status, 'الأمر مايتحرّكش على إحداثيات غلط');
+    }
+
+    /**
+     * أوامر الإنتاج (التصنيع ١٩/١٠ — عقد الخط ٨، أبلكيشن 2.6.0+13):
+     * شكل الصف ثابت، `order` في رد ابدأ/خلص، 422 بـ`message`، و403
+     * للرولز التانية (الأبلكيشن بيخبّي الميزة).
+     */
+    public function test_production_endpoints_follow_the_contract(): void
+    {
+        $fg = $this->makeProduct(['kind' => 'finished']);
+        $raw = $this->makeProduct(['kind' => 'raw']);
+        $bom = \App\Models\Bom::create(['product_id' => $fg->id, 'version' => 1, 'status' => 'approved', 'waste_pct' => 0]);
+        $bom->lines()->create(['product_id' => $raw->id, 'qty' => 1, 'basis' => 'per_unit', 'sort' => 1]);
+        $line = \App\Models\CostCenter::create(['code' => 'LC1', 'name' => 'خط', 'name_en' => 'Line', 'kind' => 'line', 'active' => true]);
+        $wh = $this->makeWarehouse();
+        $wh->forceFill(['type' => \App\Models\Warehouse::TYPE_FACTORY])->save();
+        $pm = $this->user('production_manager');
+        $o = \App\Services\Mfg\Orders::create([
+            'product_id' => $fg->id, 'line_id' => $line->id, 'planned_qty' => 50,
+            'batch_no' => 'CT-1', 'planned_on' => now()->toDateString(),
+        ], $pm);
+
+        $row = ['id', 'code', 'product_name', 'line_id', 'line_name', 'status', 'status_label',
+            'planned_qty', 'output_qty', 'unit', 'started_at', 'finished_at'];
+        $h = $this->tokenFor($pm);
+
+        $this->withHeaders($h)->getJson('/api/production/orders')->assertOk()
+            ->assertJsonStructure(['orders' => ['*' => $row], 'lines' => ['*' => ['id', 'name']]])
+            ->assertJsonPath('orders.0.code', $o->number);
+
+        $this->withHeaders($h)->postJson("/api/production/orders/{$o->id}/start", ['idem_key' => 'ct-s'])
+            ->assertOk()->assertJsonStructure(['message', 'order' => $row]);
+        $this->withHeaders($h)->postJson("/api/production/orders/{$o->id}/finish", ['idem_key' => 'ct-f', 'output_qty' => 48])
+            ->assertOk()->assertJsonStructure(['message', 'order' => $row]);
+        $this->withHeaders($h)->postJson("/api/production/orders/{$o->id}/start", ['idem_key' => 'ct-s2'])
+            ->assertStatus(422)->assertJsonStructure(['message']);
+
+        foreach (['sales_agent', 'manager'] as $role) {
+            $this->withHeaders($this->tokenFor($this->user($role)))
+                ->getJson('/api/production/orders')->assertStatus(403);
+        }
     }
 }
