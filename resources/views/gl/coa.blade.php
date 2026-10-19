@@ -58,6 +58,78 @@
 </div>
 @endif
 
+{{-- ═══ فحص الشجرة قبل الاعتماد: الأحمر بيوقف · الأصفر بيتقبل مرة ويتحفظ ═══ --}}
+@if (count($flat))
+@php
+    // ⚠️ `allows('gl.coa.accept')` بيرجّع true للمحاسب (بادئة `gl.`) والراوت `role:admin` بيرفضه — زي شاشة إعدادات الدفتر
+    $canAccept = \App\Support\Access::action(auth()->user(), 'act.gl.admin');
+    $byCheck = collect($checks['items'])->groupBy('check');
+    $order = array_merge(\App\Services\Gl\CoaChecks::RED, \App\Services\Gl\CoaChecks::YELLOW);
+@endphp
+<div class="card" id="coaChecks" style="border-inline-start:4px solid {{ $checks['red'] ? 'var(--red)' : ($checks['yellow'] ? 'var(--orange)' : 'var(--green)') }}">
+    <h3>🩺 {{ __('coa.checks_title') }} <span class="side">{{ __('coa.checks_side') }}</span></h3>
+    <div class="kpis">
+        <div class="kpi"><div class="lbl">⛔ {{ __('coa.k_red') }}</div>
+            <div class="val" style="color:var(--red)">{{ $f0($checks['red']) }}</div><div class="sub2">{{ __('coa.k_red_hint') }}</div></div>
+        <div class="kpi"><div class="lbl">⚠️ {{ __('coa.k_yellow') }}</div>
+            <div class="val" style="color:var(--orange)">{{ $f0($checks['yellow']) }}</div><div class="sub2">{{ __('coa.k_yellow_hint') }}</div></div>
+        <div class="kpi"><div class="lbl">✅ {{ __('coa.k_accepted') }}</div>
+            <div class="val" style="color:var(--green)">{{ $f0($checks['accepted']) }}</div></div>
+    </div>
+    @if ($byCheck->isEmpty())
+        <p style="color:var(--green);margin:6px 0 0">✅ {{ __('coa.checks_none') }}</p>
+    @endif
+    @foreach ($order as $check)
+        @continue(! $byCheck->has($check))
+        @php
+            $rows = $byCheck[$check];
+            $isRed = in_array($check, \App\Services\Gl\CoaChecks::RED, true);
+            $open = $rows->where('accepted', false)->count();
+        @endphp
+        <details class="coachk" @if($isRed) open @endif>
+            <summary>
+                <span class="badge {{ $isRed ? 'b-red' : ($open ? 'b-orange' : 'b-green') }}">{{ $isRed ? __('coa.level_red') : __('coa.level_yellow') }}</span>
+                <b>{{ __('coa.check_'.$check) }}</b>
+                <span class="badge b-gray num">{{ $f0($rows->count()) }}</span>
+                <span style="color:var(--muted);font-size:11.5px">{{ __('coa.check_'.$check.'_hint') }}</span>
+                @if (! $isRed && $open && $canAccept)
+                    <form method="POST" action="{{ route('gl.coa.accept') }}" style="display:inline;margin-inline-start:auto">@csrf
+                        <input type="hidden" name="check" value="{{ $check }}"><input type="hidden" name="all" value="1">
+                        <button class="btn sm green">✔ {{ __('coa.accept_all') }} ({{ $f0($open) }})</button>
+                    </form>
+                @endif
+            </summary>
+            <div class="tablewrap" style="max-height:300px;overflow:auto">
+                <table data-plain data-noxl>
+                    <tbody>
+                    @foreach ($rows as $it)
+                        <tr>
+                            <td dir="ltr" style="font-size:12px"><a href="#a{{ $it['draft_id'] }}">{{ $it['path'] }}</a></td>
+                            <td style="width:150px;white-space:nowrap">
+                                @if ($isRed)
+                                    <span class="badge b-red">⛔ {{ __('coa.level_red') }}</span>
+                                @elseif ($it['accepted'])
+                                    <span class="badge b-green">✅ {{ __('coa.accepted') }}</span>
+                                @elseif ($canAccept)
+                                    <form method="POST" action="{{ route('gl.coa.accept') }}" style="display:inline">@csrf
+                                        <input type="hidden" name="check" value="{{ $check }}">
+                                        <input type="hidden" name="draft_id" value="{{ $it['draft_id'] }}">
+                                        <button class="btn sm">✔ {{ __('coa.accept') }}</button>
+                                    </form>
+                                @else
+                                    <span class="badge b-orange">⚠️ {{ __('coa.level_yellow') }}</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    @endforeach
+</div>
+@endif
+
 <div class="card">
     <h3>🌳 {{ __('coa.tree_title') }}
         <span class="side">
@@ -83,7 +155,7 @@
     <div class="tablewrap" style="max-height:72vh;overflow:auto">
         <table data-plain data-noxl id="coaTbl" class="coa">
             <thead><tr>
-                <th style="width:34px">#</th><th style="width:120px">{{ __('coa.c_code') }}</th><th>{{ __('coa.c_name') }}</th>
+                <th style="width:56px">#</th><th style="width:120px">{{ __('coa.c_code') }}</th><th>{{ __('coa.c_name') }}</th>
                 <th>{{ __('coa.c_name_ar') }}</th><th style="width:170px">{{ __('coa.c_type') }}</th>
                 <th class="num" style="width:120px">{{ __('coa.c_file_balance') }}</th>
                 <th class="num" style="width:130px">{{ __('coa.c_system_sales') }}</th>
@@ -100,7 +172,18 @@
                 @endphp
                 @continue($hide)
                 <tr id="a{{ $a->id }}" data-id="{{ $a->id }}" data-depth="{{ $depth + 1 }}" @if($depth === 0) class="root" @endif>
-                    <td style="color:var(--muted);font-size:10.5px" title="{{ __('coa.c_source_row') }}: {{ $a->source_row ?? '—' }}">{{ $i + 1 }}</td>
+                    @php
+                        $rc = $rowChecks[$a->id] ?? collect();
+                        $rRed = $rc->where('level', 'red');
+                        $rYel = $rc->where('level', 'yellow')->where('accepted', false);
+                    @endphp
+                    <td style="color:var(--muted);font-size:10.5px" title="{{ __('coa.c_source_row') }}: {{ $a->source_row ?? '—' }}">{{ $i + 1 }}
+                        @if ($rRed->isNotEmpty())
+                            <span class="badge b-red" title="{{ __('coa.checks_badge_red') }}: {{ $rRed->map(fn ($x) => __('coa.check_'.$x['check']))->implode(' · ') }}">⛔</span>
+                        @elseif ($rYel->isNotEmpty())
+                            <span class="badge b-orange" title="{{ __('coa.checks_badge_yellow') }}: {{ $rYel->map(fn ($x) => __('coa.check_'.$x['check']))->implode(' · ') }}">⚠️</span>
+                        @endif
+                    </td>
                     <td><input data-f="code" value="{{ $a->code }}" dir="ltr" placeholder="—" @class(['bad' => $isDup || (string) $a->code === ''])
                                title="{{ $isDup ? __('coa.dup_code') : '' }}"></td>
                     {{-- الأسماء إنجليزي زي الملف — الخانة LTR عشان تدرّج الشجرة يبقى من ناحية بداية الاسم --}}
@@ -220,6 +303,9 @@ table.coa input.saved{background:#E8F7EE;transition:background .2s}
 table.coa tr.root td{background:var(--card2)}
 table.coa thead th{position:sticky;top:0;z-index:5}
 table.coa td{padding:3px 6px;vertical-align:middle}
+details.coachk{border-top:1px solid var(--border);padding:8px 0}
+details.coachk summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;cursor:pointer}
+details.coachk .tablewrap{margin-top:8px}
 </style>
 <script>
 (function () {

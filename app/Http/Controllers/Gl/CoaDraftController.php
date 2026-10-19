@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Gl\CoaDraftAccount;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
+use App\Services\Gl\CoaChecks;
 use App\Services\Gl\CoaDraftImporter;
 use App\Support\Csv;
 use App\Support\DateRange;
@@ -65,6 +66,9 @@ class CoaDraftController extends Controller
 
         $codes = $all->pluck('code')->filter();
 
+        // الفحص لفّة واحدة في الذاكرة — نفس النتيجة بتتعرض في البانل وكشارة على صف الشجرة
+        $checks = CoaChecks::run();
+
         return view('gl.coa', [
             'ready' => true, 'flat' => $flat, 'range' => $range, 'feeds' => $feeds,
             'types' => $all->pluck('qb_type')->filter()->unique()->sort()->values(),
@@ -77,7 +81,35 @@ class CoaDraftController extends Controller
             ],
             'dupCodes' => $codes->duplicates()->unique()->flip(),
             'filter' => $request->string('show')->value(),
+            'checks' => $checks,
+            'rowChecks' => collect($checks['items'])->groupBy('draft_id'),
         ]);
+    }
+
+    /**
+     * قبول تحذير أصفر — صف واحد (`draft_id`) أو كل صفوف الفحص (`all`). أدمن بس.
+     */
+    public function accept(Request $request)
+    {
+        $data = $request->validate([
+            'check' => ['required', 'string', 'max:30'],
+            'draft_id' => ['nullable', 'integer'],
+            'all' => ['nullable', 'boolean'],
+        ]);
+        if (! in_array($data['check'], CoaChecks::YELLOW, true)) {
+            return back()->withErrors(['check' => __('coa.check_not_acceptable')]);
+        }
+        if ($request->boolean('all')) {
+            $n = CoaChecks::acceptAll($data['check'], $request->user());
+        } else {
+            if (empty($data['draft_id'])) {
+                return back()->withErrors(['draft_id' => __('coa.check_pick_row')]);
+            }
+            CoaChecks::accept($data['check'], (int) $data['draft_id'], $request->user());
+            $n = 1;
+        }
+
+        return back()->with('ok', __('coa.accepted_n', ['n' => $n]));
     }
 
     /**

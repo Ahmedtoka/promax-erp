@@ -707,7 +707,7 @@ class Access
         // للمحاسب يقرا منها — الكتابة هي اللي مقفولة.
         'act.gl.admin' => ['perm.act_gl_admin', 'gl.settings', [], [
             'gl.settings.rules', 'gl.settings.general', 'gl.periods.reopen',
-            'gl.rebuild.preview', 'gl.rebuild',
+            'gl.rebuild.preview', 'gl.rebuild', 'gl.coa.accept',
         ]],
 
         // ═══ الإعدادات ═══
