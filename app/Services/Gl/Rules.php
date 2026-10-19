@@ -3,7 +3,9 @@
 namespace App\Services\Gl;
 
 use App\Models\CashMovement;
+use App\Models\CostCenter;
 use App\Models\Expense;
+use App\Models\FixedAssetDepreciation;
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlPostingRule;
 use App\Models\Invoice;
@@ -46,6 +48,7 @@ class Rules
             $source instanceof Expense => $this->expense($source),
             $source instanceof CashMovement => $this->cash($source),
             $source instanceof SafeCount => $this->count($source),
+            $source instanceof FixedAssetDepreciation => $this->depreciation($source),
             default => $this->none(),
         };
     }
@@ -383,6 +386,34 @@ class Rules
         return [
             'rule' => 'cash.count', 'needs_review' => $needsReview,
             'memo' => $c->number.' — '.($safe?->displayName() ?? ''),
+            'lines' => [
+                ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $center, 'debit' => 0.0, 'credit' => $amount],
+            ],
+        ];
+    }
+
+    /**
+     * قسط الإهلاك (L4-D11): مدين مصروف الإهلاك / دائن مجمع الإهلاك من
+     * مفاتيح القاعدة، والسطرين على مركز الأصل (من غيره: الشركة).
+     */
+    private function depreciation(FixedAssetDepreciation $d): array
+    {
+        $amount = round((float) $d->amount, 2);
+        $rule = GlPostingRule::forKey('asset.depreciation');
+        if ($amount <= 0 || ! $rule || ! $rule->active) {
+            return $this->none();
+        }
+        $asset = $d->asset;
+        // أصل اتمسح من تحت القسط = المراجعة لازم تعرف
+        $needsReview = $asset === null;
+        $center = $asset?->cost_center_id ?? CostCenter::company()->id;
+        $drId = $this->keyAccount($rule->debit_key, null, $needsReview);
+        $crId = $this->keyAccount($rule->credit_key, null, $needsReview);
+
+        return [
+            'rule' => 'asset.depreciation', 'needs_review' => $needsReview,
+            'memo' => ($asset?->code ?? '#'.$d->fixed_asset_id).' — '.$d->period_key,
             'lines' => [
                 ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
                 ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $center, 'debit' => 0.0, 'credit' => $amount],

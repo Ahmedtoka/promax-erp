@@ -74,6 +74,7 @@ return [
     'gl_expense_categories' => 'Expense categories',
     'gl_safes' => 'Safes & Banks',
     'gl_recon' => 'Bank reconciliation',
+    'gl_assets' => 'Fixed assets',
     'gl_settings' => 'Ledger Settings',
 
     'repclose' => 'Rep Settlements',

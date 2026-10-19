@@ -826,6 +826,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/recon/{statement}', [$br, 'show'])->name('recon.show');
         Route::post('/recon/{statement}/mark', [$br, 'mark'])->name('recon.mark');
         Route::post('/recon/{statement}/close', [$br, 'close'])->name('recon.close');
+
+        // سجل الأصول الثابتة والإهلاك الشهري (L4-D10..D12) — تشغيل الإهلاك أدمن بس
+        $fa = \App\Http\Controllers\Gl\FixedAssetController::class;
+        Route::get('/assets', [$fa, 'index'])->name('assets');
+        Route::post('/assets', [$fa, 'store'])->name('assets.store');
+        Route::post('/assets/depreciate', [$fa, 'depreciate'])->middleware('role:admin')->name('assets.depreciate');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.

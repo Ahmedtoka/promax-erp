@@ -4,6 +4,8 @@ namespace App\Services\Cash;
 
 use App\Exceptions\Rejected;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
+use App\Models\FixedAsset;
 use App\Models\Gl\GlPeriod;
 use App\Models\Safe;
 use App\Models\User;
@@ -133,12 +135,60 @@ class ExpenseFlow
     }
 
     /**
-     * ⚠️ **نقطة التعليق لـTask 7 (L4-D10):** بتتنادى جوه نفس الترانزاكشن
-     * بعد ما السند بقى `posted` — هنا هيتعمل صف `fixed_assets` لمصروف
-     * من نوع أصل. لسه مابتعملش حاجة.
+     * L4-D10: سند من بند نوعه «أصل» بقى مدفوع = صف `fixed_assets` في
+     * نفس الترانزاكشن (التكلفة = المبلغ، العمر والبداية من السند وإلا
+     * من البند). الأصل نفسه مابيترحّلش — تكلفته في قيد السند (مدين حساب
+     * الأصل). مرة واحدة لكل سند (`expense_id` unique).
      */
     protected function afterPaid(Expense $x): void
     {
+        $cat = $x->category_id ? ExpenseCategory::find($x->category_id) : null;
+        if ($cat?->type !== 'asset' || FixedAsset::where('expense_id', $x->id)->exists()) {
+            return;
+        }
+        FixedAsset::create([
+            'code' => FixedAsset::nextNumber(),
+            'name' => $x->asset_name ?: ($x->note ?: $cat->name),
+            'name_en' => $x->asset_name || $x->note ? null : $cat->name_en,
+            'category_id' => $cat->id,
+            'expense_id' => $x->id,
+            'cost' => round((float) $x->amount, 2),
+            'salvage' => 0,
+            'life_months' => $x->asset_life_months ?: ($cat->life_months ?: 12),
+            'start_date' => ($x->asset_start_date ?? $x->date)->toDateString(),
+            // نفس سلسلة مركز سطر السند (السند → الخزنة) — الإهلاك على نفس مركز التكلفة
+            'cost_center_id' => $x->cost_center_id ?? $x->resolvedSafe()?->cost_center_id,
+            'asset_account_id' => $x->account_id,
+            'created_by' => $x->paid_by ?? $x->created_by,
+        ]);
+    }
+
+    /**
+     * إلغاء السند. سند أصل مدفوع اتهلك = مرفوض (الإهلاك مرحّل على
+     * تكلفة الأصل — الصح استبعاد الأصل مش مسح السند). من غير إهلاك:
+     * الأصل بيتمسح مع الإلغاء، وقيد السند بيتشال من `ExpenseObserver`.
+     */
+    public function void(Expense $x, User $by): void
+    {
+        DB::transaction(function () use ($x, $by) {
+            $row = $this->lock($x);
+            if ($row->status === 'void') {
+                return;
+            }
+            // نفس حارس الكنترولر جوه القفل — أي نداء تاني للخدمة محروس
+            if ($row->status === 'posted' && GlPeriod::isClosed($row->date)) {
+                throw new Rejected(__('gl.void_closed_hint'));
+            }
+            $asset = FixedAsset::where('expense_id', $row->id)->lockForUpdate()->first();
+            if ($asset !== null) {
+                if ($asset->depreciationRows()->exists()) {
+                    throw new Rejected(__('cash.asset_void_depreciated', ['code' => $asset->code]));
+                }
+                $asset->delete();
+            }
+            $row->update(['status' => 'void', 'voided_at' => now(), 'voided_by' => $by->id]);
+            $x->setRawAttributes($row->getAttributes(), true);
+        });
     }
 
     private function lock(Expense $x): Expense

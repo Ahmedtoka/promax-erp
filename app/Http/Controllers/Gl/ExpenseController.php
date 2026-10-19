@@ -250,7 +250,12 @@ class ExpenseController extends Controller
         if ($expense->status === 'posted' && GlPeriod::isClosed($expense->date)) {
             return back()->withErrors(['void' => __('gl.void_closed_hint')]);
         }
-        $expense->update(['status' => 'void', 'voided_at' => now(), 'voided_by' => $request->user()->id]);
+        // L4-D10: سند أصل اتهلك مرفوض — والأصل من غير إهلاك بيتمسح معاه
+        try {
+            app(ExpenseFlow::class)->void($expense, $request->user());
+        } catch (Rejected $e) {
+            return back()->withErrors(['void' => $e->getMessage()]);
+        }
 
         return back()->with('ok', __('gl.voided'));
     }

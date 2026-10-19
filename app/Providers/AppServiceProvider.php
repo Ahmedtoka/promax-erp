@@ -119,6 +119,8 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Expense::observe(\App\Observers\Gl\ExpenseObserver::class);
         \App\Models\CashMovement::observe(\App\Observers\Gl\CashMovementObserver::class);
         \App\Models\SafeCount::observe(\App\Observers\Gl\SafeCountObserver::class);
+        // قسط الإهلاك الشهري (L4-D11) — الحذف بيشيل القيد
+        \App\Models\FixedAssetDepreciation::observe(\App\Observers\Gl\FixedAssetDepreciationObserver::class);
         // مستخدم ميداني جديد = حساب نقدية جديد (لو الشجرة متولدة)
         \App\Models\User::created(function (\App\Models\User $u) {
             try {

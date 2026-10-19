@@ -493,6 +493,7 @@ class Access
             ['gl.expense_categories', '🏷️', 'nav.gl_expense_categories', 'gl.expense_categories*', null],
             ['gl.safes', '💰', 'nav.gl_safes', 'gl.safes*', null],
             ['gl.recon', '🧮', 'nav.gl_recon', 'gl.recon*', null],
+            ['gl.assets', '🖥️', 'nav.gl_assets', 'gl.assets*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],
@@ -706,6 +707,8 @@ class Access
             // Lane 4: سجل الخزن والبنوك
             'gl.safes.store', 'gl.safes.update', 'gl.safes.counts.store', 'gl.safes.counts.void',
             'gl.recon.store', 'gl.recon.mark', 'gl.recon.close',
+            // L4-D12: أصل افتتاحي يدوي (صف من غير قيد)
+            'gl.assets.store',
             // L4-D7: دفع سند معتمد
             'gl.expenses.pay',
         ]],
@@ -721,6 +724,8 @@ class Access
             'gl.rebuild.preview', 'gl.rebuild',
             // L4-D8: بنود المصروف
             'gl.expense_categories.store', 'gl.expense_categories.update',
+            // L4-D11: تشغيل الإهلاك الشهري
+            'gl.assets.depreciate',
         ]],
 
         // ═══ الإعدادات ═══

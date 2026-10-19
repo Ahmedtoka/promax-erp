@@ -74,6 +74,7 @@ return [
     'gl_expense_categories' => 'بنود المصروف',
     'gl_safes' => 'الخزن والبنوك',
     'gl_recon' => 'مطابقة البنك',
+    'gl_assets' => 'الأصول الثابتة',
     'gl_settings' => 'إعدادات الدفتر',
 
     'repclose' => 'تصفية المناديب',
