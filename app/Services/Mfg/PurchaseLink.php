@@ -5,16 +5,14 @@ namespace App\Services\Mfg;
 use App\Exceptions\Rejected;
 use App\Models\AppNotification;
 use App\Models\ProductionOrder;
+use App\Models\PurchaseRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * عجز الخامات ← طلب شراء (D8).
- *
- * ⚠️ **STUB لحد ما الخط ٥ يندمج.** لو `App\Models\PurchaseRequest::raiseFor(array $lines,
- * Model $for, User $by)` موجودة بتتنده ورقم الطلب بيتسجل على الأمر
- * (`purchase_request_id`)؛ غير كده بنسجّل `shortage_requested_at` ونبلّغ
- * الأدمن بس ونرجّع null. في الحالتين الأدمن بيتبلّغ.
+ * عجز الخامات ← طلب شراء (D8 + لين ٩ D14): طلب لكل خامة ناقصة عن طريق
+ * `PurchaseRequest::raiseFor`، وأول رقم طلب بيتسجل على الأمر
+ * (`purchase_request_id`). الأدمن بيتبلّغ في كل مرة.
  */
 class PurchaseLink
 {
@@ -32,16 +30,18 @@ class PurchaseLink
                 throw new Rejected(__('mfg.order_bad_state'));
             }
 
-            if ($row->shortage_requested_at !== null) {
-                throw new Rejected(__('mfg.shortage_already_requested', [
-                    'at' => $row->shortage_requested_at->format('Y-m-d H:i'),
-                ]));
-            }
-
             $short = Requirement::forOrder($row)->filter(fn (array $r) => $r['shortage'] > 0.0005)->values();
 
             if ($short->isEmpty()) {
                 throw new Rejected(__('mfg.no_shortage'));
+            }
+
+            // مرفوض بس لو كل خامة ناقصة ليها طلب شغّال لنفس الأمر — غير كده بنطلب الناقص
+            $active = PurchaseRequest::activeProductIds($row, $short->map(fn (array $r) => $r['product']->id)->all());
+            if (count($active) >= $short->count()) {
+                throw new Rejected(__('mfg.shortage_already_requested', [
+                    'at' => ($row->shortage_requested_at ?? now())->format('Y-m-d H:i'),
+                ]));
             }
 
             $lines = $short->map(fn (array $r) => [
@@ -49,20 +49,14 @@ class PurchaseLink
                 'qty' => $r['shortage'],
             ])->all();
 
-            $id = null;
-            $class = '\\App\\Models\\PurchaseRequest';
-            if (class_exists($class) && method_exists($class, 'raiseFor')) {
-                $pr = $class::raiseFor($lines, $row, $by);
-                $id = is_object($pr) ? (int) $pr->getKey() : ($pr !== null ? (int) $pr : null);
-            }
-
+            $id = PurchaseRequest::raiseFor($lines, $row, $by)->first()?->getKey();
             $row->forceFill([
                 'shortage_requested_at' => now(),
                 'purchase_request_id' => $id ?? $row->purchase_request_id,
             ])->save();
             $o->setRawAttributes($row->getAttributes(), true);
 
-            return [$id, $short];
+            return [$id === null ? null : (int) $id, $short];
         });
 
         $o->loadMissing('product');

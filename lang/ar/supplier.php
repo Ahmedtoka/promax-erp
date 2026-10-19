@@ -151,6 +151,7 @@ return [
     'pr_status_ordered' => 'اتحوّل لأمر شراء',
     'pr_status_cancelled' => 'ملغي',
     'pr_added' => 'طلب الشراء :number اتسجل.',
+    'pr_from_order' => 'من أمر الإنتاج :number',
     'pr_cancel' => 'إلغاء الطلب',
     'pr_cancel_confirm' => 'تلغي طلب الشراء ده؟',
     'pr_cancelled' => 'طلب الشراء اتلغى.',

@@ -106,7 +106,7 @@ class RequirementTest extends TestCase
             ->assertOk()->assertSee('36.75');
     }
 
-    public function test_shortage_request_stub_marks_order_and_notifies_admin(): void
+    public function test_shortage_request_marks_order_raises_request_and_notifies_admin(): void
     {
         $this->stock(30);
         $o = $this->order();
@@ -118,7 +118,9 @@ class RequirementTest extends TestCase
 
         $o->refresh();
         $this->assertNotNull($o->shortage_requested_at);
-        $this->assertNull($o->purchase_request_id);
+        // لين ٩: الطلب بقى بيتعمل فعلاً (PurchaseRequest::raiseFor) ورقمه على الأمر
+        $this->assertNotNull($o->purchase_request_id);
+        $this->assertSame($o->id, \App\Models\PurchaseRequest::findOrFail($o->purchase_request_id)->source_id);
 
         $note = AppNotification::query()->where('user_id', $admin->id)->latest('id')->first();
         $this->assertNotNull($note);
