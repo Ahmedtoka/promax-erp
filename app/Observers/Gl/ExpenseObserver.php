@@ -36,11 +36,14 @@ class ExpenseObserver
         try {
             if ($x->wasChanged('status') && $x->status === 'void') {
                 $this->ledger->unpost($x);
-            } elseif ($x->wasChanged(['amount', 'date', 'account_id', 'paid_from', 'paid_from_user_id', 'status'])) {
+            } elseif ($x->wasChanged(['amount', 'date', 'account_id', 'paid_from', 'paid_from_user_id', 'status', 'safe_id', 'cost_center_id'])) {
+                // L4-D7: pending → approved بيعدّي هنا و`Rules` بترجّع فاضي
+                // (مفيش قيد يتشال ولا يتكتب)؛ approved → posted هو اللي بيرحّل.
                 // ⚠️ العلاقة ممكن تكون محمّلة بالمندوب القديم — و`Rules`
                 // بتقرا `paidFromUser` عشان تختار حساب النقدية، فالقيد
                 // الجديد كان هيتكتب على حساب المندوب اللي اتشال
                 $x->unsetRelation('paidFromUser');
+                $x->unsetRelation('safe');
                 $this->ledger->repost($x);
             }
         } catch (\Throwable $e) {

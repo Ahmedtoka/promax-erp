@@ -48,6 +48,8 @@ return [
     'kind_withdraw' => 'سحب بنك ← خزنة',
     'kind_rep_advance' => 'عهدة نقدية خزنة ← مندوب',
     'kind_rep_return' => 'رد عهدة مندوب ← خزنة',
+    'kind_safe_transfer' => 'تحويل خزنة لخزنة',
+    'kind_bank_transfer' => 'تحويل بنك لبنك',
 
     'status' => 'الحالة',
     'status_posted' => 'مرحّل',

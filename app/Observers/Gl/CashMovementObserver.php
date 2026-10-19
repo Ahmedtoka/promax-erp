@@ -33,10 +33,10 @@ class CashMovementObserver
         try {
             if ($m->wasChanged('status') && $m->status === 'void') {
                 $this->ledger->unpost($m);
-            } elseif ($m->wasChanged(['amount', 'date', 'kind', 'user_id', 'status'])) {
+            } elseif ($m->wasChanged(['amount', 'date', 'kind', 'user_id', 'status', 'from_safe_id', 'to_safe_id', 'cost_center_id'])) {
                 // ⚠️ نفس فخ `ExpenseObserver` — العلاقة المحمّلة بالمندوب
-                // القديم بتودّي القيد الجديد لحساب غلط
-                $m->unsetRelation('user');
+                // (أو بالخزنة) القديمة بتودّي القيد الجديد لحساب غلط
+                $m->unsetRelation('user')->unsetRelation('fromSafe')->unsetRelation('toSafe');
                 $this->ledger->repost($m);
             }
         } catch (\Throwable $e) {

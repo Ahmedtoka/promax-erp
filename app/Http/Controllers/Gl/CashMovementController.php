@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Gl;
 
 use App\Http\Controllers\Controller;
 use App\Models\CashMovement;
+use App\Models\CostCenter;
 use App\Models\Gl\GlPeriod;
+use App\Models\Safe;
 use App\Models\User;
 use App\Support\DateRange;
 use Illuminate\Http\Request;
@@ -21,7 +23,7 @@ class CashMovementController extends Controller
     public function index(Request $request)
     {
         $range = DateRange::fromRequest($request, 'month');
-        $q = CashMovement::with(['user'])
+        $q = CashMovement::with(['user', 'fromSafe', 'toSafe', 'costCenter'])
             ->tap(fn ($q) => $range->apply($q, 'date'))
             ->when($request->filled('kind'), fn ($q) => $q->where('kind', $request->string('kind')->value()))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->value()));
@@ -34,12 +36,14 @@ class CashMovementController extends Controller
             $all = (clone $q)->orderByDesc('date')->orderByDesc('id')->limit(5000)->get();
 
             return \App\Support\Csv::download('cash-movements-'.now()->format('Y-m-d-Hi').'.csv',
-                [__('gl.number'), __('common.date'), __('gl.kind'), __('gl.rep'), __('gl.reference'), __('gl.status'), __('gl.amount'), __('gl.note')],
+                [__('gl.number'), __('common.date'), __('gl.kind'), __('gl.rep'), __('cash.from_safe'), __('cash.to_safe'), __('cash.cost_center'),
+                    __('gl.reference'), __('gl.status'), __('gl.amount'), __('gl.note')],
                 $all->map(fn ($m) => [
                     $m->number, $m->date?->format('Y-m-d'), __('gl.kind_'.$m->kind), $m->user?->displayName() ?? '',
+                    $m->fromSafe?->displayName() ?? '', $m->toSafe?->displayName() ?? '', $m->costCenter?->displayName() ?? '',
                     (string) $m->reference, __('gl.status_'.$m->status), \App\Support\Csv::money($m->amount), (string) $m->note,
                 ]),
-                [__('gl.total_posted'), '', '', '', '', '', \App\Support\Csv::money((clone $posted)->sum('amount')), ''],
+                [__('gl.total_posted'), '', '', '', '', '', '', '', '', \App\Support\Csv::money((clone $posted)->sum('amount')), ''],
                 \App\Support\Csv::meta(__('gl.cash'), $range->fromValue() ?: null, $range->toValue() ?: null));
         }
 
@@ -51,6 +55,9 @@ class CashMovementController extends Controller
             'byKind' => (clone $posted)->selectRaw('kind, COALESCE(SUM(amount),0) total')
                 ->groupBy('kind')->pluck('total', 'kind')->all(),
             'kinds' => CashMovement::KINDS,
+            'safeKinds' => CashMovement::SAFE_KINDS,
+            'safes' => Safe::with('branch')->where('active', true)->orderBy('kind')->orderBy('code')->get(),
+            'costCenters' => CostCenter::where('active', true)->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'reps' => User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'code']),
         ]);
     }
@@ -65,10 +72,20 @@ class CashMovementController extends Controller
             // `GlAccount::repCash()` اللي بتفتح حساب نقدية لأي يوزر
             // بيتبعت، فعهدة نقدية لمحاسب كانت بتخلق حساب مندوب وهمي
             'user_id' => ['required_if:kind,rep_advance,rep_return', 'nullable', Rule::exists('users', 'id')->whereIn('role', User::FIELD_WORK_ROLES)->where('active', 1)],
+            // L4-D3: التحويل بين خزنتين أو بنكين لازم يسمّي الطرفين؛ الإيداع
+            // والسحب الخزن فيهم اختيارية (السند القديم من غير خزن شغال زي ما هو)
+            'from_safe_id' => ['required_if:kind,safe_transfer,bank_transfer', 'nullable', 'integer', Rule::exists('safes', 'id')->where('active', 1)],
+            'to_safe_id' => ['required_if:kind,safe_transfer,bank_transfer', 'nullable', 'integer', Rule::exists('safes', 'id')->where('active', 1)],
+            'cost_center_id' => ['nullable', 'integer', Rule::exists('cost_centers', 'id')],
             'reference' => ['nullable', 'string', 'max:80'],
             'note' => ['nullable', 'string', 'max:250'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ]);
+
+        [$from, $to, $errors] = $this->resolveSafes($data);
+        if ($errors !== []) {
+            return back()->withErrors($errors)->withInput();
+        }
 
         $date = Carbon::parse($data['date']);
         if (GlPeriod::isClosed($date)) {
@@ -86,6 +103,10 @@ class CashMovementController extends Controller
             // ⚠️ زي سند المصروف: المندوب بيتصفّر لو النوع مش بتاع مندوب،
             // وإلا الإيداع بيتحفظ منسوب لمندوب والقيد يروح لحسابه
             'user_id' => in_array($data['kind'], CashMovement::REP_KINDS, true) ? $data['user_id'] : null,
+            'from_safe_id' => $from?->id,
+            'to_safe_id' => $to?->id,
+            // مركز المستند: المختار، وإلا مركز خزنة المصدر، وإلا الوجهة
+            'cost_center_id' => $data['cost_center_id'] ?? $from?->cost_center_id ?? $to?->cost_center_id,
             'reference' => $data['reference'] ?? null,
             'note' => $data['note'] ?? null,
             'attachment_path' => $request->hasFile('attachment') ? $request->file('attachment')->store('gl-attachments', 'public') : null,
@@ -94,6 +115,43 @@ class CashMovementController extends Controller
         ]);
 
         return redirect()->route('gl.cash')->with('ok', __('gl.cash_saved'));
+    }
+
+    /**
+     * الخزن حسب النوع (L4-D3): أنواع `SAFE_KINDS` كل طرف لازم يطابق نوعه
+     * (خزنة/بنك) ومايبقاش نفس الخزنة؛ العهدة بتقبل خزنة نقدية على طرف
+     * الخزنة بس (المصدر للعهدة، الوجهة للرد) والطرف التاني بيتصفّر.
+     *
+     * @return array{0: ?Safe, 1: ?Safe, 2: array<string,string>}
+     */
+    private function resolveSafes(array $data): array
+    {
+        $kind = $data['kind'];
+        $fromId = $data['from_safe_id'] ?? null;
+        $toId = $data['to_safe_id'] ?? null;
+        $expect = CashMovement::SAFE_KINDS[$kind] ?? match ($kind) {
+            'rep_advance' => ['cash', null],
+            'rep_return' => [null, 'cash'],
+            default => [null, null],
+        };
+        // طرف مالوش نوع خزنة (طرف المندوب) بيتصفّر زي `user_id`
+        $fromId = $expect[0] ? $fromId : null;
+        $toId = $expect[1] ? $toId : null;
+
+        $from = $fromId ? Safe::find($fromId) : null;
+        $to = $toId ? Safe::find($toId) : null;
+        $errors = [];
+        if ($from && $from->kind !== $expect[0]) {
+            $errors['from_safe_id'] = __('cash.safe_kind_mismatch', ['kind' => __('cash.kind_'.$expect[0])]);
+        }
+        if ($to && $to->kind !== $expect[1]) {
+            $errors['to_safe_id'] = __('cash.safe_kind_mismatch', ['kind' => __('cash.kind_'.$expect[1])]);
+        }
+        if ($from && $to && $from->id === $to->id) {
+            $errors['to_safe_id'] = __('cash.same_safe');
+        }
+
+        return [$from, $to, $errors];
     }
 
     public function void(Request $request, CashMovement $cashMovement)

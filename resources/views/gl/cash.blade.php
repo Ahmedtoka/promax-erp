@@ -13,7 +13,10 @@
     $canPost = \App\Support\Access::action(auth()->user(), 'act.gl.post');
     $repKinds = \App\Models\CashMovement::REP_KINDS;
     // عمود الإلغاء بيظهر لصاحب الصلاحية بس — والـcolspan لازم يمشي معاه
-    $cols = $canPost ? 9 : 8;
+    $cols = $canPost ? 11 : 10;
+    // L4-D3: نوع الخزنة المطلوب على كل طرف — العهدة بتقبل خزنة نقدية على طرف الخزنة بس
+    $safeSides = $safeKinds + ['rep_advance' => ['cash', null], 'rep_return' => [null, 'cash']];
+    $transferKinds = ['safe_transfer', 'bank_transfer'];
 @endphp
 
 @section('actions')
@@ -81,6 +84,8 @@
                 <th>{{ __('common.date') }}</th>
                 <th style="text-align:start">{{ __('gl.kind') }}</th>
                 <th style="text-align:start">{{ __('gl.rep') }}</th>
+                <th style="text-align:start">{{ __('cash.from_safe') }}</th>
+                <th style="text-align:start">{{ __('cash.to_safe') }}</th>
                 <th data-nosum>{{ __('gl.reference') }}</th>
                 <th>{{ __('gl.attachment') }}</th>
                 <th>{{ __('gl.status') }}</th>
@@ -103,7 +108,20 @@
                             <div style="font-size:10px;color:var(--muted)">{{ $m->user->code }}</div>
                         @else — @endif
                     </td>
-                    <td style="font-size:11px">{{ $m->reference ?: '—' }}</td>
+                    @foreach ([$m->fromSafe, $m->toSafe] as $sf)
+                        <td style="text-align:start">
+                            @if ($sf)
+                                {{ $sf->displayName() }}
+                                <div style="font-size:10px;color:var(--muted)">{{ $sf->code }}</div>
+                            @else — @endif
+                        </td>
+                    @endforeach
+                    <td style="font-size:11px">
+                        {{ $m->reference ?: '—' }}
+                        @if ($m->costCenter)
+                            <div style="font-size:10px;color:var(--muted)">{{ $m->costCenter->displayName() }}</div>
+                        @endif
+                    </td>
                     <td>
                         @if ($m->attachment_path)
                             <a class="btn sm" href="{{ asset('storage/'.$m->attachment_path) }}" target="_blank">📎 {{ __('common.view') }}</a>
@@ -131,7 +149,7 @@
             {{-- الجدول مقسم صفحات — الإجمالي من السيرفر على الفلتر كله (المرحّل بس) = إجمالي ملف الإكسيل --}}
             @if ($rows->total() > 0)
                 <tfoot><tr>
-                    <td colspan="7" style="text-align:start">{{ __('gl.total_posted') }} · {{ __('ui.rows_n', ['n' => number_format($rows->total())]) }}</td>
+                    <td colspan="9" style="text-align:start">{{ __('gl.total_posted') }} · {{ __('ui.rows_n', ['n' => number_format($rows->total())]) }}</td>
                     <td class="num">{{ $fmt($total) }}</td>
                     @if ($canPost)<td></td>@endif
                 </tr></tfoot>
@@ -163,7 +181,7 @@
         <div class="frow" style="margin-top:10px">
             <div>
                 <label class="f">{{ __('gl.kind') }} <b class="req-star">*</b></label>
-                <select name="kind" id="cmKind" required onchange="cmToggleRep()" style="width:100%">
+                <select name="kind" id="cmKind" required onchange="cmToggleRep();cmToggleSafes()" style="width:100%">
                     @foreach ($kinds as $k)
                         <option value="{{ $k }}" @selected(old('kind') === $k)>{{ __('gl.kind_'.$k) }}</option>
                     @endforeach
@@ -178,6 +196,33 @@
                     @endforeach
                 </select>
             </div>
+        </div>
+
+        <div class="frow" style="margin-top:10px">
+            @foreach (['from' => 0, 'to' => 1] as $side => $i)
+                <div id="cmSafeBox_{{ $side }}" data-side="{{ $i }}" hidden>
+                    <label class="f">{{ __('cash.'.$side.'_safe') }} <b class="req-star" data-safe-star hidden>*</b></label>
+                    <select name="{{ $side }}_safe_id" style="width:100%">
+                        <option value="">{{ __('cash.choose_safe') }}</option>
+                        @foreach ($safes as $sf)
+                            <option value="{{ $sf->id }}" data-kind="{{ $sf->kind }}" @selected(old($side.'_safe_id') == $sf->id)>
+                                {{ $sf->displayName() }} ({{ $sf->code }}){{ $sf->branch ? ' · '.$sf->branch->displayName() : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div data-safe-hint style="font-size:10.5px;color:var(--muted);margin-top:4px">{{ __('cash.safe_optional') }}</div>
+                </div>
+            @endforeach
+        </div>
+
+        <div style="margin-top:10px">
+            <label class="f">{{ __('cash.cost_center') }}</label>
+            <select name="cost_center_id" style="width:100%">
+                <option value="">{{ __('cash.center_auto') }}</option>
+                @foreach ($costCenters as $cc)
+                    <option value="{{ $cc->id }}" @selected(old('cost_center_id') == $cc->id)>{{ $cc->code }} — {{ $cc->displayName() }}</option>
+                @endforeach
+            </select>
         </div>
 
         <div class="frow" style="margin-top:10px">
@@ -219,6 +264,34 @@ function cmToggleRep() {
     if (field) { field.required = on; if (!on) field.value = ''; }
 }
 cmToggleRep();
+
+// خانات الخزن (L4-D3): كل طرف بيبان لو النوع بيقبل خزنة عليه، وبيعرض
+// الخزن من النوع المطابق بس (خزنة/بنك)؛ إجباري في التحويلات بس
+var CM_SAFE_SIDES = @json($safeSides);
+var CM_TRANSFER = @json($transferKinds);
+function cmToggleSafes() {
+    var sel = document.getElementById('cmKind');
+    if (!sel) return;
+    var sides = CM_SAFE_SIDES[sel.value] || [null, null];
+    var req = CM_TRANSFER.indexOf(sel.value) !== -1;
+    ['from', 'to'].forEach(function (side, i) {
+        var box = document.getElementById('cmSafeBox_' + side);
+        if (!box) return;
+        var want = sides[i];
+        box.hidden = !want;
+        var field = box.querySelector('select');
+        field.required = !!want && req;
+        box.querySelector('[data-safe-star]').hidden = !(want && req);
+        box.querySelector('[data-safe-hint]').hidden = req;
+        Array.prototype.forEach.call(field.options, function (o) {
+            if (!o.value) return;
+            var ok = o.getAttribute('data-kind') === want;
+            o.hidden = !ok; o.disabled = !ok;
+        });
+        if (!want || (field.selectedOptions[0] && field.selectedOptions[0].disabled)) field.value = '';
+    });
+}
+cmToggleSafes();
 </script>
 
 @endsection

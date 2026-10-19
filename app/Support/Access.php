@@ -494,6 +494,10 @@ class Access
             ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],
             ['gl.balance_sheet', '🏛️', 'nav.gl_balance_sheet', 'gl.balance_sheet*', null],
             ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
+            ['gl.expense_categories', '🏷️', 'nav.gl_expense_categories', 'gl.expense_categories*', null],
+            ['gl.safes', '💰', 'nav.gl_safes', 'gl.safes*', null],
+            ['gl.recon', '🧮', 'nav.gl_recon', 'gl.recon*', null],
+            ['gl.assets', '🖥️', 'nav.gl_assets', 'gl.assets*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],
@@ -704,7 +708,17 @@ class Access
             'gl.expenses.store', 'gl.expenses.void', 'gl.cash.store', 'gl.cash.void',
             'gl.entries.store', 'gl.entries.override',
             'gl.accounts.store', 'gl.accounts.update', 'gl.periods.close',
+            // Lane 4: سجل الخزن والبنوك
+            'gl.safes.store', 'gl.safes.update', 'gl.safes.counts.store', 'gl.safes.counts.void',
+            'gl.recon.store', 'gl.recon.mark', 'gl.recon.close',
+            // L4-D12: أصل افتتاحي يدوي (صف من غير قيد)
+            'gl.assets.store',
+            // L4-D7: دفع سند معتمد
+            'gl.expenses.pay',
         ]],
+        // L4-D7: اعتماد/رفض المصروف — أدمن بس (`[]`)، وبيتمنح ليوزر أو
+        // رول من شاشة الصلاحيات (أصحاب الاعتماد بيتحددوا من غير كود)
+        'act.gl.expense_approve' => ['perm.act_gl_expense_approve', 'gl.expenses', [], ['gl.expenses.approve', 'gl.expenses.reject']],
         // ⚠️ **أدمن بس** (`[]`): القواعد بتحدد كل قيد جاي، وفتح فترة
         // مقفولة بيرجّع شهر معتمد للتعديل، وإعادة البناء بتمسح كل القيود
         // الآلية وتولّدها تاني. الشاشة نفسها (`gl.settings`) مفتوحة
@@ -718,6 +732,10 @@ class Access
             'gl.golive.safes.link', 'gl.golive.opening.lines.add', 'gl.golive.opening.lines.delete',
             'gl.golive.opening.client', 'gl.golive.opening.supplier', 'gl.golive.opening.post',
             'gl.golive.preview', 'gl.golive.preview.approve',
+            // L4-D8: بنود المصروف
+            'gl.expense_categories.store', 'gl.expense_categories.update',
+            // L4-D11: تشغيل الإهلاك الشهري
+            'gl.assets.depreciate',
         ]],
 
         // ═══ الإعدادات ═══

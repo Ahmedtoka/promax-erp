@@ -3,12 +3,16 @@
 namespace App\Services\Gl;
 
 use App\Models\CashMovement;
+use App\Models\CostCenter;
 use App\Models\Expense;
+use App\Models\FixedAssetDepreciation;
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlPostingRule;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
 use App\Models\RepSettlement;
+use App\Models\Safe;
+use App\Models\SafeCount;
 use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
@@ -43,6 +47,8 @@ class Rules
             $source instanceof SupplierTransaction => $this->supplier($source),
             $source instanceof Expense => $this->expense($source),
             $source instanceof CashMovement => $this->cash($source),
+            $source instanceof SafeCount => $this->count($source),
+            $source instanceof FixedAssetDepreciation => $this->depreciation($source),
             default => $this->none(),
         });
     }
@@ -303,8 +309,27 @@ class Rules
         if ($x->paid_from === 'rep_cash' && $rep === null) {
             $needsReview = true;
         }
-        // الدائن من القاعدة — `rep_cash` بيتحل لمندوب السند
-        $creditId = $this->slotAccount($rule, 'credit', $rep, $needsReview);
+        // الدائن (L4-D4): **الخزنة المسمّاة صراحةً** (`safe_id`) بحسابها في
+        // الشجرة؛ من غير `safe_id` مفتاح القاعدة زي قبل Lane 4 بالظبط (نفس
+        // `cash()`: مفيش خزنة مسمّاة = مفاتيح القاعدة). `rep_cash` مش خزنة.
+        // ⚠️ `resolvedSafe()` هنا للمركز بس — مش للحساب، وإلا السندات القديمة
+        // كانت هتتنقل لحساب `MAADI-MAIN` الخاص لو اتربط بغير `cash_main`.
+        $named = $x->paid_from !== 'rep_cash' && $x->safe_id ? $x->safe : null;
+        $safe = $x->paid_from === 'rep_cash' ? null : ($named ?? $x->resolvedSafe());
+        $creditId = null;
+        if ($named !== null) {
+            $acc = $named->gl_account_id ? GlAccount::find($named->gl_account_id) : null;
+            if ($acc !== null && $acc->is_postable && $acc->active) {
+                $creditId = $acc->id;
+            } else {
+                // خزنة اختارها المستخدم ومالهاش حساب صالح = المراجعة لازم تعرف
+                $needsReview = true;
+            }
+        }
+        // مركز التكلفة (L4-D9): السند ← الخزنة ← الشركة — مفيش سطر من غير مركز
+        $center = $x->cost_center_id ?? $safe?->cost_center_id ?? \App\Models\CostCenter::company()->id;
+        // من غير خزنة مسمّاة: خانة القاعدة (المثبّتة D1 أو المفتاح) — `rep_cash` بيتحل لمندوب السند
+        $creditId ??= $this->slotAccount($rule, 'credit', $rep, $needsReview);
         // حساب المصروف نفسه جاي من السند (مش من القاعدة) — بيعدّي على نفس
         // الحارس: حساب موقوف أو مجموعة بيروح المعلّق
         $debitId = $this->safeAccount($x->account_id ? GlAccount::find($x->account_id) : null, $needsReview);
@@ -314,8 +339,8 @@ class Rules
             'rule' => 'expense.'.$x->paid_from, 'needs_review' => $needsReview,
             'memo' => $x->number.' — '.($x->note ?: $x->account?->displayName()),
             'lines' => [
-                ['slot' => 'dr', 'account_id' => $debitId, 'debit' => $amount, 'credit' => 0.0],
-                ['slot' => 'cr', 'account_id' => $creditId, 'debit' => 0.0, 'credit' => $amount],
+                ['slot' => 'dr', 'account_id' => $debitId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $creditId, 'cost_center_id' => $safe?->cost_center_id ?? $center, 'debit' => 0.0, 'credit' => $amount],
             ],
         ];
     }
@@ -338,16 +363,108 @@ class Rules
         $res = function (string $side) use ($rule, $m, &$needsReview): int {
             return $this->slotAccount($rule, $side, $rule->{$side.'_key'} === 'rep_cash' ? $m->user : null, $needsReview);
         };
+        // L4-D4: الخزنة المسمّاة على طرف بحسابها بتحل محل مفتاح القاعدة
+        // (المدين = الوجهة، الدائن = المصدر). ⚠️ هنا قراءة بس — مافيش
+        // `ensureGlAccount()`؛ خزنة حسابها مش صالح بترجع للمفتاح بعلامة مراجعة
+        // `$slot` = `debit` | `credit` — الخانة (مش المفتاح) عشان التثبيت (D1) يتطبق
+        $side = function (?Safe $safe, string $slot) use ($res, $rule, &$needsReview): int {
+            if ($safe !== null && $rule->{$slot.'_key'} !== 'rep_cash') {
+                $acc = $safe->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+                if ($acc !== null && $acc->is_postable && $acc->active) {
+                    return $acc->id;
+                }
+                $needsReview = true;
+            }
+
+            return $res($slot);
+        };
+        $from = $m->from_safe_id ? $m->fromSafe : null;
+        $to = $m->to_safe_id ? $m->toSafe : null;
         $amount = round((float) $m->amount, 2);
+        $drId = $side($to, 'debit');
+        $crId = $side($from, 'credit');
+        // نفس الحساب على الطرفين (مثلاً خزنتين على حساب واحد) = قيد بيلغي نفسه
+        if ($drId === $crId) {
+            $needsReview = true;
+        }
         $lines = [
-            ['slot' => 'dr', 'account_id' => $res('debit'), 'debit' => $amount, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $res('credit'), 'debit' => 0.0, 'credit' => $amount],
+            ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $to?->cost_center_id ?? $m->cost_center_id, 'debit' => $amount, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $from?->cost_center_id ?? $m->cost_center_id, 'debit' => 0.0, 'credit' => $amount],
         ];
 
         return [
             'rule' => 'cash.'.$m->kind, 'needs_review' => $needsReview,
             'memo' => $m->number.' — '.$rule->label,
             'lines' => $lines,
+        ];
+    }
+
+    /**
+     * جرد الخزنة (L4-D5): الفرق **المتخزّن** بس (`counted − expected` وقت
+     * الجرد) — مابيتحسبش المتوقع هنا تاني، وإلا إعادة البناء كانت هتشوف
+     * رصيد فيه قيد الجرد نفسه وتطلّع فرق صفر. عجز (فرق سالب): مدين عجز
+     * وزيادة / دائن الخزنة · زيادة: العكس. السطرين على مركز الخزنة.
+     */
+    private function count(SafeCount $c): array
+    {
+        $diff = round((float) $c->difference, 2);
+        if ($c->status !== 'posted' || $diff == 0.0) {
+            return $this->none();
+        }
+        $rule = GlPostingRule::forKey('cash.count');
+        if (! $rule || ! $rule->active) {
+            return $this->none();
+        }
+        $needsReview = false;
+        $safe = $c->safe;
+        // نفس منطق `cash()`: حساب الخزنة لو صالح، وإلا مفتاح القاعدة بعلامة مراجعة
+        $acc = $safe?->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+        if ($acc !== null && $acc->is_postable && $acc->active) {
+            $safeId = $acc->id;
+        } else {
+            $needsReview = true;
+            $safeId = $this->keyAccount($rule->credit_key, null, $needsReview);
+        }
+        $overShortId = $this->keyAccount($rule->debit_key, null, $needsReview);
+        $amount = abs($diff);
+        $center = $safe?->cost_center_id;
+        [$drId, $crId] = $diff < 0 ? [$overShortId, $safeId] : [$safeId, $overShortId];
+
+        return [
+            'rule' => 'cash.count', 'needs_review' => $needsReview,
+            'memo' => $c->number.' — '.($safe?->displayName() ?? ''),
+            'lines' => [
+                ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $center, 'debit' => 0.0, 'credit' => $amount],
+            ],
+        ];
+    }
+
+    /**
+     * قسط الإهلاك (L4-D11): مدين مصروف الإهلاك / دائن مجمع الإهلاك من
+     * مفاتيح القاعدة، والسطرين على مركز الأصل (من غيره: الشركة).
+     */
+    private function depreciation(FixedAssetDepreciation $d): array
+    {
+        $amount = round((float) $d->amount, 2);
+        $rule = GlPostingRule::forKey('asset.depreciation');
+        if ($amount <= 0 || ! $rule || ! $rule->active) {
+            return $this->none();
+        }
+        $asset = $d->asset;
+        // أصل اتمسح من تحت القسط = المراجعة لازم تعرف
+        $needsReview = $asset === null;
+        $center = $asset?->cost_center_id ?? CostCenter::company()->id;
+        $drId = $this->keyAccount($rule->debit_key, null, $needsReview);
+        $crId = $this->keyAccount($rule->credit_key, null, $needsReview);
+
+        return [
+            'rule' => 'asset.depreciation', 'needs_review' => $needsReview,
+            'memo' => ($asset?->code ?? '#'.$d->fixed_asset_id).' — '.$d->period_key,
+            'lines' => [
+                ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $center, 'debit' => 0.0, 'credit' => $amount],
+            ],
         ];
     }
 }

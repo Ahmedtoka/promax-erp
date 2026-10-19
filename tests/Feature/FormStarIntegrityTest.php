@@ -52,6 +52,9 @@ class FormStarIntegrityTest extends TestCase
         'erp/replenishments#formRplEdit' => ['ops.replenishments.update'],
         'erp/team#passForm' => ['erp.team.password'],
         'gl/coa#coaMoveForm' => ['gl.coa.move'],
+        'gl/safes#formEditSafe' => ['gl.safes.update'],
+        'gl/expenses#formExpReject' => ['gl.expenses.reject'],
+        'gl/expense_categories#formEditCat' => ['gl.expense_categories.update'],
         'erp/vehicles#formEditVehicle' => ['erp.vehicles.update'],
         'online/collections#formCollect' => ['online.collect'],
         'online/pickup#formCollect' => ['online.collect'],
@@ -100,6 +103,15 @@ class FormStarIntegrityTest extends TestCase
         // `list_price[...]` والعمودان فولباك بس.
         'erp/_product_form:price_old' => 'fallback branch when no price lists exist; columns stay nullable for the importer (2026-08-04)',
         'erp/_product_form:price_new' => 'fallback branch when no price lists exist; columns stay nullable for the importer (2026-08-04)',
+        // Lane 4 L4-D9: الشاشة بتطلب البند والخزنة والمركز والإيصال، والسيرفر
+        // سايبهم اختياريين عن قصد عشان السكريبتات والتيستات القديمة (بدايل:
+        // الخزنة من `paid_from`، المركز من الخزنة ثم الشركة). الحساب اختياري
+        // على الشاشة: الفاضي = حساب البند (`required_without:category_id`).
+        'gl/expenses:category_id' => 'L4-D9: optional on the server for legacy callers; the form requires it',
+        'gl/expenses:safe_id' => 'L4-D9: falls back to Safe::forLegacy(paid_from); the form requires it unless rep cash',
+        'gl/expenses:cost_center_id' => 'L4-D9: falls back to the safe center then the company; the form requires it',
+        'gl/expenses:attachment' => 'L4-D9: receipt required on the form; legacy rows without one show a no-receipt badge',
+        'gl/expenses:account_id' => 'empty = the category account (required_without:category_id, and the category is required on the form)',
     ];
 
     // ═══════════════════ 1. الخريطة نفسها ═══════════════════

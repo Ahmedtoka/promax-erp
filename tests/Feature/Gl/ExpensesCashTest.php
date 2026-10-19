@@ -46,6 +46,17 @@ class ExpensesCashTest extends TestCase
         $x = Expense::first();
         $this->assertStringStartsWith('EXP-', $x->number);
         Storage::disk('public')->assertExists($x->attachment_path);
+
+        // L4-D7: سند المحاسب بيستنى الاعتماد — ولا قرش اتحرك لسه
+        $this->assertSame('pending', $x->status);
+        $this->assertSame(0.0, GlAccount::findKey('expense_fuel')->balanceBetween(null, null));
+        $this->assertSame(0.0, GlAccount::repCash($rep)->balanceBetween(null, null));
+
+        // الأدمن بيعتمد، والمحاسب بيدفع — الدفع هو اللي بيرحّل
+        $this->actingAs($this->makeAdmin())->post(route('gl.expenses.approve', $x))->assertSessionHasNoErrors();
+        $this->actingAs($acc)->post(route('gl.expenses.pay', $x))->assertSessionHasNoErrors();
+        $this->assertSame('posted', $x->fresh()->status);
+
         $this->assertSame(350.0, GlAccount::findKey('expense_fuel')->balanceBetween(null, null));
         $this->assertSame(-350.0, GlAccount::repCash($rep)->balanceBetween(null, null));
     }

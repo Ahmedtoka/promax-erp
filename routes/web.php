@@ -755,6 +755,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/expenses', [$g, 'index'])->name('expenses');
         Route::post('/expenses', [$g, 'store'])->name('expenses.store');
         Route::post('/expenses/{expense}/void', [$g, 'void'])->name('expenses.void');
+        // L4-D7: الاعتماد والرفض أدمن (قابل للمنح من شاشة الصلاحيات) · الدفع `act.gl.post`
+        Route::post('/expenses/{expense}/approve', [$g, 'approve'])->middleware('role:admin')->name('expenses.approve');
+        Route::post('/expenses/{expense}/reject', [$g, 'reject'])->middleware('role:admin')->name('expenses.reject');
+        Route::post('/expenses/{expense}/pay', [$g, 'pay'])->name('expenses.pay');
+        // بنود المصروف (L4-D8) — الشاشة للمحاسب، الكتابة أدمن بس
+        $ec = \App\Http\Controllers\Gl\ExpenseCategoryController::class;
+        Route::get('/expense-categories', [$ec, 'index'])->name('expense_categories');
+        Route::post('/expense-categories', [$ec, 'store'])->middleware('role:admin')->name('expense_categories.store');
+        Route::post('/expense-categories/{category}', [$ec, 'update'])->middleware('role:admin')->name('expense_categories.update');
         // ═══ شجرة الحسابات وكشف الحساب ═══
         $a = \App\Http\Controllers\Gl\AccountController::class;
         Route::get('/accounts', [$a, 'index'])->name('accounts');
@@ -830,6 +839,30 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/cash', [$c, 'index'])->name('cash');
         Route::post('/cash', [$c, 'store'])->name('cash.store');
         Route::post('/cash/{cashMovement}/void', [$c, 'void'])->name('cash.void');
+
+        // ═══ Lane 4 (١٩/١٠) — الخزن والبنوك: سجل بحساب دفتر لكل خزنة ═══
+        $sf = \App\Http\Controllers\Gl\SafeController::class;
+        Route::get('/safes', [$sf, 'index'])->name('safes');
+        Route::post('/safes', [$sf, 'store'])->name('safes.store');
+        // الجرد اليومي (L4-D5) — ⚠️ قبل `/safes/{safe}` عشان `counts` مايتقريش id خزنة
+        Route::get('/safes/counts', [$sf, 'counts'])->name('safes.counts');
+        Route::post('/safes/counts', [$sf, 'storeCount'])->name('safes.counts.store');
+        Route::post('/safes/counts/{safeCount}/void', [$sf, 'voidCount'])->name('safes.counts.void');
+        Route::post('/safes/{safe}', [$sf, 'update'])->name('safes.update');
+
+        // تسوية البنك مع كشف الحساب (L4-D6) — ⚠️ `/recon` الثابت قبل `/recon/{statement}`
+        $br = \App\Http\Controllers\Gl\BankReconController::class;
+        Route::get('/recon', [$br, 'index'])->name('recon');
+        Route::post('/recon', [$br, 'store'])->name('recon.store');
+        Route::get('/recon/{statement}', [$br, 'show'])->name('recon.show');
+        Route::post('/recon/{statement}/mark', [$br, 'mark'])->name('recon.mark');
+        Route::post('/recon/{statement}/close', [$br, 'close'])->name('recon.close');
+
+        // سجل الأصول الثابتة والإهلاك الشهري (L4-D10..D12) — تشغيل الإهلاك أدمن بس
+        $fa = \App\Http\Controllers\Gl\FixedAssetController::class;
+        Route::get('/assets', [$fa, 'index'])->name('assets');
+        Route::post('/assets', [$fa, 'store'])->name('assets.store');
+        Route::post('/assets/depreciate', [$fa, 'depreciate'])->middleware('role:admin')->name('assets.depreciate');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.

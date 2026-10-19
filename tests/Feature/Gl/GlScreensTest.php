@@ -55,9 +55,9 @@ class GlScreensTest extends TestCase
     public function test_the_accountant_can_add_a_free_account_and_the_admin_edits_a_system_name_only(): void
     {
         $this->actingAs($this->acc)->post(route('gl.accounts.store'), [
-            'parent_id' => GlAccount::where('code', '5')->first()->id, 'code' => '5108', 'name' => 'اتصالات', 'name_en' => 'Telecom',
+            'parent_id' => GlAccount::where('code', '5')->first()->id, 'code' => '5150', 'name' => 'اتصالات', 'name_en' => 'Telecom',
         ])->assertSessionHasNoErrors();
-        $acc = GlAccount::where('code', '5108')->first();
+        $acc = GlAccount::where('code', '5150')->first();
         $this->assertSame('expense', $acc->type);
         $this->assertFalse($acc->is_system);
 
@@ -76,11 +76,11 @@ class GlScreensTest extends TestCase
      */
     public function test_a_free_account_cannot_be_re_rooted_or_parented_into_its_own_subtree(): void
     {
-        $free = $this->makeFreeAccount('5108', 'اتصالات');
+        $free = $this->makeFreeAccount('5150', 'اتصالات');
 
         // نقل تحت مجموعة أصول
         $this->actingAs($this->acc)->post(route('gl.accounts.update', $free), [
-            'name' => 'اتصالات', 'code' => '5108', 'parent_id' => GlAccount::where('code', '11')->first()->id,
+            'name' => 'اتصالات', 'code' => '5150', 'parent_id' => GlAccount::where('code', '11')->first()->id,
         ])->assertSessionHasErrors('parent_id');
 
         // إعادة ترقيم لجذر تاني
@@ -90,16 +90,16 @@ class GlScreensTest extends TestCase
 
         // أب فرعي (مش مجموعة)
         $this->actingAs($this->acc)->post(route('gl.accounts.update', $free), [
-            'name' => 'اتصالات', 'code' => '5108', 'parent_id' => GlAccount::findKey('expense_rent')->id,
+            'name' => 'اتصالات', 'code' => '5150', 'parent_id' => GlAccount::findKey('expense_rent')->id,
         ])->assertSessionHasErrors('parent_id');
 
         // أب جوه شجرة الحساب نفسه (الحساب نفسه هنا — أبسط حالة حلقة)
         $this->actingAs($this->acc)->post(route('gl.accounts.update', $free), [
-            'name' => 'اتصالات', 'code' => '5108', 'parent_id' => $free->id,
+            'name' => 'اتصالات', 'code' => '5150', 'parent_id' => $free->id,
         ])->assertSessionHasErrors('parent_id');
 
         $free->refresh();
-        $this->assertSame('5108', $free->code);
+        $this->assertSame('5150', $free->code);
         $this->assertSame('expense', $free->type);
         $this->assertSame(GlAccount::where('code', '5')->first()->id, $free->parent_id);
 
@@ -109,7 +109,7 @@ class GlScreensTest extends TestCase
             'type' => 'expense', 'normal_side' => 'debit', 'is_system' => false, 'is_postable' => false, 'active' => true,
         ]);
         $this->actingAs($this->acc)->post(route('gl.accounts.update', $free), [
-            'name' => 'اتصالات', 'code' => '5108', 'parent_id' => $group->id, 'active' => 1,
+            'name' => 'اتصالات', 'code' => '5150', 'parent_id' => $group->id, 'active' => 1,
         ])->assertSessionHasNoErrors();
 
         $free->refresh();
