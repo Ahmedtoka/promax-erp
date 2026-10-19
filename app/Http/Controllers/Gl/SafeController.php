@@ -84,9 +84,7 @@ class SafeController extends Controller
         $data = $this->rules($request, null);
 
         DB::transaction(function () use ($data) {
-            if (empty($data['cost_center_id']) && ! empty($data['branch_id'])) {
-                $data['cost_center_id'] = CostCenter::where('branch_id', $data['branch_id'])->where('kind', 'branch')->value('id');
-            }
+            $data = $this->withBranchCenter($data);
             $safe = Safe::create($this->payload($data) + ['code' => $data['code'], 'currency' => 'EGP']);
             $safe->ensureGlAccount();
         });
@@ -101,12 +99,13 @@ class SafeController extends Controller
         DB::transaction(function () use ($safe, $data) {
             // ⚠️ الكود مش بيتعدّل — هو جزء من كود حساب الخزنة في الشجرة
             // ومن غير حساب مختار بيفضل على حسابه الحالي — مايتفكّش ويتفتح غيره
-            $payload = $this->payload($data);
+            $payload = $this->payload($this->withBranchCenter($data));
             if ($payload['gl_account_id'] === null) {
                 unset($payload['gl_account_id']);
             }
             $safe->update($payload + ['currency' => 'EGP']);
             $safe->ensureGlAccount();
+            $safe->syncAutoAccountName();
         });
 
         return redirect()->route('gl.safes')->with('ok', __('cash.safe_saved'));
@@ -127,6 +126,16 @@ class SafeController extends Controller
             'account_no' => ['nullable', 'string', 'max:60'],
             'active' => ['nullable', 'boolean'],
         ]);
+    }
+
+    /** مركز التكلفة الفاضي = مركز الفرع (`kind=branch`) — نفس القاعدة في الإضافة والتعديل */
+    private function withBranchCenter(array $data): array
+    {
+        if (empty($data['cost_center_id']) && ! empty($data['branch_id'])) {
+            $data['cost_center_id'] = CostCenter::where('branch_id', $data['branch_id'])->where('kind', 'branch')->value('id');
+        }
+
+        return $data;
     }
 
     private function payload(array $data): array

@@ -490,7 +490,7 @@ class Access
             ['gl.income', '📈', 'nav.gl_income', 'gl.income*', null],
             ['gl.balance_sheet', '🏛️', 'nav.gl_balance_sheet', 'gl.balance_sheet*', null],
             ['gl.expenses', '🧾', 'nav.gl_expenses', 'gl.expenses*', null],
-            ['gl.safes', '🏦', 'nav.gl_safes', 'gl.safes*', null],
+            ['gl.safes', '💰', 'nav.gl_safes', 'gl.safes*', null],
             ['gl.cash', '🏦', 'nav.gl_cash', 'gl.cash*', null],
             ['gl.settings', '⚙️', 'nav.gl_settings', 'gl.settings*', null],
         ],

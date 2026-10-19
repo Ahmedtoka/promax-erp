@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Cash;
 
+use App\Models\Branch;
+use App\Models\CostCenter;
 use App\Models\Gl\GlAccount;
 use App\Models\Safe;
 use App\Models\Setting;
@@ -168,5 +170,70 @@ class SafesScreenTest extends TestCase
         Setting::write('gl_enabled', '0');
         Setting::flushCache();
         $this->actingAs($this->makeAdmin())->get(route('gl.safes'))->assertOk()->assertSee(__('cash.ledger_off'));
+    }
+
+    // ═══ جولة المراجعة ١ ═══
+
+    public function test_branch_cost_center_fallback_on_store_and_update(): void
+    {
+        $admin = $this->makeAdmin();
+        $branch = Branch::create(['code' => 'BR-CC', 'name' => 'فرع', 'active' => true]);
+        $cc = CostCenter::create(['code' => 'CC-BR', 'name' => 'مركز الفرع', 'kind' => 'branch', 'branch_id' => $branch->id, 'active' => true]);
+        $other = CostCenter::create(['code' => 'CC-X', 'name' => 'مركز تاني', 'kind' => 'branch', 'active' => true]);
+
+        $this->actingAs($admin)->post(route('gl.safes.store'), [
+            'code' => 'CC-1', 'name' => 'خزنة', 'kind' => 'cash', 'branch_id' => $branch->id,
+        ])->assertSessionHasNoErrors();
+        $safe = Safe::where('code', 'CC-1')->firstOrFail();
+        $this->assertSame($cc->id, $safe->cost_center_id);
+
+        // مركز مختار صريح بيتحترم
+        $this->actingAs($admin)->post(route('gl.safes.update', $safe), [
+            'name' => 'خزنة', 'kind' => 'cash', 'branch_id' => $branch->id, 'cost_center_id' => $other->id,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame($other->id, $safe->fresh()->cost_center_id);
+
+        // فاضي في التعديل = مركز الفرع، زي الإضافة بالظبط
+        $this->actingAs($admin)->post(route('gl.safes.update', $safe), [
+            'name' => 'خزنة', 'kind' => 'cash', 'branch_id' => $branch->id, 'cost_center_id' => '',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame($cc->id, $safe->fresh()->cost_center_id);
+    }
+
+    public function test_rename_syncs_only_the_auto_created_account(): void
+    {
+        $admin = $this->makeAdmin();
+        $safe = $this->safeWithAccount('REN-1');
+        $this->actingAs($admin)->post(route('gl.safes.update', $safe), [
+            'name' => 'اسم جديد', 'name_en' => 'New name', 'kind' => 'cash',
+        ])->assertSessionHasNoErrors();
+        $acc = GlAccount::find($safe->gl_account_id);
+        $this->assertSame('اسم جديد', $acc->name);
+        $this->assertSame('New name', $acc->name_en);
+
+        // حساب نظام (cash_main) متربط بالخزنة مايتغيرش اسمه
+        $main = GlAccount::findKey('cash_main');
+        $before = [$main->name, $main->name_en];
+        $legacy = Safe::create(['code' => 'MAADI-MAIN', 'name' => 'رئيسية', 'kind' => 'cash', 'gl_account_id' => $main->id]);
+        $this->actingAs($admin)->post(route('gl.safes.update', $legacy), [
+            'name' => 'اسم تاني', 'name_en' => 'Other', 'kind' => 'cash',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame($before, [$main->fresh()->name, $main->fresh()->name_en]);
+        $this->assertSame($main->id, $legacy->fresh()->gl_account_id);
+    }
+
+    public function test_update_with_empty_account_keeps_the_current_one(): void
+    {
+        $admin = $this->makeAdmin();
+        $safe = $this->safeWithAccount('KEEP-1');
+        $accId = $safe->gl_account_id;
+        $count = GlAccount::count();
+
+        $this->actingAs($admin)->post(route('gl.safes.update', $safe), [
+            'name' => 'خزنة', 'kind' => 'cash', 'gl_account_id' => '',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame($accId, $safe->fresh()->gl_account_id);
+        $this->assertSame($count, GlAccount::count());
     }
 }

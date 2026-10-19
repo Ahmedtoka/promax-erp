@@ -127,6 +127,34 @@ class Safe extends Model
         });
     }
 
+    /**
+     * الحساب اللي `ensureGlAccount` فتحه للخزنة: تحت أب النقدية، حساب
+     * نظام، وكوده `<الأب>.<كود الخزنة>` أو `…-<id>`. حساب `cash_main`/`bank`
+     * أو حساب اختاره المحاسب مش «تلقائي».
+     */
+    public function hasAutoAccount(): bool
+    {
+        $acc = $this->gl_account_id ? GlAccount::find($this->gl_account_id) : null;
+        $parent = GlAccount::where('system_key', 'cash_main')->first()?->parent;
+        if (! $acc || ! $parent || $acc->system_key || ! $acc->is_system || $acc->parent_id !== $parent->id) {
+            return false;
+        }
+        $base = $parent->code.'.'.$this->code;
+
+        return $acc->code === $base || $acc->code === $base.'-'.$this->id;
+    }
+
+    /** تغيير اسم الخزنة بيتنقل لحسابها التلقائي بس */
+    public function syncAutoAccountName(): void
+    {
+        if ($this->hasAutoAccount()) {
+            GlAccount::whereKey($this->gl_account_id)->update([
+                'name' => $this->name,
+                'name_en' => $this->name_en ?: $this->name,
+            ]);
+        }
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
