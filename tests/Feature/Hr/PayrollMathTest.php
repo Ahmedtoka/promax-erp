@@ -76,7 +76,7 @@ class PayrollMathTest extends TestCase
         $ex = HrSettings::num('hr_tax_exemption');
         $taxOf = fn (float $taxable) => PayrollMath::monthlyTax($taxable, $b, $el, $ex);
 
-        $g = PayrollMath::grossUp(10000, 1100, $taxOf);
+        $g = PayrollMath::grossUp(10000, 1100, $taxOf, PayrollMath::taxBreaks($el, $ex));
 
         $this->assertGreaterThan(11100, $g);
         $net = $g - 1100 - $taxOf($g - 1100);
@@ -85,6 +85,22 @@ class PayrollMathTest extends TestCase
         // أصغر قيمة: قرش أقل بيوقّع الصافي تحت المطلوب
         $less = $g - 0.01;
         $this->assertLessThan(10000.0, round($less - 1100 - $taxOf($less - 1100), 2));
+    }
+
+    public function test_gross_up_is_minimal_near_an_elimination_threshold(): void
+    {
+        // الضريبة بتقفز عند كل `over` فالصافي مش متصاعد — 53719 كانت مش أصغر قيمة
+        $b = $this->brackets();
+        $el = $this->elimination();
+        $ex = HrSettings::num('hr_tax_exemption');
+        $taxOf = fn (float $taxable) => PayrollMath::monthlyTax($taxable, $b, $el, $ex);
+        $ok = fn (float $g) => round($g - 1837 - $taxOf($g - 1837), 2) >= 41099;
+
+        $g = PayrollMath::grossUp(41099, 1837, $taxOf, PayrollMath::taxBreaks($el, $ex));
+
+        $this->assertTrue($ok($g), "G=$g must reach the net");
+        $this->assertFalse($ok(round($g - 0.01, 2)), "G-0.01 must not reach the net (G=$g)");
+        $this->assertLessThan(53719, $g);
     }
 
     public function test_settings_banner_until_saved(): void
@@ -110,6 +126,8 @@ class PayrollMathTest extends TestCase
             ],
             'hr_month_days' => '30', 'hr_day_minutes' => '480', 'hr_shift_start' => '09:00',
             'hr_late_grace_minutes' => '15', 'hr_overtime_rate' => '1.35',
+            'hr_leave_annual' => '15', 'hr_leave_casual' => '6', 'hr_leave_sick' => '30', 'hr_leave_unpaid' => '0',
+            'hr_weekend_days' => ['5', '6'],
         ];
 
         $this->actingAs($hr)->post(route('hr.settings.save'), $payload)->assertForbidden();
@@ -119,6 +137,8 @@ class PayrollMathTest extends TestCase
         $this->assertNotSame('', HrSettings::get('hr_rates_verified_at'));
         $this->assertEquals([[0, 40000, 0], [40000, 55000, 0.1], [55000, null, 0.15]], HrSettings::json('hr_tax_brackets'));
         $this->assertEquals([[600000, 1]], HrSettings::json('hr_tax_elimination'));
+        $this->assertSame('15', HrSettings::get('hr_leave_annual'));
+        $this->assertSame('5,6', HrSettings::get('hr_weekend_days'));
 
         $this->actingAs($admin)->get(route('hr.settings'))->assertOk()->assertDontSee($banner);
         $this->actingAs($hr)->get(route('hr.settings'))->assertOk()->assertDontSee($banner);
@@ -128,5 +148,17 @@ class PayrollMathTest extends TestCase
         $bad['brackets'][1]['from'] = '30000';
         $this->actingAs($admin)->post(route('hr.settings.save'), $bad)->assertSessionHasErrors();
         $this->assertEquals(55000, HrSettings::json('hr_tax_brackets')[2][0]);
+
+        // سطور الإلغاء اختيارية — شيلها كلها
+        $noElim = $payload;
+        unset($noElim['elimination']);
+        $this->actingAs($admin)->post(route('hr.settings.save'), $noElim)->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame([], HrSettings::json('hr_tax_elimination'));
+
+        // يوم أسبوع مش موجود → مرفوض
+        $badDay = $payload;
+        $badDay['hr_weekend_days'] = ['9'];
+        $this->actingAs($admin)->post(route('hr.settings.save'), $badDay)->assertSessionHasErrors('hr_weekend_days.0');
+        $this->assertSame('5,6', HrSettings::get('hr_weekend_days'));
     }
 }

@@ -31,6 +31,11 @@ class HrSettingsController extends Controller
         'hr_day_minutes' => 'required|integer|min:1|max:1440',
         'hr_late_grace_minutes' => 'required|integer|min:0|max:600',
         'hr_overtime_rate' => 'required|numeric|min:0|max:10',
+        // أرصدة الإجازة السنوية الديفولت (المهمة ٣) — `unpaid=0` يعني من غير فحص رصيد
+        'hr_leave_annual' => 'required|numeric|min:0|max:365',
+        'hr_leave_casual' => 'required|numeric|min:0|max:365',
+        'hr_leave_sick' => 'required|numeric|min:0|max:365',
+        'hr_leave_unpaid' => 'required|numeric|min:0|max:365',
     ];
 
     public function index(Request $request)
@@ -39,6 +44,7 @@ class HrSettingsController extends Controller
             's' => HrSettings::all(),
             'brackets' => HrSettings::json('hr_tax_brackets'),
             'elimination' => HrSettings::json('hr_tax_elimination'),
+            'weekend' => \App\Services\Hr\Leave::weekendDays(),
             'canEdit' => Access::action($request->user(), 'act.hr.settings'),
         ]);
     }
@@ -49,6 +55,9 @@ class HrSettingsController extends Controller
 
         $data = $request->validate(self::NUMERIC + [
             'hr_shift_start' => ['required', 'date_format:H:i'],
+            // ⚠️ لازم يوم واحد على الأقل: القيمة الفاضية بترجع للديفولت (الجمعة) في `Setting::read`
+            'hr_weekend_days' => 'required|array|min:1|max:6',
+            'hr_weekend_days.*' => 'required|integer|between:0,6',
             'brackets' => 'required|array|min:1|max:20',
             'brackets.*.from' => 'required|numeric|min:0',
             'brackets.*.to' => 'nullable|numeric|min:0',
@@ -98,6 +107,9 @@ class HrSettingsController extends Controller
             $pairs[$k] = (string) $data[$k];
         }
         $pairs['hr_shift_start'] = $data['hr_shift_start'];
+        $days = array_values(array_unique(array_map('intval', $data['hr_weekend_days'])));
+        sort($days);
+        $pairs['hr_weekend_days'] = implode(',', $days);
         $pairs['hr_tax_brackets'] = json_encode($brackets);
         $pairs['hr_tax_elimination'] = json_encode($elim);
         $pairs['hr_rates_verified_at'] = now()->format('Y-m-d H:i:s');

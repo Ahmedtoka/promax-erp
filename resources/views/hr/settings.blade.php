@@ -23,7 +23,14 @@
             'hr_month_days' => '1', 'hr_day_minutes' => '1',
             'hr_late_grace_minutes' => '1', 'hr_overtime_rate' => '0.01',
         ],
+        'set_leave' => [
+            'hr_leave_annual' => '0.5', 'hr_leave_casual' => '0.5',
+            'hr_leave_sick' => '0.5', 'hr_leave_unpaid' => '0.5',
+        ],
     ];
+    $label = fn ($k) => str_starts_with($k, 'hr_leave_') ? __('hrm.leave_type_'.substr($k, 9)) : __('hrm.set_'.substr($k, 3));
+    $weekendOld = array_map('intval', (array) old('hr_weekend_days', $weekend));
+    $del = $canEdit ? '<td data-noprint><button type="button" class="btn sm red" onclick="hrDelRow(this)" title="'.e(__('hrm.set_remove_row')).'">✕</button></td>' : '';
 @endphp
 
 @section('content')
@@ -53,7 +60,7 @@
             <h4>{{ __('hrm.'.$group) }}</h4>
             <div class="searchbar">
                 @foreach ($fields as $k => $step)
-                    <label class="fl"><span>{{ __('hrm.set_'.substr($k, 3)) }} <b class="req-star">*</b></span>
+                    <label class="fl"><span>{{ $label($k) }} <b class="req-star">*</b></span>
                         <input type="number" name="{{ $k }}" step="{{ $step }}" min="0" value="{{ $val($k) }}" required {{ $ro }} dir="ltr"></label>
                 @endforeach
                 @if ($group === 'set_time')
@@ -61,6 +68,19 @@
                         <input type="time" name="hr_shift_start" value="{{ $val('hr_shift_start') }}" required {{ $ro }}></label>
                 @endif
             </div>
+            @if ($group === 'set_leave')
+                <p style="color:var(--muted);font-size:11px;margin:0 0 6px">{{ __('hrm.set_leave_hint') }}</p>
+                <div class="searchbar">
+                    <span class="fl"><span>{{ __('hrm.set_weekend_days') }} <b class="req-star">*</b></span>
+                        <span style="display:flex;flex-wrap:wrap;gap:10px">
+                            @foreach ([6, 0, 1, 2, 3, 4, 5] as $d)
+                                <label style="display:inline-flex;gap:4px;align-items:center">
+                                    <input type="checkbox" name="hr_weekend_days[]" value="{{ $d }}" @checked(in_array($d, $weekendOld, true)) {{ $ro }}>
+                                    {{ __('journey.day_'.$d) }}</label>
+                            @endforeach
+                        </span></span>
+                </div>
+            @endif
         @endforeach
     </div>
 
@@ -75,13 +95,14 @@
         <p style="color:var(--muted);font-size:11px;margin:0 0 6px">{{ __('hrm.set_brackets_hint') }}</p>
         <div class="tablewrap">
             <table id="bracketRows">
-                <tr><th data-nosum>#</th><th>{{ __('hrm.set_from') }} *</th><th>{{ __('hrm.set_to') }}</th><th>{{ __('hrm.set_rate') }} *</th></tr>
+                <tr><th data-nosum>#</th><th>{{ __('hrm.set_from') }} *</th><th>{{ __('hrm.set_to') }}</th><th>{{ __('hrm.set_rate') }} *</th>@if ($canEdit)<th data-noprint></th>@endif</tr>
                 @foreach (array_values($bRows) as $i => $r)
                     <tr>
                         <td>{{ $i }}</td>
                         <td><input type="number" name="brackets[{{ $i }}][from]" step="0.01" min="0" value="{{ $r['from'] ?? '' }}" required {{ $ro }} dir="ltr" style="width:120px"></td>
                         <td><input type="number" name="brackets[{{ $i }}][to]" step="0.01" min="0" value="{{ $r['to'] ?? '' }}" {{ $ro }} dir="ltr" style="width:120px"></td>
                         <td><input type="number" name="brackets[{{ $i }}][rate]" step="0.0001" min="0" max="1" value="{{ $r['rate'] ?? '' }}" required {{ $ro }} dir="ltr" style="width:90px"></td>
+                        {!! $del !!}
                     </tr>
                 @endforeach
             </table>
@@ -94,11 +115,12 @@
         <p style="color:var(--muted);font-size:11px;margin:0 0 6px">{{ __('hrm.set_elimination_hint') }}</p>
         <div class="tablewrap">
             <table id="elimRows">
-                <tr><th>{{ __('hrm.set_over') }} *</th><th>{{ __('hrm.set_upto') }} *</th></tr>
+                <tr><th>{{ __('hrm.set_over') }} *</th><th>{{ __('hrm.set_upto') }} *</th>@if ($canEdit)<th data-noprint></th>@endif</tr>
                 @foreach (array_values($eRows) as $i => $r)
                     <tr>
                         <td><input type="number" name="elimination[{{ $i }}][over]" step="0.01" min="0" value="{{ $r['over'] ?? '' }}" required {{ $ro }} dir="ltr" style="width:120px"></td>
                         <td><input type="number" name="elimination[{{ $i }}][upto]" step="1" min="0" value="{{ $r['upto'] ?? '' }}" required {{ $ro }} dir="ltr" style="width:70px"></td>
+                        {!! $del !!}
                     </tr>
                 @endforeach
             </table>
@@ -117,24 +139,34 @@
 
 @if ($canEdit)
 <script>
+    // ⚠️ عدّاد بيزيد بس: بعد حذف سطر `rows.length` كان هيكرّر اسم موجود
+    let hrNext = {{ max(count($bRows), count($eRows)) + 100 }};
     function hrNum(name, step, extra) {
         return '<input type="number" name="' + name + '" step="' + step + '" min="0" dir="ltr" ' + (extra || '') + '>';
     }
+    // الحذف بيسيب فجوة في الترقيم — الكنترولر بيعمل `array_values` فمفيش مشكلة
+    function hrDelRow(btn) {
+        const tr = btn.closest('tr');
+        if (tr) tr.remove();
+    }
+    function hrDelCell() {
+        return '<td data-noprint><button type="button" class="btn sm red" onclick="hrDelRow(this)">✕</button></td>';
+    }
     function hrAddBracket() {
         const t = document.getElementById('bracketRows');
-        const i = t.rows.length - 1;
+        const i = hrNext++;
         const tr = t.insertRow(-1);
         tr.innerHTML = '<td>' + i + '</td>'
             + '<td>' + hrNum('brackets[' + i + '][from]', '0.01', 'required style="width:120px"') + '</td>'
             + '<td>' + hrNum('brackets[' + i + '][to]', '0.01', 'style="width:120px"') + '</td>'
-            + '<td>' + hrNum('brackets[' + i + '][rate]', '0.0001', 'max="1" required style="width:90px"') + '</td>';
+            + '<td>' + hrNum('brackets[' + i + '][rate]', '0.0001', 'max="1" required style="width:90px"') + '</td>' + hrDelCell();
     }
     function hrAddElim() {
         const t = document.getElementById('elimRows');
-        const i = t.rows.length - 1;
+        const i = hrNext++;
         const tr = t.insertRow(-1);
         tr.innerHTML = '<td>' + hrNum('elimination[' + i + '][over]', '0.01', 'required style="width:120px"') + '</td>'
-            + '<td>' + hrNum('elimination[' + i + '][upto]', '1', 'required style="width:70px"') + '</td>';
+            + '<td>' + hrNum('elimination[' + i + '][upto]', '1', 'required style="width:70px"') + '</td>' + hrDelCell();
     }
 </script>
 @endif

@@ -72,41 +72,93 @@ final class PayrollMath
     }
 
     /**
-     * أصغر إجمالي G (قرشين) يحقق `G − التأمين − الضريبة(G − التأمين) ≥ الصافي`.
-     * بايسكشن ٦٠ لفة على [net, net×2 + التأمين + 1] وبعدين تقريب لفوق.
+     * نقط قفزة الضريبة الشهرية: عند وعاء شهري T بيتحقق `12T − الإعفاء > over`
+     * فالضريبة بتقفز (إلغاء الشرايح) — يعني الصافي مش متصاعد عند
+     * `T = (over + الإعفاء) / 12`. الـ T دي نفسها لسه في الشريحة الأقل.
+     *
+     * @return list<float> وعاء شهري (قبل التأمين)
+     */
+    public static function taxBreaks(array $elimination, float $exemption): array
+    {
+        return array_values(array_map(fn ($e) => ((float) $e[0] + $exemption) / 12, $elimination));
+    }
+
+    /**
+     * أصغر إجمالي G (قرشين) يحقق `G − التأمين − الضريبة(G − التأمين) ≥ الصافي`،
+     * في المدى [net, net×2 + التأمين + 1].
+     *
+     * ⚠️ الصافي مش متصاعد: عند كل نقطة إلغاء شرايح الضريبة بتقفز، فبايسكشن
+     * واحدة على المدى كله ممكن تقع على حل أكبر من الأصغر (53719 بدل 53274.55).
+     * عشان كده المدى بيتقسم عند `$taxableBreaks` (من `taxBreaks()`) لقطع —
+     * جوه كل قطعة الصافي متصاعد — والقطع بتتفحص بالترتيب، وأول قطعة آخرها
+     * بيحقق الشرط هي اللي فيها الأصغر؛ بايسكشن بالقرش جواها.
+     * من غير `$taxableBreaks` = قطعة واحدة (صح لما مفيش إلغاء شرايح).
      *
      * @param  callable(float): float  $taxOf  ضريبة الشهر على الوعاء الخاضع
+     * @param  list<float>  $taxableBreaks  وعاء شهري بتقفز عنده الضريبة
      */
-    public static function grossUp(float $net, float $employeeInsurance, callable $taxOf): float
+    public static function grossUp(float $net, float $employeeInsurance, callable $taxOf, array $taxableBreaks = []): float
     {
-        $ok = function (float $g) use ($net, $employeeInsurance, $taxOf): bool {
-            $taxable = $g - $employeeInsurance;
+        // بالقروش (int) عشان مفيش أخطاء فاصلة عايمة في الحدود
+        $ok = function (int $cents) use ($net, $employeeInsurance, $taxOf): bool {
+            $taxable = $cents / 100 - $employeeInsurance;
 
-            // ⚠️ هامش ميكروسكوبي عشان أخطاء الفاصلة العايمة
-            return $taxable - (float) $taxOf($taxable) >= $net - 1e-9;
+            return round($taxable - (float) $taxOf($taxable), 2) >= round($net, 2);
         };
 
-        $lo = $net;
-        $hi = $net * 2 + $employeeInsurance + 1;
-        if ($ok($lo)) {
-            return round(ceil(round($lo * 100, 6)) / 100, 2);
+        $loC = (int) ceil(round($net * 100, 6));
+        $hiC = (int) ceil(round(($net * 2 + $employeeInsurance + 1) * 100, 6));
+
+        // آخر قرش في كل قطعة: floor(نقطة القفزة) — لسه في الشريحة الأقل
+        $ends = [];
+        foreach ($taxableBreaks as $t) {
+            $c = (int) floor(round(((float) $t + $employeeInsurance) * 100, 6));
+            if ($c >= $loC && $c < $hiC) {
+                $ends[] = $c;
+            }
+        }
+        $ends = array_values(array_unique($ends));
+        sort($ends);
+        $ends[] = $hiC;
+
+        $a = $loC;
+        foreach ($ends as $e) {
+            if ($e >= $a && $ok($e)) {
+                return round(self::firstCent($a, $e, $ok) / 100, 2);
+            }
+            $a = $e + 1;
         }
 
-        for ($i = 0; $i < 60; $i++) {
-            $mid = ($lo + $hi) / 2;
+        // مفيش حل في المدى (مش متوقع: الضريبة أقل من ٢٧٫٥٪) — نكمّل بالقرش لفوق
+        $g = $hiC;
+        for ($n = 0; $n < 10000 && ! $ok($g); $n++) {
+            $g++;
+        }
+
+        return round($g / 100, 2);
+    }
+
+    /** أصغر قرش في [a, e] بيحقق الشرط، والمعروف إن `ok(e)` صح والشرط متصاعد جوه القطعة. */
+    private static function firstCent(int $a, int $e, callable $ok): int
+    {
+        if ($ok($a)) {
+            return $a;
+        }
+        $lo = $a;   // مش بيحقق
+        $hi = $e;   // بيحقق
+        while ($hi - $lo > 1) {
+            $mid = intdiv($lo + $hi, 2);
             if ($ok($mid)) {
                 $hi = $mid;
             } else {
                 $lo = $mid;
             }
         }
-
-        $g = ceil(round($hi * 100, 6)) / 100;
-        // تقريب الضريبة لقرشين ممكن يخلّي الدالة مش متصاعدة بالظبط — نزوّد قرش لحد ما تتحقق
-        for ($n = 0; $n < 100 && ! $ok($g); $n++) {
-            $g += 0.01;
+        // تقريب الضريبة لقرشين ممكن يعمل رعشة قرش — نتأكد إن اللي قبله فعلاً مش بيحقق
+        for ($n = 0; $n < 100 && $hi - 1 >= $a && $ok($hi - 1); $n++) {
+            $hi--;
         }
 
-        return round($g, 2);
+        return $hi;
     }
 }
