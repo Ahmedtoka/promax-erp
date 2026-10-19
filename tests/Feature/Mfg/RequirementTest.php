@@ -132,6 +132,47 @@ class RequirementTest extends TestCase
         $this->actingAs($this->makeAdmin(['role' => 'warehouse_keeper']))->post(route('mfg.orders.shortage', $o))->assertForbidden();
     }
 
+    public function test_second_shortage_request_is_refused(): void
+    {
+        $this->stock(30);
+        $o = $this->order();
+        $pm = $this->makeAdmin(['role' => 'production_manager']);
+        $admin = $this->makeAdmin();
+
+        PurchaseLink::raise($o, $pm);
+        $first = $o->fresh()->shortage_requested_at;
+
+        $this->actingAs($pm)->post(route('mfg.orders.shortage', $o))->assertSessionHasErrors('order');
+        $this->assertEquals($first, $o->fresh()->shortage_requested_at);
+        $this->assertSame(1, AppNotification::query()->where('user_id', $admin->id)->count());
+
+        try {
+            PurchaseLink::raise($o->fresh(), $pm);
+            $this->fail('expected Rejected');
+        } catch (Rejected $e) {
+            $this->assertStringContainsString(explode(' (', __('mfg.shortage_already_requested'))[0], $e->getMessage());
+        }
+
+        // الزرار مابيظهرش بعد الطلب
+        $this->actingAs($pm)->get(route('mfg.orders.show', $o))->assertOk()
+            ->assertDontSee(route('mfg.orders.shortage', $o));
+    }
+
+    public function test_finished_order_cannot_request_purchase(): void
+    {
+        $this->stock(30);
+        $o = $this->order();
+        $o->forceFill(['status' => 'finished'])->save();
+        $pm = $this->makeAdmin(['role' => 'production_manager']);
+
+        $this->actingAs($pm)->get(route('mfg.orders.show', $o))->assertOk()
+            ->assertDontSee(route('mfg.orders.shortage', $o));
+
+        $this->expectException(Rejected::class);
+        $this->expectExceptionMessage(__('mfg.order_bad_state'));
+        PurchaseLink::raise($o, $pm);
+    }
+
     public function test_no_shortage_is_refused(): void
     {
         $this->stock(40);
@@ -144,6 +185,22 @@ class RequirementTest extends TestCase
         $this->expectException(Rejected::class);
         $this->expectExceptionMessage(__('mfg.no_shortage'));
         PurchaseLink::raise($o, $this->makeAdmin());
+    }
+
+    /** فايض في مخزن مابيغطّيش عجز في مخزن تاني — العجز بيتحسب لكل مخزن */
+    public function test_surplus_in_one_warehouse_does_not_hide_shortage_in_another(): void
+    {
+        $second = $this->makeWarehouse();
+        $this->stock(100);            // المخزن الأول: محتاج 36.750 وعنده 100 (فايض)
+        $this->stock(4, [], $second); // التاني: محتاج 14.700 وعنده 4 (عجز 10.700)
+
+        $this->order(1000);
+        $this->order(400, ['raw_warehouse_id' => $second->id]);
+
+        $r = Requirement::forOpenOrders()->first();
+        $this->assertEqualsWithDelta(51.450, $r['remaining'], 0.0001);
+        $this->assertEqualsWithDelta(104.0, $r['available'], 0.0001);
+        $this->assertEqualsWithDelta(10.700, $r['shortage'], 0.0001);
     }
 
     public function test_open_orders_requirement_aggregates_materials(): void

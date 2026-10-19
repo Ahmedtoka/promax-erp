@@ -214,6 +214,46 @@ class ProductionOrderTest extends TestCase
         Orders::start($o->fresh(), $pm);
     }
 
+    /**
+     * السباق: طلب تاني بنفس المفتاح وصل للقفل بعد ما الأول سجّل المفتاح —
+     * بيرجّع نفس الأمر من غير خطأ ومن غير ما يغيّر حاجة.
+     */
+    public function test_key_already_remembered_for_the_order_returns_it_without_error(): void
+    {
+        $pm = $this->pm();
+        $o = $this->order();
+
+        DB::table('idempotency_keys')->insert([
+            'user_id' => $pm->id, 'action' => 'mfg_start', 'idem_key' => 'k-race',
+            'subject_type' => ProductionOrder::class, 'subject_id' => $o->id, 'created_at' => now(),
+        ]);
+
+        $got = Orders::start($o, $pm, 'k-race');
+
+        $this->assertSame($o->id, $got->id);
+        $this->assertSame('planned', $got->status);
+        $this->assertNull($o->fresh()->started_at);
+        $this->assertSame(1, DB::table('idempotency_keys')->where('action', 'mfg_start')->count());
+    }
+
+    public function test_key_used_on_one_order_is_refused_for_another(): void
+    {
+        $pm = $this->pm();
+        $a = $this->order();
+        $b = $this->order(['batch_no' => 'MB1-20261020']);
+
+        Orders::start($a, $pm, 'k-shared');
+
+        try {
+            Orders::start($b, $pm, 'k-shared');
+            $this->fail('expected Rejected');
+        } catch (Rejected $e) {
+            $this->assertSame(__('mfg.idem_other_order'), $e->getMessage());
+        }
+
+        $this->assertSame('planned', $b->fresh()->status);
+    }
+
     public function test_finish_planned_order_is_refused(): void
     {
         $o = $this->order();

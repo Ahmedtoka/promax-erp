@@ -18,27 +18,36 @@ use Illuminate\Support\Facades\DB;
  */
 class PurchaseLink
 {
+    /** الحالات اللي ينفع فيها طلب شراء للعجز — نفس شرط الزرار في صفحة الأمر */
+    public const STATUSES = ['planned', 'in_progress'];
+
     public static function raise(ProductionOrder $o, User $by): ?int
     {
-        $o->loadMissing('product');
-
-        $short = Requirement::forOrder($o)->filter(fn (array $r) => $r['shortage'] > 0.0005)->values();
-
-        if (! $o->isOpen()) {
-            throw new Rejected(__('mfg.order_bad_state'));
-        }
-
-        if ($short->isEmpty()) {
-            throw new Rejected(__('mfg.no_shortage'));
-        }
-
-        $lines = $short->map(fn (array $r) => [
-            'product_id' => $r['product']->id,
-            'qty' => $r['shortage'],
-        ])->all();
-
-        $requestId = DB::transaction(function () use ($o, $by, $lines) {
+        // ⚠️ كل الفحوص على الصف المقفول — ضغطتين في نفس اللحظة = طلب واحد
+        [$requestId, $short] = DB::transaction(function () use ($o, $by) {
             $row = ProductionOrder::query()->whereKey($o->id)->lockForUpdate()->firstOrFail();
+
+            // مخطط أو جاري بس — المنتهي خلاص صرف اللي محتاجه ومستني القفل
+            if (! in_array($row->status, self::STATUSES, true)) {
+                throw new Rejected(__('mfg.order_bad_state'));
+            }
+
+            if ($row->shortage_requested_at !== null) {
+                throw new Rejected(__('mfg.shortage_already_requested', [
+                    'at' => $row->shortage_requested_at->format('Y-m-d H:i'),
+                ]));
+            }
+
+            $short = Requirement::forOrder($row)->filter(fn (array $r) => $r['shortage'] > 0.0005)->values();
+
+            if ($short->isEmpty()) {
+                throw new Rejected(__('mfg.no_shortage'));
+            }
+
+            $lines = $short->map(fn (array $r) => [
+                'product_id' => $r['product']->id,
+                'qty' => $r['shortage'],
+            ])->all();
 
             $id = null;
             $class = '\\App\\Models\\PurchaseRequest';
@@ -53,9 +62,10 @@ class PurchaseLink
             ])->save();
             $o->setRawAttributes($row->getAttributes(), true);
 
-            return $id;
+            return [$id, $short];
         });
 
+        $o->loadMissing('product');
         $number = $o->number;
         $product = $o->product?->displayName() ?? '';
         $link = route('mfg.orders.show', $o->id, false);

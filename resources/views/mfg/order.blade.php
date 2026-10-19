@@ -78,7 +78,7 @@
 
 <div class="card">
     <h3>🥣 {{ __('mfg.order_lines_title') }}
-        @if ($canManage && $hasShortage && $order->isOpen())
+        @if ($canManage && $hasShortage && in_array($order->status, \App\Services\Mfg\PurchaseLink::STATUSES, true) && ! $order->shortage_requested_at)
             <span class="side" data-noprint>
                 <form method="POST" action="{{ route('mfg.orders.shortage', $order) }}" style="display:inline"
                       onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('mfg.confirm_shortage')) }})">

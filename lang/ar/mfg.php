@@ -231,6 +231,7 @@ return [
     'output_positive' => 'كمية الإنتاج لازم تكون قطعة واحدة على الأقل',
     'cancel_has_issues' => 'لسه فيه خامات مصروفة على الأمر — رجّعها للمخزن قبل الإلغاء',
     'idem_other_order' => 'مفتاح الطلب ده اتستخدم لأمر تاني',
+    'shortage_already_requested' => 'طلب الشراء للعجز ده اتبعت قبل كده (:at)',
     'no_shortage' => 'مفيش عجز خامات على الأمر ده',
     'shortage_notice_title' => 'عجز خامات على أمر :number (:product)',
     'shortage_notice_line' => ':material: :qty :unit',

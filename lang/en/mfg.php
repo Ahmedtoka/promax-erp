@@ -231,6 +231,7 @@ return [
     'output_positive' => 'Output must be at least one piece',
     'cancel_has_issues' => 'Materials are still issued to this order — return them before cancelling',
     'idem_other_order' => 'This request key was already used for another order',
+    'shortage_already_requested' => 'A purchase request for this shortage was already sent (:at)',
     'no_shortage' => 'No material shortage on this order',
     'shortage_notice_title' => 'Material shortage on order :number (:product)',
     'shortage_notice_line' => ':material: :qty :unit',

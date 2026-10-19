@@ -189,15 +189,31 @@ class Orders
         }
 
         try {
-            DB::transaction(function () use ($o, $by, $action, $idemKey, $change) {
+            $prev = DB::transaction(function () use ($o, $by, $action, $idemKey, $change) {
                 $row = self::locked($o);
+
+                // ⚠️ طلبين بنفس المفتاح في نفس اللحظة: التاني عدّى الفحص اللي
+                // فوق قبل ما الأول يكوميت، واستنى على القفل — بعد القفل المفتاح
+                // بقى متسجّل والحالة اتغيّرت، فبنرجّع الأمر بدل «الحالة غلط».
+                if ($prev = self::already($by, $action, $idemKey, $row)) {
+                    return $prev;
+                }
+
                 $change($row);
                 Idempotency::remember($by, $action, $idemKey, $row);
+
+                return null;
             });
         } catch (QueryException $e) {
             if (! Idempotency::isDuplicate($e) || ! ($prev = self::already($by, $action, $idemKey, $o))) {
                 throw $e;
             }
+
+            return $prev;
+        }
+
+        if ($prev !== null) {
+            $o->setRawAttributes($prev->getAttributes(), true);
 
             return $prev;
         }

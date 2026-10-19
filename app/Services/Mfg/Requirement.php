@@ -4,10 +4,12 @@ namespace App\Services\Mfg;
 
 use App\Models\Batch;
 use App\Models\Product;
+use App\Models\ProductionIssue;
 use App\Models\ProductionOrder;
 use App\Models\Warehouse;
 use App\Support\DateRange;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * احتياج الخامات (التصنيع ١٩/١٠، spec §3.5) — المعياري قصاد المصروف قصاد الرصيد.
@@ -49,49 +51,81 @@ class Requirement
 
     /**
      * نفس الصفوف مجمّعة لكل خامة على الأوامر المخططة والجارية.
-     * المتاح بيتجمع **مرة واحدة لكل مخزن خامات** — أمرين على نفس المخزن
-     * بيتنافسوا على نفس الرصيد، مش كل واحد له رصيده.
+     *
+     * ⚠️ **العجز بيتحسب لكل مخزن خامات لوحده** ثم يتجمع:
+     * `shortage = Σ_w max(0, الباقي_w − المتاح_w)` — فايض في مخزن مابيغطّيش
+     * عجز في مخزن تاني (الصرف بيسحب من مخزن الأمر بس). أمرين على نفس المخزن
+     * بيتنافسوا على نفس الرصيد. `available` المعروض = مجموع المتاح في المخازن.
+     * ⚠️ كويري واحدة للصافي المصروف لكل الأوامر، والمتاح متخزّن لكل (مخزن، خامة).
      *
      * @return Collection<int, array{product:Product, orders:int, std_qty:float, issued_net:float, remaining:float, available:float, shortage:float}>
      */
     public static function forOpenOrders(?DateRange $range = null): Collection
     {
         $q = ProductionOrder::query()->whereIn('status', ['planned', 'in_progress'])
-            ->with(['lines.product', 'rawWarehouse']);
+            ->with(['lines.product']);
 
         $range?->apply($q, 'planned_on');
 
+        $orders = $q->get();
+
+        // order_id ⇒ product_id ⇒ صافي (صرف + زيادة − مرتجع)
+        $issued = [];
+        if ($orders->isNotEmpty()) {
+            ProductionIssue::query()->whereIn('production_order_id', $orders->modelKeys())
+                ->groupBy('production_order_id', 'product_id')
+                ->select('production_order_id', 'product_id',
+                    DB::raw("SUM(CASE WHEN kind = 'return' THEN -qty ELSE qty END) AS net"))
+                ->get()
+                ->each(function ($r) use (&$issued) {
+                    $issued[(int) $r->production_order_id][(int) $r->product_id] = round((float) $r->net, 3);
+                });
+        }
+
+        $avail = [];
         $agg = [];
 
-        foreach ($q->get() as $o) {
-            foreach (self::forOrder($o) as $r) {
-                $pid = $r['product']?->id;
-                if ($pid === null) {
+        foreach ($orders as $o) {
+            $wid = (int) $o->raw_warehouse_id;
+
+            foreach ($o->lines as $l) {
+                if ($l->product === null) {
                     continue;
                 }
 
-                $agg[$pid] ??= ['product' => $r['product'], 'orders' => 0, 'std_qty' => 0.0,
-                    'issued_net' => 0.0, 'remaining' => 0.0, 'warehouses' => []];
+                $pid = $l->product->id;
+                $std = round((float) $l->std_qty, 3);
+                $net = $issued[$o->id][$pid] ?? 0.0;
+
+                $agg[$pid] ??= ['product' => $l->product, 'orders' => 0, 'std_qty' => 0.0,
+                    'issued_net' => 0.0, 'remaining' => []];
                 $agg[$pid]['orders']++;
-                $agg[$pid]['std_qty'] += $r['std_qty'];
-                $agg[$pid]['issued_net'] += $r['issued_net'];
-                $agg[$pid]['remaining'] += $r['remaining'];
-                $agg[$pid]['warehouses'][$o->raw_warehouse_id] = $r['available'];
+                $agg[$pid]['std_qty'] += $std;
+                $agg[$pid]['issued_net'] += $net;
+                $agg[$pid]['remaining'][$wid] = ($agg[$pid]['remaining'][$wid] ?? 0.0) + max(0.0, round($std - $net, 3));
+
+                $avail[$wid][$pid] ??= $wid > 0 ? self::availableIn($wid, $pid) : 0.0;
             }
         }
 
-        return collect($agg)->map(function (array $a) {
-            $available = round(array_sum($a['warehouses']), 3);
-            $remaining = round($a['remaining'], 3);
+        return collect($agg)->map(function (array $a, int $pid) use ($avail) {
+            $available = 0.0;
+            $shortage = 0.0;
+
+            foreach ($a['remaining'] as $wid => $rem) {
+                $have = $avail[$wid][$pid] ?? 0.0;
+                $available += $have;
+                $shortage += max(0.0, round($rem - $have, 3));
+            }
 
             return [
                 'product' => $a['product'],
                 'orders' => $a['orders'],
                 'std_qty' => round($a['std_qty'], 3),
                 'issued_net' => round($a['issued_net'], 3),
-                'remaining' => $remaining,
-                'available' => $available,
-                'shortage' => max(0.0, round($remaining - $available, 3)),
+                'remaining' => round(array_sum($a['remaining']), 3),
+                'available' => round($available, 3),
+                'shortage' => round($shortage, 3),
             ];
         })->sortBy(fn (array $r) => [-$r['shortage'], $r['product']->name])->values();
     }
@@ -99,8 +133,13 @@ class Requirement
     /** رصيد الخامة الصالح للصرف في المخزن (مش موقوف، فيه باقي، مش منتهي) */
     public static function available(Warehouse $w, Product $p): float
     {
+        return self::availableIn($w->id, $p->id);
+    }
+
+    private static function availableIn(int $warehouseId, int $productId): float
+    {
         return round((float) Batch::query()
-            ->where('warehouse_id', $w->id)->where('product_id', $p->id)
+            ->where('warehouse_id', $warehouseId)->where('product_id', $productId)
             ->where('blocked', false)->where('qty_remaining', '>', 0)
             ->whereDate('expires_on', '>=', today()->toDateString())
             ->sum('qty_remaining'), 3);
