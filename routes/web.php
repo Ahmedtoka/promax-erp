@@ -1414,6 +1414,21 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,hr,manager,branch_manager,warehouse_keeper')->name('attendance.supervisor.punch');
         Route::get('/attendance/punches', [$att, 'punches'])
             ->middleware('role:admin,hr,manager,branch_manager,accountant')->name('attendance.punches');
+
+        // الإجازات (المهمة ٣): كل رولز الويب ما عدا مستلم النظام. الاعتماد
+        // `isManagedBy` في الكنترولر، والأرصدة `role:admin,hr` + `act.hr.leave_balances`.
+        $lv = \App\Http\Controllers\Hr\LeaveController::class;
+        $lvRoles = 'role:admin,manager,branch_manager,accountant,warehouse_keeper,hr';
+        Route::get('/leave', [$lv, 'index'])->middleware($lvRoles)->name('leave');
+        Route::post('/leave', [$lv, 'store'])->middleware($lvRoles)->name('leave.store');
+        Route::get('/leave/balances', [$lv, 'balances'])->middleware('role:admin,hr')->name('leave.balances');
+        Route::post('/leave/balances/seed', [$lv, 'seedBalances'])->middleware('role:admin,hr')->name('leave.balances.seed');
+        Route::post('/leave/balances/{leaveBalance}', [$lv, 'updateBalance'])->whereNumber('leaveBalance')
+            ->middleware('role:admin,hr')->name('leave.balances.update');
+        Route::post('/leave/{leaveRequest}/decide', [$lv, 'decide'])->whereNumber('leaveRequest')
+            ->middleware($lvRoles)->name('leave.decide');
+        Route::post('/leave/{leaveRequest}/cancel', [$lv, 'cancel'])->whereNumber('leaveRequest')
+            ->middleware($lvRoles)->name('leave.cancel');
     });
 
 });

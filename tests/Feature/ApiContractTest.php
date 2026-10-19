@@ -106,4 +106,98 @@ class ApiContractTest extends TestCase
 
         $this->assertSame('pending', $po->fresh()->status, 'الأمر مايتحرّكش على إحداثيات غلط');
     }
+
+    /**
+     * ⚠️ عقد الإجازات (Lane 8) — الأبلكيشن بيقرا المفاتيح دي بالاسم،
+     * والأرقام JSON numbers. من غير ملف موظف 403 والكارت بيستخبى.
+     *
+     * @return array{0: User, 1: User}
+     */
+    private function leaveTeam(): array
+    {
+        $boss = $this->user('manager');
+        $bossE = \App\Models\Employee::create(['code' => 'EMP-9001', 'name' => 'المدير', 'name_en' => 'Boss', 'user_id' => $boss->id]);
+        $rep = $this->makeRep();
+        \App\Models\Employee::create(['code' => 'EMP-9002', 'name' => 'مندوب', 'name_en' => 'Rep', 'user_id' => $rep->id, 'manager_id' => $bossE->id]);
+
+        return [$rep, $boss];
+    }
+
+    public function test_leave_endpoints_follow_the_app_contract(): void
+    {
+        [$rep, $boss] = $this->leaveTeam();
+        $h = $this->tokenFor($rep);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')
+            ->assertOk()
+            ->assertJsonStructure(['year', 'balances' => ['*' => ['type', 'label', 'entitled', 'used', 'remaining']]])
+            ->assertJsonPath('balances.0.type', 'annual')
+            ->assertJsonPath('balances.0.entitled', 21);
+
+        $res = $this->withHeaders($h)->postJson('/api/leave/requests', [
+            'type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27', 'note' => 'سفر',
+        ])->assertCreated();
+
+        $res->assertJsonStructure(['request' => [
+            'id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label',
+            'decision_note', 'employee_name', 'created_at',
+        ]])
+            ->assertJsonPath('request.from', '2026-10-25')
+            ->assertJsonPath('request.to', '2026-10-27')
+            ->assertJsonPath('request.status', 'pending')
+            ->assertJsonPath('request.employee_name', 'Rep');
+        $this->assertSame(
+            ['id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label', 'decision_note', 'employee_name', 'created_at'],
+            array_keys($res->json('request')));
+        $this->assertIsNumeric($res->json('request.days'));
+        $this->assertEquals(3, $res->json('request.days'));
+        $id = $res->json('request.id');
+
+        $this->withHeaders($h)->getJson('/api/leave/requests?mine=1')
+            ->assertOk()->assertJsonCount(1, 'requests')->assertJsonPath('requests.0.id', $id);
+
+        $hb = $this->tokenFor($boss);
+        $this->withHeaders($hb)->getJson('/api/leave/approvals')
+            ->assertOk()->assertJsonCount(1, 'requests')->assertJsonPath('requests.0.id', $id);
+
+        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved'])
+            ->assertOk()->assertJsonPath('request.status', 'approved');
+
+        // نفس القرار تاني = نفس الصف، وقرار مختلف = 422
+        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved'])
+            ->assertOk()->assertJsonPath('request.status', 'approved');
+        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'rejected'])
+            ->assertStatus(422)->assertJsonStructure(['message']);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')->assertJsonPath('balances.0.remaining', 18);
+
+        // الموظف نفسه مايقررش (مش مديره)
+        $this->withHeaders($h)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'rejected'])
+            ->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_same_idem_key_returns_the_same_request(): void
+    {
+        [$rep] = $this->leaveTeam();
+        $h = $this->tokenFor($rep);
+        $body = ['type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27', 'idem_key' => 'leave-abc-1'];
+
+        $a = $this->withHeaders($h)->postJson('/api/leave/requests', $body)->assertCreated()->json('request.id');
+        $b = $this->withHeaders($h)->postJson('/api/leave/requests', $body)->assertOk()->json('request.id');
+
+        $this->assertSame($a, $b);
+        $this->assertSame(1, \App\Models\LeaveRequest::query()->count());
+    }
+
+    public function test_leave_without_employee_record_is_403(): void
+    {
+        $rep = $this->makeRep();
+        $h = $this->tokenFor($rep);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->getJson('/api/leave/requests?mine=1')->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->postJson('/api/leave/requests', ['type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27'])
+            ->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->getJson('/api/leave/approvals')->assertOk()->assertExactJson(['requests' => []]);
+    }
 }

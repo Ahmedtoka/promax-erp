@@ -58,6 +58,8 @@ class Access
             'erp.attendance',
             // Lane 7: زرار البانش في الهيدر + بصمة المشرف لعماله + تقرير البانشات
             'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
             'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
@@ -104,6 +106,8 @@ class Access
             'erp.tasks',
             // Lane 7: زرار البانش + بصمة المشرف لعماله + تقرير البانشات (فرعه)
             'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
@@ -210,6 +214,8 @@ class Access
             'hr.employees', '!hr.employees.edit',
             // Lane 7: زرار البانش + تقرير البانشات (قراءة — الساعات بتروح المرتبات)
             'attendance.punch', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -253,6 +259,8 @@ class Access
             '!ops.replenishments.update',
             // Lane 7: زرار البانش + بصمة المشرف لعمال المخزن اللي مالهمش لوجين
             'attendance.punch', 'hr.attendance.supervisor',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -603,6 +611,7 @@ class Access
             ['hr.employees', '🪪', 'hrm.nav_employees', 'hr.employees*', null],
             ['hr.attendance.supervisor', '👷', 'hrm.nav_supervisor', 'hr.attendance.supervisor*', null],
             ['hr.attendance.punches', '📍', 'hrm.nav_punches', 'hr.attendance.punches*', null],
+            ['hr.leave', '🌴', 'hrm.nav_leave', 'hr.leave*', null],
         ],
 
         'nav.group_settings' => [
@@ -749,6 +758,7 @@ class Access
 
         // ═══ الموارد البشرية (Lane 7) ═══
         'act.hr.employees' => ['perm.act_hr_employees', 'hr.employees', ['hr'], ['hr.employees.store', 'hr.employees.update']],
+        'act.hr.leave_balances' => ['perm.act_hr_leave_balances', 'hr.leave.balances', ['hr'], ['hr.leave.balances.update', 'hr.leave.balances.seed']],
     ];
 
     /**

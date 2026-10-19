@@ -54,6 +54,16 @@ Route::middleware(['api.token', 'locale'])->group(function () {
     // الحضور بييجي جوه `/bootstrap` وبيتحدّث من رد `punch`.
     Route::post('/attendance/punch', [\App\Http\Controllers\Api\AttendanceApiController::class, 'punch']);
 
+    // ═══ الإجازات (Lane 7 — المهمة ٣، عقد Lane 8) ═══
+    // ⚠️ بره حارس `attendance` — طلب الإجازة مش محتاج بانش. لأي توكن عنده
+    // ملف موظف؛ من غير ملف 403 والأبلكيشن بيخبّي الكارت. الاعتماد: `isManagedBy`.
+    $leave = \App\Http\Controllers\Api\LeaveApiController::class;
+    Route::get('/leave/balances', [$leave, 'balances']);
+    Route::get('/leave/requests', [$leave, 'index']);
+    Route::post('/leave/requests', [$leave, 'store']);
+    Route::get('/leave/approvals', [$leave, 'approvals']);
+    Route::post('/leave/requests/{leaveRequest}/decide', [$leave, 'decide'])->whereNumber('leaveRequest');
+
     // ═════════ شغل الشارع — المناديب والسواقين بس ═════════
     // ⚠️ **الراوتس دي كانت مفتوحة لأي توكن.** مع دخول المحاسب وأمين
     // المخزن على الأبلكيشن، ده بقى ثغرة حقيقية: محاسب معاه توكن كان
