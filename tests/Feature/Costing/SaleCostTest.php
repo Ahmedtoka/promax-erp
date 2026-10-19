@@ -8,6 +8,8 @@ use App\Models\CostCenter;
 use App\Models\CostEntry;
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlEntry;
+use App\Models\Gl\GlPeriod;
+use App\Models\Gl\GlPostingRule;
 use App\Models\GoodsReceipt;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -21,6 +23,8 @@ use App\Models\Supplier;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Costing\CostingGlSeed;
+use App\Services\Costing\CostSync;
+use App\Services\Gl\RebuildFailed;
 use App\Services\Costing\Valuation;
 use App\Services\Gl\Ledger;
 use App\Services\Gl\RebuildDiff;
@@ -209,8 +213,13 @@ class SaleCostTest extends TestCase
         $e = $this->entryFor($tx, 'return');
         $this->assertNotNull($e);
         $this->assertSame(26.0, $e->amount('batch'));   // 2×10 (البند الأصلي) + 1×6 (تكلفة الصنف)
-        $this->assertSame(-60.0, (float) $e->revenue);
-        $this->assertCount(2, $e->lines, 'التالف مالوش سطر');
+        $this->assertSame(-120.0, (float) $e->revenue, 'إيراد المرتجع كامل (التالف كمان)');
+        $this->assertCount(3, $e->lines);
+        $damaged = $e->lines->firstWhere('revenue', '-60.00');
+        $this->assertSame(0.0, (float) $damaged->amount_batch, 'التالف مالوش عكس تكلفة');
+        $this->assertSame(0.0, (float) $damaged->amount_wavg);
+        $this->assertNull($damaged->amount_transfer);
+        $this->assertFalse($e->hasFlag('zero_cost'));
         $this->assertSame(74.0, $this->bal('cogs'));
         $this->assertSame(-74.0, $this->bal('inventory'));
 
@@ -221,8 +230,15 @@ class SaleCostTest extends TestCase
             'qty' => 1, 'condition' => 'damaged', 'list_price' => 20, 'price' => 20, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
         $tx2 = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-16', 'memo' => 'RET2', 'debit' => 0, 'credit' => 20,
             'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret2->id]);
-        $this->assertNull($this->entryFor($tx2, 'return'));
+        $e2 = $this->entryFor($tx2, 'return');
+        $this->assertNotNull($e2, 'مرتجع كله تالف = قيد بالإيراد ومبالغ صفر');
+        $this->assertSame(-20.0, (float) $e2->revenue);
+        $this->assertSame(0.0, $e2->amount('batch'));
+        $this->assertNull(app(Ledger::class)->autoEntryFor($e2), 'مفيش سطور دفتر');
         $this->assertSame(74.0, $this->bal('cogs'));
+
+        // وإعادة البناء بتقبل غيابه (مالوش قيمة)
+        $this->assertTrue(app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'))->ok);
     }
 
     public function test_sale_with_transfer_price_posts_markup_pair(): void
@@ -309,6 +325,162 @@ class SaleCostTest extends TestCase
         $this->assertTrue($report->ok);
         $this->assertNull($this->entryFor($tx));
         $this->assertSame(0.0, $this->bal('cogs'));
+    }
+
+    public function test_inactive_cost_rules_make_the_rebuild_report_missing_entries(): void
+    {
+        $this->world();
+        $this->sale([[$this->makeProduct(), 3, 10]]);
+        GlPostingRule::whereIn('key', ['cost.sale', 'cost.markup'])->update(['active' => false]);
+        GlPostingRule::flush();
+
+        $dry = app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'), dryRun: true);
+        $this->assertFalse($dry->invariants['entries']['ok'], 'قاعدة موقوفة = قيد ضايع مش غياب مقصود');
+        $this->assertSame(1, $dry->invariants['entries']['missing']);
+
+        $this->expectException(RebuildFailed::class);
+        app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'));
+    }
+
+    public function test_return_is_valued_at_the_original_sale_and_nets_to_zero(): void
+    {
+        $this->world();
+        Setting::write('cost_method', 'wavg');
+        Setting::flushCache();
+        $admin = $this->makeAdmin();
+        $p = $this->makeProduct(['kind' => 'finished', 'cost' => 5]);
+        $this->batch($p, 10, 8, $this->receipt('2026-08-02'));
+        ProductTransferPrice::create(['product_id' => $p->id, 'price' => 15, 'unit_cost' => 8, 'effective_from' => '2026-08-01',
+            'approved_by' => $admin->id, 'approved_at' => now()]);
+        [$inv, , $items, $client] = $this->sale([[$p, 2, 8]]);
+
+        // بعد البيعة: متوسط جديد وسعر تحويل جديد
+        $this->batch($p, 10, 20, $this->receipt('2026-08-12'));
+        ProductTransferPrice::create(['product_id' => $p->id, 'price' => 18, 'unit_cost' => 14, 'effective_from' => '2026-08-12',
+            'approved_by' => $admin->id, 'approved_at' => now()]);
+
+        $ret = ClientReturn::create(['number' => 'RET-90010', 'client_id' => $client->id, 'source' => 'erp', 'policy' => 'account',
+            'subtotal' => 40, 'discount' => 0, 'total' => 40, 'tax_total' => 0, 'grand_total' => 40]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 2, 'condition' => 'good', 'list_price' => 20, 'price' => 20, 'total' => 40, 'tax_rate' => 0, 'tax' => 0]);
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-15', 'memo' => 'RET', 'debit' => 0, 'credit' => 40,
+            'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret->id]);
+
+        $line = $this->entryFor($tx, 'return')->lines->first();
+        $this->assertSame(8.0, (float) $line->unit_wavg);
+        $this->assertSame(15.0, (float) $line->unit_transfer);
+        $this->assertSame(0.0, $this->bal('cogs'));
+        $this->assertSame(0.0, $this->bal('internal_elim'));
+        $this->assertSame(0.0, $this->bal('inventory'));
+    }
+
+    public function test_supplier_return_credits_inventory_with_the_stock_rule(): void
+    {
+        $this->world();
+        $sup = Supplier::create(['code' => 'SUP-L9R', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        $sup->post('invoice', '2026-08-10', 0, 500, 'فاتورة مورد');
+        $st = $sup->post('return', '2026-08-11', 300, 0, 'مرتجع لمورد');
+
+        $this->assertSame('sup.return.stock', app(Ledger::class)->autoEntryFor($st)->rule_key);
+        $this->assertSame(200.0, $this->bal('inventory'));
+        $this->assertSame(200.0, $this->bal('payables'));
+    }
+
+    public function test_cost_entry_in_a_closed_period_is_frozen(): void
+    {
+        $this->world();
+        [$inv, $tx] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        $e = $this->entryFor($tx);
+        GlPeriod::close('2026-08', $this->makeAdmin());
+
+        InvoiceItem::where('invoice_id', $inv->id)->delete();
+        CostSync::run(Carbon::parse('2026-08-01'), true);
+        $this->assertNotNull(CostEntry::find($e->id), 'شهر مقفول = مابيتمسحش');
+        $this->assertSame(30.0, CostEntry::find($e->id)->amount('batch'), 'ولا بيتعدّل');
+
+        $tx->delete();
+        $this->assertNotNull(CostEntry::find($e->id));
+        $this->assertNotNull(app(Ledger::class)->autoEntryFor($e));
+    }
+
+    public function test_deleting_a_sale_removes_its_cost_entry_and_gl_entry(): void
+    {
+        $this->world();
+        [, $tx] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        $this->assertSame(1, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
+
+        $tx->delete();
+
+        $this->assertSame(0, CostEntry::count());
+        $this->assertSame(0, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
+        $this->assertSame(0.0, $this->bal('cogs'));
+    }
+
+    public function test_deleting_a_sale_while_the_gl_is_off_keeps_the_gl_entry(): void
+    {
+        $this->world();
+        [, $tx] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        Setting::write('gl_enabled', '0');
+        Setting::flushCache();
+
+        $tx->delete();
+
+        $this->assertSame(0, CostEntry::count());
+        $this->assertSame(1, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count(), 'السويتش مقفول = الدفتر مايتلمسش');
+    }
+
+    public function test_return_of_a_transfer_priced_product_flips_the_markup_pair(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['kind' => 'finished']);
+        ProductTransferPrice::create(['product_id' => $p->id, 'price' => 15, 'unit_cost' => 10, 'effective_from' => '2026-08-01',
+            'approved_by' => $this->makeAdmin()->id, 'approved_at' => now()]);
+        [$inv, , $items, $client] = $this->sale([[$p, 2, 10]]);
+        $ret = ClientReturn::create(['number' => 'RET-90011', 'client_id' => $client->id, 'source' => 'erp', 'policy' => 'account',
+            'subtotal' => 20, 'discount' => 0, 'total' => 20, 'tax_total' => 0, 'grand_total' => 20]);
+        ReturnItem::create(['return_id' => $ret->id, 'product_id' => $p->id, 'invoice_id' => $inv->id, 'invoice_item_id' => $items[0]->id,
+            'qty' => 1, 'condition' => 'good', 'list_price' => 20, 'price' => 20, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
+        $tx = Transaction::create(['client_id' => $client->id, 'date' => '2026-08-15', 'memo' => 'RET', 'debit' => 0, 'credit' => 20,
+            'tax' => 0, 'kind' => 'return', 'source_type' => ClientReturn::class, 'source_id' => $ret->id]);
+
+        $gl = app(Ledger::class)->autoEntryFor($this->entryFor($tx, 'return'));
+        $elim = $gl->lines->firstWhere('slot', 'mk_cr');
+        $this->assertSame(5.0, (float) $elim->debit);
+        $this->assertSame(5.0, (float) $gl->lines->firstWhere('slot', 'mk_dr')->credit);
+        $this->assertSame(10.0, (float) $gl->lines->firstWhere('slot', 'dr')->credit);
+        $this->assertSame(15.0, $this->bal('cogs'));          // 30 − 15
+        $this->assertSame(-5.0, $this->bal('internal_elim')); // دائن 10 − مدين 5
+    }
+
+    public function test_transfer_price_below_cost_flips_the_markup_pair(): void
+    {
+        $this->world();
+        $p = $this->makeProduct(['kind' => 'finished']);
+        ProductTransferPrice::create(['product_id' => $p->id, 'price' => 8, 'unit_cost' => 10, 'effective_from' => '2026-08-01',
+            'approved_by' => $this->makeAdmin()->id, 'approved_at' => now()]);
+        [, $tx] = $this->sale([[$p, 2, 10]]);
+
+        $gl = app(Ledger::class)->autoEntryFor($this->entryFor($tx));
+        $this->assertSame(4.0, (float) $gl->lines->firstWhere('slot', 'mk_dr')->credit);
+        $this->assertSame(4.0, (float) $gl->lines->firstWhere('slot', 'mk_cr')->debit);
+        $this->assertSame(16.0, $this->bal('cogs'));
+        $this->assertSame(4.0, $this->bal('internal_elim'));
+    }
+
+    public function test_model_update_of_the_sale_resyncs_through_the_observer(): void
+    {
+        $this->world();
+        [, $tx, $items] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        $id = $this->entryFor($tx)->id;
+
+        InvoiceItem::whereKey($items[0]->id)->update(['qty' => 5, 'total' => 100]);
+        $tx->update(['debit' => 100]);
+
+        $e = $this->entryFor($tx);
+        $this->assertSame($id, $e->id);
+        $this->assertSame(50.0, $e->amount('batch'));
+        $this->assertSame(50.0, $this->bal('cogs'));
+        $this->assertSame(1, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
     }
 
     public function test_admin_invoice_repost_resyncs_the_cost_entry(): void

@@ -271,6 +271,12 @@ class Rules
         if ($st->kind === 'invoice' && ($stock = GlPostingRule::forKey('sup.invoice.stock')) !== null && $stock->active) {
             $key = 'sup.invoice.stock';
         }
+        // مرتجع لمورد بصف في دفتره (`kind = return`): مدين الموردين / دائن
+        // المخزون. ⚠️ النهارده مفيش كود بيكتب النوع ده — مرتجع فحص الجودة
+        // (Lane 5 D6) مالوش قيد مورد أصلاً — القاعدة جاهزة للي جاي.
+        if ($st->kind === 'return' && ($stock = GlPostingRule::forKey('sup.return.stock')) !== null && $stock->active) {
+            $key = 'sup.return.stock';
+        }
         if ($st->kind === 'payment') {
             $method = $st->source_type === \App\Models\SupplierPayment::class
                 ? (\App\Models\SupplierPayment::find($st->source_id)?->method ?? 'cash') : 'cash';

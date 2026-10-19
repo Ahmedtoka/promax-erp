@@ -39,6 +39,8 @@ class CostingGlSeed
         ['cost.overhead', 'تحميل تكاليف تشغيل على الإنتاج', 'inventory', 'overhead_applied'],
         ['cost.variance', 'انحراف تكاليف تشغيل الشهر', 'production_variance', 'overhead_applied'],
         ['sup.invoice.stock', 'فاتورة مورد (مخزون دائم)', 'inventory', 'payables'],
+        // مرتجع لمورد بقيد في دفتره (مخزون دائم) — مراجعة المهمة ٣
+        ['sup.return.stock', 'مرتجع لمورد (مخزون دائم)', 'payables', 'inventory'],
     ];
 
     /** @return list<string> مفاتيح الحسابات الستة */
@@ -47,7 +49,7 @@ class CostingGlSeed
         return array_column(self::ACCOUNTS, 0);
     }
 
-    /** @return list<string> مفاتيح القواعد الثمانية */
+    /** @return list<string> مفاتيح القواعد التسعة */
     public static function ruleKeys(): array
     {
         return array_column(self::RULES, 0);

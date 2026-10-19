@@ -121,10 +121,10 @@ class Ledger
         // Lane 9 (D12): أدوات الفاتورة الإدارية بتعدّل البنود من ورا
         // الموديل وبتنادي repost — طبقة التكلفة لازم تتزامن **قبل** حارس
         // السويتش (التكلفة شغالة حتى من غير دفتر). فشلها مايوقفش الـrepost.
-        $costEntry = null;
+        $cost = ['entry' => null, 'changed' => false];
         if ($source instanceof \App\Models\Transaction) {
             try {
-                $costEntry = \App\Services\Costing\CostSync::forTransaction($source);
+                $cost = \App\Services\Costing\CostSync::syncTransaction($source);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('costing.sync failed in repost', ['tx' => $source->getKey(), 'error' => $e->getMessage()]);
             }
@@ -132,9 +132,11 @@ class Ledger
 
         $entry = $this->repostOwn($source, $by);
 
-        if ($costEntry !== null) {
+        // قيد التكلفة بيتعاد ترحيله لو اتغير بس؛ غير كده post (مابيعملش
+        // حاجة لو القيد موجود) — من غير ترحيل مزدوج مع الأوبزرفر
+        if (($costEntry = $cost['entry']) !== null) {
             try {
-                $this->repost($costEntry, $by);
+                $cost['changed'] ? $this->repost($costEntry, $by) : $this->post($costEntry, $by);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('costing.repost failed', ['tx' => $source->getKey(), 'entry' => $costEntry->id, 'error' => $e->getMessage()]);
             }

@@ -29,8 +29,9 @@ class CostTransactionObserver
 
     public function updated(Transaction $tx): void
     {
-        if ($tx->wasChanged(['debit', 'credit', 'tax', 'kind', 'date', 'source_type', 'source_id', 'client_id'])) {
-            $this->sync($tx, 'updated');
+        if ($tx->wasChanged(['debit', 'credit', 'tax', 'kind', 'date', 'source_type', 'source_id', 'client_id', 'memo'])) {
+            // الوصف بيروح على بيان قيد التكلفة — تغييره لوحده بيعيد الترحيل
+            $this->sync($tx, 'updated', $tx->wasChanged('memo'));
         }
     }
 
@@ -43,12 +44,13 @@ class CostTransactionObserver
         }
     }
 
-    private function sync(Transaction $tx, string $event): void
+    private function sync(Transaction $tx, string $event, bool $force = false): void
     {
         try {
-            $entry = CostSync::forTransaction($tx);
+            ['entry' => $entry, 'changed' => $changed] = CostSync::syncTransaction($tx);
             if ($entry !== null) {
-                $this->ledger->repost($entry);
+                // اتغير = repost، ماتغيرش = post (مابيعملش حاجة لو القيد موجود)
+                $changed || $force ? $this->ledger->repost($entry) : $this->ledger->post($entry);
             }
         } catch (\Throwable $e) {
             Log::error('costing.observer failed', ['tx' => $tx->id, 'event' => $event, 'error' => $e->getMessage()]);

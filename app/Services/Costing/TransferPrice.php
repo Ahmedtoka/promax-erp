@@ -17,12 +17,25 @@ use Illuminate\Support\Facades\DB;
  */
 final class TransferPrice
 {
+    /** @var array<string, ?ProductTransferPrice> لكل (صنف، يوم) — `flush()` قبل أي مزامنة */
+    private static array $memo = [];
+
     public static function effective(int $productId, CarbonInterface $date): ?ProductTransferPrice
     {
-        return ProductTransferPrice::where('product_id', $productId)
+        $key = $productId.'|'.$date->toDateString();
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
+        return self::$memo[$key] = ProductTransferPrice::where('product_id', $productId)
             ->whereDate('effective_from', '<=', $date->toDateString())
             ->orderByDesc('effective_from')->orderByDesc('id')
             ->first();
+    }
+
+    public static function flush(): void
+    {
+        self::$memo = [];
     }
 
     public static function approve(Product $p, float $price, User $by, ?float $unitCost, ?float $markupPct, ?string $note): ProductTransferPrice
@@ -30,6 +43,8 @@ final class TransferPrice
         if ($price <= 0) {
             throw new Rejected(__('costing.tp_price_required'));
         }
+
+        self::flush();
 
         return DB::transaction(fn () => ProductTransferPrice::create([
             'product_id' => $p->id,

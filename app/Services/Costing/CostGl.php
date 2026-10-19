@@ -42,15 +42,7 @@ final class CostGl
             return $none;
         }
 
-        $method = CostingSettings::method();
-        $official = $e->amount($method);
-        $markup = 0.0;
-        foreach ($e->lines()->get() as $l) {
-            if ($l->unit_transfer !== null) {
-                $markup += (float) $l->amount_transfer - (float) ($method === 'wavg' ? $l->amount_wavg : $l->amount_batch);
-            }
-        }
-        $markup = round($markup, 2);
+        [$official, $markup] = self::amounts($e);
 
         $center = $e->cost_center_id ?? CostCenter::maadi()->id;
         $company = CostCenter::company()->id;
@@ -88,8 +80,8 @@ final class CostGl
             return $none;
         }
 
-        $ref = $e->origin_type === (new Transaction)->getMorphClass()
-            ? Transaction::whereKey($e->origin_id)->value('memo') : null;
+        $isTx = $e->origin_type === (new Transaction)->getMorphClass();
+        $ref = ! $isTx ? null : ($e->relationLoaded('origin') ? $e->origin?->memo : Transaction::whereKey($e->origin_id)->value('memo'));
 
         return [
             'rule' => $ruleKey,
@@ -100,9 +92,30 @@ final class CostGl
     }
 
     /**
-     * فحص «كل مصدر اتمسح قيده رجع» في إعادة البناء (`Ledger::rebuild`):
-     * قيد تكلفة اتشال من الطبقة (أصله اختفى) أو بقى من غير سطور (مبلغه صفر
-     * أو القواعد اتقفلت) غيابه مقصود — مش مصدر ضاع.
+     * المبلغ الرسمي وهامش التحويل (Σ على سطور سعر التحويل: مبلغ التحويل −
+     * الرسمي للسطر) بطريقة الإعدادات.
+     *
+     * @return array{0:float, 1:float}
+     */
+    public static function amounts(CostEntry $e): array
+    {
+        $method = CostingSettings::method();
+        $markup = 0.0;
+        foreach ($e->relationLoaded('lines') ? $e->lines : $e->lines()->get() as $l) {
+            if ($l->unit_transfer !== null) {
+                $markup += (float) $l->amount_transfer - (float) ($method === 'wavg' ? $l->amount_wavg : $l->amount_batch);
+            }
+        }
+
+        return [$e->amount($method), round($markup, 2)];
+    }
+
+    /**
+     * فحص «كل مصدر اتمسح قيده رجع» في إعادة البناء (`Ledger::rebuild`).
+     * غياب قيد تكلفة **مقصود** بس لو: القيد اتشال في التشغيلة دي لأن أصله
+     * اختفى أو بقى مش قابل للتكلفة، أو أصله (لسه موجود) مش قابل للتكلفة،
+     * أو مالوش قيمة (المبلغ الرسمي والهامش الاتنين صفر — مرتجع كله تالف مثلاً).
+     * قاعدة `cost.*` موقوفة/ناقصة أو قيد مختفي وأصله قابل للتكلفة = ضياع حقيقي.
      *
      * @param  string  $key  `source_type|source_id`
      */
@@ -112,9 +125,20 @@ final class CostGl
         if (! str_starts_with($key, $prefix)) {
             return false;
         }
-        $entry = CostEntry::find((int) substr($key, strlen($prefix)));
+        $id = (int) substr($key, strlen($prefix));
+        $entry = CostEntry::find($id);
+        if ($entry === null) {
+            return CostSync::droppedLegitimately($id);
+        }
+        if ($entry->origin_type === (new Transaction)->getMorphClass()) {
+            $tx = Transaction::find($entry->origin_id);
+            if ($tx === null || ! CostSync::costable($tx)) {
+                return true;
+            }
+        }
+        [$official, $markup] = self::amounts($entry);
 
-        return $entry === null || self::lines($entry)['lines'] === [];
+        return $official == 0.0 && $markup == 0.0;
     }
 
     /**
@@ -134,7 +158,7 @@ final class CostGl
             throw $e;
         }
 
-        foreach (CostEntry::whereDate('date', '>=', $date)->orderBy('date')->orderBy('id')->cursor() as $entry) {
+        foreach (CostEntry::with(['lines', 'origin'])->whereDate('date', '>=', $date)->orderBy('date')->orderBy('id')->lazy(500) as $entry) {
             yield $entry;
         }
     }

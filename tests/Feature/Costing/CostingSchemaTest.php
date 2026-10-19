@@ -76,7 +76,7 @@ class CostingSchemaTest extends TestCase
 
         $first = CostingGlSeed::run();
         $this->assertSame(6, $first['accounts_created']);
-        $this->assertSame(8, $first['rules_created']);
+        $this->assertSame(9, $first['rules_created']);
 
         $types = ['internal_sales' => 'revenue', 'cogs' => 'expense', 'internal_cogs' => 'expense', 'internal_elim' => 'expense', 'overhead_applied' => 'expense', 'production_variance' => 'expense'];
         foreach ($types as $key => $type) {
@@ -124,7 +124,7 @@ class CostingSchemaTest extends TestCase
 
         $r = CostingGlSeed::run(true);
         $this->assertSame(6, $r['accounts_created']);
-        $this->assertSame(8, $r['rules_created']);
+        $this->assertSame(9, $r['rules_created']);
         $this->assertSame($accounts, GlAccount::count());
         $this->assertSame($rules, GlPostingRule::count());
         $this->assertNull(GlPostingRule::forKey('cost.sale'));
