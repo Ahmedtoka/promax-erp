@@ -390,6 +390,8 @@ final class Payroll
             return $run;
         });
 
+        PayrollGl::post($run);
+
         return $run->fresh();
     }
 
@@ -451,7 +453,9 @@ final class Payroll
             return $made;
         });
 
-        unset($payments);   // المهمة ٧: قيود الصرف
+        foreach ($payments as $p) {
+            PayrollGl::post($p);
+        }
 
         return $r->fresh();
     }

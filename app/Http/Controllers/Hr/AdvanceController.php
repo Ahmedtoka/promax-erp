@@ -126,7 +126,8 @@ class AdvanceController extends Controller
             return back()->withErrors(['advance' => $e->getMessage()])->withInput();
         }
 
-        // المهمة ٧: قيد السلفة (مدين سلف موظفين / دائن الخزنة) بيتزوّد هنا بعد الـ commit.
+        // قيد السلفة (مدين سلف العاملين / دائن الخزنة) بعد الـ commit
+        \App\Services\Hr\PayrollGl::post($adv);
 
         return back()->with('ok', __('hrm.adv_saved', ['number' => $adv->number]));
     }
@@ -140,13 +141,18 @@ class AdvanceController extends Controller
                 if ($a->status !== 'open' || (float) $a->recovered > 0) {
                     throw new Rejected(__('hrm.adv_void_blocked'));
                 }
+                // ⚠️ الإلغاء بيشيل قيد السلفة — ممنوع في شهر مقفول
+                app(Ledger::class)->assertOpen($a->date->copy());
 
                 $a->status = 'void';
                 $a->save();
             });
-        } catch (Rejected $e) {
+        } catch (ClosedPeriod|Rejected $e) {
             return back()->withErrors(['advance' => $e->getMessage()]);
         }
+
+        // السلفة اتلغت قبل أي استرداد — قيدها بيتشال
+        \App\Services\Hr\PayrollGl::unpost($advance);
 
         return back()->with('ok', __('hrm.adv_voided'));
     }

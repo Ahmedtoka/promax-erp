@@ -304,5 +304,8 @@ return [
     'line_tax' => 'Payroll income tax',
     'line_insurance_employer' => 'Social insurance (employer share)',
 
+    'gl_payroll_memo' => 'Payroll :period',
+    'gl_payroll_pay_memo' => 'Payroll payment :period',
+    'gl_advance_memo' => 'Advance :number - :name',
 
 ];

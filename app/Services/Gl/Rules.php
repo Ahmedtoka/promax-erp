@@ -43,6 +43,8 @@ class Rules
             $source instanceof SupplierTransaction => $this->supplier($source),
             $source instanceof Expense => $this->expense($source),
             $source instanceof CashMovement => $this->cash($source),
+            // Lane 7: المرتبات والسلف (مسير معتمد/مصروف، دفعة صرف، سلفة مش ملغية)
+            \App\Services\Hr\PayrollGl::handles($source) => \App\Services\Hr\PayrollGl::lines($source),
             default => $this->none(),
         };
     }

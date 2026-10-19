@@ -304,5 +304,8 @@ return [
     'line_tax' => 'ضريبة كسب العمل',
     'line_insurance_employer' => 'تأمينات (حصة الشركة)',
 
+    'gl_payroll_memo' => 'مسير مرتبات :period',
+    'gl_payroll_pay_memo' => 'صرف مرتبات :period',
+    'gl_advance_memo' => 'سلفة :number — :name',
 
 ];
