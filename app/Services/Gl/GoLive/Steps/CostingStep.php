@@ -110,7 +110,7 @@ class CostingStep implements Step
     /**
      * فحص `cost_cogs` (بيتسجّل في `RebuildDiff` من `CostingServiceProvider`):
      * المتوقع = Σ الرسمي (بيع − مرتجع) لقيود التكلفة من تاريخ البداية لو
-     * قاعدة `cost.sale` نشطة · الفعلي = رصيد حساب `cogs` من البداية من غير
+     * قاعدة `cost.sale` نشطة · الفعلي = رصيد حساب `cogs` من البداية (القيود **الآلية** بس — تسوية يدوية من المحاسب ماتوقفش المعاينات) من غير
      * سطور هامش التحويل (خانات `mk_dr`/`mk_cr`). من غير seed الاتنين صفر.
      *
      * @return array{label_key:string, expected:float, actual:float, ok:bool}
@@ -133,6 +133,7 @@ class CostingStep implements Step
         $actual = round((float) DB::table('gl_lines')->join('gl_entries', 'gl_entries.id', '=', 'gl_lines.entry_id')
             ->whereIn('gl_lines.account_id', $cogs->subtreeIds())
             ->whereDate('gl_entries.date', '>=', $from)
+            ->where('gl_entries.origin', 'auto')
             ->where(fn ($q) => $q->whereNull('gl_lines.slot')->orWhereNotIn('gl_lines.slot', ['mk_dr', 'mk_cr']))
             ->selectRaw('COALESCE(SUM(gl_lines.debit - gl_lines.credit), 0) v')->value('v'), 2);
 

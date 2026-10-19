@@ -20,13 +20,36 @@ use Illuminate\Support\Facades\DB;
  */
 class Ledger
 {
+    /**
+     * تشغيل المعالج (خطوة ٩ — مراجعة الجولة ١): الدفتر شغّال **وقت التشغيل بس**
+     * من غير ما `gl_enabled` يتكتب جوه الترانزاكشن (كاش الإعدادات كان هيسرّب
+     * قيمة لسه ماتعملهاش commit). بيترجع false دايماً في `finally`.
+     */
+    private static bool $forced = false;
+
+    public static function forceEnabled(bool $on): void
+    {
+        self::$forced = $on;
+    }
+
+    public static function forced(): bool
+    {
+        return self::$forced;
+    }
+
+    /** السويتش: الإعداد، أو تشغيل المعالج الجاري */
+    public static function isOn(): bool
+    {
+        return self::$forced || Setting::read('gl_enabled') === '1';
+    }
+
     public function __construct(private Rules $rules)
     {
     }
 
     public function enabledFor(Carbon $date): bool
     {
-        if (Setting::read('gl_enabled') !== '1') {
+        if (! self::isOn()) {
             return false;
         }
         $start = Setting::read('gl_start_date');
@@ -152,7 +175,7 @@ class Ledger
         // لو الشجرة أصلاً مقفولة، ولو سبنا unpost() يشتغل هنا كانت
         // هتمسح قيد قديم (لو موجود من قبل ما السويتش يتقفل) من غير
         // بديل — القيد القديم أولى بالبقاء من غير شجرة (مراجعة الجولة ١)
-        if (Setting::read('gl_enabled') !== '1') {
+        if (! self::isOn()) {
             return $this->autoEntryFor($source);
         }
 

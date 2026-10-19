@@ -23,6 +23,8 @@ use App\Services\Costing\CostingGlSeed;
 use App\Services\Costing\TransferPrice;
 use App\Services\Costing\Valuation;
 use App\Services\Gl\GoLive\GoLiveWizard;
+use App\Services\Gl\GoLive\Steps\RunStep;
+use App\Services\Gl\Ledger;
 use App\Services\Gl\RebuildDiff;
 use App\Services\Mfg\Closing;
 use App\Services\Mfg\Issues;
@@ -47,6 +49,8 @@ class GoLiveCostingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // التقدّم والقفل في ستور معزول — مايلمسش كاش الديف المشترك
+        config(['cache.golive_store' => 'array']);
         $this->seed(GlSeeder::class);
         Setting::write('gl_enabled', '1');
         Setting::write('gl_start_date', '2026-08-01');
@@ -193,6 +197,7 @@ class GoLiveCostingTest extends TestCase
         $this->actingAs($admin)->post(route('gl.golive.run'))->assertRedirect(route('gl.golive.show', 9))->assertSessionHas('ok');
 
         Setting::flushCache();
+        $this->assertFalse(Ledger::forced(), 'override reset after success');
         $this->assertSame('1', Setting::read('gl_enabled'));
         $this->assertNotNull(Setting::read('gl_golive_run_at'));
         $run = GlRebuildRun::where('mode', 'execute')->sole();
@@ -226,18 +231,25 @@ class GoLiveCostingTest extends TestCase
         $this->approvedPreview($admin);
         $entries = GlEntry::count();
         $lines = DB::table('gl_lines')->count();
+        $costRows = DB::table('cost_entries')->count();
+        $costSum = (float) DB::table('cost_entries')->sum('amount_batch');
         RebuildDiff::addCheck('t9_fail', fn () => ['label_key' => 'golive.check_cost_cogs', 'expected' => 1, 'actual' => 2, 'ok' => false]);
 
         $this->actingAs($admin)->post(route('gl.golive.run'))->assertRedirect(route('gl.golive.show', 9))->assertSessionHas('err');
 
         Setting::flushCache();
+        $this->assertFalse(Ledger::forced(), 'override reset after failure');
         $this->assertSame('0', Setting::read('gl_enabled'));
+        $this->assertSame($costRows, DB::table('cost_entries')->count());
+        $this->assertEqualsWithDelta($costSum, (float) DB::table('cost_entries')->sum('amount_batch'), 0.001);
         $this->assertNull(Setting::read('gl_golive_run_at'));
         $this->assertSame($entries, GlEntry::count());
         $this->assertSame($lines, DB::table('gl_lines')->count());
         $run = GlRebuildRun::where('mode', 'execute')->sole();
         $this->assertSame('failed', $run->status);
-        $msg = __('golive.s9_phase_checks').': '.__('golive.rebuild_checks_failed');
+        // الرسالة بتسمّي الفحص الفاشل بالمتوقع والفعلي
+        $msg = __('golive.s9_phase_checks').': '.__('golive.rebuild_checks_failed').' — '
+            .__('golive.s9_check_line', ['check' => __('golive.check_cost_cogs'), 'expected' => '1.00', 'actual' => '2.00']);
         $this->assertSame($msg, $run->error);
 
         $st = GoLiveWizard::step(9)->state();
@@ -252,7 +264,7 @@ class GoLiveCostingTest extends TestCase
 
     public function test_progress_endpoint_returns_json(): void
     {
-        \Illuminate\Support\Facades\Cache::store('file')->forget('golive_run_progress');
+        RunStep::cache()->forget(RunStep::PROGRESS_KEY);
         $acc = $this->makeAdmin(['role' => 'accountant', 'code' => 'ACC-'.uniqid()]);
         $this->actingAs($acc)->getJson(route('gl.golive.run.progress'))->assertOk()
             ->assertJsonStructure(['phase', 'done', 'total', 'status', 'message'])
@@ -289,6 +301,67 @@ class GoLiveCostingTest extends TestCase
         $this->assertEquals(20.0, $c['expected']);
         $this->assertEquals(20.0, $c['actual']);
         $this->assertTrue($c['ok']);
+
+        // تسوية يدوية من المحاسب على التكلفة مابتوقفش الفحص (الآلي بس)
+        app(Ledger::class)->manual(\Illuminate\Support\Carbon::parse('2026-08-15'), 'adj', [
+            ['account_id' => GlAccount::findKey('cogs')->id, 'debit' => 5, 'credit' => 0],
+            ['account_id' => GlAccount::findKey('cash_main')->id, 'debit' => 0, 'credit' => 5],
+        ], $this->makeAdmin());
+        $this->assertEquals(35.0, GlAccount::findKey('cogs')->balanceBetween(null, null));
+        $c = $check();
+        $this->assertEquals(20.0, $c['actual']);
+        $this->assertTrue($c['ok']);
+    }
+
+    public function test_run_refused_while_another_run_holds_the_lock(): void
+    {
+        [$admin] = $this->costingWorld();
+        $this->approvedPreview($admin);
+        $lock = RunStep::cache()->lock(RunStep::LOCK_KEY, 60);
+        $this->assertTrue($lock->get());
+
+        $this->actingAs($admin)->post(route('gl.golive.run'))->assertSessionHasErrors(['golive' => __('golive.s9_busy')]);
+        $this->assertSame(0, GlRebuildRun::where('mode', 'execute')->count());
+        Setting::flushCache();
+        $this->assertSame('0', Setting::read('gl_enabled'));
+        $lock->release();
+
+        $this->actingAs($admin)->post(route('gl.golive.run'))->assertSessionHas('ok');
+        $this->assertSame('ok', GlRebuildRun::where('mode', 'execute')->sole()->status);
+    }
+
+    public function test_later_failed_attempt_keeps_step9_green(): void
+    {
+        $admin = $this->makeAdmin();
+        $p = $this->approvedPreview($admin);
+        GlRebuildRun::create(['mode' => 'execute', 'from_date' => '2026-08-01', 'status' => 'ok', 'preview_id' => $p->id, 'summary' => [], 'created_by' => $admin->id]);
+        GlRebuildRun::create(['mode' => 'execute', 'from_date' => '2026-08-01', 'status' => 'failed', 'preview_id' => $p->id, 'error' => 'boom', 'created_by' => $admin->id]);
+
+        $st = GoLiveWizard::step(9)->state();
+        $this->assertSame('green', $st->level);
+        $this->assertContains(__('golive.s9_failed_after', ['msg' => 'boom']), $st->messages);
+        $this->actingAs($admin)->get(route('gl.golive.show', 9))->assertOk()->assertSee(route('gl.trial_balance'), false)
+            ->assertDontSee('id="golive-run-btn"', false);
+    }
+
+    public function test_stale_running_progress_is_reported_as_interrupted(): void
+    {
+        $admin = $this->makeAdmin();
+        RunStep::cache()->put(RunStep::PROGRESS_KEY, ['phase' => 'rebuild', 'done' => 1, 'total' => 4, 'status' => 'running',
+            'message' => '', 'started_at' => now()->subMinutes(20)->getTimestamp()], 3600);
+        $this->actingAs($admin)->getJson(route('gl.golive.run.progress'))->assertOk()->assertJson(['status' => 'running', 'stale' => true]);
+        $this->actingAs($admin)->get(route('gl.golive.show', 9))->assertOk()->assertSee(__('golive.s9_stale'));
+
+        // قفل ماسكه تشغيل حقيقي = مش قديم
+        $lock = RunStep::cache()->lock(RunStep::LOCK_KEY, 60);
+        $lock->get();
+        $this->actingAs($admin)->getJson(route('gl.golive.run.progress'))->assertJson(['stale' => false]);
+        $lock->release();
+
+        // حديث = مش قديم
+        RunStep::cache()->put(RunStep::PROGRESS_KEY, ['phase' => 'rebuild', 'done' => 1, 'total' => 4, 'status' => 'running',
+            'message' => '', 'started_at' => now()->getTimestamp()], 3600);
+        $this->actingAs($admin)->getJson(route('gl.golive.run.progress'))->assertJson(['stale' => false]);
     }
 
     // ═══ مساعدات ═══

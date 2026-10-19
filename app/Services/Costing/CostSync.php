@@ -10,7 +10,6 @@ use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\ProductionOrder;
 use App\Models\PurchaseOrder;
-use App\Models\Setting;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
 use App\Models\Warehouse;
@@ -566,7 +565,7 @@ final class CostSync
         if (self::frozen($e)) {
             return false;
         }
-        if (Setting::read('gl_enabled') === '1') {
+        if (Ledger::isOn()) {
             app(Ledger::class)->unpost($e);
         }
         self::$dropped[$e->id] = true;

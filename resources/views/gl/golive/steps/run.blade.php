@@ -13,7 +13,8 @@
         'phases' => $phaseLabels,
         'confirm' => __('golive.s9_run_confirm'),
         'running' => __('golive.s9_running'),
-        'live' => $progress['status'] === 'running',
+        'stale' => __('golive.s9_stale'),
+        'live' => $progress['status'] === 'running' && ! $progress['stale'],
     ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
     $pct = $progress['total'] > 0 ? (int) round(100 * $progress['done'] / $progress['total']) : 0;
 @endphp
@@ -28,7 +29,11 @@
     </form>
 @endif
 
-<div id="golive-progress" style="margin:8px 0 12px;{{ $progress['status'] === 'running' ? '' : 'display:none' }}">
+@if ($progress['stale'])
+    <div class="alert warn" style="margin-bottom:10px"><span>⚠️</span><span>{{ __('golive.s9_stale') }}</span></div>
+@endif
+
+<div id="golive-progress" style="margin:8px 0 12px;{{ $progress['status'] === 'running' && ! $progress['stale'] ? '' : 'display:none' }}">
     <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
         <span id="golive-phase">{{ $phaseLabels[$progress['phase']] ?? $progress['phase'] }}</span>
         <span class="num" id="golive-pct">{{ $pct }}%</span>
@@ -57,7 +62,8 @@
     @if ($last->status !== 'ok' && $last->error)
         <div class="alert" style="margin-top:8px"><span>⛔</span><span>{{ $last->error }}</span></div>
     @endif
-    @if ($last->status === 'ok')
+@endif
+@if ($lastOk)
         <h4 style="margin:12px 0 6px">{{ __('golive.s9_reports') }}</h4>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <a class="btn" href="{{ route('gl.trial_balance') }}">⚖️ {{ __('golive.s9_trial_balance') }}</a>
@@ -65,7 +71,6 @@
             <a class="btn" href="{{ route('gl.income') }}">📈 {{ __('golive.s9_income') }}</a>
             <a class="btn" href="{{ route('costing.pnl') }}">🧮 {{ __('golive.s9_pnl') }}</a>
         </div>
-    @endif
 @endif
 
 <script>
@@ -92,6 +97,12 @@
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (p) {
                 if (!p) { return; }
+                if (p.stale) {
+                    clearInterval(timer);
+                    timer = null;
+                    msg.textContent = cfg.stale;
+                    return;
+                }
                 paint(p);
                 if (p.status !== 'running' && timer && !cfg.submitted) {
                     clearInterval(timer);
