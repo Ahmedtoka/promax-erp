@@ -154,4 +154,33 @@ class CostCentersSeedTest extends TestCase
         $this->artisan('promax:cost-centers-seed', ['--maadi-warehouse' => 'NOPE'])->assertFailed();
         $this->assertSame(0, CostCenter::count());
     }
+
+    public function test_a_warehouse_already_on_another_center_is_reported_not_moved(): void
+    {
+        $whk = $this->wh('WHK', 'factory');
+        FoundationSeed::run();   // أول تشغيل من غير --maadi-warehouse: WHK راح للمصنع
+
+        $r = FoundationSeed::run(false, 'WHK');
+
+        $this->assertSame(CostCenter::where('code', 'FAC')->value('id'), $whk->fresh()->cost_center_id);
+        $this->assertNotEmpty(array_filter($r['unlinked'], fn ($l) => str_contains($l, 'WHK') && str_contains($l, 'FAC')));
+    }
+
+    public function test_codes_are_case_insensitive(): void
+    {
+        $a = $this->wh('TENTH', 'factory');
+
+        $this->artisan('promax:cost-centers-seed', ['--factory' => 'tenth'])->assertSuccessful();
+
+        $this->assertNotNull($a->fresh()->cost_center_id);
+    }
+
+    public function test_a_safe_without_its_gl_account_is_reported(): void
+    {
+        GlAccount::where('system_key', 'bank')->update(['system_key' => null]);
+
+        $r = FoundationSeed::run();
+
+        $this->assertNotEmpty(array_filter($r['unlinked'], fn ($l) => str_contains($l, 'BANK-1')));
+    }
 }

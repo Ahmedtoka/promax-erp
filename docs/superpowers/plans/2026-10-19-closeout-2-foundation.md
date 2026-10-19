@@ -42,6 +42,10 @@
 - **D9 Resolver "sales and collections" fallback** applies to: `Transaction` kinds `sale, collection, return, refund, rebate, settlement, taxded`, and sources `Invoice`, `PurchaseOrder`, `ClientReturn`, `RepSettlement`. Not to supplier, expense or cash movements (they must carry their own center — Lane 4).
 - **D10 Resolver warehouse discovery:** source `warehouse_id` → `custody_id`→custody warehouse → `Invoice`: first item's batch warehouse → `Transaction`: its `source` (one hop). Employee step: `employee_id` on the source when `App\Models\Employee` exists and has `cost_center_id` (Lane 7 will add it); otherwise skipped.
 - **D11 Product form** gets a `kind` select (new + edit) so raw/packaging items can be created from the UI.
+- **D12 (after review) Sales never land on a factory center.** If the source warehouse's center is not `branch` kind, a sales source falls through to Maadi (spec §3.1.2; the factory only sells internally, Lane 9). Non-sales sources keep the factory/line center.
+- **D13 (after review) `Product::notSellableReason(): ?string`** — draft → `api.product_draft`, raw/packaging → `api.product_not_for_sale`; used by the rule and `OpsController::fillPoItems` so the user is told the real cause.
+- **D14 (after review) Pick edit guard** checks only products being *added*; lines already on the order stay editable even if the product was drafted later. Existing Shopify links (or bundle parts) pointing at a non-finished product stop matching (item stays "unlinked").
+- **D15 Resolver robustness:** never throws (discovery wrapped, `report()`ed), caches only a positive `hasTable`.
 
 ## File map
 

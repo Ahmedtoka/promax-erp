@@ -32,7 +32,7 @@ class FoundationSeed
     public static function run(bool $dryRun = false, ?string $maadiWarehouse = null, ?array $factoryCodes = null): array
     {
         $maadiWh = self::resolveMaadiWarehouse($maadiWarehouse);
-        $factories = self::resolveFactories($factoryCodes, $maadiWh);
+        [$factories, $skipped] = self::resolveFactories($factoryCodes, $maadiWh);
 
         $out = ['created' => [], 'linked' => [], 'unlinked' => []];
 
@@ -58,12 +58,17 @@ class FoundationSeed
                 if ($maadi->warehouse_id === null) {
                     $maadi->update(['warehouse_id' => $maadiWh->id]);
                     $out['linked'][] = "MAADI.warehouse = {$maadiWh->code}";
+                } elseif ((int) $maadi->warehouse_id !== $maadiWh->id) {
+                    $out['unlinked'][] = "MAADI.warehouse already set to another warehouse, not {$maadiWh->code} (check)";
                 }
                 self::linkWarehouse($out, $maadiWh, $maadi);
             } elseif ($maadi->warehouse_id === null) {
                 $out['unlinked'][] = 'MAADI: no Maadi warehouse (code MAADI) - pass --maadi-warehouse=CODE';
             }
 
+            foreach ($skipped as $code) {
+                $out['unlinked'][] = "{$code} skipped for FAC: it is the Maadi warehouse";
+            }
             foreach ($factories as $w) {
                 self::linkWarehouse($out, $w, $fac);
             }
@@ -93,21 +98,24 @@ class FoundationSeed
         return Warehouse::where('code', 'MAADI')->first();
     }
 
-    /** @return list<Warehouse> */
+    /** @return array{0: list<Warehouse>, 1: list<string>} المخازن + أكواد اتشالت لأنها المعادي */
     private static function resolveFactories(?array $codes, ?Warehouse $maadi): array
     {
         if ($codes !== null) {
             $found = Warehouse::whereIn('code', $codes)->orderBy('id')->get();
-            if ($missing = array_diff($codes, $found->pluck('code')->all())) {
+            // ⚠️ المقارنة بحروف كبيرة — الـcollation بتلاقي `whk` = `WHK`
+            $have = array_map('strtoupper', $found->pluck('code')->all());
+            if ($missing = array_diff(array_map('strtoupper', $codes), $have)) {
                 throw new \InvalidArgumentException('Warehouse '.implode(', ', $missing).' not found');
             }
+            $skipped = $maadi && $found->contains('id', $maadi->id) ? [$maadi->code] : [];
 
-            return $found->reject(fn (Warehouse $w) => $w->id === $maadi?->id)->values()->all();
+            return [$found->reject(fn (Warehouse $w) => $w->id === $maadi?->id)->values()->all(), $skipped];
         }
 
-        return Warehouse::where('type', Warehouse::TYPE_FACTORY)
+        return [Warehouse::where('type', Warehouse::TYPE_FACTORY)
             ->when($maadi, fn ($q) => $q->whereKeyNot($maadi->id))
-            ->orderBy('id')->get()->all();
+            ->orderBy('id')->get()->all(), []];
     }
 
     private static function center(array &$out, string $code, string $kind, ?CostCenter $parent, string $name, string $nameEn): CostCenter
@@ -127,6 +135,10 @@ class FoundationSeed
         if ($w->cost_center_id === null) {
             $w->update(['cost_center_id' => $c->id]);
             $out['linked'][] = "warehouse {$w->code} -> {$c->code}";
+        } elseif ((int) $w->cost_center_id !== $c->id) {
+            // ⚠️ مابننقلش (تعديل المالك أو تشغيل قبل كده) — بس لازم يبان
+            $current = CostCenter::whereKey($w->cost_center_id)->value('code') ?? '#'.$w->cost_center_id;
+            $out['unlinked'][] = "warehouse {$w->code} already -> {$current}, not {$c->code} (check)";
         }
     }
 
@@ -138,6 +150,9 @@ class FoundationSeed
             'name' => $name, 'name_en' => $nameEn, 'kind' => $kind, 'currency' => 'EGP', 'active' => true,
             'gl_account_id' => $glId, 'cost_center_id' => $center->id, 'branch_id' => $branch?->id,
         ]);
+        if ($glId === null && $safe->gl_account_id === null) {
+            $out['unlinked'][] = "safe {$code}: no GL account with system_key {$glKey} (balance reads 0 until linked)";
+        }
         if ($safe->wasRecentlyCreated) {
             $out['created'][] = $code;
 
