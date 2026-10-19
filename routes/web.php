@@ -1390,8 +1390,25 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders');
         Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
             ->middleware('role:admin,production_manager,quality')->name('qc');
-        Route::get('/specs', [\App\Http\Controllers\Mfg\SpecController::class, 'index'])
+        // ═══ المواصفات — العرض للأربعة، الكتابة admin,rnd، الاعتماد/الإرجاع أدمن بس ═══
+        // ⚠️ الثابت قبل البارامتري؛ `!mfg.specs.*` في Access للي مايكتبش.
+        $spec = \App\Http\Controllers\Mfg\SpecController::class;
+        Route::get('/specs', [$spec, 'index'])
             ->middleware('role:admin,production_manager,quality,rnd')->name('specs');
+        Route::post('/specs', [$spec, 'store'])
+            ->middleware('role:admin,rnd')->name('specs.store');
+        Route::get('/specs/{spec}', [$spec, 'show'])->whereNumber('spec')
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs.show');
+        Route::get('/specs/{spec}/file', [$spec, 'file'])->whereNumber('spec')
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs.file');
+        Route::post('/specs/{spec}', [$spec, 'update'])->whereNumber('spec')
+            ->middleware('role:admin,rnd')->name('specs.update');
+        Route::post('/specs/{spec}/submit', [$spec, 'submit'])->whereNumber('spec')
+            ->middleware('role:admin,rnd')->name('specs.submit');
+        Route::post('/specs/{spec}/approve', [$spec, 'approve'])->whereNumber('spec')
+            ->middleware('role:admin')->name('specs.approve');
+        Route::post('/specs/{spec}/send-back', [$spec, 'sendBack'])->whereNumber('spec')
+            ->middleware('role:admin')->name('specs.send_back');
     });
 
 });

@@ -257,14 +257,21 @@ class Access
         // ═══ التصنيع (الإغلاق ١٩/١٠، spec §4) — شاشات `mfg.*` بس ═══
         // ⚠️ الاعتمادات (المواصفة والـBOM) أدمن بس — الرولز دي بتشوف وتشتغل،
         // والكتابة بتتحرس بـ`role:` على الراوت + `act.mfg.*`.
+        // ⚠️ المواصفات: الإنتاج والجودة بيشوفوا بس (الكتابة `role:admin,rnd`)،
+        // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
             'mfg.orders', 'mfg.qc', 'mfg.specs', 'notifications',
+            '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
         ],
         'quality' => [
             'mfg.qc', 'mfg.specs', 'mfg.orders', 'notifications',
+            '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
         ],
         'rnd' => [
             'mfg.specs', 'notifications',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
         ],
     ];
 
@@ -749,6 +756,10 @@ class Access
 
         // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
         'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.index.meta']],
+
+        // ═══ التصنيع (١٩/١٠) — المواصفات: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
+        'act.mfg.specs_edit' => ['perm.act_mfg_specs_edit', 'mfg.specs', ['rnd'], ['mfg.specs.store', 'mfg.specs.update', 'mfg.specs.submit']],
+        'act.mfg.specs_approve' => ['perm.act_mfg_specs_approve', 'mfg.specs', [], ['mfg.specs.approve', 'mfg.specs.send_back']],
     ];
 
     /**
