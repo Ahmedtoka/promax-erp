@@ -259,7 +259,7 @@ final class Payroll
 
     private static function recomputeSlip(Payslip $slip, array $set): Payslip
     {
-        $slip->load('employee', 'lines');
+        $slip->load('employee', 'lines', 'run');
         $e = $slip->employee;
         $lines = $slip->lines;
 
@@ -270,8 +270,14 @@ final class Payroll
         $earned = round(max(0.0, $earnings - $pre), 2);
 
         $ins = ['wage' => 0.0, 'employee' => 0.0, 'employer' => 0.0];
-        if ($e->insured) {
-            $wage = $e->insurable_wage !== null ? (float) $e->insurable_wage : (float) $e->basic_salary + (float) $e->allowances;
+        // ⚠️ قرار المالك (١٩/١٠): شهر التعيين لو التعيين بعد يوم ١ مالوش
+        // تأمينات خالص (لا حصة موظف ولا شركة) — التأمين بيبدأ من أول شهر كامل
+        $period = $slip->run?->period;
+        $partialHireMonth = $e->hire_date !== null && $period !== null
+            && $e->hire_date->format('Y-m') === $period && (int) $e->hire_date->day > 1;
+
+        if ($e->insured && ! $partialHireMonth) {
+            $wage =$e->insurable_wage !== null ? (float) $e->insurable_wage : (float) $e->basic_salary + (float) $e->allowances;
             // ⚠️ ملف لسه مرتبه ماتكتبش (صفر) مايتحسبلوش تأمين على الحد الأدنى —
             // كان بيطلّع صافي بالسالب لمندوب قسيمته عمولة بس (QA ١٩/١٠)
             if ($wage > 0) {

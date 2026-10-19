@@ -216,8 +216,10 @@ class PayrollRunTest extends TestCase
 
     public function test_negative_net_blocks_approval(): void
     {
-        $e = $this->emp(['hire_date' => '2026-09-30', 'basic_salary' => 3000, 'allowances' => 0]);
+        // غياب يدوي كبير: المستحق أقل من تأمينات الشهر
+        $e = $this->emp();
         $run = Payroll::draft('2026-09', $this->admin);
+        Payroll::setLine($this->slip($run, $e), 'absence', 9500, null, $this->admin);
         $this->assertLessThan(0, (float) $this->slip($run, $e)->net);
 
         $this->actingAs($this->admin)->post("/hr/payroll/{$run->id}/approve")->assertSessionHasErrors('run');
@@ -436,6 +438,32 @@ class PayrollRunTest extends TestCase
 
         $this->assertSame(0.0, $s->amountOf('overtime'));
         $this->assertSame(0.0, $s->amountOf('absence'));
+    }
+
+    /** قرار المالك (١٩/١٠): شهر التعيين لو بعد يوم ١ مالوش تأمينات — من الشهر اللي بعده كامل */
+    public function test_no_insurance_in_a_partial_hire_month(): void
+    {
+        $late = $this->emp(['hire_date' => '2026-09-20', 'basic_salary' => 3000, 'allowances' => 0]);
+        $first = $this->emp(['hire_date' => '2026-09-01']);
+
+        $run = Payroll::draft('2026-09', $this->admin);
+        $s = $this->slip($run, $late);
+        $this->assertSame(0.0, (float) $s->insurance_employee);
+        $this->assertSame(0.0, (float) $s->insurance_employer);
+        $this->assertSame(0.0, $s->amountOf('insurance'));
+        $this->assertGreaterThanOrEqual(0, (float) $s->net);
+        $this->assertBalanced($s);
+
+        $f = $this->slip($run, $first);
+        $this->assertEqualsWithDelta(1100.00, (float) $f->insurance_employee, 0.001);
+        $this->assertEqualsWithDelta(1875.00, (float) $f->insurance_employer, 0.001);
+
+        // الشهر الكامل اللي بعده: تأمين كامل
+        $next = $this->slip(Payroll::draft('2026-10', $this->admin), $late);
+        $this->assertEqualsWithDelta(330.00, (float) $next->insurance_employee, 0.001);   // 3000 × 11%
+
+        // والاعتماد مابقاش بيتقفل بسبب صافي بالسالب
+        $this->actingAs($this->admin)->post("/hr/payroll/{$run->id}/approve")->assertSessionHasNoErrors();
     }
 
     public function test_payslip_print_shows_net(): void
