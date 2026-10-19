@@ -423,9 +423,9 @@ class Rules
             $safeId = $acc->id;
         } else {
             $needsReview = true;
-            $safeId = $this->keyAccount($rule->credit_key, null, $needsReview);
+            $safeId = $this->slotAccount($rule, 'credit', null, $needsReview);
         }
-        $overShortId = $this->keyAccount($rule->debit_key, null, $needsReview);
+        $overShortId = $this->slotAccount($rule, 'debit', null, $needsReview);
         $amount = abs($diff);
         $center = $safe?->cost_center_id;
         [$drId, $crId] = $diff < 0 ? [$overShortId, $safeId] : [$safeId, $overShortId];
@@ -455,8 +455,8 @@ class Rules
         // أصل اتمسح من تحت القسط = المراجعة لازم تعرف
         $needsReview = $asset === null;
         $center = $asset?->cost_center_id ?? CostCenter::company()->id;
-        $drId = $this->keyAccount($rule->debit_key, null, $needsReview);
-        $crId = $this->keyAccount($rule->credit_key, null, $needsReview);
+        $drId = $this->slotAccount($rule, 'debit', null, $needsReview);
+        $crId = $this->slotAccount($rule, 'credit', null, $needsReview);
 
         return [
             'rule' => 'asset.depreciation', 'needs_review' => $needsReview,
