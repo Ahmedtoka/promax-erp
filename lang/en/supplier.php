@@ -96,4 +96,22 @@ return [
     'close_order' => 'Close order',
     'close_confirm' => 'Close the order? The undelivered remainder will not be receivable.',
     'order_closed' => 'Order closed.',
+
+    // ---------- Supplier contracts (Lane 5) ----------
+    'contracts' => 'Supplier contracts',
+    'new_contract' => 'New contract',
+    'contract_starts' => 'Starts on',
+    'contract_ends' => 'Ends on',
+    'contract_items' => 'Items',
+    'contract_price' => 'Fixed price',
+    'contract_attachment' => 'Contract file',
+    'contract_items_hint' => 'Set the agreed unit price per item. Leave blank to leave an item out of the contract.',
+    'contract_status_live' => 'Live',
+    'contract_status_expired' => 'Expired',
+    'contract_status_future' => 'Not started',
+    'contract_status_inactive' => 'Inactive',
+    'contract_added' => 'Contract :number created. Now set the item prices.',
+    'contract_updated' => 'Contract updated.',
+    'contract_items_saved' => 'Contract prices saved.',
+    'no_contracts' => 'No supplier contracts yet.',
 ];

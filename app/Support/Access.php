@@ -56,7 +56,7 @@ class Access
             'erp.targets', 'erp.performance',
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
-            'erp.suppliers', 'erp.purchasing',
+            'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
@@ -519,6 +519,7 @@ class Access
         'nav.group_purchasing' => [
             ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
+            ['erp.supplier_contracts', '📜', 'supplier.contracts', 'erp.supplier_contracts*', null],
         ],
 
         // ═══ الأونلاين — أوردرات شوبيفاي (٣/٩): الترتيب هو الفلو
@@ -685,6 +686,7 @@ class Access
         'act.suppliers.manage' => ['perm.act_suppliers_manage', 'erp.suppliers', ['manager'], ['erp.suppliers.store', 'erp.suppliers.update', 'erp.suppliers.opening']],
         'act.suppliers.pay' => ['perm.act_suppliers_pay', 'erp.suppliers', ['manager', 'accountant'], ['erp.suppliers.pay']],
         'act.purchasing.manage' => ['perm.act_purchasing_manage', 'erp.purchasing', ['manager'], ['erp.purchasing.new', 'erp.purchasing.store', 'erp.purchasing.invoice', 'erp.purchasing.cancel', 'erp.purchasing.close']],
+        'act.supplier_contracts.manage' => ['perm.act_supplier_contracts_manage', 'erp.supplier_contracts', ['manager'], ['erp.supplier_contracts.store', 'erp.supplier_contracts.update', 'erp.supplier_contracts.items']],
         'act.purchasing.receive' => ['perm.act_purchasing_receive', 'erp.purchasing', null, ['erp.purchasing.receive']],
 
         // ═══ الفلوس ═══

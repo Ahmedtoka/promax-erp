@@ -96,4 +96,22 @@ return [
     'close_order' => 'قفل الأمر',
     'close_confirm' => 'تقفل الأمر؟ الباقي اللي ماوصلش مش هيتستلم عليه.',
     'order_closed' => 'الأمر اتقفل.',
+
+    // ---------- عقود الموردين (لين ٥) ----------
+    'contracts' => 'عقود الموردين',
+    'new_contract' => 'عقد جديد',
+    'contract_starts' => 'بداية العقد',
+    'contract_ends' => 'نهاية العقد',
+    'contract_items' => 'الأصناف',
+    'contract_price' => 'السعر الثابت',
+    'contract_attachment' => 'ملف العقد',
+    'contract_items_hint' => 'حدد سعر الوحدة المتفق عليه لكل صنف. سيب الخانة فاضية لو الصنف مش في العقد.',
+    'contract_status_live' => 'ساري',
+    'contract_status_expired' => 'منتهي',
+    'contract_status_future' => 'لسه مابدأش',
+    'contract_status_inactive' => 'موقوف',
+    'contract_added' => 'العقد :number اتسجل. حدد أسعار الأصناف دلوقتي.',
+    'contract_updated' => 'العقد اتعدّل.',
+    'contract_items_saved' => 'أسعار العقد اتحفظت.',
+    'no_contracts' => 'مفيش عقود موردين لسه.',
 ];

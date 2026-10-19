@@ -256,6 +256,19 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('suppliers.update');
             Route::post('/suppliers/{supplier}/opening', [\App\Http\Controllers\SupplierController::class, 'opening'])
                 ->name('suppliers.opening');
+
+            // عقود الموردين (لين ٥) — ⚠️ الاسم `supplier_contracts` مش تحت بادئة
+            // `erp.suppliers` عمداً: المحاسب ياخد `erp.suppliers*` بالبادئة وده مش له.
+            Route::get('/supplier-contracts', [\App\Http\Controllers\SupplierContractController::class, 'index'])
+                ->name('supplier_contracts');
+            Route::get('/supplier-contracts/{supplierContract}', [\App\Http\Controllers\SupplierContractController::class, 'show'])
+                ->name('supplier_contracts.show');
+            Route::post('/supplier-contracts', [\App\Http\Controllers\SupplierContractController::class, 'store'])
+                ->name('supplier_contracts.store');
+            Route::put('/supplier-contracts/{supplierContract}', [\App\Http\Controllers\SupplierContractController::class, 'update'])
+                ->name('supplier_contracts.update');
+            Route::post('/supplier-contracts/{supplierContract}/items', [\App\Http\Controllers\SupplierContractController::class, 'items'])
+                ->name('supplier_contracts.items');
         });
 
         // أوامر الشراء — العرض للإدارة وأمين المخزن (هو اللي بيستلم)

@@ -128,4 +128,5 @@ return [
     'cov_hint' => 'Activates client zones and links them to their reps and manager teams — additive only, nothing removed',
     'cov_confirm' => 'We will walk every active client with a zone, activate the zone if inactive and link it to his rep and manager team. Nothing gets unlinked or moved. Continue?',
     'cov_done' => 'Coverage fixed: :clients clients · :zones zones activated · :links new zone links for reps.',
+    'act_supplier_contracts_manage' => 'Create & edit supplier contracts',
 ];
