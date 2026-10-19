@@ -101,7 +101,11 @@ class GlAccount extends Model
             return $existing;
         }
         $root = static::where('code', '3')->whereNull('parent_id')->first();
-        $code = static::where('code', '3199')->exists() ? '3199.1' : '3199';
+        // أول كود فاضي: 3199 ثم 3199.1 ثم 3199.2 … — الشجرة المعتمدة ممكن تكون واخدة الاتنين
+        $code = '3199';
+        for ($i = 1; static::where('code', $code)->exists(); $i++) {
+            $code = '3199.'.$i;
+        }
 
         return static::firstOrCreate(['system_key' => 'opening_difference'], [
             'code' => $code,
