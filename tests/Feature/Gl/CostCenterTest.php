@@ -9,6 +9,7 @@ use App\Models\Gl\GlEntry;
 use App\Models\Gl\GlPeriod;
 use App\Models\Setting;
 use App\Models\Warehouse;
+use App\Services\Gl\CostCenterResolver;
 use App\Services\Gl\Ledger;
 use App\Services\Gl\Rules;
 use Database\Seeders\GlSeeder;
@@ -165,5 +166,80 @@ class CostCenterTest extends TestCase
 
         $this->assertSame(3, GlEntry::count());
         $this->assertSame($fac->id, $fixed->lines->firstWhere('account_id', GlAccount::findKey('expense_rent')->id)->cost_center_id);
+    }
+
+    // ═══════════════ CostCenterResolver ═══════════════
+
+    /** @return array{0: Warehouse, 1: CostCenter} */
+    private function factoryWarehouse(): array
+    {
+        $fac = $this->center('FAC', 'factory', CostCenter::company());
+        $wh = $this->makeWarehouse();
+        $wh->update(['cost_center_id' => $fac->id]);
+
+        return [$wh->fresh(), $fac];
+    }
+
+    public function test_resolver_uses_the_source_warehouse_center(): void
+    {
+        [$wh, $fac] = $this->factoryWarehouse();
+        $po = \App\Models\PurchaseOrder::create([
+            'number' => 'PO-CC-1', 'client_id' => $this->makeClient()->id, 'status' => 'pending',
+            'warehouse_id' => $wh->id, 'total' => 0, 'tax_total' => 0, 'grand_total' => 0,
+        ]);
+
+        $this->assertSame($fac->id, CostCenterResolver::for($po));
+    }
+
+    public function test_resolver_follows_invoice_batch_warehouse(): void
+    {
+        [$wh, $fac] = $this->factoryWarehouse();
+        $p = $this->makeProduct();
+        $batch = \App\Models\Batch::create([
+            'product_id' => $p->id, 'warehouse_id' => $wh->id, 'batch_no' => 'B-CC', 'produced_on' => today()->subMonth(),
+            'expires_on' => today()->addMonths(6), 'qty_received' => 5, 'qty_remaining' => 5, 'cost' => 10,
+        ]);
+        $inv = \App\Models\Invoice::create([
+            'number' => 'INV-88001', 'client_id' => $this->makeClient()->id, 'user_id' => $this->makeRep()->id,
+            'payment' => 'credit', 'subtotal' => 20, 'discount' => 0, 'total' => 20, 'tax_total' => 0, 'grand_total' => 20,
+        ]);
+        \App\Models\InvoiceItem::create(['invoice_id' => $inv->id, 'product_id' => $p->id, 'batch_id' => $batch->id, 'qty' => 1,
+            'list_price' => 20, 'price' => 20, 'unit_cost' => 10, 'total' => 20, 'tax_rate' => 0, 'tax' => 0]);
+
+        $this->assertSame($fac->id, CostCenterResolver::for($inv));
+    }
+
+    public function test_resolver_follows_transaction_source(): void
+    {
+        [$wh, $fac] = $this->factoryWarehouse();
+        $client = $this->makeClient();
+        $po = \App\Models\PurchaseOrder::create([
+            'number' => 'PO-CC-2', 'client_id' => $client->id, 'status' => 'delivered',
+            'warehouse_id' => $wh->id, 'total' => 100, 'tax_total' => 0, 'grand_total' => 100,
+        ]);
+        $tx = \App\Models\Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'PO', 'debit' => 100,
+            'credit' => 0, 'kind' => 'sale', 'source_type' => $po->getMorphClass(), 'source_id' => $po->id]);
+
+        $this->assertSame($fac->id, CostCenterResolver::for($tx));
+    }
+
+    public function test_sales_without_a_warehouse_fall_back_to_maadi(): void
+    {
+        $client = $this->makeClient();
+        $sale = \App\Models\Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 's', 'debit' => 10, 'credit' => 0, 'kind' => 'sale']);
+        $coll = \App\Models\Transaction::create(['client_id' => $client->id, 'date' => today(), 'memo' => 'c', 'debit' => 0, 'credit' => 10, 'kind' => 'collection', 'method' => 'cash']);
+
+        $this->assertSame(CostCenter::maadi()->id, CostCenterResolver::for($sale));
+        $this->assertSame(CostCenter::maadi()->id, CostCenterResolver::for($coll));
+    }
+
+    public function test_supplier_and_expense_without_warehouse_resolve_null(): void
+    {
+        $sup = \App\Models\Supplier::create(['code' => 'SUP-CC', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        $st = $sup->post('invoice', today()->toDateString(), 0, 500, 'فاتورة');
+        $exp = new \App\Models\Expense(['amount' => 10, 'paid_from' => 'cash_main']);
+
+        $this->assertNull(CostCenterResolver::for($st));
+        $this->assertNull(CostCenterResolver::for($exp));
     }
 }
