@@ -133,6 +133,8 @@ return [
     'leave_zero_days' => 'These dates are all weekly days off - there are no leave days to request',
     'leave_no_balance' => 'Not enough balance: the request is :days days and :left are left',
     'leave_bad_type' => 'Unknown leave type',
+    'leave_too_long' => 'A leave request cannot span more than one year',
+    'leave_retry' => 'The request could not be confirmed - please try again',
     'leave_bad_range' => 'The end date is before the start date',
     'leave_bad_decision' => 'The decision must be approve or reject',
     'leave_not_your_team' => 'This employee does not report to you',

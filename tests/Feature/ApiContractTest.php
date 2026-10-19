@@ -160,8 +160,12 @@ class ApiContractTest extends TestCase
         $this->withHeaders($hb)->getJson('/api/leave/approvals')
             ->assertOk()->assertJsonCount(1, 'requests')->assertJsonPath('requests.0.id', $id);
 
-        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved'])
+        $dec = $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved', 'idem_key' => 'decide-1'])
             ->assertOk()->assertJsonPath('request.status', 'approved');
+        // شكل Lane 8 D1 مقفول
+        $this->assertEqualsCanonicalizing(
+            ['id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label', 'decision_note', 'employee_name'],
+            array_diff(array_keys($dec->json('request')), ['created_at']));
 
         // نفس القرار تاني = نفس الصف، وقرار مختلف = 422
         $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved'])
@@ -199,5 +203,49 @@ class ApiContractTest extends TestCase
         $this->withHeaders($h)->postJson('/api/leave/requests', ['type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27'])
             ->assertForbidden()->assertJsonStructure(['message']);
         $this->withHeaders($h)->getJson('/api/leave/approvals')->assertOk()->assertExactJson(['requests' => []]);
+    }
+
+    private function appLogin(string $role, bool $withEmployee): array
+    {
+        $u = $this->makeAdmin(['role' => $role, 'email' => $role.uniqid().'@promax.test']);
+        if ($withEmployee) {
+            \App\Models\Employee::create(['code' => \App\Models\Employee::nextCode(), 'name' => 'موظف', 'name_en' => 'Staff', 'user_id' => $u->id]);
+        }
+
+        return [$u, $this->postJson('/api/login', ['login' => $u->email, 'password' => 'secret'])];
+    }
+
+    public function test_branch_manager_with_employee_record_can_log_in_to_the_app(): void
+    {
+        [, $res] = $this->appLogin('branch_manager', true);
+
+        $res->assertOk()->assertJsonStructure(['token', 'user' => ['role']])->assertJsonPath('user.role', 'branch_manager');
+    }
+
+    public function test_hr_role_without_employee_record_is_refused(): void
+    {
+        [, $res] = $this->appLogin('hr', false);
+
+        $res->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_handover_reviewer_is_refused_even_with_employee_record(): void
+    {
+        [, $res] = $this->appLogin('handover_reviewer', true);
+
+        $res->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_staff_roles_bootstrap_and_punch(): void
+    {
+        foreach (['branch_manager', 'hr'] as $role) {
+            [, $res] = $this->appLogin($role, true);
+            $res->assertOk();
+            $h = ['Authorization' => 'Bearer '.$res->json('token')];
+
+            $this->withHeaders($h)->getJson('/api/bootstrap')->assertOk()->assertJsonStructure(['attendance' => ['state']]);
+            $this->withHeaders($h)->postJson('/api/attendance/punch', ['type' => 'in'])->assertOk();
+            $this->withHeaders($h)->getJson('/api/leave/balances')->assertOk();
+        }
     }
 }

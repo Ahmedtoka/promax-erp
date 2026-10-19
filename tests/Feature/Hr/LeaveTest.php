@@ -292,4 +292,18 @@ class LeaveTest extends TestCase
             ->assertForbidden();
         $this->assertSame(30.0, (float) $row->fresh()->entitled);
     }
+
+    public function test_request_longer_than_a_year_is_refused(): void
+    {
+        [$u, $e] = $this->team();
+
+        try {
+            Leave::request($e, $u, 'unpaid', $this->d('2026-01-01'), $this->d('2062-01-01'), null);
+            $this->fail('expected Rejected');
+        } catch (Rejected $ex) {
+            $this->assertContains($ex->getMessage(), [__('hrm.leave_too_long', [], 'ar'), __('hrm.leave_too_long', [], 'en')]);
+        }
+
+        $this->assertSame(0, LeaveRequest::query()->count());
+    }
 }

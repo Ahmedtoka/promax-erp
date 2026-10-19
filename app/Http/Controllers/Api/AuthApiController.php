@@ -30,10 +30,14 @@ class AuthApiController extends Controller
         // ⚠️ **أمين المخزن اتفتح له** (2026-08-09) — بقت له شاشة
         // تجهيز حقيقية على الموبايل. والمحاسب بيشوف إشعاراته
         // (تحصيلات الشيكات والتحويلات) من `OfficeHome`.
-        if (! in_array($user->role, [
+        // ⚠️ وأي موظف عنده ملف موظف (فرع، موارد بشرية، ...) — الحضور والإجازات
+        // لكل الموظفين. مراجع التسليم بره دايماً.
+        $whitelisted = in_array($user->role, [
             'sales_agent', 'driver', 'promoter', 'manager', 'admin',
             'warehouse_keeper', 'accountant',
-        ], true)) {
+        ], true);
+
+        if (! $whitelisted && ($user->role === 'handover_reviewer' || \App\Models\Employee::forUser($user) === null)) {
             return response()->json(['message' => __('api.no_app_access')], 403);
         }
 

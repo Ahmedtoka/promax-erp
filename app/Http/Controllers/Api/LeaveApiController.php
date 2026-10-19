@@ -89,7 +89,9 @@ class LeaveApiController extends Controller
 
             $old = Idempotency::find($user, Idempotency::LEAVE_REQUEST, $key, LeaveRequest::class);
 
-            return response()->json(['request' => $old?->apiRow()]);
+            return $old === null
+                ? response()->json(['message' => __('hrm.leave_retry')], 409)
+                : response()->json(['request' => $old->apiRow()]);
         }
 
         return response()->json(['request' => $r->apiRow()], 201);
@@ -110,6 +112,7 @@ class LeaveApiController extends Controller
         $data = $request->validate([
             'decision' => ['required', Rule::in(['approved', 'rejected'])],
             'note' => ['nullable', 'string', 'max:300'],
+            'idem_key' => Idempotency::RULES, // بيتتجاهل — القرار أصلاً idempotent
         ]);
 
         $user = $request->user();

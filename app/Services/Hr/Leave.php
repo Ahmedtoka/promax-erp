@@ -113,6 +113,11 @@ final class Leave
             throw new Rejected(__('hrm.leave_bad_range'));
         }
 
+        // ⚠️ سقف المدة قبل أي لوب على الأيام
+        if ((int) $from->diffInDays($to, true) + 1 > 366) {
+            throw new Rejected(__('hrm.leave_too_long'));
+        }
+
         $days = self::days($from, $to);
 
         if ($days <= 0) {
