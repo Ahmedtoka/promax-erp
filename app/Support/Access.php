@@ -242,8 +242,12 @@ class Access
             'ops.replenishments',
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
             '!ops.replenishments.update',
-            // التصنيع (١٩/١٠): بيشوف أوامر الإنتاج عشان يصرف لها خامات من مخزنه
-            'mfg.orders',
+            // التصنيع (١٩/١٠): بيشوف أوامر الإنتاج عشان يصرف لها خامات من مخزنه،
+            // واحتياج الخامات. ⚠️ الاستثناء بالاسم مش بالبادئة — صرف الخامات
+            // (`mfg.orders.issue*` / `mfg.orders.return`، مهمة ٥) شغله.
+            'mfg.orders', 'mfg.requirements',
+            '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
+            '!mfg.orders.cancel', '!mfg.orders.shortage',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -261,6 +265,7 @@ class Access
         // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
             'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
+            'mfg.lines', 'mfg.requirements', '!mfg.lines.settings',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
@@ -269,6 +274,8 @@ class Access
             'mfg.qc', 'mfg.specs', 'mfg.orders', 'notifications',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
+            '!mfg.orders.cancel', '!mfg.orders.shortage',
         ],
         'rnd' => [
             'mfg.specs', 'mfg.boms', 'notifications',
@@ -551,6 +558,8 @@ class Access
             ['mfg.qc', '🔬', 'nav.mfg_qc', 'mfg.qc*', null],
             ['mfg.specs', '📄', 'nav.mfg_specs', 'mfg.specs*', null],
             ['mfg.boms', '🧾', 'nav.mfg_boms', 'mfg.boms*', null],
+            ['mfg.lines', '🛤️', 'nav.mfg_lines', 'mfg.lines*', null],
+            ['mfg.requirements', '🧮', 'nav.mfg_requirements', 'mfg.requirements*', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══
@@ -766,6 +775,10 @@ class Access
         // ═══ التصنيع — قوايم المواد: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
         'act.mfg.boms_edit' => ['perm.act_mfg_boms_edit', 'mfg.boms', ['rnd'], ['mfg.boms.store', 'mfg.boms.lines']],
         'act.mfg.boms_approve' => ['perm.act_mfg_boms_approve', 'mfg.boms', [], ['mfg.boms.approve']],
+        // ═══ التصنيع — خطوط الإنتاج وأوامر الإنتاج: مدير الإنتاج؛ مخازن التصنيع الافتراضية أدمن بس ═══
+        'act.mfg.lines_manage' => ['perm.act_mfg_lines_manage', 'mfg.lines', ['production_manager'], ['mfg.lines.store', 'mfg.lines.update']],
+        'act.mfg.lines_settings' => ['perm.act_mfg_lines_settings', 'mfg.lines', [], ['mfg.lines.settings']],
+        'act.mfg.orders_manage' => ['perm.act_mfg_orders_manage', 'mfg.orders', ['production_manager'], ['mfg.orders.store', 'mfg.orders.start', 'mfg.orders.finish', 'mfg.orders.cancel', 'mfg.orders.shortage']],
     ];
 
     /**

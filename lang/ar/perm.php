@@ -94,6 +94,9 @@ return [
     'act_mfg_specs_approve' => 'اعتماد أو إرجاع مواصفات المنتجات',
     'act_mfg_boms_edit' => 'إنشاء وتعديل قوايم المواد (BOM)',
     'act_mfg_boms_approve' => 'اعتماد قوايم المواد (BOM)',
+    'act_mfg_lines_manage' => 'إضافة وتعديل خطوط الإنتاج',
+    'act_mfg_lines_settings' => 'ضبط مخازن التصنيع',
+    'act_mfg_orders_manage' => 'إنشاء وبدء وإنهاء وإلغاء أوامر الإنتاج وطلب شراء للعجز',
 
     // ═══ حارس السكوب (App\Support\Scope) — رسايل الرفض ═══
     'scope_rep_denied' => 'الموظف ده مش من فريقك أو مش موظف ميداني نشط.',

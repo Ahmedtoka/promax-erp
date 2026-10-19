@@ -133,4 +133,6 @@ return [
     'mfg_qc' => 'QC Release',
     'mfg_specs' => 'Product Specs',
     'mfg_boms' => 'Bills of Materials',
+    'mfg_lines' => 'Production Lines',
+    'mfg_requirements' => 'Material Requirement',
 ];

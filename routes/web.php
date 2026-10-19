@@ -1386,8 +1386,32 @@ Route::middleware(['auth', 'screen'])->group(function () {
     // ⚠️ `role:` هنا لازم يطابق `Access::SCREENS` بالحرف (`RoleAccessTest`).
     // الاعتمادات أدمن بس؛ الكتابة بتتحرس على كل راوت مع مهمته.
     Route::prefix('mfg')->name('mfg.')->group(function () {
-        Route::get('/orders', [\App\Http\Controllers\Mfg\OrderController::class, 'index'])
+        // ═══ أوامر الإنتاج — العرض للأربعة، الإنشاء والحالات admin,production_manager ═══
+        // ⚠️ `!mfg.orders.<اسم>` بالاسم للجودة وأمين المخزن (مش بادئة) — صرف
+        // الخامات (مهمة ٥) هيتفتح لأمين المخزن على نفس البادئة.
+        $order = \App\Http\Controllers\Mfg\OrderController::class;
+        Route::get('/orders', [$order, 'index'])
             ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders');
+        Route::post('/orders', [$order, 'store'])
+            ->middleware('role:admin,production_manager')->name('orders.store');
+        Route::get('/orders/{order}', [$order, 'show'])->whereNumber('order')
+            ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders.show');
+        foreach (['start', 'finish', 'cancel', 'shortage'] as $step) {
+            Route::post('/orders/{order}/'.$step, [$order, $step])->whereNumber('order')
+                ->middleware('role:admin,production_manager')->name('orders.'.$step);
+        }
+        Route::get('/requirements', [$order, 'requirements'])
+            ->middleware('role:admin,production_manager,warehouse_keeper')->name('requirements');
+        // ═══ خطوط الإنتاج — admin,production_manager؛ مخازن التصنيع الافتراضية أدمن بس ═══
+        $line = \App\Http\Controllers\Mfg\LineController::class;
+        Route::get('/lines', [$line, 'index'])
+            ->middleware('role:admin,production_manager')->name('lines');
+        Route::post('/lines', [$line, 'store'])
+            ->middleware('role:admin,production_manager')->name('lines.store');
+        Route::post('/lines/settings', [$line, 'settings'])
+            ->middleware('role:admin')->name('lines.settings');
+        Route::post('/lines/{line}', [$line, 'update'])->whereNumber('line')
+            ->middleware('role:admin,production_manager')->name('lines.update');
         Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
             ->middleware('role:admin,production_manager,quality')->name('qc');
         // ═══ المواصفات — العرض للأربعة، الكتابة admin,rnd، الاعتماد/الإرجاع أدمن بس ═══
