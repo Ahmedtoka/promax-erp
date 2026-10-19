@@ -235,7 +235,7 @@ return [
     'shortage_already_requested' => 'طلب الشراء للعجز ده اتبعت قبل كده (:at)',
     'no_shortage' => 'مفيش عجز خامات على الأمر ده',
     'shortage_notice_title' => 'عجز خامات على أمر :number (:product)',
-    'shortage_notice_line' => ':material: :qty :unit',
+    'shortage_notice_line' => ':material: ناقص :qty :unit',
     'flash_order_created' => 'اتعمل الأمر :number',
     'flash_order_started' => 'الإنتاج بدأ',
     'flash_order_finished' => 'الإنتاج انتهى',

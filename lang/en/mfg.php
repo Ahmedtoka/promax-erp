@@ -235,7 +235,7 @@ return [
     'shortage_already_requested' => 'A purchase request for this shortage was already sent (:at)',
     'no_shortage' => 'No material shortage on this order',
     'shortage_notice_title' => 'Material shortage on order :number (:product)',
-    'shortage_notice_line' => ':material: :qty :unit',
+    'shortage_notice_line' => ':material: short :qty :unit',
     'flash_order_created' => 'Order :number created',
     'flash_order_started' => 'Production started',
     'flash_order_finished' => 'Production finished',
