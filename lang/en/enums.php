@@ -20,6 +20,7 @@ return [
         'production_manager' => 'Production Manager',
         'quality' => 'Quality',
         'rnd' => 'R&D',
+        'hr' => 'HR',
     ],
 
     'channel' => [

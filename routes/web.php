@@ -532,14 +532,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ═════ الحضور والانصراف — أول موديول HR (2026-08-08) ═════
         // ⚠️ المحاسب داخل معاهم: الساعات دي بتروح للمرتبات
         Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'board'])
-            ->middleware('role:admin,manager,accountant')->name('attendance');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance');
         Route::get('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.log');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.log');
         // تصدير السجل إكسيل — موظف واحد أو الكل، بنفس فلاتر الشاشة
         Route::get('/attendance/export', [\App\Http\Controllers\AttendanceController::class, 'export'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.export');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.export');
         Route::get('/attendance/review', [\App\Http\Controllers\AttendanceController::class, 'review'])
-            ->middleware('role:admin,manager,accountant')->name('attendance.review');
+            ->middleware('role:admin,manager,accountant,hr')->name('attendance.review');
         // ⚠️ الاعتماد للأدمن والمدير بس — المحاسب بيقرا مايعتمدش
         Route::post('/attendance/{day}/approve', [\App\Http\Controllers\AttendanceController::class, 'approve'])
             ->middleware('role:admin,manager')->name('attendance.approve');
@@ -1571,6 +1571,85 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,rnd')->name('boms.lines');
         Route::post('/boms/{bom}/approve', [$bom, 'approve'])->whereNumber('bom')
             ->middleware('role:admin')->name('boms.approve');
+    });
+
+    // ═══ بانش الداش بورد (Lane 7 — المهمة ٢) ═══
+    // ⚠️ بره بادئة `erp.` — زرار الهيدر على كل شاشة. صاحب الحساب لنفسه بس،
+    // ومن غير ملف موظف بيترفض (`hrm.no_employee_record`). مستلم النظام مالوش.
+    Route::post('/attendance/punch', [\App\Http\Controllers\Hr\AttendanceHrController::class, 'punch'])
+        ->middleware('role:admin,manager,branch_manager,accountant,warehouse_keeper,hr')
+        ->name('attendance.punch');
+
+    // ═══ الموارد البشرية (Lane 7، الإغلاق ١٩/١٠) ═══
+    // ⚠️ القايمة والعقد قراءة للمحاسب كمان؛ الكتابة والتعديل `role:admin,hr`
+    // + `act.hr.employees`. الثابت قبل البارامتري. المهام الجاية بتزوّد هنا.
+    Route::prefix('hr')->name('hr.')->group(function () {
+        $emp = \App\Http\Controllers\Hr\EmployeeController::class;
+        Route::get('/employees', [$emp, 'index'])
+            ->middleware('role:admin,hr,accountant')->name('employees');
+        Route::post('/employees', [$emp, 'store'])
+            ->middleware('role:admin,hr')->name('employees.store');
+        Route::get('/employees/{employee}/edit', [$emp, 'edit'])->whereNumber('employee')
+            ->middleware('role:admin,hr')->name('employees.edit');
+        Route::get('/employees/{employee}/contract', [$emp, 'contract'])->whereNumber('employee')
+            ->middleware('role:admin,hr,accountant')->name('employees.contract');
+        Route::put('/employees/{employee}', [$emp, 'update'])->whereNumber('employee')
+            ->middleware('role:admin,hr')->name('employees.update');
+
+        // الحضور لكل موظف (المهمة ٢): المشرف بيبصم للعامل اللي مالوش لوجين،
+        // وتقرير البانشات بالمصدر. ⚠️ الحارس على الموظف نفسه في الكنترولر (`isManagedBy`).
+        $att = \App\Http\Controllers\Hr\AttendanceHrController::class;
+        Route::get('/attendance/supervisor', [$att, 'supervisor'])
+            ->middleware('role:admin,hr,manager,branch_manager,warehouse_keeper')->name('attendance.supervisor');
+        Route::post('/attendance/supervisor/punch', [$att, 'supervisorPunch'])
+            ->middleware('role:admin,hr,manager,branch_manager,warehouse_keeper')->name('attendance.supervisor.punch');
+        Route::get('/attendance/punches', [$att, 'punches'])
+            ->middleware('role:admin,hr,manager,branch_manager,accountant')->name('attendance.punches');
+
+        // الإجازات (المهمة ٣): كل رولز الويب ما عدا مستلم النظام. الاعتماد
+        // `isManagedBy` في الكنترولر، والأرصدة `role:admin,hr` + `act.hr.leave_balances`.
+        $lv = \App\Http\Controllers\Hr\LeaveController::class;
+        $lvRoles = 'role:admin,manager,branch_manager,accountant,warehouse_keeper,hr';
+        Route::get('/leave', [$lv, 'index'])->middleware($lvRoles)->name('leave');
+        Route::post('/leave', [$lv, 'store'])->middleware($lvRoles)->name('leave.store');
+        Route::get('/leave/balances', [$lv, 'balances'])->middleware('role:admin,hr')->name('leave.balances');
+        Route::post('/leave/balances/seed', [$lv, 'seedBalances'])->middleware('role:admin,hr')->name('leave.balances.seed');
+        Route::post('/leave/balances/{leaveBalance}', [$lv, 'updateBalance'])->whereNumber('leaveBalance')
+            ->middleware('role:admin,hr')->name('leave.balances.update');
+        Route::post('/leave/{leaveRequest}/decide', [$lv, 'decide'])->whereNumber('leaveRequest')
+            ->middleware($lvRoles)->name('leave.decide');
+        Route::post('/leave/{leaveRequest}/cancel', [$lv, 'cancel'])->whereNumber('leaveRequest')
+            ->middleware($lvRoles)->name('leave.cancel');
+
+        // إعدادات المرتبات (المهمة ٤): قراءة للموارد البشرية، الحفظ أدمن + `act.hr.settings`
+        $hs = \App\Http\Controllers\Hr\HrSettingsController::class;
+        Route::get('/settings', [$hs, 'index'])->middleware('role:admin,hr')->name('settings');
+        Route::post('/settings', [$hs, 'save'])->middleware('role:admin')->name('settings.save');
+
+        // السلف والجزاءات (المهمة ٥): الكتابة `role:admin,hr` + `act.hr.advances`، والقايمة قراءة للمحاسب
+        $adv = \App\Http\Controllers\Hr\AdvanceController::class;
+        Route::get('/advances', [$adv, 'index'])->middleware('role:admin,hr,accountant')->name('advances');
+        Route::post('/advances', [$adv, 'store'])->middleware('role:admin,hr')->name('advances.store');
+        Route::post('/advances/{advance}/void', [$adv, 'void'])->whereNumber('advance')
+            ->middleware('role:admin,hr')->name('advances.void');
+        Route::post('/penalties', [$adv, 'storePenalty'])->middleware('role:admin,hr')->name('penalties.store');
+        Route::post('/penalties/{penalty}/delete', [$adv, 'deletePenalty'])->whereNumber('penalty')
+            ->middleware('role:admin,hr')->name('penalties.delete');
+
+        // مسير المرتبات (المهمة ٦): قراءة أدمن/موارد/محاسب، المسودة والبنود للموارد، الاعتماد والصرف للأدمن
+        $pr = \App\Http\Controllers\Hr\PayrollController::class;
+        Route::get('/payroll', [$pr, 'index'])->middleware('role:admin,hr,accountant')->name('payroll');
+        Route::post('/payroll', [$pr, 'draft'])->middleware('role:admin,hr')->name('payroll.draft');
+        Route::post('/payroll/slips/{payslip}/line', [$pr, 'line'])->whereNumber('payslip')
+            ->middleware('role:admin,hr')->name('payroll.line');
+        Route::get('/payroll/slips/{payslip}/print', [$pr, 'print'])->whereNumber('payslip')
+            ->middleware('role:admin,hr,accountant')->name('payroll.print');
+        Route::get('/payroll/{run}', [$pr, 'show'])->whereNumber('run')
+            ->middleware('role:admin,hr,accountant')->name('payroll.show');
+        Route::post('/payroll/{run}/approve', [$pr, 'approve'])->whereNumber('run')
+            ->middleware('role:admin')->name('payroll.approve');
+        Route::post('/payroll/{run}/pay', [$pr, 'pay'])->whereNumber('run')
+            ->middleware('role:admin,accountant')->name('payroll.pay');
     });
 
 });

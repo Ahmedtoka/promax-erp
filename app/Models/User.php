@@ -33,6 +33,8 @@ class User extends Authenticatable
         'production_manager' => 'مدير الإنتاج',
         'quality' => 'الجودة',
         'rnd' => 'البحث والتطوير',
+        // الموارد البشرية (Lane 7) — ملفات الموظفين والحضور (`Access::SCREENS`)
+        'hr' => 'موارد بشرية',
     ];
 
     /**

@@ -20,6 +20,7 @@ return [
         'production_manager' => 'مدير الإنتاج',
         'quality' => 'الجودة',
         'rnd' => 'البحث والتطوير',
+        'hr' => 'موارد بشرية',
     ],
 
     'channel' => [

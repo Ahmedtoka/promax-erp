@@ -55,6 +55,7 @@ class FormStarIntegrityTest extends TestCase
         'gl/safes#formEditSafe' => ['gl.safes.update'],
         'gl/expenses#formExpReject' => ['gl.expenses.reject'],
         'gl/expense_categories#formEditCat' => ['gl.expense_categories.update'],
+        'hr/payroll_run#lineForm' => ['hr.payroll.line'],
         'erp/vehicles#formEditVehicle' => ['erp.vehicles.update'],
         'online/collections#formCollect' => ['online.collect'],
         'online/pickup#formCollect' => ['online.collect'],

@@ -30,10 +30,18 @@ class AttendancePunch extends Model
         self::OUT => ['انصراف', '#B00020', '🔴'],
     ];
 
+    /**
+     * مصدر البانش (Lane 7): الأبلكيشن · زرار الهيدر في الداش بورد · المشرف
+     * للعامل اللي مالوش لوجين. الصفوف القديمة كلها `app`.
+     */
+    public const SOURCES = ['app', 'dashboard', 'supervisor'];
+
     protected $fillable = [
         'attendance_day_id', 'user_id', 'type', 'at', 'lat', 'lng', 'auto',
         // انصراف إداري من الداش بورد (١١/٨) — مين اللي سجّله
         'forced_by',
+        // Lane 7: الموظف ومصدر البانش والجهاز ومين سجّله (المشرف)
+        'employee_id', 'source', 'device', 'ip', 'recorded_by',
     ];
 
     protected function casts(): array
@@ -49,6 +57,24 @@ class AttendancePunch extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /** المشرف اللي سجّل البانش للعامل — null لو الموظف سجّل بنفسه */
+    public function recorder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    public function sourceLabel(): string
+    {
+        $key = 'hrm.source_'.($this->source ?? 'app');
+
+        return \Illuminate\Support\Facades\Lang::has($key) ? __($key) : (string) $this->source;
     }
 
     /** الأدمن/المدير اللي سجّل الانصراف الإداري — null للبانش العادي */

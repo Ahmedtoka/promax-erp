@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AttendanceDay;
 use App\Models\AttendancePunch;
+use App\Models\Employee;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -53,10 +54,81 @@ final class Attendance
      */
     public static function today(User $user, ?string $date = null): AttendanceDay
     {
+        // ⚠️ (Lane 7) ملف الموظف بيتقري **وقت الإنشاء بس** (closure) — الأبلكيشن
+        // بينده هنا مع كل فتحة، وكويري زيادة على كل نداء مالهاش لازمة
         return AttendanceDay::firstOrCreate(
             ['user_id' => $user->id, 'date' => $date ?? today()->toDateString()],
+            fn () => ['status' => AttendanceDay::STATUS_OPEN, 'employee_id' => self::freeEmployeeId($user, $date)],
+        );
+    }
+
+    /**
+     * ملف الموظف لليوم الجديد — إلا لو العامل اتبصم له يوم النهارده قبل ما
+     * ياخد لوجين (`unique(employee_id, date)` كان هيرمي 500 على أول بانش).
+     */
+    private static function freeEmployeeId(User $user, ?string $date): ?int
+    {
+        $emp = Employee::forUser($user);
+
+        if ($emp === null) {
+            return null;
+        }
+
+        $taken = AttendanceDay::where('employee_id', $emp->id)
+            ->where('date', $date ?? today()->toDateString())->exists();
+
+        return $taken ? null : $emp->id;
+    }
+
+    /**
+     * يوم الموظف (Lane 7) — اللي ليه لوجين يومه هو `today($user)` بالظبط،
+     * والعامل اللي مالوش لوجين يومه على `employee_id` بس (`user_id` null).
+     */
+    public static function todayForEmployee(Employee $e, ?string $date = null): AttendanceDay
+    {
+        if ($e->user_id !== null && $e->user !== null) {
+            return self::today($e->user, $date);
+        }
+
+        return AttendanceDay::firstOrCreate(
+            ['employee_id' => $e->id, 'date' => $date ?? today()->toDateString()],
             ['status' => AttendanceDay::STATUS_OPEN],
         );
+    }
+
+    /**
+     * حالة النهارده لموظفين — **قراءة بس** زي `peekStates` (Lane 7). بتقرا
+     * اليوم بـ`employee_id` (العامل من غير لوجين) أو بـ`user_id` (الموظف
+     * اللي يومه اتفتح قبل ما ملفه يتعمل).
+     *
+     * @param  \Illuminate\Support\Collection<int, Employee>  $employees
+     * @return array<int, string> [employee_id => working|break|off]
+     */
+    public static function peekEmployeeStates(\Illuminate\Support\Collection $employees): array
+    {
+        if ($employees->isEmpty()) {
+            return [];
+        }
+
+        $userIds = $employees->pluck('user_id')->filter()->values();
+        $days = AttendanceDay::with('punches')
+            ->whereDate('date', today())
+            ->where(fn ($q) => $q->whereIn('employee_id', $employees->pluck('id'))
+                ->when($userIds->isNotEmpty(), fn ($w) => $w->orWhereIn('user_id', $userIds)))
+            ->get();
+
+        return $employees->mapWithKeys(function (Employee $e) use ($days) {
+            $day = $days->first(fn ($d) => ($e->user_id !== null && (int) $d->user_id === (int) $e->user_id)
+                || (int) $d->employee_id === $e->id);
+
+            return [$e->id => $day?->state() ?? 'off'];
+        })->all();
+    }
+
+    /** الانتقالات المسموحة من الحالة دي — لزراير الهيدر وشاشة المشرف */
+    public static function nextTypes(string $state): array
+    {
+        return array_values(array_keys(array_filter(self::ALLOWED, fn ($from) => in_array($state, $from, true))));
     }
 
     /**
@@ -111,6 +183,8 @@ final class Attendance
         ?float $lat = null,
         ?float $lng = null,
         bool $auto = false,
+        string $source = 'app',
+        array $meta = [],
     ): array {
         if (! isset(self::ALLOWED[$type])) {
             return [__('hr.bad_punch'), self::today($user)];
@@ -144,7 +218,13 @@ final class Attendance
             }
         }
 
-        DB::transaction(function () use ($day, $user, $type, $lat, $lng, $auto) {
+        // يوم اتفتح قبل ملف الموظف — يتربط أول ما يبصم (Lane 7)
+        if ($day->employee_id === null
+            && ($empId = self::freeEmployeeId($user, $day->date->toDateString())) !== null) {
+            $day->forceFill(['employee_id' => $empId])->save();
+        }
+
+        DB::transaction(function () use ($day, $user, $type, $lat, $lng, $auto, $source, $meta) {
             // ⚠️ **الانصراف بيقفل زيارة المخزن المفتوحة** (2026-08-08).
             // الزيارة المفتوحة هي إذن الاستلام — والموظف اللي انصرف
             // مش في المخزن بالتعريف. سيبانها مفتوحة كان معناه إن
@@ -153,20 +233,89 @@ final class Attendance
                 WarehouseVisits::closeOpenFor($user);
             }
 
-            AttendancePunch::create([
-                'attendance_day_id' => $day->id,
-                'user_id' => $user->id,
-                'type' => $type,
-                'at' => now(),
-                'lat' => $lat,
-                'lng' => $lng,
-                'auto' => $auto,
-            ]);
+            self::record($day, $user->id, $type, $lat, $lng, $auto, $source, $meta);
 
             self::recalculate($day->fresh());
         });
 
         return [null, $day->fresh()];
+    }
+
+    /**
+     * المشرف بيسجّل للعامل اللي **مالوش لوجين** (Lane 7).
+     *
+     * ⚠️ نفس آلة الحالات (`ALLOWED`)، ومن غير حارس الشغل المفتوح — مفيش
+     * لوجين يعني مفيش زيارات ولا أوامر توريد. الموظف اللي ليه لوجين بيبصم
+     * بنفسه (أبلكيشن/داش بورد) — المشرف مايبصمش مكانه.
+     *
+     * @return array{0: ?string, 1: AttendanceDay} [الخطأ، اليوم]
+     */
+    public static function punchEmployee(Employee $e, string $type, User $by): array
+    {
+        if ($e->user_id !== null) {
+            return [__('hrm.supervisor_has_login'), self::peekEmployeeDay($e)];
+        }
+
+        if (! $e->active) {
+            return [__('hrm.employee_inactive'), self::peekEmployeeDay($e)];
+        }
+
+        if (! isset(self::ALLOWED[$type])) {
+            return [__('hr.bad_punch'), self::peekEmployeeDay($e)];
+        }
+
+        $day = self::todayForEmployee($e);
+
+        if (! in_array($day->state(), self::ALLOWED[$type], true)) {
+            return [__('hr.bad_state_'.$type), $day];
+        }
+
+        DB::transaction(function () use ($day, $type, $by) {
+            self::record($day, null, $type, null, null, false, 'supervisor', ['recorded_by' => $by->id]);
+
+            self::recalculate($day->fresh());
+        });
+
+        return [null, $day->fresh()];
+    }
+
+    /** يوم العامل النهارده من غير ما يتعمل — للرفض (مفيش صف يتفتح على غلطة) */
+    private static function peekEmployeeDay(Employee $e): AttendanceDay
+    {
+        return AttendanceDay::where('employee_id', $e->id)->whereDate('date', today())->first()
+            ?? new AttendanceDay(['employee_id' => $e->id, 'date' => today()->toDateString(), 'status' => AttendanceDay::STATUS_OPEN]);
+    }
+
+    /**
+     * سطر البانش نفسه — المكان الوحيد اللي بيعمل `AttendancePunch::create`
+     * للبانش اليدوي. `$meta`: `device` · `ip` · `recorded_by`.
+     */
+    private static function record(
+        AttendanceDay $day,
+        ?int $userId,
+        string $type,
+        ?float $lat,
+        ?float $lng,
+        bool $auto,
+        string $source,
+        array $meta,
+    ): AttendancePunch {
+        $device = isset($meta['device']) ? trim(mb_substr((string) $meta['device'], 0, 190)) : null;
+
+        return AttendancePunch::create([
+            'attendance_day_id' => $day->id,
+            'user_id' => $userId,
+            'employee_id' => $day->employee_id,
+            'type' => $type,
+            'at' => now(),
+            'lat' => $lat,
+            'lng' => $lng,
+            'auto' => $auto,
+            'source' => in_array($source, AttendancePunch::SOURCES, true) ? $source : 'app',
+            'device' => $device === '' ? null : $device,
+            'ip' => isset($meta['ip']) ? mb_substr((string) $meta['ip'], 0, 45) : null,
+            'recorded_by' => $meta['recorded_by'] ?? null,
+        ]);
     }
 
     /**
@@ -332,13 +481,19 @@ final class Attendance
             // تاني يوم — والبانر مش لاقيها لأنها مش في قوايم النهارده.
             // القفل التلقائي بيقفلها على آخر يوم الشيفت — نفس منطق
             // بانش الانصراف الوهمي بالظبط.
-            \App\Models\Visit::where('user_id', $day->user_id)
-                ->whereNull('checked_out_at')
-                ->update(['checked_out_at' => $day->date->copy()->endOfDay()]);
+            //
+            // ⚠️ (Lane 7) العامل اللي مالوش لوجين `user_id` null — و`where('user_id', null)`
+            // في لارافيل = `whereNull`، يعني كان هيقفل أي زيارة يتيمة. مفيش لوجين = مفيش زيارات.
+            if ($day->user_id !== null) {
+                \App\Models\Visit::where('user_id', $day->user_id)
+                    ->whereNull('checked_out_at')
+                    ->update(['checked_out_at' => $day->date->copy()->endOfDay()]);
+            }
 
             AttendancePunch::create([
                 'attendance_day_id' => $day->id,
                 'user_id' => $day->user_id,
+                'employee_id' => $day->employee_id,
                 'type' => AttendancePunch::OUT,
                 // ⚠️ آخر ثانية في **يوم الشيفت** مش وقت تشغيل الأمر —
                 // الأمر بيشتغل بعد منتصف الليل، ولو سجّلنا وقته
@@ -411,6 +566,7 @@ final class Attendance
             AttendancePunch::create([
                 'attendance_day_id' => $day->id,
                 'user_id' => $user->id,
+                'employee_id' => $day->employee_id,
                 'type' => AttendancePunch::OUT,
                 'at' => $outAt,
                 'auto' => false,
@@ -478,6 +634,8 @@ final class Attendance
                 // انصراف إداري (١١/٨) — الأبلكيشن بيتجاهل المفاتيح
                 // الزيادة فالإضافة آمنة، وأي شاشة جاية تلاقيها جاهزة
                 'forced' => $p->forced_by !== null,
+                // Lane 7: app · dashboard · supervisor — الإضافة الوحيدة على الشكل
+                'source' => $p->source,
                 'lat' => $p->lat === null ? null : (float) $p->lat,
                 'lng' => $p->lng === null ? null : (float) $p->lng,
             ])->values(),

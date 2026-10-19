@@ -101,6 +101,13 @@ return [
     'act_mfg_orders_manage' => 'Create, start, finish, close and cancel production orders and request purchase for shortages',
     'act_mfg_issue' => 'Issue materials to production orders, extra issue and return to store',
     'act_mfg_qc_decide' => 'Decide QC on a production batch (release or reject)',
+    'act_hr_employees' => 'Add and edit employee files',
+    'act_hr_leave_balances' => 'Edit leave balances',
+    'act_hr_advances' => 'Record and void advances and penalties',
+    'act_hr_payroll' => 'Prepare payroll and edit its lines',
+    'act_hr_payroll_approve' => 'Approve payroll',
+    'act_hr_payroll_pay' => 'Pay payroll',
+    'act_hr_settings' => 'Edit payroll settings (insurance and tax)',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
     'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',

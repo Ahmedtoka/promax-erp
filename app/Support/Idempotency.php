@@ -41,6 +41,8 @@ final class Idempotency
     public const MFG_START = 'mfg_start';
 
     public const MFG_FINISH = 'mfg_finish';
+    /** طلب إجازة من الأبلكيشن (Lane 7) */
+    public const LEAVE_REQUEST = 'leave_request';
 
     /** قواعد الفاليديشن — نفس اللي في `collect` */
     public const RULES = ['nullable', 'string', 'max:64'];

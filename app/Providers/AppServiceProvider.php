@@ -88,6 +88,9 @@ class AppServiceProvider extends ServiceProvider
         // ويفتكر إن الأمر مانفعش ويعيده.
         Event::listen(MigrationsEnded::class, fn () => Cache::forget('pending-migrations'));
 
+        // زرار البانش في الهيدر (Lane 7) — قراءة بس، مفيش يوم بيتفتح على عرض صفحة
+        \Illuminate\Support\Facades\View::composer('partials._punch', \App\View\Composers\PunchComposer::class);
+
         // ═══ سجل الحركة (2026-08-07) ═══
         // ⚠️ التسكين محمي بـclass_exists — لو موديل اتشال أو اتسمى،
         // السيستم كله كان هيقع على boot بدل ما يشتغل من غير تسجيله.

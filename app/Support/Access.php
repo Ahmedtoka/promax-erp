@@ -56,6 +56,10 @@ class Access
             'erp.targets', 'erp.performance',
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
+            // Lane 7: زرار البانش في الهيدر + بصمة المشرف لعماله + تقرير البانشات
+            'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
             'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
             // طلبات الشراء وعروض الأسعار — اعتماد العرض أدمن بس (لين ٥، D10)
             'erp.purchase_requests',
@@ -104,6 +108,10 @@ class Access
             'erp.stock', 'erp.batches', 'erp.reports',
             // إدارة المهام (٢٦/٨)
             'erp.tasks',
+            // Lane 7: زرار البانش + بصمة المشرف لعماله + تقرير البانشات (فرعه)
+            'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
@@ -205,6 +213,18 @@ class Access
             // وحده، والراوتس كلها `role:admin,accountant` أصلاً — فالبادئة
             // مابتوسّعش على حد تاني.
             'gl.',
+            // ═══ ملف الموظف (Lane 7) — قراءة: المرتبات من هنا. الإضافة والتعديل
+            // `act.hr.employees` (الموارد البشرية)، وفورم التعديل فيه الرقم القومي ═══
+            'hr.employees', '!hr.employees.edit',
+            // Lane 7: زرار البانش + تقرير البانشات (قراءة — الساعات بتروح المرتبات)
+            'attendance.punch', 'hr.attendance.punches',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
+            // Lane 7: السلف — قراءة بس (الإضافة والإلغاء للموارد البشرية)
+            'hr.advances', '!hr.advances.store', '!hr.advances.void',
+            // Lane 7: مسير المرتبات — قراءة وطباعة القسايم والصرف (الاعتماد للأدمن)
+            // ⚠️ الصرف للمحاسب كمان (قرار المالك ١٩/١٠) — الاعتماد للأدمن بس
+            'hr.payroll', '!hr.payroll.draft', '!hr.payroll.line', '!hr.payroll.approve',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -255,6 +275,10 @@ class Access
             'mfg.orders', 'mfg.requirements',
             '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
             '!mfg.orders.cancel', '!mfg.orders.shortage', '!mfg.orders.close',
+            // Lane 7: زرار البانش + بصمة المشرف لعمال المخزن اللي مالهمش لوجين
+            'attendance.punch', 'hr.attendance.supervisor',
+            // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
+            'hr.leave', '!hr.leave.balances',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -291,6 +315,14 @@ class Access
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.boms.approve',
         ],
+        // ═══ الموارد البشرية (Lane 7، الإغلاق ١٩/١٠) — ملفات الموظفين والحضور ═══
+        // ⚠️ اعتماد ساعات الحضور فاضل للأدمن والمدير (`role:admin,manager`)
+        // زي المحاسب بالظبط — والمرتبات: الاعتماد والصرف وحفظ الإعدادات أدمن.
+        'hr' => [
+            'hr.', 'erp.attendance', 'attendance.punch',
+            '!erp.attendance.approve',
+            '!hr.payroll.approve', '!hr.payroll.pay', '!hr.settings.save',
+        ],
     ];
 
     /**
@@ -310,6 +342,7 @@ class Access
         'production_manager' => 'mfg.orders',
         'quality' => 'mfg.qc',
         'rnd' => 'mfg.specs',
+        'hr' => 'hr.employees',
     ];
 
     /** الرولز اللي بتدخل الويب أصلاً */
@@ -317,6 +350,7 @@ class Access
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
         'handover_reviewer',
         'production_manager', 'quality', 'rnd',
+        'hr',
     ];
 
     /**
@@ -648,6 +682,14 @@ class Access
             ['erp.attendance', '📊', 'hr.today_board', 'erp.attendance', null],
             ['erp.attendance.log', '📋', 'hr.log', 'erp.attendance.log', null],
             ['erp.attendance.review', '⏰', 'hr.review', 'erp.attendance.review', 'attendance_review'],
+            // ملف الموظف (Lane 7) — باقي شاشات الموارد البشرية بتتزوّد مع مهامها
+            ['hr.employees', '🪪', 'hrm.nav_employees', 'hr.employees*', null],
+            ['hr.attendance.supervisor', '👷', 'hrm.nav_supervisor', 'hr.attendance.supervisor*', null],
+            ['hr.attendance.punches', '📍', 'hrm.nav_punches', 'hr.attendance.punches*', null],
+            ['hr.leave', '🌴', 'hrm.nav_leave', 'hr.leave*', null],
+            ['hr.advances', '💵', 'hrm.nav_advances', 'hr.advances*', null],
+            ['hr.payroll', '🧾', 'hrm.nav_payroll', 'hr.payroll*', null],
+            ['hr.settings', '⚙️', 'hrm.nav_settings', 'hr.settings*', null],
         ],
 
         'nav.group_settings' => [
@@ -831,6 +873,17 @@ class Access
         'act.mfg.issue' => ['perm.act_mfg_issue', 'mfg.orders', ['production_manager', 'warehouse_keeper'], ['mfg.orders.issue', 'mfg.orders.issue_standard', 'mfg.orders.return']],
         // ═══ التصنيع — قرار الجودة على باتش التام (إفراج/رفض): الجودة بس (D7) ═══
         'act.mfg.qc_decide' => ['perm.act_mfg_qc_decide', 'mfg.qc', ['quality'], ['mfg.qc.decide']],
+        // ═══ الموارد البشرية (Lane 7) ═══
+        'act.hr.employees' => ['perm.act_hr_employees', 'hr.employees', ['hr'], ['hr.employees.store', 'hr.employees.update']],
+        'act.hr.leave_balances' => ['perm.act_hr_leave_balances', 'hr.leave.balances', ['hr'], ['hr.leave.balances.update', 'hr.leave.balances.seed']],
+        'act.hr.advances' => ['perm.act_hr_advances', 'hr.advances', ['hr'], ['hr.advances.store', 'hr.advances.void', 'hr.penalties.store', 'hr.penalties.delete']],
+        'act.hr.payroll' => ['perm.act_hr_payroll', 'hr.payroll', ['hr'], ['hr.payroll.draft', 'hr.payroll.line']],
+        // ⚠️ أدمن بس: الاعتماد بيرحّل قيد المرتبات
+        'act.hr.payroll_approve' => ['perm.act_hr_payroll_approve', 'hr.payroll', [], ['hr.payroll.approve']],
+        // الصرف: المحاسب أو الأدمن (قرار المالك ١٩/١٠)
+        'act.hr.payroll_pay' => ['perm.act_hr_payroll_pay', 'hr.payroll', ['accountant'], ['hr.payroll.pay']],
+        // ⚠️ أدمن بس: نسب التأمينات وشرايح الضريبة بتأثر على كل مرتب
+        'act.hr.settings' => ['perm.act_hr_settings', 'hr.settings', [], ['hr.settings.save']],
     ];
 
     /**

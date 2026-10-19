@@ -32,6 +32,9 @@ class AttendanceApiController extends Controller
             $data['type'],
             isset($data['lat']) ? (float) $data['lat'] : null,
             isset($data['lng']) ? (float) $data['lng'] : null,
+            source: 'app',
+            // Lane 7: الجهاز والـIP في تقرير البانشات
+            meta: ['device' => (string) $request->userAgent(), 'ip' => $request->ip()],
         );
 
         if ($error !== null) {

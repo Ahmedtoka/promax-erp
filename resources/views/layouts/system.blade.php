@@ -929,6 +929,9 @@ html.nav-mini .side-user{display:none}
             </script>
         @endif
 
+        {{-- زرار البانش (Lane 7) — للي ليه ملف موظف بس --}}
+        @include('partials._punch')
+
         {{-- ⚠️ الجرس للي شايف الإشعارات بس — مستلم النظام (١٩/١٠) مالوش --}}
         @if (\App\Support\Access::allows(auth()->user(), 'notifications.latest'))
         {{-- ═══ جرس الإشعارات (2026-08-09) — نفس صفوف الموبايل ═══

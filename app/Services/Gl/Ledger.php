@@ -501,6 +501,8 @@ class Ledger
             ->concat(\App\Models\CashMovement::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
             ->concat(\App\Models\SafeCount::where('status', 'posted')->whereDate('date', '>=', $d)->orderBy('date')->cursor())
             ->concat(\App\Models\FixedAssetDepreciation::whereDate('date', '>=', $d)->orderBy('date')->orderBy('id')->cursor())
+            // Lane 7: مسيرات المرتبات المعتمدة + دفعات الصرف + السلف
+            ->concat(\App\Services\Hr\PayrollGl::sources($d))
             ->sortBy(fn ($m) => self::dateOf($m)->format('Y-m-d').'-'.str_pad((string) $m->getKey(), 10, '0', STR_PAD_LEFT));
         foreach ($all as $m) {
             yield $m;

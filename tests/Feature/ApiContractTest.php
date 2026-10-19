@@ -66,6 +66,28 @@ class ApiContractTest extends TestCase
         $this->withHeaders($h)->getJson('/api/manager/bootstrap')->assertOk();
     }
 
+    /**
+     * ⚠️ شكل رد البانش ثابت — الأبلكيشن (Lane 8) بيقرا المفاتيح دي بالاسم.
+     * الإضافة الوحيدة في Lane 7: `source` على كل بانش.
+     */
+    public function test_attendance_punch_shape_is_stable(): void
+    {
+        $rep = $this->makeRep();
+
+        $this->withHeaders($this->tokenFor($rep))
+            ->postJson('/api/attendance/punch', ['type' => 'in', 'lat' => 30.05, 'lng' => 31.25])
+            ->assertOk()
+            ->assertJsonStructure([
+                'attendance' => [
+                    'state', 'worked_minutes', 'open_since',
+                    'punches' => ['*' => ['type', 'label', 'at', 'source']],
+                ],
+            ])
+            ->assertJsonPath('attendance.state', 'working')
+            ->assertJsonPath('attendance.punches.0.type', 'in')
+            ->assertJsonPath('attendance.punches.0.source', 'app');
+    }
+
     public function test_bad_coordinates_on_a_purchase_order_arrival_are_refused(): void
     {
         $rep = $this->makeRep();
@@ -123,6 +145,148 @@ class ApiContractTest extends TestCase
         foreach (['sales_agent', 'manager'] as $role) {
             $this->withHeaders($this->tokenFor($this->user($role)))
                 ->getJson('/api/production/orders')->assertStatus(403);
+        }
+    }
+
+    /**
+     * ⚠️ عقد الإجازات (Lane 8) — الأبلكيشن بيقرا المفاتيح دي بالاسم،
+     * والأرقام JSON numbers. من غير ملف موظف 403 والكارت بيستخبى.
+     *
+     * @return array{0: User, 1: User}
+     */
+    private function leaveTeam(): array
+    {
+        $boss = $this->user('manager');
+        $bossE = \App\Models\Employee::create(['code' => 'EMP-9001', 'name' => 'المدير', 'name_en' => 'Boss', 'user_id' => $boss->id]);
+        $rep = $this->makeRep();
+        \App\Models\Employee::create(['code' => 'EMP-9002', 'name' => 'مندوب', 'name_en' => 'Rep', 'user_id' => $rep->id, 'manager_id' => $bossE->id]);
+
+        return [$rep, $boss];
+    }
+
+    public function test_leave_endpoints_follow_the_app_contract(): void
+    {
+        [$rep, $boss] = $this->leaveTeam();
+        $h = $this->tokenFor($rep);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')
+            ->assertOk()
+            ->assertJsonStructure(['year', 'balances' => ['*' => ['type', 'label', 'entitled', 'used', 'remaining']]])
+            ->assertJsonPath('balances.0.type', 'annual')
+            ->assertJsonPath('balances.0.entitled', 21);
+
+        $res = $this->withHeaders($h)->postJson('/api/leave/requests', [
+            'type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27', 'note' => 'سفر',
+        ])->assertCreated();
+
+        $res->assertJsonStructure(['request' => [
+            'id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label',
+            'decision_note', 'employee_name', 'created_at',
+        ]])
+            ->assertJsonPath('request.from', '2026-10-25')
+            ->assertJsonPath('request.to', '2026-10-27')
+            ->assertJsonPath('request.status', 'pending')
+            ->assertJsonPath('request.employee_name', 'Rep');
+        $this->assertSame(
+            ['id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label', 'decision_note', 'employee_name', 'created_at'],
+            array_keys($res->json('request')));
+        $this->assertIsNumeric($res->json('request.days'));
+        $this->assertEquals(3, $res->json('request.days'));
+        $id = $res->json('request.id');
+
+        $this->withHeaders($h)->getJson('/api/leave/requests?mine=1')
+            ->assertOk()->assertJsonCount(1, 'requests')->assertJsonPath('requests.0.id', $id);
+
+        $hb = $this->tokenFor($boss);
+        $this->withHeaders($hb)->getJson('/api/leave/approvals')
+            ->assertOk()->assertJsonCount(1, 'requests')->assertJsonPath('requests.0.id', $id);
+
+        $dec = $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved', 'idem_key' => 'decide-1'])
+            ->assertOk()->assertJsonPath('request.status', 'approved');
+        // شكل Lane 8 D1 مقفول
+        $this->assertEqualsCanonicalizing(
+            ['id', 'type', 'type_label', 'from', 'to', 'days', 'note', 'status', 'status_label', 'decision_note', 'employee_name'],
+            array_diff(array_keys($dec->json('request')), ['created_at']));
+
+        // نفس القرار تاني = نفس الصف، وقرار مختلف = 422
+        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'approved'])
+            ->assertOk()->assertJsonPath('request.status', 'approved');
+        $this->withHeaders($hb)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'rejected'])
+            ->assertStatus(422)->assertJsonStructure(['message']);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')->assertJsonPath('balances.0.remaining', 18);
+
+        // الموظف نفسه مايقررش (مش مديره)
+        $this->withHeaders($h)->postJson("/api/leave/requests/{$id}/decide", ['decision' => 'rejected'])
+            ->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_same_idem_key_returns_the_same_request(): void
+    {
+        [$rep] = $this->leaveTeam();
+        $h = $this->tokenFor($rep);
+        $body = ['type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27', 'idem_key' => 'leave-abc-1'];
+
+        $a = $this->withHeaders($h)->postJson('/api/leave/requests', $body)->assertCreated()->json('request.id');
+        $b = $this->withHeaders($h)->postJson('/api/leave/requests', $body)->assertOk()->json('request.id');
+
+        $this->assertSame($a, $b);
+        $this->assertSame(1, \App\Models\LeaveRequest::query()->count());
+    }
+
+    public function test_leave_without_employee_record_is_403(): void
+    {
+        $rep = $this->makeRep();
+        $h = $this->tokenFor($rep);
+
+        $this->withHeaders($h)->getJson('/api/leave/balances')->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->getJson('/api/leave/requests?mine=1')->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->postJson('/api/leave/requests', ['type' => 'annual', 'from' => '2026-10-25', 'to' => '2026-10-27'])
+            ->assertForbidden()->assertJsonStructure(['message']);
+        $this->withHeaders($h)->getJson('/api/leave/approvals')->assertOk()->assertExactJson(['requests' => []]);
+    }
+
+    private function appLogin(string $role, bool $withEmployee): array
+    {
+        $u = $this->makeAdmin(['role' => $role, 'email' => $role.uniqid().'@promax.test']);
+        if ($withEmployee) {
+            \App\Models\Employee::create(['code' => \App\Models\Employee::nextCode(), 'name' => 'موظف', 'name_en' => 'Staff', 'user_id' => $u->id]);
+        }
+
+        return [$u, $this->postJson('/api/login', ['login' => $u->email, 'password' => 'secret'])];
+    }
+
+    public function test_branch_manager_with_employee_record_can_log_in_to_the_app(): void
+    {
+        [, $res] = $this->appLogin('branch_manager', true);
+
+        $res->assertOk()->assertJsonStructure(['token', 'user' => ['role']])->assertJsonPath('user.role', 'branch_manager');
+    }
+
+    public function test_hr_role_without_employee_record_is_refused(): void
+    {
+        [, $res] = $this->appLogin('hr', false);
+
+        $res->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_handover_reviewer_is_refused_even_with_employee_record(): void
+    {
+        [, $res] = $this->appLogin('handover_reviewer', true);
+
+        $res->assertForbidden()->assertJsonStructure(['message']);
+    }
+
+    public function test_staff_roles_bootstrap_and_punch(): void
+    {
+        foreach (['branch_manager', 'hr'] as $role) {
+            [, $res] = $this->appLogin($role, true);
+            $res->assertOk();
+            $h = ['Authorization' => 'Bearer '.$res->json('token')];
+
+            $this->withHeaders($h)->getJson('/api/bootstrap')->assertOk()->assertJsonStructure(['attendance' => ['state']]);
+            $this->withHeaders($h)->postJson('/api/attendance/punch', ['type' => 'in'])->assertOk();
+            $this->withHeaders($h)->getJson('/api/leave/balances')->assertOk();
         }
     }
 }
