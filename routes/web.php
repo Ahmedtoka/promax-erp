@@ -297,6 +297,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('purchasing.close');
         });
 
+        // موافقة/رفض أمر شراء مستني — الأدمن بس (لين ٥)
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/purchasing/{supplierOrder}/approve', [\App\Http\Controllers\SupplierController::class, 'approveOrder'])
+                ->name('purchasing.approve');
+            Route::post('/purchasing/{supplierOrder}/reject', [\App\Http\Controllers\SupplierController::class, 'rejectOrder'])
+                ->name('purchasing.reject');
+        });
+
         Route::get('/contracts', [ErpController::class, 'contracts'])->name('contracts');
         // صفحة عقد العميل — كل عقد لوحده
         // حركة أصناف العميل بالكمية (٨/٩) — CSV تفصيلي أو ملخص

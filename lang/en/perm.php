@@ -77,6 +77,7 @@ return [
     'act_suppliers_manage' => 'Add & edit suppliers',
     'act_suppliers_pay' => 'Pay supplier dues',
     'act_purchasing_manage' => 'Supplier POs & invoicing',
+    'act_purchasing_approve' => 'Approve or reject pending POs',
     'act_purchasing_receive' => 'Receive supplier goods',
     'act_money_dues' => 'Dues: generate, settle, waive',
     'act_money_eta' => 'Tax & ETA export',

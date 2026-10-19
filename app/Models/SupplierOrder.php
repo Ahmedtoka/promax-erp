@@ -29,6 +29,7 @@ class SupplierOrder extends Model
     protected $fillable = [
         'number', 'supplier_id', 'warehouse_id', 'status',
         'ordered_on', 'expected_on', 'total', 'notes', 'created_by',
+        'approval_status', 'approval_reasons', 'approved_by', 'approved_at', 'supplier_contract_id',
     ];
 
     protected function casts(): array
@@ -37,6 +38,8 @@ class SupplierOrder extends Model
             'ordered_on' => 'date',
             'expected_on' => 'date',
             'total' => 'decimal:2',
+            'approval_reasons' => 'array',
+            'approved_at' => 'datetime',
         ];
     }
 
@@ -76,6 +79,61 @@ class SupplierOrder extends Model
     {
         // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
         return static::nextDocumentNumber('SPO-', 1001);
+    }
+
+    /** مستني موافقة الأدمن (لين ٥) — مش مفتوح، فالاستلام والفوترة مرفوضين */
+    public function isPendingApproval(): bool
+    {
+        return $this->status === 'pending' && $this->approval_status === 'pending';
+    }
+
+    /** الأدمن بيوافق: pending → open */
+    public function approve(User $by): void
+    {
+        DB::transaction(function () use ($by) {
+            $order = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $order->isPendingApproval()) {
+                throw new Rejected(__('supplier.not_pending'));
+            }
+
+            $order->update([
+                'status' => 'open',
+                'approval_status' => 'approved',
+                'approved_by' => $by->id,
+                'approved_at' => now(),
+            ]);
+            $this->refresh();
+        });
+    }
+
+    /** الأدمن بيرفض: pending → cancelled والملاحظة تتضاف على `notes` */
+    public function reject(User $by, ?string $note = null): void
+    {
+        DB::transaction(function () use ($by, $note) {
+            $order = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $order->isPendingApproval()) {
+                throw new Rejected(__('supplier.not_pending'));
+            }
+
+            $note = trim((string) $note);
+            $notes = $order->notes;
+            if ($note !== '') {
+                $line = __('supplier.rejected_note', ['note' => $note]);
+                $notes = $notes ? $notes."
+".$line : $line;
+            }
+
+            $order->update([
+                'status' => 'cancelled',
+                'approval_status' => 'rejected',
+                'approved_by' => $by->id,
+                'approved_at' => now(),
+                'notes' => $notes,
+            ]);
+            $this->refresh();
+        });
     }
 
     public function isOpen(): bool
@@ -201,6 +259,7 @@ class SupplierOrder extends Model
     public function statusClass(): string
     {
         return match ($this->status) {
+            'pending' => 'b-orange',
             'open' => 'b-blue',
             'received' => 'b-green',
             'closed' => 'b-gray',

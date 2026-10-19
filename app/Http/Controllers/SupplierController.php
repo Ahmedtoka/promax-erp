@@ -8,7 +8,9 @@ use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierOrder;
 use App\Models\SupplierPayment;
+use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\PurchaseApproval;
 use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -214,6 +216,9 @@ class SupplierController extends Controller
         if ($sup = $request->integer('supplier')) {
             $q->where('supplier_id', $sup);
         }
+        if ($request->string('approval')->value() === 'pending') {
+            $q->where('approval_status', 'pending');
+        }
 
         // فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر التجاري
         // اللي المشتريات بتراجع عليه، مش `created_at`. مفتوح لو فاضي.
@@ -243,8 +248,9 @@ class SupplierController extends Controller
             'orders' => $q->latest()->paginate(30)->withQueryString(),
             'range' => $range,
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
-            'filters' => $request->only(['status', 'supplier']),
+            'filters' => $request->only(['status', 'supplier', 'approval']),
             'openCount' => SupplierOrder::where('status', 'open')->count(),
+            'pendingCount' => SupplierOrder::where('approval_status', 'pending')->count(),
         ]);
     }
 
@@ -292,24 +298,47 @@ class SupplierController extends Controller
             return back()->withErrors(['qty' => __('supplier.no_lines')])->withInput();
         }
 
-        $order = DB::transaction(function () use ($data, $lines, $request) {
+        // قواعد الموافقة (لين ٥): عقد/سعر/مورد جديد/صنف جديد. بتتقيّم قبل الإنشاء.
+        $assessment = app(PurchaseApproval::class)
+            ->assess((int) $data['supplier_id'], $lines, $data['ordered_on']);
+        $reasons = $assessment['reasons'];
+        $isAdmin = $request->user()->isAdmin();
+
+        $order = DB::transaction(function () use ($data, $lines, $request, $assessment, $reasons, $isAdmin) {
+            $extra = [];
+            $status = 'open';
+
+            if ($reasons !== []) {
+                $extra['approval_reasons'] = $reasons;
+
+                if ($isAdmin) {
+                    // D3: أمر الأدمن بيتوافق عليه لحظة الإنشاء والأسباب متسجلة
+                    $extra += ['approval_status' => 'approved', 'approved_by' => $request->user()->id, 'approved_at' => now()];
+                } else {
+                    $status = 'pending';
+                    $extra['approval_status'] = 'pending';
+                }
+            }
+
             $order = SupplierOrder::create([
                 'number' => SupplierOrder::nextNumber(),
                 'supplier_id' => $data['supplier_id'],
                 'warehouse_id' => $data['warehouse_id'],
-                'status' => 'open',
+                'status' => $status,
                 'ordered_on' => $data['ordered_on'],
                 'expected_on' => $data['expected_on'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
                 'total' => collect($lines)->sum(fn ($l) => $l['qty'] * $l['unit_cost']),
-            ]);
+                'supplier_contract_id' => $assessment['contract_id'],
+            ] + $extra);
 
             foreach ($lines as $pid => $line) {
                 $order->items()->create([
                     'product_id' => $pid,
                     'qty' => $line['qty'],
                     'unit_cost' => $line['unit_cost'],
+                    'contract_price' => $assessment['contract_prices'][$pid] ?? null,
                 ]);
             }
 
@@ -317,7 +346,9 @@ class SupplierController extends Controller
         });
 
         return redirect()->route('erp.purchasing.show', $order)
-            ->with('ok', __('supplier.order_created', ['number' => $order->number]));
+            ->with('ok', $order->status === 'pending'
+                ? __('supplier.order_waits_approval', ['number' => $order->number])
+                : __('supplier.order_created', ['number' => $order->number]));
     }
 
     public function order(SupplierOrder $supplierOrder)
@@ -327,7 +358,45 @@ class SupplierController extends Controller
             'items.product', 'receipts', 'invoices',
         ]);
 
-        return view('erp.supplier_order', ['o' => $supplierOrder]);
+        // ⚠️ أسماء الأصناف هنا مش في الـBlade (ممنوع كويري في الفيو)
+        $names = Product::whereIn('id', collect($supplierOrder->approval_reasons ?? [])->pluck('product_id'))
+            ->get()->mapWithKeys(fn (Product $p) => [$p->id => $p->displayName()]);
+        $reasonTexts = collect($supplierOrder->approval_reasons ?? [])
+            ->map(fn ($r) => PurchaseApproval::reasonText($r, $names[$r['product_id']] ?? null))
+            ->all();
+        $approver = $supplierOrder->approved_by ? User::find($supplierOrder->approved_by) : null;
+
+        return view('erp.supplier_order', [
+            'o' => $supplierOrder,
+            'reasonTexts' => $reasonTexts,
+            'approverName' => $approver?->name,
+        ]);
+    }
+
+    /** الأدمن بيوافق على أمر مستني */
+    public function approveOrder(Request $request, SupplierOrder $supplierOrder)
+    {
+        try {
+            $supplierOrder->approve($request->user());
+        } catch (Rejected $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('supplier.order_approved', ['number' => $supplierOrder->number]));
+    }
+
+    /** الأدمن بيرفض — الأمر بيتلغي */
+    public function rejectOrder(Request $request, SupplierOrder $supplierOrder)
+    {
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
+
+        try {
+            $supplierOrder->reject($request->user(), $data['note'] ?? null);
+        } catch (Rejected $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('supplier.order_rejected', ['number' => $supplierOrder->number]));
     }
 
     /** استلام بضاعة على الأمر — إذن استلام حقيقي وباتشات */

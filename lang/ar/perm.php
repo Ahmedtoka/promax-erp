@@ -77,6 +77,7 @@ return [
     'act_suppliers_manage' => 'إضافة وتعديل الموردين',
     'act_suppliers_pay' => 'دفع مستحقات الموردين',
     'act_purchasing_manage' => 'أوامر شراء الموردين وفوترتها',
+    'act_purchasing_approve' => 'موافقة أو رفض أوامر الشراء المعلّقة',
     'act_purchasing_receive' => 'استلام بضاعة الموردين',
     'act_money_dues' => 'المستحقات: توليد وتسوية وإعفاء',
     'act_money_eta' => 'الضرايب وتصدير ETA',

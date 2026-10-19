@@ -57,6 +57,8 @@ class Access
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
             'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
+            // موافقة/رفض أمر الشراء المستني قرار الأدمن بس (لين ٥، D10)
+            '!erp.purchasing.approve', '!erp.purchasing.reject',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
@@ -233,6 +235,7 @@ class Access
             'erp.purchasing',
             '!erp.purchasing.new', '!erp.purchasing.store', '!erp.purchasing.invoice',
             '!erp.purchasing.cancel', '!erp.purchasing.close',
+            '!erp.purchasing.approve', '!erp.purchasing.reject',
             // جرس الإشعارات — طلبات البضاعة وأوامر التجهيز بتوصله هنا
             'notifications',
             // ⚠️ **عرض بس** — إشعار «طلب بضاعة في السكة» لينكه بيفتح
@@ -687,6 +690,7 @@ class Access
         'act.suppliers.pay' => ['perm.act_suppliers_pay', 'erp.suppliers', ['manager', 'accountant'], ['erp.suppliers.pay']],
         'act.purchasing.manage' => ['perm.act_purchasing_manage', 'erp.purchasing', ['manager'], ['erp.purchasing.new', 'erp.purchasing.store', 'erp.purchasing.invoice', 'erp.purchasing.cancel', 'erp.purchasing.close']],
         'act.supplier_contracts.manage' => ['perm.act_supplier_contracts_manage', 'erp.supplier_contracts', ['manager'], ['erp.supplier_contracts.store', 'erp.supplier_contracts.update', 'erp.supplier_contracts.items']],
+        'act.purchasing.approve' => ['perm.act_purchasing_approve', 'erp.purchasing', [], ['erp.purchasing.approve', 'erp.purchasing.reject']],
         'act.purchasing.receive' => ['perm.act_purchasing_receive', 'erp.purchasing', null, ['erp.purchasing.receive']],
 
         // ═══ الفلوس ═══
