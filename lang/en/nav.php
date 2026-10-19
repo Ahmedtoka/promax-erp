@@ -71,6 +71,7 @@ return [
     'gl_balance_sheet' => 'Balance Sheet',
     'gl_expenses' => 'Expenses',
     'gl_cash' => 'Cash Movements',
+    'gl_safes' => 'Safes & Banks',
     'gl_settings' => 'Ledger Settings',
 
     'repclose' => 'Rep Settlements',

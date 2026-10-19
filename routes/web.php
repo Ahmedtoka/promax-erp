@@ -799,6 +799,12 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/cash', [$c, 'index'])->name('cash');
         Route::post('/cash', [$c, 'store'])->name('cash.store');
         Route::post('/cash/{cashMovement}/void', [$c, 'void'])->name('cash.void');
+
+        // ═══ Lane 4 (١٩/١٠) — الخزن والبنوك: سجل بحساب دفتر لكل خزنة ═══
+        $sf = \App\Http\Controllers\Gl\SafeController::class;
+        Route::get('/safes', [$sf, 'index'])->name('safes');
+        Route::post('/safes', [$sf, 'store'])->name('safes.store');
+        Route::post('/safes/{safe}', [$sf, 'update'])->name('safes.update');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.

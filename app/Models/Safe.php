@@ -66,6 +66,67 @@ class Safe extends Model
         return round((float) $row->d - (float) $row->c, 2);
     }
 
+    /**
+     * داخل/خارج الخزنة في نافذة (شامل الطرفين، على `gl_entries.date`) —
+     * مجموع المدين ومجموع الدائن على حسابها. من غير حساب = صفر/صفر.
+     *
+     * @return array{in: float, out: float}
+     */
+    public function movementsBetween(?Carbon $from, ?Carbon $to): array
+    {
+        if (! $this->gl_account_id) {
+            return ['in' => 0.0, 'out' => 0.0];
+        }
+
+        $row = DB::table('gl_lines')
+            ->join('gl_entries', 'gl_entries.id', '=', 'gl_lines.entry_id')
+            ->where('gl_lines.account_id', $this->gl_account_id)
+            ->when($from, fn ($q) => $q->whereDate('gl_entries.date', '>=', $from->toDateString()))
+            ->when($to, fn ($q) => $q->whereDate('gl_entries.date', '<=', $to->toDateString()))
+            ->selectRaw('COALESCE(SUM(gl_lines.debit),0) d, COALESCE(SUM(gl_lines.credit),0) c')
+            ->first();
+
+        return ['in' => round((float) $row->d, 2), 'out' => round((float) $row->c, 2)];
+    }
+
+    /**
+     * حساب الخزنة في الشجرة (L4-D2): لو متربط يرجع هو، وإلا يتفتح حساب
+     * مدين قابل للترحيل تحت أب `cash_main` بكود `<الأب>.<كود الخزنة>`.
+     * ⚠️ ده صف في الشجرة مش قيد — زي `GlAccount::repCash`، مش لازم يعدّي
+     * على `Ledger`.
+     */
+    public function ensureGlAccount(): GlAccount
+    {
+        if ($this->gl_account_id && ($acc = GlAccount::find($this->gl_account_id))) {
+            return $acc;
+        }
+
+        return DB::transaction(function () {
+            // ⚠️ تحت **أب** النقدية (`11`) مش تحت `cash_main` نفسه — ده حساب قابل للترحيل
+            $parent = GlAccount::findKey('cash_main')->parent
+                ?? throw new \RuntimeException('GL account [cash_main] has no parent group');
+            $code = $parent->code.'.'.$this->code;
+            if (GlAccount::where('code', $code)->exists()) {
+                $code .= '-'.$this->id;
+            }
+
+            $acc = GlAccount::create([
+                'code' => $code,
+                'name' => $this->name,
+                'name_en' => $this->name_en ?: $this->name,
+                'parent_id' => $parent->id,
+                'type' => 'asset',
+                'normal_side' => 'debit',
+                'is_system' => true,
+                'is_postable' => true,
+                'active' => true,
+            ]);
+            $this->forceFill(['gl_account_id' => $acc->id])->save();
+
+            return $acc;
+        });
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
