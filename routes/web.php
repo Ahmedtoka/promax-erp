@@ -1434,6 +1434,17 @@ Route::middleware(['auth', 'screen'])->group(function () {
         $hs = \App\Http\Controllers\Hr\HrSettingsController::class;
         Route::get('/settings', [$hs, 'index'])->middleware('role:admin,hr')->name('settings');
         Route::post('/settings', [$hs, 'save'])->middleware('role:admin')->name('settings.save');
+
+        // السلف والجزاءات (المهمة ٥): الكتابة `role:admin,hr` + `act.hr.advances`، والقايمة قراءة للمحاسب
+        $adv = \App\Http\Controllers\Hr\AdvanceController::class;
+        Route::get('/advances', [$adv, 'index'])->middleware('role:admin,hr,accountant')->name('advances');
+        Route::post('/advances', [$adv, 'store'])->middleware('role:admin,hr')->name('advances.store');
+        Route::post('/advances/{advance}/void', [$adv, 'void'])->whereNumber('advance')
+            ->middleware('role:admin,hr')->name('advances.void');
+        Route::post('/penalties', [$adv, 'storePenalty'])->middleware('role:admin,hr')->name('penalties.store');
+        Route::post('/penalties/{penalty}/delete', [$adv, 'deletePenalty'])->whereNumber('penalty')
+            ->middleware('role:admin,hr')->name('penalties.delete');
+
     });
 
 });
