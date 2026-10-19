@@ -97,6 +97,7 @@ return [
     'act_mfg_lines_manage' => 'Add and edit production lines',
     'act_mfg_lines_settings' => 'Set the manufacturing warehouses',
     'act_mfg_orders_manage' => 'Create, start, finish and cancel production orders and request purchase for shortages',
+    'act_mfg_issue' => 'Issue materials to production orders, extra issue and return to store',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
     'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',

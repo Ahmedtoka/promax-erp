@@ -8,6 +8,7 @@ use App\Models\CostCenter;
 use App\Models\Product;
 use App\Models\ProductionOrder;
 use App\Models\Warehouse;
+use App\Services\Mfg\Issues;
 use App\Services\Mfg\Orders;
 use App\Services\Mfg\PurchaseLink;
 use App\Services\Mfg\Requirement;
@@ -117,6 +118,7 @@ class OrderController extends Controller
         return view('mfg.order', [
             'order' => $order,
             'req' => Requirement::forOrder($order),
+            'issues' => $order->issues()->with(['product', 'batch', 'user'])->get(),
         ]);
     }
 
@@ -149,6 +151,61 @@ class OrderController extends Controller
         return back()->with('ok', $id
             ? __('mfg.flash_shortage_request', ['id' => $id])
             : __('mfg.flash_shortage_notified'));
+    }
+
+    /** صرف خامة للأمر — صرف عادي أو صرف زيادة فوق المعياري (D5) */
+    public function issue(Request $request, ProductionOrder $order): RedirectResponse
+    {
+        $data = $request->validate([
+            'material_id' => ['required', 'integer', 'exists:products,id'],
+            'qty' => ['required', 'numeric', 'gt:0', 'max:10000000'],
+            'kind' => ['required', 'in:'.implode(',', Issues::ISSUE_KINDS)],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $rows = Issues::issue($order, Product::query()->findOrFail($data['material_id']), (float) $data['qty'],
+                $request->user(), $data['kind'], $data['note'] ?? null);
+        } catch (Rejected $e) {
+            return back()->withErrors(['issue' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('ok', __('mfg.flash_issued', ['count' => $rows->count()]));
+    }
+
+    /** صرف الباقي من المعياري لكل السطور مرة واحدة */
+    public function issueStandard(Request $request, ProductionOrder $order): RedirectResponse
+    {
+        try {
+            $n = Issues::issueStandard($order, $request->user());
+        } catch (Rejected $e) {
+            return back()->withErrors(['issue' => $e->getMessage()]);
+        }
+
+        if ($n === 0) {
+            return back()->withErrors(['issue' => __('mfg.issue_nothing_left')]);
+        }
+
+        return back()->with('ok', __('mfg.flash_issued_standard', ['count' => $n]));
+    }
+
+    /** مرتجع للمخزن — لنفس الباتشات اللي الأمر سحب منها (D4) */
+    public function returnToStore(Request $request, ProductionOrder $order): RedirectResponse
+    {
+        $data = $request->validate([
+            'material_id' => ['required', 'integer', 'exists:products,id'],
+            'qty' => ['required', 'numeric', 'gt:0', 'max:10000000'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            Issues::returnToStore($order, Product::query()->findOrFail($data['material_id']), (float) $data['qty'],
+                $request->user(), $data['note'] ?? null);
+        } catch (Rejected $e) {
+            return back()->withErrors(['issue' => $e->getMessage()])->withInput();
+        }
+
+        return back()->with('ok', __('mfg.flash_returned'));
     }
 
     /** احتياج الخامات للأوامر المفتوحة (مخطط/جاري) — الفترة على `planned_on` */

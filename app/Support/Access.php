@@ -276,6 +276,7 @@ class Access
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
             '!mfg.orders.cancel', '!mfg.orders.shortage',
+            '!mfg.orders.issue', '!mfg.orders.issue_standard', '!mfg.orders.return',
         ],
         'rnd' => [
             'mfg.specs', 'mfg.boms', 'notifications',
@@ -779,6 +780,8 @@ class Access
         'act.mfg.lines_manage' => ['perm.act_mfg_lines_manage', 'mfg.lines', ['production_manager'], ['mfg.lines.store', 'mfg.lines.update']],
         'act.mfg.lines_settings' => ['perm.act_mfg_lines_settings', 'mfg.lines', [], ['mfg.lines.settings']],
         'act.mfg.orders_manage' => ['perm.act_mfg_orders_manage', 'mfg.orders', ['production_manager'], ['mfg.orders.store', 'mfg.orders.start', 'mfg.orders.finish', 'mfg.orders.cancel', 'mfg.orders.shortage']],
+        // ═══ التصنيع — صرف الخامات والمرتجع: مدير الإنتاج وأمين المخزن ═══
+        'act.mfg.issue' => ['perm.act_mfg_issue', 'mfg.orders', ['production_manager', 'warehouse_keeper'], ['mfg.orders.issue', 'mfg.orders.issue_standard', 'mfg.orders.return']],
     ];
 
     /**

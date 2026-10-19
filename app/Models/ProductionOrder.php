@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * أمر إنتاج (التصنيع ١٩/١٠، spec §3.5):
@@ -74,6 +75,59 @@ class ProductionOrder extends Model
     {
         return in_array($this->status, self::OPEN_STATUSES, true);
     }
+
+    /**
+     * صافي المصروف لكل خامة: صرف + زيادة − مرتجع.
+     *
+     * ⚠️ المصدر الوحيد للصافي — `Requirement::issuedNet` و`Orders::cancel`
+     * و`Mfg\Issues` كلهم بيقروا من هنا. بيقرا من الداتابيز كل مرة (مش من
+     * الريليشن المتحمّلة) عشان جوه الترانزاكشن يشوف آخر حركة.
+     *
+     * @return array<int, float> product_id ⇒ qty
+     */
+    public function netIssuedAll(): array
+    {
+        return ProductionIssue::query()->where('production_order_id', $this->id)
+            ->groupBy('product_id')
+            ->select('product_id', DB::raw(self::NET_QTY.' AS net'))
+            ->pluck('net', 'product_id')
+            ->map(fn ($v) => round((float) $v, 3))
+            ->all();
+    }
+
+    /** صافي المصروف من خامة واحدة */
+    public function netIssued(int $productId): float
+    {
+        return $this->netIssuedAll()[$productId] ?? 0.0;
+    }
+
+    /**
+     * صافي المصروف من خامة لكل باتش خامة (الموجب بس) — المرتجع بيرجع
+     * للباتشات دي بالظبط (D4).
+     *
+     * @return array<int, float> batch_id ⇒ qty
+     */
+    public function netIssuedByBatch(int $productId): array
+    {
+        return ProductionIssue::query()->where('production_order_id', $this->id)
+            ->where('product_id', $productId)
+            ->groupBy('batch_id')
+            ->select('batch_id', DB::raw(self::NET_QTY.' AS net'))
+            ->pluck('net', 'batch_id')
+            ->map(fn ($v) => round((float) $v, 3))
+            ->filter(fn (float $v) => $v > 0.0005)
+            ->all();
+    }
+
+    /** تكلفة الخامات الفعلية = قيمة الصرف والزيادة − قيمة المرتجع */
+    public function materialCost(): float
+    {
+        return round((float) ProductionIssue::query()->where('production_order_id', $this->id)
+            ->sum(DB::raw("CASE WHEN kind = 'return' THEN -value ELSE value END")), 2);
+    }
+
+    /** المرتجع بيتطرح — الكمية في `production_issues` موجبة دايماً */
+    private const NET_QTY = "SUM(CASE WHEN kind = 'return' THEN -qty ELSE qty END)";
 
     public function statusLabel(): string
     {

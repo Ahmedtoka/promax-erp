@@ -1400,6 +1400,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/orders/{order}/'.$step, [$order, $step])->whereNumber('order')
                 ->middleware('role:admin,production_manager')->name('orders.'.$step);
         }
+        // صرف الخامات للأمر (مهمة ٥) — أمين المخزن معاهم؛ الجودة `!` بالاسم في Access
+        foreach (['issue' => 'issue', 'issue-standard' => 'issueStandard', 'return' => 'returnToStore'] as $path => $fn) {
+            Route::post('/orders/{order}/'.$path, [$order, $fn])->whereNumber('order')
+                ->middleware('role:admin,production_manager,warehouse_keeper')->name('orders.'.str_replace('-', '_', $path));
+        }
         Route::get('/requirements', [$order, 'requirements'])
             ->middleware('role:admin,production_manager,warehouse_keeper')->name('requirements');
         // ═══ خطوط الإنتاج — admin,production_manager؛ مخازن التصنيع الافتراضية أدمن بس ═══

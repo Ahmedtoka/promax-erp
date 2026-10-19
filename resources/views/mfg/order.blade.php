@@ -124,7 +124,139 @@
     </div>
 </div>
 
-{{-- ═══ مهمة ٥: لوحة صرف الخامات (صرف المعياري / صرف زيادة / مرتجع للمخزن) هنا ═══ --}}
+{{-- ═══ صرف الخامات (مهمة ٥): صرف المعياري / صرف أو صرف زيادة / مرتجع للمخزن ═══ --}}
+@php
+    $canIssue = \App\Support\Access::action($user, 'act.mfg.issue') && $order->isOpen();
+    $kindBadge = ['issue' => 'b-blue', 'extra' => 'b-orange', 'return' => 'b-green'];
+    $materials = $order->lines->pluck('product')->filter();
+    $anyRemaining = $req->contains(fn ($r) => $r['remaining'] > 0.0005);
+    $anyHeld = $req->contains(fn ($r) => $r['issued_net'] > 0.0005);
+@endphp
+<div class="card">
+    <h3>📦 {{ __('mfg.issue_panel_title') }}
+        @if ($canIssue && $anyRemaining)
+            <span class="side" data-noprint>
+                <form method="POST" action="{{ route('mfg.orders.issue_standard', $order) }}" style="display:inline"
+                      onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('mfg.confirm_issue_standard')) }})">
+                    @csrf
+                    <button class="btn sm gold" type="submit">⚡ {{ __('mfg.btn_issue_standard') }}</button>
+                </form>
+            </span>
+        @endif
+    </h3>
+    <div class="s" style="color:var(--muted);margin-bottom:8px">{{ __('mfg.issue_panel_hint') }}</div>
+
+    @if ($canIssue && $materials->isNotEmpty())
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px" data-noprint>
+            <form method="POST" action="{{ route('mfg.orders.issue', $order) }}" style="flex:1 1 320px">
+                @csrf
+                <h4 style="margin:0 0 8px">➖ {{ __('mfg.issue_form_title') }}</h4>
+                <div class="frow">
+                    <div>
+                        <label class="f">{{ __('mfg.f_material') }} *</label>
+                        <select name="material_id" required>
+                            <option value="">—</option>
+                            @foreach ($materials as $m)
+                                <option value="{{ $m->id }}" @selected((string) old('material_id') === (string) $m->id)>{{ $m->code }} — {{ $m->displayName() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="f">{{ __('mfg.f_issue_qty') }} *</label>
+                        <input type="number" name="qty" step="1" min="1" required value="{{ old('qty') }}">
+                    </div>
+                    <div>
+                        <label class="f">{{ __('mfg.f_issue_kind') }} *</label>
+                        <select name="kind" required>
+                            @foreach (\App\Services\Mfg\Issues::ISSUE_KINDS as $k)
+                                <option value="{{ $k }}" @selected(old('kind', 'issue') === $k)>{{ __('mfg.issue_kind_'.$k) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="frow">
+                    <div>
+                        <label class="f">{{ __('mfg.f_note') }}</label>
+                        <input type="text" name="note" maxlength="500" value="{{ old('note') }}">
+                    </div>
+                </div>
+                <div class="s" style="color:var(--muted)">{{ __('mfg.issue_whole_hint') }}</div>
+                <button class="btn green" type="submit" style="margin-top:8px">{{ __('mfg.btn_issue') }}</button>
+            </form>
+
+            @if ($anyHeld)
+                <form method="POST" action="{{ route('mfg.orders.return', $order) }}" style="flex:1 1 320px">
+                    @csrf
+                    <h4 style="margin:0 0 8px">↩ {{ __('mfg.return_form_title') }}</h4>
+                    <div class="frow">
+                        <div>
+                            <label class="f">{{ __('mfg.f_material') }} *</label>
+                            <select name="material_id" required>
+                                <option value="">—</option>
+                                @foreach ($req->filter(fn ($r) => $r['issued_net'] > 0.0005) as $r)
+                                    <option value="{{ $r['product']->id }}">{{ $r['product']->code }} — {{ $r['product']->displayName() }} ({{ $num($r['issued_net']) }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="f">{{ __('mfg.f_return_qty') }} *</label>
+                            <input type="number" name="qty" step="1" min="1" required>
+                        </div>
+                    </div>
+                    <div class="frow">
+                        <div>
+                            <label class="f">{{ __('mfg.f_note') }}</label>
+                            <input type="text" name="note" maxlength="500">
+                        </div>
+                    </div>
+                    <div class="s" style="color:var(--muted)">{{ __('mfg.return_hint') }}</div>
+                    <button class="btn" type="submit" style="margin-top:8px">{{ __('mfg.btn_return') }}</button>
+                </form>
+            @endif
+        </div>
+    @endif
+
+    <div class="tablewrap">
+        <table>
+            <tr>
+                <th>{{ __('mfg.col_issued_at') }}</th>
+                <th>{{ __('mfg.col_material') }}</th>
+                <th>{{ __('mfg.col_raw_batch') }}</th>
+                <th>{{ __('mfg.col_kind') }}</th>
+                <th class="num">{{ __('mfg.col_qty') }}</th>
+                <th class="num" data-nosum>{{ __('mfg.col_unit_cost') }}</th>
+                <th class="num">{{ __('mfg.col_value') }}</th>
+                <th>{{ __('mfg.col_by') }}</th>
+                <th>{{ __('mfg.f_note') }}</th>
+            </tr>
+            @forelse ($issues as $i)
+                <tr>
+                    <td class="num">{{ $i->issued_at?->format('Y-m-d H:i') }}</td>
+                    <td>{{ $i->product?->code }} — {{ $i->product?->displayName() ?? '—' }}</td>
+                    <td class="num">{{ $i->batch?->batch_no ?? '—' }}</td>
+                    <td><span class="badge {{ $kindBadge[$i->kind] ?? 'b-gray' }}">{{ $i->kindLabel() }}</span></td>
+                    <td class="num">{{ $i->kind === 'return' ? '−' : '' }}{{ $num($i->qty) }}</td>
+                    <td class="num">{{ number_format((float) $i->unit_cost, 4) }}</td>
+                    <td class="num">{{ $i->kind === 'return' ? '−' : '' }}{{ number_format((float) $i->value, 2) }}</td>
+                    <td>{{ $i->user?->displayName() ?? '—' }}</td>
+                    <td>{{ $i->note }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">{{ __('mfg.no_issues') }}</td></tr>
+            @endforelse
+            @if ($issues->isNotEmpty())
+                {{-- إجمالي من السيرفر (صرف − مرتجع) — الـtfoot بيمنع الجمع التلقائي للعمود بالإشارات --}}
+                <tfoot>
+                    <tr>
+                        <td colspan="6"><b>{{ __('mfg.material_cost_net') }}</b></td>
+                        <td class="num"><b>{{ number_format($order->materialCost(), 2) }}</b></td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            @endif
+        </table>
+    </div>
+</div>
 
 {{-- ═══ مهمة ٦: لوحة قفل الأمر (باتش التام في الحجر، التكلفة، الانحراف) هنا ═══ --}}
 

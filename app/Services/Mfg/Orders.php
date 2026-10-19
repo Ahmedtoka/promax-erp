@@ -167,7 +167,7 @@ class Orders
                 throw new Rejected(__('mfg.order_bad_state'));
             }
 
-            if (collect(Requirement::issuedNet($row))->contains(fn (float $q) => $q > 0.0005)) {
+            if (collect($row->netIssuedAll())->contains(fn (float $q) => $q > 0.0005)) {
                 throw new Rejected(__('mfg.cancel_has_issues'));
             }
 

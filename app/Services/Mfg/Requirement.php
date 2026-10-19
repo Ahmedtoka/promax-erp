@@ -4,12 +4,10 @@ namespace App\Services\Mfg;
 
 use App\Models\Batch;
 use App\Models\Product;
-use App\Models\ProductionIssue;
 use App\Models\ProductionOrder;
 use App\Models\Warehouse;
 use App\Support\DateRange;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * احتياج الخامات (التصنيع ١٩/١٠، spec §3.5) — المعياري قصاد المصروف قصاد الرصيد.
@@ -115,11 +113,7 @@ class Requirement
      */
     public static function issuedNet(ProductionOrder $o): array
     {
-        return ProductionIssue::query()->where('production_order_id', $o->id)
-            ->groupBy('product_id')
-            ->select('product_id', DB::raw("SUM(CASE WHEN kind = 'return' THEN -qty ELSE qty END) AS net"))
-            ->pluck('net', 'product_id')
-            ->map(fn ($v) => round((float) $v, 3))
-            ->all();
+        // ⚠️ مصدر واحد للصافي (`ProductionOrder::netIssuedAll`)
+        return $o->netIssuedAll();
     }
 }
