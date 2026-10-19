@@ -27,7 +27,6 @@ class CostingSchemaTest extends TestCase
             'cost_month_lines' => ['cost_month_id', 'line_id', 'direct', 'shared', 'payroll', 'depreciation', 'pool', 'applied', 'variance', 'hours', 'output_kg', 'rate'],
             'product_transfer_prices' => ['product_id', 'price', 'unit_cost', 'markup_pct', 'effective_from', 'approved_by', 'approved_at', 'note'],
             'production_orders' => ['overhead_rate', 'overhead_kg'],
-            'purchase_requests' => ['source_type', 'source_id'],
         ];
         foreach ($tables as $table => $cols) {
             $this->assertTrue(Schema::hasTable($table), $table);

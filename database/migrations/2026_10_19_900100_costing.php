@@ -120,24 +120,10 @@ return new class extends Migration
                 }
             });
         }
-
-        if (Schema::hasTable('purchase_requests') && ! Schema::hasColumn('purchase_requests', 'source_type')) {
-            Schema::table('purchase_requests', function (Blueprint $t) {
-                $t->string('source_type', 120)->nullable();
-                $t->unsignedBigInteger('source_id')->nullable();
-                $t->index(['source_type', 'source_id']);
-            });
-        }
     }
 
     public function down(): void
     {
-        if (Schema::hasTable('purchase_requests') && Schema::hasColumn('purchase_requests', 'source_type')) {
-            Schema::table('purchase_requests', function (Blueprint $t) {
-                $t->dropIndex(['source_type', 'source_id']);
-                $t->dropColumn(['source_type', 'source_id']);
-            });
-        }
         if (Schema::hasTable('production_orders')) {
             foreach (['overhead_rate', 'overhead_kg'] as $col) {
                 if (Schema::hasColumn('production_orders', $col)) {
