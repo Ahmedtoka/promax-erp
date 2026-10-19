@@ -242,6 +242,8 @@ class Access
             'ops.replenishments',
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
             '!ops.replenishments.update',
+            // التصنيع (١٩/١٠): بيشوف أوامر الإنتاج عشان يصرف لها خامات من مخزنه
+            'mfg.orders',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -250,6 +252,19 @@ class Access
         // (`handover.index.meta` `role:admin` + `act.handover.meta`).
         'handover_reviewer' => [
             'handover.', '!handover.index.meta',
+        ],
+
+        // ═══ التصنيع (الإغلاق ١٩/١٠، spec §4) — شاشات `mfg.*` بس ═══
+        // ⚠️ الاعتمادات (المواصفة والـBOM) أدمن بس — الرولز دي بتشوف وتشتغل،
+        // والكتابة بتتحرس بـ`role:` على الراوت + `act.mfg.*`.
+        'production_manager' => [
+            'mfg.orders', 'mfg.qc', 'mfg.specs', 'notifications',
+        ],
+        'quality' => [
+            'mfg.qc', 'mfg.specs', 'mfg.orders', 'notifications',
+        ],
+        'rnd' => [
+            'mfg.specs', 'notifications',
         ],
     ];
 
@@ -267,12 +282,16 @@ class Access
         'accountant' => 'erp.overview',
         'warehouse_keeper' => 'wh.index',
         'handover_reviewer' => 'handover.index',
+        'production_manager' => 'mfg.orders',
+        'quality' => 'mfg.qc',
+        'rnd' => 'mfg.specs',
     ];
 
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
         'handover_reviewer',
+        'production_manager', 'quality', 'rnd',
     ];
 
     /**
@@ -321,6 +340,7 @@ class Access
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
         'nav.group_handover' => '🎓',
+        'nav.group_mfg' => '🧪',
     ];
 
     public const NAV = [
@@ -513,6 +533,14 @@ class Access
             // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
+        ],
+
+        // ═══ التصنيع (الإغلاق ١٩/١٠، spec §3.5) — مواصفة ← BOM ← أمر ← صرف ←
+        // قفل ← جودة. بنود الشاشات التانية بتتزوّد مع مهامها. ═══
+        'nav.group_mfg' => [
+            ['mfg.orders', '📋', 'nav.mfg_orders', 'mfg.orders*', null],
+            ['mfg.qc', '🔬', 'nav.mfg_qc', 'mfg.qc*', null],
+            ['mfg.specs', '📄', 'nav.mfg_specs', 'mfg.specs*', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══

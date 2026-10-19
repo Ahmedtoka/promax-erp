@@ -17,6 +17,9 @@ return [
         'driver' => 'سواق توزيع',
         'promoter' => 'بروموتر',
         'handover_reviewer' => 'مستلم النظام',
+        'production_manager' => 'مدير الإنتاج',
+        'quality' => 'الجودة',
+        'rnd' => 'البحث والتطوير',
     ],
 
     'channel' => [

@@ -29,6 +29,10 @@ class User extends Authenticatable
         'promoter' => 'بروموتر',
         // الشركة المستلمة (الإغلاق ١٩/١٠) — شاشات التسليم بس (`Access::SCREENS`)
         'handover_reviewer' => 'مستلم النظام',
+        // التصنيع (الإغلاق ١٩/١٠، spec §4) — شاشات `mfg.*` بس (`Access::SCREENS`)
+        'production_manager' => 'مدير الإنتاج',
+        'quality' => 'الجودة',
+        'rnd' => 'البحث والتطوير',
     ];
 
     /**

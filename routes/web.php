@@ -1382,4 +1382,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->middleware('role:admin')->name('index.meta');
         });
 
+    // ═══ التصنيع (الإغلاق ١٩/١٠، الخط ٦ — spec §3.5) ═══
+    // ⚠️ `role:` هنا لازم يطابق `Access::SCREENS` بالحرف (`RoleAccessTest`).
+    // الاعتمادات أدمن بس؛ الكتابة بتتحرس على كل راوت مع مهمته.
+    Route::prefix('mfg')->name('mfg.')->group(function () {
+        Route::get('/orders', [\App\Http\Controllers\Mfg\OrderController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders');
+        Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality')->name('qc');
+        Route::get('/specs', [\App\Http\Controllers\Mfg\SpecController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs');
+    });
+
 });

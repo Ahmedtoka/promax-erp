@@ -385,6 +385,10 @@ class RoleAccessTest extends TestCase
             'أمين مخزن' => ['warehouse_keeper'],
             // مستلم النظام (١٩/١٠) — شاشات التسليم بس، ولا لينك لغيرها
             'مستلم النظام' => ['handover_reviewer'],
+            // التصنيع (١٩/١٠) — شاشات `mfg.*` بس
+            'مدير الإنتاج' => ['production_manager'],
+            'الجودة' => ['quality'],
+            'البحث والتطوير' => ['rnd'],
         ];
     }
 
@@ -821,6 +825,9 @@ class RoleAccessTest extends TestCase
             'accountant' => $accountant,
             'warehouse_keeper' => $keeper,
             'handover_reviewer' => $reviewer,
+            'production_manager' => $this->makeAdmin(['role' => 'production_manager', 'email' => 'pm.crawl@test.local']),
+            'quality' => $this->makeAdmin(['role' => 'quality', 'email' => 'qc.crawl@test.local']),
+            'rnd' => $this->makeAdmin(['role' => 'rnd', 'email' => 'rnd.crawl@test.local']),
         ];
     }
 

@@ -17,6 +17,9 @@ return [
         'driver' => 'Delivery Driver',
         'promoter' => 'Merchandiser',
         'handover_reviewer' => 'Handover Reviewer',
+        'production_manager' => 'Production Manager',
+        'quality' => 'Quality',
+        'rnd' => 'R&D',
     ],
 
     'channel' => [
