@@ -110,6 +110,12 @@ class AppServiceProvider extends ServiceProvider
             }
         });
 
+        // ⚠️ حارس الشهر المقفول (١٩/١٠، D7) **قبل** أوبزرفرات الدفتر —
+        // بيرمي (مش بيبلع) عشان مستند الويب جوه شهر مقفول يترفض قبل أي كتابة
+        \App\Support\PeriodGuard::registerDefaults();
+        \App\Models\Gl\GlPeriod::saved(fn () => \App\Support\PeriodGuard::flush());
+        \App\Models\Gl\GlPeriod::deleted(fn () => \App\Support\PeriodGuard::flush());
+
         // دفتر الأستاذ العام (١١/٩/٢٠٢٦) — كل صف في transactions بيترحّل تلقائياً
         \App\Models\Transaction::observe(\App\Observers\Gl\TransactionObserver::class);
         // تصفية المندوب وقيود الموردين (١١/٩/٢٠٢٦) — نفس مبدأ transactions

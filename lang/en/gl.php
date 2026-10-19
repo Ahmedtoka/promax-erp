@@ -291,4 +291,8 @@ return [
     'sk_suspense' => 'Suspense',
     'sk_opening_difference' => 'Opening balance difference',
     'sk_inventory' => 'Merchandise inventory',
+    // Closed month (19/10, D7)
+    'period_closed_reject' => 'The month :month is closed. Reopen the period from the settings.',
+    'needs_review_late_sync' => 'Late sync from mobile',
+    'renumber_skipped_closed' => ':n invoices in closed months kept their numbers.',
 ];

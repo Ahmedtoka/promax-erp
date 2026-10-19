@@ -183,6 +183,10 @@ class ManualDocController extends Controller
         // المستند ليوم تاني في أي عرض
         $date = Carbon::parse($data['doc_date'])->setTime(12, 0);
 
+        // ⚠️ الشهر المقفول (D7) هنا مش في الأوبزرفر بس — المرتجع بيتعدّل
+        // تاريخه بتحديث جماعي بعد الإنشاء والأوبزرفر مابيشوفهوش
+        \App\Support\PeriodGuard::assertOpen($date, 'doc_date');
+
         return [$rep, $client, $date];
     }
 

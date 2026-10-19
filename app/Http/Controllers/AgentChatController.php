@@ -221,6 +221,15 @@ class AgentChatController extends Controller
             ]);
 
             return response()->json(['message' => $result['message']]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // رفض مفهوم (زي الشهر المقفول، D7) — الرسالة نفسها توصل لليوزر
+            // بدل «فشل التنفيذ» العامة
+            $action->update([
+                'status' => \App\Models\AgentAction::STATUS_FAILED,
+                'error' => Str::limit($e->getMessage(), 500),
+            ]);
+
+            return response()->json(['message' => collect($e->errors())->flatten()->first() ?? __('agent.act_failed')], 422);
         } catch (\Throwable $e) {
             report($e);
             $action->update([

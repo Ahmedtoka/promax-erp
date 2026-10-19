@@ -291,4 +291,8 @@ return [
     'sk_suspense' => 'حساب معلّق',
     'sk_opening_difference' => 'فرق الأرصدة الافتتاحية',
     'sk_inventory' => 'مخزون البضاعة',
+    // الشهر المقفول (١٩/١٠، D7)
+    'period_closed_reject' => 'شهر :month مقفول، افتح الفترة من الإعدادات',
+    'needs_review_late_sync' => 'مزامنة متأخرة من الموبايل',
+    'renumber_skipped_closed' => ':n فاتورة في شهور مقفولة فضلت بأرقامها زي ما هي.',
 ];

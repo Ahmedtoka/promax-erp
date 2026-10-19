@@ -140,6 +140,9 @@ class DuesController extends Controller
     /** ترحيل استحقاق لكشف الحساب */
     public function settle(Request $request, ContractDue $due)
     {
+        // قيد الخصم بيتأرّخ بآخر يوم في فترة الاستحقاق (D7)
+        \App\Support\PeriodGuard::assertOpen($due->period_end, 'status');
+
         if ($err = ContractDues::settle($due, $request->user()->id)) {
             return back()->withErrors(['status' => $err]);
         }

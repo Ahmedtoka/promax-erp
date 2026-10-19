@@ -243,6 +243,8 @@ class RepSettlementController extends Controller
             return back()->withErrors(['settlement' => __('settle.delete_latest_only')]);
         }
 
+        \App\Support\PeriodGuard::assertOpen($settlement->to_at ?? $settlement->created_at, 'settlement');
+
         DB::transaction(fn () => $settlement->delete());
 
         return back()->with('ok', __('settle.deleted_ok', ['number' => $settlement->number]));

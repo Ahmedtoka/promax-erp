@@ -59,9 +59,12 @@ class Ledger
 
         return DB::transaction(function () use ($source, $date, $spec, $by) {
             // السبب بيتسجّل دلوقتي — البادج مايستنتجوش من حالة الفترة بعدين
+            $closed = GlPeriod::isClosed($date);
             $reasons = array_keys(array_filter([
                 'rule' => $spec['needs_review'],
-                'closed_period' => GlPeriod::isClosed($date),
+                'closed_period' => $closed,
+                // مزامنة موبايل متأخرة (D7): الـAPI بيقبل المستند والمحاسب يقرر
+                'late_sync' => $closed && \App\Support\PeriodGuard::mode() === \App\Support\PeriodGuard::MODE_FLAG,
             ]));
             $entry = GlEntry::create([
                 'number' => GlEntry::nextNumber(),
