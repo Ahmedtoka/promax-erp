@@ -260,9 +260,10 @@ class Access
         // ⚠️ المواصفات: الإنتاج والجودة بيشوفوا بس (الكتابة `role:admin,rnd`)،
         // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
-            'mfg.orders', 'mfg.qc', 'mfg.specs', 'notifications',
+            'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
         ],
         'quality' => [
             'mfg.qc', 'mfg.specs', 'mfg.orders', 'notifications',
@@ -270,8 +271,9 @@ class Access
             '!mfg.specs.approve', '!mfg.specs.send_back',
         ],
         'rnd' => [
-            'mfg.specs', 'notifications',
+            'mfg.specs', 'mfg.boms', 'notifications',
             '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.boms.approve',
         ],
     ];
 
@@ -548,6 +550,7 @@ class Access
             ['mfg.orders', '📋', 'nav.mfg_orders', 'mfg.orders*', null],
             ['mfg.qc', '🔬', 'nav.mfg_qc', 'mfg.qc*', null],
             ['mfg.specs', '📄', 'nav.mfg_specs', 'mfg.specs*', null],
+            ['mfg.boms', '🧾', 'nav.mfg_boms', 'mfg.boms*', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══
@@ -760,6 +763,9 @@ class Access
         // ═══ التصنيع (١٩/١٠) — المواصفات: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
         'act.mfg.specs_edit' => ['perm.act_mfg_specs_edit', 'mfg.specs', ['rnd'], ['mfg.specs.store', 'mfg.specs.update', 'mfg.specs.submit']],
         'act.mfg.specs_approve' => ['perm.act_mfg_specs_approve', 'mfg.specs', [], ['mfg.specs.approve', 'mfg.specs.send_back']],
+        // ═══ التصنيع — قوايم المواد: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
+        'act.mfg.boms_edit' => ['perm.act_mfg_boms_edit', 'mfg.boms', ['rnd'], ['mfg.boms.store', 'mfg.boms.lines']],
+        'act.mfg.boms_approve' => ['perm.act_mfg_boms_approve', 'mfg.boms', [], ['mfg.boms.approve']],
     ];
 
     /**

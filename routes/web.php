@@ -1409,6 +1409,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('specs.approve');
         Route::post('/specs/{spec}/send-back', [$spec, 'sendBack'])->whereNumber('spec')
             ->middleware('role:admin')->name('specs.send_back');
+        // ═══ قوايم المواد — العرض admin,production_manager,rnd، الكتابة admin,rnd، الاعتماد أدمن بس ═══
+        $bom = \App\Http\Controllers\Mfg\BomController::class;
+        Route::get('/boms', [$bom, 'index'])
+            ->middleware('role:admin,production_manager,rnd')->name('boms');
+        Route::post('/boms', [$bom, 'store'])
+            ->middleware('role:admin,rnd')->name('boms.store');
+        Route::get('/boms/{bom}', [$bom, 'show'])->whereNumber('bom')
+            ->middleware('role:admin,production_manager,rnd')->name('boms.show');
+        Route::post('/boms/{bom}/lines', [$bom, 'lines'])->whereNumber('bom')
+            ->middleware('role:admin,rnd')->name('boms.lines');
+        Route::post('/boms/{bom}/approve', [$bom, 'approve'])->whereNumber('bom')
+            ->middleware('role:admin')->name('boms.approve');
     });
 
 });

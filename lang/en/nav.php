@@ -132,4 +132,5 @@ return [
     'mfg_orders' => 'Production Orders',
     'mfg_qc' => 'QC Release',
     'mfg_specs' => 'Product Specs',
+    'mfg_boms' => 'Bills of Materials',
 ];

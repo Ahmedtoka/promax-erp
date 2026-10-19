@@ -92,6 +92,8 @@ return [
     'act_handover_meta' => 'Handover module status (test, live, deadline)',
     'act_mfg_specs_edit' => 'Create, edit and submit product specs',
     'act_mfg_specs_approve' => 'Approve or send back product specs',
+    'act_mfg_boms_edit' => 'Create and edit bills of materials',
+    'act_mfg_boms_approve' => 'Approve bills of materials',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
     'scope_rep_denied' => 'This user is not on your team, or is not an active field employee.',
