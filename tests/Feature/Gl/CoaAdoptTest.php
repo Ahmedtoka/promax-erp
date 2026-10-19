@@ -8,7 +8,9 @@ use App\Models\Setting;
 use App\Services\Gl\CoaAdopter;
 use App\Services\Gl\CoaHasRed;
 use Database\Seeders\GlSeeder;
+use App\Services\Gl\CoaChecks;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -135,6 +137,116 @@ class CoaAdoptTest extends TestCase
 
         // اعتماد تاني: مفيش ترقيم تاني
         $this->assertSame([], CoaAdopter::adopt($this->makeAdmin())['recoded']);
+    }
+
+    private function lineOn(int $accountId): void
+    {
+        $entry = DB::table('gl_entries')->insertGetId([
+            'number' => 'T-'.$accountId, 'date' => '2026-10-01', 'period_key' => '2026-10', 'memo' => 't', 'origin' => 'manual',
+        ]);
+        DB::table('gl_lines')->insert(['entry_id' => $entry, 'account_id' => $accountId, 'debit' => 5, 'credit' => 0]);
+    }
+
+    public function test_readopt_refused_when_used_account_changes_type_and_type_is_kept(): void
+    {
+        $admin = $this->makeAdmin();
+        $d = $this->row(['code' => '7600', 'qb_type' => 'Expense']);
+        CoaAdopter::adopt($admin);
+        $g = GlAccount::where('coa_draft_id', $d->id)->firstOrFail();
+        $this->lineOn($g->id);
+
+        $d->update(['qb_type' => 'Bank']);
+        try {
+            CoaAdopter::adopt($admin);
+            $this->fail('CoaHasRed expected');
+        } catch (CoaHasRed) {
+        }
+        $g->refresh();
+        $this->assertSame('expense', $g->type);
+        $this->assertSame('debit', $g->normal_side);
+    }
+
+    public function test_adopting_root_codes_twice_keeps_accounts_under_seeded_roots(): void
+    {
+        $admin = $this->makeAdmin();
+        $assets = $this->row(['code' => '1', 'name' => 'ASSETS', 'qb_type' => 'Bank', 'balance' => 0]);
+        $equity = $this->row(['code' => '3', 'name' => 'EQUITY', 'qb_type' => 'Equity', 'balance' => 0]);
+        $seededAsset = GlAccount::where('code', '1')->whereNull('parent_id')->firstOrFail();
+        $seededEquity = GlAccount::where('code', '3')->whereNull('parent_id')->firstOrFail();
+
+        $r = CoaAdopter::adopt($admin);
+        $this->assertEqualsCanonicalizing(['1', '3'], $r['recoded']);
+        $this->assertSame('S-1', $seededAsset->fresh()->code);
+        $this->assertSame($seededAsset->id, GlAccount::where('coa_draft_id', $assets->id)->value('parent_id'));
+        $this->assertSame($seededEquity->id, GlAccount::where('coa_draft_id', $equity->id)->value('parent_id'));
+
+        CoaAdopter::adopt($admin);
+        $this->assertSame($seededAsset->id, GlAccount::where('coa_draft_id', $assets->id)->value('parent_id'));
+        $this->assertSame($seededEquity->id, GlAccount::where('coa_draft_id', $equity->id)->value('parent_id'));
+
+        $this->assertSame($seededEquity->id, GlAccount::openingDifference()->parent_id);
+    }
+
+    public function test_orphan_without_lines_releases_its_code(): void
+    {
+        $admin = $this->makeAdmin();
+        $old = $this->row(['code' => '7700', 'name' => 'OLD']);
+        CoaAdopter::adopt($admin);
+        $oldGl = GlAccount::where('coa_draft_id', $old->id)->firstOrFail();
+
+        // المحاسب مسح الصف وعمل صف جديد بنفس الكود
+        $old->delete();
+        $new = $this->row(['code' => '7700', 'name' => 'NEW']);
+        $taken = array_filter(CoaChecks::run()['items'], fn ($i) => $i['check'] === 'code_taken');
+        $this->assertSame([], array_values($taken));
+
+        CoaAdopter::adopt($admin);
+        $oldGl->refresh();
+        $this->assertSame('X-7700', $oldGl->code);
+        $this->assertFalse($oldGl->active);
+        $this->assertSame($new->id, GlAccount::where('code', '7700')->value('coa_draft_id'));
+    }
+
+    public function test_child_of_adopted_account_takes_parent_type_and_codes_outside_roots_never_500(): void
+    {
+        $admin = $this->makeAdmin();
+        $grp = $this->row(['code' => '7100', 'name' => 'BANKS', 'balance' => 0]);
+        $this->row(['parent_id' => $grp->id, 'code' => '7101', 'qb_type' => null]);
+        $inc = $this->row(['code' => '8100', 'qb_type' => 'Income']);
+        CoaAdopter::adopt($admin);
+        $p = GlAccount::where('coa_draft_id', $grp->id)->firstOrFail();
+
+        $this->actingAs($admin)->post(route('gl.accounts.store'), [
+            'parent_id' => $p->id, 'code' => '7105', 'name' => 'بنك جديد',
+        ])->assertSessionHasNoErrors();
+        $child = GlAccount::where('code', '7105')->firstOrFail();
+        $this->assertSame('asset', $child->type);
+        $this->assertSame('debit', $child->normal_side);
+
+        // تعديل حساب معتمد كوده بيبدأ بـ8: النوع بيفضل زي ما هو
+        $g = GlAccount::where('coa_draft_id', $inc->id)->firstOrFail();
+        $this->actingAs($admin)->post(route('gl.accounts.update', $g), [
+            'name' => 'مبيعات', 'code' => '8101', 'active' => 1,
+        ])->assertSessionHasNoErrors();
+        $g->refresh();
+        $this->assertSame('8101', $g->code);
+        $this->assertSame('revenue', $g->type);
+
+        // تعديل الحساب الجديد تحت الأب المعتمد
+        $this->actingAs($admin)->post(route('gl.accounts.update', $child), [
+            'name' => 'بنك جديد ٢', 'active' => 1,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('asset', $child->fresh()->type);
+
+        // أب حر كوده بيبدأ بـ9 (مش جذر معروف) ⇒ خطأ تحقق مش 500
+        $nine = GlAccount::create(['code' => '9', 'name' => 'x', 'type' => 'asset', 'normal_side' => 'debit',
+            'is_postable' => false, 'active' => true]);
+        $this->actingAs($admin)->post(route('gl.accounts.store'), [
+            'parent_id' => $nine->id, 'code' => '9001', 'name' => 'y',
+        ])->assertSessionHasErrors('code');
+        $free = GlAccount::create(['code' => '9002', 'name' => 'z', 'parent_id' => $nine->id, 'type' => 'asset',
+            'normal_side' => 'debit', 'is_postable' => true, 'active' => true]);
+        $this->actingAs($admin)->post(route('gl.accounts.update', $free), ['name' => 'z2'])->assertSessionHasErrors('code');
     }
 
     public function test_route_is_admin_only_and_redirects_with_counts(): void

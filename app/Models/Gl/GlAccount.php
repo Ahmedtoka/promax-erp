@@ -91,7 +91,7 @@ class GlAccount extends Model
 
     /**
      * «فرق الأرصدة الافتتاحية» — أي عدم توازن في قيد الافتتاح بيروحله.
-     * بيتعمل مرة واحدة تحت جذر حقوق الملكية (`3`) بالكود 3199 (أو 3199.1 لو
+     * بيتعمل مرة واحدة تحت جذر حقوق الملكية المتولد (`3`، أو `S-3` بعد الاعتماد) بالكود 3199 (أو 3199.1 لو
      * الكود متاخد)؛ لو الجذر مش موجود بيتعمل من غير أب.
      */
     public static function openingDifference(): self
@@ -100,7 +100,7 @@ class GlAccount extends Model
         if ($existing) {
             return $existing;
         }
-        $root = static::where('code', '3')->whereNull('parent_id')->first();
+        $root = static::seededRoots()['equity'] ?? null;
         // أول كود فاضي: 3199 ثم 3199.1 ثم 3199.2 … — الشجرة المعتمدة ممكن تكون واخدة الاتنين
         $code = '3199';
         for ($i = 1; static::where('code', $code)->exists(); $i++) {
@@ -118,6 +118,29 @@ class GlAccount extends Model
             'is_postable' => true,
             'active' => true,
         ]);
+    }
+
+    /**
+     * جذور الأنواع المتولدة من `GlSeeder` بالنوع ⇒ الحساب. بتتلاقي بصفتها (حساب نظام
+     * من غير أب ومن غير مفتاح ومش من المسودة) مش بكودها — الاعتماد ممكن ينقل كودها لـ`S-1`.
+     *
+     * @return array<string, self>
+     */
+    public static function seededRoots(): array
+    {
+        $out = [];
+        $rows = static::where('is_system', true)->whereNull('parent_id')->whereNull('coa_draft_id')
+            ->whereNull('system_key')->orderBy('id')->get();
+        foreach ($rows as $g) {
+            $code = (string) $g->code;
+            $digit = str_starts_with($code, 'S-') ? substr($code, 2, 1) : substr($code, 0, 1);
+            $type = in_array($g->type, self::TYPES, true) ? $g->type : (self::ROOT_TYPES[$digit] ?? null);
+            if ($type !== null && ! isset($out[$type])) {
+                $out[$type] = $g;
+            }
+        }
+
+        return $out;
     }
 
     /** حساب «نقدية مع المندوب» — بيتولد أول مرة تحت الأب rep_cash */

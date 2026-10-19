@@ -67,6 +67,8 @@ return [
     'code_hint' => 'Digits only, and the first digit must match the parent root (1 assets · 2 liabilities · 3 equity · 4 revenue · 5 expenses).',
     'code_root_mismatch' => 'The code must start with :root like the parent — the type comes from the first digit.',
     'code_root_locked' => 'The code must stay under root :root — changing the root changes the account type and drags every old entry with it.',
+    'code_root_unknown' => 'The code must start with a known root digit (1 to 5) — the type comes from the first digit.',
+    'parent_type_mismatch' => 'The parent must have the same type as the account — moving it to another type drags every old entry with it.',
     'parent_must_be_group' => 'The parent must be a group, not a postable account.',
     'parent_cycle' => 'That parent sits inside this account\'s own tree — pick a parent outside its branch.',
     'system_account_hint' => 'System account — only the name changes. Code and parent stay fixed for the posting rules and printed reports.',

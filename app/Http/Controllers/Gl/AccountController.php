@@ -75,18 +75,26 @@ class AccountController extends Controller
 
         $parent = GlAccount::findOrFail($data['parent_id']);
 
-        // ⚠️ **الكود لازم يبدأ برقم جذر الأب.** نوع الحساب بيتحدد من أول
-        // رقم في الكود (`ROOT_TYPES`) — حساب كوده `5108` تحت أب أصول
-        // كان هيتسجّل «مصروف» وهو في نص شجرة الأصول، فالميزانية بتبوظ
-        // والمجموع في الشجرة مايساويش مجموع الأبناء.
-        if ($data['code'][0] !== $parent->code[0]) {
-            return back()->withErrors(['code' => __('gl.code_root_mismatch', ['root' => $parent->code[0]])])->withInput();
+        if (self::fromAdoptedTree($parent)) {
+            // شجرة المحاسب المعتمدة: أكوادها مش ماشية على أرقام جذورنا (`7100` ممكن يبقى بنوك)
+            // ⇒ الحساب الجديد بياخد نوع أبوه، ومفيش قاعدة أول رقم
+            $type = $parent->type;
+        } else {
+            // ⚠️ **الكود لازم يبدأ برقم جذر الأب.** نوع الحساب بيتحدد من أول
+            // رقم في الكود (`ROOT_TYPES`) — حساب كوده `5108` تحت أب أصول
+            // كان هيتسجّل «مصروف» وهو في نص شجرة الأصول، فالميزانية بتبوظ
+            // والمجموع في الشجرة مايساويش مجموع الأبناء.
+            if ($data['code'][0] !== $parent->code[0]) {
+                return back()->withErrors(['code' => __('gl.code_root_mismatch', ['root' => $parent->code[0]])])->withInput();
+            }
+            $type = GlAccount::ROOT_TYPES[$data['code'][0]] ?? null;
+            if ($type === null) {
+                return back()->withErrors(['code' => __('gl.code_root_unknown')])->withInput();
+            }
         }
         if ($parent->is_postable) {
             return back()->withErrors(['parent_id' => __('gl.parent_must_be_group')])->withInput();
         }
-
-        $type = GlAccount::ROOT_TYPES[$data['code'][0]];
 
         GlAccount::create([
             'code' => $data['code'],
@@ -123,13 +131,16 @@ class AccountController extends Controller
             }
         } else {
             $code = ($data['code'] ?? '') !== '' ? $data['code'] : $account->code;
+            // حساب من شجرة المحاسب المعتمدة (أو اتعمل تحت حساب منها): نوعه متخزن
+            // ومش مربوط بأول رقم في الكود
+            $adopted = self::fromAdoptedTree($account);
 
             // ⚠️ **رقم الجذر مايتغيّرش أبداً.** النوع (`type`) بيتحدد من أول
             // رقم في الكود، والسطور المترحّلة على الحساب ده اتكتبت وهو
             // «مصروف» — تغيير الكود لـ`1108` كان بيحوّله «أصل» وكل قيد
             // قديم فيه بيهاجر من قائمة الدخل للميزانية في نفس اللحظة
             // من غير أي قيد تصحيح.
-            if ($code[0] !== $account->code[0]) {
+            if (! $adopted && $code[0] !== $account->code[0]) {
                 return back()->withErrors(['code' => __('gl.code_root_locked', ['root' => $account->code[0]])])->withInput();
             }
 
@@ -139,7 +150,12 @@ class AccountController extends Controller
                 if ($parent->is_postable) {
                     return back()->withErrors(['parent_id' => __('gl.parent_must_be_group')])->withInput();
                 }
-                if ($parent->code[0] !== $code[0]) {
+                if ($adopted || self::fromAdoptedTree($parent)) {
+                    // نفس الحماية بالنوع بدل أول رقم: النقل لأب من نوع تاني بيهجّر القيود
+                    if ($parent->type !== $account->type) {
+                        return back()->withErrors(['parent_id' => __('gl.parent_type_mismatch')])->withInput();
+                    }
+                } elseif ($parent->code[0] !== $code[0]) {
                     return back()->withErrors(['parent_id' => __('gl.code_root_mismatch', ['root' => $code[0]])])->withInput();
                 }
                 // ⚠️ الأب جوه شجرة الحساب نفسه (أو هو هو) = حلقة —
@@ -152,18 +168,29 @@ class AccountController extends Controller
                 $attrs['parent_id'] = $parent->id;
             }
 
-            // الجذر متقفل فوق، فالنوع مايتغيّرش عملياً — بنحسبه تاني
-            // عشان صف قديم بنوع مش متسق مع كوده يتصلّح وهو بيتعدّل
-            $type = GlAccount::ROOT_TYPES[$code[0]];
             $attrs['code'] = $code;
-            $attrs['type'] = $type;
-            $attrs['normal_side'] = GlAccount::normalSideFor($type);
+            if (! $adopted) {
+                // الجذر متقفل فوق، فالنوع مايتغيّرش عملياً — بنحسبه تاني
+                // عشان صف قديم بنوع مش متسق مع كوده يتصلّح وهو بيتعدّل
+                $type = GlAccount::ROOT_TYPES[$code[0]] ?? null;
+                if ($type === null) {
+                    return back()->withErrors(['code' => __('gl.code_root_unknown')])->withInput();
+                }
+                $attrs['type'] = $type;
+                $attrs['normal_side'] = GlAccount::normalSideFor($type);
+            }
             $attrs['active'] = $request->boolean('active');
         }
 
         $account->update($attrs);
 
         return redirect()->route('gl.accounts')->with('ok', __('gl.account_saved'));
+    }
+
+    /** الحساب من شجرة المحاسب المعتمدة (D2) أو أبوه منها — نوعه متخزن مش من أول رقم */
+    private static function fromAdoptedTree(GlAccount $a): bool
+    {
+        return $a->coa_draft_id !== null || ($a->parent_id !== null && $a->parent?->coa_draft_id !== null);
     }
 
     public function show(Request $request, GlAccount $account)

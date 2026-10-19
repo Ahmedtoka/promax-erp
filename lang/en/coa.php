@@ -90,6 +90,8 @@ return [
     'check_parent_balance_hint' => "The account has sub-accounts and carries a balance (in the file, or GL lines after adoption) — the balance belongs on a sub-account.",
     'check_no_type' => "Unknown Account Type",
     'check_no_type_hint' => "The type is not a known QuickBooks type and no ancestor has a known type — pick the type.",
+    'check_type_changed' => "Type Changed on a Used Account",
+    'check_type_changed_hint' => "The account has GL entries and its type in the draft differs from its adopted type — restore the type, or create a new account and move the balance with an entry.",
     'check_code_taken' => "Code Already Used in the Ledger",
     'check_code_taken_hint' => "A general ledger account already uses this code and did not come from this row — change the code or review that account.",
     'check_truncated_name' => "Name Looks Truncated",

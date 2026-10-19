@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Schema;
  */
 class CoaChecks
 {
-    public const RED = ['dup_code', 'no_code', 'parent_balance', 'no_type', 'code_taken'];
+    public const RED = ['dup_code', 'no_code', 'parent_balance', 'no_type', 'type_changed', 'code_taken'];
 
     public const YELLOW = ['truncated_name', 'no_arabic', 'per_product', 'unused'];
 
@@ -74,17 +74,20 @@ class CoaChecks
 
         $codeOf = fn (CoaDraftAccount $a) => trim((string) $a->code);
         $codes = $all->map($codeOf)->filter(fn ($c) => $c !== '');
-        $dups = $codes->countBy()->filter(fn ($n) => $n > 1);
+        // `ab-1` و` AB-1 ` نفس الكود — MySQL بيقارن من غير حالة الحروف والـunique هيرمي
+        $dups = $codes->map(fn ($c) => mb_strtolower($c))->countBy()->filter(fn ($n) => $n > 1);
 
         // حسابات الدفتر: اللي بنفس الأكواد + اللي اتعتمدت من المسودة — كويري واحد
         $gl = DB::table('gl_accounts')
             ->where(fn ($q) => $q->whereIn('code', $codes->unique()->values()->all())->orWhereNotNull('coa_draft_id'))
-            ->get(['id', 'code', 'is_system', 'is_postable', 'coa_draft_id']);
+            ->get(['id', 'code', 'type', 'is_system', 'is_postable', 'coa_draft_id']);
         $glByCode = $gl->groupBy('code');
         $adopted = $gl->whereNotNull('coa_draft_id')->keyBy('coa_draft_id');
         $withLines = $adopted->isEmpty() ? collect() : DB::table('gl_lines')
             ->whereIn('account_id', $adopted->pluck('id')->all())
             ->distinct()->pluck('account_id')->flip();
+        // حساب معتمد صفه اتمسح من المسودة ومن غير سطور ⇒ الاعتماد بيسيّب كوده (`X-<code>`)
+        $releasable = fn ($g) => $g->coa_draft_id !== null && ! $byId->has((int) $g->coa_draft_id) && ! isset($withLines[$g->id]);
 
         $products = self::productNames();
         $accepts = CoaCheckAccept::query()->get(['check', 'draft_account_id'])
@@ -102,21 +105,27 @@ class CoaChecks
             // ═══ الأحمر ═══
             if ($code === '') {
                 $found[] = 'no_code';
-            } elseif (isset($dups[$code])) {
+            } elseif (isset($dups[mb_strtolower($code)])) {
                 $found[] = 'dup_code';
             }
             // أب رصيده فاضي/صفر = مفيش رصيد عليه؛ أب رصيده = مجموع ولاده = إجمالي مش رصيد خاص
             $own = $isParent && round($balance, 2) != 0.0 ? round($balance - (float) ($kidsSum[$a->id] ?? 0), 2) : 0.0;
             if ($isParent && $own != 0.0) {
                 $found[] = 'parent_balance';
-            } elseif ($glAcc !== null && ! $glAcc->is_postable && $glHasLines) {
+            } elseif ($isParent && $glHasLines) {
+                // حساب عليه سطور وبقى ليه ولاد في المسودة (أو كان تجميعي أصلاً) — الاعتماد هيخليه
+                // تجميعي والسطور تفضل عليه
                 $found[] = 'parent_balance';
             }
-            if (self::typeFor($a, $byId) === null) {
+            $type = self::typeFor($a, $byId);
+            if ($type === null) {
                 $found[] = 'no_type';
+            } elseif ($glHasLines && $glAcc->type !== $type) {
+                // عليه قيود بنوعه القديم — تغييره بيهجّر القيود بين الميزانية وقائمة الدخل
+                $found[] = 'type_changed';
             }
             if ($code !== '' && collect($glByCode[$code] ?? [])
-                ->contains(fn ($g) => ! $g->is_system && (int) $g->coa_draft_id !== $a->id)) {
+                ->contains(fn ($g) => ! $g->is_system && (int) $g->coa_draft_id !== $a->id && ! $releasable($g))) {
                 $found[] = 'code_taken';
             }
 

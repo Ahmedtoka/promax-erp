@@ -116,6 +116,67 @@ class CoaChecksTest extends TestCase
         $this->assertNotContains($sys->id, array_column($this->itemsFor('code_taken'), 'draft_id'));
     }
 
+    private function lineOn(int $accountId): void
+    {
+        $entry = DB::table('gl_entries')->insertGetId([
+            'number' => 'T-'.$accountId, 'date' => '2026-10-01', 'period_key' => '2026-10', 'memo' => 't', 'origin' => 'manual',
+        ]);
+        DB::table('gl_lines')->insert(['entry_id' => $entry, 'account_id' => $accountId, 'debit' => 5, 'credit' => 0]);
+    }
+
+    public function test_duplicate_code_ignores_case_and_spaces(): void
+    {
+        $a = $this->row(['code' => 'ab-1']);
+        $b = $this->row(['code' => ' AB-1 ']);
+
+        $this->assertEqualsCanonicalizing([$a->id, $b->id], array_column($this->itemsFor('dup_code'), 'draft_id'));
+    }
+
+    public function test_adopted_account_with_lines_whose_type_changes_is_red(): void
+    {
+        $used = $this->row(['qb_type' => 'Expense']);
+        $quiet = $this->row(['qb_type' => 'Expense']);
+        $same = $this->row(['qb_type' => 'Bank']);
+        foreach ([$used, $quiet, $same] as $d) {
+            $g = GlAccount::create(['code' => $d->code, 'name' => 'x', 'type' => 'asset', 'normal_side' => 'debit',
+                'is_postable' => true, 'active' => true, 'coa_draft_id' => $d->id]);
+            if ($d->isNot($quiet)) {
+                $this->lineOn($g->id);
+            }
+        }
+
+        $items = $this->itemsFor('type_changed');
+        $this->assertSame([$used->id], array_column($items, 'draft_id'));
+        $this->assertSame('red', $items[0]['level']);
+        $this->assertNotSame('coa.check_type_changed', __('coa.check_type_changed'));
+        $this->assertNotSame('coa.check_type_changed_hint', __('coa.check_type_changed_hint'));
+    }
+
+    public function test_adopted_leaf_with_lines_that_gains_a_child_is_red(): void
+    {
+        $leaf = $this->row(['balance' => 0]);
+        $g = GlAccount::create(['code' => $leaf->code, 'name' => 'x', 'type' => 'asset', 'normal_side' => 'debit',
+            'is_postable' => true, 'active' => true, 'coa_draft_id' => $leaf->id]);
+        $this->lineOn($g->id);
+        $this->assertSame([], $this->itemsFor('parent_balance'));
+
+        $this->row(['parent_id' => $leaf->id]);
+        $this->assertSame([$leaf->id], array_column($this->itemsFor('parent_balance'), 'draft_id'));
+    }
+
+    public function test_code_taken_ignores_orphans_without_lines(): void
+    {
+        $free = $this->row(['code' => '7101']);
+        $held = $this->row(['code' => '7102']);
+        // حسابات صفها اتمسح من المسودة بعد الاعتماد (coa_draft_id مش موجود في المسودة)
+        GlAccount::create(['code' => '7101', 'name' => 'a', 'type' => 'asset', 'normal_side' => 'debit', 'coa_draft_id' => 99901]);
+        $used = GlAccount::create(['code' => '7102', 'name' => 'b', 'type' => 'asset', 'normal_side' => 'debit', 'coa_draft_id' => 99902]);
+        $this->lineOn($used->id);
+
+        $this->assertSame([$held->id], array_column($this->itemsFor('code_taken'), 'draft_id'));
+        $this->assertNotContains($free->id, array_column($this->itemsFor('code_taken'), 'draft_id'));
+    }
+
     public function test_missing_arabic_is_yellow_and_accept_is_saved(): void
     {
         $a = $this->row(['name_ar' => null]);
