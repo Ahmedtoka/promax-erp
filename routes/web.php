@@ -918,6 +918,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/overhead', [$co, 'index'])->name('overhead');
         Route::post('/overhead/close', [$co, 'close'])->middleware('role:admin')->name('overhead.close');
         Route::post('/sync', [$co, 'sync'])->middleware('role:admin')->name('sync');
+        $cc = \App\Http\Controllers\Costing\CardController::class;
+        Route::get('/cards', [$cc, 'index'])->name('cards');
+        Route::post('/cards/{product}/approve', [$cc, 'approve'])->middleware('role:admin')->name('cards.approve');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.

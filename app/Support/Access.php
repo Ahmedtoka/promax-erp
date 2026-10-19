@@ -587,6 +587,7 @@ class Access
         // ═══ التكاليف (الخط ٩) — بعد الحسابات العامة مباشرة ═══
         'nav.group_costing' => [
             ['costing.overhead', '🏭', 'nav.costing_overhead', 'costing.overhead*', null],
+            ['costing.cards', '🧮', 'nav.costing_cards', 'costing.cards*', null],
         ],
 
         // ═══ ١. المنتجات والتسعير — أول السايكل: تعريف الصنف ═══
@@ -856,7 +857,7 @@ class Access
         ]],
 
         // الخط ٩: قفل شهر التكاليف وإعادة حساب الطبقة — أدمن بس
-        'act.costing.admin' => ['perm.act_costing_admin', 'costing.overhead', [], ['costing.overhead.close', 'costing.sync']],
+        'act.costing.admin' => ['perm.act_costing_admin', 'costing.overhead', [], ['costing.overhead.close', 'costing.sync', 'costing.cards.approve']],
 
         // ═══ الإعدادات ═══
         'act.team.manage' => ['perm.act_team_manage', 'erp.team', [], ['erp.team.store', 'erp.team.update', 'erp.team.password', 'erp.channels.manager']],

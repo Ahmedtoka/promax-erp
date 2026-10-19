@@ -146,4 +146,5 @@ return [
     'mfg_requirements' => 'Material Requirement',
     'group_costing' => "Costing",
     'costing_overhead' => "Overhead by month",
+    'costing_cards' => "Cost card and transfer price",
 ];

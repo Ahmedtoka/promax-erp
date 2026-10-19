@@ -150,5 +150,5 @@ return [
     'act_purchase_requests_create' => 'Raise & cancel purchase requests',
     'act_purchase_requests_quote' => 'Add supplier quotes',
     'act_purchase_quotes_approve' => 'Approve a quote and create a PO',
-    'act_costing_admin' => "Close costing months and recompute the cost layer",
+    'act_costing_admin' => "Close costing months, recompute the cost layer and approve transfer prices",
 ];

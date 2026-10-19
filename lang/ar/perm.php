@@ -150,5 +150,5 @@ return [
     'act_purchase_requests_create' => 'رفع طلبات الشراء وإلغاؤها',
     'act_purchase_requests_quote' => 'إضافة عروض أسعار الموردين',
     'act_purchase_quotes_approve' => 'اعتماد عرض سعر وفتح أمر شراء',
-    'act_costing_admin' => "إقفال شهور التكاليف وإعادة حساب طبقة التكلفة",
+    'act_costing_admin' => "إقفال شهور التكاليف وإعادة حساب طبقة التكلفة واعتماد سعر التحويل",
 ];

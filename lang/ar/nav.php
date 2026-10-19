@@ -146,4 +146,5 @@ return [
     'mfg_requirements' => 'احتياج الخامات',
     'group_costing' => "التكاليف",
     'costing_overhead' => "التكاليف غير المباشرة بالشهر",
+    'costing_cards' => "كارت التكلفة وسعر التحويل",
 ];
