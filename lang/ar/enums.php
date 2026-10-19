@@ -16,6 +16,7 @@ return [
         'sales_agent' => 'سيلز إيجينت',
         'driver' => 'سواق توزيع',
         'promoter' => 'بروموتر',
+        'handover_reviewer' => 'مستلم النظام',
     ],
 
     'channel' => [

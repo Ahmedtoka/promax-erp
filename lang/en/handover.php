@@ -1,0 +1,73 @@
+<?php
+
+/**
+ * System handover tracker (close-out 19/10/2026, spec §3.8) — same keys as lang/ar/handover.php.
+ */
+return [
+    'title' => 'System Handover',
+    'intro' => 'Mark every screen you have received. Module progress = marked screens ÷ all its screens.',
+    'overall' => 'Overall Handover Progress',
+    'marked_of' => ':marked of :total screens',
+    'screens_n' => ':n screens',
+    'modules_n' => ':n modules',
+    'complete_n' => ':n at 100%',
+
+    'test_status' => 'Testing',
+    'live_status' => 'Live',
+    'deadline' => 'Handover Deadline',
+    'no_deadline' => 'No deadline',
+    'overdue' => 'Overdue',
+    'notes' => 'Notes',
+    'test_pending' => 'Not started',
+    'test_in_progress' => 'In progress',
+    'test_done' => 'Done',
+    'live_no' => 'Not live',
+    'live_partial' => 'Partly live',
+    'live_yes' => 'Live',
+
+    'screen' => 'Screen',
+    'stale' => 'Changed after handover',
+    'stale_hint' => 'This screen changed after it was marked. The mark stays; please check it again.',
+    'mark' => 'Received',
+    'unmark' => 'Remove Mark',
+    'mark_all' => 'Mark All Screens',
+    'unmark_all' => 'Unmark All Screens',
+    'confirm_unmark_all' => 'Remove the mark from every screen in this module? The log is kept.',
+    'marked_by' => 'Marked by :name',
+    'not_marked' => 'Not yet',
+    'note' => 'Note',
+    'note_ph' => 'Note (optional)',
+    'no_modules' => 'No modules yet. An admin runs promax:handover-seed.',
+    'no_screens' => 'This module has no screens.',
+    'back' => 'All Modules',
+
+    'meta_title' => 'Module Status',
+    'meta_hint' => 'Only the owner sets testing, live status and the deadline.',
+    'name_ar' => 'Arabic Name',
+    'name_en' => 'English Name',
+    'save' => 'Save',
+
+    'log' => 'Marks Log',
+    'log_title' => 'Handover Marks Log',
+    'no_marks' => 'No marks in this period.',
+    'state_active' => 'Marked',
+    'state_unmarked' => 'Removed',
+
+    'col_module' => 'Module',
+    'col_screen' => 'Screen',
+    'col_route' => 'Route',
+    'col_screens' => 'Screens',
+    'col_marked' => 'Marked',
+    'col_pct' => 'Progress %',
+    'col_user' => 'Marked By',
+    'col_marked_at' => 'Marked At',
+    'col_unmarked_at' => 'Removed At',
+    'col_unmarked_by' => 'Removed By',
+    'col_state' => 'Status',
+
+    'flash_marked' => 'Screen marked.',
+    'flash_unmarked' => 'Mark removed. The log is kept.',
+    'flash_marked_all' => ':n screens marked.',
+    'flash_unmarked_all' => 'Mark removed from :n screens.',
+    'flash_meta' => 'Module status saved.',
+];

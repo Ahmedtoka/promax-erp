@@ -243,6 +243,14 @@ class Access
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
             '!ops.replenishments.update',
         ],
+
+        // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
+        // ⚠️ **ولا شاشة تانية خالص** — لوجين الشركة المستلمة بيعلّم على
+        // الشاشات ويشوف النسب. حالة التيست واللايف والديدلاين قرار المالك
+        // (`handover.meta` `role:admin` + `act.handover.meta`).
+        'handover_reviewer' => [
+            'handover.', '!handover.meta',
+        ],
     ];
 
     /**
@@ -258,11 +266,13 @@ class Access
         'branch_manager' => 'erp.overview',
         'accountant' => 'erp.overview',
         'warehouse_keeper' => 'wh.index',
+        'handover_reviewer' => 'handover.index',
     ];
 
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
+        'handover_reviewer',
     ];
 
     /**
@@ -310,6 +320,7 @@ class Access
         'nav.group_targets' => '🎯',
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
+        'nav.group_handover' => '🎓',
     ];
 
     public const NAV = [
@@ -588,6 +599,12 @@ class Access
             // راوت شغال بيحوّل هنا، ومش في المنيو عشان بادئته ماتمسكش `erp.audit.chains`
             ['erp.activity', '🟢', 'activity.page', 'erp.activity*', null],
         ],
+
+        // ═══ تسليم النظام (الإغلاق ١٩/١٠) — الأدمن ومستلم النظام بس ═══
+        // ⚠️ المجموعة دي نفسها بتتولّد موديول في الأداة (`promax:handover-seed`).
+        'nav.group_handover' => [
+            ['handover.index', '✅', 'nav.handover_tracker', 'handover*', null],
+        ],
     ];
 
     /**
@@ -701,6 +718,9 @@ class Access
         'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.groups.quick']],
         'act.org.structure' => ['perm.act_org_structure', 'erp.zones', ['manager'], ['erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.channels.update']],
         'act.import.run' => ['perm.act_import_run', 'erp.import', [], ['erp.import.upload', 'erp.import.apply']],
+
+        // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
+        'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.meta']],
     ];
 
     /**

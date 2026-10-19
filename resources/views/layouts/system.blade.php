@@ -929,6 +929,8 @@ html.nav-mini .side-user{display:none}
             </script>
         @endif
 
+        {{-- ⚠️ الجرس للي شايف الإشعارات بس — مستلم النظام (١٩/١٠) مالوش --}}
+        @if (\App\Support\Access::allows(auth()->user(), 'notifications.latest'))
         {{-- ═══ جرس الإشعارات (2026-08-09) — نفس صفوف الموبايل ═══
              ⚠️ استعلامين خفاف لكل صفحة (عدّاد + آخر 12) — مقبول.
              لو بقوا تقال، كاش دقيقة بمفتاح اليوزر. --}}
@@ -972,6 +974,7 @@ html.nav-mini .side-user{display:none}
             @endforelse
           </div>
         </details>
+        @endif
         <script>
         // ═══ تموضع قايمة الجرس — fixed على الفيوبورت (2026-08-09) ═══
         //
@@ -2164,6 +2167,8 @@ document.addEventListener('DOMContentLoaded', function () {
      نفس صفوف الجرس (بولينج خفيف: الجديد بس بعد آخر id اتشاف) —
      والضغط عليه بيعلّم مقروء وبيوديك لصفحة الإشعار. --}}
 @auth
+{{-- مستلم النظام (١٩/١٠) مالوش إشعارات — مانبولّش راوت بيرفضه --}}
+@if (\App\Support\Access::allows(auth()->user(), 'notifications.latest'))
 <div id="pmxToasts" aria-live="polite"></div>
 <style>
 #pmxToasts{
@@ -2238,6 +2243,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setInterval(poll, 25000);
 })();
 </script>
+@endif
 
 {{-- ═══ مساعد بروماكس (٧/٩) — زرار عائم + بانل شات في كل الشاشات ═══
      ⚠️ متحرس بنفس مفتاح شاشة العميل — أمين المخزن والسواق ممنوعين

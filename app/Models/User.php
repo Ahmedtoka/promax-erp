@@ -27,6 +27,8 @@ class User extends Authenticatable
         'sales_agent' => 'سيلز إيجينت',
         'driver' => 'سواق توزيع',
         'promoter' => 'بروموتر',
+        // الشركة المستلمة (الإغلاق ١٩/١٠) — شاشات التسليم بس (`Access::SCREENS`)
+        'handover_reviewer' => 'مستلم النظام',
     ];
 
     /**

@@ -165,4 +165,178 @@ class HandoverTrackerTest extends TestCase
 
         $this->artisan('promax:handover-touch', ['route' => ['erp.no_such_screen']])->assertFailed();
     }
+
+    // ═══════════════ 1.3 الرول والشاشات والتصدير ═══════════════
+
+    private function reviewer(): User
+    {
+        return $this->makeAdmin(['role' => 'handover_reviewer', 'email' => 'rev'.uniqid().'@promax.test']);
+    }
+
+    public function test_reviewer_can_mark_and_unmark_a_screen(): void
+    {
+        $m = $this->module();
+        $screen = $m->screens->first();
+        $rev = $this->reviewer();
+
+        $this->actingAs($rev)->post(route('handover.mark', $screen), ['note' => 'تمام'])->assertRedirect();
+
+        $mark = HandoverMark::where('screen_id', $screen->id)->firstOrFail();
+        $this->assertSame($rev->id, $mark->user_id);
+        $this->assertSame('تمام', $mark->note);
+        $this->assertNull($mark->unmarked_at);
+
+        // تعليم تاني على شاشة معلّمة مابيعملش صف تاني
+        $this->actingAs($rev)->post(route('handover.mark', $screen))->assertRedirect();
+        $this->assertSame(1, HandoverMark::where('screen_id', $screen->id)->count());
+
+        $this->actingAs($rev)->post(route('handover.unmark', $screen))->assertRedirect();
+
+        $mark->refresh();
+        $this->assertNotNull($mark->unmarked_at);
+        $this->assertSame($rev->id, $mark->unmarked_by);
+        $this->assertSame(0, Handover::moduleProgress($m)['pct']);
+    }
+
+    public function test_mark_all_marks_every_screen_and_module_is_100(): void
+    {
+        $m = $this->module('nav.group_all', 3);
+        $rev = $this->reviewer();
+
+        $this->mark($m->screens->first(), $rev);   // معلّمة قبل كده — مابتتكررش
+
+        $this->actingAs($rev)->post(route('handover.mark_all', $m))->assertRedirect();
+
+        $this->assertSame(['marked' => 3, 'total' => 3, 'pct' => 100], Handover::moduleProgress($m));
+        $this->assertSame(3, HandoverMark::count());
+
+        $this->actingAs($rev)->post(route('handover.unmark_all', $m))->assertRedirect();
+
+        $this->assertSame(0, Handover::moduleProgress($m)['pct']);
+        $this->assertSame(3, HandoverMark::whereNotNull('unmarked_at')->count());
+    }
+
+    public function test_reviewer_cannot_edit_meta(): void
+    {
+        $m = $this->module();
+
+        $this->actingAs($this->reviewer())->post(route('handover.meta', $m), [
+            'test_status' => 'done', 'live_status' => 'yes', 'deadline' => '2026-11-01',
+        ])->assertForbidden();
+
+        $this->assertSame('pending', $m->fresh()->test_status);
+        $this->assertNull($m->fresh()->deadline);
+    }
+
+    public function test_reviewer_gets_403_on_other_screens(): void
+    {
+        $rev = $this->reviewer();
+
+        foreach (['/erp', '/ops/invoices', '/gl/accounts',
+            route('erp.clients'), route('wh.index'), route('erp.perms'), route('notifications.latest')] as $path) {
+            $this->actingAs($rev)->get($path)->assertForbidden();
+        }
+
+        // والسايدبار بتاعه فيه مجموعة التسليم بس
+        $this->assertSame(['nav.group_handover'], array_keys(Access::navFor($rev)));
+        $this->assertSame('handover.index', Access::home($rev));
+    }
+
+    public function test_reviewer_opens_the_handover_screens(): void
+    {
+        $m = $this->module();
+        $screen = $m->screens->first();
+        $this->mark($screen, $this->makeAdmin());
+        $screen->update(['touched_at' => now()->addMinute()]);
+        $rev = $this->reviewer();
+
+        $this->actingAs($rev)->get(route('handover.index'))->assertOk()->assertSee($m->name_en);
+        $this->actingAs($rev)->get(route('handover.show', $m))->assertOk()
+            ->assertSee($screen->title_en)
+            ->assertSee(__('handover.stale'))
+            // فورم الإعدادات للأدمن بس
+            ->assertDontSee(route('handover.meta', $m));
+        $this->actingAs($rev)->get(route('handover.log'))->assertOk();
+    }
+
+    /**
+     * ⚠️ مستلم النظام مالوش إشعارات — اللياوت مابيرسمش الجرس ولا بيبولّ
+     * `notifications.latest` (كان هيضرب 403 كل ٢٥ ثانية). زحف `RoleAccessTest`
+     * مابيمسكهاش لأن `@js()` بيهرّب الـ`/` في الـURL.
+     */
+    public function test_reviewer_layout_has_no_notification_bell_or_poll(): void
+    {
+        $html = $this->actingAs($this->reviewer())->get(route('handover.index'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('pmxToasts', $html);
+        $this->assertStringNotContainsString('notifications\/latest', $html);
+        $this->assertStringNotContainsString('class="bell"', $html);
+
+        // وباقي الرولز لسه شايفينه
+        $admin = $this->actingAs($this->makeAdmin())->get(route('handover.index'))->getContent();
+        $this->assertStringContainsString('pmxToasts', $admin);
+    }
+
+    public function test_other_roles_cannot_open_handover(): void
+    {
+        $manager = $this->makeAdmin(['role' => 'manager']);
+
+        $this->actingAs($manager)->get(route('handover.index'))->assertForbidden();
+    }
+
+    public function test_admin_sets_deadline_and_live_status(): void
+    {
+        $m = $this->module();
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->get(route('handover.show', $m))->assertOk()
+            ->assertSee(route('handover.meta', $m));
+
+        $this->actingAs($admin)->post(route('handover.meta', $m), [
+            'test_status' => 'in_progress', 'live_status' => 'partial',
+            'deadline' => '2026-11-15', 'notes' => 'بعد التدريب',
+        ])->assertRedirect();
+
+        $m->refresh();
+        $this->assertSame('in_progress', $m->test_status);
+        $this->assertSame('partial', $m->live_status);
+        $this->assertSame('2026-11-15', $m->deadline->toDateString());
+        $this->assertSame('بعد التدريب', $m->notes);
+
+        // قيمة برّه القايمة بترفض
+        $this->actingAs($admin)->post(route('handover.meta', $m), ['test_status' => 'x', 'live_status' => 'yes'])
+            ->assertSessionHasErrors('test_status');
+    }
+
+    public function test_export_lists_every_module_with_pct(): void
+    {
+        $a = $this->module('nav.group_a', 2);
+        $b = $this->module('nav.group_b', 4);
+        $this->mark($a->screens->first(), $this->makeAdmin());
+
+        $res = $this->actingAs($this->reviewer())->get(route('handover.export'));
+        $res->assertOk();
+        $csv = $res->streamedContent();
+
+        $this->assertStringContainsString('Test,2,1,50', $csv);
+        $this->assertStringContainsString('Test,4,0,0', $csv);
+    }
+
+    public function test_marks_log_filters_by_marked_at(): void
+    {
+        $m = $this->module();
+        $admin = $this->makeAdmin();
+        [$s1, $s2] = [$m->screens[0], $m->screens[1]];
+        $s1->marks()->create(['user_id' => $admin->id, 'marked_at' => '2026-10-01 10:00:00', 'note' => 'OLD-NOTE']);
+        $s2->marks()->create(['user_id' => $admin->id, 'marked_at' => '2026-10-18 10:00:00', 'note' => 'NEW-NOTE']);
+
+        $this->actingAs($admin)->get(route('handover.log', ['from' => '2026-10-15', 'to' => '2026-10-19']))
+            ->assertOk()->assertSee('NEW-NOTE')->assertDontSee('OLD-NOTE');
+
+        $csv = $this->actingAs($admin)
+            ->get(route('handover.log', ['from' => '2026-10-15', 'to' => '2026-10-19', 'export' => 1]))
+            ->streamedContent();
+        $this->assertStringContainsString('NEW-NOTE', $csv);
+        $this->assertStringNotContainsString('OLD-NOTE', $csv);
+    }
 }
