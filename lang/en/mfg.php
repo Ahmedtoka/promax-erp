@@ -7,7 +7,7 @@ return [
     // ═══ Issue from the raw store ═══
     'qty_positive' => 'Quantity must be greater than zero',
     'raw_whole_units' => 'Quantity must be a whole number until raw material units land',
-    'raw_short' => 'Not enough :product in stock — available :available',
+    'raw_short' => 'Not enough :product in stock — needed :need, available :available',
 
     // ═══ Statuses ═══
     'spec_status_draft' => 'Draft',

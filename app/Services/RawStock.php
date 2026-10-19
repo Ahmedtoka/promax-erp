@@ -59,6 +59,7 @@ class RawStock
             throw new Rejected(__('mfg.raw_short', [
                 'product' => $p->displayName(),
                 'available' => $available,
+                'need' => $need,
             ]));
         }
 

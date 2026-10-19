@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ProductionOrder extends Model
 {
+    use \App\Models\Concerns\HasDocumentNumber;
+
     public const STATUSES = ['planned', 'in_progress', 'finished', 'closed', 'cancelled'];
 
     public const OPEN_STATUSES = ['planned', 'in_progress', 'finished'];
@@ -64,10 +66,7 @@ class ProductionOrder extends Model
     /** رقم الأمر الجاي: MO-1001، MO-1002… (promax-feature-dev — توليد الأرقام) */
     public static function nextNumber(): string
     {
-        $last = static::query()->orderByDesc('id')->value('number');
-        $n = $last ? ((int) preg_replace('/\D+/', '', $last)) + 1 : 1001;
-
-        return 'MO-'.$n;
+        return static::nextDocumentNumber('MO-', 1001);
     }
 
     /** لسه شغّال (مخطط/جاري/انتهى ومستني القفل) */

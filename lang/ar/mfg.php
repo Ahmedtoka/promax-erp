@@ -7,7 +7,7 @@ return [
     // ═══ الصرف من مخزن الخامات ═══
     'qty_positive' => 'الكمية لازم تكون أكبر من صفر',
     'raw_whole_units' => 'الكمية لازم تكون رقم صحيح لحد ما وحدات الخامات تنزل',
-    'raw_short' => 'رصيد :product مش كفاية — المتاح :available',
+    'raw_short' => 'رصيد :product مش كفاية — المطلوب :need والمتاح :available',
 
     // ═══ الحالات ═══
     'spec_status_draft' => 'مسودة',
