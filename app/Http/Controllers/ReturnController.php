@@ -329,6 +329,12 @@ class ReturnController extends Controller
             return back()->withErrors(['delete' => __('ops.del_ret_custody_closed')]);
         }
 
+        // ⚠️ الشهر المقفول (D7): قيود المرتجع بتتمسح جماعي — تاريخها وتاريخه
+        \App\Support\PeriodGuard::assertOpen($return->created_at, 'delete');
+        foreach (\App\Models\Transaction::where('source_type', ClientReturn::class)->where('source_id', $return->id)->pluck('date') as $d) {
+            \App\Support\PeriodGuard::assertOpen($d, 'delete');
+        }
+
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($return, $client, $custody) {
                 if ($custody !== null) {

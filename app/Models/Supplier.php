@@ -84,7 +84,7 @@ class Supplier extends Model
      * ⚠️ جوه ترانزاكشن اللي بينادي — القيد والمستند (فاتورة/دفعة)
      * لازم يعيشوا أو يموتوا مع بعض.
      */
-    public function post(string $kind, string $date, float $debit, float $credit, ?string $memo = null, ?Model $source = null): SupplierTransaction
+    public function post(string $kind, string $date, float $debit, float $credit, ?string $memo = null, ?Model $source = null, ?string $idemKey = null): SupplierTransaction
     {
         // ⚠️ **قفل صف المورد يسلسل القيود.** من غيره، دفعتين في نفس
         // اللحظة: كل واحدة بتحسب SUM من سنابشوت مش شايف التانية،
@@ -99,7 +99,7 @@ class Supplier extends Model
             'memo' => $memo,
             'source_type' => $source?->getMorphClass(),
             'source_id' => $source?->getKey(),
-        ]);
+        ] + ($idemKey !== null ? ['idem_key' => $idemKey] : []));
 
         $this->recalculate();
 

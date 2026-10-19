@@ -25,6 +25,13 @@ class AppServiceProvider extends ServiceProvider
         // كانت ملفات الكونفيج على أي سيرفر.
         date_default_timezone_set('Africa/Cairo');
         config(['app.timezone' => 'Africa/Cairo']);
+
+        // ═══ سجلات قيد الافتتاح (D6) — الخط ٤ يربط الأصول والخط ٧ السلف ═══
+        // `bindIf`: ربط الخط التاني بيكسب أياً كان ترتيب التسجيل
+        $this->app->bindIf(\App\Contracts\Gl\FixedAssetRegister::class, \App\Services\Gl\Opening\NullFixedAssetRegister::class);
+        $this->app->bindIf(\App\Contracts\Gl\AdvancesRegister::class, \App\Services\Gl\Opening\NullAdvancesRegister::class);
+        // سينجلتون عشان `register()` من أي خط يفضل موجود طول الطلب
+        $this->app->singletonIf(\App\Services\Gl\OpeningBuilder::class);
     }
 
     /**
@@ -109,6 +116,12 @@ class AppServiceProvider extends ServiceProvider
                 ]);
             }
         });
+
+        // ⚠️ حارس الشهر المقفول (١٩/١٠، D7) **قبل** أوبزرفرات الدفتر —
+        // بيرمي (مش بيبلع) عشان مستند الويب جوه شهر مقفول يترفض قبل أي كتابة
+        \App\Support\PeriodGuard::registerDefaults();
+        \App\Models\Gl\GlPeriod::saved(fn () => \App\Support\PeriodGuard::flush());
+        \App\Models\Gl\GlPeriod::deleted(fn () => \App\Support\PeriodGuard::flush());
 
         // دفتر الأستاذ العام (١١/٩/٢٠٢٦) — كل صف في transactions بيترحّل تلقائياً
         \App\Models\Transaction::observe(\App\Observers\Gl\TransactionObserver::class);

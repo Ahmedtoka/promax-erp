@@ -72,7 +72,10 @@ class CashMovementController extends Controller
 
         $date = Carbon::parse($data['date']);
         if (GlPeriod::isClosed($date)) {
-            return back()->withErrors(['date' => __('gl.period_closed', ['period' => GlPeriod::keyFor($date)])])->withInput();
+            // رسالة الشهر المقفول الموحّدة (D7) — على `period` و`date` (الخانة)
+            $msg = \App\Support\PeriodGuard::message($date);
+
+            return back()->withErrors(['period' => $msg, 'date' => $msg])->withInput();
         }
 
         CashMovement::create([
@@ -99,7 +102,10 @@ class CashMovementController extends Controller
             return back();
         }
         if (GlPeriod::isClosed($cashMovement->date)) {
-            return back()->withErrors(['void' => __('gl.void_closed_hint')]);
+            return back()->withErrors([
+                'period' => \App\Support\PeriodGuard::message($cashMovement->date),
+                'void' => __('gl.void_closed_hint'),
+            ]);
         }
         $cashMovement->update(['status' => 'void', 'voided_at' => now(), 'voided_by' => $request->user()->id]);
 

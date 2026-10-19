@@ -82,7 +82,7 @@
                                     : [in_array($e->period_key, $closedPeriods ?? [], true) ? 'closed_period' : 'rule'];
                             @endphp
                             @foreach ($reasons as $why)
-                                <div><span class="badge {{ $why === 'closed_period' ? 'b-red' : 'b-orange' }}">{{ $why === 'closed_period' ? __('gl.needs_review_closed') : __('gl.needs_review') }}</span></div>
+                                <div><span class="badge {{ $why === 'closed_period' ? 'b-red' : 'b-orange' }}">{{ match ($why) { 'closed_period' => __('gl.needs_review_closed'), 'late_sync' => __('gl.needs_review_late_sync'), default => __('gl.needs_review') } }}</span></div>
                             @endforeach
                         @endif
                     </td>

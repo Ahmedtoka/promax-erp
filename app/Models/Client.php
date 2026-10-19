@@ -1439,6 +1439,15 @@ public function zone(): BelongsTo
      */
     public function setOpeningBalance(float $amount, ?string $date = null, ?string $memo = null): ?Transaction
     {
+        // ⚠️ الشهر المقفول (D7): الافتتاحي القديم بيتمسح جماعي (الأوبزرفر
+        // مابيشوفوش) — تاريخه القديم والجديد لازم يكونوا في شهر مفتوح
+        foreach ($this->transactions()->where('kind', 'opening')->pluck('date') as $old) {
+            \App\Support\PeriodGuard::assertOpen($old, 'date');
+        }
+        if (abs($amount) >= 0.01) {
+            \App\Support\PeriodGuard::assertOpen($date ?: today(), 'date');
+        }
+
         // ⚠️ **المسح والكتابة جوّه ترانزاكشن واحدة** (تدقيق ٨/٨/٢٠٢٦).
         // القديم كان بيتمسح **قبل** ما الجديد يتكتب وبرّه أي حماية —
         // لو الكتابة وقعت (خطأ فاليديشن على مستوى الداتابيز، انقطاع،

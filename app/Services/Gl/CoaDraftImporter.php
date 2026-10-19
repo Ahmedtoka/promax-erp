@@ -45,6 +45,8 @@ class CoaDraftImporter
         return DB::transaction(function () use ($rows, $cols, $replace) {
             if ($replace) {
                 CoaDraftAccount::query()->delete();
+                // الموافقات على صفوف اتمسحت ماتفضلش معلّقة على صفوف جديدة
+                \App\Models\Gl\CoaCheckAccept::query()->delete();
             }
 
             $lastByPath = [];   // المسار ⇒ آخر حساب اتعمل بيه (الولاد بيتعلقوا في آخر نسخة)

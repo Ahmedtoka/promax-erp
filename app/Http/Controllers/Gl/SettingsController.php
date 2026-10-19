@@ -9,9 +9,11 @@ use App\Models\Gl\GlPeriod;
 use App\Models\Gl\GlPostingRule;
 use App\Models\Setting;
 use App\Services\Gl\ClosedPeriod;
+use App\Services\Gl\GlMapping;
 use App\Services\Gl\Ledger;
 use App\Services\Gl\RebuildFailed;
 use App\Services\Gl\RebuildReport;
+use App\Services\Gl\UnmappedRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -38,17 +40,7 @@ class SettingsController extends Controller
      *
      * @var array<string, list<string>>
      */
-    private const REP_CASH_SLOTS = [
-        'tx.collection.rep_cash' => ['debit_key', 'credit_key'],
-        'tx.collection.auto' => ['debit_key', 'credit_key'],
-        'tx.refund' => ['debit_key', 'credit_key'],
-        'cash.rep_advance' => ['debit_key', 'credit_key'],
-        'cash.rep_return' => ['debit_key', 'credit_key'],
-        // القاعدتين دول بيتحلّوا لمندوب التصفية/السند — `rep_cash` مسموح
-        // على الدائن بس (المدين في التصفية خزنة، وفي المصروف حساب السند)
-        'settle.received' => ['credit_key'],
-        'expense.rep_cash' => ['credit_key'],
-    ];
+    private const REP_CASH_SLOTS = GlMapping::REP_CASH_SLOTS;
 
     public function __construct(private Ledger $ledger)
     {
@@ -60,11 +52,7 @@ class SettingsController extends Controller
      */
     private static function requiresKey(string $ruleKey, string $slot): bool
     {
-        if ($slot === 'credit_key') {
-            return true;
-        }
-
-        return $slot === 'debit_key' && ! str_starts_with($ruleKey, 'expense.');
+        return GlMapping::requiresKey($ruleKey, $slot);
     }
 
     public function index()
@@ -259,6 +247,11 @@ class SettingsController extends Controller
         $old = Setting::read('gl_start_date');
         $new = ($data['gl_start_date'] ?? null) ? Carbon::parse($data['gl_start_date'])->toDateString() : null;
 
+        // البداية قدام شهر مقفول فيه قيود = الشهر ده هيتمسح — مرفوض قبل أي كتابة
+        if ($new !== null && ($old === null || $new > $old) && ($hit = $this->ledger->closedBefore($new)) !== null) {
+            return back()->withErrors(['gl_start_date' => __('gl.period_closed', ['period' => $hit])]);
+        }
+
         Setting::writeMany([
             'gl_start_date' => $new,
             'gl_bank_name' => ($data['gl_bank_name'] ?? null) ?: null,
@@ -273,9 +266,7 @@ class SettingsController extends Controller
         // القيد اليدوي/الافتتاحي مايتلمسش — ده قرار محاسب مش اشتقاق.
         $purged = 0;
         if ($new !== null && ($old === null || $new > $old)) {
-            $purged = (int) DB::transaction(
-                fn () => GlEntry::where('origin', 'auto')->whereDate('date', '<', $new)->delete()
-            );
+            $purged = $this->ledger->purgeBefore($new);
         }
 
         // اسم البنك بيتكتب على حساب البنك نفسه كمان — عشان كشف الحساب
@@ -317,7 +308,11 @@ class SettingsController extends Controller
     public function rebuildPreview(Request $request)
     {
         try {
+            // بعد الاعتماد (D5): قاعدة مش مربوطة = إعادة البناء تترفض قبل أي كتابة
+            GlMapping::assertComplete();
             $report = $this->ledger->rebuild($this->rebuildFrom(), $request->boolean('keep_overrides', true), true, $request->user());
+        } catch (UnmappedRules $e) {
+            return $this->page(null, $e->getMessage());
         } catch (ClosedPeriod $e) {
             return $this->page(null, $e->getMessage());
         }
@@ -331,7 +326,10 @@ class SettingsController extends Controller
     public function rebuild(Request $request)
     {
         try {
+            GlMapping::assertComplete();
             $report = $this->ledger->rebuild($this->rebuildFrom(), $request->boolean('keep_overrides', true), false, $request->user());
+        } catch (UnmappedRules $e) {
+            return $this->page(null, $e->getMessage());
         } catch (RebuildFailed $e) {
             return $this->page($e->report, $e->getMessage());
         } catch (ClosedPeriod $e) {

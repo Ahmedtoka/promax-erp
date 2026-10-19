@@ -153,6 +153,14 @@ class SupplierController extends Controller
             'date' => ['required', 'date', 'before_or_equal:today'],
         ]);
 
+        // ⚠️ الشهر المقفول (D7): القديم بيتمسح جماعي — القديم والجديد
+        foreach ($supplier->transactions()->where('kind', 'opening')->pluck('date') as $old) {
+            \App\Support\PeriodGuard::assertOpen($old, 'date');
+        }
+        if (abs((float) $data['amount']) >= 0.005) {
+            \App\Support\PeriodGuard::assertOpen($data['date'], 'date');
+        }
+
         DB::transaction(function () use ($supplier, $data) {
             $supplier->transactions()->where('kind', 'opening')->delete();
 
@@ -188,6 +196,7 @@ class SupplierController extends Controller
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
         ]);
+        \App\Support\PeriodGuard::assertOpen($data['paid_on'], 'paid_on');
 
         SupplierPayment::record([
             'supplier_id' => $supplier->id,
@@ -387,6 +396,7 @@ class SupplierController extends Controller
             'tax' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'notes' => ['nullable', 'string'],
         ]);
+        \App\Support\PeriodGuard::assertOpen($data['invoice_date'], 'invoice_date');
 
         try {
             DB::transaction(function () use ($supplierOrder, $data, $request) {

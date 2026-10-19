@@ -90,7 +90,10 @@ class ExpenseController extends Controller
 
         $date = Carbon::parse($data['date']);
         if (GlPeriod::isClosed($date)) {
-            return back()->withErrors(['date' => __('gl.period_closed', ['period' => GlPeriod::keyFor($date)])])->withInput();
+            // رسالة الشهر المقفول الموحّدة (D7) — على `period` و`date` (الخانة)
+            $msg = \App\Support\PeriodGuard::message($date);
+
+            return back()->withErrors(['period' => $msg, 'date' => $msg])->withInput();
         }
 
         Expense::create([
@@ -125,7 +128,10 @@ class ExpenseController extends Controller
         // ⚠️ الفترة المقفولة مابتتلمسش — الإلغاء هنا كان هيمسح قيد جوه
         // شهر متقفل بميزانه المعتمد. الصح سند عكسي بتاريخ مفتوح.
         if (GlPeriod::isClosed($expense->date)) {
-            return back()->withErrors(['void' => __('gl.void_closed_hint')]);
+            return back()->withErrors([
+                'period' => \App\Support\PeriodGuard::message($expense->date),
+                'void' => __('gl.void_closed_hint'),
+            ]);
         }
         $expense->update(['status' => 'void', 'voided_at' => now(), 'voided_by' => $request->user()->id]);
 

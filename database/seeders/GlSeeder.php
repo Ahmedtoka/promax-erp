@@ -22,6 +22,8 @@ class GlSeeder extends Seeder
         ['12', 'المدينون', 'Receivables', '1', null, false],
         ['1201', 'العملاء', 'Clients', '12', 'receivables', true],
         ['1202', 'ضرايب مخصومة تحت الحساب', 'Withholding tax receivable', '12', 'withheld_tax', true],
+        ['13', 'المخزون', 'Inventory', '1', null, false],
+        ['1301', 'مخزون البضاعة', 'Merchandise inventory', '13', 'inventory', true],
         ['1901', 'حساب معلّق', 'Suspense', '1', 'suspense', true],
         ['2', 'الخصوم', 'Liabilities', null, null, false],
         ['21', 'الدائنون', 'Payables', '2', null, false],
@@ -77,10 +79,15 @@ class GlSeeder extends Seeder
     public function run(): void
     {
         foreach (self::ACCOUNTS as [$code, $name, $en, $parentCode, $key, $postable]) {
-            $parent = $parentCode ? GlAccount::where('code', $parentCode)->first() : null;
+            $parent = $parentCode ? self::seeded($parentCode, null) : null;
             $type = GlAccount::ROOT_TYPES[$code[0]];
-            $acc = GlAccount::where('code', $code)->first()
-                ?? ($key ? GlAccount::where('system_key', $key)->first() : null);
+            // المفتاح اتنقل بشاشة الربط على حساب تاني (معتمد أو حر) ⇒ ده مكانه
+            // دلوقتي: مانلمسش الحساب ده ولا نولّد نسخة تانية للمفتاح
+            $holder = $key ? GlAccount::where('system_key', $key)->first() : null;
+            if ($holder && ($holder->coa_draft_id !== null || ! in_array($holder->code, [$code, 'S-'.$code], true))) {
+                continue;
+            }
+            $acc = self::seeded($code, $key);
             $attrs = [
                 'parent_id' => $parent?->id, 'type' => $type,
                 'normal_side' => GlAccount::normalSideFor($type),
@@ -90,7 +97,9 @@ class GlSeeder extends Seeder
                 // الاسم اللي المالك غيّره مايتداسش
                 $acc->fill($attrs)->save();
             } else {
-                GlAccount::create($attrs + ['code' => $code, 'name' => $name, 'name_en' => $en, 'active' => true]);
+                // كود اتاخد من شجرة المحاسب المعتمدة ⇒ حساب النظام بيتعمل بـ`S-<code>` (D2)
+                $free = GlAccount::where('code', $code)->exists() ? 'S-'.$code : $code;
+                GlAccount::create($attrs + ['code' => $free, 'name' => $name, 'name_en' => $en, 'active' => true]);
             }
         }
 
@@ -100,5 +109,16 @@ class GlSeeder extends Seeder
             ]);
         }
         GlPostingRule::flush();
+    }
+
+    /**
+     * حساب النظام المتولد بكوده — بالمفتاح الأول، وإلا بالكود من غير ما يلمس حساب
+     * اتعتمد من شجرة المحاسب، وإلا بكوده المنقول `S-<code>` بعد الاعتماد (D2).
+     */
+    private static function seeded(string $code, ?string $key): ?GlAccount
+    {
+        return ($key ? GlAccount::where('system_key', $key)->first() : null)
+            ?? GlAccount::where('code', $code)->whereNull('coa_draft_id')->first()
+            ?? GlAccount::where('code', 'S-'.$code)->whereNull('coa_draft_id')->first();
     }
 }

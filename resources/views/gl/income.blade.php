@@ -14,7 +14,7 @@
 @endphp
 
 @section('actions')
-    <a class="btn" href="{{ route('gl.income', array_merge($range->query(), ['export' => 1])) }}">
+    <a class="btn" href="{{ route('gl.income', array_merge($range->query(), ['cost_center_id' => $centerId, 'export' => 1])) }}">
         📊 {{ __('common.export_screen') }}
     </a>
 @endsection
@@ -48,6 +48,7 @@
     <form method="GET" class="searchbar" data-noprint>
         {{-- ⚠️ `all => false`: الفترة الفاضية هنا = الشهر الحالي (`DateRange` month) مش «كل الفترات» --}}
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true, 'all' => false])
+        @include('gl._cost_center_filter')
         <button class="btn gold" type="submit">{{ __('common.filter') }}</button>
         <a class="btn" href="{{ route('gl.income') }}">{{ __('common.clear') }}</a>
     </form>

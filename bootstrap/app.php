@@ -32,6 +32,8 @@ return Application::configure(basePath: dirname(__DIR__))
             App\Http\Middleware\TrackVisit::class,
             // (٢٢/٩) اللينك اللي اليوزر مايقدرش يفتحه بيتحوّل نص — انظر LinkGuard
             App\Http\Middleware\GuardLinks::class,
+            // الشهر المقفول (١٩/١٠، D7): مستند الويب بتاريخ فيه بيترفض
+            App\Http\Middleware\PeriodGuardMode::class.':reject',
         ]);
 
         // نفس الحكاية للـ API — رسايل الأبلكيشن لازم تطلع بلغة اليوزر.
@@ -42,6 +44,8 @@ return Application::configure(basePath: dirname(__DIR__))
             App\Http\Middleware\SetLocale::class,
             // أكشنات الأبلكيشن (٢٢/٩) — الـGET بتاعه متسابة بره جوه الميدلوير
             App\Http\Middleware\TrackVisit::class,
+            // الشهر المقفول (١٩/١٠، D7): مزامنة الموبايل المتأخرة بتتقبل وتتعلّم
+            App\Http\Middleware\PeriodGuardMode::class.':flag',
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

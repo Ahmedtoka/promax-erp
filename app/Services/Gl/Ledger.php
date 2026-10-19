@@ -59,9 +59,12 @@ class Ledger
 
         return DB::transaction(function () use ($source, $date, $spec, $by) {
             // السبب بيتسجّل دلوقتي — البادج مايستنتجوش من حالة الفترة بعدين
+            $closed = GlPeriod::isClosed($date);
             $reasons = array_keys(array_filter([
                 'rule' => $spec['needs_review'],
-                'closed_period' => GlPeriod::isClosed($date),
+                'closed_period' => $closed,
+                // مزامنة موبايل متأخرة (D7): الـAPI بيقبل المستند والمحاسب يقرر
+                'late_sync' => $closed && \App\Support\PeriodGuard::mode() === \App\Support\PeriodGuard::MODE_FLAG,
             ]));
             $entry = GlEntry::create([
                 'number' => GlEntry::nextNumber(),
@@ -290,19 +293,20 @@ class Ledger
      * `overrideAccount()` بيعملوا نسخ من قيود آلية معتمدة أصلاً — ماينفعش
      * نرفضهم بنفس حارس القيد اليدوي الطازج.
      */
-    private function writeEntry(Carbon $date, string $memo, array $lines, User $by, string $origin, ?int $reversesId, bool $guardControl): GlEntry
+    private function writeEntry(Carbon $date, string $memo, array $lines, User $by, string $origin, ?int $reversesId, bool $guardControl, ?string $ruleKey = null): GlEntry
     {
         if ($guardControl) {
             $this->assertNotControl(array_column($lines, 'account_id'));
         }
 
-        return DB::transaction(function () use ($date, $memo, $lines, $by, $origin, $reversesId) {
+        return DB::transaction(function () use ($date, $memo, $lines, $by, $origin, $reversesId, $ruleKey) {
             $entry = GlEntry::create([
                 'number' => GlEntry::nextNumber(),
                 'date' => $date->toDateString(),
                 'period_key' => GlPeriod::keyFor($date),
                 'memo' => mb_substr($memo, 0, 250),
                 'origin' => $origin,
+                'rule_key' => $ruleKey,
                 'reverses_entry_id' => $reversesId,
                 'created_by' => $by->id,
             ]);
@@ -333,11 +337,86 @@ class Ledger
         return $this->writeEntry($date, $memo, $lines, $by, $origin, null, true);
     }
 
+    public const OPENING_RULE = 'golive.opening';
+
+    /**
+     * تاريخ البداية اتحرك لقدام ⇒ القيود **الآلية** اللي قبله بتتشال (اليدوي
+     * والافتتاحي قرار محاسب — مايتلمسوش). مشتركة بين الإعدادات والمعالج.
+     */
+    /** أول شهر مقفول فيه قيود آلية قبل التاريخ (هتتمسح لو البداية اتحركت) — أو null */
+    public function closedBefore(string $date): ?string
+    {
+        $closed = GlPeriod::where('status', 'closed')->pluck('key')->all();
+
+        return $closed === [] ? null : GlEntry::where('origin', 'auto')->whereDate('date', '<', $date)
+            ->whereIn('period_key', $closed)->orderBy('period_key')->value('period_key');
+    }
+
+    public function purgeBefore(string $date): int
+    {
+        // قيود آلية في شهر مقفول ماتتمسحش — الشهر اتراجع واتعتمد.
+        // الكنترولرز بتسأل `closedBefore()` قبل ما تكتب أي إعداد.
+        if (($hit = $this->closedBefore($date)) !== null) {
+            throw new ClosedPeriod(__('gl.period_closed', ['period' => $hit]));
+        }
+
+        return (int) DB::transaction(
+            fn () => GlEntry::where('origin', 'auto')->whereDate('date', '<', $date)->delete()
+        );
+    }
+
+    /**
+     * ═══ قيد الافتتاح الواحد (D6) — `OpeningBuilder` هو اللي بيناديه بس ═══
+     *
+     * بيمسح قيد `golive.opening` القديم ويكتب الجديد في نفس الترانزاكشن.
+     * ⚠️ **مسموح يلمس العملاء/الموردين** (من غير `assertNotControl`): سطورهم
+     * مش حرة — `OpeningBuilder` بيحسبها من `transactions` /
+     * `supplier_transactions` قبل البداية، فالدفتر لسه مشتق من الكشوف.
+     * التاريخ الجديد والقديم لازم يكونوا في شهر مفتوح.
+     *
+     * @param  list<array{account_id:int, cost_center_id?:?int, debit:float, credit:float, memo?:?string}>  $lines
+     */
+    public function opening(Carbon $date, array $lines, User $by, string $memo = ''): GlEntry
+    {
+        $this->validateLines($lines);
+        $this->assertOpen($date);
+
+        return DB::transaction(function () use ($date, $lines, $by, $memo) {
+            // ⚠️ قفل حساب الفرق يسلسل ترحيلين في نفس اللحظة — أول ترحيل
+            // مالوش صف قديم يتقفل عليه، فمن غيره كان ممكن يطلع قيدين افتتاح
+            GlAccount::whereKey(GlAccount::openingDifference()->id)->lockForUpdate()->first();
+            $old = GlEntry::where('origin', 'opening')->where('rule_key', self::OPENING_RULE)->lockForUpdate()->get();
+            foreach ($old as $e) {
+                $this->assertOpen(Carbon::parse($e->date));
+            }
+            // قيد عكسي/تصحيح على الافتتاحي القديم كان هيفضل يقابل الجديد
+            // (الربط `nullOnDelete`) والعملاء/الموردين يبعدوا عن كشوفهم
+            if ($old->isNotEmpty() && GlEntry::whereIn('reverses_entry_id', $old->pluck('id'))->exists()) {
+                throw new \InvalidArgumentException(__('golive.opening_has_reversal'));
+            }
+            foreach ($old as $e) {
+                $e->delete(); // gl_lines cascade
+            }
+
+            return $this->writeEntry($date, $memo, array_map(fn ($l) => [
+                'account_id' => (int) $l['account_id'],
+                'cost_center_id' => $l['cost_center_id'] ?? null,
+                'debit' => (float) ($l['debit'] ?? 0),
+                'credit' => (float) ($l['credit'] ?? 0),
+                'memo' => $l['memo'] ?? null,
+            ], $lines), $by, 'opening', null, false, self::OPENING_RULE);
+        });
+    }
+
     /** قيد عكسي بتاريخ النهاردة (أو تاريخ مفتوح تختاره) */
     public function reverse(GlEntry $entry, User $by, ?Carbon $date = null, ?string $memo = null): GlEntry
     {
         $date ??= today();
         $this->assertOpen($date);
+        // الافتتاحي بيتعدّل من المعالج بس (بيتكتب من جديد كل ترحيل)
+        if ($entry->rule_key === self::OPENING_RULE) {
+            throw new \InvalidArgumentException(__('golive.opening_locked'));
+        }
         $lines = $entry->lines->map(fn (GlLine $l) => [
             'account_id' => $l->account_id, 'cost_center_id' => $l->cost_center_id,
             'debit' => (float) $l->credit, 'credit' => (float) $l->debit,
@@ -357,6 +436,9 @@ class Ledger
     {
         $entry = $line->entry;
 
+        if ($entry->rule_key === self::OPENING_RULE) {
+            throw new \InvalidArgumentException(__('golive.opening_locked'));
+        }
         if (! $to->is_postable || ! $to->active) {
             throw new \InvalidArgumentException(__('gl.account_not_postable'));
         }
@@ -452,19 +534,23 @@ class Ledger
      * في الآخر وبيرجّع التقرير من غير رمي — القيد اليدوي/الافتتاحي مايتلمسش
      * (origin != auto). فشل الفحص في تشغيل حقيقي = rollback + رمي `RebuildFailed`.
      */
-    public function rebuild(Carbon $from, bool $keepOverrides = true, bool $dryRun = false, ?User $by = null): RebuildReport
+    public function rebuild(Carbon $from, bool $keepOverrides = true, bool $dryRun = false, ?User $by = null,
+        bool $skipClosed = false, ?callable $probe = null): RebuildReport
     {
         // حارس الفترة المقفولة — قبل ما نفتح ترانزاكشن نلغيها بعدين. أي شهر
         // من `$from` لحد النهاردة لازم يكون مفتوح، وإلا القيود الآلية اللي
-        // هتتمسح فيه مش هينفع تتبدّل
+        // هتتمسح فيه مش هينفع تتبدّل.
+        // ⭐ `skipClosed` (معالج التشغيل — D8): بدل الرفض، الشهور المقفولة
+        // **بتتجمّد**: قيودها الآلية مابتتمسحش ومصادرها مابتترحّلش تاني.
         $fromKey = $from->format('Y-m');
-        $closedPeriod = GlPeriod::where('status', 'closed')->where('key', '>=', $fromKey)->orderBy('key')->first();
-        if ($closedPeriod) {
-            throw new ClosedPeriod(__('gl.rebuild_closed_period', ['period' => $closedPeriod->key]));
+        $closedKeys = GlPeriod::where('status', 'closed')->where('key', '>=', $fromKey)->orderBy('key')->pluck('key')->all();
+        if ($closedKeys !== [] && ! $skipClosed) {
+            throw new ClosedPeriod(__('gl.rebuild_closed_period', ['period' => $closedKeys[0]]));
         }
 
         $report = new RebuildReport;
         $report->dryRun = $dryRun;
+        $report->frozenPeriods = $closedKeys;
         $snapshot = fn () => GlAccount::where('is_postable', true)->get()
             ->mapWithKeys(fn ($a) => [$a->code => $a->balanceBetween(null, null)])->all();
 
@@ -480,7 +566,8 @@ class Ledger
             // مين عملها وإمتى وليه، عشان لو اتحفظت لازم يتسجل نفس أثر
             // التدقيق على السطر الجديد (الأصلي هيتمسح مع القيد بالكاسكيد)
             $overrides = [];
-            $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString());
+            $autoQ = GlEntry::where('origin', 'auto')->whereDate('date', '>=', $from->toDateString())
+                ->when($closedKeys !== [], fn ($q) => $q->whereNotIn('period_key', $closedKeys));
             // مفاتيح المصادر اللي هتتمسح — عشان نتأكد بعد التوليد إن كل واحد
             // فيهم رجع تاني (مش عدد بس، عشان أول إعادة بناء على شجرة فاضية
             // deleted=0 و created=N طبيعي وصحيح، مش عطل)
@@ -499,6 +586,9 @@ class Ledger
             // 2. التوليد
             $createdSourceKeys = [];
             foreach ($this->sources($from) as $src) {
+                if ($closedKeys !== [] && in_array(GlPeriod::keyFor(self::dateOf($src)), $closedKeys, true)) {
+                    continue; // شهر متجمّد — قيده (لو موجود) فاضل زي ما هو
+                }
                 $entry = $this->post($src, $by);
                 if ($entry === null) {
                     continue;
@@ -552,6 +642,11 @@ class Ledger
                 'ok' => count($missing) === 0,
             ];
             $report->ok = collect($report->invariants)->every(fn ($i) => $i['ok']);
+
+            // المجس (معاينة المعالج): بيشوف الدفتر بعد التوليد وقبل الـrollback
+            if ($probe !== null) {
+                $report->probe = $probe($report);
+            }
 
             if ($dryRun) {
                 // dry run مايرميش أبداً — بيرجّع التقرير زي ما هو حتى لو

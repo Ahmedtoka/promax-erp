@@ -4701,23 +4701,39 @@ class OpsController extends Controller
         $first = '';
         $last = '';
         $changed = [];   // الفواتير اللي رقمها اتغيّر فعلاً — قيودها بس هي اللي بتتعاد
+        $skipped = 0;    // فواتير شهور مقفولة — رقمها مابيتلمسش (D7)
 
-        DB::transaction(function () use (&$count, &$first, &$last, &$changed) {
+        DB::transaction(function () use (&$count, &$first, &$last, &$changed, &$skipped) {
+            // ⚠️ الشهر المقفول (D7): الترقيم مايعدّلش مستند جوه شهر مقفول.
+            // فواتيره بتفضل برقمها، والرقم ده بيتشال من التسلسل عشان مايتكررش.
+            $frozen = [];
+            foreach (DB::table('invoices')->get(['id', 'number', 'created_at']) as $r) {
+                if ($r->created_at !== null && \App\Support\PeriodGuard::isClosed($r->created_at)) {
+                    $frozen[(int) $r->id] = (string) $r->number;
+                }
+            }
+            $skipped = count($frozen);
+            $taken = array_flip($frozen);
+            $open = fn ($q) => $frozen === [] ? $q : $q->whereNotIn('id', array_keys($frozen));
+
             // ١. الأرقام القديمة قبل ما نلمسها
-            $olds = DB::table('invoices')->pluck('number', 'id');
+            $olds = $open(DB::table('invoices'))->pluck('number', 'id');
 
             // ٢. أرقام مؤقتة — بتفك الـunique أثناء التبديل
-            DB::table('invoices')->update(['number' => DB::raw("CONCAT('TMP-', id)")]);
+            $open(DB::table('invoices'))->update(['number' => DB::raw("CONCAT('TMP-', id)")]);
 
             // ٣. الترقيم الزمني — created_at ثم id (فواتير نفس اللحظة
             //    بتترتب بترتيب دخولها الفعلي)
             $seq = 1001;
-            $ids = DB::table('invoices')
+            $ids = $open(DB::table('invoices'))
                 ->orderBy('created_at')
                 ->orderBy('id')
                 ->pluck('id');
 
             foreach ($ids as $id) {
+                while (isset($taken['INV-'.$seq])) {
+                    $seq++;
+                }
                 $new = 'INV-'.$seq;
                 $old = (string) $olds->get($id);
 
@@ -4767,7 +4783,7 @@ class OpsController extends Controller
             'count' => number_format($count),
             'first' => $first,
             'last' => $last,
-        ]));
+        ]).($skipped > 0 ? ' '.__('gl.renumber_skipped_closed', ['n' => number_format($skipped)]) : ''));
 
         // الترقيم نفسه نجح — الشجرة هي اللي ورا. الرسالة لازم تبان
         // عشان محدش يفتكر إن الدفتر اتحدّث وهو واقف على قاعدة موقوفة.
@@ -5009,6 +5025,9 @@ class OpsController extends Controller
             return back()->withErrors(['client_id' => __('ops.reassign_eta_locked')]);
         }
 
+        // الشهر المقفول (D7) — قيود الفاتورة بتتحدّث جماعي والأوبزرفر مابيشوفهاش
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'client_id');
+
         // ⚠️ الربط بالفاتورة على **بنود** المرتجع (`return_items.invoice_id`)
         // مش على رأس المستند — الاستعلام على `returns` مباشرة رمى
         // «Unknown column invoice_id» على اللايف (بلاغ ١٨/٨ مساءً).
@@ -5077,6 +5096,10 @@ class OpsController extends Controller
             return back()->withErrors(['date' => __('ops.redate_eta_locked')]);
         }
 
+        // الشهر المقفول (D7): لا خروج من شهر مقفول ولا دخول فيه
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'date');
+        \App\Support\PeriodGuard::assertOpen($data['date'], 'date');
+
         $old = $invoice->created_at->format('Y-m-d');
         // اليوم الجديد بساعة الفاتورة الأصلية
         $new = \Illuminate\Support\Carbon::parse($data['date'])
@@ -5132,6 +5155,7 @@ class OpsController extends Controller
         if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
             return back()->withErrors(['payment' => __('ops.pay_eta_locked')]);
         }
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'payment');
 
         $isConsignment = Transaction::where('source_type', Invoice::class)
             ->where('source_id', $invoice->id)
@@ -5223,6 +5247,7 @@ class OpsController extends Controller
         if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
             return back()->withErrors(['reprice' => __('ops.reprice_eta_locked')]);
         }
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'reprice');
 
         if (Transaction::where('source_type', Invoice::class)
             ->where('source_id', $invoice->id)
@@ -5356,6 +5381,7 @@ class OpsController extends Controller
         if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
             return back()->withErrors(['edit_items' => __('ops.redate_eta_locked')]);
         }
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'edit_items');
 
         if (Transaction::where('source_type', Invoice::class)
             ->where('source_id', $invoice->id)
@@ -5677,6 +5703,7 @@ class OpsController extends Controller
         if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
             return back()->withErrors(['delete' => __('ops.del_inv_eta_locked')]);
         }
+        \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'delete');
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
             && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
@@ -5771,6 +5798,7 @@ class OpsController extends Controller
         $date = ! empty($data['date'])
             ? \Illuminate\Support\Carbon::parse($data['date'])->setTime(12, 0)
             : now();
+        \App\Support\PeriodGuard::assertOpen($date, 'date');
 
         \App\Services\ManualCollection::record(
             actor: $request->user(),

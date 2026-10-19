@@ -24,7 +24,7 @@ class GlAccount extends Model
 
     public const SYSTEM_KEYS = [
         'cash_main', 'bank', 'rep_cash', 'receivables', 'withheld_tax', 'suspense',
-        'payables', 'vat_output', 'opening_equity',
+        'payables', 'vat_output', 'opening_equity', 'inventory', 'opening_difference',
         'sales', 'sales_returns', 'discounts_allowed',
         'expense_purchases', 'expense_fuel', 'expense_maintenance', 'expense_salaries',
         'expense_commissions', 'expense_rent', 'expense_gifts', 'expense_other',
@@ -34,7 +34,7 @@ class GlAccount extends Model
 
     protected $fillable = [
         'code', 'name', 'name_en', 'parent_id', 'type', 'normal_side',
-        'is_system', 'system_key', 'user_id', 'is_postable', 'active',
+        'is_system', 'system_key', 'user_id', 'is_postable', 'active', 'coa_draft_id',
     ];
 
     protected function casts(): array
@@ -72,15 +72,75 @@ class GlAccount extends Model
         return in_array($type, ['asset', 'expense'], true) ? 'debit' : 'credit';
     }
 
-    /** حساب النظام بمفتاحه — بيرمي لو الشجرة مش متولدة (شغّل GlSeeder) */
+    /**
+     * حساب النظام بمفتاحه — بيرمي لو الشجرة مش متولدة (شغّل GlSeeder).
+     * `opening_difference` بيتعمل عند الطلب (مش من السيدر).
+     */
     public static function findKey(string $systemKey): self
     {
         $acc = static::where('system_key', $systemKey)->first();
+        if ($acc === null && $systemKey === 'opening_difference') {
+            return static::openingDifference();
+        }
         if ($acc === null) {
             throw new \RuntimeException("GL system account [{$systemKey}] missing — run GlSeeder");
         }
 
         return $acc;
+    }
+
+    /**
+     * «فرق الأرصدة الافتتاحية» — أي عدم توازن في قيد الافتتاح بيروحله.
+     * بيتعمل مرة واحدة تحت جذر حقوق الملكية المتولد (`3`، أو `S-3` بعد الاعتماد) بالكود 3199 (أو 3199.1 لو
+     * الكود متاخد)؛ لو الجذر مش موجود بيتعمل من غير أب.
+     */
+    public static function openingDifference(): self
+    {
+        $existing = static::where('system_key', 'opening_difference')->first();
+        if ($existing) {
+            return $existing;
+        }
+        $root = static::seededRoots()['equity'] ?? null;
+        // أول كود فاضي: 3199 ثم 3199.1 ثم 3199.2 … — الشجرة المعتمدة ممكن تكون واخدة الاتنين
+        $code = '3199';
+        for ($i = 1; static::where('code', $code)->exists(); $i++) {
+            $code = '3199.'.$i;
+        }
+
+        return static::firstOrCreate(['system_key' => 'opening_difference'], [
+            'code' => $code,
+            'name' => 'فرق الأرصدة الافتتاحية',
+            'name_en' => 'Opening balance difference',
+            'parent_id' => $root?->id,
+            'type' => 'equity',
+            'normal_side' => 'credit',
+            'is_system' => true,
+            'is_postable' => true,
+            'active' => true,
+        ]);
+    }
+
+    /**
+     * جذور الأنواع المتولدة من `GlSeeder` بالنوع ⇒ الحساب. بتتلاقي بصفتها (حساب نظام
+     * من غير أب ومن غير مفتاح ومش من المسودة) مش بكودها — الاعتماد ممكن ينقل كودها لـ`S-1`.
+     *
+     * @return array<string, self>
+     */
+    public static function seededRoots(): array
+    {
+        $out = [];
+        $rows = static::where('is_system', true)->whereNull('parent_id')->whereNull('coa_draft_id')
+            ->whereNull('system_key')->orderBy('id')->get();
+        foreach ($rows as $g) {
+            $code = (string) $g->code;
+            $digit = str_starts_with($code, 'S-') ? substr($code, 2, 1) : substr($code, 0, 1);
+            $type = in_array($g->type, self::TYPES, true) ? $g->type : (self::ROOT_TYPES[$digit] ?? null);
+            if ($type !== null && ! isset($out[$type])) {
+                $out[$type] = $g;
+            }
+        }
+
+        return $out;
     }
 
     /** حساب «نقدية مع المندوب» — بيتولد أول مرة تحت الأب rep_cash */

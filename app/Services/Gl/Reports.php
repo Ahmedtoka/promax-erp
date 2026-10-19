@@ -13,9 +13,12 @@ class Reports
 {
     /** مجاميع مدين/دائن مجمّعة بـ`account_id` نفسه بس — بدون لمّ الأحفاد
      * (يعني حسابات postable الأوراق فقط)، على فترة */
-    private function sums(?Carbon $from, ?Carbon $to): array
+    private function sums(?Carbon $from, ?Carbon $to, ?int $costCenterId = null): array
     {
         $q = DB::table('gl_lines')->join('gl_entries', 'gl_entries.id', '=', 'gl_lines.entry_id');
+        if ($costCenterId !== null) {
+            $q->whereIn('gl_lines.cost_center_id', $this->centerIds($costCenterId));
+        }
         if ($from) {
             $q->whereDate('gl_entries.date', '>=', $from->toDateString());
         }
@@ -25,6 +28,36 @@ class Reports
 
         return $q->selectRaw('gl_lines.account_id, SUM(gl_lines.debit) d, SUM(gl_lines.credit) c')
             ->groupBy('gl_lines.account_id')->get()->keyBy('account_id')->all();
+    }
+
+    /**
+     * المركز وكل أحفاده (`cost_centers.parent_id`) — فلتر «الشركة» بيجيب
+     * المصنع وخطوطه والفروع. حارس حلقة زي `balancesByAccount`.
+     *
+     * @return list<int>
+     */
+    public function centerIds(int $costCenterId): array
+    {
+        $children = [];
+        foreach (DB::table('cost_centers')->get(['id', 'parent_id']) as $c) {
+            if ($c->parent_id !== null) {
+                $children[(int) $c->parent_id][] = (int) $c->id;
+            }
+        }
+        $out = [];
+        $stack = [$costCenterId];
+        while ($stack !== []) {
+            $id = array_pop($stack);
+            if (isset($out[$id])) {
+                continue;
+            }
+            $out[$id] = true;
+            foreach ($children[$id] ?? [] as $k) {
+                $stack[] = $k;
+            }
+        }
+
+        return array_keys($out);
     }
 
     private function signed(GlAccount $a, float $d, float $c): float
@@ -90,10 +123,10 @@ class Reports
         return $out;
     }
 
-    public function trialBalance(?Carbon $from, ?Carbon $to): array
+    public function trialBalance(?Carbon $from, ?Carbon $to, ?int $costCenterId = null): array
     {
-        $period = $this->sums($from, $to);
-        $before = $from ? $this->sums(null, $from->copy()->subDay()) : [];
+        $period = $this->sums($from, $to, $costCenterId);
+        $before = $from ? $this->sums(null, $from->copy()->subDay(), $costCenterId) : [];
         $rows = [];
         $td = $tc = 0.0;
         foreach (GlAccount::where('is_postable', true)->orderBy('code')->get() as $a) {
@@ -137,9 +170,9 @@ class Reports
         return ['opening' => round($opening, 2), 'rows' => $rows, 'closing' => $running];
     }
 
-    public function income(Carbon $from, Carbon $to): array
+    public function income(Carbon $from, Carbon $to, ?int $costCenterId = null): array
     {
-        $sums = $this->sums($from, $to);
+        $sums = $this->sums($from, $to, $costCenterId);
         $rev = $exp = [];
         $tr = $te = 0.0;
         foreach (GlAccount::whereIn('type', ['revenue', 'expense'])->where('is_postable', true)->orderBy('code')->get() as $a) {
@@ -160,9 +193,9 @@ class Reports
         return ['revenue' => $rev, 'expenses' => $exp, 'total_revenue' => round($tr, 2), 'total_expenses' => round($te, 2), 'net' => round($tr - $te, 2)];
     }
 
-    public function balanceSheet(Carbon $asOf): array
+    public function balanceSheet(Carbon $asOf, ?int $costCenterId = null): array
     {
-        $sums = $this->sums(null, $asOf);
+        $sums = $this->sums(null, $asOf, $costCenterId);
         $out = ['assets' => [], 'liabilities' => [], 'equity' => []];
         $tot = ['asset' => 0.0, 'liability' => 0.0, 'equity' => 0.0];
         foreach (GlAccount::whereIn('type', ['asset', 'liability', 'equity'])->where('is_postable', true)->orderBy('code')->get() as $a) {
@@ -178,7 +211,7 @@ class Reports
         // الإيرادات والمصروفات لحد النهاردة، وميزانية بلا قفل سنوي محتاجة
         // تضيفه لحقوق الملكية يدوياً في التقرير عشان الأصول تتوازن مع
         // الخصوم+الملكية (زي الأرباح المحتجزة قبل التوزيع/الإقفال)
-        $retained = $this->income(Carbon::parse('1970-01-01'), $asOf)['net'];
+        $retained = $this->income(Carbon::parse('1970-01-01'), $asOf, $costCenterId)['net'];
         $tle = round($tot['liability'] + $tot['equity'] + $retained, 2);
 
         return $out + [
