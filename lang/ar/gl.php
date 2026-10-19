@@ -102,6 +102,8 @@ return [
     'source_SupplierTransaction' => 'كارت المورد',
     'source_Expense' => 'سند المصروف',
     'source_CashMovement' => 'حركة النقدية',
+    'source_SafeCount' => 'جرد خزنة',
+    'source_FixedAssetDepreciation' => 'إهلاك أصل ثابت',
     'lines' => 'السطور',
     'lines_count' => 'عدد السطور',
     'lines_min' => 'القيد لازم سطرين على الأقل.',

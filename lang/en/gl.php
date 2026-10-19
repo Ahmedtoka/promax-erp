@@ -102,6 +102,8 @@ return [
     'source_SupplierTransaction' => 'Supplier card',
     'source_Expense' => 'Expense voucher',
     'source_CashMovement' => 'Cash movement',
+    'source_SafeCount' => 'Safe count',
+    'source_FixedAssetDepreciation' => 'Fixed-asset depreciation',
     'lines' => 'Lines',
     'lines_count' => 'Lines',
     'lines_min' => 'An entry needs at least two lines.',

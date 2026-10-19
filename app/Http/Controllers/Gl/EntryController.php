@@ -36,6 +36,8 @@ class EntryController extends Controller
         \App\Models\SupplierTransaction::class => ['erp.suppliers.show', 'supplier_id'],
         \App\Models\Expense::class => ['gl.expenses', null],
         \App\Models\CashMovement::class => ['gl.cash', null],
+        \App\Models\SafeCount::class => ['gl.safes.counts', null],
+        \App\Models\FixedAssetDepreciation::class => ['gl.assets', null],
     ];
 
     public function index(Request $request)
