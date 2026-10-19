@@ -22,6 +22,8 @@ class GlSeeder extends Seeder
         ['12', 'المدينون', 'Receivables', '1', null, false],
         ['1201', 'العملاء', 'Clients', '12', 'receivables', true],
         ['1202', 'ضرايب مخصومة تحت الحساب', 'Withholding tax receivable', '12', 'withheld_tax', true],
+        ['13', 'المخزون', 'Inventory', '1', null, false],
+        ['1301', 'مخزون البضاعة', 'Merchandise inventory', '13', 'inventory', true],
         ['1901', 'حساب معلّق', 'Suspense', '1', 'suspense', true],
         ['2', 'الخصوم', 'Liabilities', null, null, false],
         ['21', 'الدائنون', 'Payables', '2', null, false],
