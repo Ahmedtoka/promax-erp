@@ -26,7 +26,8 @@ class AttendanceDay extends Model
     public const STATUS_AUTO = 'auto';
 
     protected $fillable = [
-        'user_id', 'date', 'first_in_at', 'last_out_at',
+        // `employee_id` (Lane 7): العامل اللي مالوش لوجين يومه على الموظف بس
+        'user_id', 'employee_id', 'date', 'first_in_at', 'last_out_at',
         'worked_minutes', 'break_minutes', 'sessions', 'status',
         'approved_minutes', 'approved_by', 'approved_at', 'note',
     ];
@@ -44,6 +45,12 @@ class AttendanceDay extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** ملف الموظف (Lane 7) — العامل من غير لوجين `user_id` بتاعه null */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     public function approver(): BelongsTo

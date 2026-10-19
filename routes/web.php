@@ -1382,6 +1382,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->middleware('role:admin')->name('index.meta');
         });
 
+    // ═══ بانش الداش بورد (Lane 7 — المهمة ٢) ═══
+    // ⚠️ بره بادئة `erp.` — زرار الهيدر على كل شاشة. صاحب الحساب لنفسه بس،
+    // ومن غير ملف موظف بيترفض (`hrm.no_employee_record`). مستلم النظام مالوش.
+    Route::post('/attendance/punch', [\App\Http\Controllers\Hr\AttendanceHrController::class, 'punch'])
+        ->middleware('role:admin,manager,branch_manager,accountant,warehouse_keeper,hr')
+        ->name('attendance.punch');
+
     // ═══ الموارد البشرية (Lane 7، الإغلاق ١٩/١٠) ═══
     // ⚠️ القايمة والعقد قراءة للمحاسب كمان؛ الكتابة والتعديل `role:admin,hr`
     // + `act.hr.employees`. الثابت قبل البارامتري. المهام الجاية بتزوّد هنا.
@@ -1397,6 +1404,16 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,hr,accountant')->name('employees.contract');
         Route::put('/employees/{employee}', [$emp, 'update'])->whereNumber('employee')
             ->middleware('role:admin,hr')->name('employees.update');
+
+        // الحضور لكل موظف (المهمة ٢): المشرف بيبصم للعامل اللي مالوش لوجين،
+        // وتقرير البانشات بالمصدر. ⚠️ الحارس على الموظف نفسه في الكنترولر (`isManagedBy`).
+        $att = \App\Http\Controllers\Hr\AttendanceHrController::class;
+        Route::get('/attendance/supervisor', [$att, 'supervisor'])
+            ->middleware('role:admin,hr,manager,branch_manager,warehouse_keeper')->name('attendance.supervisor');
+        Route::post('/attendance/supervisor/punch', [$att, 'supervisorPunch'])
+            ->middleware('role:admin,hr,manager,branch_manager,warehouse_keeper')->name('attendance.supervisor.punch');
+        Route::get('/attendance/punches', [$att, 'punches'])
+            ->middleware('role:admin,hr,manager,branch_manager,accountant')->name('attendance.punches');
     });
 
 });

@@ -56,6 +56,8 @@ class Access
             'erp.targets', 'erp.performance',
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
+            // Lane 7: زرار البانش في الهيدر + بصمة المشرف لعماله + تقرير البانشات
+            'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
             'erp.suppliers', 'erp.purchasing',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
@@ -100,6 +102,8 @@ class Access
             'erp.stock', 'erp.batches', 'erp.reports',
             // إدارة المهام (٢٦/٨)
             'erp.tasks',
+            // Lane 7: زرار البانش + بصمة المشرف لعماله + تقرير البانشات (فرعه)
+            'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
@@ -204,6 +208,8 @@ class Access
             // ═══ ملف الموظف (Lane 7) — قراءة: المرتبات من هنا. الإضافة والتعديل
             // `act.hr.employees` (الموارد البشرية)، وفورم التعديل فيه الرقم القومي ═══
             'hr.employees', '!hr.employees.edit',
+            // Lane 7: زرار البانش + تقرير البانشات (قراءة — الساعات بتروح المرتبات)
+            'attendance.punch', 'hr.attendance.punches',
         ],
 
         // ═══ أمين المخزن — البضاعة بس ═══
@@ -245,6 +251,8 @@ class Access
             'ops.replenishments',
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
             '!ops.replenishments.update',
+            // Lane 7: زرار البانش + بصمة المشرف لعمال المخزن اللي مالهمش لوجين
+            'attendance.punch', 'hr.attendance.supervisor',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -593,6 +601,8 @@ class Access
             ['erp.attendance.review', '⏰', 'hr.review', 'erp.attendance.review', 'attendance_review'],
             // ملف الموظف (Lane 7) — باقي شاشات الموارد البشرية بتتزوّد مع مهامها
             ['hr.employees', '🪪', 'hrm.nav_employees', 'hr.employees*', null],
+            ['hr.attendance.supervisor', '👷', 'hrm.nav_supervisor', 'hr.attendance.supervisor*', null],
+            ['hr.attendance.punches', '📍', 'hrm.nav_punches', 'hr.attendance.punches*', null],
         ],
 
         'nav.group_settings' => [

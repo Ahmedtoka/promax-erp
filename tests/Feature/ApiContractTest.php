@@ -66,6 +66,28 @@ class ApiContractTest extends TestCase
         $this->withHeaders($h)->getJson('/api/manager/bootstrap')->assertOk();
     }
 
+    /**
+     * ⚠️ شكل رد البانش ثابت — الأبلكيشن (Lane 8) بيقرا المفاتيح دي بالاسم.
+     * الإضافة الوحيدة في Lane 7: `source` على كل بانش.
+     */
+    public function test_attendance_punch_shape_is_stable(): void
+    {
+        $rep = $this->makeRep();
+
+        $this->withHeaders($this->tokenFor($rep))
+            ->postJson('/api/attendance/punch', ['type' => 'in', 'lat' => 30.05, 'lng' => 31.25])
+            ->assertOk()
+            ->assertJsonStructure([
+                'attendance' => [
+                    'state', 'worked_minutes', 'open_since',
+                    'punches' => ['*' => ['type', 'label', 'at', 'source']],
+                ],
+            ])
+            ->assertJsonPath('attendance.state', 'working')
+            ->assertJsonPath('attendance.punches.0.type', 'in')
+            ->assertJsonPath('attendance.punches.0.source', 'app');
+    }
+
     public function test_bad_coordinates_on_a_purchase_order_arrival_are_refused(): void
     {
         $rep = $this->makeRep();
