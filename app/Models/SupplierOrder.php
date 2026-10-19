@@ -132,8 +132,7 @@ class SupplierOrder extends Model
             $notes = $order->notes;
             if ($note !== '') {
                 $line = __('supplier.rejected_note', ['note' => $note]);
-                $notes = $notes ? $notes."
-".$line : $line;
+                $notes = $notes ? $notes."\n".$line : $line;
             }
 
             $order->update([

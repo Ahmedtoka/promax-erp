@@ -202,6 +202,23 @@ class OrderApprovalTest extends TestCase
         $this->assertSame('cancelled', $o->status);
         $this->assertSame('rejected', $o->approval_status);
         $this->assertStringContainsString('too dear', (string) $o->notes);
+
+        // كارت الموافقة بيقول «اترفض» مش «اتوافق»
+        $res = $this->actingAs($admin)->get(route('erp.purchasing.show', $o))->assertOk();
+        $res->assertSee(trim(explode(':name', __('supplier.rejected_by_on'))[0]));
+        $res->assertDontSee(trim(explode(':name', __('supplier.approved_by_on'))[0]));
+    }
+
+    public function test_reject_note_goes_on_a_new_line_after_existing_notes(): void
+    {
+        [$o] = $this->pendingOrder();
+        $o->update(['notes' => 'first line']);
+
+        $this->actingAs($this->makeAdmin())->post(route('erp.purchasing.reject', $o), ['note' => 'too dear']);
+
+        $notes = (string) $o->fresh()->notes;
+        $this->assertStringStartsWith("first line\n", $notes);
+        $this->assertStringContainsString('too dear', $notes);
     }
 
     public function test_manager_cannot_approve(): void

@@ -82,7 +82,7 @@
             @endforeach
         </ul>
         @if ($o->approval_status !== 'pending' && $o->approved_at)
-            <div style="font-size:12px;color:var(--muted);margin-top:6px">{{ __('supplier.approved_by_on', ['name' => $approverName ?? '', 'at' => $o->approved_at->format('Y-m-d H:i')]) }}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">{{ __($o->approval_status === 'rejected' ? 'supplier.rejected_by_on' : 'supplier.approved_by_on', ['name' => $approverName ?? '', 'at' => $o->approved_at->format('Y-m-d H:i')]) }}</div>
         @endif
         @if ($o->isPendingApproval() && \App\Support\Access::action(auth()->user(), 'act.purchasing.approve'))
             <form method="POST" action="{{ route('erp.purchasing.reject', $o) }}" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">

@@ -150,6 +150,37 @@ class PurchaseRequestTest extends TestCase
         $this->assertSame(1, SupplierOrder::count());
     }
 
+    public function test_order_from_a_request_without_center_takes_the_warehouse_center(): void
+    {
+        $admin = $this->makeAdmin();
+        $wh = $this->makeWarehouse();
+        $cc = CostCenter::company();
+        $wh->update(['cost_center_id' => $cc->id]);
+        $r = $this->request();
+        $q = $this->quote($r, $this->supplier('A'), '5.00');
+
+        $this->actingAs($admin)->post(route('erp.purchase_quotes.approve', $q), ['warehouse_id' => $wh->id])
+            ->assertRedirect();
+
+        $this->assertSame($cc->id, (int) SupplierOrder::firstOrFail()->cost_center_id);
+    }
+
+    public function test_quote_of_an_inactive_supplier_cannot_be_approved(): void
+    {
+        $admin = $this->makeAdmin();
+        $wh = $this->makeWarehouse();
+        $r = $this->request();
+        $s = $this->supplier('A');
+        $q = $this->quote($r, $s, '5.00');
+        $s->update(['active' => false]);
+
+        $this->actingAs($admin)->post(route('erp.purchase_quotes.approve', $q), ['warehouse_id' => $wh->id])
+            ->assertSessionHasErrors();
+
+        $this->assertSame(0, SupplierOrder::count());
+        $this->assertSame('pending', $q->fresh()->status);
+    }
+
     public function test_manager_cannot_approve_a_quote(): void
     {
         $manager = $this->makeAdmin(['role' => 'manager']);

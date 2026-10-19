@@ -68,6 +68,8 @@ return [
     'approval_needed' => 'This order waits for admin approval',
     'approval_reasons' => 'Approval reasons',
     'approved_by_on' => 'Approved by :name on :at',
+    'rejected_by_on' => 'Rejected by :name on :at',
+    'quote_supplier_inactive' => "This supplier is inactive - reactivate it first or approve another supplier's quote.",
     'approve_order' => 'Approve',
     'reject_order' => 'Reject',
     'reject_note' => 'Reason for rejection (optional)',

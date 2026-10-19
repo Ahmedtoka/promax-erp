@@ -481,7 +481,7 @@ class SupplierController extends Controller
     public function returns(Request $request)
     {
         $user = $request->user();
-        $q = \App\Models\SupplierReturn::with(['supplier', 'order.warehouse']);
+        $q = \App\Models\SupplierReturn::with(['supplier', 'order.warehouse', 'receipt']);
 
         if ($user->isWarehouseKeeper() && $user->warehouse_id) {
             $q->whereHas('order', fn ($w) => $w->where('warehouse_id', $user->warehouse_id));

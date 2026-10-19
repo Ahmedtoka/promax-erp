@@ -48,6 +48,11 @@ class PurchaseQuote extends Model
             }
 
             $quote = static::whereKey($this->id)->firstOrFail();
+
+            // مورد اتوقف بعد ما قدّم العرض: مايتعتمدش (أمر لمورد موقوف)
+            if (! Supplier::whereKey($quote->supplier_id)->where('active', true)->exists()) {
+                throw new Rejected(__('supplier.quote_supplier_inactive'));
+            }
             $qty = (int) $request->qty;
             $price = round((float) $quote->unit_price, 2);
             $today = now()->startOfDay();
@@ -68,7 +73,9 @@ class PurchaseQuote extends Model
                 'approved_at' => now(),
                 'purchase_request_id' => $request->id,
                 'purchase_quote_id' => $quote->id,
-                'cost_center_id' => $request->cost_center_id,
+                // مركز الطلب، وإلا مركز المخزن (D9) — نفس سلسلة الأمر المباشر
+                'cost_center_id' => $request->cost_center_id
+                    ?? CostCenter::forWarehouse(Warehouse::find($warehouseId))?->id,
             ]);
 
             $order->items()->create([
