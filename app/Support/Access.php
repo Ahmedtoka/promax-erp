@@ -249,6 +249,12 @@ class Access
             'ops.replenishments',
             '!ops.replenishments.assign', '!ops.replenishments.cancel',
             '!ops.replenishments.update',
+            // التصنيع (١٩/١٠): بيشوف أوامر الإنتاج عشان يصرف لها خامات من مخزنه،
+            // واحتياج الخامات. ⚠️ الاستثناء بالاسم مش بالبادئة — صرف الخامات
+            // (`mfg.orders.issue*` / `mfg.orders.return`، مهمة ٥) شغله.
+            'mfg.orders', 'mfg.requirements',
+            '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
+            '!mfg.orders.cancel', '!mfg.orders.shortage', '!mfg.orders.close',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -257,6 +263,33 @@ class Access
         // (`handover.index.meta` `role:admin` + `act.handover.meta`).
         'handover_reviewer' => [
             'handover.', '!handover.index.meta',
+        ],
+
+        // ═══ التصنيع (الإغلاق ١٩/١٠، spec §4) — شاشات `mfg.*` بس ═══
+        // ⚠️ الاعتمادات (المواصفة والـBOM) أدمن بس — الرولز دي بتشوف وتشتغل،
+        // والكتابة بتتحرس بـ`role:` على الراوت + `act.mfg.*`.
+        // ⚠️ المواصفات: الإنتاج والجودة بيشوفوا بس (الكتابة `role:admin,rnd`)،
+        // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
+        'production_manager' => [
+            'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
+            'mfg.lines', 'mfg.requirements', 'mfg.trace', 'mfg.variance',
+            '!mfg.lines.settings', '!mfg.qc.decide',
+            '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
+        ],
+        'quality' => [
+            'mfg.qc', 'mfg.specs', 'mfg.orders', 'mfg.trace', 'notifications',
+            '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.orders.store', '!mfg.orders.start', '!mfg.orders.finish',
+            '!mfg.orders.cancel', '!mfg.orders.shortage', '!mfg.orders.close',
+            '!mfg.orders.issue', '!mfg.orders.issue_standard', '!mfg.orders.return',
+        ],
+        'rnd' => [
+            'mfg.specs', 'mfg.boms', 'notifications',
+            '!mfg.specs.approve', '!mfg.specs.send_back',
+            '!mfg.boms.approve',
         ],
     ];
 
@@ -274,12 +307,16 @@ class Access
         'accountant' => 'erp.overview',
         'warehouse_keeper' => 'wh.index',
         'handover_reviewer' => 'handover.index',
+        'production_manager' => 'mfg.orders',
+        'quality' => 'mfg.qc',
+        'rnd' => 'mfg.specs',
     ];
 
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
         'handover_reviewer',
+        'production_manager', 'quality', 'rnd',
     ];
 
     /**
@@ -328,6 +365,7 @@ class Access
         'nav.group_reports' => '📑',
         'nav.group_settings' => '⚙️',
         'nav.group_handover' => '🎓',
+        'nav.group_mfg' => '🧪',
     ];
 
     public const NAV = [
@@ -529,6 +567,19 @@ class Access
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
             ['wh.raw', '🧪', 'nav.raw_store', 'wh.raw', null],
+        ],
+
+        // ═══ التصنيع (الإغلاق ١٩/١٠، spec §3.5) — مواصفة ← BOM ← أمر ← صرف ←
+        // قفل ← جودة. بنود الشاشات التانية بتتزوّد مع مهامها. ═══
+        'nav.group_mfg' => [
+            ['mfg.orders', '📋', 'nav.mfg_orders', 'mfg.orders*', null],
+            ['mfg.qc', '🔬', 'nav.mfg_qc', 'mfg.qc*', null],
+            ['mfg.specs', '📄', 'nav.mfg_specs', 'mfg.specs*', null],
+            ['mfg.boms', '🧾', 'nav.mfg_boms', 'mfg.boms*', null],
+            ['mfg.lines', '🛤️', 'nav.mfg_lines', 'mfg.lines*', null],
+            ['mfg.requirements', '🧮', 'nav.mfg_requirements', 'mfg.requirements*', null],
+            ['mfg.trace', '🔎', 'nav.mfg_trace', 'mfg.trace*', null],
+            ['mfg.variance', '📉', 'nav.mfg_variance', 'mfg.variance*', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══
@@ -765,6 +816,21 @@ class Access
 
         // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
         'act.handover.meta' => ['perm.act_handover_meta', 'handover.index', [], ['handover.index.meta']],
+
+        // ═══ التصنيع (١٩/١٠) — المواصفات: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
+        'act.mfg.specs_edit' => ['perm.act_mfg_specs_edit', 'mfg.specs', ['rnd'], ['mfg.specs.store', 'mfg.specs.update', 'mfg.specs.submit']],
+        'act.mfg.specs_approve' => ['perm.act_mfg_specs_approve', 'mfg.specs', [], ['mfg.specs.approve', 'mfg.specs.send_back']],
+        // ═══ التصنيع — قوايم المواد: البحث والتطوير بيكتب، الاعتماد أدمن بس (D1) ═══
+        'act.mfg.boms_edit' => ['perm.act_mfg_boms_edit', 'mfg.boms', ['rnd'], ['mfg.boms.store', 'mfg.boms.lines']],
+        'act.mfg.boms_approve' => ['perm.act_mfg_boms_approve', 'mfg.boms', [], ['mfg.boms.approve']],
+        // ═══ التصنيع — خطوط الإنتاج وأوامر الإنتاج: مدير الإنتاج؛ مخازن التصنيع الافتراضية أدمن بس ═══
+        'act.mfg.lines_manage' => ['perm.act_mfg_lines_manage', 'mfg.lines', ['production_manager'], ['mfg.lines.store', 'mfg.lines.update']],
+        'act.mfg.lines_settings' => ['perm.act_mfg_lines_settings', 'mfg.lines', [], ['mfg.lines.settings']],
+        'act.mfg.orders_manage' => ['perm.act_mfg_orders_manage', 'mfg.orders', ['production_manager'], ['mfg.orders.store', 'mfg.orders.start', 'mfg.orders.finish', 'mfg.orders.cancel', 'mfg.orders.shortage', 'mfg.orders.close']],
+        // ═══ التصنيع — صرف الخامات والمرتجع: مدير الإنتاج وأمين المخزن ═══
+        'act.mfg.issue' => ['perm.act_mfg_issue', 'mfg.orders', ['production_manager', 'warehouse_keeper'], ['mfg.orders.issue', 'mfg.orders.issue_standard', 'mfg.orders.return']],
+        // ═══ التصنيع — قرار الجودة على باتش التام (إفراج/رفض): الجودة بس (D7) ═══
+        'act.mfg.qc_decide' => ['perm.act_mfg_qc_decide', 'mfg.qc', ['quality'], ['mfg.qc.decide']],
     ];
 
     /**

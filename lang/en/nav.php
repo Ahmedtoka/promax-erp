@@ -134,4 +134,14 @@ return [
     // System handover (close-out 19/10)
     'group_handover' => 'System Handover',
     'handover_tracker' => 'Handover Tracker',
+    // Manufacturing (close-out 19/10)
+    'group_mfg' => 'Manufacturing',
+    'mfg_orders' => 'Production Orders',
+    'mfg_qc' => 'QC Release',
+    'mfg_specs' => 'Product Specs',
+    'mfg_boms' => 'Bills of Materials',
+    'mfg_lines' => 'Production Lines',
+    'mfg_trace' => 'Lot Trace & Recall',
+    'mfg_variance' => 'Variance Report',
+    'mfg_requirements' => 'Material Requirement',
 ];

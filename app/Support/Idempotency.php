@@ -37,6 +37,11 @@ final class Idempotency
 
     public const REFILL = 'refill';
 
+    /** بدء / انتهاء أمر إنتاج (التصنيع ١٩/١٠) — الويب والأبلكيشن نفس الخدمة */
+    public const MFG_START = 'mfg_start';
+
+    public const MFG_FINISH = 'mfg_finish';
+
     /** قواعد الفاليديشن — نفس اللي في `collect` */
     public const RULES = ['nullable', 'string', 'max:64'];
 

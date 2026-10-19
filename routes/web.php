@@ -1495,4 +1495,82 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->middleware('role:admin')->name('index.meta');
         });
 
+    // ═══ التصنيع (الإغلاق ١٩/١٠، الخط ٦ — spec §3.5) ═══
+    // ⚠️ `role:` هنا لازم يطابق `Access::SCREENS` بالحرف (`RoleAccessTest`).
+    // الاعتمادات أدمن بس؛ الكتابة بتتحرس على كل راوت مع مهمته.
+    Route::prefix('mfg')->name('mfg.')->group(function () {
+        // ═══ أوامر الإنتاج — العرض للأربعة، الإنشاء والحالات admin,production_manager ═══
+        // ⚠️ `!mfg.orders.<اسم>` بالاسم للجودة وأمين المخزن (مش بادئة) — صرف
+        // الخامات (مهمة ٥) هيتفتح لأمين المخزن على نفس البادئة.
+        $order = \App\Http\Controllers\Mfg\OrderController::class;
+        Route::get('/orders', [$order, 'index'])
+            ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders');
+        Route::post('/orders', [$order, 'store'])
+            ->middleware('role:admin,production_manager')->name('orders.store');
+        Route::get('/orders/{order}', [$order, 'show'])->whereNumber('order')
+            ->middleware('role:admin,production_manager,quality,warehouse_keeper')->name('orders.show');
+        foreach (['start', 'finish', 'cancel', 'shortage', 'close'] as $step) {
+            Route::post('/orders/{order}/'.$step, [$order, $step])->whereNumber('order')
+                ->middleware('role:admin,production_manager')->name('orders.'.$step);
+        }
+        // صرف الخامات للأمر (مهمة ٥) — أمين المخزن معاهم؛ الجودة `!` بالاسم في Access
+        foreach (['issue' => 'issue', 'issue-standard' => 'issueStandard', 'return' => 'returnToStore'] as $path => $fn) {
+            Route::post('/orders/{order}/'.$path, [$order, $fn])->whereNumber('order')
+                ->middleware('role:admin,production_manager,warehouse_keeper')->name('orders.'.str_replace('-', '_', $path));
+        }
+        Route::get('/requirements', [$order, 'requirements'])
+            ->middleware('role:admin,production_manager,warehouse_keeper')->name('requirements');
+        // ═══ خطوط الإنتاج — admin,production_manager؛ مخازن التصنيع الافتراضية أدمن بس ═══
+        $line = \App\Http\Controllers\Mfg\LineController::class;
+        Route::get('/lines', [$line, 'index'])
+            ->middleware('role:admin,production_manager')->name('lines');
+        Route::post('/lines', [$line, 'store'])
+            ->middleware('role:admin,production_manager')->name('lines.store');
+        Route::post('/lines/settings', [$line, 'settings'])
+            ->middleware('role:admin')->name('lines.settings');
+        Route::post('/lines/{line}', [$line, 'update'])->whereNumber('line')
+            ->middleware('role:admin,production_manager')->name('lines.update');
+        Route::get('/qc', [\App\Http\Controllers\Mfg\QcController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality')->name('qc');
+        // ═══ تتبع اللوطات والسحب + تقرير الفروق (مهمة ٧) ═══
+        Route::get('/trace', [\App\Http\Controllers\Mfg\TraceController::class, 'index'])
+            ->middleware('role:admin,production_manager,quality')->name('trace');
+        Route::get('/variance', [\App\Http\Controllers\Mfg\VarianceController::class, 'index'])
+            ->middleware('role:admin,production_manager')->name('variance');
+        // قرار الجودة (إفراج/رفض) — الجودة والأدمن بس؛ مدير الإنتاج `!mfg.qc.decide`
+        Route::post('/qc/{order}', [\App\Http\Controllers\Mfg\QcController::class, 'decide'])->whereNumber('order')
+            ->middleware('role:admin,quality')->name('qc.decide');
+        // ═══ المواصفات — العرض للأربعة، الكتابة admin,rnd، الاعتماد/الإرجاع أدمن بس ═══
+        // ⚠️ الثابت قبل البارامتري؛ `!mfg.specs.*` في Access للي مايكتبش.
+        $spec = \App\Http\Controllers\Mfg\SpecController::class;
+        Route::get('/specs', [$spec, 'index'])
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs');
+        Route::post('/specs', [$spec, 'store'])
+            ->middleware('role:admin,rnd')->name('specs.store');
+        Route::get('/specs/{spec}', [$spec, 'show'])->whereNumber('spec')
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs.show');
+        Route::get('/specs/{spec}/file', [$spec, 'file'])->whereNumber('spec')
+            ->middleware('role:admin,production_manager,quality,rnd')->name('specs.file');
+        Route::post('/specs/{spec}', [$spec, 'update'])->whereNumber('spec')
+            ->middleware('role:admin,rnd')->name('specs.update');
+        Route::post('/specs/{spec}/submit', [$spec, 'submit'])->whereNumber('spec')
+            ->middleware('role:admin,rnd')->name('specs.submit');
+        Route::post('/specs/{spec}/approve', [$spec, 'approve'])->whereNumber('spec')
+            ->middleware('role:admin')->name('specs.approve');
+        Route::post('/specs/{spec}/send-back', [$spec, 'sendBack'])->whereNumber('spec')
+            ->middleware('role:admin')->name('specs.send_back');
+        // ═══ قوايم المواد — العرض admin,production_manager,rnd، الكتابة admin,rnd، الاعتماد أدمن بس ═══
+        $bom = \App\Http\Controllers\Mfg\BomController::class;
+        Route::get('/boms', [$bom, 'index'])
+            ->middleware('role:admin,production_manager,rnd')->name('boms');
+        Route::post('/boms', [$bom, 'store'])
+            ->middleware('role:admin,rnd')->name('boms.store');
+        Route::get('/boms/{bom}', [$bom, 'show'])->whereNumber('bom')
+            ->middleware('role:admin,production_manager,rnd')->name('boms.show');
+        Route::post('/boms/{bom}/lines', [$bom, 'lines'])->whereNumber('bom')
+            ->middleware('role:admin,rnd')->name('boms.lines');
+        Route::post('/boms/{bom}/approve', [$bom, 'approve'])->whereNumber('bom')
+            ->middleware('role:admin')->name('boms.approve');
+    });
+
 });

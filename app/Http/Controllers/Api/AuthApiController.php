@@ -33,6 +33,8 @@ class AuthApiController extends Controller
         if (! in_array($user->role, [
             'sales_agent', 'driver', 'promoter', 'manager', 'admin',
             'warehouse_keeper', 'accountant',
+            // مدير الإنتاج (١٩/١٠) — شاشة أوامر الإنتاج (ابدأ/خلص) في أبلكيشن 2.6.0
+            'production_manager',
         ], true)) {
             return response()->json(['message' => __('api.no_app_access')], 403);
         }

@@ -250,6 +250,18 @@ class Product extends Model
         return $this->hasMany(Batch::class);
     }
 
+    /** مواصفات المنتج بإصداراتها (التصنيع ١٩/١٠) — المعتمدة من `ProductSpec::approvedFor` */
+    public function specs(): HasMany
+    {
+        return $this->hasMany(ProductSpec::class)->orderByDesc('version');
+    }
+
+    /** قوايم المواد بإصداراتها (التصنيع ١٩/١٠) — الأوامر بتاخد `Bom::approvedFor` بس */
+    public function boms(): HasMany
+    {
+        return $this->hasMany(Bom::class)->orderByDesc('version');
+    }
+
     public function familyLabel(): string
     {
         // المسمى من جدول العائلات (بكاش) — و lang/الثوابت fallback
