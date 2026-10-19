@@ -437,8 +437,11 @@ final class CostSync
                 'amount_transfer' => round(array_sum(array_column($lines, 'amount_transfer')), 2),
                 'materials' => 0,
                 'overhead' => 0,
-                'flags' => collect($lines)->contains(fn ($l) => $l['unit_transfer'] === null) ? 'no_transfer_price'
-                    : (collect($lines)->contains(fn ($l) => $l['zero_cost']) ? 'zero_cost' : null),
+                // العلامتين مع بعض لو الاتنين موجودين (صنف من غير سعر تحويل + صنف تكلفته صفر)
+                'flags' => implode(',', array_filter([
+                    collect($lines)->contains(fn ($l) => $l['unit_transfer'] === null) ? 'no_transfer_price' : null,
+                    collect($lines)->contains(fn ($l) => $l['zero_cost']) ? 'zero_cost' : null,
+                ])) ?: null,
             ];
         });
     }

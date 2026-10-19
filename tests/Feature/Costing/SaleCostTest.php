@@ -20,6 +20,8 @@ use App\Models\PurchaseOrderItem;
 use App\Models\ReturnItem;
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\SupplierInvoice;
+use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Costing\CostingGlSeed;
@@ -515,6 +517,28 @@ class SaleCostTest extends TestCase
         $this->assertSame(500.0, $this->bal('expense_purchases'));
     }
 
+    public function test_rebuild_without_costing_seed_leaves_the_cost_layer_alone(): void
+    {
+        $this->world(costing: false);
+        [, $kept] = $this->sale([[$this->makeProduct(), 3, 10]]);
+        [, $gone] = $this->sale([[$this->makeProduct(), 2, 10]]);
+        $keptEntry = $this->entryFor($kept);
+        // تغيير من ورا الطبقة: قيد اتمسح وقيد اتعدّل — المزامنة كانت هترجّعهم
+        $goneEntry = $this->entryFor($gone);
+        \Illuminate\Support\Facades\DB::table('cost_lines')->where('cost_entry_id', $goneEntry->id)->delete();
+        \Illuminate\Support\Facades\DB::table('cost_entries')->where('id', $goneEntry->id)->delete();
+        \Illuminate\Support\Facades\DB::table('cost_entries')->where('id', $keptEntry->id)
+            ->update(['amount_batch' => 999, 'updated_at' => '2026-08-11 09:00:00']);
+
+        $this->assertTrue(app(Ledger::class)->rebuild(Carbon::parse('2026-08-01'))->ok);
+
+        $this->assertSame(1, CostEntry::count(), 'مفيش seed = إعادة البناء ماتزامنش الطبقة');
+        $row = CostEntry::find($keptEntry->id);
+        $this->assertSame(999.0, (float) $row->amount_batch);
+        $this->assertSame('2026-08-11 09:00:00', $row->updated_at->format('Y-m-d H:i:s'));
+        $this->assertSame(0, GlEntry::where('source_type', (new CostEntry)->getMorphClass())->count());
+    }
+
     public function test_supplier_invoice_debits_inventory_with_the_stock_rule(): void
     {
         $this->world();
@@ -525,6 +549,43 @@ class SaleCostTest extends TestCase
         $this->assertSame(500.0, $this->bal('inventory'));
         $this->assertSame(0.0, $this->bal('expense_purchases'));
         $this->assertSame(500.0, $this->bal('payables'));
+    }
+
+    public function test_taxed_supplier_invoice_keeps_input_vat_out_of_inventory(): void
+    {
+        $this->world();
+        $sup = Supplier::create(['code' => 'SUP-L9T', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        $inv = SupplierInvoice::record(['supplier_id' => $sup->id, 'invoice_date' => '2026-08-10',
+            'subtotal' => 1000, 'tax' => 140, 'total' => 1140, 'created_by' => $this->makeAdmin()->id]);
+        $st = SupplierTransaction::where('source_type', $inv->getMorphClass())->where('source_id', $inv->id)->firstOrFail();
+
+        $gl = app(Ledger::class)->autoEntryFor($st);
+        $this->assertSame('sup.invoice.stock', $gl->rule_key);
+        $this->assertFalse((bool) $gl->needs_review);
+        $this->assertSame(1000.0, $this->bal('inventory'));
+        $this->assertSame(140.0, $this->bal('expense_purchases'), 'الضريبة على حساب المسار القديم');
+        $this->assertSame(1140.0, $this->bal('payables'));
+
+        // من غير ضريبة = زي الأول: الكل مخزون
+        $plain = SupplierInvoice::record(['supplier_id' => $sup->id, 'invoice_date' => '2026-08-11',
+            'subtotal' => 500, 'tax' => 0, 'total' => 500, 'created_by' => $this->makeAdmin()->id]);
+        $this->assertCount(2, app(Ledger::class)->autoEntryFor(
+            SupplierTransaction::where('source_type', $plain->getMorphClass())->where('source_id', $plain->id)->firstOrFail())->lines);
+        $this->assertSame(1500.0, $this->bal('inventory'));
+        $this->assertSame(140.0, $this->bal('expense_purchases'));
+        $this->assertSame(1640.0, $this->bal('payables'));
+    }
+
+    public function test_taxed_supplier_invoice_without_costing_seed_is_all_expense(): void
+    {
+        $this->world(costing: false);
+        $sup = Supplier::create(['code' => 'SUP-L9U', 'name' => 'مورد', 'name_en' => 'Supplier', 'active' => true]);
+        SupplierInvoice::record(['supplier_id' => $sup->id, 'invoice_date' => '2026-08-10',
+            'subtotal' => 1000, 'tax' => 140, 'total' => 1140, 'created_by' => $this->makeAdmin()->id]);
+
+        $this->assertSame(1140.0, $this->bal('expense_purchases'));
+        $this->assertSame(0.0, $this->bal('inventory'));
+        $this->assertSame(1140.0, $this->bal('payables'));
     }
 
     public function test_costing_sync_command_dry_run_writes_nothing(): void

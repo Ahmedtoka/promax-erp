@@ -171,6 +171,19 @@ class InternalTransferTest extends TestCase
         $this->assertNull($gl->lines->firstWhere('account_id', GlAccount::findKey('internal_elim')->id), 'مفيش هامش');
     }
 
+    public function test_transfer_with_missing_price_and_zero_cost_lines_records_both_flags(): void
+    {
+        $this->world();
+        $noTp = $this->makeProduct(['kind' => 'finished', 'cost' => 8]);
+        $free = $this->makeProduct(['kind' => 'finished', 'cost' => 0]);
+        $this->tp($free, 11);
+        $e = $this->settle($this->received([[$noTp, 5, 5, 8], [$free, 5, 5, 0]]));
+
+        $this->assertSame('no_transfer_price,zero_cost', $e->flags);
+        $this->assertTrue($e->hasFlag('no_transfer_price'));
+        $this->assertTrue($e->hasFlag('zero_cost'));
+    }
+
     public function test_company_pl_nets_internal_to_zero_after_branch_sells_everything(): void
     {
         $this->world();

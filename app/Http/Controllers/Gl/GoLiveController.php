@@ -293,6 +293,10 @@ class GoLiveController extends Controller
     // ═══ ٨ — المعاينة ═══
     public function preview(Request $request)
     {
+        // إعادة البناء ممكن تاخد وقت على بيانات حقيقية (بتزامن طبقة التكلفة كمان)
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
         $run = app(RebuildDiff::class)->preview($request->user());
 
         return redirect()->route('gl.golive.show', 8)

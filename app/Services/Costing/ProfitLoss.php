@@ -122,7 +122,10 @@ final class ProfitLoss
         foreach ($ids as $cid) {
             $center = $centers->get($cid);
             $cells = $branch[$cid] ?? [];
-            $expenses = $center !== null ? $centerCost($cid) : 0.0;
+            // مصروفات المركز نفسه على صف الفرع **لو المركز فرع بس** — بيع
+            // متسجّل على مركز مش فرع (مصنع/خط/شركة) بياخد إيراده وتكلفته هنا،
+            // ومصروفاته بتتحسب في مكانها (تحميل المصنع/الشركة) مش مرتين
+            $expenses = $center !== null && $center->kind === 'branch' ? $centerCost($cid) : 0.0;
             if ($cells === [] && round($expenses, 2) == 0.0 && $cid !== $maadi?->id) {
                 continue;
             }

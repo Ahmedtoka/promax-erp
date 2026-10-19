@@ -307,6 +307,10 @@ class SettingsController extends Controller
 
     public function rebuildPreview(Request $request)
     {
+        // إعادة البناء ممكن تاخد وقت على بيانات حقيقية (بتزامن طبقة التكلفة كمان)
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
         try {
             // بعد الاعتماد (D5): قاعدة مش مربوطة = إعادة البناء تترفض قبل أي كتابة
             GlMapping::assertComplete();
@@ -325,6 +329,10 @@ class SettingsController extends Controller
 
     public function rebuild(Request $request)
     {
+        // إعادة البناء ممكن تاخد وقت على بيانات حقيقية (بتزامن طبقة التكلفة كمان)
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
         try {
             GlMapping::assertComplete();
             $report = $this->ledger->rebuild($this->rebuildFrom(), $request->boolean('keep_overrides', true), false, $request->user());

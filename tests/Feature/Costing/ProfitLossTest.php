@@ -227,6 +227,22 @@ class ProfitLossTest extends TestCase
         $this->assertSame(300.0, $q['product:'.$a->id]['expenses']);
     }
 
+    public function test_sale_on_non_branch_center_takes_no_center_expenses(): void
+    {
+        $p = $this->makeProduct(['kind' => 'finished']);
+        [, $tx] = $this->sale([[$p, 2, 5, 25]]);             // 50 إيراد، 10 تكلفة
+        $co = CostCenter::company();
+        CostEntry::where('origin_type', $tx->getMorphClass())->where('origin_id', $tx->id)->update(['cost_center_id' => $co->id]);
+        $this->expense($co, 30);
+
+        $pnl = ProfitLoss::build($this->aug());
+        $row = $this->branch($pnl, $co);
+        $this->assertSame([50.0, 10.0, 0.0], [$row['revenue'], $row['cost'], $row['expenses']], 'الإيراد والتكلفة بس — المصروف في مركز الشركة');
+        $this->assertSame(30.0, $pnl['company_center']['expenses']);
+        $this->assertSame(30.0, $pnl['company']['expenses'], 'المصروف مرة واحدة');
+        $this->assertTrue($pnl['reconciles']);
+    }
+
     public function test_alt_method_column_and_switch(): void
     {
         $p = $this->makeProduct(['cost' => 5]);

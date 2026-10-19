@@ -113,7 +113,20 @@ class CostingSchemaTest extends TestCase
         $r = CostingGlSeed::run();
         $this->assertSame('5150.L9', GlAccount::findKey('cogs')->code);
         $this->assertSame('5150', GlAccount::where('name', 'حساب المحاسب')->value('code'));
-        $this->assertNotEmpty($r['notes']);
+        $this->assertSame([__('costing.seed_note_code_taken', ['key' => 'cogs', 'code' => '5150', 'alt' => '5150.L9'])], $r['notes']);
+    }
+
+    public function test_seed_notes_follow_the_locale(): void
+    {
+        $this->seed(GlSeeder::class);
+        $root = GlAccount::where('code', '5')->first();
+        GlAccount::create(['code' => '5151', 'name' => 'حساب المحاسب', 'parent_id' => $root->id, 'type' => 'expense', 'normal_side' => 'debit', 'is_postable' => true, 'active' => true]);
+
+        // خطوة ٧ بالعربي: الملاحظة بالعربي مش إنجليزي ثابت
+        app()->setLocale('ar');
+        $this->assertSame(['internal_cogs: الكود 5151 متاخد بحساب تاني — اتعمل بالكود 5151.L9.'], CostingGlSeed::run(true)['notes']);
+        app()->setLocale('en');
+        $this->assertSame(['internal_cogs: code 5151 is taken by another account - created as 5151.L9.'], CostingGlSeed::run(true)['notes']);
     }
 
     public function test_seed_dry_run_writes_nothing(): void

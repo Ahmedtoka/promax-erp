@@ -38,6 +38,8 @@ class CostingGlSeed
         ['cost.production', 'إنتاج تام (مواد)', 'inventory', 'inventory'],
         ['cost.overhead', 'تحميل تكاليف تشغيل على الإنتاج', 'inventory', 'overhead_applied'],
         ['cost.variance', 'انحراف تكاليف تشغيل الشهر', 'production_variance', 'overhead_applied'],
+        // ضريبة فاتورة المورد مابتدخلش المخزون: `Rules::supplier` بيحطها على مدين
+        // قاعدة `sup.invoice` (مصروف المشتريات) والمخزون بالصافي
         ['sup.invoice.stock', 'فاتورة مورد (مخزون دائم)', 'inventory', 'payables'],
         // مرتجع لمورد بقيد في دفتره (مخزون دائم) — مراجعة المهمة ٣
         ['sup.return.stock', 'مرتجع لمورد (مخزون دائم)', 'payables', 'inventory'],
@@ -135,7 +137,7 @@ class CostingGlSeed
         $parent = GlAccount::where('code', $rootCode)->whereNull('parent_id')->first()
             ?? GlAccount::where('code', $rootCode)->first();
         if (! $parent) {
-            $note = "root {$rootCode} missing - accounts created without a parent";
+            $note = __('costing.seed_note_root_missing', ['code' => $rootCode]);
             if (! in_array($note, $out['notes'], true)) {
                 $out['notes'][] = $note;
             }
@@ -145,11 +147,11 @@ class CostingGlSeed
         if (GlAccount::where('code', $code)->exists()) {
             $finalCode = $code.'.L9';
             if (GlAccount::where('code', $finalCode)->exists()) {
-                $out['notes'][] = "{$key}: codes {$code} and {$finalCode} are both taken - not created, add it from the chart and set its key";
+                $out['notes'][] = __('costing.seed_note_codes_taken', ['key' => $key, 'code' => $code, 'alt' => $finalCode]);
 
                 return;
             }
-            $out['notes'][] = "{$key}: code {$code} is taken by another account - created as {$finalCode}";
+            $out['notes'][] = __('costing.seed_note_code_taken', ['key' => $key, 'code' => $code, 'alt' => $finalCode]);
         }
 
         GlAccount::create([

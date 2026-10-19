@@ -215,16 +215,28 @@ final class CostGl
      * إعادة البناء، من غير ترحيل) وبعدين بيمشي على القيود بالتاريخ والـid.
      * ⚠️ فشل المزامنة بيتسجّل وبيطلع — إعادة البناء لازم تفشل بصوت عالي.
      */
+    /** الـseed اتشغّل (أو على الأقل قاعدة تكلفة واحدة نشطة) */
+    public static function rulesLive(): bool
+    {
+        return CostingGlSeed::ready()
+            || GlPostingRule::where('key', 'like', 'cost.%')->where('active', true)->exists();
+    }
+
     public static function sources(string $date): \Generator
     {
         if (! CostSync::ready()) {
             return;
         }
-        try {
-            CostSync::run(Carbon::parse($date), false);
-        } catch (\Throwable $e) {
-            Log::error('costing.sync failed inside rebuild', ['from' => $date, 'error' => $e->getMessage()]);
-            throw $e;
+        // ⚠️ من غير seed التكاليف (مفيش ولا قاعدة `cost.*` نشطة) الطبقة
+        // مابتتزامنش هنا — إعادة بناء الدفتر قبل التشغيل ماتكتبش في
+        // `cost_entries`، والقيود الموجودة من غير قواعد مابتطلّعش سطور
+        if (self::rulesLive()) {
+            try {
+                CostSync::run(Carbon::parse($date), false);
+            } catch (\Throwable $e) {
+                Log::error('costing.sync failed inside rebuild', ['from' => $date, 'error' => $e->getMessage()]);
+                throw $e;
+            }
         }
 
         foreach (CostEntry::with(['lines', 'origin'])->whereDate('date', '>=', $date)->orderBy('date')->orderBy('id')->lazy(500) as $entry) {
