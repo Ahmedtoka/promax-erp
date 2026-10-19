@@ -702,7 +702,7 @@ class Access
             'gl.entries.store', 'gl.entries.override',
             'gl.accounts.store', 'gl.accounts.update', 'gl.periods.close',
             // Lane 4: سجل الخزن والبنوك
-            'gl.safes.store', 'gl.safes.update',
+            'gl.safes.store', 'gl.safes.update', 'gl.safes.counts.store', 'gl.safes.counts.void',
         ]],
         // ⚠️ **أدمن بس** (`[]`): القواعد بتحدد كل قيد جاي، وفتح فترة
         // مقفولة بيرجّع شهر معتمد للتعديل، وإعادة البناء بتمسح كل القيود

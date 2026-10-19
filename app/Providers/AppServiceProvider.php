@@ -118,6 +118,7 @@ class AppServiceProvider extends ServiceProvider
         // سندات المصروف وحركة النقدية (١١/٩/٢٠٢٦) — الإلغاء بيشيل القيد
         \App\Models\Expense::observe(\App\Observers\Gl\ExpenseObserver::class);
         \App\Models\CashMovement::observe(\App\Observers\Gl\CashMovementObserver::class);
+        \App\Models\SafeCount::observe(\App\Observers\Gl\SafeCountObserver::class);
         // مستخدم ميداني جديد = حساب نقدية جديد (لو الشجرة متولدة)
         \App\Models\User::created(function (\App\Models\User $u) {
             try {

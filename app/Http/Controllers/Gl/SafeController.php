@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Gl;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\CostCenter;
+use App\Models\Gl\GlPeriod;
 use App\Models\Safe;
+use App\Models\SafeCount;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Csv;
 use App\Support\DateRange;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -34,13 +37,16 @@ class SafeController extends Controller
         $closingAt = ($range->to ?? today())->copy();
         $rows = $q->get()->map(function (Safe $s) use ($range, $openingAt, $closingAt) {
             $mv = $s->movementsBetween($range->from, $range->to);
+            $balance = $s->balance($closingAt);
 
             return [
                 'safe' => $s,
                 'opening' => $openingAt ? $s->balance($openingAt) : 0.0,
                 'in' => $mv['in'],
                 'out' => $mv['out'],
-                'balance' => $s->balance($closingAt),
+                'balance' => $balance,
+                // رصيد النهارده لديالوج الجرد (المتوقع الفعلي بيتحسب تاني وقت الحفظ)
+                'today' => $closingAt->isSameDay(today()) ? $balance : $s->balance(today()),
             ];
         });
 
@@ -109,6 +115,101 @@ class SafeController extends Controller
         });
 
         return redirect()->route('gl.safes')->with('ok', __('cash.safe_saved'));
+    }
+
+    // ═══════════ الجرد اليومي (L4-D5) ═══════════
+
+    public function counts(Request $request)
+    {
+        $range = DateRange::fromRequest($request, 'month');
+        $q = SafeCount::with(['safe', 'creator'])
+            ->tap(fn ($q) => $range->apply($q, 'date'))
+            ->when($request->filled('safe_id'), fn ($q) => $q->where('safe_id', (int) $request->query('safe_id')))
+            ->when(in_array($request->query('status'), SafeCount::STATUSES, true), fn ($q) => $q->where('status', $request->query('status')));
+        $posted = (clone $q)->where('status', 'posted');
+        $shortage = round((float) (clone $posted)->where('difference', '<', 0)->sum('difference'), 2);
+        $overage = round((float) (clone $posted)->where('difference', '>', 0)->sum('difference'), 2);
+
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderByDesc('date')->orderByDesc('id')->limit(5000)->get();
+
+            return Csv::download('safe-counts-'.now()->format('Y-m-d-Hi').'.csv',
+                [__('cash.count_number'), __('common.date'), __('cash.safe'), __('cash.expected'), __('cash.counted'),
+                    __('cash.difference'), __('cash.count_note'), __('cash.count_by'), __('cash.count_status')],
+                $all->map(fn (SafeCount $c) => [
+                    $c->number, $c->date?->format('Y-m-d'), $c->safe?->displayName() ?? '',
+                    Csv::money($c->expected), Csv::money($c->counted), Csv::money($c->difference),
+                    (string) $c->note, $c->creator?->displayName() ?? '', __('cash.count_status_'.$c->status),
+                ]),
+                [__('cash.total'), '', '', '', '', Csv::money($shortage + $overage), '', '', ''],
+                Csv::meta(__('cash.counts'), $range->fromValue() ?: null, $range->toValue() ?: null));
+        }
+
+        return view('gl.safe_counts', [
+            'range' => $range,
+            'rows' => (clone $q)->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
+            'kpis' => ['shortage' => $shortage, 'overage' => $overage, 'n' => (clone $posted)->count()],
+            'safes' => Safe::orderBy('kind')->orderBy('code')->get(['id', 'code', 'name', 'name_en', 'kind']),
+        ]);
+    }
+
+    public function storeCount(Request $request)
+    {
+        $data = $request->validate([
+            'safe_id' => ['required', 'integer', Rule::exists('safes', 'id')->where('active', 1)],
+            'date' => ['required', 'date', 'before_or_equal:today'],
+            'counted' => ['required', 'numeric', 'min:0', 'max:999999999'],
+            'note' => ['nullable', 'string', 'max:250'],
+        ]);
+        $date = Carbon::parse($data['date'])->startOfDay();
+        if (GlPeriod::isClosed($date)) {
+            return back()->withErrors(['date' => __('gl.period_closed', ['period' => GlPeriod::keyFor($date)])])->withInput();
+        }
+
+        $saved = DB::transaction(function () use ($data, $date, $request) {
+            // ⚠️ قفل صف الخزنة: جردين في نفس اللحظة كانوا هيحسبوا نفس المتوقع
+            // ويتسجلوا الاتنين — القفل بيخلّي التاني يشوف الأول ويترفض
+            $safe = Safe::whereKey($data['safe_id'])->lockForUpdate()->firstOrFail();
+            if (SafeCount::where('safe_id', $safe->id)->where('status', 'posted')->whereDate('date', $date->toDateString())->exists()) {
+                return false;
+            }
+            // المتوقع **قبل** قيد الجرد نفسه — والفرق بيتخزّن، فإعادة البناء
+            // بتولّد نفس القيد من غير ما تحسب المتوقع تاني
+            $expected = $safe->balance($date);
+            $counted = round((float) $data['counted'], 2);
+
+            SafeCount::create([
+                'number' => SafeCount::nextNumber(),
+                'safe_id' => $safe->id,
+                'date' => $date->toDateString(),
+                'expected' => $expected,
+                'counted' => $counted,
+                'difference' => round($counted - $expected, 2),
+                'note' => $data['note'] ?? null,
+                'status' => 'posted',
+                'created_by' => $request->user()->id,
+            ]);
+
+            return true;
+        });
+        if (! $saved) {
+            return back()->withErrors(['date' => __('cash.count_exists')])->withInput();
+        }
+
+        return redirect()->route('gl.safes.counts', ['safe_id' => $data['safe_id']])->with('ok', __('cash.count_saved'));
+    }
+
+    public function voidCount(Request $request, SafeCount $safeCount)
+    {
+        if ($safeCount->status === 'void') {
+            return back();
+        }
+        if (GlPeriod::isClosed($safeCount->date)) {
+            return back()->withErrors(['void' => __('gl.void_closed_hint')]);
+        }
+        $safeCount->update(['status' => 'void', 'voided_at' => now(), 'voided_by' => $request->user()->id]);
+
+        return back()->with('ok', __('gl.voided'));
     }
 
     private function rules(Request $request, ?Safe $safe): array

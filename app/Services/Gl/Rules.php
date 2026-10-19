@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\PurchaseOrder;
 use App\Models\RepSettlement;
 use App\Models\Safe;
+use App\Models\SafeCount;
 use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
@@ -44,6 +45,7 @@ class Rules
             $source instanceof SupplierTransaction => $this->supplier($source),
             $source instanceof Expense => $this->expense($source),
             $source instanceof CashMovement => $this->cash($source),
+            $source instanceof SafeCount => $this->count($source),
             default => $this->none(),
         };
     }
@@ -326,6 +328,47 @@ class Rules
             'rule' => 'cash.'.$m->kind, 'needs_review' => $needsReview,
             'memo' => $m->number.' — '.$rule->label,
             'lines' => $lines,
+        ];
+    }
+
+    /**
+     * جرد الخزنة (L4-D5): الفرق **المتخزّن** بس (`counted − expected` وقت
+     * الجرد) — مابيتحسبش المتوقع هنا تاني، وإلا إعادة البناء كانت هتشوف
+     * رصيد فيه قيد الجرد نفسه وتطلّع فرق صفر. عجز (فرق سالب): مدين عجز
+     * وزيادة / دائن الخزنة · زيادة: العكس. السطرين على مركز الخزنة.
+     */
+    private function count(SafeCount $c): array
+    {
+        $diff = round((float) $c->difference, 2);
+        if ($c->status !== 'posted' || $diff == 0.0) {
+            return $this->none();
+        }
+        $rule = GlPostingRule::forKey('cash.count');
+        if (! $rule || ! $rule->active) {
+            return $this->none();
+        }
+        $needsReview = false;
+        $safe = $c->safe;
+        // نفس منطق `cash()`: حساب الخزنة لو صالح، وإلا مفتاح القاعدة بعلامة مراجعة
+        $acc = $safe?->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+        if ($acc !== null && $acc->is_postable && $acc->active) {
+            $safeId = $acc->id;
+        } else {
+            $needsReview = true;
+            $safeId = $this->keyAccount($rule->credit_key, null, $needsReview);
+        }
+        $overShortId = $this->keyAccount($rule->debit_key, null, $needsReview);
+        $amount = abs($diff);
+        $center = $safe?->cost_center_id;
+        [$drId, $crId] = $diff < 0 ? [$overShortId, $safeId] : [$safeId, $overShortId];
+
+        return [
+            'rule' => 'cash.count', 'needs_review' => $needsReview,
+            'memo' => $c->number.' — '.($safe?->displayName() ?? ''),
+            'lines' => [
+                ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $center, 'debit' => 0.0, 'credit' => $amount],
+            ],
         ];
     }
 }

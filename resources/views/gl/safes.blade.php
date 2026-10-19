@@ -16,6 +16,7 @@
 
 @section('actions')
     <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1]) }}">⬇ {{ __('ui.export_all') }}</a>
+    <a class="btn sm" href="{{ route('gl.safes.counts') }}">🧮 {{ __('cash.counts') }}</a>
     @if ($canPost)
         <button class="btn gold" type="button" onclick="openDlg('dlgSafeNew')">＋ {{ __('cash.new_safe') }}</button>
     @endif
@@ -113,6 +114,11 @@
                                 "branch_id" => $s->branch_id, "cost_center_id" => $s->cost_center_id, "custodian_user_id" => $s->custodian_user_id,
                                 "gl_account_id" => $s->gl_account_id, "bank_name" => $s->bank_name, "account_no" => $s->account_no, "active" => $s->active,
                             ]) }})">✎ {{ __('cash.edit') }}</button>
+                            @if ($s->active)
+                                <button class="btn sm" type="button" onclick="safeCount({{ json_encode([
+                                    "id" => $s->id, "balance" => $fmt($r['today']),
+                                ]) }})">🧮 {{ __('cash.count') }}</button>
+                            @endif
                         </td>
                     @endif
                 </tr>
@@ -188,7 +194,56 @@
     </form>
 </dialog>
 
+{{-- جرد خزنة (L4-D5) — الخزنة بتتختار من الصف، والمتوقع بيتحسب تاني على السيرفر وقت الحفظ --}}
+<dialog id="dlgSafeCount">
+    <form class="dlg" method="POST" id="formSafeCount" action="{{ route('gl.safes.counts.store') }}">
+        @csrf
+        <h4>🧮 {{ __('cash.new_count') }}</h4>
+        <div>
+            <label class="f">{{ __('cash.safe') }} <b class="req-star">*</b></label>
+            <select name="safe_id" required onchange="safeCountBalance(this)" style="width:100%">
+                <option value="">{{ __('cash.choose_safe') }}</option>
+                @foreach ($rows as $r)
+                    @if ($r['safe']->active)
+                        <option value="{{ $r['safe']->id }}" data-balance="{{ $fmt($r['today']) }}" @selected(old('safe_id') == $r['safe']->id)>{{ $r['safe']->displayName() }} ({{ $r['safe']->code }})</option>
+                    @endif
+                @endforeach
+            </select>
+            <div style="font-size:11px;margin-top:6px">{{ __('cash.current_balance') }}: <b dir="ltr" id="scBalance">—</b></div>
+        </div>
+        <div class="frow" style="margin-top:10px">
+            <div>
+                <label class="f">{{ __('common.date') }} <b class="req-star">*</b></label>
+                <input type="date" name="date" required max="{{ today()->toDateString() }}" value="{{ old('date', today()->toDateString()) }}" style="width:100%">
+            </div>
+            <div>
+                <label class="f">{{ __('cash.counted') }} <b class="req-star">*</b></label>
+                <input type="number" name="counted" required step="0.01" min="0" max="999999999" dir="ltr" value="{{ old('counted') }}" style="width:100%">
+            </div>
+        </div>
+        <div style="margin-top:10px">
+            <label class="f">{{ __('cash.count_note') }}</label>
+            <input type="text" name="note" maxlength="250" value="{{ old('note') }}" style="width:100%">
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:8px">{{ __('cash.count_hint') }}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+            <button class="btn" type="button" onclick="closeDlg('dlgSafeCount')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="submit">{{ __('common.save') }}</button>
+        </div>
+    </form>
+</dialog>
+
 <script>
+function safeCountBalance(sel) {
+    var o = sel.selectedOptions[0];
+    document.getElementById('scBalance').textContent = o && o.value ? o.getAttribute('data-balance') : '—';
+}
+function safeCount(s) {
+    var sel = document.getElementById('formSafeCount').querySelector('[name="safe_id"]');
+    sel.value = s.id;
+    safeCountBalance(sel);
+    openDlg('dlgSafeCount');
+}
 // بيانات البنك بتبان للبنك بس — ولما تتخبّى بتتفضّى وماتبقاش required
 function safeKindToggle(form) {
     var kind = form.querySelector('[data-safe-kind]').value;
@@ -214,6 +269,9 @@ function safeEdit(s) {
 safeKindToggle(document.getElementById('formNewSafe'));
 @if ($errors->any() && old('code'))
     openDlg('dlgSafeNew');
+@elseif ($errors->any() && old('counted') !== null)
+    safeCountBalance(document.getElementById('formSafeCount').querySelector('[name="safe_id"]'));
+    openDlg('dlgSafeCount');
 @endif
 </script>
 @endif

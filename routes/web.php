@@ -804,6 +804,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         $sf = \App\Http\Controllers\Gl\SafeController::class;
         Route::get('/safes', [$sf, 'index'])->name('safes');
         Route::post('/safes', [$sf, 'store'])->name('safes.store');
+        // الجرد اليومي (L4-D5) — ⚠️ قبل `/safes/{safe}` عشان `counts` مايتقريش id خزنة
+        Route::get('/safes/counts', [$sf, 'counts'])->name('safes.counts');
+        Route::post('/safes/counts', [$sf, 'storeCount'])->name('safes.counts.store');
+        Route::post('/safes/counts/{safeCount}/void', [$sf, 'voidCount'])->name('safes.counts.void');
         Route::post('/safes/{safe}', [$sf, 'update'])->name('safes.update');
     });
 
