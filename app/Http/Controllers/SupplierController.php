@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\Rejected;
+use App\Models\CostCenter;
 use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
@@ -84,6 +85,7 @@ class SupplierController extends Controller
                 ->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
             'invoices' => $supplier->invoices()->latest('invoice_date')->limit(20)->get(),
             'payments' => $supplier->payments()->latest('paid_on')->limit(20)->get(),
+            'costCenters' => CostCenter::where('active', true)->orderBy('code')->get(),
         ]);
     }
 
@@ -189,6 +191,7 @@ class SupplierController extends Controller
             'method' => ['required', Rule::in(SupplierPayment::METHODS)],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
+            'cost_center_id' => ['nullable', Rule::exists('cost_centers', 'id')->where('active', true)],
         ]);
 
         SupplierPayment::record([
@@ -199,6 +202,8 @@ class SupplierController extends Controller
             'reference' => $data['reference'] ?? null,
             'notes' => $data['notes'] ?? null,
             'created_by' => $request->user()->id,
+            // D9: اختيار الفورم، وإلا الشركة
+            'cost_center_id' => $data['cost_center_id'] ?? CostCenter::company()->id,
         ]);
 
         return back()->with('ok', __('supplier.payment_saved'));
@@ -260,6 +265,7 @@ class SupplierController extends Controller
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
             'warehouses' => Warehouse::where('active', true)->orderBy('code')->get(),
             'products' => Product::where('active', true)->orderBy('code')->get(),
+            'costCenters' => CostCenter::where('active', true)->orderBy('code')->get(),
         ]);
     }
 
@@ -268,6 +274,7 @@ class SupplierController extends Controller
         $data = $request->validate([
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'cost_center_id' => ['nullable', Rule::exists('cost_centers', 'id')->where('active', true)],
             'ordered_on' => ['required', 'date'],
             'expected_on' => ['nullable', 'date', 'after_or_equal:ordered_on'],
             'notes' => ['nullable', 'string'],
@@ -331,6 +338,9 @@ class SupplierController extends Controller
                 'created_by' => $request->user()->id,
                 'total' => collect($lines)->sum(fn ($l) => $l['qty'] * $l['unit_cost']),
                 'supplier_contract_id' => $assessment['contract_id'],
+                // D9: اختيار الفورم، وإلا مركز المخزن
+                'cost_center_id' => $data['cost_center_id']
+                    ?? CostCenter::forWarehouse(Warehouse::find($data['warehouse_id']))?->id,
             ] + $extra);
 
             foreach ($lines as $pid => $line) {
@@ -565,6 +575,9 @@ class SupplierController extends Controller
                     'total' => round($net + $tax, 2),
                     'notes' => $data['notes'] ?? null,
                     'created_by' => $request->user()->id,
+                    // D9: مركز الأمر، وإلا مركز مخزنه
+                    'cost_center_id' => $order->cost_center_id
+                        ?? CostCenter::forWarehouse($order->warehouse)?->id,
                 ]);
             });
         } catch (Rejected $e) {

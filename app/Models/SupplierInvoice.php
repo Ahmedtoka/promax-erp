@@ -21,7 +21,7 @@ class SupplierInvoice extends Model
 
     protected $fillable = [
         'number', 'supplier_id', 'supplier_order_id', 'supplier_ref',
-        'invoice_date', 'due_on', 'subtotal', 'tax', 'total', 'notes', 'created_by',
+        'invoice_date', 'due_on', 'subtotal', 'tax', 'total', 'notes', 'created_by', 'cost_center_id',
     ];
 
     protected function casts(): array
@@ -43,6 +43,11 @@ class SupplierInvoice extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(SupplierOrder::class, 'supplier_order_id');
+    }
+
+    public function costCenter(): BelongsTo
+    {
+        return $this->belongsTo(CostCenter::class);
     }
 
     public function creator(): BelongsTo

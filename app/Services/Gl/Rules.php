@@ -230,9 +230,11 @@ class Rules
         }
 
         $needsReview = false;
+        // مركز التكلفة من مستند القيد (فاتورة/دفعة المورد) — D9
+        $cc = CostCenterResolver::for($st);
         $lines = [
-            ['slot' => 'dr', 'account_id' => $this->keyAccount($dr, null, $needsReview), 'debit' => $amount, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $this->keyAccount($cr, null, $needsReview), 'debit' => 0.0, 'credit' => $amount],
+            ['slot' => 'dr', 'account_id' => $this->keyAccount($dr, null, $needsReview), 'cost_center_id' => $cc, 'debit' => $amount, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $this->keyAccount($cr, null, $needsReview), 'cost_center_id' => $cc, 'debit' => 0.0, 'credit' => $amount],
         ];
 
         return [

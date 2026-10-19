@@ -49,6 +49,15 @@
                 </select>
             </div>
         </div>
+        <div style="margin-top:10px">
+            <label class="f">{{ __('supplier.cost_center') }}</label>
+            <select name="cost_center_id" style="width:100%">
+                <option value="">{{ __('supplier.cost_center_auto') }}</option>
+                @foreach ($costCenters as $cc)
+                    <option value="{{ $cc->id }}" @selected((int) old('cost_center_id') === $cc->id)>{{ $cc->code }} · {{ $cc->displayName() }}</option>
+                @endforeach
+            </select>
+        </div>
         <div class="frow" style="margin-top:10px">
             <div>
                 <label class="f">{{ __('supplier.ordered_on') }} *</label>

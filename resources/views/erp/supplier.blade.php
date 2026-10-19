@@ -263,6 +263,15 @@
             </div>
         </div>
         <div style="margin-top:10px">
+            <label class="f">{{ __('supplier.cost_center') }}</label>
+            <select name="cost_center_id" style="width:100%">
+                <option value="">{{ __('supplier.cost_center_company') }}</option>
+                @foreach ($costCenters as $cc)
+                    <option value="{{ $cc->id }}" @selected((int) old('cost_center_id') === $cc->id)>{{ $cc->code }} · {{ $cc->displayName() }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div style="margin-top:10px">
             <label class="f">{{ __('common.notes') }}</label>
             <textarea name="notes" rows="2" style="width:100%">{{ old('notes') }}</textarea>
         </div>

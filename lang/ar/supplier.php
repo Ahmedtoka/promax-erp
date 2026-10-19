@@ -140,6 +140,8 @@ return [
     'needed_by' => 'مطلوب قبل',
     'requested_by' => 'طالب الشراء',
     'cost_center' => 'مركز التكلفة',
+    'cost_center_auto' => 'تلقائي (مركز المخزن)',
+    'cost_center_company' => 'الشركة (الافتراضي)',
     'quotes_count' => 'عدد العروض',
     'no_requests' => 'مفيش طلبات شراء لسه.',
     'pr_status_open' => 'مفتوح',

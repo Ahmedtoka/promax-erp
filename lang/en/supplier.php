@@ -140,6 +140,8 @@ return [
     'needed_by' => 'Needed by',
     'requested_by' => 'Requested by',
     'cost_center' => 'Cost center',
+    'cost_center_auto' => 'Automatic (warehouse center)',
+    'cost_center_company' => 'Company (default)',
     'quotes_count' => 'Quotes',
     'no_requests' => 'No purchase requests yet.',
     'pr_status_open' => 'Open',
