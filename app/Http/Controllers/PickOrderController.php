@@ -132,7 +132,7 @@ class PickOrderController extends Controller
         return view('wh.pick', [
             'o' => $pick,
             // كتالوج الأصناف لمنتقي «إضافة صنف» في تعديل إذن الصرف (١٠/٨)
-            'products' => Product::where('active', true)->orderBy('code')
+            'products' => Product::sellable()->orderBy('code')
                 ->get(['id', 'code', 'name', 'name_en']),
         ]);
     }
@@ -223,6 +223,12 @@ class PickOrderController extends Controller
             'unit' => ['nullable', 'array'],
             'unit.*' => ['nullable', 'in:piece,box,case'],
         ]);
+
+        // ⚠️ إذن الصرف ده للبيع (عربية/توريد/ريفيل/أونلاين) — مفيش خامة
+        // ولا تعبئة ولا درافت (١٩/١٠)
+        if ($bad = Product::firstNotSellable(array_keys(array_filter($data['qty'], fn ($q) => (int) $q > 0)))) {
+            return back()->withErrors(['qty' => $bad->notSellableReason()])->withInput();
+        }
 
         // وحدة الإدخال → قطع في السيرفر (نفس قاعدة الإنشاء والفاتورة)
         $qty = [];

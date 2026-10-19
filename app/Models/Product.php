@@ -120,6 +120,21 @@ class Product extends Model
         return $this->isSellable() ? null : __('api.product_not_for_sale', ['product' => $this->displayName()]);
     }
 
+    /**
+     * أول صنف في القايمة مينفعش يتباع (درافت أو خامة/تعبئة) — حارس
+     * المسارات اللي بتاخد `qty[product_id]` من فورم (تحميل العربية،
+     * تعديل إذن الصرف، تعديل أمر التوريد). الـid اللي مش موجود
+     * مابيرجعش — ده شغل الفاليديشن التانية.
+     */
+    public static function firstNotSellable(array $ids): ?self
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        return $ids === [] ? null : static::query()->whereKey($ids)
+            ->where(fn ($q) => $q->where('active', false)->orWhere('kind', '!=', self::KIND_FINISHED))
+            ->orderBy('id')->first();
+    }
+
     /** اسم النوع للعرض */
     public function kindLabel(): string
     {

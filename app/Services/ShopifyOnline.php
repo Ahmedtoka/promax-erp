@@ -290,7 +290,7 @@ class ShopifyOnline
         $sku = trim((string) ($line['sku'] ?? ''));
 
         if ($sku !== '') {
-            $byCode = Product::where('code', $sku)->value('id');
+            $byCode = Product::where('code', $sku)->where('kind', Product::KIND_FINISHED)->value('id');
 
             if ($byCode !== null) {
                 return ['product_id' => (int) $byCode, 'units' => 1, 'bundle' => null, 'pieces' => 1];

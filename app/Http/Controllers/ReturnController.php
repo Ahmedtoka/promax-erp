@@ -142,7 +142,7 @@ class ReturnController extends Controller
             'reps' => \App\Models\User::fieldVisibleTo(
                 \App\Models\User::whereIn('role', \App\Models\User::FIELD_WORK_ROLES), $u)
                 ->where('active', true)->orderBy('name')->get(),
-            'products' => \App\Models\Product::where('active', true)->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
+            'products' => \App\Models\Product::sellable()->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'channels' => \App\Models\Channel::orderBy('id')->get(),
             'groups' => \App\Models\ClientGroup::orderBy('name')->get(['id', 'name', 'name_en']),
             'filters' => $request->only(['client', 'group', 'channel', 'rep', 'product', 'condition', 'policy', 'q']),

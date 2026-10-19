@@ -39,6 +39,15 @@ use Illuminate\Support\Facades\DB;
  */
 class OnlineOrderController extends Controller
 {
+    /**
+     * ربط فاريانت شوبيفاي بصنف السيستم — **منتج تام بس** (١٩/١٠). الخامة
+     * ومادة التعبئة مابيتباعوش أونلاين، وربطهم كان هيطلّع أمر تجهيز بيهم.
+     */
+    private static function finishedProduct(): \Illuminate\Validation\Rules\Exists
+    {
+        return \Illuminate\Validation\Rule::exists('products', 'id')->where('kind', Product::KIND_FINISHED);
+    }
+
     // ==================== ١. السينك ====================
 
     public function sync(Request $request)
@@ -66,7 +75,7 @@ class OnlineOrderController extends Controller
             'ready' => ShopifyOnline::ready(),
             // للربط اليدوي للبند — أوردر قديم SKUه فاضي وفاريانته
             // مش في جدول الربط مالوش غير الطريق ده
-            'products' => Product::where('active', true)
+            'products' => Product::sellable()
                 ->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'warehouses' => Warehouse::orderBy('name')->get(['id', 'name', 'name_en']),
             'settings' => Setting::all_(),
@@ -1602,7 +1611,7 @@ class OnlineOrderController extends Controller
         return view('online.products', [
             'staleCount' => ShopifyProductLink::stale()->count(),
             'links' => $q->orderBy('title')->orderBy('id')->paginate(100)->withQueryString(),
-            'products' => Product::where('active', true)
+            'products' => Product::sellable()
                 ->orderBy('code')->get(['id', 'code', 'name', 'name_en']),
             'unlinkedCount' => ShopifyProductLink::whereNull('product_id')->count(),
             'filters' => $request->only(['search', 'unlinked', 'stale']),
@@ -1652,7 +1661,7 @@ class OnlineOrderController extends Controller
     {
         $data = $request->validate([
             'links' => ['required', 'array'],
-            'links.*' => ['nullable', 'integer', 'exists:products,id'],
+            'links.*' => ['nullable', 'integer', self::finishedProduct()],
             // قطع الباك: فاريانت الـ«pcs 12» = 12 قطعة من منتج السيستم
             'units' => ['nullable', 'array'],
             'units.*' => ['nullable', 'integer', 'min:1', 'max:1000'],
@@ -1749,7 +1758,7 @@ class OnlineOrderController extends Controller
     {
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1', 'max:20'],
-            'parts.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
+            'parts.*.product_id' => ['nullable', 'integer', self::finishedProduct()],
             'parts.*.units' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
 
@@ -1814,7 +1823,7 @@ class OnlineOrderController extends Controller
         }
 
         $data = $request->validate([
-            'product_id' => ['required', 'integer', 'exists:products,id'],
+            'product_id' => ['required', 'integer', self::finishedProduct()],
             'units' => ['required', 'integer', 'min:1', 'max:1000'],
         ]);
 

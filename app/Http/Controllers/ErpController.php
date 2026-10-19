@@ -1305,7 +1305,7 @@ class ErpController extends Controller
                 ->orderBy('name')->get(),
             'managers' => $this->managerOptions($request),
             // تسعيرة العميل مطبّقة على الكتالوج — عشان يشوف بيدفع كام فعلاً
-            'priced' => Product::where('active', true)->orderBy('code')->get()
+            'priced' => Product::sellable()->orderBy('code')->get()
                 ->map(fn (Product $p) => [
                     'product' => $p,
                     'quote' => \App\Services\Pricing::quote($client, $p),

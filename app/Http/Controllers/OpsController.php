@@ -3619,7 +3619,7 @@ class OpsController extends Controller
                 ->get(['id', 'name', 'name_en', 'group_id', 'channel_id', 'balance', 'price_list', 'price_list_id']),
             'reps' => $reps,
             'warehouses' => \App\Models\Warehouse::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
-            'products' => Product::where('active', true)->orderBy('code')->get(),
+            'products' => Product::sellable()->orderBy('code')->get(),
         ]);
     }
 
@@ -5345,7 +5345,11 @@ class OpsController extends Controller
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:200'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.product_id' => ['required', 'integer',
+                // ١٩/١٠: الخامة والتعبئة مش بند فاتورة. `exists` بشرط النوع مش
+                // `SellableProduct` عشان البند القديم لصنف اتوقف (درافت) يفضل
+                // ينفع يتعدّل كميته
+                \Illuminate\Validation\Rule::exists('products', 'id')->where('kind', Product::KIND_FINISHED)],
             'items.*.qty' => ['required', 'integer', 'min:0', 'max:999999'],
         ]);
 

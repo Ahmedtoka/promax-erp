@@ -68,7 +68,7 @@ class PriceList extends Model
      */
     public function missing()
     {
-        return Product::where('active', true)
+        return Product::sellable()
             ->whereNotExists(function ($q) {
                 $q->select(DB::raw(1))
                     ->from('price_list_items')
