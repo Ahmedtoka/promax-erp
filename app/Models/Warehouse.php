@@ -21,6 +21,7 @@ class Warehouse extends Model
 
     protected $fillable = [
         'code', 'name', 'name_en', 'type', 'address', 'lat', 'lng', 'manager_id', 'branch_id', 'active',
+        'cost_center_id',
     ];
 
     protected function casts(): array
