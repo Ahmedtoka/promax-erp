@@ -259,7 +259,7 @@ class GlMapping
      */
     public static function keyRefusal(string $key, GlAccount $to, array $freed = []): ?string
     {
-        if (! in_array($key, GlAccount::SYSTEM_KEYS, true)) {
+        if (! in_array($key, [...GlAccount::SYSTEM_KEYS, ...GlAccount::COSTING_KEYS], true)) {
             return __('gl.map_bad_key', ['key' => $key]);
         }
         if ($to->system_key !== null && $to->system_key !== $key && ! in_array($to->system_key, $freed, true)) {
