@@ -130,4 +130,7 @@ return [
     'cov_confirm' => 'We will walk every active client with a zone, activate the zone if inactive and link it to his rep and manager team. Nothing gets unlinked or moved. Continue?',
     'cov_done' => 'Coverage fixed: :clients clients · :zones zones activated · :links new zone links for reps.',
     'act_supplier_contracts_manage' => 'Create & edit supplier contracts',
+    'act_purchase_requests_create' => 'Raise & cancel purchase requests',
+    'act_purchase_requests_quote' => 'Add supplier quotes',
+    'act_purchase_quotes_approve' => 'Approve a quote and create a PO',
 ];

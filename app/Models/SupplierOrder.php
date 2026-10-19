@@ -30,6 +30,7 @@ class SupplierOrder extends Model
         'number', 'supplier_id', 'warehouse_id', 'status',
         'ordered_on', 'expected_on', 'total', 'notes', 'created_by',
         'approval_status', 'approval_reasons', 'approved_by', 'approved_at', 'supplier_contract_id',
+        'purchase_request_id', 'purchase_quote_id', 'cost_center_id',
     ];
 
     protected function casts(): array
@@ -56,6 +57,11 @@ class SupplierOrder extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function purchaseRequest(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequest::class);
     }
 
     public function items(): HasMany

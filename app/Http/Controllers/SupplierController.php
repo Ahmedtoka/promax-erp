@@ -355,7 +355,7 @@ class SupplierController extends Controller
     {
         $supplierOrder->load([
             'supplier', 'warehouse', 'creator',
-            'items.product', 'receipts', 'invoices',
+            'items.product', 'receipts', 'invoices', 'purchaseRequest',
         ]);
 
         // ⚠️ أسماء الأصناف هنا مش في الـBlade (ممنوع كويري في الفيو)

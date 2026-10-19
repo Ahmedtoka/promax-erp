@@ -57,6 +57,8 @@ class Access
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
             'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
+            // طلبات الشراء وعروض الأسعار — اعتماد العرض أدمن بس (لين ٥، D10)
+            'erp.purchase_requests',
             // موافقة/رفض أمر الشراء المستني قرار الأدمن بس (لين ٥، D10)
             '!erp.purchasing.approve', '!erp.purchasing.reject',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
@@ -236,6 +238,8 @@ class Access
             '!erp.purchasing.new', '!erp.purchasing.store', '!erp.purchasing.invoice',
             '!erp.purchasing.cancel', '!erp.purchasing.close',
             '!erp.purchasing.approve', '!erp.purchasing.reject',
+            // بيطلب خامة ويشوف طلباته؛ العروض والمقارنة قرار الإدارة
+            'erp.purchase_requests', '!erp.purchase_requests.quotes',
             // جرس الإشعارات — طلبات البضاعة وأوامر التجهيز بتوصله هنا
             'notifications',
             // ⚠️ **عرض بس** — إشعار «طلب بضاعة في السكة» لينكه بيفتح
@@ -520,6 +524,7 @@ class Access
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══
         'nav.group_purchasing' => [
+            ['erp.purchase_requests', '📝', 'supplier.purchase_requests', 'erp.purchase_requests*', null],
             ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
             ['erp.supplier_contracts', '📜', 'supplier.contracts', 'erp.supplier_contracts*', null],
@@ -691,6 +696,9 @@ class Access
         'act.purchasing.manage' => ['perm.act_purchasing_manage', 'erp.purchasing', ['manager'], ['erp.purchasing.new', 'erp.purchasing.store', 'erp.purchasing.invoice', 'erp.purchasing.cancel', 'erp.purchasing.close']],
         'act.supplier_contracts.manage' => ['perm.act_supplier_contracts_manage', 'erp.supplier_contracts', ['manager'], ['erp.supplier_contracts.store', 'erp.supplier_contracts.update', 'erp.supplier_contracts.items']],
         'act.purchasing.approve' => ['perm.act_purchasing_approve', 'erp.purchasing', [], ['erp.purchasing.approve', 'erp.purchasing.reject']],
+        'act.purchase_requests.create' => ['perm.act_purchase_requests_create', 'erp.purchase_requests', ['manager', 'warehouse_keeper'], ['erp.purchase_requests.store', 'erp.purchase_requests.cancel']],
+        'act.purchase_requests.quote' => ['perm.act_purchase_requests_quote', 'erp.purchase_requests', ['manager'], ['erp.purchase_requests.quotes.store']],
+        'act.purchase_quotes.approve' => ['perm.act_purchase_quotes_approve', 'erp.purchase_requests', [], ['erp.purchase_quotes.approve']],
         'act.purchasing.receive' => ['perm.act_purchasing_receive', 'erp.purchasing', null, ['erp.purchasing.receive']],
 
         // ═══ الفلوس ═══

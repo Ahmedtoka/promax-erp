@@ -271,6 +271,27 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('supplier_contracts.items');
         });
 
+        // طلبات الشراء وعروض الأسعار (لين ٥) — ⚠️ `purchase_requests` مش تحت `erp.purchasing`
+        Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
+            Route::get('/purchase-requests', [\App\Http\Controllers\PurchaseRequestController::class, 'index'])
+                ->name('purchase_requests');
+            Route::get('/purchase-requests/{purchaseRequest}', [\App\Http\Controllers\PurchaseRequestController::class, 'show'])
+                ->name('purchase_requests.show');
+            Route::post('/purchase-requests', [\App\Http\Controllers\PurchaseRequestController::class, 'store'])
+                ->name('purchase_requests.store');
+            Route::post('/purchase-requests/{purchaseRequest}/cancel', [\App\Http\Controllers\PurchaseRequestController::class, 'cancel'])
+                ->name('purchase_requests.cancel');
+        });
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/purchase-requests/{purchaseRequest}/quotes', [\App\Http\Controllers\PurchaseRequestController::class, 'storeQuote'])
+                ->name('purchase_requests.quotes.store');
+        });
+        // اعتماد العرض = موافقة الأدمن على أمر الشراء
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/purchase-quotes/{purchaseQuote}/approve', [\App\Http\Controllers\PurchaseRequestController::class, 'approveQuote'])
+                ->name('purchase_quotes.approve');
+        });
+
         // أوامر الشراء — العرض للإدارة وأمين المخزن (هو اللي بيستلم)
         Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
             Route::get('/purchasing', [\App\Http\Controllers\SupplierController::class, 'orders'])

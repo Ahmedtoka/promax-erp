@@ -58,6 +58,13 @@
             </span>
         @endif
         <span class="badge b-gold">{{ __('common.total') }}: {{ $money($o->total) }}</span>
+        @if ($o->purchaseRequest)
+            @if (\App\Support\Access::allows(auth()->user(), 'erp.purchase_requests.show'))
+                <a class="badge b-blue" href="{{ route('erp.purchase_requests.show', $o->purchaseRequest) }}">📝 {{ __('supplier.from_request', ['number' => $o->purchaseRequest->number]) }}</a>
+            @else
+                <span class="badge b-blue">📝 {{ __('supplier.from_request', ['number' => $o->purchaseRequest->number]) }}</span>
+            @endif
+        @endif
     </div>
     @if ($o->notes)
         <div style="font-size:12px;color:var(--muted);margin-top:8px">{{ $o->notes }}</div>
