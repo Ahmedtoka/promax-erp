@@ -274,4 +274,152 @@ class GlMappingTest extends TestCase
             ->assertRedirect(route('gl.mapping'));
         $this->assertSame($van->id, GlAccount::findKey('sales')->id);
     }
+
+    private function acc(string $code, string $type, array $attrs = []): GlAccount
+    {
+        return GlAccount::create(array_merge([
+            'code' => $code, 'name' => 'acc '.$code, 'type' => $type,
+            'normal_side' => in_array($type, ['asset', 'expense'], true) ? 'debit' : 'credit',
+            'is_postable' => true, 'active' => true,
+        ], $attrs));
+    }
+
+    private function slot(string $ruleKey, string $side): array
+    {
+        return collect(GlMapping::rules())->first(fn ($r) => $r['rule']->key === $ruleKey)['slots'][$side];
+    }
+
+    private function refused(callable $fn, string $msg): void
+    {
+        try {
+            $fn();
+            $this->fail('refusal expected: '.$msg);
+        } catch (\InvalidArgumentException) {
+            $this->addToAssertionCount(1);
+        }
+    }
+
+    public function test_control_accounts_cannot_be_bypassed_by_pins(): void
+    {
+        $other = $this->acc('1250', 'asset');
+        $sale = GlPostingRule::forKey('tx.sale');
+        $ar = GlAccount::findKey('receivables');
+        $ap = GlAccount::findKey('payables');
+
+        // خانة مفتاحها حساب رقابي مابتتثبتش
+        $this->assertNotNull(GlMapping::pinRefusal($sale, 'debit', $other));
+        $this->refused(fn () => GlMapping::pin($sale, 'debit', $other), 'receivables slot');
+        $payRule = GlPostingRule::where('credit_key', 'payables')->orWhere('debit_key', 'payables')->firstOrFail();
+        $paySide = $payRule->credit_key === 'payables' ? 'credit' : 'debit';
+        $this->assertNotNull(GlMapping::pinRefusal($payRule, $paySide, $this->acc('2150', 'liability')));
+
+        // ولا خانة تانية تتثبت على الحساب الرقابي
+        $ret = GlPostingRule::forKey('tx.return');
+        $this->assertNotNull(GlMapping::pinRefusal($ret, 'debit', $ar));
+        $this->assertNotNull(GlMapping::pinRefusal($ret, 'debit', $ap));
+
+        // تثبيت قديم في الداتابيز ⇒ الخانة مش مظبوطة
+        GlPostingRule::where('key', 'tx.sale')->update(['debit_account_id' => $other->id]);
+        GlPostingRule::where('key', 'tx.return')->update(['debit_account_id' => $ar->id]);
+        $this->assertFalse($this->slot('tx.sale', 'debit')['ok']);
+        $this->assertFalse($this->slot('tx.return', 'debit')['ok']);
+        $this->assertCount(2, GlMapping::problems());
+    }
+
+    public function test_key_must_land_on_an_account_of_the_right_type(): void
+    {
+        $exp = $this->acc('5250', 'expense');
+        $asset = $this->acc('1260', 'asset');
+        foreach (['receivables', 'cash_main', 'bank', 'inventory', 'withheld_tax', 'payables', 'vat_output', 'sales', 'opening_equity', 'opening_difference'] as $key) {
+            $this->assertNotNull(GlMapping::keyRefusal($key, $exp), $key.' on expense');
+        }
+        $this->assertNotNull(GlMapping::keyRefusal('sales', $asset));
+        $this->assertNotNull(GlMapping::keyRefusal('payables', $asset));
+        $this->assertNotNull(GlMapping::keyRefusal('rep_cash', $this->acc('5260', 'expense')));
+        $this->assertNull(GlMapping::keyRefusal('receivables', $asset));
+        $this->assertNull(GlMapping::keyRefusal('expense_purchases', $asset));   // غير متشيّك
+
+        // مفتاح اتنقل في الداتابيز على نوع غلط ⇒ مش مظبوط
+        GlAccount::where('system_key', 'sales')->update(['system_key' => null]);
+        $asset->update(['system_key' => 'sales']);
+        $row = collect(GlMapping::keys())->firstWhere('key', 'sales');
+        $this->assertFalse($row['ok']);
+        $this->assertNotEmpty(GlMapping::problems());
+    }
+
+    public function test_rep_cash_cannot_land_on_a_safe_or_a_pinned_account(): void
+    {
+        $safeAcc = $this->acc('1270', 'asset');
+        \App\Models\Safe::create(['code' => 'S-T1', 'name' => 'خزنة', 'kind' => 'cash', 'gl_account_id' => $safeAcc->id]);
+        $this->assertNotNull(GlMapping::keyRefusal('rep_cash', $safeAcc));
+
+        $pinned = $this->acc('1280', 'asset');
+        GlPostingRule::where('key', 'tx.collection.bank')->update(['debit_account_id' => $pinned->id]);
+        $this->assertNotNull(GlMapping::keyRefusal('rep_cash', $pinned));
+        $this->refused(fn () => GlMapping::assignKey('rep_cash', $pinned, $this->makeAdmin()), 'pinned');
+
+        $this->assertNull(GlMapping::keyRefusal('rep_cash', $this->acc('1290', 'asset')));
+    }
+
+    public function test_rep_codes_stay_stable_across_repeated_moves(): void
+    {
+        $admin = $this->makeAdmin();
+        $rep = $this->makeRep(['code' => 'R2']);
+        $bare = $this->makeRep(['code' => null]);
+        $repAcc = GlAccount::repCash($rep);
+        $bareAcc = GlAccount::repCash($bare);
+        $a = $this->acc('1150', 'asset');
+        $b = $this->acc('1160', 'asset');
+        $this->acc('1150.R2', 'asset');   // تصادم ⇒ .2
+
+        GlMapping::assignKey('rep_cash', $a, $admin);
+        $this->assertSame('1150.R2.2', $repAcc->fresh()->code);
+        $this->assertSame('1150.U'.$bare->id, $bareAcc->fresh()->code);
+
+        GlMapping::assignKey('rep_cash', $b, $admin);
+        $this->assertSame('1160.R2', $repAcc->fresh()->code);
+        $this->assertSame('1160.U'.$bare->id, $bareAcc->fresh()->code);
+
+        GlMapping::assignKey('rep_cash', $a->fresh(), $admin);
+        $this->assertSame('1150.R2.2', $repAcc->fresh()->code);
+        $this->assertSame('1150.U'.$bare->id, $bareAcc->fresh()->code);
+    }
+
+    public function test_after_adoption_pins_must_target_adopted_accounts(): void
+    {
+        $d = $this->row(['code' => '7401', 'qb_type' => 'Income', 'name' => 'Sales Van']);
+        $admin = $this->makeAdmin();
+        CoaAdopter::adopt($admin);
+        $van = $this->adopted($d);
+        $loose = $this->acc('4150', 'revenue');   // مش من الشجرة المعتمدة
+
+        $this->actingAs($admin)->post(route('gl.mapping.rules'), ['pins' => [
+            'tx.sale' => ['credit' => $loose->id],
+        ]])->assertSessionHasErrors('pins.tx.sale.credit');
+        $this->assertNull(GlPostingRule::forKey('tx.sale')->credit_account_id);
+
+        // حامل مفتاح نظام-بس (المعلّق) مسموح
+        $suspense = GlAccount::findKey('suspense');
+        $this->assertNull(GlMapping::pinRefusal(GlPostingRule::forKey('tx.rebate'), 'debit', $suspense));
+        $this->assertNull(GlMapping::pinRefusal(GlPostingRule::forKey('tx.sale'), 'credit', $van));
+
+        GlPostingRule::where('key', 'tx.sale')->update(['credit_account_id' => $loose->id]);
+        $this->assertFalse($this->slot('tx.sale', 'credit')['ok']);
+    }
+
+    public function test_moving_a_control_key_says_a_rebuild_is_needed(): void
+    {
+        $d = $this->row(['code' => '7201', 'qb_type' => 'Accounts Receivable', 'name' => 'Clients AR']);
+        $s = $this->row(['code' => '7401', 'qb_type' => 'Income', 'name' => 'Sales Van']);
+        $admin = $this->makeAdmin();
+        CoaAdopter::adopt($admin);
+
+        $this->actingAs($admin)->post(route('gl.mapping.keys'), ['keys' => ['sales' => $this->adopted($s)->id]])
+            ->assertRedirect(route('gl.mapping'));
+        $this->assertStringNotContainsString(__('gl.map_rebuild_needed'), (string) session('ok'));
+
+        $this->actingAs($admin)->post(route('gl.mapping.keys'), ['keys' => ['receivables' => $this->adopted($d)->id]])
+            ->assertRedirect(route('gl.mapping'));
+        $this->assertStringContainsString(__('gl.map_rebuild_needed'), (string) session('ok'));
+    }
 }

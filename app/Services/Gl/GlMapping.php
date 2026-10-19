@@ -4,9 +4,11 @@ namespace App\Services\Gl;
 
 use App\Models\Gl\GlAccount;
 use App\Models\Gl\GlPostingRule;
+use App\Models\Safe;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -35,6 +37,25 @@ class GlMapping
     public const SYSTEM_ONLY = ['suspense', 'opening_difference'];
 
     public const SIDES = ['debit', 'credit', 'tax'];
+
+    /**
+     * الحسابات الرقابية: رصيدها لازم يساوي `clients.balance` / `supplier_transactions`
+     * بالحرف (§12) — خاناتها مابتتثبتش (بتمشي ورا المفتاح)، ولا خانة تانية تتثبت عليها.
+     */
+    public const CONTROL_KEYS = ['receivables', 'payables'];
+
+    /**
+     * نوع الحساب المتوقع لكل مفتاح (الباقي مش متشيّك).
+     *
+     * @var array<string, string>
+     */
+    public const KEY_TYPES = [
+        'receivables' => 'asset', 'cash_main' => 'asset', 'bank' => 'asset', 'rep_cash' => 'asset',
+        'inventory' => 'asset', 'withheld_tax' => 'asset',
+        'payables' => 'liability', 'vat_output' => 'liability',
+        'sales' => 'revenue',
+        'opening_equity' => 'equity', 'opening_difference' => 'equity',
+    ];
 
     /**
      * `rep_cash` مفتاح **مجموعة** — بيتحل لحساب المندوب وقت الترحيل، وده
@@ -103,6 +124,9 @@ class GlMapping
         if (! $acc->active) {
             return __('gl.map_why_inactive');
         }
+        if (($why = self::typeWhy($key, $acc)) !== null) {
+            return $why;
+        }
         if ($key === 'rep_cash' ? $acc->is_postable : ! $acc->is_postable) {
             return $key === 'rep_cash' ? __('gl.map_why_not_group') : __('gl.map_why_not_postable');
         }
@@ -111,6 +135,29 @@ class GlMapping
         }
 
         return null;
+    }
+
+    /** النوع غلط للمفتاح ⇒ السبب، وإلا null */
+    private static function typeWhy(string $key, GlAccount $acc): ?string
+    {
+        $want = self::KEY_TYPES[$key] ?? null;
+
+        return $want !== null && $acc->type !== $want
+            ? __('gl.map_why_wrong_type', ['type' => __('gl.type_'.$want)])
+            : null;
+    }
+
+    /** سبب إن الحساب مايتثبتش عليه خانة (حالته هو)، أو null */
+    private static function pinTargetWhy(GlAccount $acc, bool $adopted): ?string
+    {
+        return match (true) {
+            ! $acc->active => __('gl.map_why_inactive'),
+            ! $acc->is_postable => __('gl.map_why_not_postable'),
+            $acc->user_id !== null => __('gl.map_why_rep_account'),
+            in_array($acc->system_key, self::CONTROL_KEYS, true) => __('gl.map_why_control_account'),
+            $adopted && $acc->coa_draft_id === null && ! in_array($acc->system_key, self::SYSTEM_ONLY, true) => __('gl.map_why_not_adopted'),
+            default => null,
+        };
     }
 
     /**
@@ -143,9 +190,8 @@ class GlMapping
                     $acc = $accounts->get($pinId);
                     $why = match (true) {
                         $acc === null => __('gl.map_why_missing'),
-                        ! $acc->active => __('gl.map_why_inactive'),
-                        ! $acc->is_postable => __('gl.map_why_not_postable'),
-                        default => null,
+                        in_array($key, self::CONTROL_KEYS, true) => __('gl.map_why_control_slot'),
+                        default => self::pinTargetWhy($acc, $adopted),
                     };
                     $slots[$side] = ['key' => $key, 'account' => $acc, 'pinned' => true, 'ok' => $why === null, 'why' => $why];
 
@@ -225,10 +271,22 @@ class GlMapping
         if ($to->user_id !== null) {
             return __('gl.map_account_bad', ['code' => $to->code, 'why' => __('gl.map_why_rep_account')]);
         }
+        if (($why = self::typeWhy($key, $to)) !== null) {
+            return __('gl.map_account_bad', ['code' => $to->code, 'why' => $why]);
+        }
         if ($key === 'rep_cash') {
             // هيبقى مجموعة — سطر عليه مباشرة بيتعدّ مرتين في الشجرة
             if ($to->lines()->exists()) {
                 return __('gl.map_account_bad', ['code' => $to->code, 'why' => __('gl.map_why_has_lines')]);
+            }
+            // خزنة أو خانة مثبّتة بترحّل عليه — والمجموعة مابتقبلش ترحيل
+            if (Schema::hasTable('safes') && Safe::where('gl_account_id', $to->id)->exists()) {
+                return __('gl.map_account_bad', ['code' => $to->code, 'why' => __('gl.map_why_safe_account')]);
+            }
+            $pinned = GlPostingRule::where(fn ($q) => $q->where('debit_account_id', $to->id)
+                ->orWhere('credit_account_id', $to->id)->orWhere('tax_account_id', $to->id))->exists();
+            if ($pinned) {
+                return __('gl.map_account_bad', ['code' => $to->code, 'why' => __('gl.map_why_pinned_account')]);
             }
         } elseif (! $to->is_postable) {
             return __('gl.map_account_bad', ['code' => $to->code, 'why' => __('gl.map_why_not_postable')]);
@@ -260,9 +318,10 @@ class GlMapping
             $to->save();
 
             if ($key === 'rep_cash') {
-                foreach (GlAccount::whereNotNull('user_id')->orderBy('id')->get() as $acc) {
-                    $pos = strrpos((string) $acc->code, '.');
-                    $suffix = $pos === false ? (string) $acc->code : substr((string) $acc->code, $pos + 1);
+                foreach (GlAccount::whereNotNull('user_id')->with('user')->orderBy('id')->get() as $acc) {
+                    // نفس لاحقة `GlAccount::repCash` — من المستخدم مش من الكود القديم،
+                    // فالنقل المتكرر مابيراكمش لواحق التصادم
+                    $suffix = $acc->user?->code ?: 'U'.$acc->user_id;
                     $code = $to->code.'.'.$suffix;
                     for ($n = 2; GlAccount::where('code', $code)->where('id', '!=', $acc->id)->exists(); $n++) {
                         $code = $to->code.'.'.$suffix.'.'.$n;
@@ -295,15 +354,13 @@ class GlMapping
         if ($rule->{$side.'_key'} === 'rep_cash') {
             return __('gl.map_pin_rep_cash', ['rule' => $label, 'side' => $sideLabel]);
         }
+        if (in_array($rule->{$side.'_key'}, self::CONTROL_KEYS, true)) {
+            return __('gl.map_pin_control', ['rule' => $label, 'side' => $sideLabel]);
+        }
         if ($side === 'tax' && ! $rule->tax_key && ! $rule->tax_account_id) {
             return __('gl.map_pin_no_tax', ['rule' => $label]);
         }
-        $why = match (true) {
-            ! $account->active => __('gl.map_why_inactive'),
-            ! $account->is_postable => __('gl.map_why_not_postable'),
-            $account->user_id !== null => __('gl.map_why_rep_account'),
-            default => null,
-        };
+        $why = self::pinTargetWhy($account, CoaAdopter::adopted());
 
         return $why === null ? null : __('gl.map_pin_bad', ['rule' => $label, 'side' => $sideLabel, 'code' => $account->code, 'why' => $why]);
     }

@@ -92,7 +92,13 @@ class MappingController extends Controller
             }
         });
 
-        return redirect()->route('gl.mapping')->with('ok', __('gl.map_saved', ['n' => count($moving)]));
+        $msg = __('gl.map_saved', ['n' => count($moving)]);
+        // القيود القديمة لسه على الحساب الرقابي القديم — الفحص الثابت محتاج إعادة بناء
+        if (array_intersect(array_keys($moving), GlMapping::CONTROL_KEYS) !== []) {
+            $msg .= ' '.__('gl.map_rebuild_needed');
+        }
+
+        return redirect()->route('gl.mapping')->with('ok', $msg);
     }
 
     public function saveRules(Request $request)
