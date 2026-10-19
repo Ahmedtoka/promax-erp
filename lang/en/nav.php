@@ -124,4 +124,7 @@ return [
     // ترتيب المنيو (٢٢/٩) — مجموعة لوحدها للتارجت والأداء والحوافز
     'group_targets' => 'Targets & incentives',
     'zones' => 'Zones',
+    // System handover (close-out 19/10)
+    'group_handover' => 'System Handover',
+    'handover_tracker' => 'Handover Tracker',
 ];

@@ -144,7 +144,7 @@ class RoleAccessTest extends TestCase
 
             // شاشات السيستم بس — مش اللوجين ولا تبديل اللغة ولا الـAPI
             // ⚠️ `online.` و`notifications.` اتضافوا (٨/٩) — كانوا بره الفحص
-            if (! preg_match('/^(erp|wh|ops|online|notifications|gl)\./', $name)) {
+            if (! preg_match('/^(erp|wh|ops|online|notifications|gl|handover)\./', $name)) {
                 continue;
             }
 
@@ -383,6 +383,8 @@ class RoleAccessTest extends TestCase
             'مدير فرع' => ['branch_manager'],
             'محاسب' => ['accountant'],
             'أمين مخزن' => ['warehouse_keeper'],
+            // مستلم النظام (١٩/١٠) — شاشات التسليم بس، ولا لينك لغيرها
+            'مستلم النظام' => ['handover_reviewer'],
         ];
     }
 
@@ -507,7 +509,7 @@ class RoleAccessTest extends TestCase
 
     private function isScreenRoute(string $name): bool
     {
-        return preg_match('/^(erp|wh|ops|online|notifications|gl)\./', $name) === 1;
+        return preg_match('/^(erp|wh|ops|online|notifications|gl|handover)\./', $name) === 1;
     }
 
     /** المسار من غير الكويري — `?page=2` و`?status=x` نفس الشاشة */
@@ -661,7 +663,7 @@ class RoleAccessTest extends TestCase
             $known[$this->pathOf($seenUrl)] = true;
         }
 
-        preg_match_all('~["\']((?:https?://[^/"\']+)?/(?:erp|wh|ops|online|notifications|gl)(?:/[^"\'\s<>]*)?)["\']~', $html, $jm);
+        preg_match_all('~["\']((?:https?://[^/"\']+)?/(?:erp|wh|ops|online|notifications|gl|handover)(?:/[^"\'\s<>]*)?)["\']~', $html, $jm);
 
         foreach (array_unique($jm[1]) as $u) {
             $u = html_entity_decode($u);
@@ -806,11 +808,19 @@ class RoleAccessTest extends TestCase
             'purchase_order_id' => $po->id,
         ]);
 
+        // ═══ تسليم النظام (١٩/١٠): موديولز حقيقية + تعليم + شاشة «اتعدلت» ═══
+        $reviewer = $this->makeAdmin(['role' => 'handover_reviewer', 'email' => 'rev.crawl@test.local']);
+        \App\Services\Handover::seedFromNav();
+        $hoScreen = \App\Models\HandoverScreen::query()->where('route', 'erp.clients')->firstOrFail();
+        $hoScreen->marks()->create(['user_id' => $reviewer->id, 'marked_at' => now()->subHour(), 'note' => 'crawl']);
+        $hoScreen->update(['touched_at' => now()]);
+
         return [
             'manager' => $manager,
             'branch_manager' => $branchManager,
             'accountant' => $accountant,
             'warehouse_keeper' => $keeper,
+            'handover_reviewer' => $reviewer,
         ];
     }
 

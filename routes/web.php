@@ -1360,4 +1360,26 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/products/{link}/bundle', [$c, 'productsBundle'])
             ->middleware('role:admin,manager')->name('products.bundle');
     });
+    // ═══ تسليم النظام (الإغلاق ١٩/١٠/٢٠٢٦، spec §3.8) ═══
+    // ⚠️ الأدمن ومستلم النظام بس. حالة الموديول (التيست/اللايف/الديدلاين)
+    // قرار المالك: `role:admin` على الراوت + `act.handover.meta` في الكنترولر.
+    // ⚠️ الثابت (`export`/`log`) قبل البارامتري `{module}`.
+    // ⚠️ **كل الراوتس الفرعية تحت `handover.index.*`** — بند المنيو `handover.index`
+    // هو اللي `Access::matches`/`groupOf` بيبنوا عليه، فإخفاء الصفحة أو المجموعة
+    // من شاشة الصلاحيات لازم يقفل الموديول والسجل والتصدير والتعليم كمان.
+    Route::prefix('handover')->name('handover.')->middleware('role:admin,handover_reviewer')
+        ->group(function () {
+            $h = \App\Http\Controllers\HandoverController::class;
+            Route::get('/', [$h, 'index'])->name('index');
+            Route::get('/export', [$h, 'export'])->name('index.export');
+            Route::get('/log', [$h, 'log'])->name('index.log');
+            Route::post('/screens/{screen}/mark', [$h, 'mark'])->whereNumber('screen')->name('index.mark');
+            Route::post('/screens/{screen}/unmark', [$h, 'unmark'])->whereNumber('screen')->name('index.unmark');
+            Route::get('/{module}', [$h, 'show'])->whereNumber('module')->name('index.show');
+            Route::post('/{module}/mark-all', [$h, 'markAll'])->whereNumber('module')->name('index.mark_all');
+            Route::post('/{module}/unmark-all', [$h, 'unmarkAll'])->whereNumber('module')->name('index.unmark_all');
+            Route::post('/{module}/meta', [$h, 'meta'])->whereNumber('module')
+                ->middleware('role:admin')->name('index.meta');
+        });
+
 });
