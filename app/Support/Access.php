@@ -56,7 +56,11 @@ class Access
             'erp.targets', 'erp.performance',
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
             'erp.attendance',
-            'erp.suppliers', 'erp.purchasing',
+            'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
+            // طلبات الشراء وعروض الأسعار — اعتماد العرض أدمن بس (لين ٥، D10)
+            'erp.purchase_requests',
+            // موافقة/رفض أمر الشراء المستني قرار الأدمن بس (لين ٥، D10)
+            '!erp.purchasing.approve', '!erp.purchasing.reject',
             // ⚠️ **`erp.clauses` مش تحت `erp.contracts`.** الراوتس
             // اتسمّت `erp.clauses.store` و`erp.clauses.destroy` بره
             // مقطع `contracts`، فبادئة العقود مابتغطّيهاش — والمدير
@@ -233,6 +237,9 @@ class Access
             'erp.purchasing',
             '!erp.purchasing.new', '!erp.purchasing.store', '!erp.purchasing.invoice',
             '!erp.purchasing.cancel', '!erp.purchasing.close',
+            '!erp.purchasing.approve', '!erp.purchasing.reject',
+            // بيطلب خامة ويشوف طلباته؛ العروض والمقارنة قرار الإدارة
+            'erp.purchase_requests', '!erp.purchase_requests.quotes',
             // جرس الإشعارات — طلبات البضاعة وأوامر التجهيز بتوصله هنا
             'notifications',
             // ⚠️ **عرض بس** — إشعار «طلب بضاعة في السكة» لينكه بيفتح
@@ -521,12 +528,16 @@ class Access
             // (عروض الأسعار اتنقلت لمجموعة المنتجات والأسعار — ٢٢/٨)
             ['erp.batches', '🗓️', 'nav.batch_report', 'erp.batches', null],
             ['wh.expiry', '⏳', 'nav.expiry', 'wh.expiry', null],
+            ['wh.raw', '🧪', 'nav.raw_store', 'wh.raw', null],
         ],
 
         // ═══ ٥. المشتريات — البضاعة داخلة ═══
         'nav.group_purchasing' => [
+            ['erp.purchase_requests', '📝', 'supplier.purchase_requests', 'erp.purchase_requests*', null],
             ['erp.suppliers', '🤝', 'supplier.suppliers', 'erp.suppliers*', null],
             ['erp.purchasing', '🧺', 'supplier.purchase_orders', 'erp.purchasing*', null],
+            ['erp.purchasing.returns', '↩️', 'supplier.supplier_returns', 'erp.purchasing.returns*', null],
+            ['erp.supplier_contracts', '📜', 'supplier.contracts', 'erp.supplier_contracts*', null],
         ],
 
         // ═══ الأونلاين — أوردرات شوبيفاي (٣/٩): الترتيب هو الفلو
@@ -693,6 +704,11 @@ class Access
         'act.suppliers.manage' => ['perm.act_suppliers_manage', 'erp.suppliers', ['manager'], ['erp.suppliers.store', 'erp.suppliers.update', 'erp.suppliers.opening']],
         'act.suppliers.pay' => ['perm.act_suppliers_pay', 'erp.suppliers', ['manager', 'accountant'], ['erp.suppliers.pay']],
         'act.purchasing.manage' => ['perm.act_purchasing_manage', 'erp.purchasing', ['manager'], ['erp.purchasing.new', 'erp.purchasing.store', 'erp.purchasing.invoice', 'erp.purchasing.cancel', 'erp.purchasing.close']],
+        'act.supplier_contracts.manage' => ['perm.act_supplier_contracts_manage', 'erp.supplier_contracts', ['manager'], ['erp.supplier_contracts.store', 'erp.supplier_contracts.update', 'erp.supplier_contracts.items']],
+        'act.purchasing.approve' => ['perm.act_purchasing_approve', 'erp.purchasing', [], ['erp.purchasing.approve', 'erp.purchasing.reject']],
+        'act.purchase_requests.create' => ['perm.act_purchase_requests_create', 'erp.purchase_requests', ['manager', 'warehouse_keeper'], ['erp.purchase_requests.store', 'erp.purchase_requests.cancel']],
+        'act.purchase_requests.quote' => ['perm.act_purchase_requests_quote', 'erp.purchase_requests', ['manager'], ['erp.purchase_requests.quotes.store']],
+        'act.purchase_quotes.approve' => ['perm.act_purchase_quotes_approve', 'erp.purchase_requests', [], ['erp.purchase_quotes.approve']],
         'act.purchasing.receive' => ['perm.act_purchasing_receive', 'erp.purchasing', null, ['erp.purchasing.receive']],
 
         // ═══ الفلوس ═══

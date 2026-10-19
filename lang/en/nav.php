@@ -36,6 +36,7 @@ return [
     'receipts' => 'Goods Receipts',
     'shelves' => 'Shelves',
     'expiry' => 'Expiry Report',
+    'raw_store' => 'Raw & Packaging Store',
     'transfers' => 'Transfers',
     'reports' => 'Reports',
 

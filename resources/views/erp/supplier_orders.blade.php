@@ -22,6 +22,9 @@
 <div class="card">
     <h3>📥 {{ __('supplier.purchase_orders') }}
         <span class="side">{{ __('supplier.open_countable', ['count' => $openCount]) }}</span>
+        @if ($pendingCount > 0)
+            <a class="badge b-orange" href="{{ route('erp.purchasing', ['approval' => 'pending']) }}">{{ __('supplier.pending_count', ['count' => $pendingCount]) }}</a>
+        @endif
     </h3>
 
     <form class="searchbar" method="GET">
@@ -35,12 +38,15 @@
         <label class="fl"><span>{{ __('ui.l_status') }}</span>
         <select name="status" onchange="this.form.submit()">
             <option value="">{{ __('client.status_all') }}</option>
-            @foreach (['open', 'received', 'closed', 'cancelled'] as $st)
+            @foreach (['pending', 'open', 'received', 'closed', 'cancelled'] as $st)
                 <option value="{{ $st }}" @selected(($filters['status'] ?? '') === $st)>{{ __('supplier.status_'.$st) }}</option>
             @endforeach
         </select></label>
         {{-- فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر مش يوم الإدخال --}}
         @include('partials._range', ['from' => $range->fromValue(), 'to' => $range->toValue(), 'auto' => true])
+        @if (($filters['approval'] ?? '') === 'pending')
+            <input type="hidden" name="approval" value="pending">
+        @endif
         <a class="btn" href="{{ route('erp.purchasing') }}">{{ __('common.clear') }}</a>
         {{-- القايمة صفحات — ده بينزّل كل النتيجة المفلترة (٢٢/٩) --}}
         <a class="btn sm green" href="{{ request()->fullUrlWithQuery(['export' => 1, 'page' => null]) }}">⬇ {{ __('ui.export_all') }}</a>

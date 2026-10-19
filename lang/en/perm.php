@@ -77,6 +77,7 @@ return [
     'act_suppliers_manage' => 'Add & edit suppliers',
     'act_suppliers_pay' => 'Pay supplier dues',
     'act_purchasing_manage' => 'Supplier POs & invoicing',
+    'act_purchasing_approve' => 'Approve or reject pending POs',
     'act_purchasing_receive' => 'Receive supplier goods',
     'act_money_dues' => 'Dues: generate, settle, waive',
     'act_money_eta' => 'Tax & ETA export',
@@ -129,4 +130,8 @@ return [
     'cov_hint' => 'Activates client zones and links them to their reps and manager teams — additive only, nothing removed',
     'cov_confirm' => 'We will walk every active client with a zone, activate the zone if inactive and link it to his rep and manager team. Nothing gets unlinked or moved. Continue?',
     'cov_done' => 'Coverage fixed: :clients clients · :zones zones activated · :links new zone links for reps.',
+    'act_supplier_contracts_manage' => 'Create & edit supplier contracts',
+    'act_purchase_requests_create' => 'Raise & cancel purchase requests',
+    'act_purchase_requests_quote' => 'Add supplier quotes',
+    'act_purchase_quotes_approve' => 'Approve a quote and create a PO',
 ];

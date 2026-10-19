@@ -29,6 +29,8 @@ class SupplierOrder extends Model
     protected $fillable = [
         'number', 'supplier_id', 'warehouse_id', 'status',
         'ordered_on', 'expected_on', 'total', 'notes', 'created_by',
+        'approval_status', 'approval_reasons', 'approved_by', 'approved_at', 'supplier_contract_id',
+        'purchase_request_id', 'purchase_quote_id', 'cost_center_id',
     ];
 
     protected function casts(): array
@@ -37,6 +39,8 @@ class SupplierOrder extends Model
             'ordered_on' => 'date',
             'expected_on' => 'date',
             'total' => 'decimal:2',
+            'approval_reasons' => 'array',
+            'approved_at' => 'datetime',
         ];
     }
 
@@ -55,6 +59,11 @@ class SupplierOrder extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function purchaseRequest(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequest::class);
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(SupplierOrderItem::class);
@@ -63,6 +72,11 @@ class SupplierOrder extends Model
     public function receipts(): HasMany
     {
         return $this->hasMany(GoodsReceipt::class);
+    }
+
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SupplierReturn::class);
     }
 
     public function invoices(): HasMany
@@ -76,6 +90,60 @@ class SupplierOrder extends Model
     {
         // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`
         return static::nextDocumentNumber('SPO-', 1001);
+    }
+
+    /** مستني موافقة الأدمن (لين ٥) — مش مفتوح، فالاستلام والفوترة مرفوضين */
+    public function isPendingApproval(): bool
+    {
+        return $this->status === 'pending' && $this->approval_status === 'pending';
+    }
+
+    /** الأدمن بيوافق: pending → open */
+    public function approve(User $by): void
+    {
+        DB::transaction(function () use ($by) {
+            $order = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $order->isPendingApproval()) {
+                throw new Rejected(__('supplier.not_pending'));
+            }
+
+            $order->update([
+                'status' => 'open',
+                'approval_status' => 'approved',
+                'approved_by' => $by->id,
+                'approved_at' => now(),
+            ]);
+            $this->refresh();
+        });
+    }
+
+    /** الأدمن بيرفض: pending → cancelled والملاحظة تتضاف على `notes` */
+    public function reject(User $by, ?string $note = null): void
+    {
+        DB::transaction(function () use ($by, $note) {
+            $order = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $order->isPendingApproval()) {
+                throw new Rejected(__('supplier.not_pending'));
+            }
+
+            $note = trim((string) $note);
+            $notes = $order->notes;
+            if ($note !== '') {
+                $line = __('supplier.rejected_note', ['note' => $note]);
+                $notes = $notes ? $notes."\n".$line : $line;
+            }
+
+            $order->update([
+                'status' => 'cancelled',
+                'approval_status' => 'rejected',
+                'approved_by' => $by->id,
+                'approved_at' => now(),
+                'notes' => $notes,
+            ]);
+            $this->refresh();
+        });
     }
 
     public function isOpen(): bool
@@ -132,6 +200,8 @@ class SupplierOrder extends Model
                 'created_by' => $by->id,
             ]);
 
+            $return = null;
+
             foreach ($lines as $productId => $line) {
                 $qty = (int) ($line['qty'] ?? 0);
 
@@ -157,6 +227,61 @@ class SupplierOrder extends Model
                 }
 
                 $product = $item->product;
+                $fail = ($line['qc'] ?? 'pass') === 'fail';
+                $note = trim((string) ($line['qc_note'] ?? '')) ?: null;
+                $photo = ($line['qc_photo'] ?? null) ?: null;
+
+                // ⚠️ **فحص الجودة**: السطر الراسب مابيدخلش مخزن ومابيتحسبش
+                // مستلَم ومابيتفوترش — بيتسجل على مرتجع مورد واحد للإذن
+                // (بيتعمل عند أول سطر راسب). الأمر يفضل مفتوح والمورد يبعت بدله.
+                if ($fail) {
+                    $return ??= SupplierReturn::create([
+                        'number' => SupplierReturn::nextNumber(),
+                        'supplier_id' => $order->supplier_id,
+                        'supplier_order_id' => $order->id,
+                        'goods_receipt_id' => $receipt->id,
+                        'returned_on' => today(),
+                        'total' => 0,
+                        'created_by' => $by->id,
+                    ]);
+
+                    $return->items()->create([
+                        'supplier_order_item_id' => $item->id,
+                        'product_id' => $product->id,
+                        'qty' => $qty,
+                        'unit_cost' => (float) $item->unit_cost,
+                        'note' => $note,
+                        'photo_path' => $photo,
+                    ]);
+                    $return->increment('total', round($qty * (float) $item->unit_cost, 2));
+
+                    $item->increment('rejected_qty', $qty);
+
+                    ReceiptInspection::create([
+                        'goods_receipt_id' => $receipt->id,
+                        'supplier_order_item_id' => $item->id,
+                        'product_id' => $product->id,
+                        'qty' => $qty,
+                        'result' => 'fail',
+                        'note' => $note,
+                        'photo_path' => $photo,
+                        'supplier_return_id' => $return->id,
+                        'inspected_by' => $by->id,
+                    ]);
+
+                    continue;
+                }
+
+                // ⚠️ الخامات والتغليف لازم لوت وانتهاء صريحين (D7) —
+                // التشغيلة الافتراضية ومدة الصلاحية للمنتج التام بس.
+                if (in_array($product->kind, ['raw', 'packaging'], true)) {
+                    if (trim((string) ($line['batch_no'] ?? '')) === '') {
+                        throw new Rejected(__('supplier.lot_required', ['product' => $product->displayName()]));
+                    }
+                    if (trim((string) ($line['expires_on'] ?? '')) === '') {
+                        throw new Rejected(__('supplier.expiry_required', ['product' => $product->displayName()]));
+                    }
+                }
 
                 $batch = Batch::firstOrNew([
                     'product_id' => $product->id,
@@ -183,6 +308,18 @@ class SupplierOrder extends Model
 
                 $item->increment('received_qty', $qty);
 
+                ReceiptInspection::create([
+                    'goods_receipt_id' => $receipt->id,
+                    'supplier_order_item_id' => $item->id,
+                    'product_id' => $product->id,
+                    'qty' => $qty,
+                    'result' => 'pass',
+                    'note' => $note,
+                    'photo_path' => $photo,
+                    'batch_id' => $batch->id,
+                    'inspected_by' => $by->id,
+                ]);
+
                 StockCounting::resync($product->id, $order->warehouse_id);
             }
 
@@ -201,6 +338,7 @@ class SupplierOrder extends Model
     public function statusClass(): string
     {
         return match ($this->status) {
+            'pending' => 'b-orange',
             'open' => 'b-blue',
             'received' => 'b-green',
             'closed' => 'b-gray',

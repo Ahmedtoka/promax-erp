@@ -9,12 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SupplierOrderItem extends Model
 {
     protected $fillable = [
-        'supplier_order_id', 'product_id', 'qty', 'unit_cost', 'received_qty',
+        'supplier_order_id', 'product_id', 'qty', 'unit_cost', 'received_qty', 'contract_price', 'rejected_qty',
     ];
 
     protected function casts(): array
     {
-        return ['unit_cost' => 'decimal:2'];
+        return ['unit_cost' => 'decimal:2', 'contract_price' => 'decimal:2'];
     }
 
     public function order(): BelongsTo

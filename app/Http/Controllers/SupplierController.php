@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\Rejected;
+use App\Models\CostCenter;
 use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierOrder;
 use App\Models\SupplierPayment;
+use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\PurchaseApproval;
 use App\Support\DateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +85,7 @@ class SupplierController extends Controller
                 ->orderByDesc('date')->orderByDesc('id')->paginate(50)->withQueryString(),
             'invoices' => $supplier->invoices()->latest('invoice_date')->limit(20)->get(),
             'payments' => $supplier->payments()->latest('paid_on')->limit(20)->get(),
+            'costCenters' => CostCenter::where('active', true)->orderBy('code')->get(),
         ]);
     }
 
@@ -195,6 +199,7 @@ class SupplierController extends Controller
             'method' => ['required', Rule::in(SupplierPayment::METHODS)],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
+            'cost_center_id' => ['nullable', Rule::exists('cost_centers', 'id')->where('active', true)],
         ]);
         \App\Support\PeriodGuard::assertOpen($data['paid_on'], 'paid_on');
 
@@ -206,6 +211,8 @@ class SupplierController extends Controller
             'reference' => $data['reference'] ?? null,
             'notes' => $data['notes'] ?? null,
             'created_by' => $request->user()->id,
+            // D9: اختيار الفورم، وإلا الشركة
+            'cost_center_id' => $data['cost_center_id'] ?? CostCenter::company()->id,
         ]);
 
         return back()->with('ok', __('supplier.payment_saved'));
@@ -222,6 +229,9 @@ class SupplierController extends Controller
         }
         if ($sup = $request->integer('supplier')) {
             $q->where('supplier_id', $sup);
+        }
+        if ($request->string('approval')->value() === 'pending') {
+            $q->where('approval_status', 'pending');
         }
 
         // فلتر «من — إلى» على `ordered_on` (٩/٩/٢٠٢٦) — تاريخ الأمر التجاري
@@ -252,8 +262,9 @@ class SupplierController extends Controller
             'orders' => $q->latest()->paginate(30)->withQueryString(),
             'range' => $range,
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
-            'filters' => $request->only(['status', 'supplier']),
+            'filters' => $request->only(['status', 'supplier', 'approval']),
             'openCount' => SupplierOrder::where('status', 'open')->count(),
+            'pendingCount' => SupplierOrder::where('approval_status', 'pending')->count(),
         ]);
     }
 
@@ -263,6 +274,7 @@ class SupplierController extends Controller
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
             'warehouses' => Warehouse::where('active', true)->orderBy('code')->get(),
             'products' => Product::where('active', true)->orderBy('code')->get(),
+            'costCenters' => CostCenter::where('active', true)->orderBy('code')->get(),
         ]);
     }
 
@@ -271,6 +283,7 @@ class SupplierController extends Controller
         $data = $request->validate([
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'cost_center_id' => ['nullable', Rule::exists('cost_centers', 'id')->where('active', true)],
             'ordered_on' => ['required', 'date'],
             'expected_on' => ['nullable', 'date', 'after_or_equal:ordered_on'],
             'notes' => ['nullable', 'string'],
@@ -301,24 +314,50 @@ class SupplierController extends Controller
             return back()->withErrors(['qty' => __('supplier.no_lines')])->withInput();
         }
 
-        $order = DB::transaction(function () use ($data, $lines, $request) {
+        // قواعد الموافقة (لين ٥): عقد/سعر/مورد جديد/صنف جديد. بتتقيّم قبل الإنشاء.
+        $assessment = app(PurchaseApproval::class)
+            ->assess((int) $data['supplier_id'], $lines, $data['ordered_on']);
+        $reasons = $assessment['reasons'];
+        $isAdmin = $request->user()->isAdmin();
+
+        $order = DB::transaction(function () use ($data, $lines, $request, $assessment, $reasons, $isAdmin) {
+            $extra = [];
+            $status = 'open';
+
+            if ($reasons !== []) {
+                $extra['approval_reasons'] = $reasons;
+
+                if ($isAdmin) {
+                    // D3: أمر الأدمن بيتوافق عليه لحظة الإنشاء والأسباب متسجلة
+                    $extra += ['approval_status' => 'approved', 'approved_by' => $request->user()->id, 'approved_at' => now()];
+                } else {
+                    $status = 'pending';
+                    $extra['approval_status'] = 'pending';
+                }
+            }
+
             $order = SupplierOrder::create([
                 'number' => SupplierOrder::nextNumber(),
                 'supplier_id' => $data['supplier_id'],
                 'warehouse_id' => $data['warehouse_id'],
-                'status' => 'open',
+                'status' => $status,
                 'ordered_on' => $data['ordered_on'],
                 'expected_on' => $data['expected_on'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
                 'total' => collect($lines)->sum(fn ($l) => $l['qty'] * $l['unit_cost']),
-            ]);
+                'supplier_contract_id' => $assessment['contract_id'],
+                // D9: اختيار الفورم، وإلا مركز المخزن
+                'cost_center_id' => $data['cost_center_id']
+                    ?? CostCenter::forWarehouse(Warehouse::find($data['warehouse_id']))?->id,
+            ] + $extra);
 
             foreach ($lines as $pid => $line) {
                 $order->items()->create([
                     'product_id' => $pid,
                     'qty' => $line['qty'],
                     'unit_cost' => $line['unit_cost'],
+                    'contract_price' => $assessment['contract_prices'][$pid] ?? null,
                 ]);
             }
 
@@ -326,17 +365,57 @@ class SupplierController extends Controller
         });
 
         return redirect()->route('erp.purchasing.show', $order)
-            ->with('ok', __('supplier.order_created', ['number' => $order->number]));
+            ->with('ok', $order->status === 'pending'
+                ? __('supplier.order_waits_approval', ['number' => $order->number])
+                : __('supplier.order_created', ['number' => $order->number]));
     }
 
     public function order(SupplierOrder $supplierOrder)
     {
         $supplierOrder->load([
             'supplier', 'warehouse', 'creator',
-            'items.product', 'receipts', 'invoices',
+            'items.product', 'receipts', 'invoices', 'purchaseRequest', 'returns',
         ]);
 
-        return view('erp.supplier_order', ['o' => $supplierOrder]);
+        // ⚠️ أسماء الأصناف هنا مش في الـBlade (ممنوع كويري في الفيو)
+        $names = Product::whereIn('id', collect($supplierOrder->approval_reasons ?? [])->pluck('product_id'))
+            ->get()->mapWithKeys(fn (Product $p) => [$p->id => $p->displayName()]);
+        $reasonTexts = collect($supplierOrder->approval_reasons ?? [])
+            ->map(fn ($r) => PurchaseApproval::reasonText($r, $names[$r['product_id']] ?? null))
+            ->all();
+        $approver = $supplierOrder->approved_by ? User::find($supplierOrder->approved_by) : null;
+
+        return view('erp.supplier_order', [
+            'o' => $supplierOrder,
+            'reasonTexts' => $reasonTexts,
+            'approverName' => $approver?->name,
+        ]);
+    }
+
+    /** الأدمن بيوافق على أمر مستني */
+    public function approveOrder(Request $request, SupplierOrder $supplierOrder)
+    {
+        try {
+            $supplierOrder->approve($request->user());
+        } catch (Rejected $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('supplier.order_approved', ['number' => $supplierOrder->number]));
+    }
+
+    /** الأدمن بيرفض — الأمر بيتلغي */
+    public function rejectOrder(Request $request, SupplierOrder $supplierOrder)
+    {
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
+
+        try {
+            $supplierOrder->reject($request->user(), $data['note'] ?? null);
+        } catch (Rejected $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+
+        return back()->with('ok', __('supplier.order_rejected', ['number' => $supplierOrder->number]));
     }
 
     /** استلام بضاعة على الأمر — إذن استلام حقيقي وباتشات */
@@ -368,6 +447,9 @@ class SupplierController extends Controller
             'lines.*.batch_no' => ['nullable', 'string', 'max:60'],
             'lines.*.produced_on' => ['nullable', 'date'],
             'lines.*.expires_on' => ['nullable', 'date'],
+            'lines.*.qc' => ['nullable', 'in:pass,fail'],
+            'lines.*.qc_note' => ['nullable', 'string', 'max:500'],
+            'lines.*.qc_photo' => ['nullable', 'image', 'max:8192'],
         ]);
 
         $lines = array_filter($data['lines'], fn ($l) => (int) ($l['qty'] ?? 0) > 0);
@@ -376,15 +458,81 @@ class SupplierController extends Controller
             return back()->withErrors(['lines' => __('supplier.no_lines')])->withInput();
         }
 
+        // صور الفحص بتتخزن قبل الاستلام (المسار بيدخل في الجدول) وبتتمسح لو اترفض
+        $stored = [];
+        foreach ($lines as $pid => $line) {
+            $file = $request->file("lines.$pid.qc_photo");
+            unset($lines[$pid]['qc_photo']);
+
+            if ($file) {
+                $lines[$pid]['qc_photo'] = $stored[] = $file->store('receipt-qc', 'public');
+            }
+        }
+
         try {
             $receipt = $supplierOrder->receive($lines, $request->user());
         } catch (Rejected $e) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($stored);
+
             return back()->withErrors(['lines' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($stored);
+
+            throw $e;
         }
 
         return back()->with('ok', __('supplier.received_ok', [
             'number' => $receipt->number,
         ]));
+    }
+
+    /** مرتجعات الموردين (الأصناف الراسبة في فحص الاستلام) — أمين المخزن بيشوف مخزنه بس */
+    public function returns(Request $request)
+    {
+        $user = $request->user();
+        $q = \App\Models\SupplierReturn::with(['supplier', 'order.warehouse', 'receipt']);
+
+        if ($user->isWarehouseKeeper() && $user->warehouse_id) {
+            $q->whereHas('order', fn ($w) => $w->where('warehouse_id', $user->warehouse_id));
+        }
+        if ($sup = $request->integer('supplier')) {
+            $q->where('supplier_id', $sup);
+        }
+
+        $range = DateRange::fromRequest($request);
+        $range->apply($q, 'returned_on');
+
+        if ($request->boolean('export')) {
+            $all = (clone $q)->orderBy('returned_on')->orderBy('id')->get();
+
+            return \App\Support\Csv::download(
+                'supplier-returns.csv',
+                [__('common.number'), __('supplier.supplier'), __('supplier.purchase_orders'), __('supplier.return_receipt'),
+                    __('supplier.returned_on'), __('common.total')],
+                $all->map(fn ($r) => [
+                    $r->number, $r->supplier?->displayName() ?? '', $r->order?->number ?? '',
+                    $r->receipt?->number ?? '', $r->returned_on->format('Y-m-d'), \App\Support\Csv::money($r->total),
+                ]),
+                [__('common.total'), $all->count(), '', '', '', \App\Support\Csv::money($all->sum('total'))],
+                \App\Support\Csv::meta(__('supplier.supplier_returns'), $range->fromValue() ?: null, $range->toValue() ?: null),
+            );
+        }
+
+        return view('erp.supplier_returns', [
+            'returns' => $q->orderByDesc('returned_on')->orderByDesc('id')->paginate(30)->withQueryString(),
+            'returnsTotal' => (float) (clone $q)->sum('total'),
+            'range' => $range,
+            'suppliers' => Supplier::where('active', true)->orderBy('name')->get(),
+            'filters' => $request->only(['supplier']),
+        ]);
+    }
+
+    public function returnShow(Request $request, \App\Models\SupplierReturn $supplierReturn)
+    {
+        $supplierReturn->load(['supplier', 'order.warehouse', 'receipt', 'items.product']);
+        $this->guardWarehouse($request, $supplierReturn->order?->warehouse_id);
+
+        return view('erp.supplier_return', ['r' => $supplierReturn]);
     }
 
     /** فاتورة المورد على الأمر — بالمستلَم فعلاً */
@@ -437,6 +585,9 @@ class SupplierController extends Controller
                     'total' => round($net + $tax, 2),
                     'notes' => $data['notes'] ?? null,
                     'created_by' => $request->user()->id,
+                    // D9: مركز الأمر، وإلا مركز مخزنه
+                    'cost_center_id' => $order->cost_center_id
+                        ?? CostCenter::forWarehouse($order->warehouse)?->id,
                 ]);
             });
         } catch (Rejected $e) {

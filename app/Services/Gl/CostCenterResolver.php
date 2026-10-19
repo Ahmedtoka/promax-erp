@@ -44,6 +44,11 @@ class CostCenterResolver
             return null;
         }
 
+        // الخطوة ٠: مستند عنده مركزه بنفسه (أمر/فاتورة/دفعة مورد) أو قيد دفتر مصدره كده
+        if ($own = self::ownCenter($source)) {
+            return $own;
+        }
+
         $sales = self::isSales($source);
 
         // ⚠️ أي فشل في الاكتشاف (مصدر بكلاس اتشال، علاقة مكسورة) = مفيش مخزن،
@@ -66,6 +71,31 @@ class CostCenterResolver
         }
 
         return $sales ? CostCenter::maadi()->id : null;
+    }
+
+    /**
+     * مركز المستند نفسه: `cost_center_id` متملي على الصف، أو على مستنده
+     * (morph `source_type`/`source_id`) لو الصف قيد دفتر. مابيرميش أبداً.
+     */
+    private static function ownCenter(Model $source): ?int
+    {
+        try {
+            if ($id = $source->getAttribute('cost_center_id')) {
+                return (int) $id;
+            }
+
+            if ($source->getAttribute('source_type') && $source->getAttribute('source_id')) {
+                $doc = $source->source ?? null;
+
+                if ($doc instanceof Model && ($id = $doc->getAttribute('cost_center_id'))) {
+                    return (int) $id;
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return null;
     }
 
     /** المخزن اللي المستند خرج منه — أو null */

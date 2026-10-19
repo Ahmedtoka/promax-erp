@@ -13,6 +13,12 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.purchasing') }}">← {{ __('supplier.purchase_orders') }}</a>
+    @if ($o->isPendingApproval() && \App\Support\Access::action(auth()->user(), 'act.purchasing.approve'))
+        <form method="POST" action="{{ route('erp.purchasing.approve', $o) }}" style="display:inline">
+            @csrf
+            <button class="btn green" type="submit">{{ __('supplier.approve_order') }}</button>
+        </form>
+    @endif
     @if ($manager && $o->isOpen())
         @if ($o->items->sum('received_qty') === 0)
             <form method="POST" action="{{ route('erp.purchasing.cancel', $o) }}" style="display:inline"
@@ -52,11 +58,41 @@
             </span>
         @endif
         <span class="badge b-gold">{{ __('common.total') }}: {{ $money($o->total) }}</span>
+        @if ($o->purchaseRequest)
+            @if (\App\Support\Access::allows(auth()->user(), 'erp.purchase_requests.show'))
+                <a class="badge b-blue" href="{{ route('erp.purchase_requests.show', $o->purchaseRequest) }}">📝 {{ __('supplier.from_request', ['number' => $o->purchaseRequest->number]) }}</a>
+            @else
+                <span class="badge b-blue">📝 {{ __('supplier.from_request', ['number' => $o->purchaseRequest->number]) }}</span>
+            @endif
+        @endif
     </div>
     @if ($o->notes)
         <div style="font-size:12px;color:var(--muted);margin-top:8px">{{ $o->notes }}</div>
     @endif
 </div>
+
+@if ($o->approval_status && $reasonTexts !== [])
+    <div class="card">
+        <h3>{{ $o->isPendingApproval() ? __('supplier.approval_needed') : __('supplier.approval_reasons') }}
+            <span class="badge {{ $o->isPendingApproval() ? 'b-orange' : ($o->approval_status === 'approved' ? 'b-green' : 'b-red') }}">{{ __('supplier.approval_reasons') }}</span>
+        </h3>
+        <ul style="margin:0;padding-inline-start:18px;font-size:13px">
+            @foreach ($reasonTexts as $text)
+                <li>{{ $text }}</li>
+            @endforeach
+        </ul>
+        @if ($o->approval_status !== 'pending' && $o->approved_at)
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">{{ __($o->approval_status === 'rejected' ? 'supplier.rejected_by_on' : 'supplier.approved_by_on', ['name' => $approverName ?? '', 'at' => $o->approved_at->format('Y-m-d H:i')]) }}</div>
+        @endif
+        @if ($o->isPendingApproval() && \App\Support\Access::action(auth()->user(), 'act.purchasing.approve'))
+            <form method="POST" action="{{ route('erp.purchasing.reject', $o) }}" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                @csrf
+                <input type="text" name="note" maxlength="500" placeholder="{{ __('supplier.reject_note') }}" style="flex:1;min-width:180px">
+                <button class="btn red" type="submit">{{ __('supplier.reject_order') }}</button>
+            </form>
+        @endif
+    </div>
+@endif
 
 @if ($errors->any())
     <div class="card"><div class="alert" style="flex-direction:column;align-items:stretch;gap:4px">
@@ -75,7 +111,7 @@
     </h3>
 
     @if ($canReceive && $outstanding !== [])
-    <form method="POST" action="{{ route('erp.purchasing.receive', $o) }}">
+    <form method="POST" action="{{ route('erp.purchasing.receive', $o) }}" enctype="multipart/form-data">
         @csrf
     @endif
 
@@ -86,12 +122,16 @@
                     <th class="num">{{ __('supplier.qty_ordered') }}</th>
                     <th class="num" data-nosum>{{ __('supplier.unit_cost') }}</th>
                     <th class="num">{{ __('supplier.qty_received') }}</th>
+                    <th class="num">{{ __('supplier.qty_rejected') }}</th>
                     <th class="num">{{ __('supplier.qty_left') }}</th>
                     @if ($canReceive && $outstanding !== [])
                         <th style="width:110px">{{ __('supplier.receive_now') }}</th>
                         <th style="width:130px">{{ __('stock.batch_no') }}</th>
                         <th style="width:140px" data-nosum>{{ __('stock.produced_on') }}</th>
                         <th style="width:140px" data-nosum>{{ __('stock.expires_on') }}</th>
+                        <th style="width:110px" data-nosum>{{ __('supplier.qc') }}</th>
+                        <th style="width:160px" data-nosum>{{ __('supplier.qc_note') }}</th>
+                        <th style="width:150px" data-nosum>{{ __('supplier.qc_photo') }}</th>
                     @endif
                 </tr>
                 @foreach ($o->items as $it)
@@ -102,6 +142,7 @@
                         <td class="num">{{ $fmt($it->qty) }}</td>
                         <td class="num">{{ $money($it->unit_cost) }}</td>
                         <td class="num pos">{{ $fmt($it->received_qty) }}</td>
+                        <td class="num {{ $it->rejected_qty > 0 ? 'neg' : '' }}">{{ $fmt($it->rejected_qty) }}</td>
                         <td class="num {{ $left > 0 ? 'mid' : 'pos' }}">{{ $fmt($left) }}</td>
                         @if ($canReceive && $outstanding !== [])
                             @if ($left > 0)
@@ -113,8 +154,14 @@
                                            placeholder="{{ __('supplier.batch_ph') }}"></td>
                                 <td><input type="date" name="lines[{{ $it->product_id }}][produced_on]" style="width:100%"></td>
                                 <td><input type="date" name="lines[{{ $it->product_id }}][expires_on]" style="width:100%"></td>
+                                <td><select name="lines[{{ $it->product_id }}][qc]" style="width:100%">
+                                    <option value="pass">{{ __('supplier.qc_pass') }}</option>
+                                    <option value="fail">{{ __('supplier.qc_fail') }}</option>
+                                </select></td>
+                                <td><input type="text" name="lines[{{ $it->product_id }}][qc_note]" maxlength="500" style="width:100%"></td>
+                                <td><input type="file" name="lines[{{ $it->product_id }}][qc_photo]" accept="image/*" style="width:100%"></td>
                             @else
-                                <td colspan="4" style="text-align:center;color:var(--muted)">✓</td>
+                                <td colspan="7" style="text-align:center;color:var(--muted)">✓</td>
                             @endif
                         @endif
                     </tr>
@@ -125,12 +172,30 @@
     @if ($canReceive && $outstanding !== [])
         {{-- ⚠️ الانتهاء لو اتساب فاضي بيتحسب من الإنتاج + مدة صلاحية الصنف --}}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-            <span style="font-size:11.5px;color:var(--muted)">{{ __('supplier.expiry_auto_hint') }}</span>
+            <span style="font-size:11.5px;color:var(--muted)">{{ __('supplier.expiry_auto_hint') }}<br>{{ __('supplier.raw_fields_hint') }}<br>{{ __('supplier.qc_hint') }}</span>
             <button class="btn gold" type="submit">📦 {{ __('supplier.receive_now') }}</button>
         </div>
     </form>
     @endif
 </div>
+
+@if ($o->returns->isNotEmpty() && \App\Support\Access::allows(auth()->user(), 'erp.purchasing.returns'))
+<div class="card">
+    <h3>↩️ {{ __('supplier.supplier_returns') }} <span class="side">{{ $o->returns->count() }}</span></h3>
+    <div class="tablewrap">
+        <table>
+            <tr><th>{{ __('common.number') }}</th><th data-nosum>{{ __('supplier.returned_on') }}</th><th class="num">{{ __('common.total') }}</th></tr>
+            @foreach ($o->returns as $ret)
+                <tr class="clickable" onclick="location.href='{{ route('erp.purchasing.returns.show', $ret) }}'">
+                    <td class="num"><a href="{{ route('erp.purchasing.returns.show', $ret) }}"><b>{{ $ret->number }}</b></a></td>
+                    <td class="num s">{{ $ret->returned_on->format('Y-m-d') }}</td>
+                    <td class="num">{{ $money($ret->total) }}</td>
+                </tr>
+            @endforeach
+        </table>
+    </div>
+</div>
+@endif
 
 <div class="grid2">
     {{-- ═══════════ أذون الاستلام ═══════════ --}}

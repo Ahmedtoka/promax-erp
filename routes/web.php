@@ -256,6 +256,40 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('suppliers.update');
             Route::post('/suppliers/{supplier}/opening', [\App\Http\Controllers\SupplierController::class, 'opening'])
                 ->name('suppliers.opening');
+
+            // عقود الموردين (لين ٥) — ⚠️ الاسم `supplier_contracts` مش تحت بادئة
+            // `erp.suppliers` عمداً: المحاسب ياخد `erp.suppliers*` بالبادئة وده مش له.
+            Route::get('/supplier-contracts', [\App\Http\Controllers\SupplierContractController::class, 'index'])
+                ->name('supplier_contracts');
+            Route::get('/supplier-contracts/{supplierContract}', [\App\Http\Controllers\SupplierContractController::class, 'show'])
+                ->name('supplier_contracts.show');
+            Route::post('/supplier-contracts', [\App\Http\Controllers\SupplierContractController::class, 'store'])
+                ->name('supplier_contracts.store');
+            Route::put('/supplier-contracts/{supplierContract}', [\App\Http\Controllers\SupplierContractController::class, 'update'])
+                ->name('supplier_contracts.update');
+            Route::post('/supplier-contracts/{supplierContract}/items', [\App\Http\Controllers\SupplierContractController::class, 'items'])
+                ->name('supplier_contracts.items');
+        });
+
+        // طلبات الشراء وعروض الأسعار (لين ٥) — ⚠️ `purchase_requests` مش تحت `erp.purchasing`
+        Route::middleware('role:admin,manager,warehouse_keeper')->group(function () {
+            Route::get('/purchase-requests', [\App\Http\Controllers\PurchaseRequestController::class, 'index'])
+                ->name('purchase_requests');
+            Route::get('/purchase-requests/{purchaseRequest}', [\App\Http\Controllers\PurchaseRequestController::class, 'show'])
+                ->name('purchase_requests.show');
+            Route::post('/purchase-requests', [\App\Http\Controllers\PurchaseRequestController::class, 'store'])
+                ->name('purchase_requests.store');
+            Route::post('/purchase-requests/{purchaseRequest}/cancel', [\App\Http\Controllers\PurchaseRequestController::class, 'cancel'])
+                ->name('purchase_requests.cancel');
+        });
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/purchase-requests/{purchaseRequest}/quotes', [\App\Http\Controllers\PurchaseRequestController::class, 'storeQuote'])
+                ->name('purchase_requests.quotes.store');
+        });
+        // اعتماد العرض = موافقة الأدمن على أمر الشراء
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/purchase-quotes/{purchaseQuote}/approve', [\App\Http\Controllers\PurchaseRequestController::class, 'approveQuote'])
+                ->name('purchase_quotes.approve');
         });
 
         // أوامر الشراء — العرض للإدارة وأمين المخزن (هو اللي بيستلم)
@@ -266,6 +300,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             // لارافيل بيطابق بالترتيب و«new» كانت هتتقري كـid.
             Route::get('/purchasing/new', [\App\Http\Controllers\SupplierController::class, 'createOrder'])
                 ->middleware('role:admin,manager')->name('purchasing.new');
+            // مرتجعات الموردين — ⚠️ قبل `/purchasing/{supplierOrder}` عشان «returns» ماتتقريش id
+            Route::get('/purchasing/returns', [\App\Http\Controllers\SupplierController::class, 'returns'])
+                ->name('purchasing.returns');
+            Route::get('/purchasing/returns/{supplierReturn}', [\App\Http\Controllers\SupplierController::class, 'returnShow'])
+                ->name('purchasing.returns.show');
             Route::get('/purchasing/{supplierOrder}', [\App\Http\Controllers\SupplierController::class, 'order'])
                 ->name('purchasing.show');
             // الاستلام بيدخل بضاعة للمخزن — شغل أمين المخزن
@@ -282,6 +321,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('purchasing.cancel');
             Route::post('/purchasing/{supplierOrder}/close', [\App\Http\Controllers\SupplierController::class, 'closeOrder'])
                 ->name('purchasing.close');
+        });
+
+        // موافقة/رفض أمر شراء مستني — الأدمن بس (لين ٥)
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/purchasing/{supplierOrder}/approve', [\App\Http\Controllers\SupplierController::class, 'approveOrder'])
+                ->name('purchasing.approve');
+            Route::post('/purchasing/{supplierOrder}/reject', [\App\Http\Controllers\SupplierController::class, 'rejectOrder'])
+                ->name('purchasing.reject');
         });
 
         Route::get('/contracts', [ErpController::class, 'contracts'])->name('contracts');
@@ -893,6 +940,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/receipts/{receipt}/put-away', [WarehouseController::class, 'putAwayForm'])->name('receipt.putaway.form');
         Route::get('/shelves', [WarehouseController::class, 'locations'])->name('locations');
         Route::get('/expiry', [WarehouseController::class, 'expiryReport'])->name('expiry');
+        // مخزن الخامات والتعبئة: باتشات FEFO وسجل الصرف
+        Route::get('/raw', [\App\Http\Controllers\RawStoreController::class, 'index'])->name('raw');
         Route::get('/transfers', [WarehouseController::class, 'transfers'])->name('transfers');
         // ⚠️ قبل `{transfer}` — وإلا «new» بتتفسر كـid ياخد 404
         Route::get('/transfers/new', [WarehouseController::class, 'newTransfer'])

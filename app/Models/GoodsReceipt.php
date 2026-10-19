@@ -80,6 +80,12 @@ class GoodsReceipt extends Model
         return $this->belongsTo(SupplierOrder::class, 'supplier_order_id');
     }
 
+    /** المرتجع الوحيد لإذن الاستلام ده (لو فيه سطر راسب) */
+    public function supplierReturn(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(SupplierReturn::class, 'goods_receipt_id');
+    }
+
     public static function nextNumber(): string
     {
         // ⚠️ أكبر رقم مش آخر صف — شوف `HasDocumentNumber`

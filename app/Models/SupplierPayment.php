@@ -21,7 +21,7 @@ class SupplierPayment extends Model
 
     protected $fillable = [
         'number', 'supplier_id', 'paid_on', 'amount', 'method',
-        'reference', 'notes', 'created_by',
+        'reference', 'notes', 'created_by', 'cost_center_id',
     ];
 
     protected function casts(): array
@@ -35,6 +35,11 @@ class SupplierPayment extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function costCenter(): BelongsTo
+    {
+        return $this->belongsTo(CostCenter::class);
     }
 
     public function creator(): BelongsTo
