@@ -93,6 +93,9 @@ return [
     'act_hr_employees' => 'إضافة وتعديل ملفات الموظفين',
     'act_hr_leave_balances' => 'تعديل أرصدة الإجازات',
     'act_hr_advances' => 'تسجيل السلف والجزاءات وإلغاؤها',
+    'act_hr_payroll' => 'تجهيز مسير المرتبات وتعديل بنوده',
+    'act_hr_payroll_approve' => 'اعتماد مسير المرتبات',
+    'act_hr_payroll_pay' => 'صرف مسير المرتبات',
     'act_hr_settings' => 'تعديل إعدادات المرتبات (التأمينات والضريبة)',
 
     // ═══ حارس السكوب (App\Support\Scope) — رسايل الرفض ═══

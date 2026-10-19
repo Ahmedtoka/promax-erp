@@ -1445,6 +1445,20 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/penalties/{penalty}/delete', [$adv, 'deletePenalty'])->whereNumber('penalty')
             ->middleware('role:admin,hr')->name('penalties.delete');
 
+        // مسير المرتبات (المهمة ٦): قراءة أدمن/موارد/محاسب، المسودة والبنود للموارد، الاعتماد والصرف للأدمن
+        $pr = \App\Http\Controllers\Hr\PayrollController::class;
+        Route::get('/payroll', [$pr, 'index'])->middleware('role:admin,hr,accountant')->name('payroll');
+        Route::post('/payroll', [$pr, 'draft'])->middleware('role:admin,hr')->name('payroll.draft');
+        Route::post('/payroll/slips/{payslip}/line', [$pr, 'line'])->whereNumber('payslip')
+            ->middleware('role:admin,hr')->name('payroll.line');
+        Route::get('/payroll/slips/{payslip}/print', [$pr, 'print'])->whereNumber('payslip')
+            ->middleware('role:admin,hr,accountant')->name('payroll.print');
+        Route::get('/payroll/{run}', [$pr, 'show'])->whereNumber('run')
+            ->middleware('role:admin,hr,accountant')->name('payroll.show');
+        Route::post('/payroll/{run}/approve', [$pr, 'approve'])->whereNumber('run')
+            ->middleware('role:admin')->name('payroll.approve');
+        Route::post('/payroll/{run}/pay', [$pr, 'pay'])->whereNumber('run')
+            ->middleware('role:admin')->name('payroll.pay');
     });
 
 });

@@ -93,6 +93,9 @@ return [
     'act_hr_employees' => 'Add and edit employee files',
     'act_hr_leave_balances' => 'Edit leave balances',
     'act_hr_advances' => 'Record and void advances and penalties',
+    'act_hr_payroll' => 'Prepare payroll and edit its lines',
+    'act_hr_payroll_approve' => 'Approve payroll',
+    'act_hr_payroll_pay' => 'Pay payroll',
     'act_hr_settings' => 'Edit payroll settings (insurance and tax)',
 
     // ═══ Scope guard (App\Support\Scope) — denial messages ═══
