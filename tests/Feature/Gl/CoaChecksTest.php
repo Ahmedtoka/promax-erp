@@ -58,6 +58,15 @@ class CoaChecksTest extends TestCase
         $this->assertSame('red', $items[0]['level']);
     }
 
+    public function test_parent_whose_total_equals_its_children_is_not_red(): void
+    {
+        // QuickBooks «Balance Total» على الأب شامل ولاده — رصيده نفسه صفر
+        $parent = $this->row(['balance' => 10]);
+        $this->row(['parent_id' => $parent->id, 'balance' => 10]);
+
+        $this->assertSame([], $this->itemsFor('parent_balance'));
+    }
+
     public function test_parent_with_file_balance_is_red(): void
     {
         $parent = $this->row(['balance' => 100]);

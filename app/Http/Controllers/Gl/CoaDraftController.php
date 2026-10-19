@@ -121,7 +121,7 @@ class CoaDraftController extends Controller
     {
         $data = $request->validate([
             'check' => ['required', 'string', 'max:30'],
-            'draft_id' => ['nullable', 'integer'],
+            'draft_id' => ['nullable', 'integer', 'exists:coa_draft_accounts,id'],
             'all' => ['nullable', 'boolean'],
         ]);
         if (! in_array($data['check'], CoaChecks::YELLOW, true)) {
@@ -279,6 +279,7 @@ class CoaDraftController extends Controller
                 $kid->update(['parent_id' => $account->parent_id, 'sort' => CoaDraftAccount::nextSort($account->parent_id)]);
             }
 
+            \App\Models\Gl\CoaCheckAccept::where('draft_account_id', $account->id)->delete();
             $account->delete();
         });
 

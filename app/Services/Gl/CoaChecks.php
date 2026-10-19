@@ -67,6 +67,10 @@ class CoaChecks
         }
         $byId = $all->keyBy('id');
         $hasKids = $all->whereNotNull('parent_id')->pluck('parent_id')->flip();
+        // ⚠️ «Balance Total» في QuickBooks رصيد الأب **شامل** ولاده — رصيد الأب
+        // نفسه = رصيده ناقص مجموع أرصدة ولاده المباشرين
+        $kidsSum = $all->whereNotNull('parent_id')->groupBy('parent_id')
+            ->map(fn ($g) => (float) $g->sum(fn ($k) => (float) ($k->balance ?? 0)));
 
         $codeOf = fn (CoaDraftAccount $a) => trim((string) $a->code);
         $codes = $all->map($codeOf)->filter(fn ($c) => $c !== '');
@@ -101,7 +105,9 @@ class CoaChecks
             } elseif (isset($dups[$code])) {
                 $found[] = 'dup_code';
             }
-            if ($isParent && round($balance, 2) != 0.0) {
+            // أب رصيده فاضي/صفر = مفيش رصيد عليه؛ أب رصيده = مجموع ولاده = إجمالي مش رصيد خاص
+            $own = $isParent && round($balance, 2) != 0.0 ? round($balance - (float) ($kidsSum[$a->id] ?? 0), 2) : 0.0;
+            if ($isParent && $own != 0.0) {
                 $found[] = 'parent_balance';
             } elseif ($glAcc !== null && ! $glAcc->is_postable && $glHasLines) {
                 $found[] = 'parent_balance';
@@ -159,10 +165,10 @@ class CoaChecks
     public static function accept(string $check, ?int $draftId, User $by): void
     {
         self::assertYellow($check);
-        CoaCheckAccept::firstOrCreate(
-            ['check' => $check, 'draft_account_id' => $draftId],
-            ['accepted_by' => $by->id, 'accepted_at' => now()],
-        );
+        // insertOrIgnore — ضغطتين في نفس اللحظة مايرموش 500 على الـunique
+        CoaCheckAccept::insertOrIgnore([
+            'check' => $check, 'draft_account_id' => $draftId, 'accepted_by' => $by->id, 'accepted_at' => now(),
+        ]);
     }
 
     /** قبول كل صفوف فحص أصفر معيّن اللي لسه ماتقبلتش — بيرجّع العدد */
@@ -174,12 +180,16 @@ class CoaChecks
             ->filter(fn ($i) => $i['check'] === $check && ! $i['accepted'])
             ->map(fn ($i) => ['check' => $check, 'draft_account_id' => $i['draft_id'], 'accepted_by' => $by->id, 'accepted_at' => $now])
             ->values()->all();
+        $n = 0;
         if ($rows !== []) {
-            DB::transaction(fn () => collect($rows)->chunk(200)
-                ->each(fn ($c) => CoaCheckAccept::insert($c->all())));
+            DB::transaction(function () use ($rows, &$n) {
+                foreach (array_chunk($rows, 200) as $c) {
+                    $n += CoaCheckAccept::insertOrIgnore($c);
+                }
+            });
         }
 
-        return count($rows);
+        return $n;
     }
 
     /**
