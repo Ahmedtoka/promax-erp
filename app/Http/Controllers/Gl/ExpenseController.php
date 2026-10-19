@@ -74,6 +74,9 @@ class ExpenseController extends Controller
             'pending' => Expense::where('status', 'pending')->count(),
             'pendingAmount' => (float) Expense::where('status', 'pending')->sum('amount'),
             'awaitingPay' => Expense::where('status', 'approved')->count(),
+            // لينك الكارت بيغطي كل المعلّق: من أقدم تاريخ لأحدث تاريخ
+            'pendingFrom' => self::ymd(Expense::where('status', 'pending')->min('date')),
+            'pendingTo' => self::ymd(Expense::where('status', 'pending')->max('date')),
             'statuses' => Expense::STATUSES,
             'accounts' => GlAccount::whereIn('type', ['expense', 'asset'])->where('is_postable', true)->where('active', true)->orderBy('code')->get(),
             'categories' => ExpenseCategory::with('account')->where('active', true)->orderBy('type')->orderBy('code')->get(),
@@ -84,6 +87,11 @@ class ExpenseController extends Controller
             'employees' => User::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'code']),
             'suppliers' => Supplier::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
         ]);
+    }
+
+    private static function ymd(mixed $d): ?string
+    {
+        return $d ? Carbon::parse($d)->toDateString() : null;
     }
 
     public function store(Request $request)

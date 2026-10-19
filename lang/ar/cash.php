@@ -157,6 +157,7 @@ return [
     'exp_reject_title' => "رفض المصروف",
     'exp_reject_note' => "سبب الرفض",
     'exp_decision_note' => "ملاحظة القرار",
+    'exp_no_approve_right' => "مالكش صلاحية اعتماد أو رفض المصروفات",
     'exp_not_pending' => "المصروف ده مش مستني اعتماد",
     'exp_cannot_reject' => "المصروف ده ماينفعش يترفض — اتدفع أو اتقفل",
     'exp_not_approved' => "المصروف المعتمد بس هو اللي يتدفع",

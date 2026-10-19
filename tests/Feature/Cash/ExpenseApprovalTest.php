@@ -335,28 +335,81 @@ class ExpenseApprovalTest extends TestCase
         $first = Expense::firstOrFail();
         $this->assertSame(CostCenter::company()->id, $first->cost_center_id);
 
-        // خزنة `MAADI-MAIN` بحساب ومركز: `paid_from=cash_main` القديم بيروحلها
+        // خزنة `MAADI-MAIN` بحسابها الخاص (`11.MAADI-MAIN`) ومركز: السند من غير
+        // `safe_id` بيفضل على مفتاح القاعدة `cash_main` زي قبل Lane 4 بالظبط —
+        // الخزنة القديمة بتدّي المركز بس (قرار المراجعة، زي `Rules::cash()`)
         $maadi = $this->center('MAADI-X');
         $legacy = Safe::create(['code' => 'MAADI-MAIN', 'name' => 'الرئيسية', 'kind' => 'cash', 'cost_center_id' => $maadi->id]);
         $legacy->ensureGlAccount();
         $legacy = $legacy->fresh();
-        $this->assertNotSame(GlAccount::findKey('cash_main')->id, $legacy->gl_account_id);
+        $cashMain = GlAccount::findKey('cash_main');
+        $this->assertNotSame($cashMain->id, $legacy->gl_account_id);
 
         $this->store($admin, ['account_id' => GlAccount::findKey('expense_rent')->id, 'paid_from' => 'cash_main', 'amount' => 60])->assertSessionHasNoErrors();
         $x = Expense::where('amount', 60)->firstOrFail();
         $this->assertNull($x->safe_id);
         $this->assertSame($maadi->id, $x->cost_center_id);
-        $this->assertSame(-60.0, $legacy->balance());
         $cr = $this->entryFor($x)->lines->firstWhere('credit', '>', 0);
-        $this->assertSame($legacy->gl_account_id, $cr->account_id);
+        $this->assertSame($cashMain->id, $cr->account_id);
         $this->assertSame($maadi->id, (int) $cr->cost_center_id);
+        $this->assertSame(0.0, $legacy->balance());
 
-        // سند قديم موجود من غير خزنة ولا مركز، بالربط الافتراضي على `cash_main`،
-        // بيترحّل على نفس حساب `cash_main` زي قبل Lane 4
-        $legacy->update(['gl_account_id' => GlAccount::findKey('cash_main')->id]);
+        // نفس الخزنة مسمّاة صراحةً (`safe_id`) = حسابها الخاص
+        $this->store($admin, ['account_id' => GlAccount::findKey('expense_rent')->id, 'safe_id' => $legacy->id, 'amount' => 70])->assertSessionHasNoErrors();
+        $y = Expense::where('amount', 70)->firstOrFail();
+        $this->assertSame($legacy->id, $y->safe_id);
+        $this->assertSame($legacy->gl_account_id, $this->entryFor($y)->lines->firstWhere('credit', '>', 0)->account_id);
+        $this->assertSame(-70.0, $legacy->balance());
+
+        // سند قديم موجود من غير خزنة ولا مركز: `cash_main`، والسطرين عليهم مركز
+        // (الخزنة القديمة على الدائن والمدين)
         $old = Expense::create(['number' => Expense::nextNumber(), 'date' => today(), 'account_id' => GlAccount::findKey('expense_rent')->id,
             'amount' => 11, 'paid_from' => 'cash_main', 'payee_type' => 'other', 'payee_name' => 'x', 'status' => 'posted', 'created_by' => $admin->id]);
-        $this->assertSame(GlAccount::findKey('cash_main')->id, $this->entryFor($old)->lines->firstWhere('credit', '>', 0)->account_id);
+        $lines = $this->entryFor($old)->lines;
+        $this->assertSame($cashMain->id, $lines->firstWhere('credit', '>', 0)->account_id);
+        $this->assertSame($maadi->id, (int) $lines->firstWhere('debit', '>', 0)->cost_center_id);
+        $this->assertSame($maadi->id, (int) $lines->firstWhere('credit', '>', 0)->cost_center_id);
+
+        // سند قديم من نقدية مندوب من غير مركز = مركز الشركة على السطرين
+        $rep = $this->makeRep();
+        $repOld = Expense::create(['number' => Expense::nextNumber(), 'date' => today(), 'account_id' => GlAccount::findKey('expense_fuel')->id,
+            'amount' => 12, 'paid_from' => 'rep_cash', 'paid_from_user_id' => $rep->id, 'payee_type' => 'other', 'payee_name' => 'x', 'status' => 'posted', 'created_by' => $admin->id]);
+        $lines = $this->entryFor($repOld)->lines;
+        $this->assertSame(GlAccount::repCash($rep)->id, $lines->firstWhere('credit', '>', 0)->account_id);
+        foreach ($lines as $l) {
+            $this->assertSame(CostCenter::company()->id, (int) $l->cost_center_id);
+        }
+    }
+
+    public function test_the_flow_refuses_approve_and_reject_without_the_right(): void
+    {
+        $acc = $this->accountant();
+        $x = Expense::create(['number' => Expense::nextNumber(), 'date' => today(), 'account_id' => GlAccount::findKey('expense_rent')->id,
+            'amount' => 5, 'paid_from' => 'cash_main', 'payee_type' => 'other', 'payee_name' => 'x', 'status' => 'pending', 'created_by' => $acc->id]);
+        $flow = app(\App\Services\Cash\ExpenseFlow::class);
+
+        foreach (['approve', 'reject'] as $m) {
+            try {
+                $flow->{$m}($x, $acc, 'x');
+                $this->fail($m.' passed without the approval right');
+            } catch (\App\Exceptions\Rejected $e) {
+                $this->assertSame(__('cash.exp_no_approve_right'), $e->getMessage());
+            }
+        }
+        $this->assertSame('pending', $x->fresh()->status);
+
+        $flow->approve($x, $this->makeAdmin());
+        $this->assertSame('approved', $x->fresh()->status);
+    }
+
+    public function test_pending_kpi_links_every_pending_request(): void
+    {
+        $admin = $this->makeAdmin();
+        Expense::create(['number' => Expense::nextNumber(), 'date' => '2026-03-05', 'account_id' => GlAccount::findKey('expense_rent')->id,
+            'amount' => 5, 'paid_from' => 'cash_main', 'payee_type' => 'other', 'payee_name' => 'x', 'status' => 'pending', 'created_by' => $admin->id]);
+
+        $this->actingAs($admin)->get(route('gl.expenses'))->assertOk()
+            ->assertSee(e(route('gl.expenses', ['status' => 'pending', 'from' => '2026-03-05', 'to' => '2026-03-05'])), false);
     }
 
     public function test_categories_screen_crud_is_admin_only(): void

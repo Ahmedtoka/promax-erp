@@ -48,8 +48,8 @@
         <div class="val">{{ number_format($count) }}</div>
         <div class="sub2">{{ __('gl.expenses_sub') }}</div>
     </a>
-    {{-- L4-D7: طلبات الاعتماد على كل التواريخ — الضغط بيفلتر المعلّق --}}
-    <a class="kpi" href="{{ request()->fullUrlWithQuery(['status' => 'pending', 'page' => null]) }}#gl-table" title="{{ __('ui.click_to_filter') }}">
+    {{-- L4-D7: طلبات الاعتماد على كل التواريخ — الضغط بيفلتر المعلّق وبيوسّع الفترة من أقدم معلّق لأحدث واحد (الفترة الفاضية هنا = الشهر الحالي، فمش كفاية نفضّيها) --}}
+    <a class="kpi" href="{{ route('gl.expenses', ['status' => 'pending', 'from' => $pendingFrom, 'to' => $pendingTo]) }}#gl-table" title="{{ __('ui.click_to_filter') }}">
         <div class="lbl">{{ __('cash.exp_pending_kpi') }}</div>
         <div class="val {{ $pending > 0 ? 'neg' : '' }}">{{ number_format($pending) }}</div>
         <div class="sub2">{{ __('cash.exp_pending_sub', ['amount' => $fmt($pendingAmount), 'n' => number_format($awaitingPay)]) }}</div>

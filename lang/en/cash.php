@@ -157,6 +157,7 @@ return [
     'exp_reject_title' => "Reject expense",
     'exp_reject_note' => "Reason for rejecting",
     'exp_decision_note' => "Decision note",
+    'exp_no_approve_right' => "You are not allowed to approve or reject expenses",
     'exp_not_pending' => "This expense is not waiting for approval",
     'exp_cannot_reject' => "This expense cannot be rejected — it was already paid or closed",
     'exp_not_approved' => "Only an approved expense can be paid",

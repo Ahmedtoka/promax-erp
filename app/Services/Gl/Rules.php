@@ -261,20 +261,25 @@ class Rules
         if ($x->paid_from === 'rep_cash' && $rep === null) {
             $needsReview = true;
         }
-        // الدائن: L4-D4/L4-D9 — الخزنة المسمّاة (أو خزنة `paid_from` القديمة)
-        // بحسابها في الشجرة؛ من غير حساب صالح بيرجع لمفتاح القاعدة زي الأول.
-        // `rep_cash` مش خزنة — بيتحل لمندوب السند من القاعدة.
-        $safe = $x->paid_from === 'rep_cash' ? null : $x->resolvedSafe();
+        // الدائن (L4-D4): **الخزنة المسمّاة صراحةً** (`safe_id`) بحسابها في
+        // الشجرة؛ من غير `safe_id` مفتاح القاعدة زي قبل Lane 4 بالظبط (نفس
+        // `cash()`: مفيش خزنة مسمّاة = مفاتيح القاعدة). `rep_cash` مش خزنة.
+        // ⚠️ `resolvedSafe()` هنا للمركز بس — مش للحساب، وإلا السندات القديمة
+        // كانت هتتنقل لحساب `MAADI-MAIN` الخاص لو اتربط بغير `cash_main`.
+        $named = $x->paid_from !== 'rep_cash' && $x->safe_id ? $x->safe : null;
+        $safe = $x->paid_from === 'rep_cash' ? null : ($named ?? $x->resolvedSafe());
         $creditId = null;
-        if ($safe !== null) {
-            $acc = $safe->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+        if ($named !== null) {
+            $acc = $named->gl_account_id ? GlAccount::find($named->gl_account_id) : null;
             if ($acc !== null && $acc->is_postable && $acc->active) {
                 $creditId = $acc->id;
-            } elseif ($x->safe_id) {
+            } else {
                 // خزنة اختارها المستخدم ومالهاش حساب صالح = المراجعة لازم تعرف
                 $needsReview = true;
             }
         }
+        // مركز التكلفة (L4-D9): السند ← الخزنة ← الشركة — مفيش سطر من غير مركز
+        $center = $x->cost_center_id ?? $safe?->cost_center_id ?? \App\Models\CostCenter::company()->id;
         $creditId ??= $this->keyAccount($rule->credit_key, $rep, $needsReview);
         // حساب المصروف نفسه جاي من السند (مش من القاعدة) — بيعدّي على نفس
         // الحارس: حساب موقوف أو مجموعة بيروح المعلّق
@@ -285,8 +290,8 @@ class Rules
             'rule' => 'expense.'.$x->paid_from, 'needs_review' => $needsReview,
             'memo' => $x->number.' — '.($x->note ?: $x->account?->displayName()),
             'lines' => [
-                ['slot' => 'dr', 'account_id' => $debitId, 'cost_center_id' => $x->cost_center_id, 'debit' => $amount, 'credit' => 0.0],
-                ['slot' => 'cr', 'account_id' => $creditId, 'cost_center_id' => $safe?->cost_center_id ?? $x->cost_center_id, 'debit' => 0.0, 'credit' => $amount],
+                ['slot' => 'dr', 'account_id' => $debitId, 'cost_center_id' => $center, 'debit' => $amount, 'credit' => 0.0],
+                ['slot' => 'cr', 'account_id' => $creditId, 'cost_center_id' => $safe?->cost_center_id ?? $center, 'debit' => 0.0, 'credit' => $amount],
             ],
         ];
     }

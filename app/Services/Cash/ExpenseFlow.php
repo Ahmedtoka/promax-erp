@@ -57,6 +57,10 @@ class ExpenseFlow
     public function approve(Expense $x, User $by, ?string $note = null): void
     {
         DB::transaction(function () use ($x, $by, $note) {
+            // الراوت عليه `role:admin` بس الخدمة نفسها بتتنده من أماكن تانية
+            if (! $this->canApprove($by)) {
+                throw new Rejected(__('cash.exp_no_approve_right'));
+            }
             $row = $this->lock($x);
             if ($row->status !== 'pending') {
                 throw new Rejected(__('cash.exp_not_pending'));
@@ -72,6 +76,10 @@ class ExpenseFlow
     public function reject(Expense $x, User $by, ?string $note = null): void
     {
         DB::transaction(function () use ($x, $by, $note) {
+            // الراوت عليه `role:admin` بس الخدمة نفسها بتتنده من أماكن تانية
+            if (! $this->canApprove($by)) {
+                throw new Rejected(__('cash.exp_no_approve_right'));
+            }
             $row = $this->lock($x);
             if (! in_array($row->status, ['pending', 'approved'], true)) {
                 throw new Rejected(__('cash.exp_cannot_reject'));
