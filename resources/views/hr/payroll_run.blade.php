@@ -169,7 +169,7 @@ function editLine(btn) {
             <input type="date" name="date" value="{{ old('date', now()->toDateString()) }}" required></label>
         @if ($cashTotal > 0 || $slips->where('pay_method', '!=', 'bank')->isNotEmpty())
             <label class="fl wide"><span>{{ __('hrm.payroll_cash_safe') }} — {{ $fmt($cashTotal) }}</span>
-                <select name="cash_safe_id" required>
+                <select name="cash_safe_id">
                     <option value="">—</option>
                     @foreach ($cashSafes as $c)
                         <option value="{{ $c->id }}">{{ $c->code }} · {{ $c->displayName() }}</option>
@@ -178,7 +178,7 @@ function editLine(btn) {
         @endif
         @if ($slips->where('pay_method', 'bank')->isNotEmpty())
             <label class="fl wide"><span>{{ __('hrm.payroll_bank_safe') }} — {{ $fmt($bankTotal) }}</span>
-                <select name="bank_safe_id" required>
+                <select name="bank_safe_id">
                     <option value="">—</option>
                     @foreach ($bankSafes as $b)
                         <option value="{{ $b->id }}">{{ $b->code }} · {{ $b->displayName() }}</option>
