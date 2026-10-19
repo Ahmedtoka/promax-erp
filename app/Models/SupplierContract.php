@@ -6,6 +6,7 @@ use App\Models\Concerns\HasDocumentNumber;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
 /**
@@ -84,9 +85,9 @@ class SupplierContract extends Model
     }
 
     /** سطر السعر الساري للمورد/الصنف في تاريخ معيّن (الأحدث بداية يكسب) */
-    public static function liveItemFor(int $supplierId, int $productId, Carbon|string $on): ?SupplierContractItem
+    public static function liveItemFor(int $supplierId, int $productId, CarbonInterface|string $on): ?SupplierContractItem
     {
-        $day = ($on instanceof Carbon ? $on : Carbon::parse($on))->toDateString();
+        $day = ($on instanceof CarbonInterface ? $on : Carbon::parse($on))->toDateString();
 
         return SupplierContractItem::query()
             ->join('supplier_contracts', 'supplier_contracts.id', '=', 'supplier_contract_items.supplier_contract_id')

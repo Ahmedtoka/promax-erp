@@ -45,7 +45,7 @@ class SupplierContractTest extends TestCase
         Storage::disk('public')->assertExists($c->attachment_path);
 
         $this->actingAs($manager)->post(route('erp.supplier_contracts.items', $c), [
-            'price' => [$p1->id => '12.50', $p2->id => '3', 999999 => '', ],
+            'price' => [$p1->id => '12.50', $p2->id => '3', 999999 => '5', $this->makeProduct(['active' => false])->id => '9'],
         ])->assertRedirect();
         $this->assertSame(2, $c->items()->count());
 
@@ -88,6 +88,19 @@ class SupplierContractTest extends TestCase
         $this->assertSame('expired', $c->statusKey(\Illuminate\Support\Carbon::parse('2026-08-01')));
         $this->assertSame('future', $c->statusKey(\Illuminate\Support\Carbon::parse('2026-01-01')));
         $this->assertSame('live', $c->statusKey(\Illuminate\Support\Carbon::parse('2026-05-01')));
+    }
+
+    public function test_update_can_deactivate_and_reactivate(): void
+    {
+        $manager = $this->makeAdmin(['role' => 'manager']);
+        $c = $this->contract($this->supplier(), '2026-01-01', '2036-12-31');
+        $base = ['starts_on' => '2026-01-01', 'ends_on' => '2036-12-31'];
+
+        $this->actingAs($manager)->put(route('erp.supplier_contracts.update', $c), $base + ['active' => '0'])->assertRedirect();
+        $this->assertSame('inactive', $c->fresh()->statusKey());
+
+        $this->actingAs($manager)->put(route('erp.supplier_contracts.update', $c), $base + ['active' => '1'])->assertRedirect();
+        $this->assertSame('live', $c->fresh()->statusKey());
     }
 
     public function test_ends_before_starts_is_rejected(): void

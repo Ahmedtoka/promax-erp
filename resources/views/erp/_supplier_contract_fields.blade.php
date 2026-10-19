@@ -17,6 +17,7 @@
 <label class="f">{{ __('common.notes') }}</label>
 <textarea name="notes" rows="2" style="width:100%">{{ old('notes', $c?->notes) }}</textarea>
 @if ($c)
+    <input type="hidden" name="active" value="0">
     <label class="f" style="display:flex;gap:6px;align-items:center;margin-top:8px">
         <input type="checkbox" name="active" value="1" @checked(old('active', $c->active))>
         {{ __('common.active') }}

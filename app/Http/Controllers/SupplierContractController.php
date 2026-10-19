@@ -117,7 +117,7 @@ class SupplierContractController extends Controller
             'starts_on' => $data['starts_on'],
             'ends_on' => $data['ends_on'],
             'notes' => $data['notes'] ?? null,
-            'active' => $request->boolean('active', true),
+            'active' => $request->boolean('active'),
         ];
         if ($file = $request->file('attachment')) {
             $fill['attachment_path'] = $file->store('supplier-contracts', 'public');
@@ -137,7 +137,7 @@ class SupplierContractController extends Controller
 
         $prices = collect($request->input('price', []))
             ->filter(fn ($v) => $v !== null && $v !== '')
-            ->only(Product::whereIn('id', array_keys($request->input('price', [])))->pluck('id')->all());
+            ->only(Product::where('active', true)->whereIn('id', array_keys($request->input('price', [])))->pluck('id')->all());
 
         DB::transaction(function () use ($supplierContract, $prices) {
             $supplierContract->items()->whereNotIn('product_id', $prices->keys()->all())->delete();

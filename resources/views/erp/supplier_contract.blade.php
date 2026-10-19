@@ -82,4 +82,8 @@
 </dialog>
 @endif
 
+@if ($errors->any())
+<script>document.addEventListener("DOMContentLoaded", function(){ var d = document.getElementById("dlgEditContract"); if (d) d.showModal(); });</script>
+@endif
+
 @endsection
