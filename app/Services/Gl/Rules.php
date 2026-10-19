@@ -9,6 +9,7 @@ use App\Models\Gl\GlPostingRule;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
 use App\Models\RepSettlement;
+use App\Models\Safe;
 use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
@@ -293,10 +294,32 @@ class Rules
         $res = function (?string $k) use ($m, &$needsReview): int {
             return $this->keyAccount($k, $k === 'rep_cash' ? $m->user : null, $needsReview);
         };
+        // L4-D4: الخزنة المسمّاة على طرف بحسابها بتحل محل مفتاح القاعدة
+        // (المدين = الوجهة، الدائن = المصدر). ⚠️ هنا قراءة بس — مافيش
+        // `ensureGlAccount()`؛ خزنة حسابها مش صالح بترجع للمفتاح بعلامة مراجعة
+        $side = function (?Safe $safe, ?string $k) use ($res, &$needsReview): int {
+            if ($safe !== null && $k !== 'rep_cash') {
+                $acc = $safe->gl_account_id ? GlAccount::find($safe->gl_account_id) : null;
+                if ($acc !== null && $acc->is_postable && $acc->active) {
+                    return $acc->id;
+                }
+                $needsReview = true;
+            }
+
+            return $res($k);
+        };
+        $from = $m->from_safe_id ? $m->fromSafe : null;
+        $to = $m->to_safe_id ? $m->toSafe : null;
         $amount = round((float) $m->amount, 2);
+        $drId = $side($to, $rule->debit_key);
+        $crId = $side($from, $rule->credit_key);
+        // نفس الحساب على الطرفين (مثلاً خزنتين على حساب واحد) = قيد بيلغي نفسه
+        if ($drId === $crId) {
+            $needsReview = true;
+        }
         $lines = [
-            ['slot' => 'dr', 'account_id' => $res($rule->debit_key), 'debit' => $amount, 'credit' => 0.0],
-            ['slot' => 'cr', 'account_id' => $res($rule->credit_key), 'debit' => 0.0, 'credit' => $amount],
+            ['slot' => 'dr', 'account_id' => $drId, 'cost_center_id' => $to?->cost_center_id ?? $m->cost_center_id, 'debit' => $amount, 'credit' => 0.0],
+            ['slot' => 'cr', 'account_id' => $crId, 'cost_center_id' => $from?->cost_center_id ?? $m->cost_center_id, 'debit' => 0.0, 'credit' => $amount],
         ];
 
         return [

@@ -40,4 +40,11 @@ return [
     'all_kinds' => 'All kinds',
     'ledger_off' => "Balances here come from the general ledger, which is off — the numbers will not move until it is enabled in the ledger settings.",
     'edit' => 'Edit',
+    'from_safe' => 'From',
+    'to_safe' => 'To',
+    'safe_optional' => 'Optional — empty = the main safe / bank account',
+    'safe_kind_mismatch' => 'This document needs a :kind here',
+    'same_safe' => 'Pick two different accounts',
+    'choose_safe' => 'Choose a safe or bank',
+    'center_auto' => 'Automatic — the safe cost center',
 ];

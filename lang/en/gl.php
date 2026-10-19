@@ -48,6 +48,8 @@ return [
     'kind_withdraw' => 'Withdrawal: bank → safe',
     'kind_rep_advance' => 'Cash advance: safe → rep',
     'kind_rep_return' => 'Cash return: rep → safe',
+    'kind_safe_transfer' => 'Safe transfer: safe → safe',
+    'kind_bank_transfer' => 'Bank transfer: bank → bank',
 
     'status' => 'Status',
     'status_posted' => 'Posted',
