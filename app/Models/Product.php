@@ -19,6 +19,14 @@ class Product extends Model
         'energy_bar' => 'إنرچي بار',
     ];
 
+    /**
+     * نوع الصنف (١٩/١٠): التام بس هو اللي بيتباع. الخامة والتعبئة
+     * بتتستلم وتتخزن وتتصرف للتصنيع، ومابتظهرش في أي شاشة بيع.
+     */
+    public const KINDS = ['finished', 'raw', 'packaging'];
+
+    public const KIND_FINISHED = 'finished';
+
     /** مدة الصلاحية الافتراضية بالشهور لو المنتج مش متحدد له */
     public const DEFAULT_SHELF_LIFE = 12;
 
@@ -45,7 +53,7 @@ class Product extends Model
         'net_content', 'net_uom', 'family', 'brand',
         'image_url', 'image_path', 'gpc_category',
         'description', 'description_en', 'shelf_life_months',
-        'active', 'taxable', 'tax_rate', 'eta_code',
+        'active', 'taxable', 'tax_rate', 'eta_code', 'kind',
     ];
 
     protected function casts(): array
@@ -80,15 +88,57 @@ class Product extends Model
      * المطبوعة تطلع بسطر فاضي وإجماليها مش مطابق لسطورها. المنع على
      * **الاختيار والبيع**، مش على قراءة التاريخ.
      */
+    /**
+     * ⚠️ **ونوع الصنف كمان (١٩/١٠):** الخامة والتعبئة مابتتباعش.
+     * السكوب هو المكان الواحد — كل اللي بيناديه (`sellable()`،
+     * `isSellable()`، قاعدة `SellableProduct`) ورث الفلتر من غير ما
+     * يتلمس. `active` فضل جوه: شيله كان هيرجّع الدرافت للبيع.
+     */
     public function scopeSellable($query)
     {
-        return $query->where('active', true);
+        return $query->where($query->qualifyColumn('active'), true)
+            ->where($query->qualifyColumn('kind'), self::KIND_FINISHED);
     }
 
     /** ينفع يتباع/يتختار دلوقتي؟ — نفس شرط `scopeSellable` */
     public function isSellable(): bool
     {
-        return (bool) $this->active;
+        return (bool) $this->active && ($this->kind ?? self::KIND_FINISHED) === self::KIND_FINISHED;
+    }
+
+    /**
+     * ليه الصنف مينفعش يتباع — بالسبب الحقيقي: الدرافت يتقاله «فعّله»،
+     * والخامة يتقالها «مش منتج تام» (تفعيلها مابيغيّرش حاجة).
+     * `null` = ينفع يتباع.
+     */
+    public function notSellableReason(): ?string
+    {
+        if (! $this->active) {
+            return __('api.product_draft', ['product' => $this->displayName()]);
+        }
+
+        return $this->isSellable() ? null : __('api.product_not_for_sale', ['product' => $this->displayName()]);
+    }
+
+    /**
+     * أول صنف في القايمة مينفعش يتباع (درافت أو خامة/تعبئة) — حارس
+     * المسارات اللي بتاخد `qty[product_id]` من فورم (تحميل العربية،
+     * تعديل إذن الصرف، تعديل أمر التوريد). الـid اللي مش موجود
+     * مابيرجعش — ده شغل الفاليديشن التانية.
+     */
+    public static function firstNotSellable(array $ids): ?self
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        return $ids === [] ? null : static::query()->whereKey($ids)
+            ->where(fn ($q) => $q->where('active', false)->orWhere('kind', '!=', self::KIND_FINISHED))
+            ->orderBy('id')->first();
+    }
+
+    /** اسم النوع للعرض */
+    public function kindLabel(): string
+    {
+        return __('stock.product_kind_'.($this->kind ?? self::KIND_FINISHED));
     }
 
     /**

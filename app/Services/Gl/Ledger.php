@@ -89,6 +89,14 @@ class Ledger
         });
     }
 
+    private static ?bool $hasCostCenter = null;
+
+    /** نفس حارس `hasReviewReason`: الكود ممكن يترفع قبل مايجريشن `gl_lines.cost_center_id` */
+    private static function hasCostCenter(): bool
+    {
+        return self::$hasCostCenter ??= \Illuminate\Support\Facades\Schema::hasColumn('gl_lines', 'cost_center_id');
+    }
+
     private static ?bool $hasReviewReason = null;
 
     /**
@@ -206,7 +214,7 @@ class Ledger
             ->where('source_id', $source->getKey())->where('origin', 'auto')->first();
     }
 
-    /** @param list<array{slot?:string,account_id:int,debit:float,credit:float,memo?:string,rule_account_id?:int,overridden?:bool}> $lines */
+    /** @param list<array{slot?:string,account_id:int,cost_center_id?:int|null,debit:float,credit:float,memo?:string,rule_account_id?:int,overridden?:bool}> $lines */
     protected function writeLines(GlEntry $entry, array $lines): void
     {
         $dr = round(array_sum(array_column($lines, 'debit')), 2);
@@ -221,6 +229,10 @@ class Ledger
             GlLine::create([
                 'entry_id' => $entry->id,
                 'account_id' => $l['account_id'],
+            ] + (self::hasCostCenter() ? [
+                // مركز التكلفة بُعد على السطر (١٩/١٠) — القواعد بتحطه، فاضي = مالوش
+                'cost_center_id' => isset($l['cost_center_id']) ? (int) $l['cost_center_id'] : null,
+            ] : []) + [
                 'debit' => round($l['debit'], 2),
                 'credit' => round($l['credit'], 2),
                 'memo' => $l['memo'] ?? null,
@@ -296,6 +308,7 @@ class Ledger
             ]);
             $this->writeLines($entry, array_map(fn ($l) => [
                 'account_id' => (int) $l['account_id'],
+                'cost_center_id' => isset($l['cost_center_id']) ? (int) $l['cost_center_id'] : null,
                 'debit' => (float) ($l['debit'] ?? 0),
                 'credit' => (float) ($l['credit'] ?? 0),
                 'memo' => $l['memo'] ?? null,
@@ -326,7 +339,8 @@ class Ledger
         $date ??= today();
         $this->assertOpen($date);
         $lines = $entry->lines->map(fn (GlLine $l) => [
-            'account_id' => $l->account_id, 'debit' => (float) $l->credit, 'credit' => (float) $l->debit,
+            'account_id' => $l->account_id, 'cost_center_id' => $l->cost_center_id,
+            'debit' => (float) $l->credit, 'credit' => (float) $l->debit,
         ])->all();
 
         return $this->writeEntry($date, $memo ?? __('gl.reversal_of', ['number' => $entry->number]), $lines, $by, 'reversal', $entry->id, false);
@@ -378,6 +392,7 @@ class Ledger
 
             $lines = $entry->lines->map(fn (GlLine $l) => [
                 'account_id' => $l->id === $line->id ? $to->id : $l->account_id,
+                'cost_center_id' => $l->cost_center_id,
                 'debit' => (float) $l->debit,
                 'credit' => (float) $l->credit,
                 'rule_account_id' => $l->id === $line->id ? $l->account_id : null,

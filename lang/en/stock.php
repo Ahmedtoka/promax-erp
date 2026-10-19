@@ -502,6 +502,11 @@ return [
     // ═══ كارت الصنف ═══
     'product_card' => 'Item card',
     'identity' => 'Identity',
+    'product_kind' => 'Item kind',
+    'product_kind_finished' => 'Finished good',
+    'product_kind_raw' => 'Raw material',
+    'product_kind_packaging' => 'Packaging',
+    'product_kind_hint' => 'Raw materials and packaging never appear on a sales screen.',
     'specs' => 'Specifications',
     'image' => 'Item photo',
     'image_hint' => 'JPG, PNG or WEBP — 4 MB max. The photo shows in the catalogue and in the field app.',

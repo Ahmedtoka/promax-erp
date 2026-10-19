@@ -147,7 +147,7 @@ class WarehouseController extends Controller
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.product_id' => ['required', new \App\Rules\SellableProduct],
+            'lines.*.product_id' => ['required', new \App\Rules\SellableProduct(anyKind: true)],
             'lines.*.batch_no' => ['required', 'string', 'max:60'],
             'lines.*.produced_on' => ['nullable', 'date'],
             'lines.*.expires_on' => ['nullable', 'date'],
@@ -1101,7 +1101,7 @@ class WarehouseController extends Controller
             'reason' => ['required', 'string', 'min:3', 'max:300'],
             'notes' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.product_id' => ['required', new \App\Rules\SellableProduct],
+            'lines.*.product_id' => ['required', new \App\Rules\SellableProduct(anyKind: true)],
             // ⚠️ **باتش موجود مش نص حر.** الرقم اللي بيتكتب بالإيد
             // مايضمنش إن البضاعة موجودة، وكان بيخلّي التحويل يخلق
             // بضاعة من العدم.

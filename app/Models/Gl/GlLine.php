@@ -10,7 +10,7 @@ class GlLine extends Model
 {
     protected $table = 'gl_lines';
 
-    protected $fillable = ['entry_id', 'account_id', 'debit', 'credit', 'memo', 'overridden', 'rule_account_id', 'slot'];
+    protected $fillable = ['entry_id', 'account_id', 'cost_center_id', 'debit', 'credit', 'memo', 'overridden', 'rule_account_id', 'slot'];
 
     protected function casts(): array
     {
@@ -30,5 +30,10 @@ class GlLine extends Model
     public function overrides(): HasMany
     {
         return $this->hasMany(GlLineOverride::class, 'line_id');
+    }
+
+    public function costCenter(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\CostCenter::class);
     }
 }

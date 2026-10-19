@@ -1235,7 +1235,7 @@ class FieldApiController extends Controller
             return $err;
         }
 
-        $items = Product::where('active', true)->orderBy('name')->get()
+        $items = Product::sellable()->orderBy('name')->get()
             ->map(function (Product $p) use ($client) {
                 $q = \App\Services\Pricing::quote($client, $p, null, 1);
 
@@ -2434,7 +2434,7 @@ class FieldApiController extends Controller
 
         $prev = \App\Services\Returns::returnableByProduct($client);
 
-        $rows = Product::where('active', true)->orderBy('name')->get()
+        $rows = Product::sellable()->orderBy('name')->get()
             ->map(function (Product $p) use ($client, $prev) {
                 $q = \App\Services\Pricing::quote($client, $p, null, 1);
 

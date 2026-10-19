@@ -57,7 +57,7 @@ class CustodyHandoutController extends Controller
             // اللي هيتفحص وقت التسليم — وإلا الشاشة بتقول «متاح 40»
             // والتسليم بيرفض.
             'products' => $warehouse
-                ? Product::where('active', true)->orderBy('family')->orderBy('code')->get()
+                ? Product::sellable()->orderBy('family')->orderBy('code')->get()
                     ->map(function (Product $p) use ($warehouse) {
                         $p->available = $warehouse->availableFor($p->id);
 
@@ -120,6 +120,14 @@ class CustodyHandoutController extends Controller
         // ⚠️ **كل خانة بوحدتها هي** — `unit` للبيع و`gift_unit`
         // للهدية. اللوب واحد على الاتنين عشان منطق الرفض يفضل
         // مكتوب مرة واحدة.
+        // ⚠️ الخامة/التعبئة/الدرافت مايتحمّلوش على عربية (١٩/١٠) — الشاشة
+        // مابتعرضهمش، والحارس ده للفورم القديم أو المعدّل.
+        $positive = fn (array $rows) => array_keys(array_filter($rows, fn ($q) => (int) $q > 0));
+        $wanted = array_merge($positive($data['qty'] ?? []), $positive($data['gift'] ?? []));
+        if ($bad = Product::firstNotSellable($wanted)) {
+            return back()->withErrors(['qty' => $bad->notSellableReason()])->withInput();
+        }
+
         foreach ([['qty', 'unit'], ['gift', 'gift_unit']] as [$qtyKey, $unitKey]) {
             foreach ($request->input($unitKey, []) as $productId => $unit) {
                 if (! $unit || $unit === 'piece' || empty($data[$qtyKey][$productId])) {

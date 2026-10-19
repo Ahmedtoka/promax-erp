@@ -28,7 +28,7 @@ class PriceListController extends Controller
 
         // ⚠️ الناقص بيتحسب لكل قايمة عشان الشاشة تقول «فاضل 6 أصناف»
         // بدل ما المستخدم يدوس تفعيل وياخد رفض من غير ما يعرف فين.
-        $totalProducts = Product::where('active', true)->count();
+        $totalProducts = Product::sellable()->count();
 
         foreach ($lists as $l) {
             $l->missing_count = $l->missingCount();
@@ -44,7 +44,7 @@ class PriceListController extends Controller
     /** شاشة تسعير قايمة واحدة */
     public function show(Request $request, PriceList $priceList)
     {
-        $q = Product::where('active', true)
+        $q = Product::sellable()
             ->with(['prices' => fn ($r) => $r->where('price_list_id', $priceList->id)]);
 
         if ($s = $request->string('q')->trim()->value()) {
@@ -70,7 +70,7 @@ class PriceListController extends Controller
             'families' => \App\Models\ProductFamily::options(),
             'filters' => $request->only(['q', 'family', 'missing']),
             'missing' => $priceList->missingCount(),
-            'total' => Product::where('active', true)->count(),
+            'total' => Product::sellable()->count(),
             // ⚠️ القايمة الافتراضية بتتعرض جنب كل صنف كمرجع — اللي
             // بيسعّر محتاج يشوف السعر الحالي عشان يقرر الجديد.
             'reference' => PriceList::default(),
@@ -147,7 +147,9 @@ class PriceListController extends Controller
         // `product_id` جاي من الفورم؛ تاب مفتوحة من قبل ما الكتالوج
         // يتغيّر بتبعت أكواد اتمسحت، والـFK بيرمي 500 والترانزاكشن
         // كلها ترجع.
-        $known = Product::whereIn('id', array_keys($data['prices']))->pluck('id')->all();
+        $known = Product::whereIn('id', array_keys($data['prices']))
+            ->where('kind', Product::KIND_FINISHED)   // ١٩/١٠: الخامة مالهاش سعر بيع
+            ->pluck('id')->all();
         $rows = array_intersect_key($data['prices'], array_flip($known));
 
         if ($rows === []) {
@@ -212,7 +214,7 @@ class PriceListController extends Controller
             'round' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $ids = Product::whereIn('id', $data['ids'])->where('active', true)->pluck('id');
+        $ids = Product::sellable()->whereIn('id', $data['ids'])->pluck('id');
 
         if ($ids->isEmpty()) {
             return back()->withErrors(['ids' => __('price.rows_stale')]);

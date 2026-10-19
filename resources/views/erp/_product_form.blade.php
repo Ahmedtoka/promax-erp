@@ -119,6 +119,20 @@
             @endif
         </div>
 
+        {{-- نوع الصنف (١٩/١٠): الخامة ومادة التعبئة مابيظهروش في البيع --}}
+        <div class="frow">
+            <div>
+                <label class="f">{{ __('stock.product_kind') }}</label>
+                <select name="kind" style="width:100%">
+                    @foreach (\App\Models\Product::KINDS as $kindKey)
+                        <option value="{{ $kindKey }}" @selected($v('kind', 'finished') === $kindKey)>{{ __('stock.product_kind_'.$kindKey) }}</option>
+                    @endforeach
+                </select>
+                <div style="font-size:11px;color:var(--muted)">{{ __('stock.product_kind_hint') }}</div>
+                @error('kind')<div class="errline">{{ $message }}</div>@enderror
+            </div>
+        </div>
+
         <div class="frow">
             <div>
                 <label class="f">{{ __('common.name_en') }}</label>

@@ -626,7 +626,7 @@ class ChannelController extends Controller
                 User::whereIn('role', User::FIELD_WORK_ROLES), $request->user())
                 ->where('active', true)->orderBy('name')->get(),
             // كتالوج منتقي الأصناف — لتعديل الطلب المستني (١٢/٨)
-            'products' => Product::where('active', true)->orderBy('code')
+            'products' => Product::sellable()->orderBy('code')
                 ->get(['id', 'code', 'name', 'name_en']),
             'filters' => $request->only('status'),
         ]);

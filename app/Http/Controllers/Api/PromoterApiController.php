@@ -146,7 +146,7 @@ class PromoterApiController extends Controller
                 ];
             })->values(),
             'open_visit' => $openVisit === null ? null : $this->visitPayload($openVisit),
-            'products' => Product::where('active', true)->orderBy('code')->get()
+            'products' => Product::sellable()->orderBy('code')->get()
                 ->map(fn ($p) => [
                     'id' => $p->id,
                     'code' => $p->code,

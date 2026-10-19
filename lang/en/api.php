@@ -43,4 +43,5 @@ return [
     // ═══ Draft product - 17 Aug 2026 ═══
     'product_missing' => 'That item does not exist.',
     'product_draft' => '":product" is a draft item and cannot be sold - remove it from the request, or activate it from the products screen first.',
+    'product_not_for_sale' => '":product" is a raw material or packaging item, not a finished good - it cannot be sold or loaded on a van.',
 ];
