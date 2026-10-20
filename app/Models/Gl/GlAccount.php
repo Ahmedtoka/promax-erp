@@ -32,6 +32,11 @@ class GlAccount extends Model
         'fixed_assets', 'accum_depreciation', 'expense_depreciation', 'cash_over_short', 'expense_factory',
     ];
 
+    /** Lane 9 — بتتزرع من CostingGlSeed بس (D1)، مش من GlSeeder، فمش جوه SYSTEM_KEYS */
+    public const COSTING_KEYS = [
+        'cogs', 'internal_cogs', 'internal_elim', 'overhead_applied', 'production_variance', 'internal_sales',
+    ];
+
     protected $table = 'gl_accounts';
 
     protected $fillable = [

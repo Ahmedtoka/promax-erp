@@ -1,0 +1,748 @@
+<?php
+
+namespace App\Services\Costing;
+
+use App\Models\ClientReturn;
+use App\Models\CostCenter;
+use App\Models\CostEntry;
+use App\Models\Gl\GlPeriod;
+use App\Models\Invoice;
+use App\Models\Product;
+use App\Models\ProductionOrder;
+use App\Models\PurchaseOrder;
+use App\Models\StockTransfer;
+use App\Models\StockTransferItem;
+use App\Models\Warehouse;
+use App\Models\Transaction;
+use App\Services\Gl\CostCenterResolver;
+use App\Services\Gl\Ledger;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * ═══ مزامنة طبقة التكلفة (الخط ٩ — D5/D6/D12) ═══
+ *
+ * قيد تكلفة واحد لكل أصل، بمفتاح `(kind, origin_type, origin_id)`
+ * وبيتحدّث في مكانه — **الـid عمره ما بيتغير** (إعادة البناء بتقارن
+ * القيود بمفتاح المصدر). السطور بتتبدّل لما الأرقام تتغير بس.
+ *
+ * الأصول في المهمة دي = صفوف `transactions`:
+ *   • `sale` مصدره فاتورة ← `invoice_items` (R الباتش = `unit_cost` المخزّن)
+ *   • `sale` مصدره أمر توريد ← البنود بـ`COALESCE(delivered_qty, qty)` و
+ *     R = `products.cost` (مفيش باتش على بند الأمر — نفس `SalesSource::lines`)
+ *   • `return` مصدره مرتجع ← كل البنود. السليم (`condition = good`) بيعكس
+ *     التكلفة بـR بند الفاتورة الأصلي (وإلا تكلفة الصنف)، والمتوسط وسعر
+ *     التحويل **بتاريخ البيعة الأصلية** لو البند مربوط بفاتورة (وإلا تاريخ
+ *     المرتجع) — عشان بيع + مرتجع كامل يصفّروا بعض. التالف ليه سطر بالكمية
+ *     والإيراد بس (مبالغ التكلفة صفر، مفيش سعر تحويل) — D6 + قرار المراجعة:
+ *     الأرباح والخسائر بتاخد إيراد المرتجعات كامل من الطبقة.
+ * أي حاجة تانية (افتتاحي، يدوي، أمانة، تحصيل) مش بتتكلّف.
+ *
+ * ⚠️ **المزامنة مش بترحّل.** `syncTransaction()` بيكتب الطبقة ويقول اتغيرت
+ * ولا لأ؛ اللي بينادي (الأوبزرفر / `Ledger::repost` / `run($post=true)`) هو
+ * اللي بيرحّل — repost لو اتغيرت، post (مابيعملش حاجة لو القيد موجود) لو لأ.
+ * جوه إعادة البناء `run($from, false)` والاستثناء بيطلع.
+ *
+ * ⚠️ **التجميد:** قيد تكلفة تاريخه في شهر دفتر مقفول مابيتعدّلش ولا بيتمسح
+ * (زي ما إعادة البناء بتجمّد الشهور المقفولة). ولما السويتش مقفول
+ * (`gl_enabled != 1`) مسح قيد تكلفة مابيشيلش قيده من الدفتر (نفس قاعدة
+ * `Ledger::repost`).
+ */
+final class CostSync
+{
+    public const TX_KINDS = ['sale', 'return'];
+
+    private static ?bool $ready = null;
+
+    /** @var list<string>|null مفاتيح شهور الدفتر المقفولة (للتشغيلة دي) */
+    private static ?array $closed = null;
+
+    /** @var array<int, string> تاريخ البيعة الأصلية لكل فاتورة */
+    private static array $saleDates = [];
+
+    /** @var array<int, true> قيود اتمسحت لأن أصلها اختفى/بقى مش قابل للتكلفة */
+    private static array $dropped = [];
+
+    /** الكود ممكن يترفع قبل المايجريشن — الإيجابي بس بيتكاش */
+    public static function ready(): bool
+    {
+        return self::$ready === true || (self::$ready = Schema::hasTable('cost_entries'));
+    }
+
+    /** الذاكرة المؤقتة كلها (متوسط، سعر تحويل، شهور مقفولة، تواريخ البيع) */
+    public static function flush(): void
+    {
+        Valuation::flush();
+        TransferPrice::flush();
+        self::$closed = null;
+        self::$saleDates = [];
+    }
+
+    /** القيد ده بيتكلّف؟ (نوعه + مصدره) */
+    public static function costable(Transaction $tx): bool
+    {
+        if (! $tx->source_id || ! $tx->source_type) {
+            return false;
+        }
+        $class = Relation::getMorphedModel($tx->source_type) ?? $tx->source_type;
+
+        return match ($tx->kind) {
+            'sale' => in_array($class, [Invoice::class, PurchaseOrder::class], true),
+            'return' => $class === ClientReturn::class,
+            default => false,
+        };
+    }
+
+    public static function forTransaction(Transaction $tx): ?CostEntry
+    {
+        return self::syncTransaction($tx)['entry'];
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool} */
+    public static function syncTransaction(Transaction $tx): array
+    {
+        if (! self::ready()) {
+            return ['entry' => null, 'changed' => false];
+        }
+        self::flush();
+        $r = self::sync($tx);
+
+        return ['entry' => $r['entry'], 'changed' => $r['changed']];
+    }
+
+    /** القيد اتمسح: قيد التكلفة بتاعه بيتشال من الدفتر ومن الطبقة (إلا المتجمّد) */
+    public static function forgetTransaction(Transaction $tx): void
+    {
+        if (! self::ready()) {
+            return;
+        }
+        self::flush();
+        DB::transaction(function () use ($tx) {
+            CostEntry::where('origin_type', $tx->getMorphClass())->where('origin_id', $tx->id)
+                ->whereIn('kind', self::TX_KINDS)->get()
+                ->each(fn (CostEntry $e) => self::drop($e));
+        });
+    }
+
+    /** قيد اتمسح في التشغيلة دي لأن أصله اختفى/بقى مش قابل للتكلفة (فحص إعادة البناء) */
+    public static function droppedLegitimately(int $entryId): bool
+    {
+        return isset(self::$dropped[$entryId]);
+    }
+
+    /**
+     * كل أصل قابل للتكلفة بتاريخ ≥ `$from` + مسح القيود اللي أصلها اختفى.
+     * `$post`: القيد اللي اتغير بيترحّل تاني (repost)، واللي ماتغيرش بيتأكد
+     * إن له قيد (post مابيعملش حاجة لو موجود). جوه إعادة البناء = false.
+     *
+     * @return array{synced:int, deleted:int}
+     */
+    public static function run(CarbonInterface $from, bool $post = false): array
+    {
+        $out = ['synced' => 0, 'deleted' => 0];
+        if (! self::ready()) {
+            return $out;
+        }
+        self::flush();
+        self::$dropped = [];
+        $d = $from->toDateString();
+        $ledger = app(Ledger::class);
+        $kept = [];
+
+        $txs = Transaction::whereIn('kind', self::TX_KINDS)
+            ->whereIn('source_type', [Invoice::class, PurchaseOrder::class, ClientReturn::class])
+            ->whereDate('date', '>=', $d);
+        foreach ($txs->lazyById(500) as $tx) {
+            $r = self::sync($tx);
+            $out['deleted'] += $r['deleted'];
+            if ($r['entry'] === null) {
+                continue;
+            }
+            $kept[$r['entry']->id] = true;
+            $out['synced']++;
+            if ($post) {
+                $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+            }
+        }
+
+        // التحويلات الداخلية المستلمة
+        $trs = StockTransfer::where('kind', 'wh_wh')->where('status', 'received')->whereDate('received_on', '>=', $d);
+        foreach ($trs->lazyById(500) as $t) {
+            $r = self::doSyncTransfer($t);
+            $out['deleted'] += $r['deleted'];
+            if ($r['entry'] === null) {
+                continue;
+            }
+            $kept[$r['entry']->id] = true;
+            $out['synced']++;
+            if ($post) {
+                $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+            }
+        }
+
+        // قيود أصلها اختفى (أو بقى مش قابل للتكلفة) في نفس النافذة
+        $morph = (new Transaction)->getMorphClass();
+        $orphans = CostEntry::whereIn('kind', self::TX_KINDS)->where('origin_type', $morph)
+            ->whereDate('date', '>=', $d)->get()->reject(fn ($e) => isset($kept[$e->id]));
+        $txs = Transaction::whereIn('id', $orphans->pluck('origin_id')->unique())->get()->keyBy('id');
+        foreach ($orphans as $e) {
+            $tx = $txs->get($e->origin_id);
+            // الأصل لسه موجود بس تاريخه اتنقل قبل النافذة — يتزامن مش يتمسح
+            if ($tx !== null && self::costable($tx)) {
+                $r = self::sync($tx);
+                $out['deleted'] += $r['deleted'];
+                if ($r['entry'] !== null && $post) {
+                    $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+                }
+
+                continue;
+            }
+            if (DB::transaction(fn () => self::drop($e))) {
+                $out['deleted']++;
+            }
+        }
+
+        // قيود تحويل أصلها اختفى أو بقى مش داخلي (ملغي مثلاً) أو تاريخه اتنقل برا النافذة
+        $tmorph = (new StockTransfer)->getMorphClass();
+        $torphans = CostEntry::where('kind', 'transfer')->where('origin_type', $tmorph)
+            ->whereDate('date', '>=', $d)->get()->reject(fn ($e) => isset($kept[$e->id]));
+        $transfers = StockTransfer::whereIn('id', $torphans->pluck('origin_id')->unique())->get()->keyBy('id');
+        foreach ($torphans as $e) {
+            $t = $transfers->get($e->origin_id);
+            if ($t !== null && self::internalTransfer($t)) {
+                $r = self::doSyncTransfer($t);
+                $out['deleted'] += $r['deleted'];
+                if ($r['entry'] !== null && $post) {
+                    $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+                }
+
+                continue;
+            }
+            if (DB::transaction(fn () => self::drop($e))) {
+                $out['deleted']++;
+            }
+        }
+
+        // أوامر الإنتاج المقفولة (بالقيم المخزّنة — التحميل عمره ما يتحسب تاني)
+        $orders = ProductionOrder::where('status', 'closed')->whereNotNull('closed_at')
+            ->where('closed_at', '>=', Carbon::parse($d)->startOfDay());
+        foreach ($orders->lazyById(500) as $o) {
+            $r = self::doSyncProduction($o);
+            $out['deleted'] += $r['deleted'];
+            if ($r['entry'] === null) {
+                continue;
+            }
+            $kept[$r['entry']->id] = true;
+            $out['synced']++;
+            if ($post) {
+                $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+            }
+        }
+
+        // قيود إنتاج أصلها اختفى أو مابقاش مقفول — أو تاريخه اتنقل
+        $pmorph = (new ProductionOrder)->getMorphClass();
+        $porphans = CostEntry::where('kind', 'production')->where('origin_type', $pmorph)
+            ->whereDate('date', '>=', $d)->get()->reject(fn ($e) => isset($kept[$e->id]));
+        $pos = ProductionOrder::whereIn('id', $porphans->pluck('origin_id')->unique())->get()->keyBy('id');
+        foreach ($porphans as $e) {
+            $o = $pos->get($e->origin_id);
+            if ($o !== null && self::producible($o)) {
+                $r = self::doSyncProduction($o);
+                $out['deleted'] += $r['deleted'];
+                if ($r['entry'] !== null && $post) {
+                    $r['changed'] ? $ledger->repost($r['entry']) : $ledger->post($r['entry']);
+                }
+
+                continue;
+            }
+            if (DB::transaction(fn () => self::drop($e))) {
+                $out['deleted']++;
+            }
+        }
+        // قيود الانحراف (أصلها سطر شهر تكاليف مقفول) تاريخ متخزّن — مابتتلمسش
+
+        return $out;
+    }
+
+    // ═══ الإنتاج (المهمة ٥): أمر مقفول = مواد + تحميل على مخزن التام ═══
+
+    /** أمر مقفول بإنتاج > ٠ */
+    public static function producible(ProductionOrder $o): bool
+    {
+        return $o->status === 'closed' && $o->closed_at !== null && (int) $o->output_qty > 0 && (int) $o->product_id > 0;
+    }
+
+    public static function forProduction(ProductionOrder $o): ?CostEntry
+    {
+        return self::syncProduction($o)['entry'];
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool} */
+    public static function syncProduction(ProductionOrder $o): array
+    {
+        if (! self::ready()) {
+            return ['entry' => null, 'changed' => false];
+        }
+        self::flush();
+        $r = self::doSyncProduction($o);
+
+        return ['entry' => $r['entry'], 'changed' => $r['changed']];
+    }
+
+    /** بعد قفل الأمر: زامن ورحّل. مابيرميش أبداً — القفل نفسه خلص */
+    public static function settleProduction(ProductionOrder $o): void
+    {
+        try {
+            ['entry' => $entry, 'changed' => $changed] = self::syncProduction($o);
+            if ($entry !== null) {
+                $ledger = app(Ledger::class);
+                $changed ? $ledger->repost($entry) : $ledger->post($entry);
+            }
+        } catch (\Throwable $e) {
+            Log::error('costing.production failed', ['order' => $o->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * قيد الإنتاج: تاريخه يوم القفل (`closed_at` — نفس شهر «المحمّل» في
+     * إقفال الشهر)، المركز = الخط، والمقابل = مركز مخزن التام. المبلغ
+     * بالطريقتين = الإجمالي المخزّن (مواد + تحميل).
+     *
+     * @return array{entry:?CostEntry, changed:bool, deleted:int}
+     */
+    private static function doSyncProduction(ProductionOrder $o): array
+    {
+        $morph = $o->getMorphClass();
+        $existing = CostEntry::where('origin_type', $morph)->where('origin_id', $o->id)->where('kind', 'production')->get();
+        if ($existing->contains(fn (CostEntry $e) => self::frozen($e))) {
+            return ['entry' => $existing->first(), 'changed' => false, 'deleted' => 0];
+        }
+
+        $lines = [];
+        if (self::producible($o)) {
+            $qty = (int) $o->output_qty;
+            $total = round((float) $o->total_cost, 2);
+            $unit = round((float) ($o->unit_cost ?? ($total / $qty)), 4);
+            $lines[] = [
+                'product_id' => (int) $o->product_id,
+                'batch_id' => $o->fg_batch_id ? (int) $o->fg_batch_id : null,
+                'qty' => (float) $qty,
+                'revenue' => 0,
+                'unit_batch' => $unit,
+                'unit_wavg' => $unit,
+                'unit_transfer' => null,
+                'amount_batch' => $total,
+                'amount_wavg' => $total,
+                'amount_transfer' => null,
+                'zero_cost' => $total <= 0,
+            ];
+        }
+
+        return self::store($morph, (int) $o->id, 'production', $lines, $existing, function () use ($o, $lines) {
+            $fg = CostCenter::forWarehouse(Warehouse::find($o->warehouse_id));
+
+            return [
+                'date' => Carbon::parse($o->closed_at)->toDateString(),
+                'cost_center_id' => $o->line_id ? (int) $o->line_id : null,
+                'other_center_id' => $fg?->id,
+                'qty' => $lines[0]['qty'],
+                'revenue' => 0,
+                'amount_batch' => $lines[0]['amount_batch'],
+                'amount_wavg' => $lines[0]['amount_wavg'],
+                'amount_transfer' => null,
+                'materials' => round((float) $o->material_cost, 2),
+                'overhead' => round((float) $o->overhead_cost, 2),
+                'flags' => $o->overhead_flag ?: null,
+            ];
+        });
+    }
+
+    // ═══ التحويل الداخلي (المهمة ٤): مصنع/خط ← فرع بسعر التحويل ═══
+
+    /** شرط D4 الهيكلي: wh_wh + مستلم + مركز المرسل مصنع/خط + مركز المستلم فرع */
+    public static function internalTransfer(StockTransfer $t): bool
+    {
+        if ($t->kind !== 'wh_wh' || $t->status !== 'received' || ! $t->received_on) {
+            return false;
+        }
+        $from = CostCenter::forWarehouse(Warehouse::find($t->from_warehouse_id));
+        $to = CostCenter::forWarehouse(Warehouse::find($t->to_warehouse_id));
+
+        return $from !== null && $to !== null
+            && in_array($from->kind, ['factory', 'line'], true) && $to->kind === 'branch';
+    }
+
+    public static function forTransfer(StockTransfer $t): ?CostEntry
+    {
+        return self::syncTransfer($t)['entry'];
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool} */
+    public static function syncTransfer(StockTransfer $t): array
+    {
+        if (! self::ready()) {
+            return ['entry' => null, 'changed' => false];
+        }
+        self::flush();
+        $r = self::doSyncTransfer($t);
+
+        return ['entry' => $r['entry'], 'changed' => $r['changed']];
+    }
+
+    /**
+     * بعد استلام التحويل: زامن الطبقة ورحّل (repost لو اتغير، post لو لأ).
+     * مابيرميش أبداً — الاستلام نفسه خلص، والمزامنة/إعادة البناء بيصلّحوا.
+     */
+    public static function settleTransfer(StockTransfer $t): void
+    {
+        try {
+            ['entry' => $entry, 'changed' => $changed] = self::syncTransfer($t);
+            if ($entry !== null) {
+                $ledger = app(Ledger::class);
+                $changed ? $ledger->repost($entry) : $ledger->post($entry);
+            }
+        } catch (\Throwable $e) {
+            Log::error('costing.transfer failed', ['transfer' => $t->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** @return array{entry:?CostEntry, changed:bool, deleted:int} */
+    private static function doSyncTransfer(StockTransfer $t): array
+    {
+        $morph = $t->getMorphClass();
+        $existing = CostEntry::where('origin_type', $morph)->where('origin_id', $t->id)->where('kind', 'transfer')->get();
+        if ($existing->contains(fn (CostEntry $e) => self::frozen($e))) {
+            return ['entry' => $existing->first(), 'changed' => false, 'deleted' => 0];
+        }
+
+        $date = Carbon::parse($t->received_on)->startOfDay();
+        $lines = self::internalTransfer($t) ? self::transferLines($t, $date) : [];
+
+        return self::store($morph, (int) $t->id, 'transfer', $lines, $existing, function () use ($t, $lines, $date) {
+            $from = CostCenter::forWarehouse(Warehouse::find($t->from_warehouse_id));
+            $to = CostCenter::forWarehouse(Warehouse::find($t->to_warehouse_id));
+
+            return [
+                'date' => $date->toDateString(),
+                'cost_center_id' => $from->id,
+                'other_center_id' => $to->id,
+                'qty' => round(array_sum(array_column($lines, 'qty')), 3),
+                'revenue' => 0,
+                'amount_batch' => round(array_sum(array_column($lines, 'amount_batch')), 2),
+                'amount_wavg' => round(array_sum(array_column($lines, 'amount_wavg')), 2),
+                'amount_transfer' => round(array_sum(array_column($lines, 'amount_transfer')), 2),
+                'materials' => 0,
+                'overhead' => 0,
+                // العلامتين مع بعض لو الاتنين موجودين (صنف من غير سعر تحويل + صنف تكلفته صفر)
+                'flags' => implode(',', array_filter([
+                    collect($lines)->contains(fn ($l) => $l['unit_transfer'] === null) ? 'no_transfer_price' : null,
+                    collect($lines)->contains(fn ($l) => $l['zero_cost']) ? 'zero_cost' : null,
+                ])) ?: null,
+            ];
+        });
+    }
+
+    /**
+     * سطور التحويل: الأصناف التامة بكمية مستلمة > 0 بس. R الباتش = تكلفة بند
+     * التحويل (وإلا تكلفة الصنف)، وسعر التحويل بتاريخ الاستلام. صنف من غير
+     * سعر تحويل: `unit_transfer` فاضي (من غير هامش) ومبلغ التحويل = R الباتش.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function transferLines(StockTransfer $t, Carbon $date): array
+    {
+        $items = StockTransferItem::where('stock_transfer_id', $t->id)->where('qty_received', '>', 0)->orderBy('id')->get();
+        $products = Product::whereIn('id', $items->pluck('product_id')->unique())->get()->keyBy('id');
+        $out = [];
+        foreach ($items as $it) {
+            $p = $products->get($it->product_id);
+            if ($p === null || ($p->kind ?? 'finished') !== 'finished') {
+                continue;
+            }
+            $qty = round((float) $it->qty_received, 3);
+            $unitBatch = round((float) ($it->cost ?? $p->cost), 4);
+            $unitWavg = Valuation::wavg($p, $date);
+            $tp = TransferPrice::effective((int) $p->id, $date);
+            $unitTp = $tp === null ? null : round((float) $tp->price, 4);
+            $amountBatch = round($qty * $unitBatch, 2);
+
+            $out[] = [
+                'product_id' => (int) $p->id,
+                'batch_id' => $it->source_batch_id ? (int) $it->source_batch_id : null,
+                'qty' => $qty,
+                'revenue' => 0,
+                'unit_batch' => $unitBatch,
+                'unit_wavg' => $unitWavg,
+                'unit_transfer' => $unitTp,
+                'amount_batch' => $amountBatch,
+                'amount_wavg' => round($qty * $unitWavg, 2),
+                'amount_transfer' => $unitTp === null ? $amountBatch : round($qty * $unitTp, 2),
+                'zero_cost' => $unitBatch <= 0 || $unitWavg <= 0,
+            ];
+        }
+
+        return $out;
+    }
+
+    /** تاريخ القيد في شهر دفتر مقفول؟ (القائمة بتتحمّل مرة لكل تشغيلة) */
+    private static function frozen(CostEntry $e): bool
+    {
+        if (self::$closed === null) {
+            self::$closed = Schema::hasTable('gl_periods')
+                ? GlPeriod::where('status', 'closed')->pluck('key')->all() : [];
+        }
+
+        return self::$closed !== [] && in_array(GlPeriod::keyFor(Carbon::parse($e->date)), self::$closed, true);
+    }
+
+    /**
+     * @return array{entry:?CostEntry, changed:bool, deleted:int}
+     */
+    private static function sync(Transaction $tx): array
+    {
+        $morph = $tx->getMorphClass();
+        $existing = CostEntry::where('origin_type', $morph)->where('origin_id', $tx->id)
+            ->whereIn('kind', self::TX_KINDS)->get();
+        // أصل قيده في شهر مقفول = متجمّد بالكامل (لا تعديل ولا مسح)
+        if ($existing->contains(fn (CostEntry $e) => self::frozen($e))) {
+            return ['entry' => $existing->firstWhere('kind', $tx->kind) ?? $existing->first(), 'changed' => false, 'deleted' => 0];
+        }
+
+        $kind = self::costable($tx) ? $tx->kind : null;
+        $date = Carbon::parse($tx->date)->startOfDay();
+        $lines = $kind === null ? [] : self::linesFor($tx, $kind, $date);
+
+        return self::store($morph, (int) $tx->id, $kind, $lines, $existing,
+            fn () => self::entryAttrs($tx, $kind, $lines, $date));
+    }
+
+    /**
+     * كتابة القيد في مكانه (مشتركة بين المعاملات والتحويلات): مسح القيد
+     * القديم لو الأصل مابقاش قابل للتكلفة، وإلا upsert بتوقيع يحافظ على الـid.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @param  \Closure():array<string, mixed>  $attrsFn
+     * @return array{entry:?CostEntry, changed:bool, deleted:int}
+     */
+    private static function store(string $morph, int $originId, ?string $kind, array $lines, $existing, \Closure $attrsFn): array
+    {
+        return DB::transaction(function () use ($originId, $kind, $lines, $morph, $existing, $attrsFn) {
+            // قيد بنوع تاني لنفس الأصل (أو الأصل بقى مش قابل للتكلفة) بيتشال
+            $stale = $existing->filter(fn (CostEntry $e) => $lines === [] || $e->kind !== $kind);
+            $deleted = 0;
+            foreach ($stale as $s) {
+                $deleted += self::drop($s) ? 1 : 0;
+            }
+            if ($lines === []) {
+                return ['entry' => null, 'changed' => $deleted > 0, 'deleted' => $deleted];
+            }
+
+            $attrs = $attrsFn();
+            $entry = CostEntry::where('kind', $kind)->where('origin_type', $morph)->where('origin_id', $originId)
+                ->lockForUpdate()->first();
+            if ($entry !== null && self::signature($entry->only(array_keys($attrs)), $entry->lines()->orderBy('id')->get()->map->only(array_keys($lines[0]))->all())
+                === self::signature($attrs, $lines)) {
+                return ['entry' => $entry, 'changed' => false, 'deleted' => $deleted];
+            }
+
+            $entry ??= new CostEntry(['kind' => $kind, 'origin_type' => $morph, 'origin_id' => $originId]);
+            $entry->fill($attrs)->save();
+            $entry->lines()->delete();
+            $entry->lines()->createMany($lines);
+            $entry->unsetRelation('lines');
+
+            return ['entry' => $entry, 'changed' => true, 'deleted' => $deleted];
+        });
+    }
+
+    /**
+     * شيل القيد من الدفتر ومن الطبقة (السطور بالكاسكيد). المتجمّد مابيتمسحش
+     * (بيرجع false)، والسويتش مقفول = القيد اللي في الدفتر بيفضل.
+     */
+    private static function drop(CostEntry $e): bool
+    {
+        if (self::frozen($e)) {
+            return false;
+        }
+        if (Ledger::isOn()) {
+            app(Ledger::class)->unpost($e);
+        }
+        self::$dropped[$e->id] = true;
+        $e->delete();
+
+        return true;
+    }
+
+    /**
+     * سطور التكلفة بالطريقتين + سعر التحويل. المرتجع: الكميات والمبالغ
+     * موجبة والإيراد سالب (اتجاه الدفتر بيتقلب في `CostGl`). سطر المرتجع
+     * التالف: كمية وإيراد بس — المبالغ صفر ومفيش سعر تحويل ولا علامة zero_cost.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function linesFor(Transaction $tx, string $kind, Carbon $date): array
+    {
+        $raw = match (true) {
+            $kind === 'return' => self::returnRows((int) $tx->source_id),
+            (Relation::getMorphedModel($tx->source_type) ?? $tx->source_type) === PurchaseOrder::class => self::poRows((int) $tx->source_id),
+            default => self::invoiceRows((int) $tx->source_id),
+        };
+        $raw = array_values(array_filter($raw, fn ($r) => (float) $r['qty'] > 0));
+        if ($raw === []) {
+            return [];
+        }
+
+        $products = Product::whereIn('id', array_unique(array_column($raw, 'product_id')))->get()->keyBy('id');
+        $out = [];
+        foreach ($raw as $r) {
+            $p = $products->get($r['product_id']);
+            if ($p === null) {
+                continue;
+            }
+            $qty = round((float) $r['qty'], 3);
+            $sign = $kind === 'return' ? -1 : 1;
+            $base = [
+                'product_id' => (int) $p->id,
+                'batch_id' => $r['batch_id'] ?? null,
+                'qty' => $qty,
+                'revenue' => round($sign * (float) $r['revenue'], 2),
+            ];
+            if ($r['damaged'] ?? false) {
+                $out[] = $base + ['unit_batch' => 0.0, 'unit_wavg' => 0.0, 'unit_transfer' => null,
+                    'amount_batch' => 0.0, 'amount_wavg' => 0.0, 'amount_transfer' => null, 'zero_cost' => false];
+
+                continue;
+            }
+            // المرتجع المربوط بفاتورة بيتقيّم بتاريخ البيعة الأصلية
+            $at = isset($r['invoice_id']) ? Carbon::parse(self::saleDate((int) $r['invoice_id'], $date)) : $date;
+            $unitBatch = round((float) ($r['unit'] ?? $p->cost), 4);
+            $unitWavg = Valuation::wavg($p, $at);
+            $tp = ($p->kind ?? 'finished') === 'finished' ? TransferPrice::effective((int) $p->id, $at) : null;
+            $unitTp = $tp === null ? null : round((float) $tp->price, 4);
+
+            $out[] = $base + [
+                'unit_batch' => $unitBatch,
+                'unit_wavg' => $unitWavg,
+                'unit_transfer' => $unitTp,
+                'amount_batch' => round($qty * $unitBatch, 2),
+                'amount_wavg' => round($qty * $unitWavg, 2),
+                'amount_transfer' => $unitTp === null ? null : round($qty * $unitTp, 2),
+                'zero_cost' => $unitBatch <= 0 || $unitWavg <= 0,
+            ];
+        }
+
+        return $out;
+    }
+
+    /** تاريخ قيد البيع الأصلي للفاتورة، وإلا تاريخ إنشائها، وإلا `$fallback` */
+    private static function saleDate(int $invoiceId, Carbon $fallback): string
+    {
+        if (! isset(self::$saleDates[$invoiceId])) {
+            $d = Transaction::where('kind', 'sale')->where('source_type', Invoice::class)->where('source_id', $invoiceId)->min('date')
+                ?? Invoice::whereKey($invoiceId)->value('created_at');
+            self::$saleDates[$invoiceId] = $d ? Carbon::parse($d)->toDateString() : $fallback->toDateString();
+        }
+
+        return self::$saleDates[$invoiceId];
+    }
+
+    /** @return list<array{product_id:int, batch_id:?int, qty:float, revenue:float, unit:?float}> */
+    private static function invoiceRows(int $invoiceId): array
+    {
+        return DB::table('invoice_items')->where('invoice_id', $invoiceId)->orderBy('id')
+            ->get(['product_id', 'batch_id', 'qty', 'total', 'unit_cost'])
+            ->map(fn ($r) => ['product_id' => (int) $r->product_id, 'batch_id' => $r->batch_id ? (int) $r->batch_id : null,
+                'qty' => (float) $r->qty, 'revenue' => (float) $r->total, 'unit' => $r->unit_cost === null ? null : (float) $r->unit_cost])
+            ->all();
+    }
+
+    /** بند الأمر بقيمة المسلَّم — نفس قاعدة `SalesSource::lines` بالحرف */
+    private static function poRows(int $poId): array
+    {
+        return DB::table('purchase_order_items')->where('purchase_order_id', $poId)->orderBy('id')
+            ->get(['product_id', 'qty', 'delivered_qty', 'price', 'total'])
+            ->map(function ($r) {
+                $full = $r->delivered_qty === null || (float) $r->delivered_qty === (float) $r->qty;
+
+                return ['product_id' => (int) $r->product_id, 'batch_id' => null,
+                    'qty' => (float) ($r->delivered_qty ?? $r->qty),
+                    'revenue' => $full ? (float) $r->total : round((float) $r->delivered_qty * (float) $r->price, 2),
+                    'unit' => null];
+            })->all();
+    }
+
+    /** كل البنود — R من بند الفاتورة الأصلي وإلا تكلفة الصنف (`unit` = null)، والتالف متعلّم */
+    private static function returnRows(int $returnId): array
+    {
+        return DB::table('return_items as ri')
+            ->leftJoin('invoice_items as ii', 'ii.id', '=', 'ri.invoice_item_id')
+            ->where('ri.return_id', $returnId)
+            ->orderBy('ri.id')
+            ->get(['ri.product_id', 'ri.condition', 'ii.batch_id', 'ri.qty', 'ri.total', 'ii.id as ii_id', 'ii.invoice_id', 'ii.unit_cost'])
+            ->map(fn ($r) => ['product_id' => (int) $r->product_id, 'batch_id' => $r->batch_id ? (int) $r->batch_id : null,
+                'qty' => (float) $r->qty, 'revenue' => (float) $r->total,
+                'damaged' => $r->condition !== ClientReturn::CONDITION_GOOD,
+                'invoice_id' => $r->ii_id !== null ? (int) $r->invoice_id : null,
+                'unit' => $r->ii_id !== null && $r->unit_cost !== null ? (float) $r->unit_cost : null])
+            ->all();
+    }
+
+    /** @param list<array<string, mixed>> $lines */
+    private static function entryAttrs(Transaction $tx, string $kind, array $lines, Carbon $date): array
+    {
+        $withTp = array_filter($lines, fn ($l) => $l['unit_transfer'] !== null);
+        $center = CostCenterResolver::for($tx) ?? CostCenter::maadi()->id;
+
+        return [
+            'date' => $date->toDateString(),
+            'cost_center_id' => $center,
+            'other_center_id' => null,
+            'qty' => round(array_sum(array_column($lines, 'qty')), 3),
+            'revenue' => round(array_sum(array_column($lines, 'revenue')), 2),
+            'amount_batch' => round(array_sum(array_column($lines, 'amount_batch')), 2),
+            'amount_wavg' => round(array_sum(array_column($lines, 'amount_wavg')), 2),
+            'amount_transfer' => $withTp === [] ? null : round(array_sum(array_column($withTp, 'amount_transfer')), 2),
+            'materials' => 0,
+            'overhead' => 0,
+            // `no_transfer_price` مابيتحطش على البيع أبداً — من غير سعر تحويل
+            // تكلفة الفرع هي R (D4/D10)
+            'flags' => collect($lines)->contains(fn ($l) => $l['zero_cost']) ? 'zero_cost' : null,
+        ];
+    }
+
+    /**
+     * توقيع ثابت للمقارنة (القيم من الداتابيز بتيجي نصوص بكسور — بتتوحّد).
+     *
+     * @param  array<string, mixed>  $attrs
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private static function signature(array $attrs, array $lines): string
+    {
+        $norm = function ($v) {
+            if ($v instanceof \DateTimeInterface) {
+                return $v->format('Y-m-d');
+            }
+            if (is_bool($v)) {
+                return $v ? '1' : '0';
+            }
+            if (is_numeric($v)) {
+                return number_format((float) $v, 4, '.', '');
+            }
+
+            return $v === null ? '' : (string) $v;
+        };
+        ksort($attrs);
+        $a = array_map($norm, $attrs);
+        $l = array_map(function ($line) use ($norm) {
+            ksort($line);
+
+            return array_map($norm, $line);
+        }, $lines);
+
+        return json_encode([$a, $l]);
+    }
+}

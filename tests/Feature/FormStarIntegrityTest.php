@@ -42,6 +42,7 @@ class FormStarIntegrityTest extends TestCase
      * @var array<string, list<string>>
      */
     private const DYNAMIC_FORMS = [
+        'costing/cards#frmApprove' => ['costing.cards.approve'],
         'erp/account_audit#auditForm' => ['erp.audit.save'],
         'erp/branches#formEditBranch' => ['erp.branches.update'],
         'erp/channels#formCh' => ['erp.channels.update'],

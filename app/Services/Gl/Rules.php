@@ -13,6 +13,7 @@ use App\Models\PurchaseOrder;
 use App\Models\RepSettlement;
 use App\Models\Safe;
 use App\Models\SafeCount;
+use App\Models\SupplierInvoice;
 use App\Models\SupplierTransaction;
 use App\Models\Transaction;
 use App\Models\User;
@@ -51,6 +52,8 @@ class Rules
             $source instanceof FixedAssetDepreciation => $this->depreciation($source),
             // Lane 7: المرتبات والسلف (مسير معتمد/مصروف، دفعة صرف، سلفة مش ملغية)
             \App\Services\Hr\PayrollGl::handles($source) => \App\Services\Hr\PayrollGl::lines($source),
+            // Lane 9: قيود التكلفة (بيع/مرتجع، وبعدين تحويل/إنتاج/انحراف)
+            \App\Services\Costing\CostGl::handles($source) => \App\Services\Costing\CostGl::lines($source),
             default => $this->none(),
         });
     }
@@ -137,7 +140,7 @@ class Rules
      * مجموعة ⇒ المعلّق + مراجعة. من غير تثبيت ⇒ المفتاح زي ما هو.
      * `$side` = `debit` | `credit` | `tax`.
      */
-    private function slotAccount(GlPostingRule $rule, string $side, ?User $rep, bool &$needsReview): int
+    public function slotAccount(GlPostingRule $rule, string $side, ?User $rep, bool &$needsReview): int
     {
         $pinned = $rule->{$side.'_account_id'};
         if ($pinned !== null) {
@@ -264,6 +267,17 @@ class Rules
             return $this->none();
         }
         $key = 'sup.'.$st->kind;
+        // Lane 9 (D1): المخزون الدائم — القاعدة دي بيعملها seed التكاليف بس،
+        // ولو موقوفة أو مش موجودة الفاتورة بتفضل مصروف مشتريات زي الأول
+        if ($st->kind === 'invoice' && ($stock = GlPostingRule::forKey('sup.invoice.stock')) !== null && $stock->active) {
+            $key = 'sup.invoice.stock';
+        }
+        // مرتجع لمورد بصف في دفتره (`kind = return`): مدين الموردين / دائن
+        // المخزون. ⚠️ النهارده مفيش كود بيكتب النوع ده — مرتجع فحص الجودة
+        // (Lane 5 D6) مالوش قيد مورد أصلاً — القاعدة جاهزة للي جاي.
+        if ($st->kind === 'return' && ($stock = GlPostingRule::forKey('sup.return.stock')) !== null && $stock->active) {
+            $key = 'sup.return.stock';
+        }
         if ($st->kind === 'payment') {
             $method = $st->source_type === \App\Models\SupplierPayment::class
                 ? (\App\Models\SupplierPayment::find($st->source_id)?->method ?? 'cash') : 'cash';
@@ -288,11 +302,40 @@ class Rules
             ['slot' => 'cr', 'account_id' => $cr, 'debit' => 0.0, 'credit' => $amount],
         ];
 
+        // Lane 9: ضريبة المدخلات مش تكلفة مخزون. فاتورة المورد بتتسجّل
+        // بالإجمالي (صافي + ضريبة)، فمع المخزون الدائم: المخزون بالصافي
+        // والضريبة على مدين قاعدة `sup.invoice` (المسار القديم —
+        // `expense_purchases`)، والموردين بالإجمالي. ضريبة مش معروفة = الكل مخزون.
+        if ($key === 'sup.invoice.stock' && (float) $st->credit > 0) {
+            $tax = $this->supplierInvoiceTax($st);
+            if ($tax > 0 && $tax < $amount) {
+                $old = GlPostingRule::forKey('sup.invoice');
+                $taxId = $old !== null
+                    ? $this->slotAccount($old, 'debit', null, $needsReview)
+                    : $this->keyAccount('expense_purchases', null, $needsReview);
+                $lines = [
+                    ['slot' => 'dr', 'account_id' => $dr, 'debit' => round($amount - $tax, 2), 'credit' => 0.0],
+                    ['slot' => 'tax', 'account_id' => $taxId, 'debit' => $tax, 'credit' => 0.0],
+                    ['slot' => 'cr', 'account_id' => $cr, 'debit' => 0.0, 'credit' => $amount],
+                ];
+            }
+        }
+
         return [
             'rule' => $key, 'needs_review' => $needsReview,
             'memo' => (string) ($st->memo ?: $rule->label),
             'lines' => $lines,
         ];
+    }
+
+    /** ضريبة فاتورة المورد مصدر الصف (`supplier_invoices.tax`)، وإلا صفر */
+    private function supplierInvoiceTax(SupplierTransaction $st): float
+    {
+        if ($st->source_type !== SupplierInvoice::class && $st->source_type !== (new SupplierInvoice)->getMorphClass()) {
+            return 0.0;
+        }
+
+        return round((float) (SupplierInvoice::whereKey($st->source_id)->value('tax') ?? 0), 2);
     }
 
     private function expense(Expense $x): array

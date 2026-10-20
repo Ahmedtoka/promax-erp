@@ -970,6 +970,9 @@ class StockTransfer extends Model
             return $receipt;
         });
 
+        // Lane 9: بعد الـcommit بس — البيع الداخلي بسعر التحويل (مابيرميش أبداً)
+        \App\Services\Costing\CostSync::settleTransfer($this->fresh());
+
         if ($this->fresh()->hasVariance()) {
             AppNotification::send(
                 $this->sender,

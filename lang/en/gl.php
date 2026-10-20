@@ -304,4 +304,11 @@ return [
     'cost_center' => 'Cost center',
     'all_centers' => 'All centers',
     'center_filter_note' => 'The filter shows only lines that carry a center. Clients, suppliers and safes have no center, so a balance sheet by center may not balance.',
+    // Lane 9 costing keys
+    'sk_cogs' => 'Cost of sales',
+    'sk_internal_cogs' => 'Internal cost of sales',
+    'sk_internal_elim' => 'Internal transfer margin elimination',
+    'sk_overhead_applied' => 'Overhead applied to production',
+    'sk_production_variance' => 'Production cost variances',
+    'sk_internal_sales' => 'Internal sales to branches',
 ];

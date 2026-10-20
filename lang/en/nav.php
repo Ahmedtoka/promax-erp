@@ -144,4 +144,8 @@ return [
     'mfg_trace' => 'Lot Trace & Recall',
     'mfg_variance' => 'Variance Report',
     'mfg_requirements' => 'Material Requirement',
+    'group_costing' => "Costing",
+    'costing_overhead' => "Overhead by month",
+    'costing_cards' => "Cost card and transfer price",
+    'costing_pnl' => "Management P&L",
 ];

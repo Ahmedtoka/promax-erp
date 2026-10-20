@@ -853,8 +853,15 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 Route::post('/opening/post', [$gw, 'postOpening'])->name('opening.post');
                 Route::post('/preview', [$gw, 'preview'])->name('preview');
                 Route::post('/preview/{run}/approve', [$gw, 'approve'])->name('preview.approve');
+                // الخط ٩ — خطوة ٧ (إعدادات التكاليف) وخطوة ٩ (التشغيل الفعلي)
+                $gc = \App\Http\Controllers\Gl\GoLiveCostingController::class;
+                Route::post('/costing', [$gc, 'save'])->name('costing.save');
+                Route::post('/costing/seed', [$gc, 'seed'])->name('costing.seed');
+                Route::post('/run', [$gc, 'run'])->name('run');
                 Route::post('/{n}/confirm', [$gw, 'confirm'])->whereNumber('n')->name('confirm');
             });
+            // تقدّم التشغيل (JSON) — مقروء للمحاسب كمان، وقبل `{n}`
+            Route::get('/run/progress', [\App\Http\Controllers\Gl\GoLiveCostingController::class, 'progress'])->name('run.progress');
             Route::get('/{n}', [$gw, 'show'])->whereNumber('n')->name('show');
         });
 
@@ -910,6 +917,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/assets', [$fa, 'index'])->name('assets');
         Route::post('/assets', [$fa, 'store'])->name('assets.store');
         Route::post('/assets/depreciate', [$fa, 'depreciate'])->middleware('role:admin')->name('assets.depreciate');
+    });
+
+    // ═══ التكاليف (الخط ٩) — محاسب وأدمن يشوفوا، والكتابة أدمن بس ═══
+    Route::prefix('costing')->name('costing.')->middleware('role:admin,accountant')->group(function () {
+        Route::get('/pnl', [\App\Http\Controllers\Costing\PnlController::class, 'index'])->name('pnl');
+        $co = \App\Http\Controllers\Costing\OverheadController::class;
+        Route::get('/overhead', [$co, 'index'])->name('overhead');
+        Route::post('/overhead/close', [$co, 'close'])->middleware('role:admin')->name('overhead.close');
+        Route::post('/sync', [$co, 'sync'])->middleware('role:admin')->name('sync');
+        $cc = \App\Http\Controllers\Costing\CardController::class;
+        Route::get('/cards', [$cc, 'index'])->name('cards');
+        Route::post('/cards/{product}/approve', [$cc, 'approve'])->middleware('role:admin')->name('cards.approve');
     });
 
     // ⚠️ ملفات العقود جوه storage مش public — لازم تعدي على اللوجين.
