@@ -144,7 +144,7 @@ class RoleAccessTest extends TestCase
 
             // شاشات السيستم بس — مش اللوجين ولا تبديل اللغة ولا الـAPI
             // ⚠️ `online.` و`notifications.` اتضافوا (٨/٩) — كانوا بره الفحص
-            if (! preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr)\./', $name)) {
+            if (! preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr|docs)\./', $name)) {
                 continue;
             }
 
@@ -515,7 +515,7 @@ class RoleAccessTest extends TestCase
 
     private function isScreenRoute(string $name): bool
     {
-        return preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr)\./', $name) === 1;
+        return preg_match('/^(erp|wh|ops|online|notifications|gl|handover|hr|docs)\./', $name) === 1;
     }
 
     /** المسار من غير الكويري — `?page=2` و`?status=x` نفس الشاشة */

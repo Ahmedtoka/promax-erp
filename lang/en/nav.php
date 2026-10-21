@@ -148,4 +148,10 @@ return [
     'costing_overhead' => "Overhead by month",
     'costing_cards' => "Cost card and transfer price",
     'costing_pnl' => "Management P&L",
+    // Documents (2026-10-21) - training and handover site inside the ERP
+    'group_docs' => "Documents",
+    'docs' => "Documents",
+    'docs_missing_title' => "The documents have not been uploaded to the server yet",
+    'docs_missing_body' => "The user guide and training files have not been uploaded yet. Once they are, they will open from this same link.",
+    'docs_missing_admin' => "Admin: upload the contents of the docs folder (index.html, assets, data, media) into storage/app/docs on the server.",
 ];

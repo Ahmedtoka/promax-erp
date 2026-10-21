@@ -31,6 +31,8 @@ class TrackVisit
     private const SKIP = [
         'live/data', 'live/stream', 'img/', 'brand/', 'storage/',
         'up', 'favicon', 'notifications/latest',
+        // 📖 ملفات الدليل (صور وسكربتات) — فتح `/docs` نفسه بيتسجل مرة
+        'docs/',
     ];
 
     /** أكشنات خلفية من الأبلكيشن مش «حركة يوزر» */

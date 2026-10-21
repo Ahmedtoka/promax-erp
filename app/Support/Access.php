@@ -39,6 +39,8 @@ class Access
     public const SCREENS = [
         // ═══ Channel Manager — الشركة كلها ما عدا الإعدادات ═══
         'manager' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             // السايكل الجديدة (١٧/٨): الديفيجنز + الإعداد + رصيد العناوين
             'erp.divisions', 'erp.setup.chains', 'erp.setup.clients', 'erp.client_locations.credits',
             // مراجعة الحسابات (٢٨/٨) — مدير القناة بيراجع عملاءه
@@ -94,6 +96,8 @@ class Access
         // ⚠️ الفلترة نفسها مش هنا. دي بتحصل في الكويري بـ`canSeeBranch`.
         // الخريطة بتقول «الشاشة دي مسموحة»، والكويري بتقول «الصفوف دي».
         'branch_manager' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             // الديفيجنز **قراءة** — الإعداد الجماعي مش هنا عن قصد:
             // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
             'erp.divisions', '!erp.divisions.assign',
@@ -151,6 +155,8 @@ class Access
         // مش بيوزّع شغل ولا بيحرّك بضاعة. ولو شاف زرار «نزّل أمر توريد»
         // هيدوس عليه يوم ويطلّع بضاعة محدش طلبها.
         'accountant' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
             // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
@@ -234,6 +240,8 @@ class Access
         // دعوة بمديونية العميل ولا بخصمه ولا بعقده. وشاشة المخزون بتوريه
         // كميات، والتكلفة والهامش بيتخبّوا عنه في الشاشة نفسها.
         'warehouse_keeper' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             // ⚠️ `erp.products` عرض بس — راوتس الحفظ والتعديل عليها
             // `role:admin,manager` جوه الراوت نفسه.
             'erp.stock', 'erp.batches', 'erp.warehouses', 'erp.products',
@@ -297,6 +305,8 @@ class Access
         // ⚠️ المواصفات: الإنتاج والجودة بيشوفوا بس (الكتابة `role:admin,rnd`)،
         // والبحث والتطوير بيكتب ويقدّم ومايعتمدش (`role:admin`).
         'production_manager' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             'mfg.orders', 'mfg.qc', 'mfg.specs', 'mfg.boms', 'notifications',
             'mfg.lines', 'mfg.requirements', 'mfg.trace', 'mfg.variance',
             '!mfg.lines.settings', '!mfg.qc.decide',
@@ -305,6 +315,8 @@ class Access
             '!mfg.boms.store', '!mfg.boms.lines', '!mfg.boms.approve',
         ],
         'quality' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             'mfg.qc', 'mfg.specs', 'mfg.orders', 'mfg.trace', 'notifications',
             '!mfg.specs.store', '!mfg.specs.update', '!mfg.specs.submit',
             '!mfg.specs.approve', '!mfg.specs.send_back',
@@ -313,6 +325,8 @@ class Access
             '!mfg.orders.issue', '!mfg.orders.issue_standard', '!mfg.orders.return',
         ],
         'rnd' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             'mfg.specs', 'mfg.boms', 'notifications',
             '!mfg.specs.approve', '!mfg.specs.send_back',
             '!mfg.boms.approve',
@@ -321,6 +335,8 @@ class Access
         // ⚠️ اعتماد ساعات الحضور فاضل للأدمن والمدير (`role:admin,manager`)
         // زي المحاسب بالظبط — والمرتبات: الاعتماد والصرف وحفظ الإعدادات أدمن.
         'hr' => [
+            // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
+            'docs',
             'hr.', 'erp.attendance', 'attendance.punch',
             '!erp.attendance.approve',
             '!hr.payroll.approve', '!hr.payroll.pay', '!hr.settings.save',
@@ -403,6 +419,7 @@ class Access
         'nav.group_settings' => '⚙️',
         'nav.group_handover' => '🎓',
         'nav.group_mfg' => '🧪',
+        'nav.group_docs' => '📖',
     ];
 
     public const NAV = [
@@ -726,6 +743,15 @@ class Access
         // ⚠️ المجموعة دي نفسها بتتولّد موديول في الأداة (`promax:handover-seed`).
         'nav.group_handover' => [
             ['handover.index', '✅', 'nav.handover_tracker', 'handover*', null],
+        ],
+
+        // ═══ 📖 الدليل (٢١/١٠/٢٠٢٦) — كتاب واحد آخر المنيو لكل رولز الويب ═══
+        // موقع التدريب والتسليم الساكن ورا اللوجين (`DocsController`). بيفتح في
+        // نفس التاب، وزرار الرجوع بيرجّع للشاشة. زرار مساعدة كل شاشة بعدين:
+        // `/docs#/screen/<S-id>`. ⚠️ مستلم النظام مالوش الدليل عن قصد —
+        // خريطته «شاشات التسليم بس»، والصور فيها أسامي عملاء حقيقية.
+        'nav.group_docs' => [
+            ['docs.index', '📖', 'nav.docs', 'docs.*', null],
         ],
     ];
 

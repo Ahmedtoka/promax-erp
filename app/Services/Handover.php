@@ -23,6 +23,12 @@ use Illuminate\Support\Facades\DB;
  */
 class Handover
 {
+    /**
+     * مجموعات منيو مش موديولز تسليم — `seedFromNav` بيعدّيها.
+     * 📖 الدليل (٢١/١٠) مرجع التسليم نفسه، ومستلم النظام مالوش وصول له أصلاً.
+     */
+    public const NOT_HANDOVER = ['nav.group_docs'];
+
     /** @return array{marked:int,total:int,pct:int} */
     public static function moduleProgress(HandoverModule $m): array
     {
@@ -60,6 +66,11 @@ class Handover
 
             foreach (Access::NAV as $groupKey => $links) {
                 $groupSort += 10;
+
+                // 📖 الدليل مش شاشة بتتسلّم — ده مرجع التسليم نفسه
+                if (in_array($groupKey, self::NOT_HANDOVER, true)) {
+                    continue;
+                }
                 $module = HandoverModule::query()->where('key', $groupKey)->first();
 
                 if ($module === null) {

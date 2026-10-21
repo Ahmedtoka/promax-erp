@@ -1671,4 +1671,11 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin,accountant')->name('payroll.pay');
     });
 
+    // ═══ 📖 الدليل (٢١/١٠/٢٠٢٦) — موقع التدريب والتسليم ورا اللوجين ═══
+    // ⚠️ الملفات في `storage/app/docs` (بره جيت وبره public) — انظر DocsController.
+    // الرؤية من `Access::SCREENS` (بادئة `docs`) لكل رولز الويب ما عدا مستلم النظام.
+    Route::get('/docs', [\App\Http\Controllers\DocsController::class, 'index'])->name('docs.index');
+    Route::get('/docs/{path}', [\App\Http\Controllers\DocsController::class, 'file'])
+        ->where('path', '.*')->name('docs.file');
+
 });
