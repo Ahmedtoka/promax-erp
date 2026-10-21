@@ -95,11 +95,14 @@ class HandoverTrackerTest extends TestCase
     {
         $out = Handover::seedFromNav();
 
-        $items = array_sum(array_map('count', Access::NAV));
+        // 📖 الدليل (٢١/١٠) مجموعة منيو مش موديول تسليم
+        $nav = array_diff_key(Access::NAV, array_flip(Handover::NOT_HANDOVER));
+        $items = array_sum(array_map('count', $nav));
 
-        $this->assertSame(count(Access::NAV), HandoverModule::count());
+        $this->assertSame(count($nav), HandoverModule::count());
         $this->assertSame($items, HandoverScreen::count());
-        $this->assertSame(['modules_added' => count(Access::NAV), 'screens_added' => $items], $out);
+        $this->assertSame(['modules_added' => count($nav), 'screens_added' => $items], $out);
+        $this->assertFalse(HandoverModule::where('key', 'nav.group_docs')->exists());
 
         // المفتاح = مفتاح المجموعة، والراوت = اسم راوت البند، والعناوين باللغتين
         $clients = HandoverModule::where('key', 'nav.group_clients')->firstOrFail();
@@ -116,7 +119,7 @@ class HandoverTrackerTest extends TestCase
     {
         $out = Handover::seedFromNav(true);
 
-        $this->assertSame(count(Access::NAV), $out['modules_added']);
+        $this->assertSame(count(Access::NAV) - count(Handover::NOT_HANDOVER), $out['modules_added']);
         $this->assertSame(0, HandoverModule::count());
         $this->assertSame(0, HandoverScreen::count());
     }
