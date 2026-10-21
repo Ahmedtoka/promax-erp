@@ -49,3 +49,14 @@ private/
 
 # 📖 الدليل (٢١/١٠/٢٠٢٦) — موقع التدريب فيه أسامي عملاء حقيقية؛ بيترفع على السيرفر بإيد بس
 /storage/app/docs
+
+# Auto Claude data directory
+.auto-claude/
+
+# Auto Claude generated files
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
+.worktrees/
+.security-key
+logs/security/
