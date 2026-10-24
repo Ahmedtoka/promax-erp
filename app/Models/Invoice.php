@@ -19,6 +19,8 @@ class Invoice extends Model
         'subtotal', 'discount_pct', 'discount_source', 'discount', 'total',
         'tax_total', 'grand_total', 'eta_status', 'eta_uuid', 'eta_submitted_at',
         'cost_total', 'lat', 'lng',
+        // تعديل الأسعار (Lane 13)
+        'repriced_at', 'repriced_by', 'price_change_run_id',
     ];
 
     /** حالات الرفع لمصلحة الضرائب */
@@ -42,7 +44,14 @@ class Invoice extends Model
             'tax_total' => 'decimal:2',
             'grand_total' => 'decimal:2',
             'eta_submitted_at' => 'datetime',
+            'repriced_at' => 'datetime',
         ];
+    }
+
+    /** تعديل الأسعار اللي لمس الفاتورة دي آخر مرة */
+    public function priceChangeRun(): BelongsTo
+    {
+        return $this->belongsTo(PriceChangeRun::class, 'price_change_run_id');
     }
 
     public function client(): BelongsTo
