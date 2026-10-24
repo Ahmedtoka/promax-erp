@@ -457,7 +457,11 @@ class PriceChangeEngineTest extends TestCase
 
         $delivered = $this->po($x, 10, 'delivered');
         $cancelled = $this->po($x, 10, 'cancelled');
-        $fixed = $this->po($x, 10, 'pending', ['price_mode' => 'old']);
+        // سعر صافي متفق عليه فعلاً: عميل له خصم + السطر بسعر القايمة قبل
+        // الخصم (price_old = 18) — مش مجرد `price_mode = old`
+        $f = $this->client($this->listA, ['discount' => 0.10]);
+        $fixed = $this->po($f, 10, 'pending', ['price_mode' => 'old', 'total' => 54, 'tax_total' => 7.56, 'grand_total' => 61.56]);
+        $fixed->items()->update(['price' => 18, 'list_price' => 18, 'total' => 54, 'tax' => 7.56]);
 
         $run = $this->listDraft(12);
         $result = PriceChange::apply($run, $this->admin);
@@ -489,11 +493,50 @@ class PriceChangeEngineTest extends TestCase
             $this->assertEqualsWithDelta(34.20, (float) $fresh->grand_total, 0.001);
             $this->assertNull($fresh->price_change_run_id);
         }
-        foreach ([$delivered, $cancelled, $fixed] as $po) {
+        foreach ([$delivered, $cancelled] as $po) {
             $this->assertEqualsWithDelta(34.20, (float) $po->fresh()->grand_total, 0.001);
             $this->assertNull($po->fresh()->price_change_run_id);
         }
+        $this->assertEqualsWithDelta(61.56, (float) $fixed->fresh()->grand_total, 0.001);
+        $this->assertEqualsWithDelta(18.0, (float) $fixed->items()->first()->price, 0.001);
+        $this->assertNull($fixed->fresh()->price_change_run_id);
         $this->assertLedgerReconciles($x);
+    }
+
+    public function test_default_new_list_channel_po_repriced_real_fixed_po_skipped(): void
+    {
+        // القايمة الافتراضية `new` — أوامر القناة عليها بتتخزّن `price_mode = new`
+        $newList = $this->makePriceList('new');
+        $chan = $this->client($newList, ['discount' => 0.10]);
+        $fix = $this->client($newList, ['discount' => 0.10]);
+
+        // أمر قناة عادي: السطر مخصوم (20 × 0.9 = 18)
+        $channelPo = $this->po($chan, 18, 'pending', ['price_mode' => 'new']);
+        $channelPo->items()->update(['list_price' => 20, 'discount_pct' => 0.10]);
+
+        // سعر صافي متفق عليه: السطر بسعر القايمة قبل الخصم (price_new = 20)
+        $fixedPo = $this->po($fix, 20, 'pending', ['price_mode' => 'new']);
+
+        $run = PriceChange::draft($this->admin, 'list', [
+            'price_list_id' => $newList->id,
+            'prices' => [$this->product->id => 25],
+        ]);
+        $result = PriceChange::apply($run, $this->admin);
+
+        // 25 × 0.9 = 22.50 × 3 = 67.50 + 14% = 76.95
+        $channelPo->refresh();
+        $this->assertEqualsWithDelta(76.95, (float) $channelPo->grand_total, 0.001);
+        $this->assertEqualsWithDelta(22.50, (float) $channelPo->items()->first()->price, 0.001);
+        $this->assertSame($run->id, (int) $channelPo->price_change_run_id);
+
+        // ⚠️ تعديل قايمة `new` بيكتب `price_new` العكسي قبل الفحص —
+        // الأمر الثابت لازم يفضل متخطّي برضو
+        $this->assertEqualsWithDelta(68.40, (float) $fixedPo->fresh()->grand_total, 0.001);
+        $this->assertEqualsWithDelta(20.0, (float) $fixedPo->items()->first()->price, 0.001);
+        $this->assertSame('po_fixed_price', PriceChangeDoc::where('run_id', $run->id)
+            ->where('doc_type', 'po')->where('doc_id', $fixedPo->id)->value('reason'));
+
+        $this->assertSame(1, $result['pos_changed']);
     }
 
     public function test_pending_po_repriced_delivered_po_skipped(): void

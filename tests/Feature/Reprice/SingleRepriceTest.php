@@ -437,12 +437,110 @@ class SingleRepriceTest extends TestCase
 
         $this->assertSame('po_cancelled', PoRepricer::blocker($this->po('cancelled'))['key']);
         $this->assertSame('po_delivered', PoRepricer::blocker($this->po('delivered'))['key']);
-        $this->assertSame('po_fixed_price', PoRepricer::blocker($this->po('pending', ['price_mode' => 'old']))['key']);
+        // ⚠️ old/new لوحده مش «سعر ثابت» — العميل من غير خصم = أمر قناة عادي
+        $this->assertNull(PoRepricer::blocker($this->po('pending', ['price_mode' => 'old'])));
+
+        // عميل له خصم + أمر بوضع new سطوره بالسعر المخصوم = أمر قناة عادي
+        $this->client->update(['discount' => 0.10]);
+        $channelPo = $this->po('pending', ['price_mode' => 'new']);
+        $channelPo->items()->update(['price' => 18, 'list_price' => 20, 'discount_pct' => 0.10, 'total' => 54]);
+        $this->assertNull(PoRepricer::blocker($channelPo));
+
+        // عميل له خصم + كل السطور بسعر القايمة قبل الخصم (price_new = 20) = سعر صافي متفق عليه
+        $fixed = $this->po('pending', ['price_mode' => 'new']);
+        $fixed->items()->update(['price' => 20, 'list_price' => 20, 'total' => 60]);
+        $this->assertSame('po_fixed_price', PoRepricer::blocker($fixed)['key']);
+
         // العمود NOT NULL — الحالة دي بتيجي من صف قديم/عميل اتمسح، فبنحاكيها في الذاكرة
         $orphan = $this->po();
         $orphan->client_id = null;
         $orphan->unsetRelation('client');
         $this->assertSame('no_client', PoRepricer::blocker($orphan)['key']);
         $this->assertNull(PoRepricer::blocker($this->po()));
+    }
+
+    public function test_po_plan_reads_the_client_fresh(): void
+    {
+        $this->scene();
+        $this->setListPrice(8);
+        $po = $this->po();
+
+        // الأمر محمّل بعميله قبل ما قايمة العميل تتغير — زي المحرك الجماعي
+        $loaded = PurchaseOrder::with(['client', 'items.product'])->find($po->id);
+        $this->assertFalse(PoRepricer::plan($loaded)['changed']);
+
+        $listB = PriceList::create([
+            'code' => 'lb', 'name' => 'قايمة ب', 'name_en' => 'List B',
+            'active' => true, 'is_default' => false,
+        ]);
+        PriceListItem::create(['price_list_id' => $listB->id, 'product_id' => $this->product->id, 'price' => 15]);
+        Client::whereKey($this->client->id)->update(['price_list_id' => $listB->id]);
+        PriceList::flushCache();
+
+        $plan = PoRepricer::plan($loaded);
+        $this->assertTrue($plan['changed']);
+        $this->assertEqualsWithDelta(15.0, $plan['lines'][0]['price'], 0.001);
+
+        // والكتابة كمان بالعميل الطازة
+        $this->actingAs($this->admin);
+        $this->assertNull(PoRepricer::apply($loaded));
+        $this->assertEqualsWithDelta(15.0, (float) $po->items()->first()->price, 0.001);
+        $this->assertSame('lb', $po->fresh()->price_mode);
+    }
+
+    public function test_po_plan_reports_not_sellable_product_and_null_client(): void
+    {
+        $this->scene();
+        $po = $this->po();
+        $this->product->update(['active' => false]);
+
+        $plan = PoRepricer::plan(PurchaseOrder::find($po->id));
+        $this->assertSame($this->product->fresh()->notSellableReason(), $plan['not_priced']);
+        $this->assertFalse($plan['changed']);
+        $this->assertSame([], $plan['lines']);
+
+        $orphan = PurchaseOrder::find($po->id);
+        $orphan->client_id = null;
+        $plan = PoRepricer::plan($orphan);
+        $this->assertSame(__('ops.po_needs_rep_wh'), $plan['not_priced']);
+        $this->assertEqualsWithDelta(27.36, $plan['before']['grand'], 0.001);
+    }
+
+    public function test_apply_without_collection_leaves_collection_and_balance(): void
+    {
+        $this->scene('cash');
+        $invoice = $this->invoice('cash');
+        $this->setListPrice(12);
+
+        $inv = Invoice::find($invoice->id);
+        $plan = InvoiceRepricer::plan($inv);
+        InvoiceRepricer::apply($inv, $plan, adjustCollection: false, recalc: true);
+
+        $tx = Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get()->keyBy('kind');
+        $this->assertEqualsWithDelta(41.04, (float) $tx['sale']->debit, 0.001);
+        // ⚠️ التحصيل اللي اتقبض يوم البيع زي ما هو — الفرق على حساب العميل
+        $this->assertEqualsWithDelta(27.36, (float) $tx['collection']->credit, 0.001);
+        $this->assertEqualsWithDelta(3.36, (float) $tx['collection']->tax, 0.001);
+        $this->assertEqualsWithDelta(13.68, (float) $this->client->fresh()->balance, 0.001);
+        $this->assertBalanceMatchesLedger();
+    }
+
+    public function test_plan_detects_discount_only_change(): void
+    {
+        $this->scene();
+        $this->setListPrice(8);
+        $invoice = $this->invoice();
+
+        $this->assertFalse(InvoiceRepricer::plan(Invoice::find($invoice->id))['changed']);
+
+        // القايمة زي ما هي — الخصم بس اللي اتغيّر
+        Client::whereKey($this->client->id)->update(['discount' => 0.10]);
+
+        $plan = InvoiceRepricer::plan(Invoice::find($invoice->id));
+        $this->assertTrue($plan['changed']);
+        $this->assertEqualsWithDelta(0.10, $plan['after']['discount_pct'], 0.0001);
+        $this->assertEqualsWithDelta(8.0, $plan['lines'][0]['list_price'], 0.001);
+        $this->assertEqualsWithDelta(7.20, $plan['lines'][0]['price'], 0.001);
+        $this->assertSame('custom_discount', $plan['after']['discount_source']);
     }
 }

@@ -20,9 +20,10 @@ use Illuminate\Support\Facades\DB;
  *   • `fillItems()` — هي `fillPoItems` القديمة بالحرف (بناء البنود
  *     وتسعيرها وإجمالياته) — الإنشاء والتعديل والرفع كلهم بينادوها.
  *   • `blocker()` — اللي يمنع إعادة التسعير الجماعية: ملغي / مُسلَّم /
- *     من غير عميل / سعر صافي متفق عليه (`price_mode` = old/new، نفس
- *     استثناء شاشة الفحص `repriceCheck`).
- *   • `plan()` — قراءة بس، نفس حسبة `expectedPoTotals` بالحرف.
+ *     من غير عميل / سعر صافي متفق عليه **فعلاً** (`isFixedPrice` — الوضع
+ *     old/new لوحده مش كفاية، شوف شرحها).
+ *   • `plan()` — قراءة بس، نفس حسبة `expectedPoTotals` (+ رفض الصنف
+ *     الدرافت والأمر من غير عميل بنفس شكل «مش متسعّر»).
  *   • `apply()` — جسم `repricePoCore` بعد فحص الحالة: البنود بتتبني
  *     تاني **بنفس الكميات** عبر `fillItems`.
  *
@@ -51,16 +52,68 @@ class PoRepricer
             return ['key' => 'po_delivered', 'detail' => null];
         }
 
-        if ($po->client_id === null || $po->client === null) {
+        // العميل طازة — نفس سبب `plan()`
+        $client = $po->client_id === null ? null : $po->client()->first();
+
+        if ($client === null) {
             return ['key' => 'no_client', 'detail' => null];
         }
 
-        // أسعار صافية متفق عليها مع السلسلة عن قصد — مش تسعيرة عميل تتحدث
-        if (in_array((string) $po->price_mode, ['old', 'new'], true)) {
+        if (self::isFixedPrice($po, $client)) {
             return ['key' => 'po_fixed_price', 'detail' => null];
         }
 
         return null;
+    }
+
+    /**
+     * أمر بسعر قايمة صافي متفق عليه مع السلسلة (وضع old/new الحقيقي)؟
+     *
+     * ⚠️ **`price_mode` = old/new لوحده مش علامة كفاية** (قرار المنسّق
+     * ٢٤/١٠). أوامر القناة العادية بتخزّن `price_mode = $client->priceList()`
+     * — يعني عميل على القايمة الافتراضية أمره بيتكتب `new` وهو متسعّر
+     * بخصمه عادي (على اللايف ~100 أمر كده). الاستثناء الحقيقي بس: الوضع
+     * old/new **و** العميل له خصم **و** كل سطر متسعّر بسعر القايمة قبل
+     * الخصم بالظبط — يعني اتباع فعلاً بالصافي من غير خصمه. غير كده أمر
+     * قناة عادي ويتسعّر.
+     */
+    private static function isFixedPrice(PurchaseOrder $po, Client $client): bool
+    {
+        $mode = (string) $po->price_mode;
+
+        if (! in_array($mode, ['old', 'new'], true) || $client->effectiveDiscount() <= 0) {
+            return false;
+        }
+
+        $items = $po->items()->with('product')->get();
+
+        if ($items->isEmpty()) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if ($item->product === null) {
+                return false;
+            }
+
+            // ١. السطر = سعر القايمة قبل الخصم بتاع الوضع ده
+            $atList = abs((float) $item->price - Pricing::listPrice($item->product, $mode)) < self::EPS;
+
+            // ٢. ⚠️ أو اللقطة المخزّنة على السطر بتقول نفس الكلام (سعر =
+            // سعر القايمة، خصم صفر — بالظبط اللي `fillItems` بتكتبه في
+            // وضع old/new). لازمة لأن تعديل قايمة `new`/`old` بيكتب عمود
+            // الصنف العكسي **جوه نفس الترانزاكشن قبل الفحص ده** — فالمقارنة
+            // الأولى لوحدها كانت هتشوف السعر الجديد وتسعّر الأمر الثابت.
+            $snapshot = (float) $item->list_price > 0
+                && abs((float) $item->price - (float) $item->list_price) < self::EPS
+                && abs((float) $item->discount_pct) < 0.00005;
+
+            if (! $atList && ! $snapshot) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -75,15 +128,35 @@ class PoRepricer
      */
     public static function plan(PurchaseOrder $po): array
     {
-        $po->loadMissing(['client', 'items.product']);
+        // ⚠️ `load` مش `loadMissing` — التعديل الجماعي بيغيّر قايمة العميل
+        // جوه نفس الترانزاكشن قبل الخطة، فالعميل المحمّل قبلها قديم
+        $po->load(['client', 'items.product']);
 
-        $plan = self::planLines($po->client, $po->items);
-
-        $plan['before'] = [
+        $before = [
             'net' => (float) $po->total,
             'tax' => (float) $po->tax_total,
             'grand' => (float) $po->grand_total,
         ];
+        $blocked = fn (string $why) => [
+            'not_priced' => $why, 'changed' => false, 'before' => $before, 'after' => [], 'lines' => [],
+        ];
+
+        // أمر من غير عميل — نفس شكل «مش متسعّر» بدل TypeError
+        if ($po->client === null) {
+            return $blocked(__('ops.po_needs_rep_wh'));
+        }
+
+        // صنف درافت/موقوف — `fillItems` كانت هترفضه وقت الكتابة، فالخطة
+        // بتقوله من الأول بنفس السبب
+        foreach ($po->items as $item) {
+            if ($item->product !== null && ($reason = $item->product->notSellableReason())) {
+                return $blocked($reason);
+            }
+        }
+
+        $plan = self::planLines($po->client, $po->items);
+
+        $plan['before'] = $before;
 
         $plan['changed'] = $plan['not_priced'] === null && self::differs($plan);
 
@@ -162,7 +235,11 @@ class PoRepricer
      */
     public static function apply(PurchaseOrder $po): ?string
     {
-        $client = $po->client;
+        // ⚠️ العميل طازة من الداتابيز مش العلاقة المحمّلة — التعديل
+        // الجماعي بيغيّر قايمة العميل/بنودها جوه نفس الترانزاكشن قبل
+        // ما يوصل هنا، والعلاقة القديمة كانت هتسعّر بالقايمة اللي فاتت
+        $client = $po->client()->first();
+        $po->setRelation('client', $client);
 
         if ($client === null) {
             return __('ops.po_needs_rep_wh');

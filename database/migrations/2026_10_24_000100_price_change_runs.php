@@ -78,14 +78,22 @@ return new class extends Migration
             });
         }
 
+        // ⚠️ كل عمود بحارسه لوحده — تشغيل جزئي قديم (عمود اتضاف والتاني لأ)
+        // مايوقعش المايجريشن ولا يسيب عمود ناقص
+        if (! Schema::hasColumn('invoices', 'repriced_at')) {
+            Schema::table('invoices', function (Blueprint $t) {
+                $t->dateTime('repriced_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('invoices', 'repriced_by')) {
+            Schema::table('invoices', function (Blueprint $t) {
+                $t->foreignId('repriced_by')->nullable()->constrained('users')->nullOnDelete();
+            });
+        }
+
         if (! Schema::hasColumn('invoices', 'price_change_run_id')) {
             Schema::table('invoices', function (Blueprint $t) {
-                if (! Schema::hasColumn('invoices', 'repriced_at')) {
-                    $t->dateTime('repriced_at')->nullable();
-                }
-                if (! Schema::hasColumn('invoices', 'repriced_by')) {
-                    $t->foreignId('repriced_by')->nullable()->constrained('users')->nullOnDelete();
-                }
                 $t->foreignId('price_change_run_id')->nullable()->constrained('price_change_runs')->nullOnDelete();
             });
         }
@@ -105,10 +113,21 @@ return new class extends Migration
             });
         }
 
+        // كل عمود بحارسه — والمفتاح الأجنبي بيتشال قبل العمود (dropConstrainedForeignId)
         if (Schema::hasColumn('invoices', 'price_change_run_id')) {
             Schema::table('invoices', function (Blueprint $t) {
                 $t->dropConstrainedForeignId('price_change_run_id');
+            });
+        }
+
+        if (Schema::hasColumn('invoices', 'repriced_by')) {
+            Schema::table('invoices', function (Blueprint $t) {
                 $t->dropConstrainedForeignId('repriced_by');
+            });
+        }
+
+        if (Schema::hasColumn('invoices', 'repriced_at')) {
+            Schema::table('invoices', function (Blueprint $t) {
                 $t->dropColumn('repriced_at');
             });
         }
