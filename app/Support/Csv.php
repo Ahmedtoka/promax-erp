@@ -32,20 +32,20 @@ class Csv
             // سطور التعريف (٢١/٩ — «كل ما أسحب تقرير مش بلاقي تاريخ»): الملف
             // لوحده لازم يقول هو إيه، لأنهي فترة، واتسحب إمتى.
             foreach ($meta as $m) {
-                fputcsv($out, $m);
+                fputcsv($out, self::safeRow($m));
             }
             if ($meta !== []) {
                 fputcsv($out, []);
             }
 
-            fputcsv($out, $columns);
+            fputcsv($out, self::safeRow($columns));
 
             foreach ($rows as $row) {
-                fputcsv($out, $row);
+                fputcsv($out, self::safeRow($row));
             }
 
             if ($totals !== null) {
-                fputcsv($out, $totals);
+                fputcsv($out, self::safeRow($totals));
             }
 
             fclose($out);
@@ -67,6 +67,39 @@ class Csv
             [__('common.exp_period'), $period],
             [__('common.exp_generated'), now()->format('Y-m-d h:i A'), auth()->user()?->displayName() ?? ''],
         ];
+    }
+
+    /**
+     * ⚠️ **حارس حقن المعادلات (CSV injection).** خلية نصية أولها `=` أو
+     * `+` أو `@` أو تاب أو `\r` — أو `-` وبعدها حاجة — إكسيل بيشغّلها
+     * كمعادلة: اسم عميل زي `=HYPERLINK(...)` بيبقى لينك أو أمر بيشتغل
+     * عند اللي فتح الملف. بنحط `'` قبلها فتتعرض نص زي ما هي.
+     * الأرقام (حتى السالبة `-12.50`) مابتتلمسش عشان إكسيل يجمعها.
+     */
+    public static function safeCell(mixed $v): mixed
+    {
+        if (! is_string($v) || $v === '' || is_numeric($v)) {
+            return $v;
+        }
+
+        $first = $v[0];
+
+        if (in_array($first, ['=', '+', '@', "\t", "\r"], true) || ($first === '-' && strlen($v) > 1)) {
+            return "'".$v;
+        }
+
+        return $v;
+    }
+
+    /** @param  iterable<mixed>  $row */
+    private static function safeRow(iterable $row): array
+    {
+        $out = [];
+        foreach ($row as $k => $v) {
+            $out[$k] = self::safeCell($v);
+        }
+
+        return $out;
     }
 
     /** رقم مالي للخلية — منزلتين، من غير فاصلة آلاف */

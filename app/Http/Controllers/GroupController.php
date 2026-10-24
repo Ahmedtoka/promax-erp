@@ -178,6 +178,8 @@ class GroupController extends Controller
             // ⚠️ بالفترة (١٢/٩ — طلب المالك): «مسحوبات السلسلة من — إلى» على
             // الشاشة نفسها، مش في التصدير بس. الفلتر على تاريخ المستند.
             'movements' => \App\Services\ProductMovements::summary($ids->all(), $range->from, $range->to),
+            // قايمة أسعار السلسلة (Lane 13) — عقد السلسلة السارٍ، وإلا الأكتر بين الفروع
+            'chainList' => \App\Services\Reprice\PriceChange::chainListOf($group),
         ]);
     }
 
@@ -514,19 +516,28 @@ class GroupController extends Controller
         // ⚠️ **والعقد لسه بيغلب.** الفرع اللي عقده ماسك قايمة،
         // `listRowFor` بتاخد قايمة العقد قبل خانة العميل — فالختم
         // ده بيملا الاحتياطي مش بيدهس على اتفاق مكتوب.
+        //
+        // ⚠️⚠️ **Lane 13 (٢٤/١٠/٢٠٢٦): مفيش كتابة هنا.** تغيير قايمة السلسلة
+        // بيعمل مسودة `chain` ويودّي على صفحة المعاينة — الفروع بتتنقل
+        // (والفواتير/الأوامر تتسعّر) عند «تأكيد»، أو الفروع بس عند «احفظ
+        // للبيع الجديد بس». باقي الحقول فوق اتحفظت خلاص ورسايلها بتتعرض هناك.
         if ($request->filled('apply_price_list')) {
             $list = \App\Models\PriceList::find((int) $request->input('apply_price_list'));
 
             if ($list !== null) {
-                $n = Client::visibleTo($group->clients(), $request->user())->update([
-                    'price_list_id' => $list->id,
-                    'price_list' => $list->code,
-                ]);
+                try {
+                    $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'chain', [
+                        'group_id' => $group->id,
+                        'price_list_id' => $list->id,
+                    ]);
+                } catch (\App\Exceptions\Rejected $e) {
+                    return back()->with('ok', $msgs === [] ? __('flash.chain_saved') : implode(' · ', $msgs))
+                        ->withErrors(['reprice' => $e->getMessage()]);
+                }
 
-                $msgs[] = __('client.chain_price_list_applied', [
-                    'list' => $list->displayName(),
-                    'count' => $n,
-                ]);
+                $msgs[] = __('reprice.draft_created');
+
+                return redirect()->route('erp.prices.change', $run)->with('ok', implode(' · ', $msgs));
             }
         }
 

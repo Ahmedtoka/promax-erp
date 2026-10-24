@@ -70,6 +70,9 @@ class ClientFormIntegrityTest extends TestCase
             'from', 'to',
             // ⭐ ٢٢/٩/٢٠٢٦ — فلتر نوع القيد والريفرنس على نفس فورم الكشف (GET، بيتقروا في `ErpController::client`)
             'kind', 'ref',
+            // ⭐ ٢٤/١٠/٢٠٢٦ (Lane 13) — زرار «طبّق التسعيرة الحالية على مستندات العميل»
+            // (POST `erp.prices.change.resync`، قواعده في `PriceChangeController::resync`)
+            'trigger', 'id',
         ],
         'erp/client_form' => ['amount', 'date', 'memo'],
     ];

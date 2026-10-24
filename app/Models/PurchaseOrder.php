@@ -44,6 +44,8 @@ class PurchaseOrder extends Model
         'image_path', 'prep_started_at',
         // تدقيق الإلغاء (٢١/٨) — مين لغى وإمتى
         'cancelled_by', 'cancelled_at',
+        // تعديل الأسعار (Lane 13)
+        'price_change_run_id',
     ];
 
     /**
@@ -93,6 +95,12 @@ class PurchaseOrder extends Model
             // تدقيق الإلغاء (٢١/٨)
             'cancelled_at' => 'datetime',
         ];
+    }
+
+    /** تعديل الأسعار اللي لمس الأمر ده آخر مرة */
+    public function priceChangeRun(): BelongsTo
+    {
+        return $this->belongsTo(PriceChangeRun::class, 'price_change_run_id');
     }
 
     /** اللي لغى الأمر — لخط سير الأمر (٢١/٨) */
