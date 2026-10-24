@@ -64,6 +64,9 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.clients') }}">← {{ __('client.all_clients') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
+        <a class="btn" href="{{ route('erp.price_changes', ['client_id' => $c->id]) }}">{{ __('reprice.link_log') }}</a>
+    @endif
     @if ($manager)
         {{-- ⚠️ **الويزارد مش مودال.** المودال القديم كان بيعرض نص
              الحقول بترتيب مختلف عن شاشة الإنشاء — واللي بيدخل الداتا

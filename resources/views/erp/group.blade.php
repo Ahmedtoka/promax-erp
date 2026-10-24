@@ -68,6 +68,9 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
+        <a class="btn" href="{{ route('erp.price_changes', ['group_id' => $g->id]) }}">{{ __('reprice.link_log') }}</a>
+    @endif
     {{-- تصدير فروع السلسلة بإجمالي كشف حساب كل فرع (٨/٩) --}}
     {{-- الفترة المختارة في الصفحة بتمشي مع التصدير (٩/٩/٢٠٢٦) --}}
     <a class="btn" href="{{ route('erp.groups.statements', ['group' => $g] + $range->query()) }}">⬇ {{ __('client.export_branches') }}</a>

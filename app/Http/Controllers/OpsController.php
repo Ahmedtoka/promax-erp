@@ -4686,6 +4686,11 @@ class OpsController extends Controller
 
         return view('ops.invoice', [
             'inv' => $invoice,
+            // صف الفاتورة في سجل تعديلات الأسعار (لو اتعدلت بتعديل جماعي) — لبادج الربط
+            'repriceDoc' => $invoice->price_change_run_id
+                ? \App\Models\PriceChangeDoc::with('run')->where('run_id', $invoice->price_change_run_id)
+                    ->where('doc_type', 'invoice')->where('doc_id', $invoice->id)->first()
+                : null,
             'taxRateLabel' => $rates->count() === 1 ? \App\Services\Tax::label($rates->first()) : '',
             'companyTaxId' => \App\Models\Setting::read('company_tax_id'),
             // مودال «تحويل لعميل تاني» — للأدمن بس. فروع نفس السلسلة
