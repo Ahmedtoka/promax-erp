@@ -150,7 +150,7 @@ class PriceChange
             PriceChangeRun::whereKey($run->id)->where('status', 'draft')->update([
                 'status' => 'cancelled',
                 'error' => Str::limit($e->getMessage(), 245),
-            ]);
+            ] + self::zeroColumns());
 
             throw $e;
         }
@@ -203,6 +203,7 @@ class PriceChange
         }
 
         self::longRun();
+        self::assertCreator($run);
 
         DB::beginTransaction();
         try {
@@ -250,7 +251,8 @@ class PriceChange
             return DB::transaction(function () use ($run, $by) {
                 $locked = self::lockDraft($run);
 
-                $result = self::simulate($locked, $locked->user ?? $by);
+                self::assertCreator($locked);
+                $result = self::simulate($locked, $locked->user);
 
                 if (! self::matchesPreview($locked->preview, $result)) {
                     throw new Rejected(__('reprice.preview_stale'));
@@ -287,9 +289,12 @@ class PriceChange
             DB::transaction(function () use ($run, $by) {
                 $locked = self::lockDraft($run);
 
-                self::applyMaster($locked, $locked->user ?? $by);
+                self::assertCreator($locked);
+                self::applyMaster($locked, $locked->user);
 
-                $locked->update(['status' => 'master_only', 'applied_at' => now()]);
+                // ⚠️ مفيش ولا مستند اتلمس — أرقام المعاينة بتتصفّر من الأعمدة
+                // (السجل بيجمع الأعمدة)، والـjson فاضل للتاريخ
+                $locked->update(['status' => 'master_only', 'applied_at' => now()] + self::zeroColumns());
             });
         } finally {
             self::flushCaches();
@@ -299,7 +304,7 @@ class PriceChange
     public static function cancel(PriceChangeRun $run): void
     {
         DB::transaction(function () use ($run) {
-            self::lockDraft($run)->update(['status' => 'cancelled']);
+            self::lockDraft($run)->update(['status' => 'cancelled'] + self::zeroColumns());
         });
     }
 
@@ -485,10 +490,17 @@ class PriceChange
         // ٣. المستندات — العدّ الأول، وفوق السقف = رفض
         $since = $run->since ? Carbon::parse($run->since)->startOfDay() : null;
 
-        $invoiceQ = fn () => Invoice::whereIn('client_id', $clientIds)
-            ->when($since, fn ($q) => $q->where('created_at', '>=', $since));
-        $poQ = fn () => PurchaseOrder::whereIn('client_id', $clientIds)
-            ->when($since, fn ($q) => $q->where('created_at', '>=', $since));
+        // ⚠️ مصدر القايمة (قرار المنسّق ٢٤/١٠): التعديل بيلمس بس اللي
+        // التعديل لمسه — المستند لازم يكون فيه صنف من الأصناف اللي سعرها
+        // اتغير. السلسلة/الفرع/العميل وإعادة المزامنة = إعادة تسعير كاملة.
+        $only = self::changedProducts($run);
+        $withItems = fn ($q) => $only === null ? $q
+            : $q->whereHas('items', fn ($i) => $i->whereIn('product_id', $only));
+
+        $invoiceQ = fn () => $withItems(Invoice::whereIn('client_id', $clientIds)
+            ->when($since, fn ($q) => $q->where('created_at', '>=', $since)));
+        $poQ = fn () => $withItems(PurchaseOrder::whereIn('client_id', $clientIds)
+            ->when($since, fn ($q) => $q->where('created_at', '>=', $since)));
 
         $n = $invoiceQ()->count() + $poQ()->count();
         if ($n > self::MAX_DOCS) {
@@ -498,16 +510,16 @@ class PriceChange
         $touched = [];
 
         // ٤. الفواتير
-        $invoiceQ()->chunkById(200, function ($invoices) use (&$result, &$touched) {
+        $invoiceQ()->chunkById(200, function ($invoices) use (&$result, &$touched, $only) {
             foreach ($invoices as $inv) {
-                self::invoiceStep($inv, $result, $touched);
+                self::invoiceStep($inv, $result, $touched, $only);
             }
         });
 
         // ٥. أوامر التوريد
-        $poQ()->with('client')->chunkById(200, function ($pos) use (&$result) {
+        $poQ()->with('client')->chunkById(200, function ($pos) use (&$result, $only) {
             foreach ($pos as $po) {
-                self::poStep($po, $result);
+                self::poStep($po, $result, $only);
             }
         });
 
@@ -522,7 +534,8 @@ class PriceChange
         return $result;
     }
 
-    private static function invoiceStep(Invoice $inv, array &$result, array &$touched): void
+    /** @param  list<int>|null  $only  أصناف تعديل القايمة (null = كل حاجة) */
+    private static function invoiceStep(Invoice $inv, array &$result, array &$touched, ?array $only = null): void
     {
         $current = ['net' => (float) $inv->total, 'tax' => (float) $inv->tax_total, 'grand' => (float) $inv->grand_total];
 
@@ -552,6 +565,12 @@ class PriceChange
             return;
         }
 
+        if ($only !== null && self::otherTermsChanged($plan, $inv->items, $only, (float) $inv->discount_pct)) {
+            self::skip($result, 'invoice', $inv, 'other_terms_changed', null, $current);
+
+            return;
+        }
+
         // ⚠️ التحصيل ماحدش يلمسه، و`recalculate` مرة واحدة في الآخر
         // والشجرة صارمة: فشل إعادة الترحيل = التعديل كله يرجع
         InvoiceRepricer::apply($inv, $plan, false, false, true);
@@ -566,7 +585,8 @@ class PriceChange
         $touched[(int) $inv->client_id] = true;
     }
 
-    private static function poStep(PurchaseOrder $po, array &$result): void
+    /** @param  list<int>|null  $only  أصناف تعديل القايمة (null = كل حاجة) */
+    private static function poStep(PurchaseOrder $po, array &$result, ?array $only = null): void
     {
         $current = ['net' => (float) $po->total, 'tax' => (float) $po->tax_total, 'grand' => (float) $po->grand_total];
 
@@ -586,6 +606,12 @@ class PriceChange
 
         if (! $plan['changed']) {
             $result['unchanged']++;
+
+            return;
+        }
+
+        if ($only !== null && self::otherTermsChanged($plan, $po->items, $only, null)) {
+            self::skip($result, 'po', $po, 'other_terms_changed', null, $current);
 
             return;
         }
@@ -617,6 +643,65 @@ class PriceChange
         $result['docs'][] = self::docRow('po', $po, 'changed', null, null, $plan['before'], $after, $plan['lines']);
         self::addTo($result['totals']['po'], $plan['before'], $after);
         self::addTo($result['totals']['all'], $plan['before'], $after);
+    }
+
+    /** أصناف تعديل القايمة — أو null لباقي المصادر (إعادة تسعير كاملة) */
+    private static function changedProducts(PriceChangeRun $run): ?array
+    {
+        if ($run->trigger !== 'list') {
+            return null;
+        }
+
+        return array_map('intval', array_keys((array) ($run->payload['prices'] ?? [])));
+    }
+
+    /**
+     * الخطة بتغيّر حاجة **غير** أسعار الأصناف اللي القايمة غيّرتها؟
+     * (خصم الفاتورة/السطر، نسبة ضريبة أي سطر، أو سعر صنف تاني)
+     *
+     * ⚠️ لو آه، مصدر القايمة مايلمسش المستند: إعادة تسعيره كانت هتغيّر
+     * شروط تانية في صمت باسم «تعديل سعر صنف». ده شغل «طبّق التسعيرة
+     * الحالية» من صفحة العميل/السلسلة، بمعاينته هو.
+     *
+     * @param  iterable<\Illuminate\Database\Eloquent\Model>  $items  بنود المستند (فيها tax_rate الحالي)
+     * @param  list<int>  $only
+     */
+    private static function otherTermsChanged(array $plan, iterable $items, array $only, ?float $docDiscountPct): bool
+    {
+        $byId = [];
+        foreach ($items as $item) {
+            $byId[(int) $item->id] = $item;
+        }
+
+        // خصم الفاتورة (العمود decimal:4 — نفس دقة المقارنة في InvoiceRepricer)
+        if ($docDiscountPct !== null
+            && abs(round($docDiscountPct, 4) - round((float) ($plan['after']['discount_pct'] ?? 0), 4)) >= 0.00005) {
+            return true;
+        }
+
+        foreach ($plan['lines'] as $l) {
+            $item = $byId[(int) $l['item_id']] ?? null;
+
+            if ($item !== null && abs((float) $item->tax_rate - (float) $l['tax_rate']) >= 0.00005) {
+                return true;
+            }
+
+            // خصم سطر أمر التوريد
+            if (isset($l['old_discount_pct'], $l['discount_pct'])
+                && abs(round((float) $l['old_discount_pct'], 4) - round((float) $l['discount_pct'], 4)) >= 0.00005) {
+                return true;
+            }
+
+            if (! in_array((int) $l['product_id'], $only, true)
+                && (abs($l['old_list'] - $l['list_price']) >= self::EPS
+                    || abs($l['old_price'] - $l['price']) >= self::EPS
+                    || abs($l['old_total'] - $l['total']) >= self::EPS
+                    || abs($l['old_tax'] - $l['tax']) >= self::EPS)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** تغيير القايمة (أسعار بنود، أو قايمة عميل/فروع) — من غير أي مستند */
@@ -934,6 +1019,30 @@ class PriceChange
         }
 
         return abs((float) ($preview['ledger_diff'] ?? INF) - (float) $result['ledger_diff']) < self::EPS;
+    }
+
+    /**
+     * نطاق السلسلة/الفرع/العميل محسوب بسكوب صاحب المسودة — لو اتمسح،
+     * مانقعش على سكوب اللي فاتح الصفحة (أرقام مختلفة عن المعاينة).
+     * القايمة على مستوى الشركة فمالهاش دعوة.
+     */
+    private static function assertCreator(PriceChangeRun $run): void
+    {
+        if ($run->trigger !== 'list' && ($run->user_id === null || $run->user === null)) {
+            throw new Rejected(__('reprice.creator_missing'));
+        }
+    }
+
+    /** أعمدة الأرقام متصفّرة — للمسودة اللي اتلغت أو اتحفظت للبيع الجديد بس */
+    private static function zeroColumns(): array
+    {
+        return [
+            'clients_count' => 0, 'invoices_changed' => 0, 'pos_changed' => 0,
+            'skipped_count' => 0, 'unchanged_count' => 0,
+            'before_net' => 0, 'before_tax' => 0, 'before_grand' => 0,
+            'after_net' => 0, 'after_tax' => 0, 'after_grand' => 0,
+            'ledger_diff' => 0,
+        ];
     }
 
     /** قفل صف المسودة (جوه ترانزاكشن المنادي) — ولو مابقتش draft = رفض */

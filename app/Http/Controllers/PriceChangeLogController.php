@@ -44,8 +44,13 @@ class PriceChangeLogController extends Controller
             return $this->export($this->filtered($range, $filters), $range);
         }
 
+        // ⚠️ العدّادات والفلوس من التعديلات **المطبّقة** بس — المسودة
+        // والملغي و«للبيع الجديد بس» مالمسوش ولا مستند
         $kpi = $this->filtered($range, $filters)->selectRaw(
-            'COUNT(*) as runs, COALESCE(SUM(invoices_changed),0) as invs, COALESCE(SUM(pos_changed),0) as pos, COALESCE(SUM(ledger_diff),0) as ledger'
+            "COUNT(*) as runs,
+             COALESCE(SUM(CASE WHEN status = 'applied' THEN invoices_changed ELSE 0 END),0) as invs,
+             COALESCE(SUM(CASE WHEN status = 'applied' THEN pos_changed ELSE 0 END),0) as pos,
+             COALESCE(SUM(CASE WHEN status = 'applied' THEN ledger_diff ELSE 0 END),0) as ledger"
         )->first();
 
         $runs = $this->filtered($range, $filters)
@@ -149,21 +154,27 @@ class PriceChangeLogController extends Controller
     {
         $rows = (function () use ($q) {
             foreach ($q->with(['user', 'priceList', 'group', 'client', 'invoice'])->orderByDesc('id')->lazyById(500) as $r) {
-                yield [
+                $head = [
                     $r->number,
                     $r->created_at?->format('Y-m-d H:i'),
                     $r->user?->displayName() ?? '',
                     $r->triggerLabel(),
                     $this->target($r),
                     $r->statusLabel(),
-                    (int) $r->invoices_changed,
-                    (int) $r->pos_changed,
-                    (int) $r->skipped_count,
-                    number_format((float) $r->before_grand, 2, '.', ''),
-                    number_format((float) $r->after_grand, 2, '.', ''),
-                    number_format((float) $r->after_grand - (float) $r->before_grand, 2, '.', ''),
-                    number_format((float) $r->ledger_diff, 2, '.', ''),
                 ];
+
+                // غير المطبّق مالوش أرقام — خلايا فاضية مش أصفار تتجمع
+                yield $r->status !== 'applied'
+                    ? array_merge($head, array_fill(0, 7, ''))
+                    : array_merge($head, [
+                        (int) $r->invoices_changed,
+                        (int) $r->pos_changed,
+                        (int) $r->skipped_count,
+                        number_format((float) $r->before_grand, 2, '.', ''),
+                        number_format((float) $r->after_grand, 2, '.', ''),
+                        number_format((float) $r->after_grand - (float) $r->before_grand, 2, '.', ''),
+                        number_format((float) $r->ledger_diff, 2, '.', ''),
+                    ]);
             }
         })();
 

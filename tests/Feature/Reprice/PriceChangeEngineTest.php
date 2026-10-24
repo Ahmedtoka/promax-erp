@@ -453,7 +453,12 @@ class PriceChangeEngineTest extends TestCase
         Invoice::whereKey($closed->id)->update(['created_at' => $lastMonth]);
         GlPeriod::close($lastMonth->format('Y-m'), $this->admin);
 
+        // فيها الصنف اللي اتغير (عشان مصدر القايمة يلمسها) + صنف بلا سعر
         $unpriced = $this->invoice($x, 10, 'credit', [], $other);
+        InvoiceItem::create([
+            'invoice_id' => $unpriced->id, 'product_id' => $this->product->id, 'qty' => 1,
+            'list_price' => 10, 'price' => 10, 'unit_cost' => 5, 'total' => 0, 'tax_rate' => 0.14, 'tax' => 0,
+        ]);
 
         $delivered = $this->po($x, 10, 'delivered');
         $cancelled = $this->po($x, 10, 'cancelled');
@@ -891,5 +896,118 @@ class PriceChangeEngineTest extends TestCase
 
         $this->assertRejected(__('reprice.preview_stale'), fn () => PriceChange::apply($run->fresh(), $this->admin));
         $this->assertSame('draft', $run->fresh()->status);
+    }
+
+    // ═══════════════ المراجعة الأخيرة ═══════════════
+
+    public function test_list_trigger_touches_only_documents_with_changed_products(): void
+    {
+        $q = $this->makeProduct(['name' => 'صنف تاني', 'name_en' => 'Other item']);
+        PriceListItem::create(['price_list_id' => $this->listA->id, 'product_id' => $q->id, 'price' => 5]);
+
+        $x = $this->client($this->listA);
+        $withP = $this->invoice($x, 10);
+        // سعر Q على الفاتورة قديم (4 والقايمة 5) — إعادة تسعير كاملة كانت هتغيّره
+        $onlyQ = $this->invoice($x, 4, 'credit', [], $q);
+        $mixed = $this->invoice($x, 10);
+        InvoiceItem::create([
+            'invoice_id' => $mixed->id, 'product_id' => $q->id, 'qty' => 1,
+            'list_price' => 4, 'price' => 4, 'unit_cost' => 2, 'total' => 4, 'tax_rate' => 0.14, 'tax' => 0.56,
+        ]);
+        $mixed->update(['subtotal' => 34, 'total' => 34, 'tax_total' => 4.76, 'grand_total' => 38.76]);
+        Transaction::where('source_id', $mixed->id)->where('kind', 'sale')->update(['debit' => 38.76, 'tax' => 4.76]);
+        $x->recalculate();
+
+        $run = $this->listDraft(12);
+        $result = PriceChange::apply($run, $this->admin);
+
+        $this->assertSame(1, $result['invoices_changed']);
+        $this->assertSame(0, $result['unchanged'], 'فاتورة Q بس مابتتعدّش أصلاً');
+        $this->assertSame(1, $result['skipped']);
+        $this->assertEqualsWithDelta(41.04, (float) $withP->fresh()->grand_total, 0.001);
+
+        $this->assertEqualsWithDelta(13.68, (float) $onlyQ->fresh()->grand_total, 0.001);
+        $this->assertNull($onlyQ->fresh()->price_change_run_id);
+        $this->assertSame(0, PriceChangeDoc::where('doc_id', $onlyQ->id)->where('doc_type', 'invoice')->count());
+
+        $this->assertEqualsWithDelta(38.76, (float) $mixed->fresh()->grand_total, 0.001);
+        $this->assertSame('other_terms_changed', PriceChangeDoc::where('run_id', $run->id)
+            ->where('doc_type', 'invoice')->where('doc_id', $mixed->id)->value('reason'));
+        $this->assertLedgerReconciles($x);
+    }
+
+    public function test_client_discount_change_skips_on_list_but_reprices_on_resync(): void
+    {
+        $c = $this->client($this->listA);
+        $inv = $this->invoice($c, 10);
+        $po = $this->po($c, 10);
+        $c->update(['discount' => 0.10]);   // الخصم اتغير بعد البيع
+
+        $run = $this->listDraft(12);
+        $result = PriceChange::apply($run, $this->admin);
+
+        $this->assertSame(0, $result['invoices_changed']);
+        $this->assertSame(0, $result['pos_changed']);
+        $reasons = PriceChangeDoc::where('run_id', $run->id)->pluck('reason', 'doc_type')->all();
+        $this->assertSame(['invoice' => 'other_terms_changed', 'po' => 'other_terms_changed'], $reasons);
+        $this->assertEqualsWithDelta(34.20, (float) $inv->fresh()->grand_total, 0.001);
+        $this->assertSame(__('reprice.skip_other_terms_changed'), PriceChangeDoc::where('run_id', $run->id)->first()->reasonLabel());
+
+        // «طبّق التسعيرة الحالية» من صفحة العميل = إعادة تسعير كاملة
+        $resync = PriceChange::draft($this->admin, 'client', ['client_id' => $c->id, 'price_list_id' => null]);
+        PriceChange::apply($resync, $this->admin);
+
+        // 12 × 0.9 = 10.80 × 3 = 32.40 + 4.54 = 36.94
+        $this->assertEqualsWithDelta(36.94, (float) $inv->fresh()->grand_total, 0.001);
+        $this->assertEqualsWithDelta(36.94, (float) $po->fresh()->grand_total, 0.001);
+        $this->assertLedgerReconciles($c);
+    }
+
+    public function test_master_only_and_cancel_zero_money_columns(): void
+    {
+        $x = $this->client($this->listA);
+        $this->invoice($x, 10);
+
+        $m = $this->listDraft(12);
+        $this->assertEqualsWithDelta(41.04, (float) $m->after_grand, 0.001);
+        PriceChange::applyMasterOnly($m, $this->admin);
+
+        $c = $this->listDraft(15);
+        PriceChange::cancel($c);
+
+        foreach ([$m->fresh(), $c->fresh()] as $run) {
+            foreach (['clients_count', 'invoices_changed', 'pos_changed', 'skipped_count', 'unchanged_count'] as $k) {
+                $this->assertSame(0, (int) $run->{$k}, $k);
+            }
+            foreach (['before_grand', 'after_grand', 'ledger_diff'] as $k) {
+                $this->assertEqualsWithDelta(0.0, (float) $run->{$k}, 0.001, $k);
+            }
+            $this->assertNotEmpty($run->preview['totals'], 'المعاينة فاضلة في الـjson للتاريخ');
+        }
+    }
+
+    public function test_deleted_creator_blocks_scoped_preview_and_apply(): void
+    {
+        $creator = $this->makeAdmin(['role' => 'manager']);
+        $g = $this->group();
+        $a = $this->client($this->listA, ['group_id' => $g->id]);
+        $this->invoice($a, 10);
+
+        $run = PriceChange::draft($creator, 'chain', ['group_id' => $g->id, 'price_list_id' => $this->listB->id]);
+        DB::table('users')->where('id', $creator->id)->delete();
+        $run = $run->fresh();
+        $this->assertNull($run->user_id);
+
+        $this->assertRejected(__('reprice.creator_missing'), fn () => PriceChange::refreshPreview($run));
+        $this->assertRejected(__('reprice.creator_missing'), fn () => PriceChange::apply($run, $this->admin));
+        $this->assertSame($this->listA->id, (int) $a->fresh()->price_list_id);
+        $this->assertSame('draft', $run->fresh()->status);
+
+        // القايمة على مستوى الشركة — مالهاش دعوة بصاحبها
+        $owner = $this->makeAdmin();
+        $list = $this->listDraft(12, $owner);
+        DB::table('users')->where('id', $owner->id)->delete();
+        PriceChange::apply($list->fresh(), $this->admin);
+        $this->assertSame('applied', $list->fresh()->status);
     }
 }

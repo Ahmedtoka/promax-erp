@@ -8,8 +8,11 @@ use App\Models\ClientGroup;
 use App\Models\PriceChangeRun;
 use App\Services\Reprice\PriceChange;
 use App\Support\Access;
+use Illuminate\Database\DeadlockException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -97,10 +100,8 @@ class PriceChangeController extends Controller
             'since' => ['nullable', 'date'],
         ]);
 
-        try {
-            PriceChange::retarget($run, $data['scope'] ?? null, $data['since'] ?? null);
-        } catch (Rejected $e) {
-            return back()->withErrors(['reprice' => $e->getMessage()]);
+        if ($fail = $this->attempt(fn () => PriceChange::retarget($run, $data['scope'] ?? null, $data['since'] ?? null))) {
+            return $fail;
         }
 
         return redirect()->route('erp.prices.change', $run)->with('ok', __('reprice.preview_refreshed'));
@@ -111,10 +112,11 @@ class PriceChangeController extends Controller
     {
         $this->guardOwner($request, $run);
 
-        try {
+        $r = null;
+        if ($fail = $this->attempt(function () use ($run, $request, &$r) {
             $r = PriceChange::apply($run, $request->user());
-        } catch (Rejected $e) {
-            return back()->withErrors(['reprice' => $e->getMessage()]);
+        })) {
+            return $fail;
         }
 
         return redirect()->route('erp.prices.change', $run)->with('ok', __('reprice.applied_ok', [
@@ -129,10 +131,8 @@ class PriceChangeController extends Controller
     {
         $this->guardOwner($request, $run);
 
-        try {
-            PriceChange::applyMasterOnly($run, $request->user());
-        } catch (Rejected $e) {
-            return back()->withErrors(['reprice' => $e->getMessage()]);
+        if ($fail = $this->attempt(fn () => PriceChange::applyMasterOnly($run, $request->user()))) {
+            return $fail;
         }
 
         return redirect()->to($this->homeOf($run))->with('ok', __('reprice.master_ok'));
@@ -142,10 +142,8 @@ class PriceChangeController extends Controller
     {
         $this->guardOwner($request, $run);
 
-        try {
-            PriceChange::cancel($run);
-        } catch (Rejected $e) {
-            return back()->withErrors(['reprice' => $e->getMessage()]);
+        if ($fail = $this->attempt(fn () => PriceChange::cancel($run))) {
+            return $fail;
         }
 
         return redirect()->to($this->homeOf($run))->with('ok', __('reprice.cancelled_ok'));
@@ -180,6 +178,49 @@ class PriceChangeController extends Controller
     }
 
     // ═══════════════════════ مساعدات ═══════════════════════
+
+    /**
+     * تشغيل أكشن من المحرك — null لو نجح، أو رد «ارجع ومعاك الرسالة».
+     *
+     *   • `Rejected` (مش مسودة / الأرقام اتغيرت / الشجرة رفضت …) → رسالته.
+     *   • `ValidationException` (شهر مقفول في مود الويب مثلاً) → أخطاؤه.
+     *   • ديد لوك / انتظار لوك (1213 / 1205 / SQLSTATE 40001) → «جرّب تاني»
+     *     — التعديل كله رجع فمفيش حاجة نص نص.
+     *   • أي حاجة تانية → تكمّل لـ500 وتتسجل (⚠️ ممنوع نبلع أخطاء SQL).
+     */
+    private function attempt(callable $fn)
+    {
+        try {
+            $fn();
+        } catch (Rejected $e) {
+            return back()->withErrors(['reprice' => $e->getMessage()]);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
+        } catch (QueryException|DeadlockException $e) {
+            if (self::isLockError($e)) {
+                return back()->withErrors(['reprice' => __('reprice.retry_locked')]);
+            }
+
+            throw $e;
+        }
+
+        return null;
+    }
+
+    private static function isLockError(QueryException|DeadlockException $e): bool
+    {
+        // ⚠️ جوه ترانزاكشن متداخلة لارافيل بيلف الديد لوك في DeadlockException
+        // ويطلّعه لبره — ده نفسه علامة اللوك
+        if ($e instanceof DeadlockException) {
+            return true;
+        }
+
+        $info = $e->errorInfo ?? [];
+
+        return in_array((int) ($info[1] ?? 0), [1213, 1205], true)
+            || (string) ($info[0] ?? '') === '40001'
+            || (string) $e->getCode() === '40001';
+    }
 
     /** الأدمن أو صاحب المسودة — غير كده 403 */
     private function guardOwner(Request $request, PriceChangeRun $run): void

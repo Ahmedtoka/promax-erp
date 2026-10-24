@@ -171,7 +171,7 @@ class PriceListController extends Controller
      *
      * @param  array<int|string, mixed>  $rows  product_id => سعر
      */
-    private function draftOrNothing(Request $request, PriceList $priceList, array $rows, string $nothingMsg)
+    private function draftOrNothing(Request $request, PriceList $priceList, array $rows, string $nothingMsg, int $skipped = 0)
     {
         try {
             $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'list', [
@@ -186,7 +186,14 @@ class PriceListController extends Controller
             return back()->withErrors(['prices' => $e->getMessage()]);
         }
 
-        return redirect()->route('erp.prices.change', $run)->with('ok', __('reprice.draft_created'));
+        // التسعير الجماعي: الأصناف اللي اتسابت من غير سعر أساس لازم تبان
+        // في المعاينة كمان، مش في رسالة «مفيش تغيير» بس
+        $ok = __('reprice.draft_created');
+        if ($skipped > 0) {
+            $ok .= ' · '.__('reprice.draft_skipped', ['n' => $skipped]);
+        }
+
+        return redirect()->route('erp.prices.change', $run)->with('ok', $ok);
     }
 
     /**
@@ -254,7 +261,7 @@ class PriceListController extends Controller
         return $this->draftOrNothing($request, $priceList, $rows, __('price.bulk_done', [
             'count' => 0,
             'skipped' => $skipped,
-        ]));
+        ]), $skipped);
     }
 
     public function activate(PriceList $priceList)

@@ -191,4 +191,76 @@ class PriceChangeLogTest extends TestCase
         $this->actingAs($this->admin)->get(route('erp.prices.show', $this->list))
             ->assertOk()->assertSee('price_list_id='.$this->list->id, false);
     }
+
+    /** صف التعديل في ملف التصدير (مقسوم خلايا) */
+    private function csvRow(string $body, string $number): array
+    {
+        foreach (preg_split('/\r?\n/', $body) as $line) {
+            $cells = str_getcsv($line);
+            if (($cells[0] ?? null) === $number) {
+                return $cells;
+            }
+        }
+
+        $this->fail('الصف مش في الملف: '.$number);
+    }
+
+    public function test_log_money_counts_only_applied_runs(): void
+    {
+        [$applied] = $this->appliedRun();
+
+        // مسودة اتلغت وأعمدتها لسه شايلة أرقام معاينة (صف قديم قبل التصفير)
+        $legacy = PriceChangeRun::create([
+            'user_id' => $this->admin->id, 'trigger' => 'list', 'status' => 'cancelled', 'scope' => 'list',
+            'price_list_id' => $this->list->id, 'payload' => ['price_list_id' => $this->list->id, 'prices' => []],
+            'invoices_changed' => 7, 'pos_changed' => 3, 'skipped_count' => 2,
+            'before_grand' => 100, 'after_grand' => 900, 'ledger_diff' => 800,
+            'preview' => ['totals' => ['all' => ['after_grand' => 900]]],
+        ]);
+
+        // «للبيع الجديد بس» من المحرك
+        $c = $this->makeClient(['price_list_id' => $this->list->id, 'taxable' => true]);
+        $this->invoice($c);
+        $master = PriceChange::draft($this->admin, 'list', ['price_list_id' => $this->list->id, 'prices' => [$this->product->id => 15]]);
+        PriceChange::applyMasterOnly($master, $this->admin);
+
+        $res = $this->actingAs($this->admin)->get(route('erp.price_changes'))->assertOk();
+        $kpi = $res->viewData('kpi');
+        $this->assertSame(3, (int) $kpi->runs);
+        $this->assertSame(1, (int) $kpi->invs);
+        $this->assertSame(0, (int) $kpi->pos);
+        $this->assertEqualsWithDelta((float) $applied->ledger_diff, (float) $kpi->ledger, 0.001);
+        $this->assertEqualsWithDelta(6.84, (float) $kpi->ledger, 0.001);
+
+        $body = $this->actingAs($this->admin)->get(route('erp.price_changes', ['export' => 1]))->streamedContent();
+
+        foreach ([$legacy->number, $master->number] as $n) {
+            $row = $this->csvRow($body, $n);
+            $this->assertSame(array_fill(0, 7, ''), array_slice($row, 6, 7), 'غير المطبّق مالوش أرقام');
+        }
+        $this->assertSame('1', $this->csvRow($body, $applied->number)[6]);
+        $this->assertSame('6.84', $this->csvRow($body, $applied->number)[12]);
+    }
+
+    public function test_export_neutralizes_formula_cells(): void
+    {
+        $evil = $this->makeClient([
+            'name' => '=HYPERLINK("x")', 'name_en' => '=HYPERLINK("x")',
+            'price_list_id' => $this->list->id, 'taxable' => true,
+        ]);
+        $run = PriceChange::draft($this->admin, 'client', ['client_id' => $evil->id, 'price_list_id' => null]);
+
+        $body = $this->actingAs($this->admin)->get(route('erp.price_changes', ['export' => 1]))->streamedContent();
+
+        $this->assertSame("'=HYPERLINK(\"x\")", $this->csvRow($body, $run->number)[4]);
+        $this->assertStringNotContainsString(',=HYPERLINK', $body);
+        $this->assertStringNotContainsString('"=HYPERLINK', $body);
+
+        // الأرقام السالبة مابتتلمسش
+        $this->assertSame('-12.50', \App\Support\Csv::safeCell('-12.50'));
+        $this->assertSame("'-cmd", \App\Support\Csv::safeCell('-cmd'));
+        $this->assertSame('-', \App\Support\Csv::safeCell('-'));
+        $this->assertSame("'@SUM(A1)", \App\Support\Csv::safeCell('@SUM(A1)'));
+        $this->assertSame(5, \App\Support\Csv::safeCell(5));
+    }
 }

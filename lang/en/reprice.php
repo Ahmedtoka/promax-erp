@@ -28,6 +28,7 @@ return [
     'skip_po_delivered' => 'Delivered purchase order - review manually',
     'skip_po_fixed_price' => 'Priced at list price without the client discount - may be an agreed price; review it and reprice from the order page if needed',
     'skip_po_in_delivery' => 'Order is out for delivery - review it manually',
+    'skip_other_terms_changed' => 'Other pricing terms of this client changed too (discount/tax/other items) - use Apply current pricing from the client or chain page',
     'skip_no_client' => 'Order without a client',
 
     // Messages
@@ -168,4 +169,9 @@ return [
 
     // Engine review (Task 3)
     'gl_failed' => 'Reposting the GL entries of invoice :number failed - the whole change was rolled back and nothing was written.',
+
+    // Final review (Task 3)
+    'retry_locked' => 'Another operation is updating the same documents - try again in a moment',
+    'creator_missing' => 'The user who created this preview no longer exists - create a new preview',
+    'draft_skipped' => ':n items skipped for having no base price',
 ];

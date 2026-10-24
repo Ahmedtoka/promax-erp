@@ -97,13 +97,18 @@
                     <td>{{ $r->triggerLabel() }}</td>
                     <td>{{ $targets[$r->id] ?? '—' }}</td>
                     <td><span class="badge {{ $statusBadge($r->status) }}">{{ $r->statusLabel() }}</span></td>
-                    <td class="num">{{ (int) $r->invoices_changed }}</td>
-                    <td class="num">{{ (int) $r->pos_changed }}</td>
-                    <td class="num">{{ (int) $r->skipped_count }}</td>
-                    <td class="num">{{ $fmt($r->before_grand) }}</td>
-                    <td class="num">{{ $fmt($r->after_grand) }}</td>
-                    <td class="num {{ $sign($diff) }}" dir="ltr">{{ $fmt($diff) }}</td>
-                    <td class="num {{ $sign($r->ledger_diff) }}" dir="ltr">{{ $fmt($r->ledger_diff) }}</td>
+                    @if ($r->status === 'applied')
+                        <td class="num">{{ (int) $r->invoices_changed }}</td>
+                        <td class="num">{{ (int) $r->pos_changed }}</td>
+                        <td class="num">{{ (int) $r->skipped_count }}</td>
+                        <td class="num">{{ $fmt($r->before_grand) }}</td>
+                        <td class="num">{{ $fmt($r->after_grand) }}</td>
+                        <td class="num {{ $sign($diff) }}" dir="ltr">{{ $fmt($diff) }}</td>
+                        <td class="num {{ $sign($r->ledger_diff) }}" dir="ltr">{{ $fmt($r->ledger_diff) }}</td>
+                    @else
+                        {{-- مسودة/ملغي/للبيع الجديد بس: مفيش مستند اتلمس — مفيش أرقام --}}
+                        @for ($i = 0; $i < 7; $i++)<td class="num" style="color:var(--muted)">—</td>@endfor
+                    @endif
                 </tr>
             @empty
                 <tr><td colspan="13" style="text-align:center;color:var(--muted)">{{ __('reprice.log_empty') }}</td></tr>

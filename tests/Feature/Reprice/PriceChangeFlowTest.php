@@ -580,4 +580,45 @@ class PriceChangeFlowTest extends TestCase
         $this->actingAs($acc)->get(route('erp.price_changes'))->assertOk();
         $this->actingAs($this->manager())->get(route('erp.price_changes'))->assertForbidden();
     }
+
+    public function test_deadlock_on_apply_is_a_retry_message_not_500(): void
+    {
+        $client = $this->client($this->listA);
+        $inv = $this->invoice($client, 10);
+
+        $this->actingAs($this->admin)
+            ->post(route('erp.prices.save', $this->listA), ['prices' => [$this->product->id => 12]]);
+        $run = $this->lastRun();
+
+        // ديد لوك في نص التطبيق — نفس شكل استثناء MySQL الحقيقي
+        Invoice::updating(function () {
+            $pdo = new \PDOException('Deadlock found when trying to get lock');
+            $pdo->errorInfo = ['40001', 1213, 'Deadlock found when trying to get lock'];
+
+            throw new \Illuminate\Database\QueryException('mysql', 'update invoices', [], $pdo);
+        });
+
+        $this->actingAs($this->admin)->from(route('erp.prices.change', $run))
+            ->post(route('erp.prices.change.apply', $run))
+            ->assertRedirect(route('erp.prices.change', $run))
+            ->assertSessionHasErrors(['reprice' => __('reprice.retry_locked')]);
+
+        // ⚠️ الرجوع نفسه مابيتفحصش هنا: جوه ترانزاكشن RefreshDatabase لارافيل
+        // بيعدّي الديد لوك لبره من غير ROLLBACK (المستوى الأخير بتاع التيست) —
+        // على اللايف ترانزاكشن المحرك هي الأولى وبترجع كلها
+        $this->assertSame('draft', $run->fresh()->status);
+        $this->assertNotNull($inv->fresh());
+    }
+
+    public function test_bulk_pricing_carries_skipped_count_into_draft_flash(): void
+    {
+        $noBase = $this->makeProduct(['name' => 'بلا أساس', 'name_en' => 'No base']);
+
+        $this->actingAs($this->admin)->post(route('erp.prices.bulk', $this->listA), [
+            'ids' => [$this->product->id, $noBase->id],
+            'mode' => 'pct',
+            'value' => 20,
+        ])->assertRedirect(route('erp.prices.change', $this->lastRun()))
+            ->assertSessionHas('ok', __('reprice.draft_created').' · '.__('reprice.draft_skipped', ['n' => 1]));
+    }
 }
