@@ -5134,12 +5134,15 @@ class OpsController extends Controller
 
         // الزرار الفردي: قيد التحصيل المربوط (كاش) بيتحرك مع البيع،
         // و`recalculate()` هنا — حتى لو مفيش فرق (سلوكه من الأول)
-        \App\Services\Reprice\InvoiceRepricer::apply($invoice, $plan, adjustCollection: true, recalc: true);
+        // Lane 13: والزرار بيتسجل في «سجل تعديلات الأسعار» (لو فيه فرق فعلاً)
+        // **جوه نفس الترانزاكشن** — يا التسعير والسجل مع بعض يا ولا حاجة
+        DB::transaction(function () use ($invoice, $plan, $request) {
+            \App\Services\Reprice\InvoiceRepricer::apply($invoice, $plan, adjustCollection: true, recalc: true);
 
-        // Lane 13: الزرار الفردي بيتسجل في «سجل تعديلات الأسعار» — لو فيه فرق فعلاً
-        if ($plan['changed']) {
-            \App\Services\Reprice\PriceChange::recordSingle($invoice, $request->user(), $plan);
-        }
+            if ($plan['changed']) {
+                \App\Services\Reprice\PriceChange::recordSingle($invoice, $request->user(), $plan);
+            }
+        });
 
         $invoice->refresh();
 

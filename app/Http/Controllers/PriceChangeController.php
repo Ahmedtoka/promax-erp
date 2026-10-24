@@ -40,7 +40,20 @@ class PriceChangeController extends Controller
         // بعد التطبيق المستندات من صفوف السجل نفسها؛ في المسودة من المعاينة المتخزنة
         $result = $run->isDraft() ? ($run->preview ?? []) : ($run->summary ?? $run->preview ?? []);
 
-        if ($run->isDraft()) {
+        // ⚠️ القايمة بتتحسب على مستوى الشركة كلها (`company_wide`) — غير
+        // الأدمن يشوف الإجماليات وتغييرات الأصناف بس، من غير صفوف مستندات
+        // ولا أسماء عملاء (داتا فرق تانية). الصفوف ماتوصلش للفيو أصلاً.
+        $aggregateOnly = ! $user->isAdmin()
+            && (bool) ($result['company_wide'] ?? $run->trigger === 'list');
+
+        // ⚠️ «للبيع الجديد بس» و«ملغي» مفيش ولا مستند اتلمس — صفوف المعاينة
+        // القديمة مابتتعرضش كأنها اتغيرت
+        $docsShown = ! $aggregateOnly && in_array($run->status, ['draft', 'applied'], true);
+
+        if (! $docsShown) {
+            $docs = collect();
+            $docsTotal = 0;
+        } elseif ($run->isDraft()) {
             $docs = collect($result['docs'] ?? []);
             $docsTotal = (int) ($result['docs_total'] ?? $docs->count());
         } else {
@@ -66,6 +79,8 @@ class PriceChangeController extends Controller
             'docsTotal' => $docsTotal,
             'shownDocs' => $docs->count(),
             'names' => $names,
+            'aggregateOnly' => $aggregateOnly,
+            'docsShown' => $docsShown,
             'chain' => $chain,
             'canApply' => Access::allows($user, 'erp.prices.change.apply'),
             'canLog' => Access::allows($user, 'erp.price_changes'),

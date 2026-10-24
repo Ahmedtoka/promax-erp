@@ -39,8 +39,8 @@ return [
     'preview_title' => 'Price change preview',
     'draft_note' => 'This is a draft - no price and no document has changed yet. Review the effect, then choose.',
     'applied_note' => 'Applied to prices and documents on :date.',
-    'master_only_note' => 'Prices saved for new sales only on :date - existing documents are unchanged.',
-    'cancelled_note' => 'This draft was cancelled - nothing changed.',
+    'master_only_note' => 'Prices saved for new sales only on :date - no documents were changed.',
+    'cancelled_note' => 'Cancelled - nothing changed.',
     'last_error' => 'The last confirm attempt failed and nothing was written: :msg',
     'apply_admin_only' => 'Applying to existing documents is admin only - you can save the prices for new sales only.',
     'draft_created' => 'A price change draft was created - review the effect and confirm.',
@@ -161,4 +161,7 @@ return [
     'no_lines' => 'No lines were saved for this document.',
     'badge_repriced' => '🏷 Repriced by price change :number',
     'link_log' => '🧾 Price change log',
+
+    // Company-wide list preview for non-admins (Task 4 review)
+    'aggregate_only' => "This list is computed across every client of the company - only totals and item changes are shown, without document details.",
 ];

@@ -483,6 +483,93 @@ class PriceChangeFlowTest extends TestCase
         $this->assertSame(0, PriceChangeRun::count());
     }
 
+    // ═══════════════ الصفحة نفسها (مراجعة Task 4) ═══════════════
+
+    /**
+     * ⚠️ التأكيد كان ميت: `json_encode` بيطلّع `"…"` جوه `onsubmit="…"`
+     * فالـattribute بيتقفل بدري والفورم بيتبعت من غير سؤال.
+     */
+    public function test_confirm_dialogs_use_single_quoted_strings(): void
+    {
+        $this->client($this->listA);
+        $this->actingAs($this->admin)
+            ->post(route('erp.prices.save', $this->listA), ['prices' => [$this->product->id => 12]]);
+
+        $html = $this->actingAs($this->admin)->get(route('erp.prices.change', $this->lastRun()))
+            ->assertOk()
+            ->assertSee("return confirm('", false)
+            ->assertDontSee('confirm("', false)
+            ->getContent();
+
+        $this->assertSame(3, substr_count($html, "return confirm('"), 'تأكيد / للبيع الجديد / إلغاء');
+    }
+
+    public function test_master_only_page_does_not_show_documents_as_changed(): void
+    {
+        $inv = $this->invoice($this->client($this->listA), 10);
+
+        $this->actingAs($this->admin)
+            ->post(route('erp.prices.save', $this->listA), ['prices' => [$this->product->id => 12]]);
+        $run = $this->lastRun();
+        $this->actingAs($this->admin)->post(route('erp.prices.change.master', $run));
+
+        $this->actingAs($this->admin)->get(route('erp.prices.change', $run))
+            ->assertOk()
+            ->assertSee(__('reprice.master_only_note', ['date' => $run->fresh()->applied_at->format('Y-m-d H:i')]))
+            ->assertDontSee($inv->number)
+            ->assertDontSee(__('reprice.k_invoices'))
+            ->assertDontSee(__('reprice.docs_title'));
+    }
+
+    public function test_cancelled_page_says_nothing_changed(): void
+    {
+        $inv = $this->invoice($this->client($this->listA), 10);
+
+        $this->actingAs($this->admin)
+            ->post(route('erp.prices.save', $this->listA), ['prices' => [$this->product->id => 12]]);
+        $run = $this->lastRun();
+        $this->actingAs($this->admin)->post(route('erp.prices.change.cancel', $run));
+
+        $this->actingAs($this->admin)->get(route('erp.prices.change', $run))
+            ->assertOk()
+            ->assertSee(__('reprice.cancelled_note'))
+            ->assertDontSee($inv->number)
+            ->assertDontSee(__('reprice.k_invoices'));
+    }
+
+    /**
+     * القايمة بتتحسب على الشركة كلها — المدير يشوف الإجماليات وتغيير
+     * الصنف بس، مش فواتير فريق تاني ولا أسماء عملاءه.
+     */
+    public function test_manager_list_preview_shows_totals_not_other_teams_documents(): void
+    {
+        $manager = $this->manager();
+        $other = $this->manager();
+        $mine = $this->invoice($this->client($this->listA, ['manager_id' => $manager->id]), 10);
+        $theirs = $this->invoice($this->client($this->listA, [
+            'manager_id' => $other->id, 'name' => 'عميل فريق تاني', 'name_en' => 'Other team client',
+        ]), 10);
+
+        $this->actingAs($manager)
+            ->post(route('erp.prices.save', $this->listA), ['prices' => [$this->product->id => 12]]);
+        $run = $this->lastRun();
+
+        $this->actingAs($manager)->get(route('erp.prices.change', $run))
+            ->assertOk()
+            ->assertSee(__('reprice.totals_title'))
+            ->assertSee(__('reprice.aggregate_only'))
+            ->assertSee($this->product->displayName())
+            ->assertDontSee($theirs->number)
+            ->assertDontSee('Other team client')
+            ->assertDontSee('عميل فريق تاني')
+            ->assertDontSee($mine->number);
+
+        // الأدمن بيشوف التفاصيل عادي
+        $this->actingAs($this->admin)->get(route('erp.prices.change', $run))
+            ->assertOk()
+            ->assertDontSee(__('reprice.aggregate_only'));
+    }
+
     // ═══════════════ شاشة السجل (هيكل Task 5) ═══════════════
 
     public function test_log_routes_exist_for_admin_and_accountant(): void

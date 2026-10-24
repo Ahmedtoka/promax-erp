@@ -33,14 +33,17 @@
         : route('ops.pos.show', $d['doc_id']);
     $showBranchAsk = $run->isDraft() && $chain !== null && $chain['list'] !== null
         && (int) $chain['list']->id !== (int) $run->price_list_id && $chain['total'] > 1;
-    $jsFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP;
-    $jsApply = json_encode(__('reprice.confirm_apply', [
+    // ⚠️ نصوص التأكيد بتتحسب هنا وبتتطبع بـ`@js` (نص بين علامتين مفردتين) —
+    // `json_encode` بيطلّع علامة تنصيص مزدوجة بتقفل الـattribute والتأكيد يموت
+    $cfApply = __('reprice.confirm_apply', [
         'inv' => (int) ($result['invoices_changed'] ?? 0),
         'po' => (int) ($result['pos_changed'] ?? 0),
         'diff' => $fmt($totals['all']['diff_grand'] ?? 0),
-    ]), $jsFlags);
-    $jsMaster = json_encode(__('reprice.confirm_master'), $jsFlags);
-    $jsCancel = json_encode(__('reprice.confirm_cancel'), $jsFlags);
+    ]);
+    $cfMaster = __('reprice.confirm_master');
+    $cfCancel = __('reprice.confirm_cancel');
+    // «للبيع الجديد بس» و«ملغي»: مفيش مستند اتلمس — الأرقام مابتتعرضش كأنها اتغيرت
+    $moneyShown = in_array($run->status, ['draft', 'applied'], true);
 @endphp
 
 @section('title', __('reprice.preview_title').' — '.$run->number)
@@ -106,6 +109,11 @@
     </div>
 @endif
 
+@if ($aggregateOnly && $moneyShown)
+    <div class="alert info">{{ __('reprice.aggregate_only') }}</div>
+@endif
+
+@if ($moneyShown)
 <div class="kpis">
     <div class="kpi"><div class="lbl">{{ __('reprice.k_clients') }}</div><div class="val">{{ (int) ($result['clients'] ?? 0) }}</div></div>
     <div class="kpi"><div class="lbl">{{ __('reprice.k_invoices') }}</div><div class="val">{{ (int) ($result['invoices_changed'] ?? 0) }}</div></div>
@@ -116,8 +124,11 @@
         <div class="val {{ $sign($result['ledger_diff'] ?? 0) }}" dir="ltr">{{ $fmt($result['ledger_diff'] ?? 0) }} {{ __('common.currency') }}</div>
         <div class="sub2">{{ __('reprice.ledger_hint') }}</div></div>
 </div>
+@endif
 
-@include('erp._price_change_totals', ['totals' => $totals, 'items' => $items, 'trigger' => $run->trigger])
+@include('erp._price_change_totals', ['totals' => $moneyShown ? $totals : [], 'items' => $items, 'trigger' => $run->trigger])
+
+@if ($docsShown)
 
 <div class="card">
     <h3>📄 {{ __('reprice.docs_title') }} <span class="side">{{ $changed->count() }}</span></h3>
@@ -173,6 +184,7 @@
         </tbody>
     </table></div>
 </div>
+@endif
 
 @if ($run->isDraft())
     <div class="card">
@@ -182,18 +194,18 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             @if ($canApply)
                 <form method="POST" action="{{ route('erp.prices.change.apply', $run) }}"
-                      onsubmit="return confirm({!! $jsApply !!})">
+                      onsubmit="return confirm(@js($cfApply))">
                     @csrf
                     <button class="btn green" type="submit">{{ __('reprice.btn_apply') }}</button>
                 </form>
             @endif
             <form method="POST" action="{{ route('erp.prices.change.master', $run) }}"
-                  onsubmit="return confirm({!! $jsMaster !!})">
+                  onsubmit="return confirm(@js($cfMaster))">
                 @csrf
                 <button class="btn gold" type="submit">{{ __('reprice.btn_master') }}</button>
             </form>
             <form method="POST" action="{{ route('erp.prices.change.cancel', $run) }}"
-                  onsubmit="return confirm({!! $jsCancel !!})">
+                  onsubmit="return confirm(@js($cfCancel))">
                 @csrf
                 <button class="btn red" type="submit">{{ __('reprice.btn_cancel') }}</button>
             </form>
