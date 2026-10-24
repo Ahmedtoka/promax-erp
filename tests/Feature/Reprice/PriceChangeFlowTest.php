@@ -227,7 +227,10 @@ class PriceChangeFlowTest extends TestCase
         $this->actingAs($this->admin)->get(route('erp.prices.change', $run))
             ->assertOk()
             ->assertSee(__('reprice.status_applied'))
-            ->assertSee($inv->number);
+            ->assertSee($inv->number)
+            // تاريخ المستند محلي (Y-m-d) مش ISO بتوقيت UTC
+            ->assertSee($inv->fresh()->created_at->toDateString())
+            ->assertDontSee('.000000Z', false);
     }
 
     public function test_manager_can_save_master_only_but_not_apply(): void

@@ -61,7 +61,8 @@ class PriceChangeController extends Controller
             $docsTotal = (int) ($result['docs_total'] ?? $docs->count());
         } else {
             $docs = $run->docs()->orderBy('id')->limit(PriceChange::PREVIEW_DOC_ROWS)->get()
-                ->map(fn ($d) => $d->toArray() + ['doc_date' => $d->doc_date?->toDateString()]);
+                // ⚠️ الأول التاريخ المحلي: `+` بيسيب مفتاح الشمال، و`toArray()` بيطلّع doc_date ISO بتوقيت UTC (يوم بدري)
+                ->map(fn ($d) => ['doc_date' => $d->doc_date?->toDateString()] + $d->toArray());
             $docsTotal = $run->docs()->count();
         }
 
