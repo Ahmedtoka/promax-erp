@@ -91,6 +91,16 @@
             <button class="btn sm" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('client.delete_client') }}</button>
         </form>
     @endif
+    {{-- Lane 13: إعادة تسعير مستندات العميل بالتسعيرة الحالية — معاينة الأول --}}
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.prices.change.resync'))
+        <form method="POST" action="{{ route('erp.prices.change.resync') }}" style="display:inline"
+              onsubmit="return confirm(@js(__('reprice.confirm_resync')))">
+            @csrf
+            <input type="hidden" name="trigger" value="client">
+            <input type="hidden" name="id" value="{{ $c->id }}">
+            <button class="btn sm" type="submit">{{ __('reprice.btn_resync_client') }}</button>
+        </form>
+    @endif
     @if ($money)
         <button class="btn" onclick="openDlg('dlgOpening')">{{ __('client.opening_balance') }}</button>
         <button class="btn green" onclick="openDlg('dlgCollect')">+ {{ __('enums.transaction.collection') }}</button>

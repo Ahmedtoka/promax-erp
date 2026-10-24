@@ -5131,6 +5131,11 @@ class OpsController extends Controller
         // و`recalculate()` هنا — حتى لو مفيش فرق (سلوكه من الأول)
         \App\Services\Reprice\InvoiceRepricer::apply($invoice, $plan, adjustCollection: true, recalc: true);
 
+        // Lane 13: الزرار الفردي بيتسجل في «سجل تعديلات الأسعار» — لو فيه فرق فعلاً
+        if ($plan['changed']) {
+            \App\Services\Reprice\PriceChange::recordSingle($invoice, $request->user(), $plan);
+        }
+
         $invoice->refresh();
 
         return back()->with('ok', __('ops.repriced', [
