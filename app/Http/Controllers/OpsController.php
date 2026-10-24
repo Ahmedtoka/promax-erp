@@ -2257,43 +2257,18 @@ class OpsController extends Controller
             return __('ops.po_reprice_locked');
         }
 
-        $client = $purchaseOrder->client;
-
-        if ($client === null) {
-            return __('ops.po_needs_rep_wh');
-        }
-
-        // الكميات بالقطع زي ما هي — إعادة التسعير ماتلمسش الكميات
-        $qty = $purchaseOrder->items->pluck('qty', 'product_id')
-            ->map(fn ($q) => (int) $q)->all();
-
-        try {
-            DB::transaction(function () use ($purchaseOrder, $client, $qty) {
-                // بنود جديدة بالكامل — نفس قاعدة التعديل: إعادة بناء مش ترقيع
-                $purchaseOrder->items()->delete();
-                $this->fillPoItems($purchaseOrder, $client, $qty, 'channel');
-
-                $purchaseOrder->update([
-                    'price_mode' => $client->priceList(),
-                    'was_edited' => true,
-                    'edited_by' => auth()->id(),
-                    'edited_at' => now(),
-                ]);
-            });
-
-            // ⚠️⚠️ **إعادة التسعير ماترجّعش الأمر للحسابات — قرار المالك
-            // ٢٤/٨ بعد الحادثة.** أول نسخة عاملت المعتمد زي التعديل
-            // (رجوع للطابور + إلغاء التجهيز)، والفحص الجماعي طبّقها على
-            // أوامر قديمة شغّالة: المناديب فقدوا أوامرهم والموافقة
-            // التانية كانت هتفتح تجهيزات مكررة. القاعدة من دلوقتي:
-            // السعر بيتغير في مكانه — الحالة والموافقة والتجهيز
-            // ماحدش يلمسهم (الكميات أصلاً ثابتة فالتجهيز صحيح زي ما هو).
-            // اللي اتبهدل ساعتها اترجّع بأمر promax:restore-repriced.
-        } catch (\App\Exceptions\Rejected $e) {
-            return $e->getMessage();
-        }
-
-        return null;
+        // ⚠️⚠️ **إعادة التسعير ماترجّعش الأمر للحسابات — قرار المالك
+        // ٢٤/٨ بعد الحادثة.** أول نسخة عاملت المعتمد زي التعديل
+        // (رجوع للطابور + إلغاء التجهيز)، والفحص الجماعي طبّقها على
+        // أوامر قديمة شغّالة: المناديب فقدوا أوامرهم والموافقة
+        // التانية كانت هتفتح تجهيزات مكررة. القاعدة من دلوقتي:
+        // السعر بيتغير في مكانه — الحالة والموافقة والتجهيز
+        // ماحدش يلمسهم (الكميات أصلاً ثابتة فالتجهيز صحيح زي ما هو).
+        // اللي اتبهدل ساعتها اترجّع بأمر promax:restore-repriced.
+        //
+        // الجسم (فحص العميل + إعادة بناء البنود) في
+        // `App\Services\Reprice\PoRepricer::apply` (٢٤/١٠)
+        return \App\Services\Reprice\PoRepricer::apply($purchaseOrder);
     }
 
     /**
@@ -2304,31 +2279,14 @@ class OpsController extends Controller
      */
     private function expectedPoTotals(Client $client, $items): array
     {
-        $rows = [];
+        // الحسبة في `PoRepricer::planLines` (٢٤/١٠) — نفس أرقام الخطة الجماعية
+        $plan = \App\Services\Reprice\PoRepricer::planLines($client, $items);
 
-        foreach ($items as $item) {
-            $product = $item->product;
-
-            if ($product === null) {
-                continue;
-            }
-
-            $price = $client->priceFor($product);
-
-            if ((float) $price <= 0) {
-                return ['error' => $product->displayName()];
-            }
-
-            $lineTotal = round((int) $item->qty * $price, 2);
-            $rows[] = [
-                'total' => $lineTotal,
-                'tax' => \App\Services\Tax::on($lineTotal, $client, $product),
-            ];
+        if ($plan['not_priced'] !== null) {
+            return ['error' => $plan['not_priced']];
         }
 
-        $sums = \App\Services\Tax::totals($rows);
-
-        return ['grand' => (float) $sums['grand']];
+        return ['grand' => (float) $plan['after']['grand']];
     }
 
     /**
@@ -2573,92 +2531,9 @@ class OpsController extends Controller
      */
     private function fillPoItems(PurchaseOrder $po, Client $client, array $qtyByProduct, string $priceMode): void
     {
-        $rows = [];
-
-        foreach ($qtyByProduct as $productId => $qty) {
-            $qty = (int) $qty;
-            if ($qty <= 0) {
-                continue;
-            }
-            $product = Product::find($productId);
-            if (! $product) {
-                continue;
-            }
-
-            // ⚠️ **الصنف الدرافت بيترفض بصوت عالي مش `continue`** (١٧/٨).
-            // التخطي في صمت هنا كان هيخلّي أمر التوريد يتحفظ **ناقص
-            // سطر** والمستخدم فاكر إنه اتحفظ كامل — والعميل يستلم أقل
-            // مما اتفق عليه. الرفض بيوقف الحفظ كله ويقول اسم الصنف.
-            if ($reason = $product->notSellableReason()) {
-                throw new \App\Exceptions\Rejected($reason);
-            }
-
-            $price = $priceMode === 'channel'
-                ? $client->priceFor($product)
-                : $product->priceFor($priceMode);
-
-            if ((float) $price <= 0) {
-                throw new \App\Exceptions\Rejected(
-                    __('stock.po_not_priced', ['name' => $product->displayName()])
-                );
-            }
-
-            // ⚠️ **الخصم بيتسجّل على السطر مش بيتقرا وقت الطباعة.**
-            // خصم العميل بيتغيّر (عقد بينتهي، نسبة بتتظبط)، والورقة
-            // اللي الفرع بيمضي عليها لازم تفضل شاهدة على اللحظة اللي
-            // الأمر اتسعّر فيها. `list_price` قبل الخصم، و`price`
-            // فضل بعد الخصم زي ما هو عشان `total` مايتحركش.
-            //
-            // ⚠️ وضع `old`/`new` **مالوش خصم أصلاً** — ده سعر قايمة
-            // صافي متفق عليه مع السلسلة. اشتقاق النسبة من الفرق
-            // بين القايمتين كان هيطبع «خصم 8%» على أمر محدش اتفق
-            // فيه على خصم.
-            //
-            // ⚠️ **النسبة بتتاخد من العميل مباشرة، مش بتتعكس من السعر.**
-            // `Pricing::unitPrice` بتقرّب لقرشين قبل ما نقسم، فعكسها
-            // (`1 - price/list`) كان بيطلّع 9.98% لعقد 10% على صنف
-            // سعره 13.33 — ومستند بيتمضى عليه بيقول نسبة مختلفة عن
-            // العقد وعن فاتورة نفس العميل (اللي بتخزّن الكسر الصح).
-            $discountPct = $priceMode === 'channel' ? $client->effectiveDiscount() : 0.0;
-
-            $listPrice = $priceMode === 'channel'
-                ? \App\Services\Pricing::listPriceFor($client, $product)
-                : (float) $price;
-
-            // القايمة الناقصة بترجّع 0 — ساعتها السعر المطبوع هو المتاح
-            if ($listPrice <= 0) {
-                $listPrice = (float) $price;
-            }
-
-            $lineTotal = round($qty * $price, 2);
-
-            // الضريبة سطر بسطر من `Tax` — نفس قاعدة الفاتورة بالظبط
-            $taxRate = \App\Services\Tax::rate($client, $product);
-            $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
-
-            PurchaseOrderItem::create([
-                'purchase_order_id' => $po->id,
-                'product_id' => $product->id,
-                'qty' => $qty,
-                'price' => $price,
-                'list_price' => $listPrice,
-                'discount_pct' => $discountPct,
-                'total' => $lineTotal,
-                'tax_rate' => $taxRate,
-                'tax' => $lineTax,
-            ]);
-
-            $rows[] = ['total' => $lineTotal, 'tax' => $lineTax];
-        }
-
-        // `total` صافي المبيعات، و`grand_total` اللي بيتقيّد عند التسليم
-        $sums = \App\Services\Tax::totals($rows);
-
-        $po->update([
-            'total' => $sums['net'],
-            'tax_total' => $sums['tax'],
-            'grand_total' => $sums['grand'],
-        ]);
+        // الجسم اتنقل بالحرف لـ`App\Services\Reprice\PoRepricer::fillItems`
+        // (٢٤/١٠) — إعادة التسعير الجماعية بتبني البنود بنفس الطريق
+        \App\Services\Reprice\PoRepricer::fillItems($po, $client, $qtyByProduct, $priceMode);
     }
 
     // ═══════════ رفع POs من شيتات السلاسل — 2026-08-05 ═══════════
@@ -4963,25 +4838,8 @@ class OpsController extends Controller
      */
     private function repostInvoiceGl(Invoice $invoice, string $event): bool
     {
-        try {
-            $ok = true;
-            $ledger = app(\App\Services\Gl\Ledger::class);
-            foreach (Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->get() as $glTx) {
-                // ⚠️ قيد كان موجود ورجع null = القاعدة اتوقفت أو مفتاحها
-                // اتشال، والقيد اتمسح من غير بديل. مافيش استثناء بيترمي
-                // في الحالة دي فالصمت كان بيبلع اختفاء قيد من الدفتر.
-                $had = $ledger->autoEntryFor($glTx) !== null;
-                if ($ledger->repost($glTx) === null && $had) {
-                    $ok = false;
-                }
-            }
-
-            return $ok;
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('gl.repost failed', ['invoice' => $invoice->id, 'event' => $event, 'error' => $e->getMessage()]);
-
-            return false;
-        }
+        // الجسم اتنقل لـ`App\Services\Reprice\InvoiceGl` (٢٤/١٠) بالحرف
+        return \App\Services\Reprice\InvoiceGl::repost($invoice, $event);
     }
 
     /**
@@ -5244,93 +5102,34 @@ class OpsController extends Controller
      */
     public function repriceInvoice(Request $request, Invoice $invoice)
     {
-        if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
-            return back()->withErrors(['reprice' => __('ops.reprice_eta_locked')]);
+        // الجوهر في `App\Services\Reprice\InvoiceRepricer` (٢٤/١٠) — نفس
+        // التعديل الجماعي بيمشي عليه. ⚠️ ترتيب الحراس زي ما كان بالحرف:
+        // الضرايب ← الشهر المقفول ← الأمانة ← المرتجع ← صنف مش متسعّر.
+        $block = \App\Services\Reprice\InvoiceRepricer::blocker($invoice);
+
+        if ($block !== null && $block['key'] === 'eta_locked') {
+            return back()->withErrors(['reprice' => __(\App\Services\Reprice\InvoiceRepricer::BLOCKER_MESSAGES['eta_locked'])]);
         }
         \App\Support\PeriodGuard::assertOpen($invoice->created_at, 'reprice');
 
-        if (Transaction::where('source_type', Invoice::class)
-            ->where('source_id', $invoice->id)
-            ->where('kind', 'consignment')->exists()) {
-            return back()->withErrors(['reprice' => __('ops.reprice_consignment_blocked')]);
+        if ($block !== null) {
+            return back()->withErrors(['reprice' => __(\App\Services\Reprice\InvoiceRepricer::BLOCKER_MESSAGES[$block['key']])]);
         }
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('return_items', 'invoice_id')
-            && DB::table('return_items')->where('invoice_id', $invoice->id)->exists()) {
-            return back()->withErrors(['reprice' => __('ops.reprice_has_return')]);
-        }
-
-        $invoice->load(['items.product', 'items.batch', 'client']);
-        $client = $invoice->client;
         $oldGrand = (float) $invoice->grand_total;
+        $plan = \App\Services\Reprice\InvoiceRepricer::plan($invoice);
 
-        DB::transaction(function () use ($invoice, $client) {
-            $subtotal = 0;
-            $rows = [];
-
-            foreach ($invoice->items as $item) {
-                $quote = \App\Services\Pricing::quote(
-                    $client, $item->product, $item->batch, (int) $item->qty,
-                );
-
-                if ($quote['list_price'] <= 0) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'reprice' => __('ops.reprice_not_priced', [
-                            'product' => $item->product->displayName(),
-                        ]),
-                    ]);
-                }
-
-                $taxRate = \App\Services\Tax::rate($client, $item->product);
-                $lineTax = \App\Services\Tax::on($quote['line_total'], $client, $item->product);
-
-                // ⚠️ التكلفة زي ما هي — لقطة يوم البيع
-                $item->update([
-                    'list_price' => $quote['list_price'],
-                    'price' => $quote['unit_price'],
-                    'total' => $quote['line_total'],
-                    'tax_rate' => $taxRate,
-                    'tax' => $lineTax,
-                ]);
-
-                $rows[] = ['total' => $quote['line_total'], 'tax' => $lineTax];
-                $subtotal += round($quote['list_price'] * $item->qty, 2);
-            }
-
-            // الإجماليات التلاتة من نفس مصدر الفاتورة الجديدة
-            $sums = \App\Services\Tax::totals($rows);
-            $net = $sums['net'];
-            $taxTotal = $sums['tax'];
-            $grandTotal = $sums['grand'];
-
-            $invoice->update([
-                'price_list' => $client->priceList(),
-                'subtotal' => $subtotal,
-                'discount_pct' => $client->effectiveDiscount(),
-                'discount_source' => $client->discountSourceKey(),
-                'discount' => round($subtotal - $net, 2),
-                'total' => $net,
-                'tax_total' => $taxTotal,
-                'grand_total' => $grandTotal,
-                // الحارس فوق ضمن إنها مش متصدّرة — بنظبط الجاهزية بس
-                'eta_status' => $taxTotal > 0 ? 'ready' : 'none',
+        if ($plan['not_priced'] !== null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'reprice' => __('ops.reprice_not_priced', [
+                    'product' => $plan['not_priced'],
+                ]),
             ]);
+        }
 
-            // قيد البيع (مدين بالشامل) — وقيد التحصيل المربوط لو كاش
-            Transaction::where('source_type', Invoice::class)
-                ->where('source_id', $invoice->id)
-                ->where('kind', 'sale')
-                ->update(['debit' => $grandTotal, 'tax' => $taxTotal]);
-
-            Transaction::where('source_type', Invoice::class)
-                ->where('source_id', $invoice->id)
-                ->where('kind', 'collection')
-                ->update(['credit' => $grandTotal, 'tax' => $taxTotal]);
-
-            $client->recalculate();
-
-            $this->repostInvoiceGl($invoice, 'repriceInvoice');
-        });
+        // الزرار الفردي: قيد التحصيل المربوط (كاش) بيتحرك مع البيع،
+        // و`recalculate()` هنا — حتى لو مفيش فرق (سلوكه من الأول)
+        \App\Services\Reprice\InvoiceRepricer::apply($invoice, $plan, adjustCollection: true, recalc: true);
 
         $invoice->refresh();
 
