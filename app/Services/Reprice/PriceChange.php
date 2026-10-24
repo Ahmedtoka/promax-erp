@@ -142,7 +142,18 @@ class PriceChange
             $run->update(['item_changes' => self::assignmentChanges($run, $by)]);
         }
 
-        self::refreshPreview($run);
+        // ⚠️ أول معاينة وقعت (كتير / الشجرة رفضت / ...) → المسودة تتقفل
+        // بسببها بدل ما تفضل يتيمة في السجل من غير أرقام
+        try {
+            self::refreshPreview($run);
+        } catch (\Throwable $e) {
+            PriceChangeRun::whereKey($run->id)->where('status', 'draft')->update([
+                'status' => 'cancelled',
+                'error' => Str::limit($e->getMessage(), 245),
+            ]);
+
+            throw $e;
+        }
 
         return $run->fresh();
     }
@@ -153,26 +164,27 @@ class PriceChange
      */
     public static function retarget(PriceChangeRun $run, ?string $scope, ?string $since): array
     {
-        if (! $run->isDraft()) {
-            throw new Rejected(__('reprice.not_draft'));
-        }
+        // القفل والفحص بعده — تأكيد في تاب تانية مايتقابلش مع تعديل النطاق
+        DB::transaction(function () use ($run, $scope, $since) {
+            $locked = self::lockDraft($run);
 
-        $attrs = ['since' => $since ? Carbon::parse($since)->toDateString() : null];
+            $attrs = ['since' => $since ? Carbon::parse($since)->toDateString() : null];
 
-        if ($run->trigger === 'branch' && $scope !== null) {
-            $client = Client::findOrFail((int) $run->payload['client_id']);
-            $scope = self::branchScope($client, $scope);
-            $attrs['scope'] = $scope;
-            $attrs['payload'] = array_merge($run->payload, ['scope' => $scope]);
-        }
+            if ($locked->trigger === 'branch' && $scope !== null) {
+                $client = Client::findOrFail((int) $locked->payload['client_id']);
+                $scope = self::branchScope($client, $scope);
+                $attrs['scope'] = $scope;
+                $attrs['payload'] = array_merge($locked->payload, ['scope' => $scope]);
+            }
 
-        $run->update($attrs);
+            $locked->update($attrs);
 
-        if ($run->trigger === 'branch') {
-            $run->update(['item_changes' => self::assignmentChanges($run, $run->user)]);
-        }
+            if ($locked->trigger === 'branch') {
+                $locked->update(['item_changes' => self::assignmentChanges($locked, $locked->user)]);
+            }
+        });
 
-        return self::refreshPreview($run);
+        return self::refreshPreview($run->refresh());
     }
 
     // ═══════════════════════ المعاينة ═══════════════════════
@@ -200,7 +212,21 @@ class PriceChange
             self::flushCaches();
         }
 
-        $run->update(['preview' => self::stored($result), 'error' => null] + self::columns($result));
+        // ⚠️ التخزين بعد القفل وبشرط إنها لسه draft — تأكيد خلص في
+        // النص مايتدهسش بأرقام معاينة قديمة
+        DB::transaction(function () use ($run, $result) {
+            self::lockDraft($run);
+
+            // ⚠️ مابنفحصش عدد الصفوف المتأثرة: MySQL بيرجّع صفر لو القيم
+            // هي هي (معاينة متكررة في نفس الثانية) — القفل فوق هو الضمان
+            PriceChangeRun::whereKey($run->id)->where('status', 'draft')->update([
+                'preview' => json_encode(self::stored($result), JSON_UNESCAPED_UNICODE),
+                'error' => null,
+                'updated_at' => now(),
+            ] + self::columns($result));
+        });
+
+        $run->refresh();
 
         return $result;
     }
@@ -222,11 +248,7 @@ class PriceChange
 
         try {
             return DB::transaction(function () use ($run, $by) {
-                $locked = PriceChangeRun::whereKey($run->id)->lockForUpdate()->first();
-
-                if ($locked === null || ! $locked->isDraft()) {
-                    throw new Rejected(__('reprice.not_draft'));
-                }
+                $locked = self::lockDraft($run);
 
                 $result = self::simulate($locked, $locked->user ?? $by);
 
@@ -246,11 +268,11 @@ class PriceChange
 
                 return $result;
             });
-        } catch (Rejected $e) {
-            throw $e;
         } catch (\Throwable $e) {
-            // الترانزاكشن رجعت — بنسجّل السبب على المسودة بس (بره الترانزاكشن)
-            PriceChangeRun::whereKey($run->id)->update(['error' => Str::limit($e->getMessage(), 245)]);
+            // الترانزاكشن رجعت — بنسجّل السبب على المسودة بس (بره الترانزاكشن)،
+            // وبشرط إنها لسه draft (الرفض «مش مسودة» مالوش دعوة بالصف)
+            PriceChangeRun::whereKey($run->id)->where('status', 'draft')
+                ->update(['error' => Str::limit($e->getMessage(), 245)]);
 
             throw $e;
         } finally {
@@ -263,11 +285,7 @@ class PriceChange
     {
         try {
             DB::transaction(function () use ($run, $by) {
-                $locked = PriceChangeRun::whereKey($run->id)->lockForUpdate()->first();
-
-                if ($locked === null || ! $locked->isDraft()) {
-                    throw new Rejected(__('reprice.not_draft'));
-                }
+                $locked = self::lockDraft($run);
 
                 self::applyMaster($locked, $locked->user ?? $by);
 
@@ -281,13 +299,7 @@ class PriceChange
     public static function cancel(PriceChangeRun $run): void
     {
         DB::transaction(function () use ($run) {
-            $locked = PriceChangeRun::whereKey($run->id)->lockForUpdate()->first();
-
-            if ($locked === null || ! $locked->isDraft()) {
-                throw new Rejected(__('reprice.not_draft'));
-            }
-
-            $locked->update(['status' => 'cancelled']);
+            self::lockDraft($run)->update(['status' => 'cancelled']);
         });
     }
 
@@ -460,6 +472,8 @@ class PriceChange
             'ledger_diff' => 0.0,
             'docs' => [],
             'item_changes' => $run->item_changes ?? [],
+            // القايمة بيانات أساسية على مستوى الشركة — نطاقها كل العملاء
+            'company_wide' => $run->trigger === 'list',
         ];
 
         if ($clientIds === []) {
@@ -539,7 +553,8 @@ class PriceChange
         }
 
         // ⚠️ التحصيل ماحدش يلمسه، و`recalculate` مرة واحدة في الآخر
-        InvoiceRepricer::apply($inv, $plan, false, false);
+        // والشجرة صارمة: فشل إعادة الترحيل = التعديل كله يرجع
+        InvoiceRepricer::apply($inv, $plan, false, false, true);
 
         $fresh = $inv->fresh();
         $after = ['net' => (float) $fresh->total, 'tax' => (float) $fresh->tax_total, 'grand' => (float) $fresh->grand_total];
@@ -655,11 +670,15 @@ class PriceChange
             return self::assignmentQuery($run, $scopeUser)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
         }
 
-        // كل عميل قايمته الفعلية (`listRowFor`) هي القايمة دي
+        // كل عميل قايمته الفعلية (`listRowFor`) هي القايمة دي.
+        // ⚠️ **من غير `visibleTo` عن قصد** (قرار المنسّق ٢٤/١٠): القايمة
+        // بيانات أساسية للشركة كلها — سعرها اتغير لكل عملائها مش لفريق
+        // واحد، والتطبيق بأثر رجعي صلاحية أدمن بس. السلسلة/الفرع/العميل
+        // فاضلين على سكوب منشئ المسودة.
         $listId = (int) $run->payload['price_list_id'];
         $ids = [];
 
-        Client::visibleTo(Client::query(), $scopeUser)
+        Client::query()
             ->with(['contract.priceListRow', 'group.contract.priceListRow', 'priceListRow'])
             ->chunkById(200, function ($clients) use ($listId, &$ids) {
                 foreach ($clients as $c) {
@@ -906,13 +925,27 @@ class PriceChange
             }
         }
 
-        foreach (self::MONEY_KEYS as $k) {
-            if (abs((float) ($preview['totals']['all'][$k] ?? INF) - (float) $result['totals']['all'][$k]) >= self::EPS) {
-                return false;
+        foreach (['invoice', 'po', 'all'] as $group) {
+            foreach (self::MONEY_KEYS as $k) {
+                if (abs((float) ($preview['totals'][$group][$k] ?? INF) - (float) $result['totals'][$group][$k]) >= self::EPS) {
+                    return false;
+                }
             }
         }
 
-        return true;
+        return abs((float) ($preview['ledger_diff'] ?? INF) - (float) $result['ledger_diff']) < self::EPS;
+    }
+
+    /** قفل صف المسودة (جوه ترانزاكشن المنادي) — ولو مابقتش draft = رفض */
+    private static function lockDraft(PriceChangeRun $run): PriceChangeRun
+    {
+        $locked = PriceChangeRun::whereKey($run->id)->lockForUpdate()->first();
+
+        if ($locked === null || ! $locked->isDraft()) {
+            throw new Rejected(__('reprice.not_draft'));
+        }
+
+        return $locked;
     }
 
     private static function flushCaches(): void

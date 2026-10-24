@@ -169,10 +169,14 @@ class InvoiceRepricer
      * حساب العميل). `$recalc`: `recalculate()` للعميل هنا ولا المنادي
      * هيعملها مرة واحدة في الآخر — في الحالتين جوه نفس الترانزاكشن.
      *
+     * `$strictGl`: إعادة ترحيل الشجرة فشلت → `Rejected` والترانزاكشن كلها
+     * ترجع. الجماعي = true (تعديل بفلوس من غير قيد شجرة مطابق مرفوض)،
+     * الزرار الفردي = false (السلوك القديم: المشكلة بتتسجل في اللوج بس).
+     *
      * ⚠️ بتفتح `DB::transaction` بتاعتها (التداخل سليم) — والمنادي
      * الجماعي لازم يناديها جوه ترانزاكشنه هو.
      */
-    public static function apply(Invoice $inv, array $plan, bool $adjustCollection, bool $recalc): void
+    public static function apply(Invoice $inv, array $plan, bool $adjustCollection, bool $recalc, bool $strictGl = false): void
     {
         // شبكة أمان — المنادي مفروض رفض قبل كده
         if (($plan['not_priced'] ?? null) !== null) {
@@ -185,7 +189,7 @@ class InvoiceRepricer
         $client = $inv->client;
         $after = $plan['after'];
 
-        DB::transaction(function () use ($inv, $client, $plan, $after, $adjustCollection, $recalc) {
+        DB::transaction(function () use ($inv, $client, $plan, $after, $adjustCollection, $recalc, $strictGl) {
             $items = $inv->items->keyBy('id');
 
             foreach ($plan['lines'] as $line) {
@@ -230,7 +234,11 @@ class InvoiceRepricer
                 $client->recalculate();
             }
 
-            InvoiceGl::repost($inv, 'repriceInvoice');
+            $glOk = InvoiceGl::repost($inv, 'repriceInvoice');
+
+            if ($strictGl && ! $glOk) {
+                throw new \App\Exceptions\Rejected(__('reprice.gl_failed', ['number' => $inv->number]));
+            }
         });
     }
 

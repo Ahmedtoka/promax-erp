@@ -26,7 +26,8 @@ return [
     'skip_closed_period' => 'In a closed accounting period: :detail',
     'skip_po_cancelled' => 'Cancelled purchase order',
     'skip_po_delivered' => 'Delivered purchase order - review manually',
-    'skip_po_fixed_price' => 'Order with agreed fixed net prices',
+    'skip_po_fixed_price' => 'Priced at list price without the client discount - may be an agreed price; review it and reprice from the order page if needed',
+    'skip_po_in_delivery' => 'Order is out for delivery - review it manually',
     'skip_no_client' => 'Order without a client',
 
     // Messages
@@ -164,4 +165,7 @@ return [
 
     // Company-wide list preview for non-admins (Task 4 review)
     'aggregate_only' => "This list is computed across every client of the company - only totals and item changes are shown, without document details.",
+
+    // Engine review (Task 3)
+    'gl_failed' => 'Reposting the GL entries of invoice :number failed - the whole change was rolled back and nothing was written.',
 ];

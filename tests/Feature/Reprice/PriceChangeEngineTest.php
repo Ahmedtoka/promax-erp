@@ -204,7 +204,7 @@ class PriceChangeEngineTest extends TestCase
     private function snapshot(): array
     {
         $out = [];
-        foreach (['price_list_items', 'invoices', 'invoice_items', 'transactions', 'purchase_orders', 'purchase_order_items', 'products'] as $table) {
+        foreach (['price_list_items', 'invoices', 'invoice_items', 'transactions', 'purchase_orders', 'purchase_order_items', 'products', 'gl_entries', 'gl_lines', 'activity_logs'] as $table) {
             $out[$table] = DB::table($table)->orderBy('id')->get()->map(fn ($r) => (array) $r)->all();
         }
         $out['clients'] = DB::table('clients')->orderBy('id')->get(['id', 'balance', 'price_list_id', 'price_list'])->map(fn ($r) => (array) $r)->all();
@@ -457,6 +457,7 @@ class PriceChangeEngineTest extends TestCase
 
         $delivered = $this->po($x, 10, 'delivered');
         $cancelled = $this->po($x, 10, 'cancelled');
+        $onRoad = $this->po($x, 10, 'arrived');
         // سعر صافي متفق عليه فعلاً: عميل له خصم + السطر بسعر القايمة قبل
         // الخصم (price_old = 18) — مش مجرد `price_mode = old`
         $f = $this->client($this->listA, ['discount' => 0.10]);
@@ -468,7 +469,7 @@ class PriceChangeEngineTest extends TestCase
 
         $this->assertSame(0, $result['invoices_changed']);
         $this->assertSame(0, $result['pos_changed']);
-        $this->assertSame(8, $result['skipped']);
+        $this->assertSame(9, $result['skipped']);
 
         $reasons = PriceChangeDoc::where('run_id', $run->id)->where('outcome', 'skipped')
             ->get()->mapWithKeys(fn ($d) => [$d->doc_type.':'.$d->doc_id => $d->reason])->all();
@@ -480,6 +481,7 @@ class PriceChangeEngineTest extends TestCase
         $this->assertSame('not_priced', $reasons['invoice:'.$unpriced->id]);
         $this->assertSame('po_delivered', $reasons['po:'.$delivered->id]);
         $this->assertSame('po_cancelled', $reasons['po:'.$cancelled->id]);
+        $this->assertSame('po_in_delivery', $reasons['po:'.$onRoad->id]);
         $this->assertSame('po_fixed_price', $reasons['po:'.$fixed->id]);
 
         $notPriced = PriceChangeDoc::where('run_id', $run->id)->where('doc_id', $unpriced->id)->where('doc_type', 'invoice')->first();
@@ -493,7 +495,7 @@ class PriceChangeEngineTest extends TestCase
             $this->assertEqualsWithDelta(34.20, (float) $fresh->grand_total, 0.001);
             $this->assertNull($fresh->price_change_run_id);
         }
-        foreach ([$delivered, $cancelled] as $po) {
+        foreach ([$delivered, $cancelled, $onRoad] as $po) {
             $this->assertEqualsWithDelta(34.20, (float) $po->fresh()->grand_total, 0.001);
             $this->assertNull($po->fresh()->price_change_run_id);
         }
@@ -757,7 +759,7 @@ class PriceChangeEngineTest extends TestCase
         $this->assertSame('none', $empty['source']);
     }
 
-    public function test_manager_scope_limits_clients(): void
+    public function test_list_scope_is_company_wide_chain_scope_is_manager(): void
     {
         $manager = $this->makeAdmin(['role' => 'manager']);
         $mine = $this->client($this->listA, ['manager_id' => $manager->id]);
@@ -765,10 +767,129 @@ class PriceChangeEngineTest extends TestCase
         $this->invoice($mine, 10);
         $theirs = $this->invoice($notMine, 10);
 
+        // القايمة بيانات أساسية للشركة — كل عملائها حتى لو المنشئ مدير
         $run = $this->listDraft(12, $manager);
-        $this->assertSame(1, (int) $run->clients_count);
+        $this->assertSame(2, (int) $run->clients_count);
+        $this->assertTrue($run->preview['company_wide']);
 
-        PriceChange::apply($run, $this->admin);
-        $this->assertEqualsWithDelta(34.20, (float) $theirs->fresh()->grand_total, 0.001);
+        $result = PriceChange::apply($run, $this->admin);
+        $this->assertTrue($result['company_wide']);
+        $this->assertEqualsWithDelta(41.04, (float) $theirs->fresh()->grand_total, 0.001);
+
+        // السلسلة فاضلة على سكوب المدير اللي عمل المسودة
+        $g = $this->group();
+        $a = $this->client($this->listA, ['group_id' => $g->id, 'manager_id' => $manager->id]);
+        $b = $this->client($this->listA, ['group_id' => $g->id]);
+        $ib = $this->invoice($b, 12);
+
+        $chain = PriceChange::draft($manager, 'chain', ['group_id' => $g->id, 'price_list_id' => $this->listB->id]);
+        $this->assertSame(1, (int) $chain->clients_count);
+        $this->assertFalse($chain->preview['company_wide']);
+        PriceChange::apply($chain, $this->admin);
+
+        $this->assertSame($this->listB->id, (int) $a->fresh()->price_list_id);
+        $this->assertSame($this->listA->id, (int) $b->fresh()->price_list_id);
+        $this->assertEqualsWithDelta(41.04, (float) $ib->fresh()->grand_total, 0.001);
+        $this->assertLedgerReconciles($mine, $notMine, $a, $b);
+    }
+
+    /** دفتر شجرة بيقع في إعادة الترحيل — `InvoiceGl::repost` بترجّع false */
+    private function breakGl(): void
+    {
+        $this->mock(\App\Services\Gl\Ledger::class, function ($m) {
+            $m->shouldReceive('autoEntryFor')->andReturn(null);
+            $m->shouldReceive('repost')->andThrow(new \RuntimeException('gl down'));
+            $m->shouldIgnoreMissing();
+        });
+    }
+
+    public function test_gl_failure_rolls_back_the_whole_run(): void
+    {
+        $x = $this->client($this->listA);
+        $y = $this->client($this->listA);
+        $ix = $this->invoice($x, 10);
+        $iy = $this->invoice($y, 10);
+        $run = $this->listDraft(12);
+
+        $this->breakGl();
+
+        $msg = __('reprice.gl_failed', ['number' => $ix->number]);
+        $this->assertRejected($msg, fn () => PriceChange::apply($run, $this->admin));
+
+        $run->refresh();
+        $this->assertSame('draft', $run->status);
+        $this->assertSame($msg, $run->error);
+        $this->assertEqualsWithDelta(10.0, $this->priceIn($this->listA), 0.001);
+        foreach ([$ix, $iy] as $inv) {
+            $this->assertEqualsWithDelta(34.20, (float) $inv->fresh()->grand_total, 0.001);
+            $this->assertNull($inv->fresh()->price_change_run_id);
+        }
+        $this->assertSame(0, PriceChangeDoc::count());
+        $this->assertLedgerReconciles($x, $y);
+    }
+
+    public function test_single_button_stays_lenient_on_gl_failure(): void
+    {
+        $x = $this->client($this->listA);
+        $inv = $this->invoice($x, 10);
+        PriceListItem::where('price_list_id', $this->listA->id)->update(['price' => 12]);
+        PriceList::flushCache();
+        $this->breakGl();
+
+        $plan = \App\Services\Reprice\InvoiceRepricer::plan($inv);
+        \App\Services\Reprice\InvoiceRepricer::apply($inv, $plan, true, true);
+
+        $this->assertEqualsWithDelta(41.04, (float) $inv->fresh()->grand_total, 0.001);
+    }
+
+    public function test_failed_first_preview_cancels_the_draft(): void
+    {
+        $x = $this->client($this->listA);
+        $inv = $this->invoice($x, 10);
+        $this->breakGl();
+
+        $msg = __('reprice.gl_failed', ['number' => $inv->number]);
+        $this->assertRejected($msg, fn () => $this->listDraft(12));
+
+        $run = PriceChangeRun::sole();
+        $this->assertSame('cancelled', $run->status);
+        $this->assertSame($msg, $run->error);
+        $this->assertEqualsWithDelta(10.0, $this->priceIn($this->listA), 0.001);
+    }
+
+    public function test_preview_refused_once_run_left_draft(): void
+    {
+        $x = $this->client($this->listA);
+        $this->invoice($x, 10);
+        $run = $this->listDraft(12);
+
+        // تاب تانية أكّدت — الموديل اللي في إيدنا لسه فاكر نفسه draft
+        PriceChange::apply($run->fresh(), $this->admin);
+        $applied = $run->fresh();
+
+        $this->assertRejected(__('reprice.not_draft'), fn () => PriceChange::refreshPreview($run));
+        $this->assertRejected(__('reprice.not_draft'), fn () => PriceChange::retarget($run, null, '2026-01-01'));
+
+        $after = $run->fresh();
+        $this->assertSame('applied', $after->status);
+        $this->assertEquals($applied->preview, $after->preview);
+        $this->assertNull($after->since);
+    }
+
+    public function test_stale_guard_compares_per_type_totals(): void
+    {
+        $x = $this->client($this->listA);
+        $this->invoice($x, 10);
+        $this->po($x, 10);
+        $run = $this->listDraft(12);
+
+        // نفس الإجمالي الكلي بس متوزع غلط بين الفواتير والأوامر
+        $p = $run->preview;
+        $p['totals']['invoice']['after_grand'] += 1;
+        $p['totals']['po']['after_grand'] -= 1;
+        $run->forceFill(['preview' => $p])->save();
+
+        $this->assertRejected(__('reprice.preview_stale'), fn () => PriceChange::apply($run->fresh(), $this->admin));
+        $this->assertSame('draft', $run->fresh()->status);
     }
 }
