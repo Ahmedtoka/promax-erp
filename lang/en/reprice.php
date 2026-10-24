@@ -33,4 +33,5 @@ return [
     'too_many' => 'This change would touch :n documents - more than the allowed limit. Narrow it with the "since" date.',
     'preview_stale' => 'The numbers changed since the preview - run a new preview before confirming.',
     'not_draft' => 'This change is not a draft - it was already confirmed or cancelled.',
+    'nothing_changed' => 'No price changed - every entered price equals the stored one.',
 ];
