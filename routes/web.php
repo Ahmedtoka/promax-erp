@@ -216,6 +216,37 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // فاتورة — مش شاشة إعدادات، دي شاشة فلوس.
         Route::get('/prices', [\App\Http\Controllers\PriceListController::class, 'index'])
             ->middleware('role:admin,manager,branch_manager')->name('prices');
+        // ═══ تعديل الأسعار — مسودة / معاينة / تأكيد (Lane 13) ═══
+        // ⚠️ الثابت `/prices/changes/resync` قبل البارامتري `{run}`، والاتنين
+        // قبل `/prices/{priceList}` عشان «changes» ماتتقريش كقايمة.
+        // ⚠️ التأكيد على المستندات وإعادة المزامنة أدمن بس (`act.prices.propagate`)؛
+        // العرض/المعاينة/«احفظ للبيع الجديد بس»/الإلغاء لصاحب المسودة أو الأدمن
+        // (الكنترولر بيفحص الملكية).
+        Route::post('/prices/changes/resync', [\App\Http\Controllers\PriceChangeController::class, 'resync'])
+            ->middleware('role:admin')->name('prices.change.resync');
+        Route::middleware('role:admin,manager,branch_manager')->group(function () {
+            Route::get('/prices/changes/{run}', [\App\Http\Controllers\PriceChangeController::class, 'show'])
+                ->name('prices.change');
+            Route::post('/prices/changes/{run}/refresh', [\App\Http\Controllers\PriceChangeController::class, 'refresh'])
+                ->name('prices.change.refresh');
+            Route::post('/prices/changes/{run}/master', [\App\Http\Controllers\PriceChangeController::class, 'master'])
+                ->name('prices.change.master');
+            Route::post('/prices/changes/{run}/cancel', [\App\Http\Controllers\PriceChangeController::class, 'cancel'])
+                ->name('prices.change.cancel');
+        });
+        Route::post('/prices/changes/{run}/apply', [\App\Http\Controllers\PriceChangeController::class, 'apply'])
+            ->middleware('role:admin')->name('prices.change.apply');
+
+        // ═══ سجل تعديلات الأسعار (Lane 13) — قراءة للأدمن والمحاسب ═══
+        Route::middleware('role:admin,accountant')->group(function () {
+            Route::get('/price-changes', [\App\Http\Controllers\PriceChangeLogController::class, 'index'])
+                ->name('price_changes');
+            Route::get('/price-changes/{run}', [\App\Http\Controllers\PriceChangeLogController::class, 'show'])
+                ->name('price_changes.show');
+            Route::get('/price-changes/{run}/docs/{doc}', [\App\Http\Controllers\PriceChangeLogController::class, 'doc'])
+                ->name('price_changes.doc');
+        });
+
         Route::get('/prices/{priceList}', [\App\Http\Controllers\PriceListController::class, 'show'])
             ->middleware('role:admin,manager,branch_manager')->name('prices.show');
 

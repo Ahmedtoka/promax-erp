@@ -1338,6 +1338,21 @@ class ErpController extends Controller
             return $blocked;
         }
 
+        // ═══ Lane 13 (٢٤/١٠/٢٠٢٦): تغيير قايمة الأسعار بيستنى المعاينة ═══
+        // ⚠️ لو القايمة المختارة اتغيرت **وفعلاً هتغيّر تسعيرته**، بنشيل
+        // `price_list_id` (و`clientFields` مابتكتبش `price_list` من غيره)
+        // ونحفظ باقي الحقول عادي، وبعدين مسودة `branch` (في سلسلة) أو
+        // `client` ونودّيه على صفحة المعاينة. ملء الخانة بنفس القايمة
+        // اللي بيتحاسب بيها أصلاً (عميل قديم `price_list_id` فاضي) مالوش
+        // أثر فلوس فبيتحفظ زي الأول. `syncContract` مابيكتبش القايمة.
+        $heldList = null;
+        $newList = isset($data['price_list_id']) ? (int) $data['price_list_id'] : null;
+        if ($newList !== null && $newList !== (int) $client->price_list_id
+            && \App\Services\Pricing::listRowFor($client)?->id !== $newList) {
+            $heldList = $newList;
+            unset($data['price_list_id']);
+        }
+
         DB::transaction(function () use ($data, $request, $client) {
             $client->update($this->clientFields($data));
             $this->syncContract($client, $data, $request);
@@ -1346,6 +1361,25 @@ class ErpController extends Controller
             // مندوبه؟ المنطقة بتتفعّل وبتتعلّم للفريق أوتوماتيك
             \App\Services\Coverage::sync($client->fresh());
         });
+
+        if ($heldList !== null) {
+            $client->refresh();
+
+            try {
+                $run = \App\Services\Reprice\PriceChange::draft(
+                    $request->user(),
+                    $client->group_id !== null ? 'branch' : 'client',
+                    ['client_id' => $client->id, 'price_list_id' => $heldList, 'scope' => 'branch'],
+                );
+            } catch (\App\Exceptions\Rejected $e) {
+                return redirect()->route('erp.clients.show', $client)
+                    ->with('ok', __('flash.client_saved'))
+                    ->withErrors(['reprice' => $e->getMessage()]);
+            }
+
+            return redirect()->route('erp.prices.change', $run)
+                ->with('ok', __('reprice.client_saved_list_held'));
+        }
 
         // ⚠️ **`back()` كان بيرجّع للويزارد نفسه.** المستخدم بيحفظ
         // ويلاقي نفس الفورم قدامه فمش عارف إتحفظ ولا لأ. الكارت هو

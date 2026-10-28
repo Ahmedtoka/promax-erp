@@ -30,6 +30,9 @@
     @if ($canEdit && \App\Support\Access::action(auth()->user(), 'act.prices.edit'))
         <button class="btn" type="button" onclick="openDlg('dlgEditL')">✏️ {{ __('common.edit') }}</button>
     @endif
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
+        <a class="btn" href="{{ route('erp.price_changes', ['price_list_id' => $list->id]) }}">{{ __('reprice.link_log') }}</a>
+    @endif
     <a class="btn" href="{{ route('erp.prices') }}">← {{ __('price.price_lists') }}</a>
 @endsection
 

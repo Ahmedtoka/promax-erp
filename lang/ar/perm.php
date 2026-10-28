@@ -60,6 +60,7 @@ return [
     'act_leads_manage' => 'إدارة العملاء المحتملين',
     'act_products_edit' => 'إضافة وتعديل الأصناف',
     'act_prices_edit' => 'تعديل أسعار القوايم',
+    'act_prices_propagate' => 'تطبيق تعديل الأسعار على المستندات',
     'act_prices_activate' => 'تفعيل وإيقاف القوايم',
     'act_wh_receive' => 'إذن استلام جديد',
     'act_wh_putaway' => 'ترصيف ونقل على الأرفف',

@@ -156,44 +156,44 @@ class PriceListController extends Controller
             return back()->withErrors(['prices' => __('price.rows_stale')]);
         }
 
-        $touched = 0;
-
-        DB::transaction(function () use ($rows, $priceList, &$touched) {
-            foreach ($rows as $productId => $price) {
-                if ($price === null || $price === '') {
-                    continue;
-                }
-
-                $price = round((float) $price, 2);
-
-                $item = PriceListItem::firstOrNew([
-                    'price_list_id' => $priceList->id,
-                    'product_id' => (int) $productId,
-                ]);
-
-                if ($item->exists && abs((float) $item->price - $price) < 0.005) {
-                    continue;
-                }
-
-                $item->price = $price;
-                $item->save();
-                $touched++;
-
-                // ⚠️ **القايمتين المهاجرتين ليهم عمودين على الصنف**
-                // لسه بيقروا منهم الـKPIs والأبلكيشن وأوامر التوريد.
-                // من غير الكتابة العكسية دي، المندوب بيشوف سعر
-                // والفاتورة بتطلع بسعر تاني.
-                if (in_array($priceList->code, \App\Services\Pricing::LISTS, true)) {
-                    Product::whereKey((int) $productId)
-                        ->update(['price_'.$priceList->code => $price]);
-                }
-            }
-        });
-
-        return back()->with('ok', __('price.prices_saved', [
-            'count' => $touched,
-            'missing' => $priceList->fresh()->missingCount(),
+        // ═══ Lane 13: مفيش كتابة هنا — مسودة ومعاينة ═══
+        // الكتابة نفسها اتنقلت لـ`PriceChange::writeListPrices` (نفس الحلقة
+        // بالحرف + الكتابة العكسية لعمودي الصنف)، وبتتنفذ عند «تأكيد» أو
+        // «احفظ للبيع الجديد بس» من صفحة المعاينة.
+        return $this->draftOrNothing($request, $priceList, $rows, __('price.prices_saved', [
+            'count' => 0,
+            'missing' => $priceList->missingCount(),
         ]));
+    }
+
+    /**
+     * مسودة تعديل للصفوف اللي فعلاً مختلفة — أو رسالة «مفيش تغيير».
+     *
+     * @param  array<int|string, mixed>  $rows  product_id => سعر
+     */
+    private function draftOrNothing(Request $request, PriceList $priceList, array $rows, string $nothingMsg, int $skipped = 0)
+    {
+        try {
+            $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'list', [
+                'price_list_id' => $priceList->id,
+                'prices' => $rows,
+            ]);
+        } catch (\App\Exceptions\Rejected $e) {
+            if ($e->getMessage() === __('reprice.nothing_changed')) {
+                return back()->with('ok', $nothingMsg);
+            }
+
+            return back()->withErrors(['prices' => $e->getMessage()]);
+        }
+
+        // التسعير الجماعي: الأصناف اللي اتسابت من غير سعر أساس لازم تبان
+        // في المعاينة كمان، مش في رسالة «مفيش تغيير» بس
+        $ok = __('reprice.draft_created');
+        if ($skipped > 0) {
+            $ok .= ' · '.__('reprice.draft_skipped', ['n' => $skipped]);
+        }
+
+        return redirect()->route('erp.prices.change', $run)->with('ok', $ok);
     }
 
     /**
@@ -225,52 +225,43 @@ class PriceListController extends Controller
             : $priceList;
 
         $skipped = 0;
-        $done = 0;
+        $rows = [];
 
-        DB::transaction(function () use ($ids, $data, $priceList, $source, &$done, &$skipped) {
-            foreach ($ids as $pid) {
-                $base = $source?->priceFor($pid) ?? 0.0;
+        // ⚠️ نفس حساب السعر بالحرف — بس بيتجمّع في `$rows` بدل ما يتكتب.
+        // الكتابة (`updateOrCreate` + العمود العكسي) بقت في
+        // `PriceChange::writeListPrices` بعد المعاينة (Lane 13).
+        foreach ($ids as $pid) {
+            $base = $source?->priceFor($pid) ?? 0.0;
 
-                $price = match ($data['mode']) {
-                    'set' => (float) $data['value'],
-                    'copy' => $base,
-                    // ⚠️ الصنف اللي مالوش سعر أساس بيتساب — «زوّد 10%»
-                    // على صفر بتدّي صفر، وده سعر بيع مجاني.
-                    'pct' => $base > 0 ? $base * (1 + ((float) $data['value'] / 100)) : 0.0,
-                    'amount' => $base > 0 ? $base + (float) $data['value'] : 0.0,
-                    default => 0.0,
-                };
+            $price = match ($data['mode']) {
+                'set' => (float) $data['value'],
+                'copy' => $base,
+                // ⚠️ الصنف اللي مالوش سعر أساس بيتساب — «زوّد 10%»
+                // على صفر بتدّي صفر، وده سعر بيع مجاني.
+                'pct' => $base > 0 ? $base * (1 + ((float) $data['value'] / 100)) : 0.0,
+                'amount' => $base > 0 ? $base + (float) $data['value'] : 0.0,
+                default => 0.0,
+            };
 
-                if ($price <= 0) {
-                    $skipped++;
+            if ($price <= 0) {
+                $skipped++;
 
-                    continue;
-                }
-
-                // تقريب اختياري — لأقرب 0.25 أو 0.50 مثلاً
-                if (! empty($data['round']) && (float) $data['round'] > 0) {
-                    $step = (float) $data['round'];
-                    $price = round($price / $step) * $step;
-                }
-
-                PriceListItem::updateOrCreate(
-                    ['price_list_id' => $priceList->id, 'product_id' => $pid],
-                    ['price' => round($price, 2)],
-                );
-
-                // نفس الكتابة العكسية بتاعت `savePrices` — الشرح هناك
-                if (in_array($priceList->code, \App\Services\Pricing::LISTS, true)) {
-                    Product::whereKey($pid)->update(['price_'.$priceList->code => round($price, 2)]);
-                }
-
-                $done++;
+                continue;
             }
-        });
 
-        return back()->with('ok', __('price.bulk_done', [
-            'count' => $done,
+            // تقريب اختياري — لأقرب 0.25 أو 0.50 مثلاً
+            if (! empty($data['round']) && (float) $data['round'] > 0) {
+                $step = (float) $data['round'];
+                $price = round($price / $step) * $step;
+            }
+
+            $rows[(int) $pid] = round($price, 2);
+        }
+
+        return $this->draftOrNothing($request, $priceList, $rows, __('price.bulk_done', [
+            'count' => 0,
             'skipped' => $skipped,
-        ]));
+        ]), $skipped);
     }
 
     public function activate(PriceList $priceList)

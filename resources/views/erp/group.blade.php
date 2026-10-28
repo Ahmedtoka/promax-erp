@@ -68,6 +68,9 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
+        <a class="btn" href="{{ route('erp.price_changes', ['group_id' => $g->id]) }}">{{ __('reprice.link_log') }}</a>
+    @endif
     {{-- تصدير فروع السلسلة بإجمالي كشف حساب كل فرع (٨/٩) --}}
     {{-- الفترة المختارة في الصفحة بتمشي مع التصدير (٩/٩/٢٠٢٦) --}}
     <a class="btn" href="{{ route('erp.groups.statements', ['group' => $g] + $range->query()) }}">⬇ {{ __('client.export_branches') }}</a>
@@ -92,6 +95,21 @@
          إجمالياتها. كل فرع عميل مستقل بعقده وخصمه ومسؤوله. --}}
     <span class="badge b-gray">{{ __('client.branch_count') }}: {{ $branches->count() }}</span>
     @if (! $g->active)<span class="badge b-red">{{ __('client.suspended') }}</span>@endif
+    {{-- قايمة أسعار السلسلة (Lane 13): عقد السلسلة السارٍ، وإلا الأكتر بين الفروع --}}
+    @if ($chainList['list'])
+        <span class="badge b-blue">🏷 {{ __('reprice.chain_list', ['list' => $chainList['list']->displayName(), 'n' => $chainList['count'], 'total' => $chainList['total']]) }}@if ($chainList['source'] === 'contract') · {{ __('reprice.chain_list_contract') }}@endif</span>
+    @else
+        <span class="badge b-gray">🏷 {{ __('reprice.chain_list_none') }}</span>
+    @endif
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.prices.change.resync'))
+        <form method="POST" action="{{ route('erp.prices.change.resync') }}" style="display:inline"
+              onsubmit="return confirm(@js(__('reprice.confirm_resync')))">
+            @csrf
+            <input type="hidden" name="trigger" value="chain">
+            <input type="hidden" name="id" value="{{ $g->id }}">
+            <button class="btn sm" type="submit">{{ __('reprice.btn_resync_chain') }}</button>
+        </form>
+    @endif
 </div>
 
 {{-- كل رقم هنا بيتداس (٢٢/٩): يا ينزّلك على جدول الفروع مترتّب بالرقم ده، يا يفلتر قيود السلسلة بنوعها --}}

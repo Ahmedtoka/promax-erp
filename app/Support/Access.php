@@ -54,6 +54,9 @@ class Access
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices', 'erp.govs', 'erp.families',
+            // ⚠️ تطبيق تعديل الأسعار على المستندات وإعادة المزامنة أدمن بس (Lane 13) —
+            // المدير يقدر يحفظ للبيع الجديد بس، والبادئة `erp.prices` كانت هتفتحهم له
+            '!erp.prices.change.apply', '!erp.prices.change.resync',
             // الحوافز: التارجتات ولوحة الأداء — شغل مدير القناة (2026-08-06)
             'erp.targets', 'erp.performance',
             // الحضور والانصراف — بيشوف فريقه ويعتمد ساعاتهم (2026-08-08)
@@ -118,6 +121,8 @@ class Access
             'hr.leave', '!hr.leave.balances',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
+            // نفس استثناء المدير: تطبيق/إعادة مزامنة الأسعار على المستندات أدمن بس (Lane 13)
+            '!erp.prices.change.apply', '!erp.prices.change.resync',
             // ⚠️ **`erp.products` لازم مع `erp.stock`.** كود الصنف في
             // كل صف لينك لكارته (`erp.products.show`)، وكان بيرمي 403
             // لأن البادئة مش مغطّاة — نفس الغلطة بالظبط اللي الملف ده
@@ -162,6 +167,8 @@ class Access
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
             '!erp.client_locations.confirm', '!erp.groups.contract',
             'erp.dues', 'erp.reports', 'erp.tax', 'erp.eta',
+            // سجل تعديلات الأسعار — قراءة (Lane 13)
+            'erp.price_changes',
             // إدارة المهام (٢٦/٨)
             'erp.tasks',
             // تصفية المناديب — ده شغل الحسابات الأساسي (2026-08-06)
@@ -614,6 +621,7 @@ class Access
             // العائلات والصلاحية (2026-08-06) — بتحكم مدة انتهاء منتجاتها
             ['erp.families', '🧬', 'nav.families', 'erp.families*', null],
             ['erp.prices', '🏷️', 'price.price_lists', 'erp.prices*', null],
+            ['erp.price_changes', '🧾', 'reprice.log_title', 'erp.price_changes*', null],
         ],
 
         // ═══ ٢. المخزن — بترتيب دخول البضاعة ═══
@@ -789,6 +797,8 @@ class Access
         // ═══ المنتجات والتسعير ═══
         'act.products.edit' => ['perm.act_products_edit', 'erp.stock', ['manager'], ['erp.products.store', 'erp.products.update']],
         'act.prices.edit' => ['perm.act_prices_edit', 'erp.prices', ['manager'], ['erp.prices.store', 'erp.prices.update', 'erp.prices.save', 'erp.prices.bulk']],
+        // تطبيق تعديل الأسعار على الفواتير وأوامر التوريد + إعادة المزامنة — أدمن بس (Lane 13)
+        'act.prices.propagate' => ['perm.act_prices_propagate', 'erp.prices', [], ['erp.prices.change.apply', 'erp.prices.change.resync']],
         'act.prices.activate' => ['perm.act_prices_activate', 'erp.prices', ['manager'], ['erp.prices.activate', 'erp.prices.deactivate', 'erp.prices.default']],
 
         // ═══ المخزن ═══

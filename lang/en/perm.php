@@ -60,6 +60,7 @@ return [
     'act_leads_manage' => 'Manage leads',
     'act_products_edit' => 'Add & edit products',
     'act_prices_edit' => 'Edit price lists',
+    'act_prices_propagate' => 'Apply price changes to documents',
     'act_prices_activate' => 'Activate & stop price lists',
     'act_wh_receive' => 'New goods receipt',
     'act_wh_putaway' => 'Put-away & shelf moves',

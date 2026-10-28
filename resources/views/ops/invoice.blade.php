@@ -46,6 +46,13 @@
     @if ($inv->client)
         <a class="btn" href="{{ route('erp.clients.show', $inv->client) }}">👤 {{ __('client.client_card') }}</a>
     @endif
+    @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
+        {{-- (Lane 13) الفاتورة اتعدلت بتعديل أسعار جماعي؟ — بادج لتفاصيلها + لينك السجل مفلتر بالرقم --}}
+        @if ($repriceDoc)
+            <a class="badge b-purple" href="{{ route('erp.price_changes.doc', [$repriceDoc->run_id, $repriceDoc->id]) }}">{{ __('reprice.badge_repriced', ['number' => $repriceDoc->run?->number]) }}</a>
+        @endif
+        <a class="btn" href="{{ route('erp.price_changes', ['invoice' => $inv->number]) }}">{{ __('reprice.link_log') }}</a>
+    @endif
     @if ($inv->user)
         <a class="btn" href="{{ route('ops.rep', $inv->user) }}">🚚 {{ $inv->user->displayName() }}</a>
     @endif
