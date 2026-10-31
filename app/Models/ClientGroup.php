@@ -16,7 +16,7 @@ class ClientGroup extends Model
     use HasBilingualName, HasFactory;
 
     protected $fillable = [
-        'code', 'name', 'name_en', 'channel_id', 'sub_channel',
+        'code', 'name', 'name_en', 'channel_id', 'mother_company_id', 'sub_channel',
         'notes', 'active', 'reviewed_at',
     ];
 
@@ -31,6 +31,12 @@ class ClientGroup extends Model
     public function channel(): BelongsTo
     {
         return $this->belongsTo(Channel::class);
+    }
+
+    /** الشركة الأم — تجميعة فوق السلسلة، مابتأثرش على السعر أو الحساب */
+    public function motherCompany(): BelongsTo
+    {
+        return $this->belongsTo(MotherCompany::class);
     }
 
     /** عقد السلسلة — كل فروعها بتورثه لو مالهاش عقد خاص */

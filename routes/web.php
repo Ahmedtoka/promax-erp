@@ -780,6 +780,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('groups.contract');
         });
 
+        // ===== الشركات الأم (٣١/١٠) =====
+        Route::get('/mother-companies', [\App\Http\Controllers\MotherCompanyController::class, 'index'])->name('mother_companies');
+        // ⚠️ الثابت قبل البارامتري
+        Route::get('/mother-companies/export', [\App\Http\Controllers\MotherCompanyController::class, 'export'])->name('mother_companies.export');
+        Route::get('/mother-companies/{mother}', [\App\Http\Controllers\MotherCompanyController::class, 'show'])->name('mother_companies.show');
+        Route::middleware('role:admin,manager')->group(function () {
+            Route::post('/mother-companies', [\App\Http\Controllers\MotherCompanyController::class, 'store'])->name('mother_companies.store');
+            Route::put('/mother-companies/{mother}', [\App\Http\Controllers\MotherCompanyController::class, 'update'])->name('mother_companies.update');
+            Route::delete('/mother-companies/{mother}', [\App\Http\Controllers\MotherCompanyController::class, 'destroy'])->name('mother_companies.destroy');
+            Route::post('/mother-companies/{mother}/attach', [\App\Http\Controllers\MotherCompanyController::class, 'attach'])->name('mother_companies.attach');
+        });
+
         // ===== الديفيجنز (١٧/٨) =====
         Route::get('/divisions', [\App\Http\Controllers\DivisionController::class, 'index'])
             ->name('divisions');

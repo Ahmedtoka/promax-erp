@@ -371,6 +371,11 @@ class GroupController extends Controller
 
         $group = ClientGroup::create($data);
 
+        // من صفحة الشركة الأم بنرجع لها — بيضيف كذا سلسلة ورا بعض
+        if ($group->mother_company_id !== null) {
+            return redirect()->route('erp.mother_companies.show', $group->mother_company_id)->with('ok', __('flash.chain_created'));
+        }
+
         return redirect()->route('erp.groups.show', $group)->with('ok', __('flash.chain_created'));
     }
 
@@ -659,6 +664,7 @@ class GroupController extends Controller
             // والاسم العربي في شاشة إنجليزية بيكسّر الصفحة بصرياً.
             'name_en' => ['nullable', 'string', 'max:120'],
             'channel_id' => ['nullable', 'exists:channels,id'],
+            'mother_company_id' => ['nullable', 'exists:mother_companies,id'],
             'sub_channel' => ['nullable', 'in:chain,convenience'],
             // ⚠️ **مفيش خصم ولا مسؤول على السلسلة.** قرار 2026-08-01:
             // السلسلة تجميعة عرض بس. كل فرع عميل مستقل بعقده وخصمه

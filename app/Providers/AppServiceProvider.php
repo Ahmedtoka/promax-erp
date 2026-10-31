@@ -54,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Contract::class,
         \App\Models\Zone::class,
         \App\Models\ClientGroup::class,
+        \App\Models\MotherCompany::class,
         \App\Models\Channel::class,
         \App\Models\PurchaseOrder::class,
         \App\Models\Invoice::class,

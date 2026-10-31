@@ -68,6 +68,9 @@
 
 @section('actions')
     <a class="btn" href="{{ route('erp.groups') }}">← {{ __('client.all_chains') }}</a>
+    @if ($g->motherCompany)
+        <a class="btn" href="{{ route('erp.mother_companies.show', $g->motherCompany) }}">🏢 {{ $g->motherCompany->displayName() }}</a>
+    @endif
     @if (\App\Support\Access::allows(auth()->user(), 'erp.price_changes'))
         <a class="btn" href="{{ route('erp.price_changes', ['group_id' => $g->id]) }}">{{ __('reprice.link_log') }}</a>
     @endif
@@ -550,6 +553,17 @@
                     @endforeach
                 </select>
             </div>
+            {{-- ⚠️ محروسة: الملفات بتترفع بإيد وممكن توصل قبل المايجريشن --}}
+            @if (\Illuminate\Support\Facades\Schema::hasTable('mother_companies'))
+                <div><label class="f">{{ __('client.mother_company') }}</label>
+                    <select name="mother_company_id" style="width:100%">
+                        <option value="">— {{ __('common.none') }} —</option>
+                        @foreach (\App\Models\MotherCompany::orderBy('name')->get() as $mc)
+                            <option value="{{ $mc->id }}" @selected($g->mother_company_id === $mc->id)>{{ $mc->displayName() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @endif
         </div>
         <div class="frow">
             <div><label class="f">{{ __('client.segment') }}</label>

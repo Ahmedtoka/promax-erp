@@ -49,7 +49,7 @@ class Access
             // فالفورم بيبان والخريطة ترفضه
             'erp.audit.chains', 'erp.audit.clients', 'erp.audit.report',
             'erp.audit.save', 'erp.audit.confirm', 'erp.audit.statement',
-            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.channels',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.channels',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
@@ -104,7 +104,7 @@ class Access
             // الديفيجنز **قراءة** — الإعداد الجماعي مش هنا عن قصد:
             // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
             'erp.divisions', '!erp.divisions.assign',
-            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
             // عقد السلسلة `role:admin,manager` (تدقيق ١٥/٩)
             '!erp.groups.contract',
             // ⚠️ **محفظة الليدز قراءة بس.** الجدولة وخط السير والحصاد
@@ -162,7 +162,7 @@ class Access
         'accountant' => [
             // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
             'docs',
-            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.contracts',
+            'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
             // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
             '!erp.client_locations.confirm', '!erp.groups.contract',
@@ -465,6 +465,7 @@ class Access
             ['erp.client_locations', '📍', 'nav.client_locations', 'erp.client_locations', null],
             ['erp.client_locations.credits', '🧭', 'geo.rep_credits', 'erp.client_locations.credits', null],
             ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
+            ['erp.mother_companies', '🏢', 'nav.mother_companies', 'erp.mother_companies*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
             ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
@@ -904,7 +905,7 @@ class Access
         // بس المحافظات والفروع والعربيات والسلاسل والقنوات `role:admin,manager` —
         // المفتاح الواحد كان بيوريه فورم «محافظة جديدة» و«سلسلة جديدة» وبيترفض
         'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.groups.quick']],
-        'act.org.structure' => ['perm.act_org_structure', 'erp.zones', ['manager'], ['erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.channels.update']],
+        'act.org.structure' => ['perm.act_org_structure', 'erp.zones', ['manager'], ['erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.mother_companies.store', 'erp.mother_companies.update', 'erp.mother_companies.destroy', 'erp.mother_companies.attach', 'erp.channels.update']],
         'act.import.run' => ['perm.act_import_run', 'erp.import', [], ['erp.import.upload', 'erp.import.apply']],
 
         // ═══ تسليم النظام (١٩/١٠) — حالة التيست واللايف والديدلاين والملاحظات قرار المالك ═══
