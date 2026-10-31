@@ -19,7 +19,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--paper);color:var(--text);font-family:{{ $isRtl ? 'Cairo,Poppins,Tahoma' : 'Poppins,Cairo,Tahoma' }},sans-serif;font-size:14px}
+body{background:var(--paper);color:var(--text);font-family:{{ $isRtl ? 'Cairo,Poppins,Tahoma' : 'Poppins,Cairo,Tahoma' }},sans-serif;font-size:16px}
 /* ⚠️ **عناصر الفورم مابترثش الفونت من `body` افتراضياً** — المتصفح
    بيديها فونت النظام. كل عنصر كان بيحط `font-family:inherit` بإيده،
    وأي زرار أو سيلكت أو `summary` اتكتب من غيره كان بيطلع بفونت تاني
@@ -125,8 +125,8 @@ img{display:block;max-width:100%}
   margin-inline-start:20px;   /* بمحاذاة أيقونة المجموعة */
 }
 /* اللينك جوّه المجموعة أصغر من العنوان — التسلسل البصري */
-.navgrp-acc .navbody .navlink{font-size:11.5px;padding:6.5px 10px}
-.navlink{display:flex;align-items:center;gap:8px;padding:7.5px 11px;border-radius:var(--r-sm);font-weight:600;font-size:12px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
+.navgrp-acc .navbody .navlink{font-size:13.5px;padding:6.5px 10px}
+.navlink{display:flex;align-items:center;gap:8px;padding:7.5px 11px;border-radius:var(--r-sm);font-weight:600;font-size:14px;color:rgba(255,255,255,.82);margin-bottom:2px;transition:.15s}
 .navlink:hover{background:rgba(255,255,255,.12);color:#fff}
 .navlink.active{background:#fff;color:var(--royal-blue);font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 .navlink .cnt{margin-inline-start:auto;background:var(--brand-yellow);color:var(--ink);font-weight:800;border-radius:20px;padding:1px 8px;font-size:10.5px}
@@ -286,7 +286,7 @@ input.bad, select.bad, textarea.bad{border-color:var(--red)!important;background
    ⚠️ **ممنوع تظبيط جدول في بليد واحد.** أي قاعدة هنا بتتطبق على
    الـ50 جدول مرة واحدة؛ والتظبيط الموضعي هو اللي خلّى نص الجداول
    محاذاتها مختلفة عن التانية. */
-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
+table{width:100%;border-collapse:collapse;font-size:15px;table-layout:auto}
 
 /* ⚠️ **الهيدر بأزرق البراند وكلام أبيض** (قرار المالك 2026-08-08).
    كان رمادي باهت على أبيض — بيضيع وسط الصفوف، والعين مابتعرفش
@@ -362,7 +362,7 @@ img[data-zoom]{cursor:zoom-in}
 .b-purple{background:#F1EAFD;color:var(--purple)}
 .b-gold{background:#FFFDE0;color:#8A7A00}
 .searchbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
-input:not([type]),input[type=text],input[type=search],input[type=number],input[type=date],input[type=datetime-local],input[type=time],input[type=email],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:13px;outline:none;transition:.15s}
+input:not([type]),input[type=text],input[type=search],input[type=number],input[type=date],input[type=datetime-local],input[type=time],input[type=email],input[type=password],select,textarea{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 13px;font-family:inherit;font-size:15px;outline:none;transition:.15s}
 input[type=search]{-webkit-appearance:none;appearance:none}
 input:focus,select:focus,textarea:focus{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.14)}
 .searchbar input:not([type]),.searchbar input[type=text],.searchbar input[type=search]{flex:1;min-width:200px}
