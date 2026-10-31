@@ -27,6 +27,23 @@ class MotherCompany extends Model
         return $this->hasMany(ClientGroup::class, 'mother_company_id');
     }
 
+    /**
+     * السلسلة الأساسية: اللي اسمها نفس اسم الشركة (زي «Circle K»).
+     * فروعها بتتوزع على سلاسل الشركة لحد ما تفضى.
+     */
+    public function mainChainId(): ?int
+    {
+        $names = array_values(array_filter([$this->name, $this->name_en]));
+
+        return ClientGroup::whereIn('name', $names)->orWhereIn('name_en', $names)->orderBy('id')->value('id');
+    }
+
+    /** السلاسل الأساسية لكل الشركات الأم */
+    public static function mainChainIds(): array
+    {
+        return static::all()->map->mainChainId()->filter()->unique()->values()->all();
+    }
+
     /** كود فريد من الاسم — نفس فكرة `ClientGroup::nextCode` */
     public static function nextCode(string $name): string
     {

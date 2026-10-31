@@ -703,10 +703,19 @@
         <div style="max-height:46vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
             <div class="tablewrap">
             <table>
-                @foreach (Client::whereNull('group_id')->where('category', '!=', 'internal')->orderBy('name')->get() as $c)
-                    <tr data-txt="{{ $c->displayName() }}">
+                {{-- سلسلة تابعة لشركة أم بتاخد كمان من فروع السلسلة الأساسية — الضم بينقل الفرع منها --}}
+                @php
+                    $mainChainId = $g->motherCompany?->mainChainId();
+                    $mainChainId = $mainChainId === $g->id ? null : $mainChainId;
+                @endphp
+                @foreach (Client::with('group')->where('category', '!=', 'internal')
+                    ->where(fn ($q) => $q->whereNull('group_id')->when($mainChainId, fn ($w, $id) => $w->orWhere('group_id', $id)))
+                    ->orderBy('name')->get() as $c)
+                    <tr data-txt="{{ $c->displayName() }} {{ $c->code }}">
                         <td style="width:34px"><input type="checkbox" name="client_ids[]" value="{{ $c->id }}"></td>
-                        <td>{{ $c->displayName() }}<br><span style="font-size:10px;color:var(--muted)">{{ $c->address }}</span></td>
+                        <td>{{ $c->displayName() }}
+                            @if ($c->group)<span class="badge b-orange">{{ __('client.unlinked_from_chain', ['chain' => $c->group->displayName()]) }}</span>@endif
+                            <br><span style="font-size:10px;color:var(--muted)">{{ $c->address }}</span></td>
                         <td class="num" style="font-size:11px">{{ $fmt($c->purchases) }}</td>
                     </tr>
                 @endforeach

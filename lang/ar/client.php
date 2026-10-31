@@ -859,4 +859,11 @@ return [
     'mother_chains_detached' => 'اتفك :count سلسلة من الشركة',
     'mother_confirm_detach' => 'فك السلسلة من الشركة؟ السلسلة وعملاءها مش هيتأثروا.',
     'mother_confirm_delete' => 'مسح الشركة؟ لو تحتها سلاسل هتتوقف بس.',
+    'unlinked_title' => 'فروع مش مربوطة بسلسلة',
+    'unlinked_all' => 'كل الفروع المش مربوطة',
+    'unlinked_main' => 'لسه في السلسلة الأساسية',
+    'unlinked_main_hint' => 'زي Circle K — لسه مااتنقلتش لسلسلتها',
+    'unlinked_none' => 'من غير سلسلة خالص',
+    'unlinked_empty' => 'مفيش فروع هنا',
+    'unlinked_from_chain' => 'حاليًا في :chain',
 ];

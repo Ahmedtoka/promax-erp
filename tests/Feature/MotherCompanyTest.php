@@ -147,6 +147,36 @@ class MotherCompanyTest extends TestCase
         $this->assertSame(0, MotherCompany::where('name', 'X')->count());
     }
 
+    public function test_branch_moves_from_main_chain_and_leaves_the_unlinked_screen(): void
+    {
+        $admin = $this->makeAdmin();
+        $m = $this->mother();
+        $main = ClientGroup::create(['code' => 'CRK', 'name' => 'سيركل كيه', 'name_en' => 'Circle K', 'active' => true]);
+        $tmt = $this->chain('Circle K TMT', $m);
+        $other = $this->chain('Other Chain');
+
+        $moving = $this->makeClient(['name' => 'Moving Branch', 'name_en' => 'Moving Branch', 'group_id' => $main->id]);
+        $this->makeClient(['name' => 'Solo Client', 'name_en' => 'Solo Client']);
+        $this->makeClient(['name' => 'Other Branch', 'name_en' => 'Other Branch', 'group_id' => $other->id]);
+
+        // ديالوج الضم بيعرض فروع السلسلة الأساسية والمستقلين، مش فروع سلسلة تانية
+        $this->actingAs($admin)->get(route('erp.groups.show', $tmt))
+            ->assertOk()->assertSee('Moving Branch')->assertSee('Solo Client')->assertDontSee('Other Branch');
+
+        $this->actingAs($admin)->get(route('erp.groups.unlinked'))
+            ->assertOk()->assertSee('Moving Branch')->assertSee('Solo Client')->assertDontSee('Other Branch');
+        $this->actingAs($admin)->get(route('erp.groups.unlinked', ['show' => 'none']))
+            ->assertOk()->assertDontSee('Moving Branch')->assertSee('Solo Client');
+
+        $this->actingAs($admin)->post(route('erp.groups.attach', $tmt), [
+            'action' => 'attach', 'client_ids' => [$moving->id],
+        ])->assertRedirect();
+
+        $this->assertSame($tmt->id, $moving->fresh()->group_id);
+        $this->assertSame(0, $main->clients()->count());
+        $this->actingAs($admin)->get(route('erp.groups.unlinked'))->assertDontSee('Moving Branch');
+    }
+
     public function test_mother_company_does_not_change_pricing_or_client_chain(): void
     {
         $g = $this->chain('TMT');

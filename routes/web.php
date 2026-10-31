@@ -755,6 +755,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::get('/groups', [GroupController::class, 'index'])->name('groups');
         // ⚠️ الثابت قبل البارامتري — `/groups/export` لازم قبل `/groups/{group}`
         Route::get('/groups/export', [GroupController::class, 'export'])->name('groups.export');
+        Route::get('/groups/unlinked', [GroupController::class, 'unlinked'])->name('groups.unlinked');
         Route::get('/groups/{group}', [GroupController::class, 'show'])->name('groups.show');
         // تصدير CSV (٨/٩): فروع السلسلة بأرصدتها، وكشف حساب فرع بالحركة —
         // قراءة بس، بنفس سكوب الشاشة، فمن غير `role:` زي `show`

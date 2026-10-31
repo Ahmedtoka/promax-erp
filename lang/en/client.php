@@ -842,4 +842,11 @@ return [
     'mother_chains_detached' => ':count chains removed from the company',
     'mother_confirm_detach' => 'Remove this chain from the company? The chain and its clients are not affected.',
     'mother_confirm_delete' => 'Delete this company? If it has chains it will only be suspended.',
+    'unlinked_title' => 'Branches Not Linked to a Chain',
+    'unlinked_all' => 'All Unlinked Branches',
+    'unlinked_main' => 'Still in the Main Chain',
+    'unlinked_main_hint' => 'Like Circle K — not moved to their chain yet',
+    'unlinked_none' => 'No Chain at All',
+    'unlinked_empty' => 'No branches here',
+    'unlinked_from_chain' => 'Now in :chain',
 ];

@@ -467,6 +467,7 @@ class Access
             ['erp.clients.activate', '✅', 'client.activate_clients', 'erp.clients.activate*', null],
             ['erp.mother_companies', '🏢', 'nav.mother_companies', 'erp.mother_companies*', null],
             ['erp.groups', '🏬', 'nav.chains', 'erp.groups*', null],
+            ['erp.groups.unlinked', '🔗', 'nav.unlinked_branches', 'erp.groups.unlinked', null],
             ['erp.channels', '🎯', 'nav.channels', 'erp.channels', null],
             ['erp.contracts', '📜', 'nav.contracts', 'erp.contracts', null],
             ['erp.managers.clients', '🧑‍💼', 'perm.manager_clients', 'erp.managers*', null],

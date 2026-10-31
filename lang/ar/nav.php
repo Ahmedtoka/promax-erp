@@ -29,6 +29,7 @@ return [
     'client_locations' => 'مواقع العملاء',
     'chains' => 'السلاسل',
     'mother_companies' => 'الشركات الأم',
+    'unlinked_branches' => 'فروع مش مربوطة',
     'channels' => 'القنوات',
     'contracts' => 'العقود',
     'inventory' => 'كتالوج المنتجات',

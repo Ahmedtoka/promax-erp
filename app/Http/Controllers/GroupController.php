@@ -32,6 +32,40 @@ class GroupController extends Controller
     }
 
     /**
+     * الفروع اللي لسه مااتوزعتش (٣١/١٠/٢٠٢٦): من غير سلسلة خالص، أو لسه في
+     * السلسلة الأساسية لشركة أم (زي Circle K) لحد ما تفضى.
+     */
+    public function unlinked(Request $request)
+    {
+        $mainIds = \App\Models\MotherCompany::mainChainIds();
+
+        $base = fn () => Client::visibleTo(Client::query(), $request->user())
+            ->where('category', '!=', 'internal')
+            ->where('status', '!=', 'rejected')
+            ->where(fn ($q) => $q->whereNull('group_id')->orWhereIn('group_id', $mainIds));
+
+        $show = $request->string('show')->value();
+        $q = $base()->with(['group', 'zone'])
+            ->when($show === 'main', fn ($w) => $w->whereNotNull('group_id'))
+            ->when($show === 'none', fn ($w) => $w->whereNull('group_id'));
+
+        if ($s = $request->string('q')->trim()->value()) {
+            Client::search($q, $s);
+        }
+
+        return view('erp.unlinked_branches', [
+            'clients' => $q->orderBy('name')->get(),
+            'counts' => [
+                'all' => $base()->count(),
+                'main' => $base()->whereNotNull('group_id')->count(),
+                'none' => $base()->whereNull('group_id')->count(),
+            ],
+            'show' => in_array($show, ['main', 'none'], true) ? $show : 'all',
+            'search' => $s,
+        ]);
+    }
+
+    /**
      * ═══ تصدير السلاسل كلها بأرقامها (٨ سبتمبر ٢٠٢٦) ═══
      *
      * نفس صفوف الشاشة بنفس فلاترها (بحث + قناة) — CSV بالـBOM بيفتح في
