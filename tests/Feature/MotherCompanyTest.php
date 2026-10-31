@@ -177,6 +177,24 @@ class MotherCompanyTest extends TestCase
         $this->actingAs($admin)->get(route('erp.groups.unlinked'))->assertDontSee('Moving Branch');
     }
 
+    public function test_chains_screen_and_export_filter_by_mother_company(): void
+    {
+        $admin = $this->makeAdmin();
+        $m = $this->mother();
+        $this->chain('Inside Chain', $m);
+        $this->chain('Outside Chain');
+
+        $this->actingAs($admin)->get(route('erp.groups', ['mother' => $m->id]))
+            ->assertOk()->assertSee('Inside Chain')->assertDontSee('Outside Chain');
+
+        $this->actingAs($admin)->get(route('erp.groups'))
+            ->assertOk()->assertSee('Inside Chain')->assertSee('Outside Chain');
+
+        $csv = $this->actingAs($admin)->get(route('erp.groups.export', ['mother' => $m->id]))->streamedContent();
+        $this->assertStringContainsString('Inside Chain', $csv);
+        $this->assertStringNotContainsString('Outside Chain', $csv);
+    }
+
     public function test_mother_company_does_not_change_pricing_or_client_chain(): void
     {
         $g = $this->chain('TMT');

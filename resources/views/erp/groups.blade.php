@@ -59,6 +59,13 @@
                 <option value="{{ $ch->id }}" @selected((int) ($filters['channel'] ?? 0) === $ch->id)>{{ $ch->displayName() }}</option>
             @endforeach
         </select></label>
+        <label class="fl"><span>{{ __('client.mother_company') }}</span>
+        <select name="mother">
+            <option value="">{{ __('client.mother_all') }}</option>
+            @foreach ($mothers as $mc)
+                <option value="{{ $mc->id }}" @selected((int) ($filters['mother'] ?? 0) === $mc->id)>{{ $mc->displayName() }}</option>
+            @endforeach
+        </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
         <a class="btn" href="{{ route('erp.groups') }}">{{ __('common.clear') }}</a>
         <span class="badge b-gray">{{ __('client.chain_countable', ['count' => $groups->count()]) }}</span>

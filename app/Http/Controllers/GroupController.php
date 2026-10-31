@@ -25,7 +25,8 @@ class GroupController extends Controller
             'groups' => $groups,
             'stats' => $stats,
             'channels' => Channel::orderBy('id')->get(),
-            'filters' => $request->only(['q', 'channel']),
+            'mothers' => \App\Models\MotherCompany::orderBy('name')->get(),
+            'filters' => $request->only(['q', 'channel', 'mother']),
             'ungrouped' => Client::visibleTo(Client::whereNull('group_id'), $request->user())
                 ->where('category', '!=', 'internal')->count(),
         ]);
@@ -139,6 +140,9 @@ class GroupController extends Controller
         }
         if ($ch = $request->integer('channel')) {
             $q->where('channel_id', $ch);
+        }
+        if ($mother = $request->integer('mother')) {
+            $q->where('mother_company_id', $mother);
         }
 
         // الافتراضي: أكتر الفروع الأول (قرار المالك 2026-08-06) —
