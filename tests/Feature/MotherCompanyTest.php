@@ -159,9 +159,9 @@ class MotherCompanyTest extends TestCase
         $this->makeClient(['name' => 'Solo Client', 'name_en' => 'Solo Client']);
         $this->makeClient(['name' => 'Other Branch', 'name_en' => 'Other Branch', 'group_id' => $other->id]);
 
-        // ديالوج الضم بيعرض فروع السلسلة الأساسية والمستقلين، مش فروع سلسلة تانية
+        // ديالوج الضم بيعرض فروع السلسلة الأساسية والمستقلين — ومؤقتاً (٣/١١) فروع أي سلسلة تانية كمان
         $this->actingAs($admin)->get(route('erp.groups.show', $tmt))
-            ->assertOk()->assertSee('Moving Branch')->assertSee('Solo Client')->assertDontSee('Other Branch');
+            ->assertOk()->assertSee('Moving Branch')->assertSee('Solo Client')->assertSee('Other Branch');
 
         $this->actingAs($admin)->get(route('erp.groups.unlinked'))
             ->assertOk()->assertSee('Moving Branch')->assertSee('Solo Client')->assertDontSee('Other Branch');

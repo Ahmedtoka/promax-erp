@@ -18,6 +18,8 @@ class ClientGroup extends Model
     protected $fillable = [
         'code', 'name', 'name_en', 'channel_id', 'mother_company_id', 'sub_channel',
         'notes', 'active', 'reviewed_at',
+        // بيانات السلسلة (٣/١١) — الفاضي = ماحددتش، والفروع على بياناتها
+        'price_list_id', 'default_discount', 'taxable', 'docs_path', 'docs_type',
     ];
 
     protected function casts(): array
@@ -25,7 +27,62 @@ class ClientGroup extends Model
         return [
             'active' => 'boolean',
             'reviewed_at' => 'datetime',
+            'default_discount' => 'decimal:4',
+            'taxable' => 'boolean',
         ];
+    }
+
+    /** قايمة سعر السلسلة — اسمها مش `priceList` لنفس سبب `Client::priceListRow` */
+    public function priceListRow(): BelongsTo
+    {
+        return $this->belongsTo(PriceList::class, 'price_list_id');
+    }
+
+    /** السلسلة محددة قايمة أو خصم؟ — دول بس اللي بيعدّلوا مستندات */
+    public function hasPricingDefaults(): bool
+    {
+        return $this->price_list_id !== null || $this->default_discount !== null;
+    }
+
+    /**
+     * فروع من دول تسعيرتها هتتغير لو أخدت بيانات السلسلة؟
+     *
+     * @param  iterable<Client>  $clients
+     * @return list<int>
+     */
+    public function clientsOffPricing(iterable $clients): array
+    {
+        $ids = [];
+
+        foreach ($clients as $c) {
+            $listOff = $this->price_list_id !== null
+                && \App\Services\Pricing::listRowFor($c)?->id !== (int) $this->price_list_id;
+            $discOff = $this->default_discount !== null
+                && abs($c->effectiveDiscount() - (float) $this->default_discount) >= 0.00005;
+
+            if ($listOff || $discOff) {
+                $ids[] = (int) $c->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /** شامل/خاضع والمستندات — بيتكتبوا على طول من غير مستندات */
+    public function stampPlainDefaults($clientsQuery): void
+    {
+        $fields = [];
+
+        if ($this->taxable !== null) {
+            $fields['taxable'] = $this->taxable;
+        }
+        if ($this->docs_path !== null) {
+            $fields += ['docs_path' => $this->docs_path, 'docs_type' => $this->docs_type, 'has_docs' => true];
+        }
+
+        if ($fields !== []) {
+            $clientsQuery->update($fields);
+        }
     }
 
     public function channel(): BelongsTo

@@ -5,6 +5,7 @@ namespace App\Services\Reprice;
 use App\Exceptions\Rejected;
 use App\Models\Client;
 use App\Models\ClientGroup;
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\PriceChangeDoc;
 use App\Models\PriceChangeRun;
@@ -74,7 +75,8 @@ class PriceChange
      *
      * الطلب حسب المصدر:
      *   list   → ['price_list_id' => int, 'prices' => [product_id => float]]
-     *   chain  → ['group_id' => int, 'price_list_id' => ?int]
+     *   chain  → ['group_id' => int, 'price_list_id' => ?int, 'discount' => ?float, 'client_ids' => ?list<int>]
+     *            (`discount` كسر زي `clients.discount`، و`client_ids` = فروع اتضمت بس)
      *   branch → ['client_id' => int, 'price_list_id' => ?int, 'scope' => 'branch'|'chain']
      *   client → ['client_id' => int, 'price_list_id' => ?int]
      * `price_list_id` = null معناها «طبّق التسعيرة الحالية على المستندات»
@@ -105,7 +107,18 @@ class PriceChange
             case 'chain':
                 $group = ClientGroup::findOrFail((int) ($payload['group_id'] ?? 0));
                 $listId = self::listIdOrNull($payload['price_list_id'] ?? null);
+                $discount = self::discountOrNull($payload['discount'] ?? null);
+                $only = isset($payload['client_ids'])
+                    ? array_values(array_unique(array_map('intval', (array) $payload['client_ids'])))
+                    : null;
+
                 $payload = ['group_id' => $group->id, 'price_list_id' => $listId];
+                if ($discount !== null) {
+                    $payload['discount'] = $discount;
+                }
+                if ($only !== null) {
+                    $payload['client_ids'] = $only;
+                }
                 $cols['group_id'] = $group->id;
                 $cols['price_list_id'] = $listId;
                 $scope = 'chain';
@@ -716,18 +729,59 @@ class PriceChange
             return;
         }
 
-        if (empty($p['price_list_id'])) {
-            return;   // إعادة مزامنة المستندات بس
+        // من غير قايمة ولا خصم = إعادة مزامنة المستندات بس
+        if (! empty($p['price_list_id'])) {
+            $list = PriceList::findOrFail((int) $p['price_list_id']);
+
+            self::assignmentQuery($run, $scopeUser)->update([
+                'price_list_id' => $list->id,
+                'price_list' => self::codeColumn($list),
+            ]);
+
+            PriceList::flushCache();
         }
 
-        $list = PriceList::findOrFail((int) $p['price_list_id']);
+        if (isset($p['discount'])) {
+            self::applyDiscount($run, $scopeUser, (float) $p['discount']);
+        }
 
-        self::assignmentQuery($run, $scopeUser)->update([
-            'price_list_id' => $list->id,
-            'price_list' => self::codeColumn($list),
-        ]);
+        // بيانات السلسلة نفسها — عشان أي فرع يتضم بعدين ياخدها. الضم
+        // (`client_ids`) بياخد من بيانات السلسلة، فمابيكتبش عليها.
+        if ($run->trigger === 'chain' && empty($p['client_ids'])) {
+            $defaults = array_filter([
+                'price_list_id' => $p['price_list_id'] ?? null,
+                'default_discount' => $p['discount'] ?? null,
+            ], fn ($v) => $v !== null);
 
-        PriceList::flushCache();
+            if ($defaults !== []) {
+                ClientGroup::whereKey((int) $p['group_id'])->update($defaults);
+            }
+        }
+    }
+
+    /**
+     * خصم الفروع — نفس ختم شاشة إعداد السلاسل: خصم العميل + عقده الشخصي
+     * السارٍ + عقد السلسلة السارٍ.
+     *
+     * ⚠️ العقود لازم تتختم معاه: `effectiveDiscount` بتقدّم عقد الفرع على
+     * خصمه، وعقد السلسلة بيكسب لو خصم الفرع صفر — فالصفر عمره ما كان
+     * هيتطبق. العقود المنتهية/الموقوفة تاريخ ومابتتلمسش.
+     */
+    private static function applyDiscount(PriceChangeRun $run, ?User $scopeUser, float $discount): void
+    {
+        self::assignmentQuery($run, $scopeUser)->update(['discount' => $discount]);
+
+        $contracts = Contract::whereIn('client_id', self::assignmentQuery($run, $scopeUser)->select('id'))->get();
+
+        if ($run->trigger === 'chain' && empty($run->payload['client_ids'])) {
+            $contracts = $contracts->concat(Contract::where('group_id', (int) $run->payload['group_id'])->get());
+        }
+
+        foreach ($contracts as $ct) {
+            if ($ct->active && ! $ct->isExpired() && abs((float) $ct->discount - $discount) >= 0.00005) {
+                $ct->update(['discount' => $discount]);
+            }
+        }
     }
 
     /** العملاء اللي قايمتهم بتتغير — سلسلة/فرع/عميل، عبر `visibleTo` */
@@ -736,7 +790,8 @@ class PriceChange
         $p = $run->payload;
 
         if ($run->trigger === 'chain') {
-            return Client::visibleTo(Client::where('group_id', (int) $p['group_id']), $scopeUser);
+            return Client::visibleTo(Client::where('group_id', (int) $p['group_id'])
+                ->when(! empty($p['client_ids']), fn ($q) => $q->whereIn('id', $p['client_ids'])), $scopeUser);
         }
 
         if ($run->trigger === 'branch' && $run->scope === 'chain') {
@@ -783,24 +838,54 @@ class PriceChange
     private static function assignmentChanges(PriceChangeRun $run, ?User $scopeUser): array
     {
         $newId = $run->payload['price_list_id'] ?? null;
-        if (empty($newId)) {
+        $newDisc = isset($run->payload['discount']) ? (float) $run->payload['discount'] : null;
+
+        if (empty($newId) && $newDisc === null) {
             return [];
         }
 
-        $new = PriceList::find((int) $newId);
+        $new = empty($newId) ? null : PriceList::find((int) $newId);
         $names = PriceList::all()->mapWithKeys(fn ($l) => [$l->id => $l->displayName()]);
 
+        // الخصم «قبل» = الخصم الفعلي اللي بيتحاسب بيه دلوقتي، مش العمود الخام
         return self::assignmentQuery($run, $scopeUser)
-            ->where(fn ($q) => $q->whereNull('price_list_id')->orWhere('price_list_id', '!=', (int) $newId))
+            ->with(['contract', 'group.contract'])
             ->orderBy('id')->get()
-            ->map(fn (Client $c) => [
-                'client_id' => (int) $c->id,
-                'name' => $c->displayName(),
-                'old_list_id' => $c->price_list_id !== null ? (int) $c->price_list_id : null,
-                'old_list_name' => $c->price_list_id !== null ? ($names[$c->price_list_id] ?? null) : null,
-                'new_list_id' => (int) $newId,
-                'new_list_name' => $new?->displayName(),
-            ])->all();
+            ->map(function (Client $c) use ($newId, $newDisc, $new, $names) {
+                $row = ['client_id' => (int) $c->id, 'name' => $c->displayName()];
+
+                if (! empty($newId) && (int) $c->price_list_id !== (int) $newId) {
+                    $row += [
+                        'old_list_id' => $c->price_list_id !== null ? (int) $c->price_list_id : null,
+                        'old_list_name' => $c->price_list_id !== null ? ($names[$c->price_list_id] ?? null) : null,
+                        'new_list_id' => (int) $newId,
+                        'new_list_name' => $new?->displayName(),
+                    ];
+                }
+
+                if ($newDisc !== null && abs($c->effectiveDiscount() - $newDisc) >= 0.00005) {
+                    $row += ['old_discount' => $c->effectiveDiscount(), 'new_discount' => $newDisc];
+                }
+
+                return count($row) > 2 ? $row : null;
+            })
+            ->filter()->values()->all();
+    }
+
+    /** خصم كسر بين صفر وواحد، أو null = ماتغيّرش الخصم */
+    private static function discountOrNull(mixed $v): ?float
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+
+        $d = round((float) $v, 4);
+
+        if ($d < 0 || $d > 1) {
+            throw new \InvalidArgumentException('discount must be a fraction between 0 and 1');
+        }
+
+        return $d;
     }
 
     /**

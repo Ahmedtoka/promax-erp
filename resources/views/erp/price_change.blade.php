@@ -67,6 +67,12 @@
         @if ($run->priceList && $run->trigger !== 'list')
             <span class="badge b-blue">{{ __('reprice.col_new_list') }}: {{ $run->priceList->displayName() }}</span>
         @endif
+        @if (isset($run->payload['discount']))
+            <span class="badge b-blue">{{ __('reprice.col_new_discount') }}: {{ rtrim(rtrim(number_format((float) $run->payload['discount'] * 100, 2), '0'), '.') }}%</span>
+        @endif
+        @if (! empty($run->payload['client_ids']))
+            <span class="badge b-orange">{{ __('reprice.meta_joined', ['count' => count($run->payload['client_ids'])]) }}</span>
+        @endif
     </div>
 </div>
 

@@ -236,6 +236,16 @@ class ClientSetupController extends Controller
                     }
                 }
 
+                // بيانات السلسلة (٣/١١) — نفس الصف، عشان أي فرع يتضم بعدين ياخده
+                if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'taxable')) {
+                    $p = $this->payload($data);
+                    $group->fill(array_filter([
+                        'taxable' => $p['taxable'],
+                        'default_discount' => $p['discount'],
+                        'price_list_id' => $p['price_list_id'] ?? null,
+                    ], fn ($v) => $v !== null))->save();
+                }
+
                 // علامة المراجعة — بتتكتب وبتتشال من نفس الخانة.
                 // التاريخ بيتجدد مع كل حفظة والعلامة شغالة، عشان
                 // «آخر مراجعة» تفضل صادقة.

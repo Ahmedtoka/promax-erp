@@ -104,6 +104,18 @@
     @else
         <span class="badge b-gray">🏷 {{ __('reprice.chain_list_none') }}</span>
     @endif
+    {{-- بيانات السلسلة (٣/١١) — اللي بيتختم على أي فرع يتضم. محروسة لحد المايجريشن --}}
+    @if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'taxable'))
+        @if ($g->default_discount !== null)
+            <span class="badge b-blue">{{ __('client.chain_data_discount', ['pct' => rtrim(rtrim(number_format((float) $g->default_discount * 100, 2), '0'), '.')]) }}</span>
+        @endif
+        @if ($g->taxable !== null)
+            <span class="badge b-blue">{{ __($g->taxable ? 'client.chain_exclusive' : 'client.chain_inclusive') }}</span>
+        @endif
+        @if ($g->docs_path)
+            <a class="badge b-green" href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($g->docs_path) }}" target="_blank">📎 {{ __('client.chain_docs') }}</a>
+        @endif
+    @endif
     @if (\App\Support\Access::allows(auth()->user(), 'erp.prices.change.resync'))
         <form method="POST" action="{{ route('erp.prices.change.resync') }}" style="display:inline"
               onsubmit="return confirm(@js(__('reprice.confirm_resync')))">
@@ -525,7 +537,7 @@
 
 @if ($manager)
 <dialog id="dlgEditG">
-    <form class="dlg" method="POST" action="{{ route('erp.groups.update', $g) }}">
+    <form class="dlg" method="POST" action="{{ route('erp.groups.update', $g) }}" enctype="multipart/form-data">
         @csrf @method('PUT')
         <h4>{{ __('common.edit_named', ['name' => $g->displayName()]) }}</h4>
         <div class="frow">
@@ -584,25 +596,32 @@
              عشان محدش يوصل للرفض أصلاً. --}}
         <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
             <label class="f">{{ __('client.chain_apply_discount') }} %</label>
-            @if ($gctLive)
-                <input type="number" disabled style="width:100%"
-                       placeholder="{{ __('client.chain_discount_locked_ph') }}">
-                <div style="font-size:11px;color:var(--orange,#B86E00);margin-top:5px">
-                    ⚠️ {{ __('client.chain_discount_locked_hint', [
-                        'pct' => rtrim(rtrim(number_format((float) $gct->discount * 100, 2), '0'), '.'),
-                    ]) }}
-                </div>
-            @else
-                {{-- ⚠️ `step="0.01"` مش `0.5` — ٢٦٫٦٧٪ كان بيترفض من
-                     المتصفح نفسه قبل ما يوصل للسيرفر، والفاليديشن
-                     هناك `numeric` وبيقبله عادي. --}}
-                <input type="number" name="apply_discount" step="0.01" min="0" max="100"
-                       style="width:100%" value="" placeholder="{{ __('client.chain_apply_discount_ph') }}">
-                <div style="font-size:11px;color:var(--muted);margin-top:5px">
-                    {{ __('client.chain_apply_discount_hint', ['count' => $g->clients()->count()]) }}
-                </div>
-            @endif
+            {{-- ⚠️ `step="0.01"` مش `0.5` — ٢٦٫٦٧٪ كان بيترفض من المتصفح نفسه.
+                 (٣/١١) الحفظ بيفتح معاينة قبل/بعد وبيختم عقود السلسلة والفروع
+                 السارية معاه — فمفيش قفل لما يكون فيه عقد. --}}
+            <input type="number" name="apply_discount" step="0.01" min="0" max="100"
+                   style="width:100%" value="" placeholder="{{ __('client.chain_apply_discount_ph') }}">
+            <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                {{ __('client.chain_apply_discount_preview_hint', ['count' => $g->clients()->count()]) }}
+            </div>
         </div>
+
+        {{-- ═════ شامل/خاضع والمستندات (٣/١١) — بيتختموا على طول ═════ --}}
+        @if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'taxable'))
+            <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card2)">
+                <label class="f">{{ __('client.chain_apply_inclusive') }}</label>
+                <select name="apply_inclusive" style="width:100%">
+                    <option value="">— {{ __('client.chain_apply_keep_any') }} —</option>
+                    <option value="inclusive">{{ __('client.chain_inclusive') }}</option>
+                    <option value="exclusive">{{ __('client.chain_exclusive') }}</option>
+                </select>
+                <label class="f" style="margin-top:10px">{{ __('client.chain_docs') }}</label>
+                <input type="file" name="chain_docs" accept=".pdf,.jpg,.jpeg,.png,.webp" style="width:100%">
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">
+                    {{ __('client.chain_plain_hint', ['count' => $g->clients()->count()]) }}
+                </div>
+            </div>
+        @endif
 
         {{-- ═════ الديفيجن على كل الفروع (١٧/٨) ═════
              السلسلة نشاطها واحد — الفاضي = ماتلمسش. --}}
@@ -708,8 +727,14 @@
                     $mainChainId = $g->motherCompany?->mainChainId();
                     $mainChainId = $mainChainId === $g->id ? null : $mainChainId;
                 @endphp
+                {{-- ⚠️ مؤقت (٣/١١ — طلب المالك لحد ما تسكين Circle K يخلص): الديالوج
+                     بيعرض **كل** العملاء اللي مش في السلسلة دي، والضم بينقلهم من سلسلتهم.
+                     للقفل: خلّي `$attachAnyChain = false` فيرجع للمستقلين + السلسلة الأساسية. --}}
+                @php $attachAnyChain = true; @endphp
                 @foreach (Client::with('group')->where('category', '!=', 'internal')
-                    ->where(fn ($q) => $q->whereNull('group_id')->when($mainChainId, fn ($w, $id) => $w->orWhere('group_id', $id)))
+                    ->when($attachAnyChain,
+                        fn ($q) => $q->where(fn ($w) => $w->whereNull('group_id')->orWhere('group_id', '!=', $g->id)),
+                        fn ($q) => $q->where(fn ($w) => $w->whereNull('group_id')->when($mainChainId, fn ($x, $id) => $x->orWhere('group_id', $id))))
                     ->orderBy('name')->get() as $c)
                     <tr data-txt="{{ $c->displayName() }} {{ $c->code }}">
                         <td style="width:34px"><input type="checkbox" name="client_ids[]" value="{{ $c->id }}"></td>

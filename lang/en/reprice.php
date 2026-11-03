@@ -99,6 +99,9 @@ return [
     'col_client' => 'Client',
     'col_old_list' => 'Old list',
     'col_new_list' => 'New list',
+    'col_old_discount' => 'Old discount',
+    'col_new_discount' => 'New discount',
+    'meta_joined' => 'Branches joining the chain: :count',
     'no_list' => '—',
     'no_items' => 'No list change - current pricing is applied to the documents only.',
 

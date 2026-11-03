@@ -73,14 +73,38 @@
             </tbody>
         </table></div>
     @else
+        @php
+            // الخصم (٣/١١) — أعمدته بتظهر بس لو التعديل فيه خصم، والصف اللي
+            // اتغير فيه حاجة واحدة بس بيعرض «—» في التانية
+            $hasList = collect($items)->contains(fn ($it) => array_key_exists('new_list_id', $it));
+            $hasDisc = collect($items)->contains(fn ($it) => array_key_exists('new_discount', $it));
+            $pct = fn ($v) => rtrim(rtrim(number_format((float) $v * 100, 2), '0'), '.').'%';
+        @endphp
         <div class="tablewrap"><table>
-            <thead><tr><th>{{ __('reprice.col_client') }}</th><th>{{ __('reprice.col_old_list') }}</th><th>{{ __('reprice.col_new_list') }}</th></tr></thead>
+            <thead><tr><th>{{ __('reprice.col_client') }}</th>
+                @if ($hasList)<th>{{ __('reprice.col_old_list') }}</th><th>{{ __('reprice.col_new_list') }}</th>@endif
+                @if ($hasDisc)<th class="num">{{ __('reprice.col_old_discount') }}</th><th class="num">{{ __('reprice.col_new_discount') }}</th>@endif
+            </tr></thead>
             <tbody>
                 @foreach ($items as $it)
                     <tr>
                         <td><a href="{{ route('erp.clients.show', $it['client_id']) }}">{{ $it['name'] ?? '' }}</a></td>
-                        <td>{{ $it['old_list_name'] ?? __('reprice.no_list') }}</td>
-                        <td>{{ $it['new_list_name'] ?? __('reprice.no_list') }}</td>
+                        @if ($hasList)
+                            @if (array_key_exists('new_list_id', $it))
+                                <td>{{ $it['old_list_name'] ?? __('reprice.no_list') }}</td>
+                                <td>{{ $it['new_list_name'] ?? __('reprice.no_list') }}</td>
+                            @else
+                                <td>—</td><td>—</td>
+                            @endif
+                        @endif
+                        @if ($hasDisc)
+                            @if (array_key_exists('new_discount', $it))
+                                <td class="num">{{ $pct($it['old_discount']) }}</td>
+                                <td class="num">{{ $pct($it['new_discount']) }}</td>
+                            @else
+                                <td class="num">—</td><td class="num">—</td>
+                            @endif
+                        @endif
                     </tr>
                 @endforeach
             </tbody>

@@ -438,9 +438,37 @@ class GroupController extends Controller
             // الديفيجن على كل الفروع (١٧/٨) — السلسلة نشاطها واحد،
             // وتسكين ٦٠٠ فرع واحد واحد مش شغل بني آدم
             'apply_division' => ['nullable', \App\Support\Divisions::rule()],
+            // بيانات السلسلة (٣/١١): شامل/خاضع والمستندات بيتختموا على طول
+            'apply_inclusive' => ['nullable', 'in:inclusive,exclusive'],
+            'chain_docs' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
         $group->update($this->validated($request));
+
+        // ═══ شامل/خاضع على السلسلة وفروعها (٣/١١) ═══
+        // شامل = مفيش ضريبة فوق السعر (`taxable=false`) — نفس شاشة الإعداد.
+        // ⚠️ بيأثر على الفواتير الجاية بس؛ المستندات القديمة زي ما هي.
+        if ($request->filled('apply_inclusive')) {
+            $taxable = $request->string('apply_inclusive')->toString() === 'exclusive';
+            $group->update(['taxable' => $taxable]);
+            $n = Client::visibleTo($group->clients(), $request->user())->update(['taxable' => $taxable]);
+            $msgs[] = __('client.chain_inclusive_applied', [
+                'mode' => __($taxable ? 'client.chain_exclusive' : 'client.chain_inclusive'), 'count' => $n,
+            ]);
+        }
+
+        // ═══ السجل التجاري والبطاقة (٣/١١) ═══
+        // ملف واحد على السلسلة، وكل فرع بيشاور عليه — نفس خانة مستندات العميل.
+        if ($request->hasFile('chain_docs')) {
+            $file = $request->file('chain_docs');
+            $group->update([
+                'docs_path' => $file->store('chain-docs', 'public'),
+                'docs_type' => $file->getClientOriginalExtension() === 'pdf' ? 'pdf' : 'image',
+            ]);
+            $n = Client::visibleTo($group->clients(), $request->user())
+                ->update(['docs_path' => $group->docs_path, 'docs_type' => $group->docs_type, 'has_docs' => true]);
+            $msgs[] = __('client.chain_docs_applied', ['count' => $n]);
+        }
 
         // ⚠️⚠️ **الخصم الجماعي مقفول لما يكون فيه عقد سلسلة سارٍ**
         // (بلاغ المالك ١٧ أغسطس ٢٠٢٦).
@@ -453,18 +481,10 @@ class GroupController extends Controller
         //
         // ⚠️ **الرفض أحسن من التحذير**: التحذير بيتقري بعد الحفظ،
         // والرقم بيبقى اتكتب على ١٩٩ صف خلاص.
-        if ($request->filled('apply_discount')) {
-            $ct = $group->contract;
-
-            if ($ct !== null && $ct->active && ! $ct->isExpired()) {
-                return back()->withErrors([
-                    'apply_discount' => __('client.chain_discount_locked', [
-                        'pct' => rtrim(rtrim(number_format((float) $ct->discount * 100, 2), '0'), '.'),
-                        'number' => $ct->number,
-                    ]),
-                ]);
-            }
-        }
+        //
+        // ⚠️⚠️ **(٣/١١) الخصم بقى بيمشي من صفحة المعاينة** زي قايمة السعر،
+        // وبيختم عقد السلسلة وعقود الفروع السارية معاه — فالقفل اتشال: الرقم
+        // اللي بيتكتب هو اللي هيتحاسب بيه فعلاً (انظر `PriceChange::applyDiscount`).
 
         // ═══ شروط الدفع على كل الفروع ═══
         //
@@ -519,22 +539,6 @@ class GroupController extends Controller
         // الفروع (الوضع الطبيعي لأي حفظ)؛ صفر مكتوب = صفّرهم كلهم
         // عن قصد. لو الفاضي اتعامل كصفر، أي تعديل اسم كان بيمسح
         // خصومات السلسلة كلها في صمت.
-        if ($request->filled('apply_discount')) {
-            $pct = round((float) $request->input('apply_discount'), 2);
-
-            // ⚠️ بيتكتب كخصم خاص على كل فرع — مش عمود على السلسلة.
-            // قرار 2026-08-01: السلسلة تجميعة مش كيان تجاري، والخصم
-            // بيعيش على الفرع عشان الفرع اللي هيتفاوض لوحده بعدين
-            // يتعدّل لوحده. والفرع اللي ليه عقد سارٍ بخصم فاتورة،
-            // خصم العقد هو اللي بيتحاسب بيه (أولوية `effectiveDiscount`).
-            $n = Client::visibleTo($group->clients(), $request->user())->update(['discount' => $pct / 100]);
-
-            $msgs[] = __('client.chain_discount_applied', [
-                'pct' => $pct,
-                'count' => $n,
-            ]);
-        }
-
         // ═══ الديفيجن على كل الفروع ═══
         if ($request->filled('apply_division')) {
             $div = $request->string('apply_division')->toString();
@@ -564,24 +568,30 @@ class GroupController extends Controller
         // بيعمل مسودة `chain` ويودّي على صفحة المعاينة — الفروع بتتنقل
         // (والفواتير/الأوامر تتسعّر) عند «تأكيد»، أو الفروع بس عند «احفظ
         // للبيع الجديد بس». باقي الحقول فوق اتحفظت خلاص ورسايلها بتتعرض هناك.
-        if ($request->filled('apply_price_list')) {
-            $list = \App\Models\PriceList::find((int) $request->input('apply_price_list'));
+        // ⚠️ (٣/١١) الخصم معاها في نفس المسودة — قبل/بعد لكل فرع والفواتير
+        // وأوامر التوريد بتتسعّر بالاتنين مع بعض.
+        $list = $request->filled('apply_price_list')
+            ? \App\Models\PriceList::find((int) $request->input('apply_price_list'))
+            : null;
+        $discount = $request->filled('apply_discount')
+            ? round((float) $request->input('apply_discount'), 2) / 100
+            : null;
 
-            if ($list !== null) {
-                try {
-                    $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'chain', [
-                        'group_id' => $group->id,
-                        'price_list_id' => $list->id,
-                    ]);
-                } catch (\App\Exceptions\Rejected $e) {
-                    return back()->with('ok', $msgs === [] ? __('flash.chain_saved') : implode(' · ', $msgs))
-                        ->withErrors(['reprice' => $e->getMessage()]);
-                }
-
-                $msgs[] = __('reprice.draft_created');
-
-                return redirect()->route('erp.prices.change', $run)->with('ok', implode(' · ', $msgs));
+        if ($list !== null || $discount !== null) {
+            try {
+                $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'chain', [
+                    'group_id' => $group->id,
+                    'price_list_id' => $list?->id,
+                    'discount' => $discount,
+                ]);
+            } catch (\App\Exceptions\Rejected $e) {
+                return back()->with('ok', $msgs === [] ? __('flash.chain_saved') : implode(' · ', $msgs))
+                    ->withErrors(['reprice' => $e->getMessage()]);
             }
+
+            $msgs[] = __('reprice.draft_created');
+
+            return redirect()->route('erp.prices.change', $run)->with('ok', implode(' · ', $msgs));
         }
 
         return back()->with('ok', $msgs === []
@@ -681,16 +691,46 @@ class GroupController extends Controller
         // كان يقدر يبعت أي `client_id` (الفاليديشن `exists` بس) ويضم
         // فروع فريق تاني لسلسلته — وعضوية السلسلة بتورّث خصم/عقد. نفس
         // حارس الإخوة فوق (سطر 149/171). العدّ من الصفوف المتأثرة فعلاً.
-        $n = Client::visibleTo(
-            Client::whereIn('id', $data['client_ids']),
-            $request->user()
-        )->update([
+        $ids = Client::visibleTo(Client::whereIn('id', $data['client_ids']), $request->user())
+            ->pluck('id')->all();
+
+        $n = Client::whereIn('id', $ids)->update([
             'group_id' => $data['action'] === 'attach' ? $group->id : null,
         ]);
 
-        return back()->with('ok', $data['action'] === 'attach'
-            ? __('flash.branches_attached', ['count' => $n])
-            : __('flash.branches_detached', ['count' => $n]));
+        if ($data['action'] === 'detach') {
+            return back()->with('ok', __('flash.branches_detached', ['count' => $n]));
+        }
+
+        // ═══ الفرع اللي اتضم بياخد بيانات السلسلة (٣/١١) ═══
+        // شامل/خاضع والمستندات على طول. القايمة والخصم بيغيّروا فلوس، فلو
+        // فرع منهم تسعيرته هتتغير بنفتح معاينة بالفروع دي بس (`client_ids`)
+        // وبتعدّل فواتيرهم وأوامرهم عند التأكيد. الإلغاء بيسيبهم في السلسلة
+        // على تسعيرتهم القديمة.
+        $group->stampPlainDefaults(Client::whereIn('id', $ids));
+        $msg = __('flash.branches_attached', ['count' => $n]);
+
+        if ($group->hasPricingDefaults()) {
+            $off = $group->clientsOffPricing(Client::with(['contract', 'group.contract', 'priceListRow'])->whereIn('id', $ids)->get());
+
+            if ($off !== []) {
+                try {
+                    $run = \App\Services\Reprice\PriceChange::draft($request->user(), 'chain', [
+                        'group_id' => $group->id,
+                        'price_list_id' => $group->price_list_id,
+                        'discount' => $group->default_discount !== null ? (float) $group->default_discount : null,
+                        'client_ids' => $off,
+                    ]);
+                } catch (\App\Exceptions\Rejected $e) {
+                    return back()->with('ok', $msg)->withErrors(['reprice' => $e->getMessage()]);
+                }
+
+                return redirect()->route('erp.prices.change', $run)
+                    ->with('ok', $msg.' · '.__('client.chain_join_preview', ['count' => count($off)]));
+            }
+        }
+
+        return back()->with('ok', $msg);
     }
 
     private function validated(Request $request, bool $creating = false): array
