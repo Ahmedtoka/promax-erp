@@ -870,6 +870,8 @@ return [
     'chain_docs_applied' => 'المستندات اتحطت على :count فرع',
     'chain_data_discount' => 'خصم السلسلة :pct%',
     'chain_join_preview' => ':count فرع تسعيرتهم هتتغير لبيانات السلسلة — راجع وأكّد',
+    'commercial_register' => 'رقم السجل التجاري',
+    'chain_cr_applied' => 'السجل التجاري :number اتحط على :count فرع',
     'unlinked_title' => 'فروع مش مربوطة بسلسلة',
     'unlinked_all' => 'كل الفروع المش مربوطة',
     'unlinked_main' => 'لسه في السلسلة الأساسية',

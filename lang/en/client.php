@@ -853,6 +853,8 @@ return [
     'chain_docs_applied' => 'Documents set on :count branches',
     'chain_data_discount' => 'Chain discount :pct%',
     'chain_join_preview' => ':count branches will move to the chain pricing — review and confirm',
+    'commercial_register' => 'Commercial register no.',
+    'chain_cr_applied' => 'Commercial register :number set on :count branches',
     'unlinked_title' => 'Branches Not Linked to a Chain',
     'unlinked_all' => 'All Unlinked Branches',
     'unlinked_main' => 'Still in the Main Chain',

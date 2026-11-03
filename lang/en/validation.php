@@ -140,6 +140,7 @@ return [
         'tax_rate' => 'tax rate',
         'tax_cycle' => 'filing cycle',
         'tax_id' => 'tax ID',
+        'commercial_register' => 'commercial register number',
         'eta_type' => 'tax authority recipient type',
 
         // ─── Elsewhere in the system ───

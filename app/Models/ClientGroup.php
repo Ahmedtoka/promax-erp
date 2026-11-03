@@ -19,7 +19,7 @@ class ClientGroup extends Model
         'code', 'name', 'name_en', 'channel_id', 'mother_company_id', 'sub_channel',
         'notes', 'active', 'reviewed_at',
         // بيانات السلسلة (٣/١١) — الفاضي = ماحددتش، والفروع على بياناتها
-        'price_list_id', 'default_discount', 'taxable', 'docs_path', 'docs_type',
+        'price_list_id', 'default_discount', 'taxable', 'commercial_register', 'docs_path', 'docs_type',
     ];
 
     protected function casts(): array
@@ -68,13 +68,16 @@ class ClientGroup extends Model
         return $ids;
     }
 
-    /** شامل/خاضع والمستندات — بيتكتبوا على طول من غير مستندات */
+    /** شامل/خاضع والسجل التجاري والمستندات — بيتكتبوا على طول من غير مستندات */
     public function stampPlainDefaults($clientsQuery): void
     {
         $fields = [];
 
         if ($this->taxable !== null) {
             $fields['taxable'] = $this->taxable;
+        }
+        if ($this->commercial_register !== null) {
+            $fields['commercial_register'] = $this->commercial_register;
         }
         if ($this->docs_path !== null) {
             $fields += ['docs_path' => $this->docs_path, 'docs_type' => $this->docs_type, 'has_docs' => true];

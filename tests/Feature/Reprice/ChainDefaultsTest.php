@@ -171,6 +171,27 @@ class ChainDefaultsTest extends TestCase
         $this->assertTrue($c->fresh()->taxable);
     }
 
+    public function test_commercial_register_typed_on_chain_reaches_branches_and_joiners(): void
+    {
+        $g = $this->group();
+        $a = $this->client($this->listA, ['group_id' => $g->id]);
+
+        $this->actingAs($this->admin)->put(route('erp.groups.update', $g), [
+            'name' => 'سلسلة', 'active' => 1, 'apply_commercial_register' => ' 19743 ',
+        ])->assertRedirect();
+
+        $this->assertSame('19743', $g->fresh()->commercial_register);
+        $this->assertSame('19743', $a->fresh()->commercial_register);
+
+        $joining = $this->client($this->listA);
+        $this->actingAs($this->admin)->post(route('erp.groups.attach', $g), ['action' => 'attach', 'client_ids' => [$joining->id]]);
+        $this->assertSame('19743', $joining->fresh()->commercial_register);
+
+        // الخانة الفاضية ماتمسحش الرقم
+        $this->actingAs($this->admin)->put(route('erp.groups.update', $g), ['name' => 'سلسلة', 'active' => 1]);
+        $this->assertSame('19743', $a->fresh()->commercial_register);
+    }
+
     public function test_edit_dialog_discount_opens_preview_and_plain_fields_apply_now(): void
     {
         Storage::fake('public');

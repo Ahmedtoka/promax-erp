@@ -441,6 +441,7 @@ class GroupController extends Controller
             // بيانات السلسلة (٣/١١): شامل/خاضع والمستندات بيتختموا على طول
             'apply_inclusive' => ['nullable', 'in:inclusive,exclusive'],
             'chain_docs' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'apply_commercial_register' => ['nullable', 'string', 'max:60'],
         ]);
 
         $group->update($this->validated($request));
@@ -468,6 +469,14 @@ class GroupController extends Controller
             $n = Client::visibleTo($group->clients(), $request->user())
                 ->update(['docs_path' => $group->docs_path, 'docs_type' => $group->docs_type, 'has_docs' => true]);
             $msgs[] = __('client.chain_docs_applied', ['count' => $n]);
+        }
+
+        // رقم السجل التجاري بالإيد — الفاضي = ماتغيّرش
+        if ($request->filled('apply_commercial_register')) {
+            $cr = $request->string('apply_commercial_register')->trim()->toString();
+            $group->update(['commercial_register' => $cr]);
+            $n = Client::visibleTo($group->clients(), $request->user())->update(['commercial_register' => $cr]);
+            $msgs[] = __('client.chain_cr_applied', ['number' => $cr, 'count' => $n]);
         }
 
         // ⚠️⚠️ **الخصم الجماعي مقفول لما يكون فيه عقد سلسلة سارٍ**

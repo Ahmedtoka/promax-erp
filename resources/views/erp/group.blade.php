@@ -112,6 +112,9 @@
         @if ($g->taxable !== null)
             <span class="badge b-blue">{{ __($g->taxable ? 'client.chain_exclusive' : 'client.chain_inclusive') }}</span>
         @endif
+        @if ($g->commercial_register)
+            <span class="badge b-blue" dir="auto">{{ __('client.commercial_register') }}: {{ $g->commercial_register }}</span>
+        @endif
         @if ($g->docs_path)
             <a class="badge b-green" href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($g->docs_path) }}" target="_blank">📎 {{ __('client.chain_docs') }}</a>
         @endif
@@ -615,6 +618,11 @@
                     <option value="inclusive">{{ __('client.chain_inclusive') }}</option>
                     <option value="exclusive">{{ __('client.chain_exclusive') }}</option>
                 </select>
+                @if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'commercial_register'))
+                    <label class="f" style="margin-top:10px">{{ __('client.commercial_register') }}</label>
+                    <input type="text" name="apply_commercial_register" maxlength="60" dir="ltr" style="width:100%"
+                           placeholder="{{ $g->commercial_register ?: __('client.chain_apply_keep_any') }}">
+                @endif
                 <label class="f" style="margin-top:10px">{{ __('client.chain_docs') }}</label>
                 <input type="file" name="chain_docs" accept=".pdf,.jpg,.jpeg,.png,.webp" style="width:100%">
                 <div style="font-size:11px;color:var(--muted);margin-top:5px">

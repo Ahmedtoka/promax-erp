@@ -114,7 +114,7 @@
               'contract_payment_days', 'contract_payment_days_from',
               'contract_starts_at', 'contract_ends_at', 'contract_note',
               'contract_clauses', 'contract_file', 'clause'],
-        3 => ['taxable', 'tax_rate', 'tax_cycle', 'tax_id', 'eta_type', 'notes'],
+        3 => ['taxable', 'commercial_register', 'tax_rate', 'tax_cycle', 'tax_id', 'eta_type', 'notes'],
     ];
 
     $errorStep = 1;
@@ -1105,6 +1105,16 @@
                    onchange="toggleTax()">
             {{ __('client.taxable') }}
         </label>
+
+        {{-- رقم السجل التجاري (٣/١١) — بره `#taxBox` عشان العميل الغير خاضع ليه سجل برضو --}}
+        @if (\Illuminate\Support\Facades\Schema::hasColumn('clients', 'commercial_register'))
+            <div style="max-width:360px;margin-bottom:14px">
+                <label class="f">{{ __('client.commercial_register') }}</label>
+                <input type="text" name="commercial_register" maxlength="60" dir="ltr" style="width:100%"
+                       class="{{ trim($bad('commercial_register')) }}" value="{{ $own('commercial_register') }}">
+                {!! $err('commercial_register') !!}
+            </div>
+        @endif
 
         <div id="taxBox" style="display:none">
             <div class="frow">

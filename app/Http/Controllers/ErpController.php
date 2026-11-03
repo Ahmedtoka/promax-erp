@@ -1579,6 +1579,7 @@ class ErpController extends Controller
             'taxable' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax_id' => ['nullable', 'string', 'max:40'],
+            'commercial_register' => ['nullable', 'string', 'max:60'],
             'tax_cycle' => ['nullable', 'in:'.implode(',', Client::TAX_CYCLES)],
             'eta_type' => ['nullable', 'in:B,P'],
             'branch_id' => ['nullable', 'exists:branches,id'],
