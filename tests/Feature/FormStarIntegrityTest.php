@@ -50,6 +50,7 @@ class FormStarIntegrityTest extends TestCase
         'erp/client_locations#geoForm' => ['erp.client_locations.confirm'],
         'erp/leads#formEditLead' => ['erp.leads.update'],
         'erp/replenishments#formRpl' => ['ops.replenishments.assign'],
+        'erp/review/stock#fBatch' => ['erp.review.stock.batch'],
         'erp/replenishments#formRplEdit' => ['ops.replenishments.update'],
         'erp/team#passForm' => ['erp.team.password'],
         'gl/coa#coaMoveForm' => ['gl.coa.move'],

@@ -29,6 +29,7 @@ return [
     'client_locations' => 'Client Locations',
     'chains' => 'Chains',
     'mother_companies' => 'Mother Companies',
+    'review_golive' => 'Go-live Review',
     'unlinked_branches' => 'Unlinked Branches',
     'channels' => 'Channels',
     'contracts' => 'Contracts',

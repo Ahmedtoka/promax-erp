@@ -781,6 +781,21 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 ->name('groups.contract');
         });
 
+        // ===== مراجعة إعادة التشغيل (٥/١١) =====
+        // المراجعة نفسها لفريق المراجعة كله؛ التصفير وإدخال الأرصدة أدمن بس
+        Route::middleware('role:admin,manager,branch_manager,accountant')->group(function () {
+            Route::get('/review', [\App\Http\Controllers\ReviewController::class, 'dashboard'])->name('review');
+            Route::get('/review/data', [\App\Http\Controllers\ReviewController::class, 'data'])->name('review.data');
+            Route::get('/review/money', [\App\Http\Controllers\ReviewController::class, 'money'])->name('review.money');
+            Route::get('/review/stock', [\App\Http\Controllers\ReviewController::class, 'stock'])->name('review.stock');
+            Route::post('/review/mark', [\App\Http\Controllers\ReviewController::class, 'mark'])->name('review.mark');
+            Route::post('/review/opening/{group}', [\App\Http\Controllers\ReviewController::class, 'chainOpening'])->name('review.opening');
+        });
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/review/stock/{warehouse}/zero', [\App\Http\Controllers\ReviewController::class, 'zeroWarehouse'])->name('review.stock.zero');
+            Route::post('/review/stock/{warehouse}/batch', [\App\Http\Controllers\ReviewController::class, 'addBatch'])->name('review.stock.batch');
+        });
+
         // ===== الشركات الأم (٣١/١٠) =====
         Route::get('/mother-companies', [\App\Http\Controllers\MotherCompanyController::class, 'index'])->name('mother_companies');
         // ⚠️ الثابت قبل البارامتري

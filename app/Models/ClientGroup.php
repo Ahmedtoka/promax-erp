@@ -20,6 +20,8 @@ class ClientGroup extends Model
         'notes', 'active', 'reviewed_at',
         // بيانات السلسلة (٣/١١) — الفاضي = ماحددتش، والفروع على بياناتها
         'price_list_id', 'default_discount', 'taxable', 'commercial_register', 'docs_path', 'docs_type',
+        // رصيد أول المدة للسلسلة كرقم واحد (٥/١١)
+        'opening_balance', 'opening_as_of',
     ];
 
     protected function casts(): array
@@ -29,6 +31,8 @@ class ClientGroup extends Model
             'reviewed_at' => 'datetime',
             'default_discount' => 'decimal:4',
             'taxable' => 'boolean',
+            'opening_balance' => 'decimal:2',
+            'opening_as_of' => 'date',
         ];
     }
 

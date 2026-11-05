@@ -50,6 +50,8 @@ class Access
             'erp.audit.chains', 'erp.audit.clients', 'erp.audit.report',
             'erp.audit.save', 'erp.audit.confirm', 'erp.audit.statement',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.channels',
+            // مراجعة إعادة التشغيل (٥/١١) — التصفير وإدخال الأرصدة أدمن بس
+            'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
@@ -105,6 +107,7 @@ class Access
             // كتابة على مئات العملاء مرة واحدة قرار أدمن/مدير قناة
             'erp.divisions', '!erp.divisions.assign',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
+            'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
             // عقد السلسلة `role:admin,manager` (تدقيق ١٥/٩)
             '!erp.groups.contract',
             // ⚠️ **محفظة الليدز قراءة بس.** الجدولة وخط السير والحصاد
@@ -163,6 +166,7 @@ class Access
             // 📖 الدليل (٢١/١٠) — كل رولز الويب ما عدا مستلم النظام
             'docs',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
+            'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
             // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
             '!erp.client_locations.confirm', '!erp.groups.contract',
@@ -479,6 +483,8 @@ class Access
         // السلاسل والصفحتين الجداد». الترتيب = ترتيب الشغل: تظبط
         // الإعداد الأول، وبعدين تمشي على الحسابات كيان كيان.
         'nav.group_review' => [
+            // (٥/١١) مراجعة إعادة التشغيل — أول الجروب لأنها خطة الشغل كلها
+            ['erp.review', '🧭', 'nav.review_golive', 'erp.review*', null],
             ['erp.setup.chains', '⚙️', 'client.setup_chains', 'erp.setup.chains', null],
             ['erp.setup.clients', '🧩', 'client.setup_clients', 'erp.setup.clients', null],
             ['erp.audit.chains', '🧾', 'audit.chains_title', 'erp.audit.chains', null],

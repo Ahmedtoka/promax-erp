@@ -55,6 +55,8 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Zone::class,
         \App\Models\ClientGroup::class,
         \App\Models\MotherCompany::class,
+        // مراجعة إعادة التشغيل (٥/١١) — مين علّم إيه بالتاريخ الكامل
+        \App\Models\ReviewCheck::class,
         \App\Models\Channel::class,
         \App\Models\PurchaseOrder::class,
         \App\Models\Invoice::class,
