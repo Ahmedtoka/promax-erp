@@ -301,7 +301,9 @@ class RoleAccessTest extends TestCase
         $nav = Access::navFor($admin);
 
         $shown = collect($nav)->flatten(1)->count();
-        $total = collect(Access::NAV)->flatten(1)->count();
+        // ⚠️ (٥/١١) «وقت الشغل الفعلي» لجاد بس بالكود — الأدمن العادي مايشوفوش عن قصد
+        $total = collect(Access::NAV)->flatten(1)
+            ->reject(fn ($l) => \App\Support\WorkTimeGate::covers($l[0]))->count();
 
         $this->assertSame($total, $shown, 'الأدمن مش شايف كل اللينكات');
     }

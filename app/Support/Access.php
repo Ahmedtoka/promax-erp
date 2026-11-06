@@ -753,6 +753,8 @@ class Access
             // (٢٢/٩) مركز نشاط المستخدمين — بدل «سجل الحركة» القديم. `erp.audit` لسه
             // راوت شغال بيحوّل هنا، ومش في المنيو عشان بادئته ماتمسكش `erp.audit.chains`
             ['erp.activity', '🟢', 'activity.page', 'erp.activity*', null],
+            // (٥/١١) وقت الشغل الفعلي — جاد بس (`WorkTimeGate`)
+            ['erp.worktime', '⏱', 'worktime.page', 'erp.worktime*', null],
         ],
 
         // ═══ تسليم النظام (الإغلاق ١٩/١٠) — الأدمن ومستلم النظام بس ═══
@@ -982,6 +984,12 @@ class Access
     {
         if ($user === null) {
             return false;
+        }
+
+        // ⚠️ (٥/١١) «وقت الشغل الفعلي» لجاد بس — قبل خروج الأدمن عن قصد،
+        // فلا أدمن تاني يشوف اللينك ولا شاشة الصلاحيات تقدر تمنحها
+        if (WorkTimeGate::covers($routeName)) {
+            return WorkTimeGate::allows($user);
         }
 
         // ⚠️ الأدمن بيعدّي من غير ما يبص على الخريطة ولا الاستثناءات —

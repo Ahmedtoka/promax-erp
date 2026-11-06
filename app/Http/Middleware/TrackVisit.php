@@ -39,6 +39,8 @@ class TrackVisit
     private const SKIP_ACTIONS = [
         'api/device-token', 'api/locale', 'api/geo/suggest', 'api/notifications/read',
         'notifications/read', 'locale',
+        // نبضة وقت الشغل (٥/١١) — كل دقيقة، ليها جدولها `presence_pings`
+        'presence/ping',
     ];
 
     /** عمرها ما تتخزن */

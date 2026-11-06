@@ -52,6 +52,22 @@ Route::middleware(['auth', \App\Http\Middleware\AiOnly::class])->group(function 
         [\App\Http\Controllers\AgentChatController::class, 'cancelAction'])->name('agent.action.cancel');
 });
 
+// ═══ نبضة المتصفح (٥/١١) — كل يوزر ويب، كل دقيقة، لشاشة وقت الشغل ═══
+// ⚠️ auth بس من غير `screen`: النبضة لازم توصل من أي صفحة، ومش بتتسجل
+// في مركز النشاط (`TrackVisit::SKIP_ACTIONS`)
+Route::middleware('auth')->post('/presence/ping',
+    [\App\Http\Controllers\WorkTimeController::class, 'ping'])->name('presence.ping');
+
+// ═══ وقت الشغل الفعلي (٥/١١) — **جاد بس** (`WorkTimeGate`) ═══
+// ⚠️ القفل على الراوت نفسه — أي أدمن تاني 403 حتى بالـURL المباشر
+// (`screen` كمان — `Access::allows` نفسه بيرجع لـ`WorkTimeGate` للبادئة دي)
+Route::middleware(['auth', \App\Http\Middleware\WorkTimeOnly::class, 'screen'])
+    ->prefix('erp')->name('erp.')->group(function () {
+        Route::get('/worktime', [\App\Http\Controllers\WorkTimeController::class, 'index'])->name('worktime');
+        Route::get('/worktime/user/{user}', [\App\Http\Controllers\WorkTimeController::class, 'user'])->name('worktime.user');
+        Route::post('/worktime/check', [\App\Http\Controllers\WorkTimeController::class, 'check'])->name('worktime.check');
+    });
+
 Route::middleware(['auth', 'screen'])->group(function () {
 
     // ═══ جرس الإشعارات في الداش بورد (2026-08-09) ═══

@@ -2163,6 +2163,46 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 })();
 </script>
+{{-- ═══ نبضة وقت الشغل (٥/١١) — كل دقيقة: شغال / قدامه وساكت / مستخبية ═══
+     «شغال» = ماوس أو كيبورد أو سكرول في الدقيقة. «ساكت» = الصفحة قدامه
+     ومتركّز عليها أغلب الدقيقة ومحدش لمسها. غير كده = ورا برنامج تاني.
+     الأرقام بتظهر في شاشة جاد بس (`erp.worktime`). --}}
+@auth
+<script>
+(function () {
+  var url = @json(route('presence.ping'));
+  var token = document.querySelector('meta[name="csrf-token"]');
+  var tab = Math.random().toString(36).slice(2, 12);
+  var touched = true;   // فتح الصفحة نفسه كليك
+  var seen = 0, samples = 0, lastInput = Date.now();
+  // بعد ٣٠ دقيقة من غير لمس النبضة بتقف — عشان ماتجددش السيشن للأبد
+  // وجهاز سايبه مفتوح يفضل يخرج لوحده زي الأول. أول لمسة بترجّعها.
+  var QUIET = 30 * 60000;
+  ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart', 'input'].forEach(function (e) {
+    window.addEventListener(e, function () { touched = true; lastInput = Date.now(); }, { passive: true, capture: true });
+  });
+  function sample() {
+    samples++;
+    if (!document.hidden && document.hasFocus()) seen++;
+  }
+  function beat() {
+    var state = touched ? 'active' : (samples > 0 && seen * 2 >= samples ? 'idle' : 'hidden');
+    if (document.hidden && !touched) state = 'hidden';
+    touched = false; seen = 0; samples = 0;
+    if (Date.now() - lastInput > QUIET) return;
+    fetch(url, {
+      method: 'POST', credentials: 'same-origin', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token ? token.content : '' },
+      body: JSON.stringify({ tab: tab, state: state, url: location.pathname })
+    }).then(function (r) {
+      if ([401, 403, 404, 419].indexOf(r.status) !== -1) { clearInterval(s); clearInterval(b); }
+    }).catch(function () {});
+  }
+  var s = setInterval(sample, 5000);
+  var b = setInterval(beat, 60000);
+})();
+</script>
+@endauth
 @yield('scripts')
 
 {{-- ═══ توست الإشعارات (٢٢/٨ — طلب المالك) ═══
