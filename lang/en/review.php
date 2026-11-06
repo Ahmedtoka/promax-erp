@@ -9,7 +9,6 @@ return [
     'tab_stock' => '3. Stock & reps',
 
     'intro' => 'Check everything against the paper: press ✓ if it matches, ✗ with a reason if not, fix it from the button next to it (opens a new tab) and come back to mark it.',
-    'video' => '🎬 How-to video',
 
     'phase_data' => 'Client data',
     'phase_data_sub' => 'Name · address · chain · mother company · commercial register · price list',

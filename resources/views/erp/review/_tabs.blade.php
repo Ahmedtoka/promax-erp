@@ -6,24 +6,18 @@
         'erp.review.money' => __('review.tab_money'),
         'erp.review.stock' => __('review.tab_stock'),
     ];
-    // الفيديوهات بتترفع في storage/app/docs/review — نفس مكان «الدليل»
-    $videos = ['erp.review.data' => 'review/phase1.mp4', 'erp.review.money' => 'review/phase2.mp4', 'erp.review.stock' => 'review/phase3.mp4'];
     $here = request()->route()?->getName();
 @endphp
 <div class="rv-tabs">
     @foreach ($tabs as $r => $label)
         <a href="{{ route($r) }}" class="{{ $here === $r ? 'on' : '' }}">{{ $label }}</a>
     @endforeach
-    @if (isset($videos[$here]) && \App\Support\Access::allows(auth()->user(), 'docs.file'))
-        <a class="vid" href="{{ route('docs.file', $videos[$here]) }}" target="_blank" rel="noopener">{{ __('review.video') }}</a>
-    @endif
 </div>
 
 <style>
 .rv-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .rv-tabs a{padding:9px 16px;border-radius:999px;background:var(--card);border:1px solid var(--border);font-weight:800;font-size:13px;color:var(--text)}
 .rv-tabs a.on{background:var(--royal-blue);color:#fff;border-color:var(--royal-blue)}
-.rv-tabs a.vid{margin-inline-start:auto;background:#FFF7D6;border-color:#E8C548;color:#7A5A00}
 .rv{display:inline-flex;gap:3px;align-items:center;margin-top:4px}
 .rv button{border:1px solid var(--border);background:var(--card);border-radius:7px;min-width:28px;height:26px;cursor:pointer;font-weight:900;font-size:13px;line-height:1;color:var(--muted)}
 .rv[data-status="ok"] .y{background:#16A34A;border-color:#16A34A;color:#fff}
