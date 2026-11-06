@@ -64,6 +64,7 @@ return [
     'edit_client' => '✏️ العميل',
     'edit_chain' => '🏬 السلسلة',
     'none' => '—',
+    'missing_fix' => '⚠️ ناقص — كمّله',
     'no_rows' => 'مفيش حاجة هنا',
     'by_at' => ':by · :at',
     'saved' => 'اتحفظ',

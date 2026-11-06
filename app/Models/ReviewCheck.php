@@ -80,6 +80,28 @@ class ReviewCheck extends Model
         return array_merge(self::MONEY_ITEMS, array_map(fn ($m) => 'm:'.$m, self::months()), [self::OPENING_ITEM]);
     }
 
+    /**
+     * بنود بيانات العميل الفاضية في السيستم (٦/١١ — طلب المالك).
+     *
+     * البند الفاضي مش «✗ غلط» — ده «ناقص»: المراجع بيروح يكمّله وبيرجع
+     * يلاقي ✓ اتفعّلت. فـ✓ مقفولة عليه لحد ما القيمة تتكتب.
+     */
+    public static function missingItems(\App\Models\Client $c): array
+    {
+        $out = [];
+        if (trim((string) $c->address_ar) === '' && trim((string) $c->address) === '') {
+            $out[] = 'address';
+        }
+        if (trim((string) $c->commercial_register) === '') {
+            $out[] = 'cr';
+        }
+        if (\App\Services\Pricing::listRowFor($c) === null) {
+            $out[] = 'price_list';
+        }
+
+        return $out;
+    }
+
     public static function phaseOf(string $entityType, string $item): ?string
     {
         if ($entityType === 'client' && in_array($item, self::DATA_ITEMS, true)) {

@@ -47,7 +47,8 @@ class ReviewTest extends TestCase
     public function test_marks_ok_issue_and_clear_with_who_and_note(): void
     {
         $admin = $this->makeAdmin();
-        $c = $this->makeClient(['name' => 'Review Client', 'name_en' => 'Review Client']);
+        $c = $this->makeClient(['name' => 'Review Client', 'name_en' => 'Review Client', 'address' => 'Maadi', 'commercial_register' => '12345']);
+        $this->assertSame([], ReviewCheck::missingItems($c), 'test client must have every data item filled');
 
         $this->actingAs($admin)->postJson(route('erp.review.mark'), [
             'entity_type' => 'client', 'entity_id' => $c->id, 'items' => ReviewCheck::DATA_ITEMS, 'status' => 'ok',
@@ -169,5 +170,25 @@ class ReviewTest extends TestCase
         ])->assertSessionHasErrors('batch_no');
         $this->assertSame(35, (int) $b->fresh()->qty_remaining);
         $this->assertSame(2, ReviewStockMove::where('kind', 'opening')->count());
+    }
+
+    public function test_missing_item_cannot_be_ticked_until_it_is_filled(): void
+    {
+        $admin = $this->makeAdmin();
+        $c = $this->makeClient(['address' => 'Maadi', 'commercial_register' => null]);
+        $this->assertContains('cr', ReviewCheck::missingItems($c));
+
+        $this->actingAs($admin)->postJson(route('erp.review.mark'), [
+            'entity_type' => 'client', 'entity_id' => $c->id, 'items' => ['address', 'cr'], 'status' => 'ok',
+        ])->assertOk()->assertJsonPath('missing', ['cr']);
+        $this->assertFalse(ReviewCheck::where('entity_id', $c->id)->where('item', 'cr')->exists());
+        $this->assertTrue(ReviewCheck::where('entity_id', $c->id)->where('item', 'address')->exists());
+
+        $this->actingAs($admin)->get(route('erp.review.data', ['show' => 'all']))->assertOk()->assertSee(__('review.missing_fix'));
+
+        $c->update(['commercial_register' => '998877']);
+        $this->actingAs($admin)->postJson(route('erp.review.mark'), [
+            'entity_type' => 'client', 'entity_id' => $c->id, 'items' => ['cr'], 'status' => 'ok',
+        ])->assertJsonPath('missing', [])->assertJsonPath('checks.cr.status', 'ok');
     }
 }

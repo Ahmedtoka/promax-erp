@@ -53,9 +53,13 @@
             @forelse ($clients as $c)
                 @php
                     $ch = $checks[$c->id] ?? [];
-                    $states = collect($items)->map(fn ($i) => ($ch[$i] ?? null)?->status);
+                    $states = collect($items)->map(fn ($i) => in_array($i, $missing[$c->id] ?? [], true) ? null : ($ch[$i] ?? null)?->status);
                     $rowCls = $states->contains('issue') ? 'rv-issue' : ($states->every(fn ($s) => $s === 'ok') ? 'rv-done' : '');
-                    $cell = fn ($item) => view('erp.review._mark', ['type' => 'client', 'id' => $c->id, 'item' => $item, 'check' => $ch[$item] ?? null])->render();
+                    // البند الناقص بيفتح المكان اللي بيتكمّل منه — قايمة السعر للفرع من السلسلة
+                    $editUrl = $can('erp.clients.edit') ? route('erp.clients.edit', $c) : route('erp.clients.show', $c);
+                    $fixUrls = ['address' => $editUrl, 'cr' => $editUrl, 'price_list' => $c->group ? route('erp.groups.show', $c->group) : $editUrl];
+                    $miss = $missing[$c->id] ?? [];
+                    $cell = fn ($item) => view('erp.review._mark', ['type' => 'client', 'id' => $c->id, 'item' => $item, 'check' => in_array($item, $miss, true) ? null : ($ch[$item] ?? null), 'fix' => in_array($item, $miss, true) ? $fixUrls[$item] : null])->render();
                 @endphp
                 <tr data-row="client-{{ $c->id }}" class="{{ $rowCls }}">
                     <td>
@@ -76,7 +80,7 @@
                     <td><div class="rv-val">{{ $lists[$c->id] ?? __('review.none') }}</div>{!! $cell('price_list') !!}</td>
                     <td style="white-space:nowrap">
                         <button type="button" class="btn sm" style="background:#16A34A;color:#fff;border-color:#16A34A"
-                                onclick="rvAll('client', {{ $c->id }}, @js($items))">{{ __('review.all_ok') }}</button>
+                                onclick="rvAll('client', {{ $c->id }}, @js(array_values(array_diff($items, $missing[$c->id] ?? []))))">{{ __('review.all_ok') }}</button>
                         <div style="margin-top:6px;display:flex;gap:4px">
                             @if ($can('erp.clients.edit'))
                                 <a class="btn sm rv-edit" href="{{ route('erp.clients.edit', $c) }}" target="_blank" rel="noopener">{{ __('review.edit_client') }}</a>

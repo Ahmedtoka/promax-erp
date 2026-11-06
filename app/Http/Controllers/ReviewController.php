@@ -118,6 +118,7 @@ class ReviewController extends Controller
             'clients' => $clients,
             'checks' => $all,
             'lists' => $clients->getCollection()->mapWithKeys(fn ($c) => [$c->id => Pricing::listRowFor($c)?->displayName()]),
+            'missing' => $clients->getCollection()->mapWithKeys(fn ($c) => [$c->id => ReviewCheck::missingItems($c)]),
             'counts' => $counts,
             'show' => $show,
             'filters' => $request->only(['q', 'group', 'mother']),
@@ -297,9 +298,18 @@ class ReviewController extends Controller
 
         $this->assertEntity($request->user(), $data['entity_type'], (int) $data['entity_id']);
 
+        // البند الناقص مايتعلّمش ✓ — لازم يتكمّل الأول (٦/١١)
+        $missing = $data['entity_type'] === 'client' && $data['status'] === 'ok'
+            ? ReviewCheck::missingItems(Client::findOrFail($data['entity_id']))
+            : [];
+
         foreach ($data['items'] as $item) {
             $phase = ReviewCheck::phaseOf($data['entity_type'], $item);
             abort_if($phase === null, 422);
+
+            if (in_array($item, $missing, true)) {
+                continue;
+            }
 
             $key = ['entity_type' => $data['entity_type'], 'entity_id' => (int) $data['entity_id'], 'item' => $item];
 
@@ -326,6 +336,7 @@ class ReviewController extends Controller
 
             return response()->json([
                 'ok' => true,
+                'missing' => array_values(array_intersect($data['items'], $missing)),
                 'checks' => collect($checks)->map(fn ($c) => [
                     'status' => $c->status, 'note' => $c->note, 'by' => $c->user?->displayName(),
                     'at' => $c->updated_at?->format('Y-m-d H:i'),

@@ -31,6 +31,7 @@
 .rv .meta{font-size:10px;color:var(--muted);margin-inline-start:4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr.rv-done td{background:#F0FDF4}
 tr.rv-issue td{background:#FEF2F2}
+.rv-miss{display:inline-block;padding:4px 9px;border-radius:7px;background:#FFF4E5;border:1px dashed #F59E0B;color:#B45309;font-weight:800;font-size:12px}
 .rv-val{font-weight:700}
 .rv-sub{font-size:11px;color:var(--muted)}
 .rv-bar{height:10px;background:var(--border);border-radius:99px;overflow:hidden;margin:10px 0 6px}
@@ -82,7 +83,7 @@ window.rvSend = async function (type, id, items, status, note, extra) {
     return data;
 };
 
-window.rvAll = function (type, id, items) { rvSend(type, id, items, 'ok', null, {}); };
+window.rvAll = function (type, id, items) { if (items.length) rvSend(type, id, items, 'ok', null, {}); };
 
 // التعديل بيفتح في تاب جديدة — لما ترجع الصفحة بتتحدّث عشان تشوف القيمة الجديدة
 document.addEventListener('click', e => {

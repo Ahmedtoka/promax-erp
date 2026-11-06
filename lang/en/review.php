@@ -64,6 +64,7 @@ return [
     'edit_client' => '✏️ Client',
     'edit_chain' => '🏬 Chain',
     'none' => '—',
+    'missing_fix' => '⚠️ Missing — fill it in',
     'no_rows' => 'Nothing here',
     'by_at' => ':by · :at',
     'saved' => 'Saved',
