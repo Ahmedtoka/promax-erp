@@ -202,6 +202,12 @@ final class Payroll
             ->whereDate('from', '<=', $to->toDateString())->whereDate('to', '>=', $from->toDateString())
             ->get();
 
+        // الأذونات بالساعة (٧/١١): الإذن المعتمد «تأخير الصبح» بيتشال من دقايق تأخير اليوم
+        $permLate = \App\Models\HrPermission::query()->where('employee_id', $e->id)
+            ->where('status', 'approved')->where('kind', 'late_in')
+            ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
+            ->get()->groupBy(fn ($p) => $p->date->toDateString())->map->sum('minutes');
+
         [$sh, $sm] = array_map('intval', explode(':', $s['shift_start'].':0'));
         $absent = $unpaid = $late = $ot = 0;
 
@@ -231,7 +237,8 @@ final class Payroll
 
             if ($day->first_in_at !== null) {
                 $shift = $d->copy()->setTime($sh, $sm);
-                $mins = (int) round(($day->first_in_at->getTimestamp() - $shift->getTimestamp()) / 60);
+                $mins = (int) round(($day->first_in_at->getTimestamp() - $shift->getTimestamp()) / 60)
+                    - (int) ($permLate[$d->toDateString()] ?? 0);
                 if ($mins > $s['grace']) {
                     $late += $mins;
                 }

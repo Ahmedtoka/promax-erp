@@ -71,6 +71,7 @@ return [
     'source_app' => 'App',
     'source_dashboard' => 'Dashboard',
     'source_supervisor' => 'Supervisor',
+    'source_device' => 'Fingerprint device',
     'source_by_supervisor' => 'Recorded by supervisor: :name',
     'supervisor_has_login' => 'This employee has a login - they punch themselves from the app or the dashboard',
     'no_employee_record' => 'No employee file is linked to your account - contact HR',

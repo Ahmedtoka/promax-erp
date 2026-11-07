@@ -34,7 +34,7 @@ class AttendancePunch extends Model
      * مصدر البانش (Lane 7): الأبلكيشن · زرار الهيدر في الداش بورد · المشرف
      * للعامل اللي مالوش لوجين. الصفوف القديمة كلها `app`.
      */
-    public const SOURCES = ['app', 'dashboard', 'supervisor'];
+    public const SOURCES = ['app', 'dashboard', 'supervisor', 'device'];
 
     protected $fillable = [
         'attendance_day_id', 'user_id', 'type', 'at', 'lat', 'lng', 'auto',

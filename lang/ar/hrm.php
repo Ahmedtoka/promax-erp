@@ -71,6 +71,7 @@ return [
     'source_app' => 'الأبلكيشن',
     'source_dashboard' => 'الداش بورد',
     'source_supervisor' => 'المشرف',
+    'source_device' => 'مكنة البصمة',
     'source_by_supervisor' => 'سجّله المشرف: :name',
     'supervisor_has_login' => 'الموظف ده ليه لوجين — بيسجّل حضوره بنفسه من الأبلكيشن أو الداش بورد',
     'no_employee_record' => 'مفيش ملف موظف مربوط بحسابك — كلّم الموارد البشرية',

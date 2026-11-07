@@ -65,8 +65,12 @@ class Access
             'erp.attendance',
             // Lane 7: زرار البانش في الهيدر + بصمة المشرف لعماله + تقرير البانشات
             'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // كشف الحضور اليومي والشهري (٧/١١ — مكنة البصمة)
+            'hr.attendance.daily', 'hr.attendance.monthly',
             // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
             'hr.leave', '!hr.leave.balances',
+            // الأذونات بالساعة (٧/١١) — نفس رولز الإجازات
+            'hr.permissions',
             'erp.suppliers', 'erp.purchasing', 'erp.supplier_contracts',
             // طلبات الشراء وعروض الأسعار — اعتماد العرض أدمن بس (لين ٥، D10)
             'erp.purchase_requests',
@@ -120,8 +124,12 @@ class Access
             'erp.tasks',
             // Lane 7: زرار البانش + بصمة المشرف لعماله + تقرير البانشات (فرعه)
             'attendance.punch', 'hr.attendance.supervisor', 'hr.attendance.punches',
+            // كشف الحضور اليومي والشهري (٧/١١ — مكنة البصمة)
+            'hr.attendance.daily', 'hr.attendance.monthly',
             // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
             'hr.leave', '!hr.leave.balances',
+            // الأذونات بالساعة (٧/١١) — نفس رولز الإجازات
+            'hr.permissions',
             'erp.team', 'erp.zones', 'erp.geo', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
             'erp.prices',
             // نفس استثناء المدير: تطبيق/إعادة مزامنة الأسعار على المستندات أدمن بس (Lane 13)
@@ -237,8 +245,12 @@ class Access
             'hr.employees', '!hr.employees.edit',
             // Lane 7: زرار البانش + تقرير البانشات (قراءة — الساعات بتروح المرتبات)
             'attendance.punch', 'hr.attendance.punches',
+            // كشف الحضور اليومي والشهري (٧/١١ — مكنة البصمة)
+            'hr.attendance.daily', 'hr.attendance.monthly',
             // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
             'hr.leave', '!hr.leave.balances',
+            // الأذونات بالساعة (٧/١١) — نفس رولز الإجازات
+            'hr.permissions',
             // Lane 7: السلف — قراءة بس (الإضافة والإلغاء للموارد البشرية)
             'hr.advances', '!hr.advances.store', '!hr.advances.void',
             // Lane 7: مسير المرتبات — قراءة وطباعة القسايم والصرف (الاعتماد للأدمن)
@@ -300,6 +312,8 @@ class Access
             'attendance.punch', 'hr.attendance.supervisor',
             // Lane 7: الإجازات — طلباتي واعتماد فريقي؛ الأرصدة للموارد البشرية
             'hr.leave', '!hr.leave.balances',
+            // الأذونات بالساعة (٧/١١) — نفس رولز الإجازات
+            'hr.permissions',
         ],
 
         // ═══ مستلم النظام — شاشات التسليم بس (الإغلاق ١٩/١٠، spec §4.1) ═══
@@ -729,7 +743,12 @@ class Access
             ['hr.employees', '🪪', 'hrm.nav_employees', 'hr.employees*', null],
             ['hr.attendance.supervisor', '👷', 'hrm.nav_supervisor', 'hr.attendance.supervisor*', null],
             ['hr.attendance.punches', '📍', 'hrm.nav_punches', 'hr.attendance.punches*', null],
+            // مكنة البصمة (٧/١١): كشف اليوم والشهر، الأذونات بالساعة، وأجهزة البصمة
+            ['hr.attendance.daily', '🗓️', 'fp.nav_daily', 'hr.attendance.daily*', null],
+            ['hr.attendance.monthly', '📆', 'fp.nav_monthly', 'hr.attendance.monthly*', null],
             ['hr.leave', '🌴', 'hrm.nav_leave', 'hr.leave*', null],
+            ['hr.permissions', '⏱️', 'fp.nav_permissions', 'hr.permissions*', null],
+            ['hr.fingerprint', '🖐️', 'fp.nav_devices', 'hr.fingerprint*', null],
             ['hr.advances', '💵', 'hrm.nav_advances', 'hr.advances*', null],
             ['hr.payroll', '🧾', 'hrm.nav_payroll', 'hr.payroll*', null],
             ['hr.settings', '⚙️', 'hrm.nav_settings', 'hr.settings*', null],

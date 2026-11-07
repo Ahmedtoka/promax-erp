@@ -31,7 +31,7 @@ class Employee extends Model
     public const MANAGE_ALL_ROLES = ['admin', 'hr'];
 
     protected $fillable = [
-        'code', 'user_id', 'name', 'name_en', 'cost_center_id', 'department', 'job_title',
+        'code', 'fp_pin', 'user_id', 'name', 'name_en', 'cost_center_id', 'department', 'job_title',
         'manager_id', 'hire_date', 'end_date', 'contract_path', 'national_id', 'insurance_no',
         'pay_method', 'bank_account', 'basic_salary', 'allowances', 'insurable_wage',
         'insured', 'taxable', 'employee_share_borne_by', 'attendance_required', 'active',

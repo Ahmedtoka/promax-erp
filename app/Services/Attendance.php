@@ -286,6 +286,71 @@ final class Attendance
             ?? new AttendanceDay(['employee_id' => $e->id, 'date' => today()->toDateString(), 'status' => AttendanceDay::STATUS_OPEN]);
     }
 
+    /** بصمتين لنفس الموظف في أقل من كده = ضغطة مكررة (حطّ صباعه مرتين) */
+    public const DEVICE_DEBOUNCE_SECONDS = 60;
+
+    /**
+     * بصمة من مكنة البصمة (ZKTeco ADMS — ٧/١١/٢٠٢٦) **بوقتها على المكنة** مش دلوقتي.
+     *
+     * ⚠️ **نفس يوم الأبلكيشن.** الموظف اللي ليه لوجين يومه `today($user, date)` —
+     * يعني بصمة المكنة والأبلكيشن والداش بورد كلهم على صف واحد، واللي يسبق يتحسب:
+     * حضر من الأبلكيشن ٨:٥٠ وبصم على المكنة ٩:٠٠ ⇒ بصمة المكنة `duplicate`.
+     *
+     * ⚠️ **الحالة وقت البصمة مش دلوقتي** — المكنة بترفع المتأخر بعد انقطاع النت،
+     * فالحالة بتتقري من آخر بانش **قبل** وقت البصمة في نفس اليوم.
+     *
+     * ⚠️ **من غير حارس الشغل المفتوح** (زي القفل التلقائي) — الموظف بصم وخرج فعلاً
+     * من الباب، والزيارة المتعلقة مشكلة تانية.
+     *
+     * `$type` = من زرار المكنة (mode `keys`)، أو `null` = السيستم يحدد (mode `toggle`:
+     * مش حاضر ⇒ حضور · شغال ⇒ انصراف · في بريك ⇒ رجوع).
+     *
+     * @return array{0: string, 1: ?AttendancePunch} [النتيجة `FpLog::*`، البانش]
+     */
+    public static function punchFromDevice(Employee $e, ?string $type, CarbonInterface $at, array $meta = []): array
+    {
+        $day = self::todayForEmployee($e, $at->toDateString());
+
+        $before = $day->punches()->get()->filter(fn (AttendancePunch $p) => $p->at->lte($at));
+        $near = $day->punches()->get()->first(
+            fn (AttendancePunch $p) => abs($p->at->getTimestamp() - $at->getTimestamp()) < self::DEVICE_DEBOUNCE_SECONDS);
+
+        if ($near !== null) {
+            return [\App\Models\FpLog::DUPLICATE, null];
+        }
+
+        $last = $before->sortBy([['at', 'desc'], ['id', 'desc']])->first();
+        $state = match ($last?->type) {
+            AttendancePunch::IN, AttendancePunch::BACK => 'working',
+            AttendancePunch::BREAK => 'break',
+            default => 'off',
+        };
+
+        $type ??= match ($state) {
+            'working' => AttendancePunch::OUT,
+            'break' => AttendancePunch::BACK,
+            default => AttendancePunch::IN,
+        };
+
+        if (! isset(self::ALLOWED[$type]) || ! in_array($state, self::ALLOWED[$type], true)) {
+            return [\App\Models\FpLog::DUPLICATE, null];
+        }
+
+        $punch = DB::transaction(function () use ($day, $e, $type, $at, $meta) {
+            if ($type === AttendancePunch::OUT && $e->user !== null && $at->isToday()) {
+                WarehouseVisits::closeOpenFor($e->user);
+            }
+
+            $p = self::record($day, $e->user_id, $type, null, null, false, 'device', array_merge($meta, ['at' => $at]));
+
+            self::recalculate($day->fresh());
+
+            return $p;
+        });
+
+        return [\App\Models\FpLog::APPLIED, $punch];
+    }
+
     /**
      * سطر البانش نفسه — المكان الوحيد اللي بيعمل `AttendancePunch::create`
      * للبانش اليدوي. `$meta`: `device` · `ip` · `recorded_by`.
@@ -307,7 +372,7 @@ final class Attendance
             'user_id' => $userId,
             'employee_id' => $day->employee_id,
             'type' => $type,
-            'at' => now(),
+            'at' => $meta['at'] ?? now(),
             'lat' => $lat,
             'lng' => $lng,
             'auto' => $auto,

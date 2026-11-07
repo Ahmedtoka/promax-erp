@@ -1715,6 +1715,31 @@ Route::middleware(['auth', 'screen'])->group(function () {
         Route::post('/leave/{leaveRequest}/cancel', [$lv, 'cancel'])->whereNumber('leaveRequest')
             ->middleware($lvRoles)->name('leave.cancel');
 
+        // ═══ مكنة البصمة ZKTeco (٧/١١/٢٠٢٦) — المكنة نفسها بتكلّم routes/iclock.php ═══
+        // كشف الحضور: نفس رولز تقرير البانشات (المدير فريقه بس — `visibleTo` في الكنترولر)
+        $sheet = \App\Http\Controllers\Hr\AttendanceSheetController::class;
+        Route::get('/attendance/daily', [$sheet, 'daily'])
+            ->middleware('role:admin,hr,manager,branch_manager,accountant')->name('attendance.daily');
+        Route::get('/attendance/monthly', [$sheet, 'monthly'])
+            ->middleware('role:admin,hr,manager,branch_manager,accountant')->name('attendance.monthly');
+        // الأذونات بالساعة: نفس رولز الإجازات، والاعتماد `isManagedBy` في الكنترولر
+        $perm = \App\Http\Controllers\Hr\HrPermissionController::class;
+        Route::get('/permissions', [$perm, 'index'])->middleware($lvRoles)->name('permissions');
+        Route::post('/permissions', [$perm, 'store'])->middleware($lvRoles)->name('permissions.store');
+        Route::post('/permissions/{permission}/decide', [$perm, 'decide'])->whereNumber('permission')
+            ->middleware($lvRoles)->name('permissions.decide');
+        // أجهزة البصمة: الأدمن والموارد البشرية
+        $fp = \App\Http\Controllers\Hr\FingerprintController::class;
+        Route::get('/fingerprint', [$fp, 'index'])->middleware('role:admin,hr')->name('fingerprint');
+        Route::get('/fingerprint/live', [$fp, 'live'])->middleware('role:admin,hr')->name('fingerprint.live');
+        Route::post('/fingerprint/devices', [$fp, 'store'])->middleware('role:admin,hr')->name('fingerprint.store');
+        Route::post('/fingerprint/devices/{device}', [$fp, 'update'])->whereNumber('device')
+            ->middleware('role:admin,hr')->name('fingerprint.update');
+        Route::post('/fingerprint/devices/{device}/command', [$fp, 'command'])->whereNumber('device')
+            ->middleware('role:admin,hr')->name('fingerprint.command');
+        Route::post('/fingerprint/map', [$fp, 'map'])->middleware('role:admin,hr')->name('fingerprint.map');
+        Route::post('/fingerprint/settings', [$fp, 'settings'])->middleware('role:admin,hr')->name('fingerprint.settings');
+
         // إعدادات المرتبات (المهمة ٤): قراءة للموارد البشرية، الحفظ أدمن + `act.hr.settings`
         $hs = \App\Http\Controllers\Hr\HrSettingsController::class;
         Route::get('/settings', [$hs, 'index'])->middleware('role:admin,hr')->name('settings');
