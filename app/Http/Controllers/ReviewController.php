@@ -192,6 +192,8 @@ class ReviewController extends Controller
     /** رصيد أول المدة للسلسلة كرقم واحد — ومعاه علامة البند */
     public function chainOpening(Request $request, ClientGroup $group)
     {
+        $this->assertEntity($request->user(), 'group', $group->id);
+
         $data = $request->validate([
             'amount' => ['nullable', 'numeric', 'between:-999999999,999999999'],
             'as_of' => ['nullable', 'date'],
@@ -413,7 +415,8 @@ class ReviewController extends Controller
     {
         $ok = match ($type) {
             'client' => Client::visibleTo(Client::whereKey($id), $user)->exists(),
-            'group' => ClientGroup::whereKey($id)->exists(),
+            // السلسلة لازم يكون فيها فرع من عملاء اليوزر — مدير القناة مايعلّمش على سلسلة غيره
+            'group' => $this->clientsQuery($user)->where('group_id', $id)->exists(),
             'warehouse' => Warehouse::whereKey($id)->exists(),
             'rep' => User::whereKey($id)->where('role', 'sales_agent')->exists(),
         };

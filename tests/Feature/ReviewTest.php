@@ -191,4 +191,20 @@ class ReviewTest extends TestCase
             'entity_type' => 'client', 'entity_id' => $c->id, 'items' => ['cr'], 'status' => 'ok',
         ])->assertJsonPath('missing', [])->assertJsonPath('checks.cr.status', 'ok');
     }
+
+    public function test_manager_cannot_touch_a_chain_with_none_of_their_branches(): void
+    {
+        $g = ClientGroup::create(['code' => 'G9', 'name' => 'Other chain', 'active' => true]);
+        $this->makeClient(['group_id' => $g->id]);
+        $manager = $this->makeAdmin(['role' => 'manager']);
+
+        $this->actingAs($manager)->postJson(route('erp.review.mark'), [
+            'entity_type' => 'group', 'entity_id' => $g->id, 'items' => ['prices'], 'status' => 'ok',
+        ])->assertNotFound();
+        $this->actingAs($manager)->post(route('erp.review.opening', $g), ['amount' => 100])->assertNotFound();
+
+        $this->actingAs($this->makeAdmin())->postJson(route('erp.review.mark'), [
+            'entity_type' => 'group', 'entity_id' => $g->id, 'items' => ['prices'], 'status' => 'ok',
+        ])->assertOk();
+    }
 }
