@@ -281,6 +281,7 @@
 @keyframes lvpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}
 .lv-zone-label{background:transparent;border:0;box-shadow:none;color:#8B90B5;font-size:11px;font-weight:700;white-space:nowrap}
 .leaflet-container{background:#0D1022}
+.lv-dark-tiles{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6)}
 
 /* البوب أب */
 /* ⚠️ z-index أعلى من طبقات Leaflet (اللي بتوصل ~700) — البوب أب كان
@@ -486,8 +487,10 @@ function signalLine(r) {
 
 /* ═════ الخريطة الداكنة ═════ */
 const map = L.map('lvMap', { zoomControl: true }).setView([30.05, 31.25], 11);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+// CARTO بقت بتطلب API key (٨/١١) — نفس بلاطات OSM اللي في باقي الخرايط،
+// والشكل الداكن بفلتر CSS على البلاطات بس (الماركرز مش بتتأثر)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 19, className: 'lv-dark-tiles',
 }).addTo(map);
 
 function drawZones() {
