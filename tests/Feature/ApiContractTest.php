@@ -263,6 +263,12 @@ class ApiContractTest extends TestCase
         $res->assertOk()->assertJsonStructure(['token', 'user' => ['role']])->assertJsonPath('user.role', 'branch_manager');
     }
 
+    public function test_branch_manager_without_employee_record_can_log_in_to_the_app(): void
+    {
+        [, $res] = $this->appLogin('branch_manager', false);
+        $res->assertOk()->assertJsonPath('user.role', 'branch_manager');
+    }
+
     public function test_hr_role_without_employee_record_is_refused(): void
     {
         [, $res] = $this->appLogin('hr', false);

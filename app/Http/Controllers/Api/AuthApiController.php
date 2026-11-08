@@ -37,6 +37,9 @@ class AuthApiController extends Controller
             'warehouse_keeper', 'accountant',
             // مدير الإنتاج (١٩/١٠) — شاشة أوامر الإنتاج (ابدأ/خلص) في أبلكيشن 2.6.0
             'production_manager',
+            // مدير الفرع (٩/١١ — قرار أحمد) — حضور وإجازات وموافقات حتى من غير
+            // ملف موظف. الكروت اللي السيرفر بيرفضها له بتستخبى في الأبلكيشن.
+            'branch_manager',
         ], true);
 
         if (! $whitelisted && ($user->role === 'handover_reviewer' || \App\Models\Employee::forUser($user) === null)) {
