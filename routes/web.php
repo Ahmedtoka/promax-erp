@@ -448,6 +448,17 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->middleware('role:admin')->name('perms.role.save');
         Route::post('/permissions/{user}', [\App\Http\Controllers\PermissionController::class, 'save'])
             ->middleware('role:admin')->name('perms.save');
+        // الرولز المخصصة (٩/١١) — `clone` ثابت قبل `{role}`
+        Route::post('/roles', [\App\Http\Controllers\RoleController::class, 'store'])
+            ->middleware('role:admin')->name('roles.store');
+        Route::post('/roles/clone', [\App\Http\Controllers\RoleController::class, 'clone'])
+            ->middleware('role:admin')->name('roles.clone');
+        Route::put('/roles/{role}', [\App\Http\Controllers\RoleController::class, 'update'])
+            ->middleware('role:admin')->name('roles.update');
+        Route::post('/roles/{role}/toggle', [\App\Http\Controllers\RoleController::class, 'toggle'])
+            ->middleware('role:admin')->name('roles.toggle');
+        Route::delete('/roles/{role}', [\App\Http\Controllers\RoleController::class, 'destroy'])
+            ->middleware('role:admin')->name('roles.destroy');
         Route::get('/manager-clients', [\App\Http\Controllers\ManagerClientController::class, 'index'])
             ->middleware('role:admin')->name('managers.clients');
         // إصلاح التغطية بأثر رجعي (٢١/٨) — تفعيل المناطق وتعليمها
