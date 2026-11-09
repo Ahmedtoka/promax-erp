@@ -220,13 +220,71 @@ class ActionGovernedRoutesTest extends TestCase
 
     public function test_get_screens_under_an_action_prefix_follow_their_page(): void
     {
-        $this->assertNull(Access::actionKeyFor('gl.golive.run.progress'));
-        $this->assertNull(Access::actionKeyFor('wh.receipt.putaway.form'));
-        $this->assertSame('act.gl.admin', Access::actionKeyFor('gl.golive.run'));
-        $this->assertSame('act.wh.putaway', Access::actionKeyFor('wh.receipt.putaway'));
+        // مغطّية للصفوف، بس افتراضيها افتراضي الصفحة
+        $this->assertSame('act.gl.admin', Access::actionKeyFor('gl.golive.run.progress'));
+        $this->assertSame('act.wh.putaway', Access::actionKeyFor('wh.receipt.putaway.form'));
+        $this->assertFalse(Access::actionDefaulted('gl.golive.run.progress'));
+        $this->assertFalse(Access::actionDefaulted('wh.receipt.putaway.form'));
+        $this->assertTrue(Access::actionDefaulted('gl.golive.run'));
+        $this->assertTrue(Access::actionDefaulted('wh.receipt.putaway'));
 
         $this->assertTrue(Access::allows(new User(['role' => 'accountant']), 'gl.golive.run.progress'));
         $this->assertTrue(Access::allows(new User(['role' => 'branch_manager']), 'wh.receipt.putaway.form'));
+
+        // اسم مش راوت: بيتعامل ككتابة، ومابيتكاشش كإنه راوت
+        $this->assertTrue(Access::actionDefaulted('wh.receipt.putaway.not_a_route'));
+    }
+
+    public function test_action_deny_blocks_the_get_screen_under_its_prefix(): void
+    {
+        $u = $this->customOn('warehouse_keeper', ['act.wh.putaway' => false]);
+        $plain = $this->customOn('warehouse_keeper', []);
+
+        $this->assertTrue(Access::allows($plain, 'wh.receipt.putaway.form'));
+        $this->assertTrue(LinkGuard::canOpen($plain, route('wh.receipt.putaway.form', 1)));
+
+        LinkGuard::reset();
+        $this->assertFalse(Access::allows($u, 'wh.receipt.putaway.form'));
+        $this->assertFalse(Access::allows($u, 'wh.receipt.putaway'));
+        $this->assertFalse(Access::effectiveFor($u->permRoleKey(), 'wh.receipt.putaway.form'));
+        $this->assertFalse(LinkGuard::canOpen($u, route('wh.receipt.putaway.form', 1)));
+        // الراوت مالوش `role:` — `EnsureScreenAccess` بيقفله بـ`allows` فوق
+        $this->assertNotContains('wh.receipt.putaway.form', Access::screensOf('wh.receipt'));
+    }
+
+    /** راوت تحت بادئة أكشن من غير اسمه في ACTIONS لازم يبقى GET بس أو كتابة بس */
+    public function test_no_prefix_covered_route_mixes_get_and_write_methods(): void
+    {
+        $listed = [];
+        foreach (Access::ACTIONS as $def) {
+            foreach ($def[3] as $c) {
+                $listed[$c] = true;
+            }
+        }
+
+        $bad = [];
+        foreach (Route::getRoutes() as $route) {
+            $name = $route->getName();
+            if ($name === null || isset($listed[$name]) || Access::actionKeyFor($name) === null) {
+                continue;
+            }
+            $methods = array_diff($route->methods(), ['GET', 'HEAD']);
+            if (in_array('GET', $route->methods(), true) && $methods !== []) {
+                $bad[] = $name.' '.implode('|', $route->methods());
+            }
+        }
+
+        $this->assertSame([], $bad);
+    }
+
+    public function test_controller_gated_routes_are_forbidden_for_branch_manager(): void
+    {
+        $bm = $this->makeAdmin(['role' => 'branch_manager']);
+        $lead = \App\Models\Lead::create(['number' => 'L-T1', 'name' => 'Probe Lead', 'status' => 'new']);
+
+        $this->actingAs($bm)->post(route('erp.leads.store'), ['name' => 'X'])->assertForbidden();
+        $this->actingAs($bm)->put(route('erp.leads.update', $lead), ['name' => 'X'])->assertForbidden();
+        $this->assertSame(1, \App\Models\Lead::count());
     }
 
     public function test_every_covered_route_has_one_action_and_no_action_page_is_covered(): void
@@ -291,8 +349,8 @@ class ActionGovernedRoutesTest extends TestCase
                     $bad[] = "effective {$role} {$name} before=".(int) $before.' after='.(int) $after;
                 }
 
-                if ($key === null) {
-                    // مش مغطّي: allows والمصفوفة زي ما كانوا بالظبط
+                if ($key === null || ! Access::actionDefaulted($name)) {
+                    // مش مغطّي (أو شاشة GET تحت بادئة): allows والمصفوفة زي ما كانوا بالظبط
                     if ($now !== Access::roleDefault($role, $name) || Access::effectiveFor($role, $name) !== $now) {
                         $bad[] = "uncovered {$role} {$name}";
                     }

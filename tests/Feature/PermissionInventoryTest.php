@@ -463,17 +463,10 @@ class PermissionInventoryTest extends TestCase
     }
 
     /** نفس مطابقة البادئة اللي `resolveMap` بيستخدمها وقت التشغيل */
+    /** نفس تعريف وقت التشغيل (`Access::actionKeyFor`) — مصدر واحد للتغطية */
     private function coveredByPrefix(string $name): bool
     {
-        foreach (Access::ACTIONS as [, , , $routes]) {
-            foreach ($routes as $c) {
-                if ($name === $c || str_starts_with($name, $c.'.')) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return Access::actionKeyFor($name) !== null;
     }
 
     private function managed(string $name): bool

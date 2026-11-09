@@ -33,7 +33,8 @@ class EnsureRole
         // ⚠️ راوت عليه أكشن (قرار ٦، ٩/١١): القرار كله من `Access::allows` —
         // صف الراوت/الأكشن (أي طبقة) وإلا افتراضي الأكشن. منح الصفحة مابيعدّيش
         // `role:` هنا، ومنح الأكشن بيعدّيه. افتراضي الأكشن = `role:` (RoleAccessTest).
-        if ($overridable && \App\Support\Access::actionKeyFor($routeName) !== null) {
+        // (شاشة GET تحت بادئة أكشن: الصفوف تحت من resolveMap، والافتراضي `role:`)
+        if ($overridable && \App\Support\Access::actionDefaulted($routeName)) {
             if (! \App\Support\Access::allows($user, $routeName)) {
                 abort(403, __('common.forbidden'));
             }

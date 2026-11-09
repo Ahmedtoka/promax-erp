@@ -1411,14 +1411,9 @@ class Access
     }
 
     /**
-     * الأكشن اللي بيغطي الراوت ده — null لو مالوش. الاسم بالظبط في ACTIONS،
-     * أو راوت كتابة تحت بادئته. لو أكتر من واحد: أطول بادئة (التيست بيضمن
-     * إن مفيش تداخل أصلاً).
-     *
-     * ⚠️ شاشة GET تحت بادئة أكشن من غير ما تتكتب بالاسم (`gl.golive.run.progress`
-     * تحت `gl.golive.run`، `wh.receipt.putaway.form` تحت `wh.receipt.putaway`)
-     * مش مغطّية — عرض بيتبع صفحته، وإلا المحاسب يفقد شاشة التقدّم ومدير الفرع
-     * فورم الترصيف من غير أي صف.
+     * الأكشن اللي بيغطي الراوت ده (نفس مطابقة البادئة) — null لو مالوش.
+     * لو أكتر من واحد: أطول بادئة (التيست بيضمن إن مفيش تداخل أصلاً).
+     * ده اللي بيحدد الصفوف (الراوت بالظبط ← الأكشن) و`screensOf` كمان.
      */
     public static function actionKeyFor(string $routeName): ?string
     {
@@ -1428,25 +1423,13 @@ class Access
 
         $found = null;
         $len = -1;
-        $isView = null;
 
         foreach (self::ACTIONS as $key => $def) {
             foreach ($def[3] as $covered) {
-                if (! self::matches($routeName, $covered) || strlen($covered) <= $len) {
-                    continue;
+                if (self::matches($routeName, $covered) && strlen($covered) > $len) {
+                    $found = $key;
+                    $len = strlen($covered);
                 }
-
-                if ($routeName !== $covered) {
-                    $isView ??= in_array('GET',
-                        \Illuminate\Support\Facades\Route::getRoutes()->getByName($routeName)?->methods() ?? [], true);
-
-                    if ($isView) {
-                        continue;
-                    }
-                }
-
-                $found = $key;
-                $len = strlen($covered);
             }
         }
 
@@ -1457,6 +1440,31 @@ class Access
     private static array $actionCache = [];
 
     /**
+     * الراوت المغطّي بياخد **افتراضي الأكشن** لما مفيش صف؟ — الاسم بالظبط في
+     * ACTIONS أو راوت كتابة. ⚠️ شاشة GET تحت البادئة من غير ما تتكتب بالاسم
+     * (`gl.golive.run.progress`، `wh.receipt.putaway.form`) صفوف الأكشن بتوصلها
+     * (منع الزرار بيقفل الفورم)، بس افتراضيها افتراضي صفحتها — وإلا المحاسب
+     * يفقد شاشة التقدّم ومدير الفرع فورم الترصيف من غير أي صف.
+     */
+    public static function actionDefaulted(string $routeName): bool
+    {
+        if (self::actionKeyFor($routeName) === null) {
+            return false;
+        }
+
+        foreach (self::ACTIONS as $def) {
+            if (in_array($routeName, $def[3], true)) {
+                return true;
+            }
+        }
+
+        $route = \Illuminate\Support\Facades\Route::getRoutes()->getByName($routeName);
+
+        // اسم مش راوت: يتعامل ككتابة (الأضيق) — من غير كاش
+        return $route === null || ! in_array('GET', $route->methods(), true);
+    }
+
+    /**
      * افتراضي الكود للراوت (من غير أي صف): الراوت المغطّي بأكشن بيتبع افتراضي
      * الأكشن، والباقي خريطة SCREENS. `$sees` = الرول شايف صفحة الأكشن؟
      *
@@ -1464,7 +1472,9 @@ class Access
      */
     private static function baseDefault(string $role, string $routeName, \Closure $sees): bool
     {
-        $action = self::isLocked($routeName) ? null : self::actionKeyFor($routeName);
+        $action = self::isLocked($routeName) || ! self::actionDefaulted($routeName)
+            ? null
+            : self::actionKeyFor($routeName);
 
         return $action !== null
             ? self::actionDefault($role, $action, $sees)
@@ -1584,13 +1594,6 @@ class Access
                 }
             }
 
-            $covered = [];
-
-            foreach (self::ACTIONS as $def) {
-                foreach ($def[3] as $route) {
-                    $covered[] = $route;
-                }
-            }
 
             $map = [];
 
@@ -1601,11 +1604,9 @@ class Access
                     continue;
                 }
 
-                // ⚠️ نفس مطابقة البادئة اللي `resolveMap` بيغطي بيها وقت التشغيل
-                foreach ($covered as $c) {
-                    if (self::matches($name, $c)) {
-                        continue 2;
-                    }
+                // ⚠️ نفس `actionKeyFor` اللي `resolveMap` بيغطي بيها وقت التشغيل
+                if (self::actionKeyFor($name) !== null) {
+                    continue;
                 }
 
                 $owner = null;

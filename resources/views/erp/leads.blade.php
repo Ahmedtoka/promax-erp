@@ -577,6 +577,8 @@
 @endif
 
 {{-- ═══════════ تعديل ═══════════ --}}
+{{-- نفس حارس الإضافة — زرار التعديل نفسه تحت `$canEditLead` (فيه canWrite) --}}
+@if ($canWrite)
 <dialog id="dlgEditLead">
     <form class="dlg" method="POST" id="formEditLead" style="max-height:86vh;overflow-y:auto">
         @csrf @method('PUT')
@@ -639,6 +641,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 {{-- ═══ ديالوج التوزيع الجماعي — «خد N من المنطقة دي» (٢٦/٨) ═══ --}}
 @if ($canConvert)
