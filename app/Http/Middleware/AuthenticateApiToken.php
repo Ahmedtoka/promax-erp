@@ -43,6 +43,15 @@ class AuthenticateApiToken
             ], 403);
         }
 
+        // الرول المخصص (٩/١١): قفل `app_login` بيقفل الجلسات المفتوحة كمان،
+        // مش اللوجين الجديد بس — نفس رسالة اللوجين
+        if ($record->user->activeCustomRole()?->app_login === false) {
+            return response()->json([
+                'message' => __('api.no_app_access'),
+                'code' => 'no_app_access',
+            ], 401);
+        }
+
         $record->forceFill(['last_used_at' => now()])->saveQuietly();
 
         Auth::setUser($record->user);
