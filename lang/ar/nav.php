@@ -48,6 +48,7 @@ return [
     'po_handout' => 'أمر توريد للمندوب',
     'po_import' => 'رفع أوامر بالإكسيل',
     'po_approvals' => 'موافقات التوريد',
+    'po_shortage' => 'الطلب مقابل المخزون',
     'invoices' => 'الفواتير',
     'client_requests' => 'طلبات العملاء الجدد',
     'replenishments' => 'طلبات البضاعة والريفيل',

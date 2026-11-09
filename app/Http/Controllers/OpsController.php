@@ -1845,8 +1845,12 @@ class OpsController extends Controller
             COALESCE(SUM(CASE WHEN '.self::PO_COUNTED_SQL.' THEN grand_total ELSE 0 END), 0) as total,
             COALESCE(SUM(CASE WHEN '.self::PO_COUNTED_SQL.' THEN 0 ELSE 1 END), 0) as excluded')->first();
 
+        // ═══ الطلب مقابل المخزون (٩/١١) — نفس الفلاتر، التعريفات في PoShortage ═══
+        $shortage = new \App\Services\PoShortage($request);
+
         return view('ops.pos', [
             'sum' => $sum,
+            'demand' => $shortage->report()['totals'] + ['open_orders' => $shortage->openOrders()->count()],
             'pos' => $q->latest()->paginate(30)->withQueryString(),
             // ⚠️ كل الأرقام من نفس الأساس المفلتر — رقم فوق وجدول تحت
             // من نطاقين = شاشة بتكدب
@@ -1886,7 +1890,7 @@ class OpsController extends Controller
      * فلاتر لوحة أوامر التوريد المشتركة (من غير الحالة) — بتخدم
      * الشاشة والـKPIs **والتصديرين إكسيل** بنفس المنطق بالحرف.
      */
-    private function poFilterBase(Request $request)
+    public static function poFilterBase(Request $request)
     {
         $u = auth()->user();
 

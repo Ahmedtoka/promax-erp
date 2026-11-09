@@ -100,6 +100,7 @@ return [
     'ops_pos' => ['what' => 'All sales orders.', 'data' => 'Orders, clients, totals and approval status.'],
     'ops_po_handout' => ['what' => 'Create a new sales order.', 'data' => 'Order lines and prices for a client.'],
     'ops_po_import' => ['what' => 'Import sales orders from sheets.', 'data' => 'Uploaded order sheets and parsed orders.'],
+    'ops_po_shortage' => ['what' => 'Demand vs stock: open orders against warehouse stock, with the shortage in units and money — read only.', 'data' => 'Open order quantities and values, shelf balances and stock held by pick orders, clients and reps (a manager sees own clients only).'],
     'ops_po_approvals' => ['what' => 'Approve or reject sales orders.', 'data' => 'Pending orders with prices and totals.'],
     'ops_invoices' => ['what' => 'All invoices.', 'data' => 'Invoices, totals, payment state and client.'],
     'ops_manual' => ['what' => 'Enter paper documents by hand.', 'data' => 'Manual invoices, returns, collections and gifts.'],

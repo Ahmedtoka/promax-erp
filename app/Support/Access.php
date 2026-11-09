@@ -149,6 +149,8 @@ class Access
             // المخزن. البادئة كانت هنا فمدير الفرع بيشوف اللينك
             // والراوت بيرفضه بـ403.
             'ops.dashboard', 'ops.requests', 'ops.pos', 'ops.replenishments',
+            // الطلب مقابل المخزون (٩/١١) — نفس اللي شايف `ops.pos`
+            'ops.po.shortage',
             // ⚠️ **`ops.invoices` بالجمع لازم تتكتب لوحدها.** قاعدة
             // البادئة بتطابق الاسم بالظبط أو `الاسم + نقطة` — و
             // `ops.invoices` مش `ops.invoice` ولا بتبدأ بـ`ops.invoice.`،
@@ -274,6 +276,8 @@ class Access
             'online.prep', 'online.invoice', 'online.view',
             // ⚠️ تسليم العهدة بيخرّج بضاعة من مخزنه — ده شغله.
             'ops.pos', 'ops.handout',
+            // الطلب مقابل المخزون (٩/١١) — يجهّز للعجز قبل ما يحصل
+            'ops.po.shortage',
             // ورقة الأمر بتتطبع مع التجهيز (٨/٩)
             'ops.po.print',
             // ⚠️ **بس عرض الأوامر مش إنشاءها ولا تسكينها** (تدقيق
@@ -617,6 +621,8 @@ class Access
             ['ops.po.handout', '📦', 'nav.po_handout', 'ops.po.handout', null],
             ['ops.po.import', '📊', 'nav.po_import', 'ops.po.import*', null],
             ['ops.po.approvals', '🔏', 'nav.po_approvals', 'ops.po.approvals*', 'po_approvals'],
+            // الطلب مقابل المخزون (٩/١١) — نواقص الأوامر المفتوحة
+            ['ops.po.shortage', '⚖️', 'nav.po_shortage', 'ops.po.shortage', null],
         ],
 
         // ═══ ٨. الفلوس — بعد ما البيع حصل ═══

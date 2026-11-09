@@ -80,6 +80,34 @@
     </a>
 </div>
 
+{{-- ═══ الطلب مقابل المخزون (٩/١١) — الأوامر المفتوحة بنفس الفلاتر قصاد المتاح ═══ --}}
+@if (\App\Support\Access::allows(auth()->user(), 'ops.po.shortage'))
+    @php $shortUrl = route('ops.po.shortage', \Illuminate\Support\Arr::only(request()->query(), ['q', 'channel', 'group', 'rep', 'approval', 'status', 'from', 'to', 'late'])); @endphp
+    <div style="font-size:11.5px;font-weight:800;color:var(--muted);margin:2px 2px 6px">⚖️ {{ __('shortage.box_title') }}</div>
+    <div class="kpis">
+        <a class="kpi" href="{{ $shortUrl }}">
+            <div class="lbl">📂 {{ __('shortage.box_open') }}</div>
+            <div class="val">{{ $fmt($demand['open_orders']) }}</div>
+            <div class="sub2">{{ __('shortage.box_open_sub', ['u' => $fmt($demand['ordered_units']), 'v' => $fmt($demand['ordered_value'])]) }}</div>
+        </a>
+        <a class="kpi" href="{{ $shortUrl }}">
+            <div class="lbl">🏭 {{ __('shortage.box_stock') }}</div>
+            <div class="val {{ $demand['free_for_need'] >= $demand['need_units'] ? 'pos' : 'mid' }}">{{ $fmt($demand['free_for_need']) }} / {{ $fmt($demand['need_units']) }}</div>
+            <div class="sub2">{{ __('shortage.box_stock_sub', ['c' => $fmt($demand['prepared_units'] + $demand['reserved_units'])]) }}</div>
+        </a>
+        <a class="kpi" href="{{ $shortUrl.(str_contains($shortUrl, '?') ? '&' : '?').'short=1' }}">
+            <div class="lbl">⚠️ {{ __('shortage.box_short') }}</div>
+            <div class="val {{ $demand['short_units'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($demand['short_units']) }}</div>
+            <div class="sub2">{{ __('shortage.box_short_sub', ['v' => $fmt($demand['short_value']), 'n' => $fmt($demand['short_products'])]) }}</div>
+        </a>
+        <a class="kpi" href="{{ $shortUrl }}">
+            <div class="lbl">🎯 {{ __('shortage.k_cover') }}</div>
+            <div class="val {{ $demand['coverage'] >= 100 ? 'pos' : ($demand['coverage'] >= 80 ? 'mid' : 'neg') }}">{{ $demand['coverage'] }}%</div>
+            <div class="sub2">→ {{ __('shortage.box_link') }}</div>
+        </a>
+    </div>
+@endif
+
 <div class="card">
     <h3>🚚 {{ __('ops.orders') }} <span class="side">{{ $pos->total() }} {{ trans_choice('ops.order_count', $pos->total()) }}</span></h3>
 

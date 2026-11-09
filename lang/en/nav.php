@@ -48,6 +48,7 @@ return [
     'po_handout' => 'New Sales Order',
     'po_import' => 'Import Sales Orders',
     'po_approvals' => 'Sales Order Approvals',
+    'po_shortage' => 'Demand vs Stock',
     'invoices' => 'Invoices',
     'client_requests' => 'New Client Requests',
     'replenishments' => 'Goods & Replenishment Requests',

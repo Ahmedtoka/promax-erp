@@ -1281,6 +1281,10 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // طباعة مجمعة: ?ids=1,2,3 — أمر في صفحة (2026-08-06)
         Route::get('/pos-print-batch', [OpsController::class, 'printPoBatch'])
             ->middleware('role:admin,manager,accountant,branch_manager,warehouse_keeper')->name('po.print.batch');
+        // ═══ الطلب مقابل المخزون — نواقص الأوامر المفتوحة (٩/١١/٢٠٢٦) ═══
+        // نفس اللي شايفين `ops.pos` (المحاسب مش منهم). سكوب المدير من poFilterBase
+        Route::get('/po-shortage', [\App\Http\Controllers\PoShortageController::class, 'index'])
+            ->middleware('role:admin,manager,branch_manager,warehouse_keeper')->name('po.shortage');
         // تنزيل شيت الأمر الأصلي — المرجع المحفوظ وقت الرفع
         Route::get('/pos/{purchaseOrder}/sheet', [OpsController::class, 'downloadPoSheet'])
             ->middleware('role:admin,manager,accountant')->name('po.sheet');
