@@ -117,6 +117,7 @@ return [
     'model_User' => "User",
     'model_Contract' => "Contract",
     'model_Zone' => "Zone",
+    'model_Role' => "Role",
     'model_ClientGroup' => "Chain",
     'model_Channel' => "Channel",
     'model_PurchaseOrder' => "Purchase order",

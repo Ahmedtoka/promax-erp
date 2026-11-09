@@ -82,6 +82,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\DayClose::class,
         \App\Models\StockCount::class,
         \App\Models\PickOrder::class,
+        \App\Models\Role::class,
     ];
 
     public function boot(): void

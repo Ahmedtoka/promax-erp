@@ -270,12 +270,40 @@ class User extends Authenticatable
 
     public function roleLabel(): string
     {
+        // رول مخصص فعّال → اسمه هو المسمى (الرول الأساسي بيفضل في `role`)
+        if (($custom = $this->activeCustomRole()) !== null) {
+            return $custom->displayName();
+        }
+
         // المسمى بييجي من lang/{ar,en}/enums.php — والثابت القديم fallback
         $key = 'enums.role.'.$this->role;
 
         return \Illuminate\Support\Facades\Lang::has($key)
             ? __($key)
             : (self::ROLES[$this->role] ?? $this->role);
+    }
+
+    public function customRole(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'custom_role_id');
+    }
+
+    /** الرول المخصص لو موجود وفعّال، وإلا null (من الكاش مش كويري) */
+    public function activeCustomRole(): ?Role
+    {
+        if ($this->custom_role_id === null) {
+            return null;
+        }
+
+        $role = Role::maps()[(int) $this->custom_role_id] ?? null;
+
+        return $role !== null && $role->active ? $role : null;
+    }
+
+    /** مفتاح الرول المخصص في المصفوفة (`c:<id>`) أو null */
+    public function permRoleKey(): ?string
+    {
+        return $this->activeCustomRole()?->key();
     }
 
     public function isAdmin(): bool

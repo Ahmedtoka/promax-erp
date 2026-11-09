@@ -117,6 +117,7 @@ return [
     'model_User' => "مستخدم",
     'model_Contract' => "عقد",
     'model_Zone' => "زون",
+    'model_Role' => "دور",
     'model_ClientGroup' => "سلسلة",
     'model_Channel' => "قناة",
     'model_PurchaseOrder' => "أمر توريد",
