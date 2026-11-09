@@ -126,9 +126,7 @@ class CustomRoleAssignmentTest extends TestCase
         $adminTarget = $this->makeAdmin();
         $mgr = User::factory()->create(['role' => 'accountant', 'code' => 'T-M']);
 
-        foreach (['act.team.manage'] as $k) {
-            UserPermission::create(['user_id' => $mgr->id, 'perm' => $k, 'allow' => true]);
-        }
+        UserPermission::create(['user_id' => $mgr->id, 'perm' => 'act.team.manage', 'allow' => true]);
 
         $mgr = $mgr->fresh();
 
@@ -140,6 +138,13 @@ class CustomRoleAssignmentTest extends TestCase
         $this->actingAs($mgr)->put(route('erp.team.update', $adminTarget), [
             'name' => 'x', 'name_en' => 'x', 'email' => $adminTarget->email, 'role' => 'accountant',
         ])->assertForbidden();
+        // وماينفعش يرقّي يوزر عادي لأدمن من مسار التعديل
+        $plain = User::factory()->create(['role' => 'accountant', 'code' => 'T-P']);
+        $this->actingAs($mgr)->put(route('erp.team.update', $plain), [
+            'name' => 'x', 'name_en' => 'x', 'email' => $plain->email, 'role' => 'admin',
+        ])->assertSessionHasErrors('role');
+        $this->assertSame('accountant', $plain->fresh()->role);
+
         $this->actingAs($mgr)->post(route('erp.team.password', $adminTarget), [
             'password' => 'newpass-123', 'password_confirmation' => 'newpass-123',
         ])->assertForbidden();
@@ -148,6 +153,27 @@ class CustomRoleAssignmentTest extends TestCase
         $this->actingAs($mgr)->post(route('erp.team.store'), $this->payload(['email' => 'ok1@promax.test']))
             ->assertSessionHasNoErrors();
         $this->assertDatabaseHas('users', ['email' => 'ok1@promax.test', 'role' => 'accountant']);
+    }
+
+    public function test_team_manager_editing_kept_field_custom_role_still_needs_branch(): void
+    {
+        $role = $this->role(['base_role' => 'sales_agent', 'name_en' => 'Field Lead']);
+        $br = $this->branch();
+        $u = User::factory()->create(['role' => 'sales_agent', 'code' => 'T-K', 'branch_id' => $br->id]);
+        $u->custom_role_id = $role->id;
+        $u->save();
+        $mgr = User::factory()->create(['role' => 'accountant', 'code' => 'T-KM']);
+        UserPermission::create(['user_id' => $mgr->id, 'perm' => 'act.team.manage', 'allow' => true]);
+        $mgr = $mgr->fresh();
+
+        $body = ['name' => 'س', 'name_en' => 'S', 'email' => $u->email, 'role' => 'sales_agent', 'active' => 1];
+
+        $this->actingAs($mgr)->put(route('erp.team.update', $u), $body + ['branch_id' => ''])
+            ->assertSessionHasErrors('branch_id');
+
+        $this->actingAs($mgr)->put(route('erp.team.update', $u), $body + ['branch_id' => $br->id])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($role->id, (int) $u->fresh()->custom_role_id);
     }
 
     private function appUser(Role $role, string $base = 'accountant'): User
@@ -220,6 +246,11 @@ class CustomRoleAssignmentTest extends TestCase
         $b->save();
         $c = User::factory()->create(['role' => 'accountant', 'code' => 'T-C']);
         $d = User::factory()->create(['role' => 'sales_agent', 'code' => 'T-D']);
+        // رول مخصص موقوف = بيرجع لسلوك الأساسي (محاسب = ويب، ميداني = لأ)
+        $off = $this->role(['base_role' => 'accountant', 'name_en' => 'Off', 'web_login' => false, 'active' => false]);
+        $e = User::factory()->create(['role' => 'accountant', 'code' => 'T-E']);
+        $e->custom_role_id = $off->id;
+        $e->save();
 
         $ids = User::webUsers()->pluck('id')->all();
 
@@ -227,5 +258,6 @@ class CustomRoleAssignmentTest extends TestCase
         $this->assertNotContains($b->id, $ids);
         $this->assertContains($c->id, $ids);
         $this->assertNotContains($d->id, $ids);
+        $this->assertContains($e->id, $ids);
     }
 }

@@ -2934,20 +2934,25 @@ class ErpController extends Controller
      * ⚠️ الفاليديشن على نسخة متحوّلة (الرول = الأساسي) عشان `required_if:role,warehouse_keeper`
      * يشتغل على الأساس — والـold() بيرجع الاختيار الأصلي `c:<id>` للفورم.
      *
-     * @return array{0: array, 1: ?int, 2: bool} [data, custom_role_id, custom_chosen]
+     * @return array{0: array, 1: ?int} [data, custom_role_id]
      */
     private function validatedUser(Request $request, ?User $user, array $extra = []): array
     {
         $byAdmin = $request->user()->role === 'admin';
         $input = $request->all();
         $custom = null;
+        $rule = null; // الرول المخصص اللي بتتطبق عليه قاعدة الفرع
 
         if ($byAdmin && is_string($input['role'] ?? null) && ($c = \App\Models\Role::fromKey($input['role'])) && $c->active) {
-            $custom = $c;
+            $custom = $rule = $c;
             $input['role'] = $c->base_role;
+        } elseif ($user !== null && ($kept = $user->activeCustomRole()) !== null
+            && ($input['role'] ?? null) === $kept->base_role) {
+            // غير الأدمن مابيبعتش `c:<id>` — الرول المخصص بيفضل على اليوزر فقاعدة فرعه لازم تفضل سارية
+            $rule = $kept;
         }
 
-        $data = \Illuminate\Support\Facades\Validator::make($input, $this->userRules($user, $custom, $byAdmin) + $extra)->validate();
+        $data = \Illuminate\Support\Facades\Validator::make($input, $this->userRules($user, $rule, $byAdmin) + $extra)->validate();
 
         return [$data, $custom?->id];
     }
@@ -2959,15 +2964,13 @@ class ErpController extends Controller
         ]);
 
         // الكاست `hashed` على الموديل بيشفّر الباسورد بنفسه
-        $new = User::create($data
+        $new = new User($data
             + $this->avatarData($request)
             + ['active' => $request->boolean('active', true)]);
 
-        // ⚠️ `custom_role_id` مش fillable (منع mass-assignment) — بيتحط صريح بعد الفاليديشن
-        if ($customId !== null) {
-            $new->custom_role_id = $customId;
-            $new->save();
-        }
+        // ⚠️ `custom_role_id` مش fillable (منع mass-assignment) — بيتحط صريح بعد الفاليديشن، وفي نفس الكتابة
+        $new->custom_role_id = $customId;
+        $new->save();
 
         return back()->with('ok', __('team.user_added', ['name' => $data['name']]));
     }
@@ -2981,7 +2984,7 @@ class ErpController extends Controller
         $oldRole = $user->role;
         $data = $this->guardSelfEdit($request, $user, $data);
 
-        $user->update($data
+        $user->fill($data
             + $this->avatarData($request, $user)
             + ['active' => $request->boolean('active')]);
 
@@ -2992,8 +2995,9 @@ class ErpController extends Controller
 
         if (! $self && ($byAdmin || $roleSent !== $oldRole)) {
             $user->custom_role_id = $customId;
-            $user->save();
         }
+
+        $user->save(); // كتابة واحدة
 
         return back()->with('ok', __('team.user_updated', ['name' => $user->displayName()]));
     }

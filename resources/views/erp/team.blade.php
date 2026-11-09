@@ -11,12 +11,10 @@
         if ($v->driver_id) { $vanOf[$v->driver_id] = $v; }
     }
 
-    // ⚠️ زرار الباسورد للأدمن بس — الراوت نفسه `role:admin`، ومدير
-    // القنوات لو شافه هياخد 403 (وأصلاً مينفعش يقدر يغيّر باسورد
-    // الأدمن ويستلم السيستم).
     $isAdminUser = auth()->user()->isAdmin();
-    // ⚠️ غير الأدمن (استثناء `act.team.manage`) بيدير الفريق بس مايلمسش الأدمن ولا الرولز المخصصة (السيرفر بيرفض)
-    $canSetPassword = $isAdminUser || \App\Support\Access::action(auth()->user(), 'act.team.manage');
+    // ⚠️ أزرار الإضافة/التعديل/الباسورد للأدمن ولحامل `act.team.manage` (استثناء من الصلاحيات). غير الأدمن
+    // مايلمسش الأدمن ولا الرولز المخصصة — السيرفر بيرفض (مدير القنوات من غير الاستثناء مالوش الأزرار).
+    $canManageTeam = $isAdminUser || \App\Support\Access::action(auth()->user(), 'act.team.manage');
 
     // الرولز المخصصة الفعّالة (للأدمن بس) + خريطة c:<id> → الرول الأساسي لشروط الفورم
     $customRoles = $isAdminUser
@@ -31,7 +29,7 @@
     {{-- التخصيص وخطط السير `role:admin,manager` — مدير الفرع كان شايف الزرارين وبيترفض (٨/٩) --}}
     @if (\App\Support\Access::allows(auth()->user(), 'ops.assignments'))<a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>@endif
     @if (\App\Support\Access::allows(auth()->user(), 'ops.journeys'))<a class="btn" href="{{ route('ops.journeys') }}">🗺️ {{ __('journey.page') }}</a>@endif
-    @if ($canSetPassword)
+    @if ($canManageTeam)
         <button class="btn gold" onclick="openUser(null)">+ {{ __('team.new_user') }}</button>
     @endif
 @endsection
@@ -61,7 +59,7 @@
     </div>
     <div class="tablewrap" id="tmUsers">
         <table>
-            <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canSetPassword)<th></th>@endif</tr>
+            <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canManageTeam)<th></th>@endif</tr>
             @foreach ($users as $u)
                 <tr data-role="{{ $roleKeyOf($u) }}" data-active="{{ $u->active ? 1 : 0 }}">
                     <td>
@@ -97,7 +95,7 @@
                             <span class="badge b-gold">{{ __('team.token_countable', ['count' => $u->tokens_count]) }}</span>
                         @else — @endif
                     </td>
-                    @if ($canSetPassword && ($isAdminUser || $u->role !== 'admin'))
+                    @if ($canManageTeam && ($isAdminUser || $u->role !== 'admin'))
                         @php
                             // ⚠️ **مش `@json([...])` متعدد الأسطر** — ده الفخ
                             // المسجّل في سكيل المشروع: بيكسر بارسر Blade
@@ -121,7 +119,7 @@
                                 🔑
                             </button>
                         </td>
-                    @elseif ($canSetPassword)
+                    @elseif ($canManageTeam)
                         <td></td>
                     @endif
                 </tr>
@@ -181,7 +179,7 @@
     </div>
 </div>
 
-@if ($canSetPassword)
+@if ($canManageTeam)
 {{-- ═══════════ يوزر جديد / تعديل يوزر ═══════════ --}}
 <dialog id="dlgUser">
     {{-- ⚠️ enctype إجباري (٩/٨) — صورة الموظف بتترفع من نفس الفورم --}}
@@ -352,7 +350,7 @@
     </form>
 </dialog>
 
-@if ($canSetPassword)
+@if ($canManageTeam)
 <dialog id="dlgPass">
     <form class="dlg" method="POST" id="passForm" action="">
         @csrf
@@ -420,7 +418,7 @@ function tmFilter() {
     document.getElementById('tmCount').textContent = n;
 }
 </script>
-@if ($canSetPassword)
+@if ($canManageTeam)
 <script>
 const PASS_URL = @js(route('erp.team.password', ['user' => '__ID__']));
 const USER_URL = @js(route('erp.team.update', ['user' => '__ID__']));
@@ -488,7 +486,7 @@ function userRoleSync() {
     document.getElementById('uWarehouse').required = isKeeper;
     // الفرع إجباري لميداني/مدير فرع على رول مخصص (السيرفر بيفرضه)
     document.getElementById('uBranch').required = !!CUSTOM_BASE[rv]
-        && ['sales_agent', 'driver', 'promoter', 'branch_manager'].indexOf(base) !== -1;
+        && @js([...\App\Models\User::FIELD_ROLES, 'branch_manager']).indexOf(base) !== -1;
 }
 
 function openPass(id, name, isField) {

@@ -6,7 +6,6 @@ return [
     'users_and_roles' => 'المستخدمين والصلاحيات',
     'role' => 'الرول',
     'custom_roles_group' => 'رولز مخصصة',
-    'custom_roles_group' => 'رولز مخصصة',
     'email' => 'الإيميل',
     'zone' => 'الزون',
     'zones' => 'الزونز',
