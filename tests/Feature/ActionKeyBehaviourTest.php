@@ -38,29 +38,60 @@ class ActionKeyBehaviourTest extends TestCase
         ]);
     }
 
-    public function test_journey_wipe_granted_to_a_custom_role_works(): void
+    /** يوزر مدير فرع على رول مخصص — الصفوف المدية للرول المخصص */
+    private function onCustomRole(array $perms): User
     {
         $role = Role::create([
             'name_ar' => 'منسق خطوط السير', 'name_en' => 'Route Planner',
             'base_role' => 'branch_manager', 'web_login' => true, 'app_login' => false,
         ]);
-        RolePermission::create(['role' => 'c:'.$role->id, 'perm' => 'act.field.wipe', 'allow' => true]);
+
+        foreach ($perms as $perm) {
+            RolePermission::create(['role' => 'c:'.$role->id, 'perm' => $perm, 'allow' => true]);
+        }
         RolePermission::flush();
 
+        $user = $this->makeAdmin(['role' => 'branch_manager']);
+        $user->custom_role_id = $role->id;
+        $user->save();
+
+        return $user->fresh();
+    }
+
+    /** المنح لغير المدير بيمسح خطط مناديبه بس — فريق تاني مايتلمسش (مش مسح للشركة) */
+    public function test_journey_wipe_granted_to_a_custom_role_is_team_scoped(): void
+    {
         // مدير الفرع مالوش المسح افتراضياً (`role:admin,manager`) — المنح هو اللي بيفتحه
-        $planner = $this->makeAdmin(['role' => 'branch_manager']);
-        $planner->custom_role_id = $role->id;
-        $planner->save();
+        $planner = $this->onCustomRole(['act.field.wipe']);
+        $ownRep = $this->makeRep(['manager_id' => $planner->id]);
+        $this->plan($ownRep);
 
-        $rep = $this->makeRep(['manager_id' => $planner->id]);
-        $this->plan($rep);
+        $otherManager = $this->makeAdmin(['role' => 'manager']);
+        $otherRep = $this->makeRep(['manager_id' => $otherManager->id]);
+        $this->plan($otherRep);
 
-        $this->actingAs($planner->fresh())
+        $this->actingAs($planner)
             ->post(route('ops.journeys.wipe'))
             ->assertRedirect()
             ->assertSessionHas('ok');
 
-        $this->assertSame(0, JourneyPlan::where('user_id', $rep->id)->count());
+        $this->assertSame(0, JourneyPlan::where('user_id', $ownRep->id)->count());
+        $this->assertSame(1, JourneyPlan::where('user_id', $otherRep->id)->count());
+    }
+
+    /** منح صفحة خطوط السير بس مابيورّثش المسح — الزرار مخفي والراوت 403 */
+    public function test_journeys_page_grant_alone_does_not_give_wipe(): void
+    {
+        $planner = $this->onCustomRole(['ops.journeys']);
+        $rep = $this->makeRep(['manager_id' => $planner->id]);
+        $this->plan($rep);
+
+        $this->actingAs($planner)->get(route('ops.journeys'))
+            ->assertOk()
+            ->assertDontSee(route('ops.journeys.wipe'), false);
+
+        $this->actingAs($planner)->post(route('ops.journeys.wipe'))->assertForbidden();
+        $this->assertSame(1, JourneyPlan::where('user_id', $rep->id)->count());
     }
 
     public function test_journey_wipe_denied_to_a_manager_is_hidden_and_forbidden(): void

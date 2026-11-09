@@ -237,10 +237,17 @@ class JourneyController extends Controller
     {
         $q = JourneyPlan::query();
 
-        // الأدمن بيمسح الكل — وغيره فريقه بس (`fieldVisibleTo`:
-        // مناديب المدير + نفسه، بعد قرار ١١/٨ إن المدير بيشتغل ميداني)
-        if ($viewer === null || ! $viewer->isAdmin()) {
-            $q->whereIn('user_id', User::fieldVisibleTo(User::query(), $viewer)->select('id'));
+        if ($viewer === null) {
+            return $q->whereRaw('1 = 0');
+        }
+
+        // ⚠️ الأدمن بس بيمسح الشركة كلها. أي حد تاني — مدير أو رول اتمنح
+        // `act.field.wipe` — فريقه بس زي المدير بالظبط: مناديبه (`manager_id`)
+        // + نفسه. من غير مناديب = مفيش حاجة تتمسح (مش «الكل»).
+        if (! $viewer->isAdmin()) {
+            $q->whereIn('user_id', User::query()
+                ->where(fn ($w) => $w->where('manager_id', $viewer->id)->orWhere('id', $viewer->id))
+                ->select('id'));
         }
 
         return $q;

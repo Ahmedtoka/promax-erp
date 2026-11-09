@@ -915,8 +915,9 @@ class Access
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
         'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
-        // مسح خطوط السير كلها (فريقه بس لغير الأدمن) — مفتاح لوحده لأنه هدّام
-        'act.field.wipe' => ['perm.act_field_wipe', 'ops.journeys', null, ['ops.journeys.wipe']],
+        // مسح خطوط السير كلها (فريقه بس لغير الأدمن) — مفتاح لوحده لأنه هدّام.
+        // ⚠️ `['manager']` مش `null`: مايتورثش من مجرد رؤية الصفحة، لازم منح صريح
+        'act.field.wipe' => ['perm.act_field_wipe', 'ops.journeys', ['manager'], ['ops.journeys.wipe']],
         'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close', 'ops.requests.revise']],
 
         // ═══ الموردين والمشتريات ═══
