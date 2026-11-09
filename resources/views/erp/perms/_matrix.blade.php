@@ -28,8 +28,6 @@
         return $html.'</div>';
     };
 
-    /** نص البحث للسطر: الاسم + المفتاح + الوصف + البيانات */
-    $q = fn (array $r) => mb_strtolower($r['label'].' '.$r['key'].' '.($r['what'] ?? '').' '.($r['data'] ?? ''));
     $ovAttr = fn (?bool $v) => $v === null ? '' : ($v ? '1' : '0');
     $riskLabels = array_combine(PermissionCatalog::LEVELS, array_map(fn ($l) => PermissionCatalog::riskLabel($l), PermissionCatalog::LEVELS));
 @endphp
@@ -143,7 +141,7 @@
                     {!! $dot($g['effective']) !!}
                     @if (! $g['virtual']) {!! $src($g['source']) !!} @endif
                 </div>
-                <div class="pm-gctl" data-pm-row data-ov="{{ $ovAttr($g['override']) }}" data-q="{{ mb_strtolower($g['label'].' '.$g['key']) }}" data-risk="{{ $g['risk'] }}" data-kind="group">
+                <div class="pm-gctl" data-key="{{ $g['key'] }}" {{ $g['virtual'] ? 'data-locked' : 'data-pm-row' }} data-ov="{{ $ovAttr($g['override']) }}" data-risk="{{ $g['risk'] }}" data-kind="group">
                     @if ($g['virtual'])
                         <span class="pm-lock">{{ __('perm.public_group_hint') }}</span>
                     @else
@@ -169,7 +167,7 @@
                         @if ($kids !== [])
                             <div class="pm-kids" hidden>
                                 @foreach ($kids as $c)
-                                    @include('erp.perms._row', ['r' => $c + ['page_key' => $p['key'], 'page_what' => $p['what']], 'depth' => 2, 'kids' => []])
+                                    @include('erp.perms._row', ['r' => $c + ['page' => $p['label'], 'page_key' => $p['key'], 'page_what' => $p['what']], 'depth' => 2, 'kids' => []])
                                 @endforeach
                             </div>
                         @endif
@@ -262,6 +260,13 @@
         risk: @json($riskLabels)
     };
     var rows = Array.prototype.slice.call(form.querySelectorAll('[data-pm-row]'));
+    // فهرس البحث من النص اللي على الشاشة مرة واحدة (اسم، مسار، وصف، داتا) — مش من خاصية مكررة في كل سطر
+    form.querySelectorAll('.pm-row').forEach(function (r) {
+        r._q = ((r.dataset.key || '') + ' ' + r.firstElementChild.textContent).replace(/\s+/g, ' ').toLowerCase();
+    });
+    form.querySelectorAll('.pm-gctl').forEach(function (g) {
+        g._q = ((g.dataset.key || '') + ' ' + g.closest('[data-pm-grp]').querySelector('.pm-gtitle').textContent).replace(/\s+/g, ' ').toLowerCase();
+    });
     var submitting = false;
 
     function current(row) {
@@ -296,8 +301,10 @@
     // ═══ البحث والفلاتر ═══
     function rowHit(r, q, only, high) {
         if (!r) return false;
-        if (q && r.dataset.q.indexOf(q) === -1) return false;
-        if (only && current(r) === '' && !isDirty(r) && r.dataset.ov === '') return false;
+        if (q && r._q.indexOf(q) === -1) return false;
+        // من غير تحكم (مقفول/القسم الوهمي) = مش «متحدد» أبداً
+        var cur = current(r);
+        if (only && (cur === null || (cur === '' && r.dataset.ov === '' && !isDirty(r)))) return false;
         if (high && r.dataset.risk !== 'high' && r.dataset.risk !== 'critical') return false;
         return true;
     }

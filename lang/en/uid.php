@@ -71,8 +71,6 @@ return [
     'oc_coll' => 'Partly collected so far',
     'oc_coll_how' => 'Collected from these open orders — an order closes as "completed" when nothing remains',
 
-    // Permissions
-
     // Product card
     'shelf_life_how' => 'used to derive the expiry date when a receipt has none',
     'no_batches_in_window' => 'No batches expire inside this period.',

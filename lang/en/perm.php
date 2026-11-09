@@ -29,6 +29,7 @@ return [
     'src_hint_user' => 'An exception for this one employee - beats the role',
     'via' => 'follows page ":page"',
     'locked_reason' => 'Locked in code - the permissions, roles, work-time and AI assistant screens can never be granted from the matrix.',
+    'locked_short' => 'Locked in code',
     'kind_group' => 'Section',
     'kind_page' => 'Page',
     'kind_screen' => 'Screen',

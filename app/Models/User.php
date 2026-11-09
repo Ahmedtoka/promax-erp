@@ -64,6 +64,18 @@ class User extends Authenticatable
      */
     public const OFFICE_ROLES = ['accountant', 'warehouse_keeper'];
 
+    /**
+     * الرولز اللي بتدخل الأبلكيشن من غير شرط ملف موظف (`Api\AuthApiController::login`).
+     * الأدمن والمدير: متابعة وموافقات. أمين المخزن (٩/٨): التجهيز. المحاسب: إشعاراته.
+     * مدير الإنتاج (١٩/١٠): أوامر الإنتاج. مدير الفرع (٩/١١ — قرار أحمد): حضور وموافقات.
+     * أي رول تاني بيدخل بملف موظف بس، ومراجع التسليم بره دايماً.
+     * ⚠️ شاشة الرولز (بادج «أبلكيشن») بتقرا نفس القايمة.
+     */
+    public const APP_ROLES = [
+        'sales_agent', 'driver', 'promoter', 'manager', 'admin',
+        'warehouse_keeper', 'accountant', 'production_manager', 'branch_manager',
+    ];
+
     /** الرولز اللي بتنزل الشارع */
     public const FIELD_ROLES = ['sales_agent', 'driver', 'promoter'];
 
@@ -236,7 +248,8 @@ class User extends Authenticatable
      */
     public function permMap(): array
     {
-        return $this->permMapCache ??= $this->permissions()
+        // محمّلة بـeager load (شاشة «مين معاه الصلاحية») ⇒ من غير كويري
+        return $this->permMapCache ??= ($this->relationLoaded('permissions') ? $this->permissions : $this->permissions()->get(['perm', 'allow']))
             ->pluck('allow', 'perm')->map(fn ($v) => (bool) $v)->all();
     }
 

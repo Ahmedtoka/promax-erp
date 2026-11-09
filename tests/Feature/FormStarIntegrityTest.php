@@ -118,7 +118,7 @@ class FormStarIntegrityTest extends TestCase
         // `RoleController::nameRules()` اللي بيتدمج في validate — الفحص النصي مابيتبعش الهيلبر
         'erp/perms/_roles:name_ar' => 'required in RoleController::nameRules(), merged into validate(); the text scan cannot follow the helper',
         'erp/perms/_roles:name_en' => 'required in RoleController::nameRules(), merged into validate(); the text scan cannot follow the helper',
-        'gl/expenses:account_id' =>'empty = the category account (required_without:category_id, and the category is required on the form)',
+        'gl/expenses:account_id' => 'empty = the category account (required_without:category_id, and the category is required on the form)',
     ];
 
     // ═══════════════════ 1. الخريطة نفسها ═══════════════════

@@ -14,7 +14,13 @@
     $tabIcons = ['roles' => '👥', 'matrix' => '🧩', 'sheet' => '📄', 'who' => '🔎', 'compare' => '⚖️', 'history' => '🕓'];
 
     /** اسم أي رول (أساسي/مخصص) من الكتالوج */
-    $roleName = fn (?string $k) => $k === null ? '—' : ($roles[$k]['label'] ?? __('enums.role.'.$k));
+    $roleName = fn (?string $k) => match (true) {
+        $k === null => '—',
+        isset($roles[$k]) => $roles[$k]['label'],
+        // رول مخصص اتمسح (مصدر نسخة مثلاً)
+        str_starts_with($k, 'c:') => __('perm.hist_deleted_role', ['id' => substr($k, 2)]),
+        default => __('enums.role.'.$k),
+    };
 
     /** نقطة الفعلي — مسموح/ممنوع */
     $dot = fn (bool $on) => '<span class="pm-dot '.($on ? 'on' : 'off').'" role="img" aria-label="'

@@ -31,15 +31,6 @@ class PermissionController extends Controller
 {
     public const TABS = ['roles', 'matrix', 'sheet', 'who', 'compare', 'history'];
 
-    /**
-     * الرولز الأساسية اللي بتدخل الأبلكيشن من غير شرط ملف موظف — نسخة عرض
-     * بس من القايمة في `Api\AuthApiController::login` (لو اتغيرت هناك غيّرها هنا).
-     */
-    private const APP_ROLES = [
-        'sales_agent', 'driver', 'promoter', 'manager', 'warehouse_keeper',
-        'accountant', 'production_manager', 'branch_manager',
-    ];
-
     public function index(Request $request)
     {
         $tab = in_array($request->query('tab'), self::TABS, true) ? (string) $request->query('tab') : 'roles';
@@ -94,7 +85,7 @@ class PermissionController extends Controller
                 'model' => null,
                 'base' => $r,
                 'web' => in_array($r, Access::WEB_ROLES, true),
-                'app' => in_array($r, self::APP_ROLES, true),
+                'app' => in_array($r, User::APP_ROLES, true),
                 'active' => true,
                 'users' => $users[$r]['total'] ?? 0,
                 'active_users' => $users[$r]['active'] ?? 0,
@@ -329,7 +320,8 @@ class PermissionController extends Controller
 
         $overrides = UserPermission::query()
             ->where('perm', $key)
-            ->with('user:id,name,name_en,role,code,custom_role_id,active')
+            // `user.permissions` محمّلة مرة واحدة — `permMap()` بيقرا منها بدل كويري لكل يوزر
+            ->with(['user.permissions'])
             ->get()
             ->filter(fn ($o) => $o->user !== null)
             ->map(fn ($o) => [
@@ -415,20 +407,29 @@ class PermissionController extends Controller
             $rowsB[$r['key']] = $r;
         }
 
-        $rows = [];
+        $all = [];
         $diffCount = 0;
+        // قسم/صفحة فيها فرق تحتها — بتفضل كعنوان في «الفروق بس»
+        $hasDiff = [];
 
         foreach (self::flatRows(PermissionMatrix::forRole($a)) as $r) {
             $other = $rowsB[$r['key']] ?? null;
             $differs = $other !== null && $other['effective'] !== $r['effective'];
-            $diffCount += ($differs && $r['kind'] !== 'group') ? 1 : 0;
 
-            if ($only && ! $differs) {
-                continue;
+            if ($differs && $r['kind'] !== 'group') {
+                $diffCount++;
+                $hasDiff[$r['group']] = true;
+                if (isset($r['page_key'])) {
+                    $hasDiff[$r['page_key']] = true;
+                }
             }
 
-            $rows[] = ['row' => $r, 'b' => $other, 'differs' => $differs];
+            $all[] = ['row' => $r, 'b' => $other, 'differs' => $differs];
         }
+
+        $rows = $only
+            ? array_values(array_filter($all, fn ($x) => $x['differs'] || isset($hasDiff[$x['row']['key']])))
+            : $all;
 
         return ['cmpA' => $a, 'cmpB' => $b, 'cmpOnly' => $only, 'cmpRows' => $rows, 'cmpDiffs' => $diffCount];
     }

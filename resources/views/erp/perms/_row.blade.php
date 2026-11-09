@@ -7,8 +7,9 @@
     $kidActions = count($kids) - $kidScreens;
     $mark = ['screen' => '🖥', 'action' => '🔘'][$r['kind']] ?? null;
 @endphp
-<div class="pm-row d{{ $depth }}" data-pm-row data-kind="{{ $r['kind'] }}" data-risk="{{ $r['risk'] }}"
-     data-ov="{{ $r['override'] === null ? '' : ($r['override'] ? '1' : '0') }}" data-q="{{ $q($r) }}">
+{{-- ⚠️ `data-pm-row` على السطر اللي ليه تحكم بس — المقفول `data-locked` (فلتر «المتحدد بس» والعدّاد بيعتمدوا عليه) --}}
+<div class="pm-row d{{ $depth }}" data-key="{{ $r['key'] }}" {{ $r['locked'] ? 'data-locked' : 'data-pm-row' }} data-kind="{{ $r['kind'] }}" data-risk="{{ $r['risk'] }}"
+     data-ov="{{ $r['override'] === null ? '' : ($r['override'] ? '1' : '0') }}">
     <div style="min-width:0">
         <div class="pm-name" data-dirty="{{ __('perm.changed') }}">
             @if ($depth === 1 && $r['icon'])<span aria-hidden="true">{{ $r['icon'] }}</span>@endif
@@ -40,7 +41,7 @@
         @if ($r['locked'])
             <span class="pm-lock">🔒 {{ __('perm.locked_reason') }}</span>
         @else
-            {!! $seg($r['key'], $r['override'], ($r['kind'] === 'page' ? '' : ($r['page'] ?? '')).$title) !!}
+            {!! $seg($r['key'], $r['override'], isset($r['page']) ? $r['page'].' · '.$title : $title) !!}
         @endif
     </div>
 </div>

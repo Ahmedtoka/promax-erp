@@ -52,7 +52,7 @@
                         <td>{{ __('enums.role.'.$roles[$rk]['base']) }}</td>
                         <td>{!! $state($c['effective']) !!}</td>
                         <td>{!! $src($c['source'], $c['via']) !!}</td>
-                        <td>{{ $ov($c['override']) }}</td>
+                        <td>@if ($info['locked'])🔒 <span class="pm-muted">{{ __('perm.locked_short') }}</span>@elseif ($whoKey === \App\Support\Access::PUBLIC_GROUP)<span class="pm-muted">—</span>@else{{ $ov($c['override']) }}@endif</td>
                         <td class="num">{{ $roles[$rk]['active_users'] }}</td>
                     </tr>
                 @endforeach

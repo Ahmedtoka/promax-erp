@@ -31,21 +31,9 @@ class AuthApiController extends Controller
             return response()->json(['message' => __('api.no_app_access')], 403);
         }
 
-        // الأدمن والمدير بيدخلوا الأبلكيشن كمان (شاشة متابعة وموافقات).
-        // ⚠️ **أمين المخزن اتفتح له** (2026-08-09) — بقت له شاشة
-        // تجهيز حقيقية على الموبايل. والمحاسب بيشوف إشعاراته
-        // (تحصيلات الشيكات والتحويلات) من `OfficeHome`.
-        // ⚠️ وأي موظف عنده ملف موظف (فرع، موارد بشرية، ...) — الحضور والإجازات
-        // لكل الموظفين. مراجع التسليم بره دايماً.
-        $whitelisted = in_array($user->role, [
-            'sales_agent', 'driver', 'promoter', 'manager', 'admin',
-            'warehouse_keeper', 'accountant',
-            // مدير الإنتاج (١٩/١٠) — شاشة أوامر الإنتاج (ابدأ/خلص) في أبلكيشن 2.6.0
-            'production_manager',
-            // مدير الفرع (٩/١١ — قرار أحمد) — حضور وإجازات وموافقات حتى من غير
-            // ملف موظف. الكروت اللي السيرفر بيرفضها له بتستخبى في الأبلكيشن.
-            'branch_manager',
-        ], true);
+        // القايمة في `User::APP_ROLES` (مشتركة مع بادج شاشة الرولز) — وأي موظف
+        // عنده ملف موظف بيدخل للحضور والإجازات. مراجع التسليم بره دايماً.
+        $whitelisted = in_array($user->role, User::APP_ROLES, true);
 
         if (! $whitelisted && ($user->role === 'handover_reviewer' || \App\Models\Employee::forUser($user) === null)) {
             return response()->json(['message' => __('api.no_app_access')], 403);

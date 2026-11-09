@@ -186,9 +186,91 @@ class PermissionScreenTest extends TestCase
             ->assertSee('data-cmp-key="erp.dues"', false)
             ->assertSee('data-cmp-key="erp.clients"', false);
 
+        $group = collect(Access::NAV)->search(fn ($links) => in_array('erp.dues', array_column($links, 0), true));
+        $this->assertIsString($group);
+
         $this->actingAs($admin)->get($this->tab('compare', $q + ['only' => 1]))->assertOk()
             ->assertSee('data-cmp-key="erp.dues"', false)
+            // عنوان القسم بيفضل لما فيه فرق تحته
+            ->assertSee('data-cmp-key="'.$group.'"', false)
             ->assertDontSee('data-cmp-key="erp.clients"', false);
+    }
+
+    /**
+     * فلتر «المتحدد بس» والعدّاد بيعتمدوا على `data-pm-row` — لازم يبقى على
+     * السطور اللي ليها تحكم بس، والمقفول/القسم الوهمي `data-locked`.
+     */
+    public function test_explicit_only_filter_marker_is_only_on_rows_with_controls(): void
+    {
+        $html = $this->actingAs($this->makeAdmin())->get($this->tab('matrix', ['role' => 'manager']))->assertOk()->getContent();
+
+        $this->assertStringContainsString('data-key="erp.perms" data-locked', $html);
+        $this->assertStringContainsString('data-key="'.Access::PUBLIC_GROUP.'" data-locked', $html);
+        $this->assertStringContainsString('data-key="erp.dues" data-pm-row', $html);
+
+        preg_match_all('/data-key="([^"]+)" data-pm-row/', $html, $marked);
+        preg_match_all('/name="perm\[([^\]]+)\]" value="1"/', $html, $controls);
+        $this->assertSame(array_values(array_unique($controls[1])), $marked[1], 'every data-pm-row has exactly one tri-state control');
+        $this->assertSame([], array_values(array_filter($marked[1], fn ($k) => Access::isLocked($k))));
+    }
+
+    public function test_role_names_are_escaped_on_every_tab(): void
+    {
+        $admin = $this->makeAdmin();
+        $this->actingAs($admin);
+        $evil = '<script>alert(1)</script>';
+        $role = $this->custom('manager', ['name_ar' => $evil, 'name_en' => $evil]);
+        PermissionMatrix::save($role->key(), ['erp.dues' => '0']);
+
+        foreach ([
+            $this->tab('roles'),
+            $this->tab('matrix', ['role' => $role->key()]),
+            $this->tab('sheet', ['role' => $role->key()]),
+            $this->tab('who', ['key' => 'erp.dues']),
+            $this->tab('compare', ['a' => 'manager', 'b' => $role->key()]),
+            $this->tab('history'),
+        ] as $url) {
+            $html = $this->get($url)->assertOk()->getContent();
+            $this->assertStringNotContainsString($evil, $html, $url);
+            $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html, $url);
+        }
+    }
+
+    public function test_who_has_locked_key_and_deleted_clone_source(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->get($this->tab('who', ['key' => 'erp.perms']))->assertOk()
+            ->assertSee(__('perm.locked_short'))
+            ->assertDontSee('<td>'.__('perm.seg_inherit').'</td>', false);
+
+        $this->custom('manager', ['cloned_from' => 'c:99999']);
+        $this->actingAs($admin)->get($this->tab('roles'))->assertOk()
+            ->assertSee(__('perm.hist_deleted_role', ['id' => 99999]))
+            ->assertDontSee('enums.role.c:');
+    }
+
+    public function test_who_has_does_not_query_per_override_user(): void
+    {
+        $admin = $this->makeAdmin();
+        $count = function () use ($admin) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->actingAs($admin)->get($this->tab('who', ['key' => 'erp.dues']))->assertOk();
+            $n = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $n;
+        };
+
+        UserPermission::create(['user_id' => $this->userOn('accountant')->id, 'perm' => 'erp.dues', 'allow' => true]);
+        $one = $count();
+
+        foreach (range(1, 6) as $i) {
+            UserPermission::create(['user_id' => $this->userOn('accountant')->id, 'perm' => 'erp.dues', 'allow' => (bool) ($i % 2)]);
+        }
+
+        $this->assertLessThanOrEqual($one + 2, $count(), 'who-has must not run a query per override user');
     }
 
     public function test_matrix_has_tri_state_controls_and_locked_rows_read_only(): void
