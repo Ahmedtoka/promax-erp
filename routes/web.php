@@ -28,6 +28,12 @@ Route::get('/', fn () => redirect()->route(
     \App\Support\Access::home(auth()->user())
 ));
 
+// ═══ «مفيش شاشات متحددة لك» (٩/١١) — آخر محطة لـ`Access::home()` ═══
+// ⚠️ `screen` موجود عشان اليوزر اللي مش ويب ياخد رسالة الأبلكيشن؛
+// `Access::allows` بيسمح بالراوت ده لأي يوزر ويب
+Route::middleware(['auth', 'screen'])->get('/no-screens', fn () => view('errors.no-screens'))
+    ->name(\App\Support\Access::NO_SCREENS);
+
 // تبديل اللغة — بره الـ auth عشان صفحة اللوجين نفسها تقدر تبدّل
 Route::post('/locale/{locale}', [LocaleController::class, 'switch'])->name('locale.switch');
 

@@ -75,7 +75,9 @@ final class LinkGuard
             return $override;
         }
 
-        $roleOverride = Access::roleOverride($user->role, $name);
+        // الرول المخصص (٩/١١) — نفس ترتيب `EnsureRole`
+        $roleOverride = Access::customOverride($user, $name)
+            ?? Access::roleOverride($user->role, $name);
 
         if ($roleOverride === false) {
             return false;

@@ -388,6 +388,16 @@ class Access
         'hr' => 'hr.employees',
     ];
 
+    /**
+     * مفاتيح مقفولة على المصفوفة (٩/١١) — بادئات. أي صف استثناء (يوزر/
+     * رول مخصص/رول أساسي) عليها **بيتجاهل**: الصلاحيات والرولز بـ`role:admin`
+     * بس، ووقت الشغل بـ`WorkTimeGate`، والمساعد بـ`AiGate`.
+     */
+    public const LOCKED = ['erp.perms', 'erp.roles', 'erp.worktime', 'agent'];
+
+    /** راوت صفحة «مفيش شاشات متحددة لك» — آخر محطة لـ`home()` */
+    public const NO_SCREENS = 'no_screens';
+
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
@@ -1011,13 +1021,30 @@ class Access
             return WorkTimeGate::allows($user);
         }
 
+        // صفحة «مفيش شاشات» (٩/١١) — آخر محطة لـ`home()`، لازم تفتح لأي حد
+        if ($routeName === self::NO_SCREENS) {
+            return true;
+        }
+
         // ⚠️ الأدمن بيعدّي من غير ما يبص على الخريطة ولا الاستثناءات —
         // «الأدمن معاه كل أوبشن». أي تعداد لشاشاته هيبقى ناقص.
         if ($user->role === 'admin') {
             return true;
         }
 
+        // ⚠️ المقفول (٩/١١): مفيش صف استثناء يفتحه — افتراضي الكود بس
+        if (self::isLocked($routeName)) {
+            return self::roleDefault($user->role, $routeName);
+        }
+
         $decision = self::userOverride($user, $routeName);
+
+        if ($decision !== null) {
+            return $decision;
+        }
+
+        // ═══ الرول المخصص (٩/١١) — بين اليوزر والرول الأساسي ═══
+        $decision = self::customOverride($user, $routeName);
 
         if ($decision !== null) {
             return $decision;
@@ -1076,6 +1103,140 @@ class Access
     }
 
     /**
+     * استثناء الرول المخصص (`c:<id>`) لليوزر ده — null لو مالوش رول
+     * مخصص فعّال أو مفيش صف. **بيستخدمها كمان `EnsureRole` و`LinkGuard`.**
+     */
+    public static function customOverride(?User $user, string $routeName): ?bool
+    {
+        if ($user === null || $user->role === 'admin') {
+            return null;
+        }
+
+        $key = $user->permRoleKey();
+
+        if ($key === null) {
+            return null;
+        }
+
+        return self::resolveMap(\App\Models\RolePermission::mapFor($key), $routeName);
+    }
+
+    /**
+     * الرول (أساسي أو `c:<id>`) بيوصل للراوت؟ — من غير طبقة اليوزر.
+     * للمصفوفة والشيت والمقارنة: المخصص = خريطته ?? فعلي الرول الأساسي.
+     */
+    public static function effectiveFor(string $roleKey, string $routeName): bool
+    {
+        if (! str_starts_with($roleKey, 'c:')) {
+            return self::roleEffective($roleKey, $routeName);
+        }
+
+        $custom = \App\Models\Role::fromKey($roleKey);
+
+        if ($custom === null) {
+            return false;
+        }
+
+        return self::resolveMap(\App\Models\RolePermission::mapFor($roleKey), $routeName)
+            ?? self::roleEffective((string) $custom->base_role, $routeName);
+    }
+
+    /** نفس `effectiveFor` للزراير — مخصص ← رول أساسي ← افتراضي الكود */
+    public static function actionFor(string $roleKey, string $key): bool
+    {
+        if ($roleKey === 'admin') {
+            return true;
+        }
+
+        $custom = str_starts_with($roleKey, 'c:') ? \App\Models\Role::fromKey($roleKey) : null;
+
+        if (str_starts_with($roleKey, 'c:') && $custom === null) {
+            return false;
+        }
+
+        $base = $custom !== null ? (string) $custom->base_role : $roleKey;
+
+        if (! self::isLocked($key)) {
+            if ($custom !== null) {
+                $map = \App\Models\RolePermission::mapFor($roleKey);
+
+                if (array_key_exists($key, $map)) {
+                    return $map[$key];
+                }
+            }
+
+            $map = \App\Models\RolePermission::mapFor($base);
+
+            if (array_key_exists($key, $map)) {
+                return $map[$key];
+            }
+        }
+
+        return self::actionDefault($base, $key, fn (string $page) => self::effectiveFor($roleKey, $page));
+    }
+
+    /**
+     * افتراضي الكود للزرار من ACTIONS — `$sees` بتقول الرول شايف صفحته ولا لأ.
+     *
+     * @param \Closure(string): bool $sees
+     */
+    private static function actionDefault(string $role, string $key, \Closure $sees): bool
+    {
+        $def = self::ACTIONS[$key] ?? null;
+
+        if ($def === null) {
+            return false;   // مفتاح مش متسجل = زرار محدش يشوفه — سجّله الأول
+        }
+
+        [, $page, $roles] = $def;
+
+        if ($roles === []) {
+            return false;   // أدمن بس
+        }
+
+        if ($roles !== null && ! in_array($role, $roles, true)) {
+            return false;
+        }
+
+        return $sees($page);
+    }
+
+    /**
+     * المفتاح ده مقفول على المصفوفة؟ — راوت تحت بادئة في LOCKED، أو
+     * `act.` كل راوتاته مقفولة. `nav.` عمره ما يتقفل.
+     */
+    public static function isLocked(string $key): bool
+    {
+        if (str_starts_with($key, 'nav.')) {
+            return false;
+        }
+
+        if (str_starts_with($key, 'act.')) {
+            $covered = self::ACTIONS[$key][3] ?? [];
+
+            if ($covered === []) {
+                return false;
+            }
+
+            foreach ($covered as $route) {
+                if (! self::isLocked($route)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        foreach (self::LOCKED as $prefix) {
+            if (self::matches($key, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * حل خريطة استثناءات (يوزر أو رول) لراوت — المنطق الواحد المشترك.
      *
      * الترتيب (قرار المالك 2026-08-05): إخفاء القسم بيغلب الكل ←
@@ -1085,7 +1246,9 @@ class Access
      */
     private static function resolveMap(array $map, string $routeName): ?bool
     {
-        if ($map === []) {
+        // ⚠️ المقفول مالوش استثناء من أي طبقة (يوزر/مخصص/رول) — هنا عشان
+        // كل اللي بينادي الدالة (allows/EnsureRole/LinkGuard/المصفوفة) يلتزم
+        if ($map === [] || self::isLocked($routeName)) {
             return null;
         }
 
@@ -1176,36 +1339,32 @@ class Access
             return true;
         }
 
-        $map = $user->permMap();
+        // ⚠️ زرار كل راوتاته مقفولة: مفيش صف يمنحه — افتراضي الكود بس
+        if (! self::isLocked($key)) {
+            $map = $user->permMap();
 
-        if (array_key_exists($key, $map)) {
-            return $map[$key];
+            if (array_key_exists($key, $map)) {
+                return $map[$key];
+            }
+
+            // الرول المخصص (٩/١١) — بين اليوزر والرول الأساسي
+            if (($customKey = $user->permRoleKey()) !== null) {
+                $customMap = \App\Models\RolePermission::mapFor($customKey);
+
+                if (array_key_exists($key, $customMap)) {
+                    return $customMap[$key];
+                }
+            }
+
+            // استثناء الرول على الزرار (٢٣/٨) — بعد اليوزر وقبل الافتراضي
+            $roleMap = \App\Models\RolePermission::mapFor($user->role);
+
+            if (array_key_exists($key, $roleMap)) {
+                return $roleMap[$key];
+            }
         }
 
-        // استثناء الرول على الزرار (٢٣/٨) — بعد اليوزر وقبل الافتراضي
-        $roleMap = \App\Models\RolePermission::mapFor($user->role);
-
-        if (array_key_exists($key, $roleMap)) {
-            return $roleMap[$key];
-        }
-
-        $def = self::ACTIONS[$key] ?? null;
-
-        if ($def === null) {
-            return false;   // مفتاح مش متسجل = زرار محدش يشوفه — سجّله الأول
-        }
-
-        [, $page, $roles] = $def;
-
-        if ($roles === []) {
-            return false;   // أدمن بس
-        }
-
-        if ($roles !== null) {
-            return in_array($user->role, $roles, true) && self::allows($user, $page);
-        }
-
-        return self::allows($user, $page);
+        return self::actionDefault($user->role, $key, fn (string $page) => self::allows($user, $page));
     }
 
     /** القسم اللي الراوت ده تابع له في المنيو — null لو مش في المنيو */
@@ -1239,15 +1398,39 @@ class Access
             || str_starts_with($routeName, rtrim($prefix, '.').'.');
     }
 
-    /** فين يروح بعد اللوجين */
+    /**
+     * فين يروح بعد اللوجين — HOME الرول لو مسموح له، وإلا أول لينك في
+     * السايدبار، وإلا صفحة «مفيش شاشات» (٩/١١). عمره ما يهبط على 403.
+     *
+     * ⚠️ اليوزر اللي مش ويب بيفضل على القديم — `EnsureScreenAccess` بيوريه
+     * رسالة «شغلك على الأبلكيشن» بدل صفحة «مفيش شاشات».
+     */
     public static function home(?User $user): string
     {
-        return self::HOME[$user?->role ?? ''] ?? 'erp.overview';
+        $base = self::HOME[$user?->role ?? ''] ?? 'erp.overview';
+
+        if ($user === null || ! self::isWebRole($user) || self::allows($user, $base)) {
+            return $base;
+        }
+
+        foreach (self::navFor($user) as $links) {
+            return $links[0][0];
+        }
+
+        return self::NO_SCREENS;
     }
 
-    /** الرول ده بيدخل الويب أصلاً؟ */
+    /** الرول ده بيدخل الويب أصلاً؟ — الرول المخصص بيقرر بـ`web_login` */
     public static function isWebRole(?User $user): bool
     {
-        return $user !== null && in_array($user->role, self::WEB_ROLES, true);
+        if ($user === null) {
+            return false;
+        }
+
+        if ($user->role !== 'admin' && ($custom = $user->activeCustomRole()) !== null) {
+            return (bool) $custom->web_login;
+        }
+
+        return in_array($user->role, self::WEB_ROLES, true);
     }
 }

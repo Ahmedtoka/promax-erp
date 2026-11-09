@@ -99,6 +99,62 @@ class RoleAccessTest extends TestCase
     }
 
     /**
+     * (٩/١١) الأدمن لو منع على رول شاشة الـHOME بتاعته من المصفوفة،
+     * اللوجين لسه بيهبط على شاشة مسموحة (أول لينك أو «مفيش شاشات»).
+     */
+    public function test_home_survives_a_role_override_on_the_home_screen(): void
+    {
+        foreach (Access::WEB_ROLES as $role) {
+            if ($role === 'admin') {
+                continue;
+            }
+
+            \App\Models\RolePermission::create(['role' => $role, 'perm' => Access::HOME[$role], 'allow' => false]);
+        }
+        \App\Models\RolePermission::flush();
+
+        foreach (Access::WEB_ROLES as $role) {
+            $user = $this->makeAdmin(['role' => $role, 'email' => $role.'.home2@test.local']);
+            $home = Access::home($user);
+
+            $this->assertTrue(Access::allows($user, $home), "«{$role}» بيهبط على «{$home}» الممنوعة");
+            $this->assertNotSame(403, $this->actingAs($user)->get(route($home))->getStatusCode(),
+                "«{$role}» بيهبط على 403 في «{$home}»");
+        }
+        \App\Models\RolePermission::flush();
+    }
+
+    /** (٩/١١) مفيش صف استثناء رول أو يوزر يفتح مفتاح مقفول لغير الأدمن */
+    public function test_no_override_row_opens_a_locked_route(): void
+    {
+        $locked = ['erp.perms', 'erp.perms.save', 'erp.perms.role.save', 'erp.worktime'];
+
+        foreach (Access::WEB_ROLES as $role) {
+            if ($role === 'admin') {
+                continue;
+            }
+            foreach ($locked as $key) {
+                \App\Models\RolePermission::create(['role' => $role, 'perm' => $key, 'allow' => true]);
+            }
+        }
+        \App\Models\RolePermission::flush();
+
+        foreach (Access::WEB_ROLES as $role) {
+            if ($role === 'admin') {
+                continue;
+            }
+            $user = $this->makeAdmin(['role' => $role, 'email' => $role.'.lock@test.local']);
+
+            foreach ($locked as $key) {
+                $this->assertFalse(Access::allows($user, $key), "صف رول فتح «{$key}» لـ«{$role}»");
+            }
+            $this->assertSame(403, $this->actingAs($user)->get(route('erp.perms'))->getStatusCode(),
+                "«{$role}» فتح شاشة الصلاحيات بصف استثناء");
+        }
+        \App\Models\RolePermission::flush();
+    }
+
+    /**
      * كل لينك في السايدبار له راوت حقيقي.
      *
      * ⚠️ لينك باسم راوت مش موجود بيرمي `RouteNotFoundException` وقت

@@ -26,9 +26,23 @@ class EnsureRole
         // حتى لو الرول أصلاً مسموح.
         $routeName = $request->route()?->getName();
 
-        if ($routeName !== null
+        // ⚠️ المقفول (٩/١١): مفيش صف استثناء يعدّي `role:` على الصلاحيات
+        // والرولز ووقت الشغل والمساعد — البوابة نفسها بس
+        $overridable = $routeName !== null && ! \App\Support\Access::isLocked($routeName);
+
+        if ($overridable
             && ($override = \App\Support\Access::userOverride($user, $routeName)) !== null) {
             if ($override === false) {
+                abort(403, __('common.forbidden'));
+            }
+
+            return $next($request);
+        }
+
+        // الرول المخصص (٩/١١) — بين اليوزر والرول الأساسي، بنفس المنطق
+        if ($overridable && ! $user->isAdmin()
+            && ($customOverride = \App\Support\Access::customOverride($user, $routeName)) !== null) {
+            if ($customOverride === false) {
                 abort(403, __('common.forbidden'));
             }
 
@@ -38,7 +52,7 @@ class EnsureRole
         // ⚠️ **واستثناء الرول بنفس المنطق (٢٣/٨).** الأدمن لو دّى رول
         // المديرين شاشة من تاب الرولز، بوابة `role:` على الراوت لازم
         // تعدّيهم — والمنع الصريح للرول بيقفل حتى لو الراوت سامح.
-        if ($routeName !== null && ! $user->isAdmin()
+        if ($overridable && ! $user->isAdmin()
             && ($roleOverride = \App\Support\Access::roleOverride($user->role, $routeName)) !== null) {
             if ($roleOverride === false) {
                 abort(403, __('common.forbidden'));

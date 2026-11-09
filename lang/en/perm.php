@@ -152,4 +152,8 @@ return [
     'act_purchase_requests_quote' => 'Add supplier quotes',
     'act_purchase_quotes_approve' => 'Approve a quote and create a PO',
     'act_costing_admin' => "Close costing months, recompute the cost layer and approve transfer prices",
+
+    // "No screens" page (Nov 9)
+    'no_screens_title' => 'No screens assigned to you yet',
+    'no_screens_body' => 'Your account works, but no screen is open for your role right now. Ask the admin to assign the screens you need.',
 ];
