@@ -163,9 +163,11 @@ class PermissionMatrix
 
     /**
      * المفاتيح اللي هتتغير بس، بالفعلي قبل وبعد — من غير ما يتكتب حاجة.
+     * `implied: true` = مفتاح ماتبعتش بس فعليه هيتغير تبعاً (زرار بيتبع صفحته،
+     * صفحات قسم، شاشات) — `before`/`after` فيه = الاستثناء الحالي زي ما هو.
      *
      * @param array<string, mixed> $perms مفتاح ⇒ '' (وراثة) | '0' | '1'
-     * @return list<array{key:string, label:string, before:?bool, after:?bool, effective_before:bool, effective_after:bool, risk:string}>
+     * @return list<array{key:string, label:string, before:?bool, after:?bool, effective_before:bool, effective_after:bool, risk:string, implied:bool}>
      */
     public static function diff(string|User $subject, array $perms): array
     {
@@ -232,11 +234,86 @@ class PermissionMatrix
             return [];
         }
 
-        $before = self::effectives($s, array_keys($changes));
+        // ⚠️ (مراجعة ٩/١١) الأثر التلقائي: زرار افتراضيه null بيتبع صفحته،
+        // فمنح صفحة ممكن يفتح زرار حرج من غير ما يتبعت — بنحسبه ونعرضه
+        $implied = array_values(array_diff(self::affected(array_keys($changes)), array_keys($changes)));
+        $keys = array_merge(array_keys($changes), $implied);
+
+        $before = self::effectives($s, $keys);
         self::write($s, $changes);
         RolePermission::flush();   // الكاش المعزول بس — الخريطة تتبني تاني من الصفوف الجديدة
+        $after = self::effectives(self::subject($subject), $keys);
 
-        return self::rows($changes, $before, self::effectives(self::subject($subject), array_keys($changes)));
+        $rows = self::rows($changes, $before, $after);
+
+        foreach ($implied as $key) {
+            if ($before[$key] !== $after[$key]) {
+                $ov = self::override($s, $key);
+                $rows[] = [
+                    'key' => $key,
+                    'label' => self::label($key),
+                    'before' => $ov,
+                    'after' => $ov,
+                    'effective_before' => $before[$key],
+                    'effective_after' => $after[$key],
+                    'risk' => PermissionCatalog::risk($key),
+                    'implied' => true,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * المفاتيح اللي فعليها ممكن يتغير مع المفاتيح المتبعتة: صفحة كل مفتاح
+     * (القسم ⇒ صفحاته) + الصفحات تحت بادئتها + شاشاتها وأزرارها.
+     *
+     * @param list<string> $changed
+     * @return list<string>
+     */
+    private static function affected(array $changed): array
+    {
+        $all = PermissionCatalog::pages();
+        $pages = [];
+
+        foreach ($changed as $key) {
+            if (str_starts_with($key, 'nav.')) {
+                foreach (self::pagesOf($key) as [$p]) {
+                    $pages[$p] = true;
+                }
+            } elseif (isset(Access::ACTIONS[$key])) {
+                $pages[self::pageForAction(Access::ACTIONS[$key][1])] = true;
+            } elseif (in_array($key, $all, true)) {
+                $pages[$key] = true;
+            } elseif (($p = PermissionCatalog::pageOf($key)) !== null) {
+                $pages[$p] = true;
+            }
+        }
+
+        // صفحة تحت بادئة صفحة متغيرة بتورث منها (أطول بادئة)
+        foreach (array_keys($pages) as $p) {
+            foreach ($all as $other) {
+                if (str_starts_with($other, $p.'.')) {
+                    $pages[$other] = true;
+                }
+            }
+        }
+
+        $actionsOf = [];
+
+        foreach (Access::ACTIONS as $k => $def) {
+            $actionsOf[self::pageForAction($def[1])][] = $k;
+        }
+
+        $out = [];
+
+        foreach (array_keys($pages) as $p) {
+            $out[] = $p;
+            array_push($out, ...Access::screensOf($p), ...($actionsOf[$p] ?? []));
+        }
+
+        return array_values(array_unique($out));
     }
 
     /** المفاتيح اللي ينفع تتكتب: الكتالوج ناقص المقفول والقسم الوهمي @return list<string> */
@@ -371,6 +448,7 @@ class PermissionMatrix
                 'effective_before' => $before[$key],
                 'effective_after' => $after[$key],
                 'risk' => PermissionCatalog::risk($key),
+                'implied' => false,
             ];
         }
 

@@ -56,6 +56,7 @@
                                         @foreach ($changes as $c)
                                             <div @if(($c['risk'] ?? '') === 'critical') style="background:#FDECEC;border-radius:6px;padding:2px 6px" @endif>
                                                 {!! $risk($c['risk'] ?? 'medium') !!}
+                                                @if (! empty($c['implied']))<span class="badge b-gray">⚡ {{ __('perm.hist_implied') }}</span>@endif
                                                 <b>{{ $c['label'] ?? $c['key'] }}</b> <span class="pm-key">{{ $c['key'] ?? '' }}</span>:
                                                 <s class="pm-muted">{{ $ov($c['before'] ?? null) }}</s> → <b>{{ $ov($c['after'] ?? null) }}</b>
                                                 <span class="pm-muted">({{ ($c['effective_before'] ?? false) ? '✓' : '✗' }} → {{ ($c['effective_after'] ?? false) ? '✓' : '✗' }})</span>

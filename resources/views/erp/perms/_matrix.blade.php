@@ -232,6 +232,7 @@
 .pm-dirtyn.has{color:#9A5A08}
 #pmDiffBody table{width:100%}
 #pmDiffBody tr.crit td{background:#FDECEC}
+#pmDiffBody .pm-implied{margin:14px 0 6px;font-size:13px}
 #pmDiffBody .pm-sum{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
 @media (max-width:900px){
   .pm-row{grid-template-columns:auto 22px minmax(0,1fr);grid-template-areas:"name name name" "meta dot ctl"}
@@ -257,6 +258,7 @@
         cItem: @json(__('perm.c_item')), cSetting: @json(__('perm.c_setting')), cEff: @json(__('perm.effective')), cRisk: @json(__('perm.c_risk')),
         sameEff: @json(__('perm.diff_same_effective')), crit: @json(__('perm.diff_critical_warn')),
         total: @json(__('perm.diff_total')), leave: @json(__('perm.leave_warn')),
+        implied: @json(__('perm.diff_implied_title')), impliedSub: @json(__('perm.diff_implied_sub')),
         risk: @json($riskLabels)
     };
     var rows = Array.prototype.slice.call(form.querySelectorAll('[data-pm-row]'));
@@ -430,23 +432,38 @@
         if (!changes.length) { body.innerHTML = '<div class="alert info"><span>ℹ️</span><span>' + esc(T.empty) + '</span></div>'; return false; }
         var order = { critical: 0, high: 1, medium: 2, low: 3 };
         changes.sort(function (a, b) { return order[a.risk] - order[b.risk]; });
+        // المتبعت فوق، و«هيتغيّر كمان تلقائياً» (implied) تحت — مراجعة ٩/١١
+        var direct = changes.filter(function (c) { return !c.implied; });
+        var implied = changes.filter(function (c) { return c.implied; });
         var counts = {};
         changes.forEach(function (c) { counts[c.risk] = (counts[c.risk] || 0) + 1; });
-        var h = '<div class="pm-sum"><b>' + esc(T.total.replace(':n', changes.length)) + '</b>';
-        ['critical', 'high', 'medium', 'low'].forEach(function (k) {
-            if (counts[k]) h += '<span class="pm-risk r-' + k + '">' + esc(T.risk[k]) + ' × ' + counts[k] + '</span>';
-        });
-        h += '</div>';
+        function chips(list) {
+            var n = {}, s = '';
+            list.forEach(function (c) { n[c.risk] = (n[c.risk] || 0) + 1; });
+            ['critical', 'high', 'medium', 'low'].forEach(function (k) {
+                if (n[k]) s += '<span class="pm-risk r-' + k + '">' + esc(T.risk[k]) + ' × ' + n[k] + '</span>';
+            });
+            return s;
+        }
+        function table(list, withSetting) {
+            var t = '<table data-plain data-noxl><thead><tr><th>' + esc(T.cItem) + '</th>' + (withSetting ? '<th>' + esc(T.cSetting) + '</th>' : '') + '<th>' + esc(T.cEff) + '</th><th>' + esc(T.cRisk) + '</th></tr></thead><tbody>';
+            list.forEach(function (c) {
+                var same = c.effective_before === c.effective_after;
+                t += '<tr class="' + (c.risk === 'critical' ? 'crit' : '') + '"><td><b>' + esc(c.label) + '</b><div class="pm-key">' + esc(c.key) + '</div></td>'
+                    + (withSetting ? '<td style="white-space:nowrap"><s class="pm-muted">' + esc(ovText(c.before)) + '</s> → <b>' + esc(ovText(c.after)) + '</b></td>' : '')
+                    + '<td style="white-space:nowrap">' + (same ? effText(c.effective_after) + ' <span class="pm-muted">' + esc(T.sameEff) + '</span>' : effText(c.effective_before) + ' → ' + effText(c.effective_after)) + '</td>'
+                    + '<td><span class="pm-risk r-' + esc(c.risk) + '">' + esc(T.risk[c.risk] || c.risk) + '</span></td></tr>';
+            });
+            return t + '</tbody></table>';
+        }
+        var h = '<div class="pm-sum"><b>' + esc(T.total.replace(':n', direct.length)) + '</b>' + chips(direct) + '</div>';
         if (counts.critical) h += '<div class="alert" style="margin-bottom:10px"><span>⛔</span><span>' + esc(T.crit) + '</span></div>';
-        h += '<div class="tablewrap" style="max-height:52vh;overflow-y:auto"><table data-plain data-noxl><thead><tr><th>' + esc(T.cItem) + '</th><th>' + esc(T.cSetting) + '</th><th>' + esc(T.cEff) + '</th><th>' + esc(T.cRisk) + '</th></tr></thead><tbody>';
-        changes.forEach(function (c) {
-            var same = c.effective_before === c.effective_after;
-            h += '<tr class="' + (c.risk === 'critical' ? 'crit' : '') + '"><td><b>' + esc(c.label) + '</b><div class="pm-key">' + esc(c.key) + '</div></td>'
-                + '<td style="white-space:nowrap"><s class="pm-muted">' + esc(ovText(c.before)) + '</s> → <b>' + esc(ovText(c.after)) + '</b></td>'
-                + '<td style="white-space:nowrap">' + (same ? effText(c.effective_after) + ' <span class="pm-muted">' + esc(T.sameEff) + '</span>' : effText(c.effective_before) + ' → ' + effText(c.effective_after)) + '</td>'
-                + '<td><span class="pm-risk r-' + esc(c.risk) + '">' + esc(T.risk[c.risk] || c.risk) + '</span></td></tr>';
-        });
-        body.innerHTML = h + '</tbody></table></div>';
+        h += '<div class="tablewrap" style="max-height:52vh;overflow-y:auto">' + table(direct, true);
+        if (implied.length) {
+            h += '<h4 class="pm-implied">⚡ ' + esc(T.implied) + ' <span class="pm-muted">(' + implied.length + ')</span> ' + chips(implied) + '</h4>'
+                + '<div class="pm-muted" style="margin-bottom:6px">' + esc(T.impliedSub) + '</div>' + table(implied, false);
+        }
+        body.innerHTML = h + '</div>';
         return true;
     }
     document.getElementById('pmReview').addEventListener('click', function () {

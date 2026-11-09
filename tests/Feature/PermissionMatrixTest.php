@@ -200,7 +200,7 @@ class PermissionMatrixTest extends TestCase
             'erp.dues' => ['0'], 'erp.leads' => 'x', 'erp.contracts' => '2', 'erp.clients' => 0,
         ]);
 
-        $this->assertSame(['erp.clients'], array_column($diff, 'key'));
+        $this->assertSame(['erp.clients'], array_column(array_filter($diff, fn ($r) => ! $r['implied']), 'key'));
         $this->assertSame(['erp.clients' => false], RolePermission::mapFor('manager'));
 
         $admin = $this->makeAdmin();
@@ -252,7 +252,7 @@ class PermissionMatrixTest extends TestCase
             'bogus.key' => '1',
         ]);
 
-        $by = collect($rows)->keyBy('key');
+        $by = collect($rows)->where('implied', false)->keyBy('key');
         $this->assertSame(['act.clients.create', 'erp.dues', 'erp.leads'], $by->keys()->sort()->values()->all());
         $this->assertSame([false, null, false, true], [$by['erp.leads']['before'], $by['erp.leads']['after'], $by['erp.leads']['effective_before'], $by['erp.leads']['effective_after']]);
         $this->assertSame([null, false, true, false], [$by['erp.dues']['before'], $by['erp.dues']['after'], $by['erp.dues']['effective_before'], $by['erp.dues']['effective_after']]);
@@ -303,7 +303,7 @@ class PermissionMatrixTest extends TestCase
         $this->assertSame('User', $logs[0]->subject_type);
         $this->assertSame($u->id, (int) $logs[0]->subject_id);
         $this->assertSame($u->name, $logs[0]->title);
-        $this->assertCount(2, $logs[0]->changes);
+        $this->assertCount(2, array_filter($logs[0]->changes, fn ($r) => ! $r['implied']));
         $this->assertSame($diff, $logs[0]->changes);
         $this->assertFalse(Access::allows($u->fresh(), 'erp.dues'));
 
@@ -358,5 +358,83 @@ class PermissionMatrixTest extends TestCase
 
         $this->assertTrue(Access::isLocked('erp.perms.diff'));
         $this->actingAs($this->userOn('manager'))->postJson(route('erp.perms.diff'), ['role' => 'manager'])->assertForbidden();
+    }
+
+    // ═══════════════════════ الأثر التلقائي (مراجعة ٩/١١) ═══════════════════════
+
+    public function test_page_grant_reports_implied_action_changes_with_risk(): void
+    {
+        // act.dayclose.close افتراضيه null ⇒ بيتبع صفحته؛ المدير مالوش erp.dayclose
+        $this->assertNull(Access::ACTIONS['act.dayclose.close'][2]);
+        $this->assertFalse(Access::effectiveFor('manager', 'erp.dayclose'));
+        $this->assertFalse(Access::actionFor('manager', 'act.dayclose.close'));
+
+        $rows = collect(PermissionMatrix::diff('manager', ['erp.dayclose' => '1']));
+
+        $direct = $rows->where('implied', false)->values();
+        $this->assertSame(['erp.dayclose'], $direct->pluck('key')->all());
+
+        $implied = $rows->where('implied', true)->keyBy('key');
+        $this->assertTrue($implied->has('act.dayclose.close'), 'الزرار التابع للصفحة مش ظاهر');
+        $row = $implied['act.dayclose.close'];
+        $this->assertSame([null, null, false, true], [$row['before'], $row['after'], $row['effective_before'], $row['effective_after']]);
+        $this->assertSame(PermissionCatalog::risk('act.dayclose.close'), $row['risk']);
+        $this->assertSame(__(Access::ACTIONS['act.dayclose.close'][0]), $row['label']);
+
+        // كل صف تلقائي فعلاً اتغير، ومفيش مفتاح مكرر مع المباشر
+        foreach ($implied as $k => $r) {
+            $this->assertNotSame($r['effective_before'], $r['effective_after'], $k);
+            $this->assertNotContains($k, $direct->pluck('key')->all());
+        }
+
+        // المعاينة مابتكتبش
+        $this->assertSame(0, RolePermission::count());
+    }
+
+    public function test_no_implied_rows_when_nothing_cascades(): void
+    {
+        $rows = PermissionMatrix::diff('manager', ['act.clients.create' => '0']);
+
+        $this->assertSame(['act.clients.create'], array_column($rows, 'key'));
+        $this->assertSame([false], array_column($rows, 'implied'));
+
+        // ومن غير أي تغيير مفيش صفوف خالص
+        $this->assertSame([], PermissionMatrix::diff('manager', ['erp.clients' => '']));
+    }
+
+    public function test_group_change_reports_its_pages_and_save_logs_implied_rows(): void
+    {
+        $diff = PermissionMatrix::save('manager', ['nav.group_clients' => '0']);
+
+        $implied = array_values(array_filter($diff, fn ($r) => $r['implied']));
+        $this->assertNotEmpty($implied);
+        $this->assertContains('erp.clients', array_column($implied, 'key'));
+
+        $log = ActivityLog::where('event', 'perms.saved')->sole();
+        $this->assertSame($diff, $log->changes);
+        $this->assertSame(['nav.group_clients'], array_column(array_filter($log->changes, fn ($r) => ! $r['implied']), 'key'));
+    }
+
+    public function test_diff_route_and_matrix_ui_carry_implied_changes(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $changes = collect($this->actingAs($admin)
+            ->postJson(route('erp.perms.diff'), ['role' => 'manager', 'perm' => ['erp.dayclose' => '1']])
+            ->assertOk()->json('changes'));
+
+        $this->assertSame([false, true], [
+            $changes->firstWhere('key', 'erp.dayclose')['implied'],
+            $changes->firstWhere('key', 'act.dayclose.close')['implied'],
+        ]);
+
+        // المودال عنده عنوان القسم التلقائي والسجل بيعلّم الصفوف التلقائية
+        $html = $this->actingAs($admin)->get(route('erp.perms', ['tab' => 'matrix', 'role' => 'manager']))->assertOk()->getContent();
+        $this->assertStringContainsString(json_encode(__('perm.diff_implied_title')), $html);
+        $this->assertStringContainsString('c.implied', $html);
+
+        $this->actingAs($admin)->post(route('erp.perms.role.save', 'manager'), ['perm' => ['erp.dayclose' => '1']])->assertRedirect();
+        $this->actingAs($admin)->get(route('erp.perms', ['tab' => 'history']))->assertOk()
+            ->assertSee(__('perm.hist_implied'));
     }
 }
