@@ -158,7 +158,7 @@ class PermissionCatalog
             return self::RISK[$key];
         }
 
-        // المقفولين (perms/roles/worktime/agent) دايماً critical
+        // المقفولين (perms/roles/worktime/agent/erp.agent) دايماً critical
         if (Access::isLocked($key)) {
             return self::CRITICAL;
         }

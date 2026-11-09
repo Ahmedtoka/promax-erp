@@ -157,7 +157,7 @@ class CustomRoleAccessTest extends TestCase
     {
         $role = $this->role(['base_role' => 'manager']);
 
-        foreach (['erp.perms', 'erp.roles.store', 'erp.worktime', 'agent.ask'] as $key) {
+        foreach (['erp.perms', 'erp.roles.store', 'erp.worktime', 'agent.ask', 'erp.agent.runs'] as $key) {
             $u = $this->userOn('manager', $role);
 
             UserPermission::create(['user_id' => $u->id, 'perm' => $key, 'allow' => true]);
@@ -184,7 +184,8 @@ class CustomRoleAccessTest extends TestCase
         $this->assertTrue(Access::isLocked('erp.perms.role.save'));
         $this->assertTrue(Access::isLocked('agent.action.confirm'));
         $this->assertFalse(Access::isLocked('erp.permsx'));
-        $this->assertFalse(Access::isLocked('erp.agent.runs'));
+        $this->assertTrue(Access::isLocked('erp.agent.runs'));
+        $this->assertFalse(Access::isLocked('erp.agentx'));
         $this->assertFalse(Access::isLocked('nav.group_settings'));
         $this->assertFalse(Access::isLocked('act.clients.create'));
     }

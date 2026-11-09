@@ -203,6 +203,7 @@ return [
     // ---------- locked ----------
     'erp_roles' => ['what' => 'Role management (create, edit, delete custom roles).', 'data' => 'All roles and their permissions. Admin only, never grantable.'],
     'agent' => ['what' => 'The AI assistant interface.', 'data' => 'Assistant conversations. Reserved, never grantable.'],
+    'erp_agent' => ['what' => 'AI assistant run log.', 'data' => 'Assistant requests and results (may hold management conversations). Admin only, never grantable.'],
 
     // ---------- actions ----------
     'act_overview_wipe' => ['what' => 'Empties all movement and stock from the system.', 'data' => 'Deletes invoices, collections, stock and movements. Cannot be undone.'],

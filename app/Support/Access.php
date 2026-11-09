@@ -391,9 +391,10 @@ class Access
     /**
      * مفاتيح مقفولة على المصفوفة (٩/١١) — بادئات. أي صف استثناء (يوزر/
      * رول مخصص/رول أساسي) عليها **بيتجاهل**: الصلاحيات والرولز بـ`role:admin`
-     * بس، ووقت الشغل بـ`WorkTimeGate`، والمساعد بـ`AiGate`.
+     * بس، ووقت الشغل بـ`WorkTimeGate`، والمساعد بـ`AiGate`. `erp.agent` (سجل
+     * تشغيلات المساعد، فيه محادثات جاد) أدمن بس — مراجعة ٩/١١.
      */
-    public const LOCKED = ['erp.perms', 'erp.roles', 'erp.worktime', 'agent'];
+    public const LOCKED = ['erp.perms', 'erp.roles', 'erp.worktime', 'agent', 'erp.agent'];
 
     /** راوت صفحة «مفيش شاشات متحددة لك» — آخر محطة لـ`home()` */
     public const NO_SCREENS = 'no_screens';
