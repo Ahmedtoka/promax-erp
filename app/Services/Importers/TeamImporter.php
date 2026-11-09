@@ -127,6 +127,11 @@ class TeamImporter extends Importer
                     );
                 }
 
+                // ⚠️ (٩/١١) الرول اتغير ⇒ الرول المخصص القديم مبني على أساس تاني — يتشال
+                if ($existing && $existing->role !== $payload['role']) {
+                    $existing->custom_role_id = null;
+                }
+
                 $user = $existing
                     ? tap($existing)->update($payload)
                     : User::create($payload);

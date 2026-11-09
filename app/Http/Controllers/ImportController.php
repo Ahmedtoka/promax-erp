@@ -37,10 +37,30 @@ class ImportController extends Controller
         'leads' => LeadImporter::class,
     ];
 
-    public function index()
+    /**
+     * أنواع للأدمن بس (مراجعة ٩/١١): الفريق بيعمل/يعدّل يوزرز ورولز (حتى
+     * أدمنز) — منحة `act.import.run` من المصفوفة ماتكفيش.
+     */
+    private const ADMIN_ONLY = ['team'];
+
+    /** @return list<string> */
+    private function kindsFor(?\App\Models\User $user): array
+    {
+        return array_values(array_filter(
+            array_keys(self::KINDS),
+            fn (string $k) => $user?->role === 'admin' || ! in_array($k, self::ADMIN_ONLY, true),
+        ));
+    }
+
+    private function guardKind(Request $request, string $kind): void
+    {
+        abort_if(in_array($kind, self::ADMIN_ONLY, true) && $request->user()?->role !== 'admin', 403);
+    }
+
+    public function index(Request $request)
     {
         return view('erp.import', [
-            'kinds' => array_keys(self::KINDS),
+            'kinds' => $this->kindsFor($request->user()),
             'columns' => collect(self::KINDS)->map(fn ($c) => [
                 'columns' => (new $c)->columns(),
                 'required' => (new $c)->required(),
@@ -58,6 +78,8 @@ class ImportController extends Controller
             'file' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:20480'],
             'sheet' => ['nullable', 'string', 'max:190'],
         ]);
+
+        $this->guardKind($request, $data['kind']);
 
         $importer = $this->importer($data['kind']);
 
@@ -121,11 +143,14 @@ class ImportController extends Controller
         return redirect()->route('erp.import.preview', $import);
     }
 
-    public function preview(Import $import)
+    public function preview(Request $request, Import $import)
     {
         if ($import->file_path === null) {
             abort(404);
         }
+
+        // شيت الفريق فيه إيميلات وممكن باسوردات — نفس قفل الرفع والتنفيذ
+        $this->guardKind($request, $import->kind);
 
         $importer = $this->importer($import->kind);
         $path = storage_path('app/'.$import->file_path);
@@ -143,6 +168,8 @@ class ImportController extends Controller
     /** التنفيذ الفعلي */
     public function apply(Request $request, Import $import)
     {
+        $this->guardKind($request, $import->kind);
+
         if (! $import->isPending()) {
             return back()->withErrors(['status' => __('import.already_applied')]);
         }
