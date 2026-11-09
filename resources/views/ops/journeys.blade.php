@@ -256,6 +256,8 @@
     const T = {!! json_encode($jsT, $jsFlags) !!};
     const TODAY_DOW = {{ (int) $today }};
     const MAX_PER_DAY = 8;
+    // من غير act.field.plan البورد قراءة بس: مفيش سحب ولا «فيه تعديل مش محفوظ»
+    const CAN_PLAN = @json(\App\Support\Access::action(auth()->user(), 'act.field.plan'));
 
     // حالة البورد كلها في المتصفح — الحفظ بيبعت الصورة النهائية مرة واحدة
     const state = {
@@ -300,6 +302,7 @@
     }
 
     function markDirty() {
+        if (! CAN_PLAN) { return; }
         state.dirty = true;
         const b = document.getElementById('jbSaveBtn');
         if (! b) { return; }
@@ -574,6 +577,7 @@
 
     function bindDragRow(el) {
         el.addEventListener('dragstart', function (e) {
+            if (! CAN_PLAN) { e.preventDefault(); return; }
             const cid = +el.dataset.cid;
             drag = el.dataset.fromday !== undefined
                 ? {type: 'chip', day: +el.dataset.fromday,
@@ -585,6 +589,7 @@
 
     function bindDragChip(el) {
         el.addEventListener('dragstart', function (e) {
+            if (! CAN_PLAN) { e.preventDefault(); return; }
             drag = {type: 'chip', day: +el.dataset.day, idx: +el.dataset.idx};
             e.dataTransfer.effectAllowed = 'move';
             e.stopPropagation();
@@ -641,6 +646,7 @@
     }
 
     function removeChip(day, idx) {
+        if (! CAN_PLAN) { return; }
         const it = state.days[day].splice(idx, 1)[0];
         state.pool.push(it.c);
         state.pool.sort(function (a, b) { return a.name.localeCompare(b.name); });
@@ -653,6 +659,7 @@
     // عملاء نفس الزون في نفس اليوم، والزون بيروح لليوم الأخف —
     // السبت إجازة. توزيع محلي: راجعه وبعدين احفظ.
     function jbAutoZone() {
+        if (! CAN_PLAN) { return; }
         if (!state.pool.length) return;
 
         const byZone = {};

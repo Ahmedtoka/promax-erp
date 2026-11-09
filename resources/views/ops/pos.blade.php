@@ -28,7 +28,9 @@
     @if ($manager && \App\Support\Access::action(auth()->user(), 'act.ka.create'))
         <a class="btn gold" href="{{ route('ops.po.handout') }}">📦 {{ __('nav.po_handout') }}</a>
         <a class="btn" href="{{ route('ops.po.import') }}">📊 {{ __('nav.po_import') }}</a>
-        {{-- فحص الأسعار (٢٤/٨) — الأوامر اللي تسعيرتها اتغيرت --}}
+    @endif
+    {{-- فحص الأسعار (٢٤/٨) — الأوامر اللي تسعيرتها اتغيرت --}}
+    @if (\App\Support\Access::action(auth()->user(), 'act.ka.reprice'))
         <a class="btn" href="{{ route('ops.pos.reprice.check') }}">🔍 {{ __('ops.po_check_btn') }}</a>
     @endif
     {{-- تصدير إكسيل (٥/٩) — بنفس فلاتر الشاشة الحالية بالحرف --}}

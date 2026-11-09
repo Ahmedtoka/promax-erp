@@ -120,7 +120,7 @@
                     @for ($m = 1; $m <= 12; $m++)
                         @php $locked = \App\Models\Target::monthLocked($year, $m); @endphp
                         <td class="num" style="{{ $curBg($m) }}">
-                            @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && ! $locked && $m < 12)
+                            @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && \App\Support\Access::action($viewer, 'act.targets.annual') && ! $locked && $m < 12)
                                 <input type="number" step="0.01" min="0" dir="ltr"
                                        value="{{ $grid['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                        data-action="{{ route('erp.targets.annual.rebalance', $grid['node_id']) }}"
@@ -194,12 +194,14 @@
 
     {{-- فورمات الجريد — برّه الجدول عشان مفيش تداخل فورمات --}}
     @if (\App\Support\Access::action($viewer, 'act.targets.annual_company'))
+        @if (\App\Support\Access::action($viewer, 'act.targets.annual'))
         <form id="rbForm" method="POST" action="{{ route('erp.targets.annual.rebalance', $grid['node_id']) }}">
             @csrf
             <input type="hidden" name="year" value="{{ $year }}">
             <input type="hidden" name="month" id="rbMonth">
             <input type="hidden" name="amount" id="rbAmount">
         </form>
+        @endif
         @if ($hasLockedMonths)
             <form id="manualForm" method="POST" action="{{ route('erp.targets.annual.manual', $grid['node_id']) }}">
                 @csrf
@@ -325,7 +327,7 @@
                                             @for ($m = 1; $m <= 12; $m++)
                                                 @php $locked = \App\Models\Target::monthLocked($year, $m); @endphp
                                                 <td class="num" style="{{ $curBg($m) }}">
-                                                    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && ! $locked && $m < 12)
+                                                    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && \App\Support\Access::action($viewer, 'act.targets.annual') && ! $locked && $m < 12)
                                                         <input type="number" step="0.01" min="0" dir="ltr"
                                                                value="{{ $row['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                                                data-action="{{ route('erp.targets.annual.rebalance', $row['node_id']) }}"

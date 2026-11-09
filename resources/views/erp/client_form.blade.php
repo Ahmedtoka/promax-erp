@@ -307,8 +307,10 @@
                             <option value="{{ $grp->id }}" @selected((int) $v('group_id') === $grp->id)>{{ $grp->displayName() }}</option>
                         @endforeach
                     </select>
+                    @if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
                     <button type="button" class="btn sm" onclick="openGroupBox()"
                             title="{{ __('client.new_chain') }}">+</button>
+                    @endif
                 </div>
                 {!! $err('group_id') !!}
                 {!! $hint('group_id') !!}
@@ -373,8 +375,10 @@
                          تتحرك**. أي navigation هنا معناه إن اللي اتكتب في
                          الـ3 مراحل يضيع، والمستخدم بيحط العميل في منطقة
                          غلط بدل ما يقف يعمل منطقته. --}}
+                    @if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
                     <button type="button" class="btn sm" onclick="openZoneBox()"
                             title="{{ __('geo.add_zone') }}">+</button>
+                    @endif
                 </div>
                 {!! $err('zone_id') !!}
                 {!! $hint('zone_id') !!}
@@ -1227,8 +1231,8 @@
         'months' => collect(\App\Models\Contract::DURATIONS)
             ->map(fn ($d) => $d['months'])->all(),
         'errorStep' => $errorStep,
-        'zoneUrl' => route('erp.zones.quick'),
-        'groupUrl' => route('erp.groups.quick'),
+        'zoneUrl' => \App\Support\Access::action(auth()->user(), 'act.org.manage') ? route('erp.zones.quick') : null,
+        'groupUrl' => \App\Support\Access::action(auth()->user(), 'act.org.manage') ? route('erp.groups.quick') : null,
         'groupNeedsName' => __('client.chain_needs_name'),
         'geoUrl' => route('erp.geo.resolve'),
         'zoneNeedsName' => __('geo.zone_needs_name'),

@@ -210,8 +210,13 @@ class PermissionInventoryTest extends TestCase
             $rel = str_replace('\\', '/', substr((string) $file, strlen($root)));
             $src = str_replace("\r\n", "\n", (string) file_get_contents((string) $file));
             $lines = explode("\n", $src);
-            preg_match_all('/(\$\w+)\s*=[^;]*Access::(?:action|allows)/', $src, $m);
-            $guardVars = array_unique($m[1]);
+            // متغيّر ⇒ المفتاح/الراوت اللي اتاخد منه (`$canX = Access::action(..., 'act.x')`)
+            preg_match_all('/(\$\w+)\s*=[^;]*?Access::(?:action|allows)\([^;]*?[\'"]([a-z0-9_.]+)[\'"]\s*\)/', $src, $m, PREG_SET_ORDER);
+            $guardVars = [];
+
+            foreach ($m as [, $var, $bound]) {
+                $guardVars[$var][] = $bound;
+            }
 
             foreach ($lines as $i => $line) {
                 if (! preg_match_all('/route\(\s*[\'"]([a-z0-9_.]+)[\'"]/', $line, $mm)) {
@@ -219,12 +224,14 @@ class PermissionInventoryTest extends TestCase
                 }
 
                 foreach ($mm[1] as $route) {
-                    if (! isset($keyOf[$route]) || isset(self::GUARD_ALLOW["$rel|$route"]) || isset(self::GUARD_ALLOW["$rel|*"])) {
+                    $key = $keyOf[$route] ?? null;
+
+                    if ($key === null || isset(self::GUARD_ALLOW["$rel|$route"]) || isset(self::GUARD_ALLOW["$rel|$key"])) {
                         continue;
                     }
 
                     // الحارس على نفس السطر (`@unless (...) inert @endunless`) أو في `@if` فوقه
-                    if (! $this->guarded([$line, ...$this->enclosingConditions($lines, $i)], $guardVars)) {
+                    if (! $this->guarded([$line, ...$this->enclosingConditions($lines, $i)], $key, $guardVars, $keyOf)) {
                         $bad[] = "$rel:".($i + 1)." $route ({$keyOf[$route]})";
                     }
                 }
@@ -237,11 +244,12 @@ class PermissionInventoryTest extends TestCase
     /** إعفاءات الفحص الساكن: «الملف|الراوت» ⇒ السبب (لينك JS زرّاره محروس في مكان تاني...) */
     private const GUARD_ALLOW = [
         // الصفحة نفسها راوت مغطّي بنفس الأكشن — مابتتفتحش من غيره
-        'erp/client_form.blade.php|*' => 'erp.clients.new/edit/clone are covered by act.clients.create/edit; zone/chain quick-add and the dupe check are JS helpers of that form',
-        'erp/quotation_form.blade.php|*' => 'erp.reports.quotation / quotations.edit are covered by act.quotations.save',
-        'erp/kpi_setup.blade.php|*' => 'erp.kpi.setup is covered by act.kpi.setup',
-        'ops/return_new.blade.php|*' => 'ops.returns.new is covered by act.returns.create',
-        'ops/po_reprice_check.blade.php|*' => 'ops.pos.reprice.check is covered by act.ka.reprice',
+        // («الملف|المفتاح» = راوتات المفتاح ده بس في الملف ده)
+        'erp/client_form.blade.php|act.clients.create' => 'the form is reached only through erp.clients.new/clone (act.clients.create) or edit; the dupe check is its JS helper',
+        'erp/quotation_form.blade.php|act.quotations.save' => 'erp.reports.quotation / quotations.edit are covered by act.quotations.save',
+        'erp/kpi_setup.blade.php|act.kpi.setup' => 'erp.kpi.setup is covered by act.kpi.setup',
+        'ops/return_new.blade.php|act.returns.create' => 'ops.returns.new is covered by act.returns.create',
+        'ops/po_reprice_check.blade.php|act.ka.reprice' => 'ops.pos.reprice.check is covered by act.ka.reprice',
         // URL في الجافاسكربت — العنصر اللي بيستخدمه محروس في نفس الملف
         'erp/app_version.blade.php|erp.app_version.chunk' => 'JS upload URL used only by the upload form, which is inert without the key',
         'erp/client_locations.blade.php|erp.client_locations.confirm' => 'JS URL; the confirm controls are guarded with Access::allows(erp.client_locations.confirm)',
@@ -304,15 +312,28 @@ class PermissionInventoryTest extends TestCase
         'act.wh.van_transfer',
     ];
 
-    /** @param list<string> $guardVars */
-    private function guarded(array $conditions, array $guardVars): bool
+    /**
+     * الحارس لازم يشاور على **مفتاح الراوت نفسه**: `Access::action(..., '<المفتاح>')`،
+     * أو `Access::allows(..., '<راوت تبع نفس المفتاح>')`، أو متغيّر متاخد من واحد منهم.
+     *
+     * @param array<string, list<string>> $guardVars
+     * @param array<string, string> $keyOf
+     */
+    private function guarded(array $conditions, string $key, array $guardVars, array $keyOf): bool
     {
+        $ours = fn (string $bound): bool => $bound === $key || ($keyOf[$bound] ?? null) === $key;
+
         foreach ($conditions as $c) {
-            if (preg_match('/Access::(action|allows)/', $c)) {
-                return true;
+            preg_match_all('/Access::(?:action|allows)\([^;]*?[\'"]([a-z0-9_.]+)[\'"]\s*\)/', $c, $mm);
+
+            foreach ($mm[1] as $bound) {
+                if ($ours($bound)) {
+                    return true;
+                }
             }
-            foreach ($guardVars as $v) {
-                if (preg_match('/'.preg_quote($v, '/').'\b/', $c)) {
+
+            foreach ($guardVars as $var => $bounds) {
+                if (preg_match('/'.preg_quote($var, '/').'\b/', $c) && array_filter($bounds, $ours) !== []) {
                     return true;
                 }
             }
