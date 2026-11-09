@@ -398,6 +398,45 @@ class Access
     /** راوت صفحة «مفيش شاشات متحددة لك» — آخر محطة لـ`home()` */
     public const NO_SCREENS = 'no_screens';
 
+    /** مجموعة المصفوفة الوهمية للشاشات اللي بره السايدبار (٩/١١) */
+    public const PUBLIC_GROUP = 'nav.group_public';
+
+    /**
+     * «شاشات عامة» (٩/١١) — راوتس (أو بادئات) بره NAV بيوصلها اليوزر من
+     * الهيدر أو من لينك جوه صفحة. من غيرها مكانهم مش موجود في المصفوفة.
+     * ⚠️ أي بادئة هنا مابتطابقش صفحة NAV (التيست بيمسكها).
+     *
+     * @var list<string>
+     */
+    public const PUBLIC_PAGES = [
+        'notifications', 'attendance.punch', 'docs.file',
+        'erp.products', 'erp.reports',
+        'ops.invoice', 'ops.rep', 'ops.rep_day', 'ops.po.print', 'ops.po.sheet',
+        'online.view', 'online.invoice', 'online.pickup',
+        'wh.receipt', 'wh.count',
+        'gl.golive.show', 'gl.golive.run.progress',
+    ];
+
+    /**
+     * راوتس كتابة مالهاش زرار في المصفوفة عن قصد — اليوزر بيشتغل على
+     * حاجته هو، والكنترولر بيفحص الملكية. الراوت ⇒ السبب.
+     *
+     * @var array<string, string>
+     */
+    public const ACTION_EXEMPT = [
+        'attendance.punch' => 'own punch in/out from the header',
+        'notifications.read' => 'marks the user\'s own notifications as read',
+        'hr.leave.store' => 'own leave request',
+        'hr.leave.cancel' => 'cancels the user\'s own leave request (controller checks owner)',
+        'hr.permissions.store' => 'own hourly permission request',
+        'erp.tasks.comment' => 'party to the task only (controller checks creator/assignee)',
+        'erp.tasks.submit' => 'assignee submits own task (controller checks assignee)',
+        'erp.tasks.approve' => 'task creator approves own task (controller checks creator)',
+        'erp.tasks.reject' => 'task creator rejects own task (controller checks creator)',
+        'erp.client_locations.suggest' => 'read-only map suggestion, writes nothing',
+        'erp.geo.resolve' => 'read-only map-link to coordinates lookup, writes nothing',
+    ];
+
     /** الرولز اللي بتدخل الويب أصلاً */
     public const WEB_ROLES = [
         'admin', 'manager', 'branch_manager', 'accountant', 'warehouse_keeper',
@@ -824,7 +863,7 @@ class Access
         'act.overview.demo' => ['perm.act_overview_demo', 'erp.overview', [], ['erp.demo']],
 
         // ═══ العملاء ═══
-        'act.clients.create' => ['perm.act_clients_create', 'erp.clients', ['manager', 'branch_manager'], ['erp.clients.new', 'erp.clients.store', 'erp.clients.clone']],
+        'act.clients.create' => ['perm.act_clients_create', 'erp.clients', ['manager', 'branch_manager'], ['erp.clients.new', 'erp.clients.store', 'erp.clients.clone', 'erp.clients.dupes']],
         'act.clients.edit' => ['perm.act_clients_edit', 'erp.clients', ['manager', 'branch_manager'], ['erp.clients.edit', 'erp.clients.update']],
         'act.clients.collect' => ['perm.act_clients_collect', 'erp.clients', ['manager', 'branch_manager', 'accountant'], ['erp.clients.collect', 'erp.clients.opening']],
         'act.clients.activate' => ['perm.act_clients_activate', 'erp.clients.activate', ['manager'], ['erp.clients.activate.do', 'erp.clients.deactivate']],
@@ -875,8 +914,8 @@ class Access
         // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign']],
-        'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close']],
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync', 'ops.journeys.wipe']],
+        'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close', 'ops.requests.revise']],
 
         // ═══ الموردين والمشتريات ═══
         'act.suppliers.manage' => ['perm.act_suppliers_manage', 'erp.suppliers', ['manager'], ['erp.suppliers.store', 'erp.suppliers.update', 'erp.suppliers.opening']],
@@ -942,7 +981,7 @@ class Access
         // ⚠️ اتقسم (٨/٩): مدير الفرع بيدير **مناطق** فرعه (`role:…,branch_manager`)
         // بس المحافظات والفروع والعربيات والسلاسل والقنوات `role:admin,manager` —
         // المفتاح الواحد كان بيوريه فورم «محافظة جديدة» و«سلسلة جديدة» وبيترفض
-        'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.groups.quick']],
+        'act.org.manage' => ['perm.act_org_manage', 'erp.zones', ['manager', 'branch_manager'], ['erp.zones.store', 'erp.zones.update', 'erp.groups.quick', 'erp.zones.quick']],
         'act.org.structure' => ['perm.act_org_structure', 'erp.zones', ['manager'], ['erp.govs.store', 'erp.govs.update', 'erp.branches.store', 'erp.branches.update', 'erp.vehicles.store', 'erp.vehicles.update', 'erp.groups.store', 'erp.groups.update', 'erp.groups.destroy', 'erp.groups.attach', 'erp.mother_companies.store', 'erp.mother_companies.update', 'erp.mother_companies.destroy', 'erp.mother_companies.attach', 'erp.channels.update']],
         'act.import.run' => ['perm.act_import_run', 'erp.import', [], ['erp.import.upload', 'erp.import.apply']],
 
@@ -974,6 +1013,73 @@ class Access
         'act.hr.payroll_pay' => ['perm.act_hr_payroll_pay', 'hr.payroll', ['accountant'], ['hr.payroll.pay']],
         // ⚠️ أدمن بس: نسب التأمينات وشرايح الضريبة بتأثر على كل مرتب
         'act.hr.settings' => ['perm.act_hr_settings', 'hr.settings', [], ['hr.settings.save']],
+
+        // ═══ جرد الأزرار (٩/١١) — كل راوت كتابة تحت صفحة بقى له مفتاح ═══
+        // ⚠️ الافتراضي منسوخ من `role:` اللي على الراوت بالظبط (`[]` = أدمن بس،
+        // `null` = نفس جمهور الصفحة) — من غير أي استثناء محدش سلوكه بيتغير.
+        // العملاء والمراجعة
+        'act.clients.delete' => ['perm.act_clients_delete', 'erp.clients', [], ['erp.clients.destroy', 'erp.clients.visits.purge']],
+        'act.clients.geo' => ['perm.act_clients_geo', 'erp.clients.activate', null, ['erp.clients.geo']],
+        'act.locations.confirm' => ['perm.act_locations_confirm', 'erp.client_locations', ['manager', 'branch_manager'], ['erp.client_locations.confirm']],
+        'act.divisions.assign' => ['perm.act_divisions_assign', 'erp.divisions', ['manager'], ['erp.divisions.assign']],
+        'act.managers.assign' => ['perm.act_managers_assign', 'erp.managers.clients', [], ['erp.managers.assign', 'erp.managers.unassign', 'erp.managers.team.assign', 'erp.managers.team.unassign', 'erp.managers.clients.repair']],
+        'act.setup.save' => ['perm.act_setup_save', 'erp.setup.clients', null, ['erp.setup.chains.save', 'erp.setup.clients.save']],
+        'act.audit.review' => ['perm.act_audit_review', 'erp.audit.clients', null, ['erp.audit.save', 'erp.audit.confirm', 'erp.audit.statement.delete']],
+        'act.review.mark' => ['perm.act_review_mark', 'erp.review', null, ['erp.review.mark', 'erp.review.opening']],
+        'act.review.stock_reset' => ['perm.act_review_stock_reset', 'erp.review', [], ['erp.review.stock.zero', 'erp.review.stock.batch']],
+        'act.leads.clear_assign' => ['perm.act_leads_clear_assign', 'erp.leads', [], ['erp.leads.clearassign']],
+        'act.leads.plan' => ['perm.act_leads_plan', 'erp.leads.planner', null, ['erp.leads.planner.save', 'erp.leads.route.save']],
+        'act.tasks.create' => ['perm.act_tasks_create', 'erp.tasks', null, ['erp.tasks.store']],
+        // المنتجات والأسعار
+        'act.products.delete' => ['perm.act_products_delete', 'erp.stock', [], ['erp.products.destroy']],
+        'act.families.manage' => ['perm.act_families_manage', 'erp.families', null, ['erp.families.save', 'erp.families.assign']],
+        // مسودة تعديل الأسعار: الكنترولر بيفحص صاحب المسودة
+        'act.prices.change' => ['perm.act_prices_change', 'erp.prices', null, ['erp.prices.change.refresh', 'erp.prices.change.master', 'erp.prices.change.cancel']],
+        'act.quotations.save' => ['perm.act_quotations_save', 'erp.reports.quotations', null, ['erp.reports.quotation', 'erp.reports.quotation.print', 'erp.reports.quotations.edit', 'erp.reports.quotations.update']],
+        // الميدان والعهدة والتوريد
+        'act.field.force_out' => ['perm.act_field_force_out', 'ops.open_visits', null, ['ops.open_visits.out', 'ops.open_visits.wh_out', 'ops.att.force_out']],
+        'act.field.request_delete' => ['perm.act_field_request_delete', 'ops.requests', [], ['ops.requests.destroy']],
+        'act.field.gps' => ['perm.act_field_gps', 'ops.gps', [], ['ops.gps.credentials', 'ops.gps.poll', 'ops.gps.save', 'ops.gps.sync']],
+        'act.custody.clear' => ['perm.act_custody_clear', 'ops.vans', [], ['ops.rep.clear']],
+        // تصحيح كمية باتش بعد الاستلام — أدمن بس (`role:admin` فوق بوابة المخزن)
+        'act.wh.fix_qty' => ['perm.act_wh_fix_qty', 'wh.receipts', [], ['wh.batch.fixqty']],
+        'act.ka.reprice' => ['perm.act_ka_reprice', 'ops.pos', ['manager'], ['ops.pos.reprice', 'ops.pos.reprice.bulk']],
+        // الفلوس
+        'act.invoices.edit' => ['perm.act_invoices_edit', 'ops.invoices', [], ['ops.invoices.renumber', 'ops.invoices.items', 'ops.invoices.paper', 'ops.invoices.payment', 'ops.invoices.reassign', 'ops.invoices.redate', 'ops.invoices.reprice']],
+        'act.invoices.delete' => ['perm.act_invoices_delete', 'ops.invoices', [], ['ops.invoices.destroy']],
+        'act.returns.create' => ['perm.act_returns_create', 'ops.returns', ['manager', 'accountant'], ['ops.returns.new', 'ops.returns.store']],
+        'act.returns.delete' => ['perm.act_returns_delete', 'ops.returns', [], ['ops.returns.destroy']],
+        'act.money.manual' => ['perm.act_money_manual', 'ops.manual', null, ['ops.manual.invoice', 'ops.manual.return', 'ops.manual.collection', 'ops.manual.gift']],
+        'act.repclose.close' => ['perm.act_repclose_close', 'erp.repclose', null, ['erp.repclose.store']],
+        'act.repclose.delete' => ['perm.act_repclose_delete', 'erp.repclose', [], ['erp.repclose.destroy']],
+        'act.dayclose.close' => ['perm.act_dayclose_close', 'erp.dayclose', null, ['erp.dayclose.store']],
+        'act.gl.coa_draft' => ['perm.act_gl_coa_draft', 'gl.coa', null, ['gl.coa.store', 'gl.coa.import', 'gl.coa.update', 'gl.coa.destroy', 'gl.coa.move']],
+        // الأونلاين
+        'act.online.sync' => ['perm.act_online_sync', 'online.sync', null, ['online.sync.run']],
+        'act.online.sync_settings' => ['perm.act_online_sync_settings', 'online.sync', [], ['online.sync.settings', 'online.reset']],
+        'act.online.prep' => ['perm.act_online_prep', 'online.prep', null, ['online.prep.start', 'online.prep.review', 'online.prep.done']],
+        'act.online.orders' => ['perm.act_online_orders', 'online.orders', ['manager'], ['online.confirm', 'online.ship', 'online.cancel', 'online.postpone', 'online.reship', 'online.return', 'online.relink', 'online.pickup.push', 'online.couriers.store', 'online.item.link']],
+        'act.online.manual_ship' => ['perm.act_online_manual_ship', 'online.orders', [], ['online.manualship']],
+        'act.online.collect' => ['perm.act_online_collect', 'online.collections', null, ['online.collect']],
+        'act.online.products' => ['perm.act_online_products', 'online.products', null, ['online.products.fetch', 'online.products.save', 'online.products.bundle', 'online.products.delete', 'online.products.prune']],
+        // التارجت والحوافز
+        'act.targets.edit' => ['perm.act_targets_edit', 'erp.targets', null, ['erp.targets.save', 'erp.targets.copy']],
+        'act.targets.annual' => ['perm.act_targets_annual', 'erp.targets.annual', null, ['erp.targets.annual.clients', 'erp.targets.annual.reps', 'erp.targets.annual.rebalance']],
+        'act.targets.annual_company' => ['perm.act_targets_annual_company', 'erp.targets.annual', [], ['erp.targets.annual.company', 'erp.targets.annual.managers', 'erp.targets.annual.manual']],
+        'act.performance.points' => ['perm.act_performance_points', 'erp.performance', ['manager'], ['erp.performance.points']],
+        'act.kpi.inputs' => ['perm.act_kpi_inputs', 'erp.kpi', null, ['erp.kpi.inputs']],
+        // ⚠️ بيغطي شاشة الإعداد نفسها كمان — منح الحفظ من غير الشاشة مالوش معنى
+        'act.kpi.setup' => ['perm.act_kpi_setup', 'erp.kpi', [], ['erp.kpi.setup', 'erp.kpi.setup.save']],
+        'act.incentives.manage' => ['perm.act_incentives_manage', 'erp.incentives', [], ['erp.incentives.save']],
+        // الحضور والموارد البشرية
+        'act.attendance.approve' => ['perm.act_attendance_approve', 'erp.attendance.review', ['manager'], ['erp.attendance.approve']],
+        'act.hr.supervisor_punch' => ['perm.act_hr_supervisor_punch', 'hr.attendance.supervisor', null, ['hr.attendance.supervisor.punch']],
+        // اعتماد إجازات وأذونات الفريق — الكنترولر بيفحص `isManagedBy`
+        'act.hr.leave_decide' => ['perm.act_hr_leave_decide', 'hr.leave', null, ['hr.leave.decide', 'hr.permissions.decide']],
+        'act.hr.fingerprint' => ['perm.act_hr_fingerprint', 'hr.fingerprint', null, ['hr.fingerprint.store', 'hr.fingerprint.update', 'hr.fingerprint.command', 'hr.fingerprint.map', 'hr.fingerprint.settings']],
+        // الإعدادات والتسليم
+        'act.app_version.manage' => ['perm.act_app_version_manage', 'erp.app_version', [], ['erp.app_version.save', 'erp.app_version.chunk']],
+        'act.handover.mark' => ['perm.act_handover_mark', 'handover.index', null, ['handover.index.mark', 'handover.index.unmark', 'handover.index.mark_all', 'handover.index.unmark_all']],
     ];
 
     /**
@@ -1390,6 +1496,70 @@ class Access
 
     /** @var array<string, ?string> */
     private static array $groupCache = [];
+
+    /**
+     * شاشات الصفحة (مستوى المصفوفة التالت، ٩/١١): راوتس GET المتسمّية تحت
+     * بادئة الصفحة — مش مقفولة ومش مغطّية بأكشن. مترتّبة.
+     *
+     * ⚠️ الراوت بيتبع **أطول** صفحة (NAV أو عامة) بتطابقه — `erp.clients.activate`
+     * صفحة لوحدها مش شاشة تحت `erp.clients`، فمفيش صف بيتكرر في المصفوفة.
+     *
+     * @return list<string>
+     */
+    public static function screensOf(string $page): array
+    {
+        if (self::$screenCache === null) {
+            $pages = self::PUBLIC_PAGES;
+
+            foreach (self::NAV as $links) {
+                foreach ($links as $link) {
+                    $pages[] = $link[0];
+                }
+            }
+
+            $covered = [];
+
+            foreach (self::ACTIONS as $def) {
+                foreach ($def[3] as $route) {
+                    $covered[$route] = true;
+                }
+            }
+
+            $map = [];
+
+            foreach (\Illuminate\Support\Facades\Route::getRoutes() as $route) {
+                $name = $route->getName();
+
+                if ($name === null || ! in_array('GET', $route->methods(), true)
+                    || isset($covered[$name]) || self::isLocked($name)) {
+                    continue;
+                }
+
+                $owner = null;
+
+                foreach ($pages as $p) {
+                    if (self::matches($name, $p) && strlen($p) > strlen((string) $owner)) {
+                        $owner = $p;
+                    }
+                }
+
+                if ($owner !== null && $owner !== $name) {
+                    $map[$owner][] = $name;
+                }
+            }
+
+            foreach ($map as &$list) {
+                sort($list);
+            }
+
+            self::$screenCache = $map;
+        }
+
+        return self::$screenCache[$page] ?? [];
+    }
+
+    /** @var array<string, list<string>>|null */
+    private static ?array $screenCache = null;
 
     /** الاسم بيطابق البادئة؟ (بالظبط أو `البادئة.`) */
     private static function matches(string $routeName, string $prefix): bool

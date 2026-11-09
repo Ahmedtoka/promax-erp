@@ -8,7 +8,7 @@
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
-    $canPoints = auth()->user()->isAdmin() || auth()->user()->role === 'manager';
+    $canPoints = \App\Support\Access::action(auth()->user(), 'act.performance.points');
 
     // بار تحقيق صغير — لون حسب النسبة
     $barColor = fn ($p) => $p >= 100 ? 'var(--green, #1B7A3D)' : ($p >= 70 ? 'var(--orange, #B86E00)' : 'var(--red, #B00020)');

@@ -16,7 +16,7 @@
 @section('content')
 
 @php
-    $isAdmin = auth()->user()->role === 'admin';
+    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.field.gps');
     $fresh = fn ($d) => $d->gps_time && $d->gps_time->gt(now()->subMinutes(15));
 @endphp
 

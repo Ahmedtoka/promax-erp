@@ -195,7 +195,7 @@
                            title="{{ __('settle.details_title') }}">🔎</a>
                         <a class="btn sm" href="{{ route('erp.repclose.doc', $s) }}">🖨️</a>
                         {{-- مسح — أدمن، وآخر تصفية للمندوب بس (سلامة سلسلة الأرصدة) --}}
-                        @if (auth()->user()->isAdmin() && ($latestIds[$s->user_id] ?? null) === $s->id)
+                        @if (\App\Support\Access::action(auth()->user(), 'act.repclose.delete') && ($latestIds[$s->user_id] ?? null) === $s->id)
                             <form method="POST" action="{{ route('erp.repclose.destroy', $s) }}" style="display:inline"
                                   onsubmit="return confirm(@js(__('settle.delete_confirm', ['number' => $s->number])))">
                                 @csrf @method('DELETE')

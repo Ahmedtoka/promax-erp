@@ -14,7 +14,7 @@
 @endphp
 
 @section('actions')
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.kpi.setup'))
         <a class="btn" href="{{ route('erp.kpi.setup') }}">⚙️ {{ __('kpi.setup_btn') }}</a>
     @endif
     <a class="btn gold" href="{{ route('erp.kpi', ['period' => $period, 'export' => 1]) }}">⬇️ {{ __('rpt.export') }}</a>

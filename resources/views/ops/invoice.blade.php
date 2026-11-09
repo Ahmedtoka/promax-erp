@@ -56,11 +56,11 @@
     @if ($inv->user)
         <a class="btn" href="{{ route('ops.rep', $inv->user) }}">🚚 {{ $inv->user->displayName() }}</a>
     @endif
-    @if (auth()->user()?->role === 'admin' && $reassignClients->isNotEmpty())
+    @if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit') && $reassignClients->isNotEmpty())
         {{-- المندوب نزّل الفاتورة على فرع غلط؟ — تحويل كامل بقيودها --}}
         <button class="btn" type="button" onclick="openDlg('dlgReassign')">🔁 {{ __('ops.reassign_invoice') }}</button>
     @endif
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit'))
         {{-- سيريال الفاتورة الورقية المختومة — إضافة/تعديل للقديم --}}
         <button class="btn" type="button" onclick="openDlg('dlgPaper')">🧾 {{ __('ops.set_paper_ref') }}</button>
         {{-- فواتير أيام متراكمة نزلت بتاريخ واحد؟ — تعديل التاريخ بقيوده --}}
@@ -88,12 +88,14 @@
             </button>
         </form>
         {{-- فاتورة غلط بالكامل؟ — مسح بيعكس القيود ويرد البضاعة للعهدة --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.invoices.delete'))
         <form method="POST" action="{{ route('ops.invoices.destroy', $inv) }}" style="display:inline"
               onsubmit="return confirm(@js(__('ops.del_inv_confirm', ['number' => $inv->number])))">
             @csrf
             @method('DELETE')
             <button class="btn" type="submit" style="color:var(--red);border-color:var(--red)">🗑 {{ __('ops.del_invoice') }}</button>
         </form>
+        @endif
     @endif
     {{-- إكسيل الفاتورة الواحدة + PDF (٩/٩) — الـPDF من نافذة طباعة المتصفح
          («حفظ كـ PDF») بقرار المالك: مفيش باكدج PDF في المشروع --}}
@@ -311,7 +313,7 @@
 {{-- ═══ مودال «تحويل لعميل تاني» (١٨ أغسطس ٢٠٢٦) — أدمن بس ═══
      فروع نفس السلسلة في أول القايمة (الحالة الشائعة). الديالوج
      المقفول مش بيتطبع أصلاً — مفيش أثر على مستند A4. --}}
-@if (auth()->user()?->role === 'admin' && $reassignClients->isNotEmpty())
+@if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit') && $reassignClients->isNotEmpty())
 <dialog id="dlgReassign">
     <form class="dlg" method="POST" action="{{ route('ops.invoices.reassign', $inv) }}"
           style="max-width:480px"
@@ -342,7 +344,7 @@
 @endif
 
 {{-- ═══ مودال «سيريال الفاتورة الورقية» (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══ --}}
-@if (auth()->user()?->role === 'admin')
+@if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit'))
 <dialog id="dlgPaper">
     <form class="dlg" method="POST" action="{{ route('ops.invoices.paper', $inv) }}" style="max-width:400px">
         @csrf
@@ -364,7 +366,7 @@
 @endif
 
 {{-- ═══ مودال «تعديل تاريخ الفاتورة» (١٩ أغسطس ٢٠٢٦) — أدمن بس ═══ --}}
-@if (auth()->user()?->role === 'admin')
+@if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit'))
 <dialog id="dlgRedate">
     <form class="dlg" method="POST" action="{{ route('ops.invoices.redate', $inv) }}"
           style="max-width:420px"

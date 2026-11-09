@@ -3,8 +3,9 @@
 @section('title', __('online.sync_title'))
 
 @php
-    $isAdmin = auth()->user()->role === 'admin';
-    $canAct = in_array(auth()->user()->role, ['admin', 'manager'], true);
+    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.online.sync_settings');
+    $canAct = \App\Support\Access::action(auth()->user(), 'act.online.orders');
+    $canSync = \App\Support\Access::action(auth()->user(), 'act.online.sync');
     $money = fn ($v) => number_format((float) $v, 2);
 
     // قايمة المنتجات لديالوج الربط اليدوي — مرة واحدة في <template>
@@ -103,7 +104,7 @@
 <div class="card" id="syncList">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <h3 style="margin:0">🔄 {{ __('online.sync_title') }}</h3>
-        @if ($canAct)
+        @if ($canSync)
             <form method="POST" action="{{ route('online.sync.run') }}">
                 @csrf
                 <button class="btn gold" type="submit" @disabled(! $ready)>
@@ -198,7 +199,7 @@
                                 <button class="btn sm red" type="button"
                                         onclick="openCancel({{ $o->id }}, '{{ $o->number }}')">
                                     ✖ {{ __('online.act_cancel') }}</button>
-                                @if (auth()->user()->role === 'admin')
+                                @if (\App\Support\Access::action(auth()->user(), 'act.online.manual_ship'))
                                     {{-- خرج يدوي من بدري (٧/١٠) — شحن + تحصيل من غير حركة مخزون --}}
                                     <button class="btn sm" type="button"
                                             onclick="openManualShip({{ $o->id }}, '{{ $o->number }}', {{ (float) $o->subtotal }})">

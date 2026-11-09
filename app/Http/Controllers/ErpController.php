@@ -2705,7 +2705,7 @@ class ErpController extends Controller
      */
     public function destroyProduct(Request $request, Product $product)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.products.delete'), 403);
 
         $tables = collect(DB::select(
             "SELECT DISTINCT TABLE_NAME AS t FROM information_schema.COLUMNS

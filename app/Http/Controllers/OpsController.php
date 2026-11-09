@@ -4696,7 +4696,7 @@ class OpsController extends Controller
             // مودال «تحويل لعميل تاني» — للأدمن بس. فروع نفس السلسلة
             // الأول (دي الحالة الشائعة: مندوب نزّل على الفرع الغلط)
             // وبعدين باقي العملاء الشغالين.
-            'reassignClients' => request()->user()->role === 'admin'
+            'reassignClients' => \App\Support\Access::action(request()->user(), 'act.invoices.edit')
                 ? Client::where('status', 'active')
                     ->where('id', '!=', $invoice->client_id)
                     ->with('group')
@@ -4805,7 +4805,7 @@ class OpsController extends Controller
     /** أصناف عهدة المندوب المفتوحة — لمودال تعديل بنود الفاتورة */
     private function editItemsPayload(Invoice $invoice): ?array
     {
-        if (request()->user()->role !== 'admin') {
+        if (! \App\Support\Access::action(request()->user(), 'act.invoices.edit')) {
             return null;
         }
 

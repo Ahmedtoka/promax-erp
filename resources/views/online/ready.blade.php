@@ -3,7 +3,7 @@
 @section('title', __('online.ready_title'))
 
 @php
-    $canAct = in_array(auth()->user()->role, ['admin', 'manager'], true);
+    $canAct = \App\Support\Access::action(auth()->user(), 'act.online.orders');
     $money = fn ($v) => number_format((float) $v, 2);
 @endphp
 

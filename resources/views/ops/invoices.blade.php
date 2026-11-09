@@ -11,7 +11,7 @@
        href="{{ route('ops.invoices', array_merge(request()->except('page'), ['export' => 1])) }}">
         📊 {{ __('ops.inv_excel') }}
     </a>
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.invoices.edit'))
         {{-- إعادة الترقيم بالتاريخ (٢٢/٨): الفواتير المتأخرة بالمستند
              اليدوي بتاخد أرقام قدام تاريخها — الزرار بيرتّب INV-1001
              فما فوق حسب created_at، والقيود بتتصحح معاها --}}

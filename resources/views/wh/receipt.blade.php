@@ -169,7 +169,7 @@
                                 {{-- ⚖️ تصحيح الكمية (٢٨/٨) — أدمن بس. بيبان
                                      حتى لو خرج من الباتش بضاعة: اللي خرج
                                      ثابت مايتلمسش والتصحيح على المستلم بس --}}
-                                @if (auth()->user()?->role === 'admin')
+                                @if (\App\Support\Access::action(auth()->user(), 'act.wh.fix_qty'))
                                     <button class="btn sm" type="button" onclick="openDlg('dlgFixQ{{ $b->id }}')"
                                             title="{{ __('stock.fix_qty') }}">⚖️</button>
                                 @endif
@@ -239,7 +239,7 @@
          بالمضاعِف الصح. الحساب بيحصل **في السيرفر** — الجافاسكريبت
          بيعرض «= N قطعة» بس (نفس دوكترين وحدات الإدخال) --}}
     @foreach ($receipt->batches as $b)
-        @if (auth()->user()?->role === 'admin')
+        @if (\App\Support\Access::action(auth()->user(), 'act.wh.fix_qty'))
             @php
                 $facts = $b->product?->unitFactors() ?? ['piece' => 1];
                 $entryUnit = $b->entry_unit && isset($facts[$b->entry_unit]) ? $b->entry_unit : 'piece';

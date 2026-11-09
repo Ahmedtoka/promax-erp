@@ -6,7 +6,7 @@
 
 @section('actions')
     <a class="btn" href="{{ route('ops.returns') }}">← {{ __('field.returns') }}</a>
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.returns.delete'))
         {{-- مرتجع غلط بالكامل؟ — مسح بيعكس القيود ويسحب البضاعة من العهدة --}}
         <form method="POST" action="{{ route('ops.returns.destroy', $r) }}" style="display:inline"
               onsubmit="return confirm(@js(__('ops.del_ret_confirm', ['number' => $r->number])))">

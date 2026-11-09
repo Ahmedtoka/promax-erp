@@ -235,7 +235,7 @@ class RepSettlementController extends Controller
      */
     public function destroy(Request $request, RepSettlement $settlement)
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.repclose.delete'), 403);
 
         $latestId = RepSettlement::where('user_id', $settlement->user_id)->max('id');
 

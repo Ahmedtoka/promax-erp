@@ -59,6 +59,7 @@
                     </div>
                 </div>
 
+                @if (\App\Support\Access::action(auth()->user(), 'act.attendance.approve'))
                 <form method="POST" action="{{ route('erp.attendance.approve', $d) }}"
                       style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
                     @csrf
@@ -74,6 +75,7 @@
                     </div>
                     <button class="btn primary" type="submit">✅ {{ __('hr.approve') }}</button>
                 </form>
+                @endif
             </div>
 
             {{-- السجل الخام — الدليل اللي المدير بيقرر على أساسه --}}

@@ -4,7 +4,7 @@
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
-    $isAdmin = auth()->user()->role === 'admin';
+    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.review.stock_reset');
 @endphp
 
 @section('content')

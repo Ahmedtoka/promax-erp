@@ -153,7 +153,7 @@ class TargetPlanController extends Controller
         // TargetProgress الواحدة، مفيش N+1.
         $managersCard = null;
 
-        if ($actor->isAdmin() && $company !== null) {
+        if (\App\Support\Access::action($actor, 'act.targets.annual_company') && $company !== null) {
             $rows = User::where('role', 'manager')
                 ->where('active', true)
                 ->orderBy('name')
@@ -295,7 +295,7 @@ class TargetPlanController extends Controller
     /** إنشاء/تعديل تارجيت الشركة للسنة — أدمن بس */
     public function createCompany(Request $request)
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.targets.annual_company'), 403);
 
         $data = $request->validate([
             'year' => ['required', 'integer', 'between:2020,2100'],
@@ -329,7 +329,7 @@ class TargetPlanController extends Controller
     public function saveManagers(Request $request)
     {
         $actor = $request->user();
-        abort_unless($actor->isAdmin(), 403);
+        abort_unless(\App\Support\Access::action($actor, 'act.targets.annual_company'), 403);
 
         $data = $request->validate([
             'year' => ['required', 'integer', 'between:2020,2100'],
@@ -479,7 +479,7 @@ class TargetPlanController extends Controller
      */
     public function saveManual(Request $request, Target $target)
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.targets.annual_company'), 403);
         abort_unless(
             in_array($target->kind, [Target::KIND_COMPANY, Target::KIND_MANAGER], true),
             422,

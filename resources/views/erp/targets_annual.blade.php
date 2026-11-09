@@ -36,7 +36,7 @@
         <a class="btn" href="{{ route('erp.targets.annual', ['year' => $year - 1]) }}">◀ {{ $year - 1 }}</a>
         <span class="badge b-blue" style="font-size:14px;padding:6px 14px">{{ $year }}</span>
         <a class="btn" href="{{ route('erp.targets.annual', ['year' => $year + 1]) }}">{{ $year + 1 }} ▶</a>
-        @if ($isAdmin)
+        @if (\App\Support\Access::action($viewer, 'act.targets.annual_company'))
             <button class="btn gold" type="button" onclick="openDlg('dlgCompany')" style="margin-inline-start:auto">
                 {{ $company ? '✏️ '.__('targets.edit_company') : '➕ '.__('targets.create_for', ['year' => $year]) }}
             </button>
@@ -514,7 +514,7 @@
 @endforeach
 
 {{-- ═══ ديالوج إنشاء/تعديل تارجيت الشركة ═══ --}}
-@if ($isAdmin)
+@if (\App\Support\Access::action($viewer, 'act.targets.annual_company'))
     <dialog id="dlgCompany">
         <form class="dlg" method="POST" action="{{ route('erp.targets.annual.company') }}">
             @csrf

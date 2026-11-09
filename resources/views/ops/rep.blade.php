@@ -112,7 +112,7 @@
     @endif
     {{-- ═══ تفريغ العربية (٢٨/٨) — أدمن بس. نفس نتيجة كتابة صفر في
          كل سطر في التصحيح الإداري، بس بضغطة وباختيار مصير البضاعة --}}
-    @if ($custody && $custody->status === 'open' && $me?->role === 'admin')
+    @if ($custody && $custody->status === 'open' && \App\Support\Access::action($me, 'act.custody.clear'))
         <button class="btn" type="button" onclick="openDlg('dlgClearCustody')">
             🧹 {{ __('field.clear_btn') }}
         </button>
@@ -1464,7 +1464,7 @@ a.src-ref:hover{text-decoration-style:solid}
 {{-- ═══ تفريغ العربية (٢٨ أغسطس ٢٠٢٦) ═══
      الاختيار هنا مش تفصيلة شكلية — هو الفرق بين حركة مخزون سليمة
      وبين بضاعة بتختفي من السيستم. الافتراضي **ترجع المخزن** عن قصد --}}
-@if ($custody && $custody->status === 'open' && $me?->role === 'admin')
+@if ($custody && $custody->status === 'open' && \App\Support\Access::action($me, 'act.custody.clear'))
     @php
         // المتبقي الفعلي في العربية — نفس معادلة remaining() للبنود كلها
         $clrUnits = $custody->items->sum(fn ($i) => $i->remaining()) + $custody->items->sum(fn ($i) => $i->giftLeft());

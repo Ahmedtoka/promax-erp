@@ -4,7 +4,7 @@
 
 @php
     $money = fn ($v) => number_format((float) $v, 2);
-    $canCollect = in_array(auth()->user()->role, ['admin', 'manager', 'accountant'], true);
+    $canCollect = \App\Support\Access::action(auth()->user(), 'act.online.collect');
 @endphp
 
 @section('content')

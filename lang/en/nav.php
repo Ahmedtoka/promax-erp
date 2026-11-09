@@ -157,4 +157,7 @@ return [
     'docs_missing_title' => "The documents have not been uploaded to the server yet",
     'docs_missing_body' => "The user guide and training files have not been uploaded yet. Once they are, they will open from this same link.",
     'docs_missing_admin' => "Admin: upload the contents of the docs folder (index.html, assets, data, media) into storage/app/docs on the server.",
+
+    // Screens outside the sidebar, in the matrix (Nov 9)
+    'group_public' => 'General screens',
 ];

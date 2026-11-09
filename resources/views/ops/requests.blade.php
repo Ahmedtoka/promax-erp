@@ -172,7 +172,7 @@
                                             onclick='revise({!! $rJson !!})'>🔎 {{ __('ops.revise_decision') }}</button>
                                 @endif
                             @endif
-                            @if (auth()->user()?->role === 'admin')
+                            @if (\App\Support\Access::action(auth()->user(), 'act.field.request_delete'))
                                 {{-- مسح طلب نزل غلط — المعتمد اللي عميله موجود السيرفر بيحميه --}}
                                 <form method="POST" action="{{ route('ops.requests.destroy', $r) }}" style="display:inline"
                                       onsubmit="return confirm(@js(__('ops.req_del_confirm', ['number' => $r->number])))">

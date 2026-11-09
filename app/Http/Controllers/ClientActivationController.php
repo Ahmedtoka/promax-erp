@@ -442,7 +442,7 @@ class ClientActivationController extends Controller
      */
     public function purgeVisits(Request $request, Client $client)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.clients.delete'), 403);
 
         $has = fn (string $table, int $visitId) => \Illuminate\Support\Facades\Schema::hasTable($table)
             && \Illuminate\Support\Facades\Schema::hasColumn($table, 'visit_id')
@@ -483,7 +483,7 @@ class ClientActivationController extends Controller
 
     public function destroy(Request $request, Client $client)
     {
-        abort_unless($request->user()->role === 'admin', 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.clients.delete'), 403);
 
         $tables = [
             'transactions' => __('client.del_transactions'),

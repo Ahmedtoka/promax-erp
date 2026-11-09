@@ -3,7 +3,7 @@
 @section('title', __('online.prep_title'))
 
 @php
-    $canPrep = in_array(auth()->user()->role, ['admin', 'manager', 'warehouse_keeper'], true);
+    $canPrep = \App\Support\Access::action(auth()->user(), 'act.online.prep');
 @endphp
 
 @section('content')
@@ -93,13 +93,13 @@
                                     <button class="btn sm green" type="submit">✅ {{ __('online.prep_finish') }}</button>
                                 </form>
                                 {{-- خرج مع المندوب من غير ما يتجهز في السيستم (٧/١٠) — أدمن بس --}}
-                                @if ($o !== null && auth()->user()->role === 'admin')
+                                @if ($o !== null && \App\Support\Access::action(auth()->user(), 'act.online.manual_ship'))
                                     <button class="btn sm" type="button"
                                             onclick="openManualShip({{ $o->id }}, '{{ $o->number }}', {{ (float) $o->subtotal }}, {{ $pick->qtyRequested() }})">
                                         📦 {{ __('online.act_manual_ship') }}</button>
                                 @endif
                                 {{-- ربط منتج اتصلّح بعد التأكيد (٧/١٠) — للتيم بس زي الراوت --}}
-                                @if ($o !== null && in_array(auth()->user()->role, ['admin', 'manager'], true))
+                                @if ($o !== null && \App\Support\Access::action(auth()->user(), 'act.online.orders'))
                                     <form method="POST" action="{{ route('online.relink', $o) }}" style="display:inline"
                                           onsubmit="if (!confirm(RELINK_MSG)) return false; this.querySelector('button').disabled = true;">
                                         @csrf

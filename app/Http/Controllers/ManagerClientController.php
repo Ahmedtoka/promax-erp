@@ -222,7 +222,7 @@ class ManagerClientController extends Controller
      */
     public function repairCoverage(Request $request)
     {
-        abort_unless($request->user()?->isAdmin() ?? false, 403);
+        abort_unless(\App\Support\Access::action($request->user(), 'act.managers.assign'), 403);
 
         $r = \App\Services\Coverage::repairAll();
 

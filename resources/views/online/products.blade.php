@@ -3,7 +3,7 @@
 @section('title', __('online.products_title'))
 
 @php
-    $canAct = in_array(auth()->user()->role, ['admin', 'manager'], true);
+    $canAct = \App\Support\Access::action(auth()->user(), 'act.online.products');
 
     // ⚠️ قايمة الأوبشنز بتتبني مرة واحدة وتتحقن بـ<template> —
     // سيلكت كامل المنتجات × ١٠٠ صف مكتوب في الـHTML كان هيتخن

@@ -47,7 +47,7 @@
                 ⚠️ {{ $dupPending }} {{ __('lead.dup_pending') }}</a>
         @endif
     @endif
-    @if (auth()->user()->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.leads.clear_assign'))
         {{-- تصفير التوزيعات (٢٦/٨) — «خلي الكل بدون مناديب وأبدأ أوزع» --}}
         <form method="POST" action="{{ route('erp.leads.clearassign') }}" style="display:inline"
               onsubmit="return confirm({!! json_encode(__('lead.clear_confirm'), JSON_UNESCAPED_UNICODE) !!})">

@@ -77,7 +77,7 @@
              «فرع بنفس شروط السلسلة» (١٢/٨) — نفس الاستنساخ بالظبط --}}
         <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ $c->group_id ? __('client.new_branch_like_chain') : __('client.clone_client') }}</a>
     @endif
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.clients.delete'))
         {{-- تنضيف الزيارات الفاضية — اللي بتقف في وش مسح العميل.
              اللي عليها فلوس أو مستند بتتساب زي ما هي. --}}
         <form method="POST" action="{{ route('erp.clients.visits.purge', $c) }}" style="display:inline"
