@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\RolePermission;
 use App\Support\Access;
@@ -142,6 +143,7 @@ class RoleManagementTest extends TestCase
     {
         $admin = $this->makeAdmin();
         $role = $this->makeRole();
+        RolePermission::create(['role' => $role->key(), 'perm' => 'ops.invoices', 'allow' => true]);
         $u = $this->makeAdmin(['role' => 'warehouse_keeper', 'active' => false]);
         $u->custom_role_id = $role->id;
         $u->save();
@@ -151,6 +153,7 @@ class RoleManagementTest extends TestCase
 
         $this->actingAs($admin)->delete(route('erp.roles.destroy', $role))->assertSessionHasErrors('role');
         $this->assertNotNull(Role::find($role->id));
+        $this->assertSame(1, RolePermission::where('role', $role->key())->count());
 
         // من غير يوزرز: الإيقاف والتفعيل شغالين
         $empty = $this->makeRole();
@@ -183,5 +186,41 @@ class RoleManagementTest extends TestCase
 
         $this->actingAs($acc)->post(route('erp.roles.store'), $this->payload())->assertForbidden();
         $this->assertSame(0, Role::count());
+    }
+
+    public function test_each_write_is_audited_exactly_once(): void
+    {
+        $admin = $this->makeAdmin();
+        $count = fn (string $ev) => ActivityLog::where('event', $ev)->where('subject_type', 'Role')->count();
+
+        $this->actingAs($admin)->post(route('erp.roles.store'), $this->payload());
+        $role = Role::firstWhere('name_en', 'Store Lead');
+        $this->assertSame(1, $count('created'));
+
+        $this->actingAs($admin)->put(route('erp.roles.update', $role), [
+            'name_ar' => 'اسم تاني', 'name_en' => 'Other Name', 'web_login' => 1,
+        ]);
+        $this->assertSame(1, $count('updated'));
+
+        $this->actingAs($admin)->post(route('erp.roles.toggle', $role));
+        $this->assertSame(2, $count('updated'));
+
+        $this->actingAs($admin)->delete(route('erp.roles.destroy', $role));
+        $this->assertSame(1, $count('deleted'));
+        $this->assertSame(4, ActivityLog::where('subject_type', 'Role')->count());   // created + 2 updated + deleted, no manual duplicates
+    }
+
+    public function test_clone_logs_a_cloned_row_with_the_source(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)->post(route('erp.roles.clone'), [
+            'source' => 'driver', 'name_ar' => 'نسخة سواق', 'name_en' => 'Driver Copy',
+        ]);
+
+        $rows = ActivityLog::where('event', 'roles.cloned')->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame('Role', $rows[0]->subject_type);
+        $this->assertSame(['cloned_from' => 'driver'], $rows[0]->changes);
     }
 }

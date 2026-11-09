@@ -83,8 +83,6 @@ class RoleController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        $this->log('roles.created', $role);
-
         return back()->with('ok', __('role.created', ['name' => $role->displayName()]));
     }
 
@@ -160,49 +158,63 @@ class RoleController extends Controller
             'app_login' => $request->boolean('app_login'),
         ]);
 
-        $this->log('roles.updated', $role);
-
         return back()->with('ok', __('role.updated', ['name' => $role->displayName()]));
     }
 
     public function toggle(Role $role): RedirectResponse
     {
-        if ($role->active && ($n = $role->users()->count()) > 0) {
-            return back()->withErrors(['role' => __('role.has_users', ['count' => $n])]);
+        $error = DB::transaction(function () use ($role) {
+            $locked = Role::whereKey($role->id)->lockForUpdate()->first();
+
+            if ($locked->active && ($n = $locked->users()->count()) > 0) {
+                return $n;
+            }
+
+            $locked->update(['active' => ! $locked->active]);
+            $role->setRawAttributes($locked->getAttributes(), true);
+
+            return 0;
+        });
+
+        if ($error > 0) {
+            return back()->withErrors(['role' => __('role.has_users', ['count' => $error])]);
         }
-
-        $role->update(['active' => ! $role->active]);
-
-        $this->log($role->active ? 'roles.activated' : 'roles.deactivated', $role);
 
         return back()->with('ok', __($role->active ? 'role.activated' : 'role.deactivated', ['name' => $role->displayName()]));
     }
 
     public function destroy(Role $role): RedirectResponse
     {
-        if (($n = $role->users()->count()) > 0) {
-            return back()->withErrors(['role' => __('role.has_users', ['count' => $n])]);
-        }
-
         $name = $role->displayName();
         $key = $role->key();
 
-        DB::transaction(function () use ($role, $key) {
+        $error = DB::transaction(function () use ($role, $key) {
+            $locked = Role::whereKey($role->id)->lockForUpdate()->first();
+
+            if (($n = $locked->users()->count()) > 0) {
+                return $n;
+            }
+
             RolePermission::where('role', $key)->delete();
-            $role->delete();
+            $locked->delete();
+
+            return 0;
         });
 
+        if ($error > 0) {
+            return back()->withErrors(['role' => __('role.has_users', ['count' => $error])]);
+        }
+
         RolePermission::flush();
-        $this->log('roles.deleted', $role);
 
         return back()->with('ok', __('role.deleted', ['name' => $name]));
     }
 
-    /** Role مش في AUDITED — فبنسجل بإيدنا */
+    /** الإنشاء/التعديل/المسح بيسجّلهم المراقب (Role في AUDITED) — هنا النسخ بس */
     private function log(string $event, Role $role, array $extra = []): void
     {
         ActivityLog::record($event, $extra + [
-            'subject_type' => 'role',
+            'subject_type' => class_basename($role),
             'subject_id' => $role->id,
             'title' => $role->displayName(),
         ]);
