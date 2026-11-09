@@ -149,6 +149,91 @@ class PermissionMatrixTest extends TestCase
         }
     }
 
+    /** [المصدر، via] لمفتاح مش في الشجرة (راوت مغطّي) — من نفس دالة الشجرة */
+    private function sourceOf(string|User $subject, string $key): array
+    {
+        $m = new \ReflectionMethod(PermissionMatrix::class, 'subject');
+        $s = $m->invoke(null, $subject);
+
+        return (new \ReflectionMethod(PermissionMatrix::class, 'sourceOf'))->invoke(null, $s, $key);
+    }
+
+    /** الزرار من غير صف بيتبع صفحته: المصدر مصدر الصفحة و`via` = الصفحة */
+    public function test_action_without_row_follows_its_page_source(): void
+    {
+        // رول أساسي بيمنع الصفحة ⇒ الزرار «role» عن طريق الصفحة
+        $this->rolePerm('manager', 'erp.clients', false);
+        $m = $this->flat(PermissionMatrix::forRole('manager'));
+        $this->assertSame([false, 'role', 'erp.clients'], [$m['act.clients.create']['effective'], $m['act.clients.create']['source'], $m['act.clients.create']['via']]);
+        $this->assertNull($m['erp.clients']['via']);
+        // زرار أدمن بس: الكود هو اللي قافله مهما كانت الصفحة
+        $this->assertSame(['code', null], [$m['act.overview.wipe']['source'], $m['act.overview.wipe']['via']]);
+
+        // رول مخصص بيورث صف صفحة الأساسي ⇒ «base» عن طريق الصفحة
+        $custom = $this->custom('manager');
+        $c = $this->flat(PermissionMatrix::forRole($custom->key()));
+        $this->assertSame([false, 'base', 'erp.clients'], [$c['act.clients.create']['effective'], $c['act.clients.create']['source'], $c['act.clients.create']['via']]);
+
+        // صف يوزر على الصفحة ⇒ «user» عن طريق الصفحة
+        $u = $this->userOn('manager');
+        UserPermission::create(['user_id' => $u->id, 'perm' => 'erp.contracts', 'allow' => false]);
+        $f = $this->flat(PermissionMatrix::forUser($u->fresh()));
+        $this->assertSame([false, 'user', 'erp.contracts'], [$f['act.contracts.manage']['effective'], $f['act.contracts.manage']['source'], $f['act.contracts.manage']['via']]);
+
+        // الرول الأساسي مش في رولز الزرار ⇒ الكود (مش الصفحة)
+        $acc = $this->flat(PermissionMatrix::forRole('accountant'));
+        $this->assertSame(['code', null], [$acc['act.clients.create']['source'], $acc['act.clients.create']['via']]);
+
+        // صفحة من غير صف: الزرار بيتبعها والمصدر كود
+        $this->assertSame(['code', 'erp.contracts'], [$m['act.contracts.manage']['source'], $m['act.contracts.manage']['via']]);
+
+        // راوت كتابة مغطّي بأكشن من غير صف ⇒ نفس سلسلة الأكشن
+        $this->assertSame(['role', 'erp.clients'], $this->sourceOf('manager', 'erp.clients.store'));
+        $this->assertFalse(Access::effectiveFor('manager', 'erp.clients.store'));
+        $this->rolePerm('manager', 'act.clients.create', true);
+        $this->assertSame(['role', null], $this->sourceOf('manager', 'erp.clients.store'));
+    }
+
+    public function test_invalid_values_are_ignored_by_the_service_and_rejected_by_routes(): void
+    {
+        $diff = PermissionMatrix::save('manager', [
+            'erp.dues' => ['0'], 'erp.leads' => 'x', 'erp.contracts' => '2', 'erp.clients' => 0,
+        ]);
+
+        $this->assertSame(['erp.clients'], array_column($diff, 'key'));
+        $this->assertSame(['erp.clients' => false], RolePermission::mapFor('manager'));
+
+        $admin = $this->makeAdmin();
+        $this->actingAs($admin)->postJson(route('erp.perms.diff'), ['role' => 'manager', 'perm' => ['erp.dues' => ['1']]])->assertStatus(422);
+        $this->actingAs($admin)->postJson(route('erp.perms.role.save', 'manager'), ['perm' => ['erp.dues' => 'yes']])->assertStatus(422);
+        $this->assertSame(['erp.clients' => false], RolePermission::mapFor('manager'));
+    }
+
+    /** استثنا جوه المعاينة/الحفظ: الكاش يرجع زي ما كان، والكتابة تترجع */
+    public function test_isolated_restores_cache_and_db_on_exception(): void
+    {
+        $cache = \Illuminate\Support\Facades\Cache::getFacadeRoot();
+        $level = \Illuminate\Support\Facades\DB::transactionLevel();
+
+        foreach ([false, true] as $commit) {
+            try {
+                PermissionMatrix::isolated(function () {
+                    RolePermission::create(['role' => 'manager', 'perm' => 'erp.dues', 'allow' => false]);
+                    throw new \RuntimeException('boom');
+                }, $commit);
+                $this->fail('exception swallowed');
+            } catch (\RuntimeException $e) {
+                $this->assertSame('boom', $e->getMessage());
+            }
+
+            $this->assertSame($cache, \Illuminate\Support\Facades\Cache::getFacadeRoot());
+            $this->assertSame($level, \Illuminate\Support\Facades\DB::transactionLevel());
+            $this->assertSame(0, RolePermission::count());
+        }
+
+        $this->assertTrue(Access::effectiveFor('manager', 'erp.dues'));
+    }
+
     public function test_admin_is_never_a_subject(): void
     {
         $this->expectException(\InvalidArgumentException::class);

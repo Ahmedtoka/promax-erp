@@ -156,7 +156,7 @@ class PermissionController extends Controller
         // ⚠️ استثناءات على أدمن ممنوعة — وعلى رولز الميدان مالهاش معنى ويب
         abort_if($user->role === 'admin' || ! Access::isWebRole($user), 403);
 
-        PermissionMatrix::save($user, (array) $request->input('perm', []));
+        PermissionMatrix::save($user, $this->perms($request));
 
         return back()->with('ok', __('perm.saved', ['name' => $user->name]));
     }
@@ -166,7 +166,7 @@ class PermissionController extends Controller
     {
         $subject = $this->roleSubject($role);
 
-        PermissionMatrix::save($subject instanceof Role ? $subject->key() : $subject, (array) $request->input('perm', []));
+        PermissionMatrix::save($subject instanceof Role ? $subject->key() : $subject, $this->perms($request));
 
         $name = $subject instanceof Role ? $subject->displayName() : __('enums.role.'.$role);
 
@@ -179,7 +179,7 @@ class PermissionController extends Controller
      */
     public function diff(Request $request)
     {
-        $perms = (array) $request->input('perm', []);
+        $perms = $this->perms($request);
 
         if ($request->filled('user')) {
             $user = User::find((int) $request->input('user'));
@@ -193,6 +193,18 @@ class PermissionController extends Controller
         return response()->json(['changes' => PermissionMatrix::diff(
             $subject instanceof Role ? $subject->key() : $subject, $perms,
         )]);
+    }
+
+    /**
+     * `perm[key]` = '' (وراثة) | '0' | '1' بس — أي قيمة تانية (أراي، 'x') 422.
+     *
+     * @return array<string, mixed>
+     */
+    private function perms(Request $request): array
+    {
+        $request->validate(['perm' => ['nullable', 'array'], 'perm.*' => ['nullable', 'in:0,1']]);
+
+        return (array) $request->input('perm', []);
     }
 
     /** رول أساسي (غير الأدمن) أو مخصص موجود — وإلا 403 */

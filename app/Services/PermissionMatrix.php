@@ -77,7 +77,7 @@ class PermissionMatrix
             $g = $virtual
                 // القسم الوهمي مالوش صف في الريزولفر (`groupOf` بيمشي على NAV بس)
                 ? ['override' => null, 'source' => 'code']
-                : ['override' => self::override($s, $group), 'source' => self::source($s, $group)];
+                : ['override' => self::override($s, $group), 'source' => self::sourceOf($s, $group)[0]];
 
             $out[] = [
                 'key' => $group,
@@ -87,6 +87,7 @@ class PermissionMatrix
                 'override' => $g['override'],
                 'effective' => (bool) array_filter($pages, fn ($p) => $p['effective']),
                 'source' => $g['source'],
+                'via' => null,
                 'risk' => PermissionCatalog::risk($group),
                 'virtual' => $virtual,
                 'pages' => $pages,
@@ -106,6 +107,7 @@ class PermissionMatrix
     {
         $locked = Access::isLocked($key);
         $desc = PermissionCatalog::describe($key);
+        [$source, $via] = self::sourceOf($s, $key);
 
         return [
             'key' => $key,
@@ -114,7 +116,8 @@ class PermissionMatrix
             'icon' => $icon,
             'override' => $locked ? null : self::override($s, $key),
             'effective' => self::effective($s, $key),
-            'source' => self::source($s, $key),
+            'source' => $source,
+            'via' => $via,
             'risk' => PermissionCatalog::risk($key),
             'what' => $desc['what'],
             'data' => $desc['data'],
@@ -166,33 +169,63 @@ class PermissionMatrix
      */
     public static function diff(string|User $subject, array $perms): array
     {
-        $s = self::subject($subject);
-        $changes = self::changes($s, $perms);
+        self::subject($subject);   // يرفض الأدمن/المجهول قبل أي ترانزاكشن
 
-        if ($changes === []) {
-            return [];
-        }
-
-        $before = self::effectives($s, array_keys($changes));
-        $after = self::preview(function () use ($s, $changes) {
-            self::write($s, $changes);
-
-            return self::effectives(self::reload($s), array_keys($changes));
-        });
-
-        return self::rows($changes, $before, $after);
+        return self::isolated(fn () => self::apply($subject, $perms), commit: false);
     }
 
     /**
-     * يحفظ ويرجّع الفرق. مفاتيح مجهولة/مقفولة بتتجاهل. صف نشاط واحد
-     * (`perms.saved`) لو فيه تغيير — الحذف كويري مباشر بيعدّي الأوبزرفر.
+     * يحفظ ويرجّع الفرق. مفاتيح مجهولة/مقفولة وقيم غير '' '0' '1' بتتجاهل.
+     * القراية والكتابة وصف النشاط الواحد (`perms.saved`) في ترانزاكشن واحد
+     * — الحذف كويري مباشر بيعدّي الأوبزرفر، فالتسجيل هنا صريح.
      *
      * @param array<string, mixed> $perms
      * @return list<array<string, mixed>>
      */
     public static function save(string|User $subject, array $perms): array
     {
+        self::subject($subject);
+
+        $diff = self::isolated(function () use ($subject, $perms) {
+            $diff = self::apply($subject, $perms, lock: true);
+
+            if ($diff !== []) {
+                $s = self::subject($subject);
+                ActivityLog::record('perms.saved', [
+                    'subject_type' => $s['type'],
+                    'subject_id' => $s['type'] === 'BuiltinRole' ? null : $s['id'],
+                    'title' => mb_substr($s['title'], 0, 190),
+                    'changes' => $diff,
+                ]);
+            }
+
+            return $diff;
+        }, commit: true);
+
+        // ⚠️ بعد الكوميت — من غير المسح ده التعديل مايبانش غير بعد الكاش
+        RolePermission::flush();
+
+        return $diff;
+    }
+
+    /**
+     * جوه ترانزاكشن وكاش معزول: يقرا الصفوف الحالية من الداتابيز، يحسب
+     * الفعلي قبل، يكتب، ويحسب الفعلي بعد.
+     *
+     * @param array<string, mixed> $perms
+     * @return list<array<string, mixed>>
+     */
+    private static function apply(string|User $subject, array $perms, bool $lock = false): array
+    {
         $s = self::subject($subject);
+
+        if ($lock) {
+            // صفوف الطبقة دي بتتقفل لحد الكوميت — حفظين في نفس الوقت مايتداخلوش
+            ($s['user'] !== null
+                ? $s['user']->permissions()
+                : RolePermission::where('role', $s['key']))->lockForUpdate()->get();
+        }
+
         $changes = self::changes($s, $perms);
 
         if ($changes === []) {
@@ -200,22 +233,10 @@ class PermissionMatrix
         }
 
         $before = self::effectives($s, array_keys($changes));
+        self::write($s, $changes);
+        RolePermission::flush();   // الكاش المعزول بس — الخريطة تتبني تاني من الصفوف الجديدة
 
-        DB::transaction(fn () => self::write($s, $changes));
-
-        // ⚠️ من غير المسح ده التعديل مايبانش غير بعد الكاش
-        RolePermission::flush();
-
-        $diff = self::rows($changes, $before, self::effectives(self::reload($s), array_keys($changes)));
-
-        ActivityLog::record('perms.saved', [
-            'subject_type' => $s['type'],
-            'subject_id' => $s['type'] === 'BuiltinRole' ? null : $s['id'],
-            'title' => mb_substr($s['title'], 0, 190),
-            'changes' => $diff,
-        ]);
-
-        return $diff;
+        return self::rows($changes, $before, self::effectives(self::subject($subject), array_keys($changes)));
     }
 
     /** المفاتيح اللي ينفع تتكتب: الكتالوج ناقص المقفول والقسم الوهمي @return list<string> */
@@ -225,6 +246,22 @@ class PermissionMatrix
             PermissionCatalog::keys(),
             fn (string $k) => $k !== Access::PUBLIC_GROUP && ! Access::isLocked($k),
         ));
+    }
+
+    /**
+     * '' / null = وراثة، '0' / 0 / false = منع، '1' / 1 / true = سماح.
+     * أي حاجة تانية (أراي، 'x'، '2') = غير صالحة.
+     *
+     * @return array{0:bool, 1:?bool} [صالحة؟، القيمة]
+     */
+    public static function normalize(mixed $val): array
+    {
+        return match (true) {
+            $val === null, $val === '' => [true, null],
+            $val === '0', $val === 0, $val === false => [true, false],
+            $val === '1', $val === 1, $val === true => [true, true],
+            default => [false, null],
+        };
     }
 
     /**
@@ -239,12 +276,12 @@ class PermissionMatrix
 
         foreach ($perms as $key => $val) {
             $key = (string) $key;
+            [$ok, $after] = self::normalize($val);
 
-            if (! isset($valid[$key])) {
+            if (! $ok || ! isset($valid[$key])) {
                 continue;
             }
 
-            $after = ($val === '' || $val === null) ? null : (bool) (int) $val;
             $before = array_key_exists($key, $s['map']) ? $s['map'][$key] : null;
 
             if ($before !== $after) {
@@ -277,24 +314,41 @@ class PermissionMatrix
     }
 
     /**
-     * يشغّل الكتابة جوه ترانزاكشن بيترجع، بكاش في الذاكرة — عشان الكاش المشترك
-     * مايتلوّثش بصفوف عمرها ما اتحفظت.
+     * يشغّل `$fn` جوه ترانزاكشن (كوميت أو رجوع) بكاش في الذاكرة: الخرايط
+     * بتتبني من الداتابيز جوه الترانزاكشن، والكاش المشترك مايشوفش صفوف
+     * لسه ماتحفظتش. الفاساد بيرجع في `finally` حتى لو حصل استثنا.
+     *
+     * ⚠️ السواب على فاساد `Cache` كله (خرايط RolePermission وRole الاتنين
+     * عليه) — جوه البروسيس ده بس وطول الدالة بس.
+     *
+     * @internal عامة للتيست بس
      *
      * @template T
      * @param \Closure(): T $fn
      * @return T
      */
-    private static function preview(\Closure $fn): mixed
+    public static function isolated(\Closure $fn, bool $commit): mixed
     {
         $cache = Cache::getFacadeRoot();
-        Cache::swap(new Repository(new ArrayStore));
         DB::beginTransaction();
+        $committed = false;
 
         try {
-            return $fn();
+            Cache::swap(new Repository(new ArrayStore));
+            $result = $fn();
+
+            if ($commit) {
+                DB::commit();
+                $committed = true;
+            }
+
+            return $result;
         } finally {
-            DB::rollBack();
             Cache::swap($cache);
+
+            if (! $committed) {
+                DB::rollBack();
+            }
         }
     }
 
@@ -347,7 +401,7 @@ class PermissionMatrix
     // ═══════════════════════ الموضوع والطبقات ═══════════════════════
 
     /**
-     * @return array{type:string, id:?int, key:?string, title:string, user:?User,
+     * @return array{type:string, id:?int, key:?string, title:string, user:?User, base:string,
      *               map:array<string,bool>, layers:list<array{0:string,1:array<string,bool>}>}
      */
     private static function subject(string|User $subject): array
@@ -369,7 +423,7 @@ class PermissionMatrix
 
             return [
                 'type' => 'User', 'id' => (int) $user->id, 'key' => null, 'title' => (string) $user->name,
-                'user' => $user, 'map' => $user->permMap(), 'layers' => $layers,
+                'user' => $user, 'base' => (string) $user->role, 'map' => $user->permMap(), 'layers' => $layers,
             ];
         }
 
@@ -384,7 +438,7 @@ class PermissionMatrix
 
             return [
                 'type' => 'Role', 'id' => (int) $role->id, 'key' => $subject, 'title' => $subject,
-                'user' => null, 'map' => $map,
+                'user' => null, 'base' => (string) $role->base_role, 'map' => $map,
                 'layers' => [['role', $map], ['base', RolePermission::mapFor((string) $role->base_role)]],
             ];
         }
@@ -397,14 +451,8 @@ class PermissionMatrix
 
         return [
             'type' => 'BuiltinRole', 'id' => null, 'key' => $subject, 'title' => $subject,
-            'user' => null, 'map' => $map, 'layers' => [['role', $map]],
+            'user' => null, 'base' => $subject, 'map' => $map, 'layers' => [['role', $map]],
         ];
-    }
-
-    /** نفس الموضوع بعد الكتابة — خرايط وكاش اليوزر جداد */
-    private static function reload(array $s): array
-    {
-        return self::subject($s['user'] ?? (string) $s['key']);
     }
 
     /** @param array<string, mixed> $s */
@@ -413,16 +461,45 @@ class PermissionMatrix
         return array_key_exists($key, $s['map']) ? $s['map'][$key] : null;
     }
 
-    /** أول طبقة ليها رأي بنفس ترتيب الريزولفر، وإلا الكود */
-    private static function source(array $s, string $key): string
+    /**
+     * المصدر: أول طبقة ليها رأي على المفتاح بنفس ترتيب الريزولفر. لو مفيش
+     * وافتراضيه **بيتبع صفحة** (زرار رولزه بتسمح للرول الأساسي أو null، أو
+     * راوت مغطّي افتراضيه افتراضي الأكشن) — المصدر مصدر الصفحة و`via` = هي.
+     *
+     * @param array<string, mixed> $s
+     * @return array{0:string, 1:?string} [المصدر، الصفحة اللي بيتبعها]
+     */
+    private static function sourceOf(array $s, string $key, int $depth = 0): array
     {
         foreach ($s['layers'] as [$name, $map]) {
             if (Access::layerDecision($map, $key) !== null) {
-                return $name;
+                return [$name, null];
             }
         }
 
-        return 'code';
+        if (str_starts_with($key, 'nav.') || $depth > 5) {
+            return ['code', null];
+        }
+
+        // نفس `baseDefault`: الراوت المقفول أو اللي مش متعامل كأكشن ⇒ SCREENS (كود)
+        $action = isset(Access::ACTIONS[$key])
+            ? $key
+            : (! Access::isLocked($key) && Access::actionDefaulted($key) ? Access::actionKeyFor($key) : null);
+
+        if ($action === null) {
+            return ['code', null];
+        }
+
+        // نفس `actionDefault`: [] = أدمن بس، أو الرول الأساسي مش في الرولز ⇒ false من الكود
+        [, $page, $roles] = Access::ACTIONS[$action];
+
+        if ($roles === [] || ($roles !== null && ! in_array($s['base'], $roles, true))) {
+            return ['code', null];
+        }
+
+        [$source, $via] = self::sourceOf($s, $page, $depth + 1);
+
+        return [$source, $via ?? $page];
     }
 
     /** الفعلي من Access — القسم = أي صفحة فيه فعلية */
