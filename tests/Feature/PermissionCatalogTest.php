@@ -42,7 +42,7 @@ class PermissionCatalogTest extends TestCase
 
     public function test_brief_risk_floor_and_defaults(): void
     {
-        foreach (['act.overview.wipe', 'act.overview.demo', 'act.prices.propagate', 'act.gl.admin', 'act.costing.admin', 'act.hr.payroll_approve', 'act.hr.settings', 'act.team.manage', 'act.import.run', 'act.custody.adjust', 'act.field.wipe', 'act.products.delete'] as $k) {
+        foreach (['act.overview.wipe', 'act.overview.demo', 'act.prices.propagate', 'act.gl.admin', 'act.costing.admin', 'act.hr.payroll_approve', 'act.hr.settings', 'act.team.manage', 'act.import.run', 'act.custody.adjust', 'act.field.wipe', 'act.products.delete', 'act.app_version.manage', 'act.wh.count_manage'] as $k) {
             $this->assertSame('critical', C::risk($k), $k);
         }
 
@@ -50,6 +50,8 @@ class PermissionCatalogTest extends TestCase
             $this->assertSame('low', C::risk($k), $k);
         }
 
+        $this->assertSame('high', C::risk('hr.payroll'));
+        $this->assertSame('high', C::risk('hr.employees'));
         $this->assertSame('medium', C::risk('nav.group_home'));
         $this->assertSame('medium', C::risk('erp.overview'));
         $this->assertSame('high', C::risk('act.clients.create'));

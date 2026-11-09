@@ -6,6 +6,10 @@ namespace App\Support;
  * كتالوج مرجعي لكل مفتاح صلاحية (قسم / صفحة / شاشة / زرار): وصف بسيط
  * + مستوى خطورة. المصفوفة (٩/١١) بتعرضه جنب كل تاجل عشان الأدمن يفهم
  * هو بيدّي إيه. مفيش أي سلوك وقت التشغيل هنا — قراءة بس.
+ *
+ * ⚠️ الأوصاف (lang/*\/permref.php) مكتوبة من سلوك الكنترولرز الفعلي (فلوس،
+ * مخزون، دفاتر، إشعارات، نطاق). **أي تغيير في سلوك راوت بتحميه صلاحية لازم
+ * يتحدّث وصفه هنا في ar + en**، وإلا الأدمن هيدّي صلاحية وهو فاهم حاجة غلط.
  */
 class PermissionCatalog
 {
@@ -51,6 +55,11 @@ class PermissionCatalog
         'act.review.stock_reset' => self::CRITICAL,
         'act.online.sync_settings' => self::CRITICAL,
         'act.hr.payroll_pay' => self::CRITICAL,
+        'act.app_version.manage' => self::CRITICAL,
+        'act.wh.count_manage' => self::CRITICAL,
+        // high: مرتبات وبيانات شخصية
+        'hr.payroll' => self::HIGH,
+        'hr.employees' => self::HIGH,
         // low
         'nav.group_docs' => self::LOW,
         'docs.index' => self::LOW,
