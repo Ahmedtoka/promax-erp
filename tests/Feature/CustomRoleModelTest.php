@@ -73,4 +73,35 @@ class CustomRoleModelTest extends TestCase
         $this->assertNotContains('admin', Role::BASE_ROLES());
         $this->assertContains('manager', Role::BASE_ROLES());
     }
+
+    /**
+     * مراجعة ٩/١١: المسح بعد الكوميت — ريكوست تاني قرا الصفوف القديمة
+     * وكاشها جوه الترانزاكشن ماينفعش يفضل كاش للأبد.
+     */
+    public function test_role_cache_is_flushed_after_commit_not_inside_transaction(): void
+    {
+        $role = $this->role();
+        $stale = Role::maps();
+        $this->assertTrue($stale[$role->id]->active);
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($role, $stale) {
+            $role->update(['active' => false]);
+            // ريكوست متزامن شايف الداتا المتكومتة (القديمة) بيكاشها
+            \Illuminate\Support\Facades\Cache::forever('custom_roles_map', $stale);
+        });
+
+        $this->assertFalse(Role::maps()[$role->id]->active);
+
+        // ورجوع الترانزاكشن مايمسحش ولا يكاش حاجة متغيرتش
+        $fresh = Role::maps();
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($role) {
+                $role->update(['active' => true]);
+                throw new \RuntimeException('rollback');
+            });
+        } catch (\RuntimeException) {
+        }
+        $this->assertFalse(Role::maps()[$role->id]->active);
+        $this->assertSame(array_keys($fresh), array_keys(Role::maps()));
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * رول مخصص (٩/١١) — اسم + رول أساسي (`base_role`) + صلاحيات من المصفوفة.
@@ -32,8 +33,10 @@ class Role extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => static::flush());
-        static::deleted(fn () => static::flush());
+        // ⚠️ بعد الكوميت (مراجعة ٩/١١): المسح جوه الترانزاكشن كان بيسيب ريكوست
+        // متزامن يكاش الصفوف القديمة للأبد. بره ترانزاكشن بيتنفذ على طول.
+        static::saved(fn () => DB::afterCommit(fn () => static::flush()));
+        static::deleted(fn () => DB::afterCommit(fn () => static::flush()));
     }
 
     /** الرولز الأساسية المسموحة (كل رولز اليوزر ماعدا الأدمن) */
