@@ -40,6 +40,9 @@
 
 @section('content')
 
+{{-- الفلتر السريع (٩/١١) — أول حاجة في الشاشة: كل الأوامر / المفتوح / مستني الحسابات / متغطّي --}}
+@include('ops._po_scope', ['current' => $f['scope'] ?? '', 'withAll' => true])
+
 {{-- ═══ الأوفرفيو: كل كارت فلتر بضغطة — وبنفس فلاتر القايمة ═══ --}}
 <div class="kpis">
     <a @class(['kpi', 'on' => ! ($f['approval'] ?? '') && ! ($f['status'] ?? '') && ! ($f['late'] ?? false)]) href="{{ $kpiLink([]) }}">
@@ -80,32 +83,55 @@
     </a>
 </div>
 
-{{-- ═══ الطلب مقابل المخزون (٩/١١) — الأوامر المفتوحة بنفس الفلاتر قصاد المتاح ═══ --}}
+{{-- ═══ الطلب مقابل المخزون (٩/١١، إعادة تصميم ٢) — دفتر الطلبات | العجز | المخزون
+     بنفس الفلاتر، كل رقم بوحدته واسمه (نفس الـpartial بتاع شاشة النواقص). ═══ --}}
 @if (\App\Support\Access::allows(auth()->user(), 'ops.po.shortage'))
-    @php $shortUrl = route('ops.po.shortage', \Illuminate\Support\Arr::only(request()->query(), ['q', 'channel', 'group', 'rep', 'approval', 'status', 'from', 'to', 'late'])); @endphp
-    <div style="font-size:11.5px;font-weight:800;color:var(--muted);margin:2px 2px 6px">⚖️ {{ __('shortage.box_title') }}</div>
-    <div class="kpis">
-        <a class="kpi" href="{{ $shortUrl }}">
-            <div class="lbl">📂 {{ __('shortage.box_open') }}</div>
-            <div class="val">{{ $fmt($demand['open_orders']) }}</div>
-            <div class="sub2">{{ __('shortage.box_open_sub', ['u' => $fmt($demand['ordered_units']), 'v' => $fmt($demand['ordered_value'])]) }}</div>
-        </a>
-        <a class="kpi" href="{{ $shortUrl }}">
-            <div class="lbl">🏭 {{ __('shortage.box_stock') }}</div>
-            <div class="val {{ $demand['free_for_need'] >= $demand['need_units'] ? 'pos' : 'mid' }}">{{ $fmt($demand['free_for_need']) }} / {{ $fmt($demand['need_units']) }}</div>
-            <div class="sub2">{{ __('shortage.box_stock_sub', ['c' => $fmt($demand['prepared_units'] + $demand['reserved_units'])]) }}</div>
-        </a>
-        <a class="kpi" href="{{ $shortUrl.(str_contains($shortUrl, '?') ? '&' : '?').'short=1' }}">
-            <div class="lbl">⚠️ {{ __('shortage.box_short') }}</div>
-            <div class="val {{ $demand['short_units'] > 0 ? 'neg' : 'pos' }}">{{ $fmt($demand['short_units']) }}</div>
-            <div class="sub2">{{ __('shortage.box_short_sub', ['v' => $fmt($demand['short_value']), 'n' => $fmt($demand['short_products'])]) }}</div>
-        </a>
-        <a class="kpi" href="{{ $shortUrl }}">
-            <div class="lbl">🎯 {{ __('shortage.k_cover') }}</div>
-            <div class="val {{ $demand['coverage'] >= 100 ? 'pos' : ($demand['coverage'] >= 80 ? 'mid' : 'neg') }}">{{ $demand['coverage'] }}%</div>
-            <div class="sub2">→ {{ __('shortage.box_link') }}</div>
-        </a>
+    @php
+        // الرابط بنفس الفلاتر — والفلتر السريع «كل المفتوح» لو مش متحدد، عشان
+        // الأرقام هنا = الأرقام اللي هتلاقيها في الشاشة (افتراضيها «مستني»)
+        $shortUrl = route('ops.po.shortage', ['scope' => $f['scope'] ?? null ?: 'open']
+            + \Illuminate\Support\Arr::only(request()->query(), ['q', 'channel', 'group', 'rep', 'approval', 'status', 'from', 'to', 'late']));
+        $dCovered = $demand['prepared_units'] + $demand['reserved_units'];
+        $dOrd = max($demand['ordered_units'], 1);
+        $dTone = $demand['coverage'] >= 100 ? 'pos' : ($demand['coverage'] >= 80 ? 'mid' : 'neg');
+    @endphp
+    <div class="dm-head">
+        <div><b>⚖️ {{ __('shortage.box_title') }}</b> <span>{{ __('shortage.box_cap') }}</span></div>
+        <a class="btn sm" href="{{ $shortUrl }}">{{ __('shortage.box_link') }} ←</a>
     </div>
+    @include('ops._demand_ledger', ['t' => $demand])
+    <a class="kpi dm-cover" href="{{ $shortUrl }}">
+        <div class="dm-cover-n"><b class="{{ $dTone }}">{{ $demand['coverage'] }}%</b><span>{{ __('shortage.cover_label') }}</span></div>
+        <div class="dm-cover-b">
+            <div class="dm-bar" aria-hidden="true">
+                <i style="width:{{ round($dCovered / $dOrd * 100, 2) }}%;background:var(--royal-blue)"></i>
+                <i style="width:{{ round($demand['free_for_need'] / $dOrd * 100, 2) }}%;background:var(--green)"></i>
+                <i style="width:{{ round($demand['short_units'] / $dOrd * 100, 2) }}%;background:var(--red)"></i>
+            </div>
+            <div class="dm-leg">
+                <span><i style="background:var(--royal-blue)"></i>{{ __('shortage.seg_covered') }} <b>{{ $fmt($dCovered) }}</b></span>
+                <span><i style="background:var(--green)"></i>{{ __('shortage.seg_free') }} <b>{{ $fmt($demand['free_for_need']) }}</b></span>
+                <span><i style="background:var(--red)"></i>{{ __('shortage.seg_short') }} <b>{{ $fmt($demand['short_units']) }}</b></span>
+                <span class="muted">{{ __('shortage.u_pcs') }} · {{ __('shortage.box_cover_sub') }}</span>
+            </div>
+        </div>
+    </a>
+    <style>
+    .dm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:4px 2px 8px}
+    .dm-head b{font-size:14px;font-weight:900}
+    .dm-head span{font-size:11.5px;color:var(--muted);margin-inline-start:6px}
+    .dm-cover{display:flex !important;align-items:center;gap:16px;margin-bottom:16px}
+    .dm-cover-n{display:flex;flex-direction:column;align-items:center;min-width:80px}
+    .dm-cover-n b{font-size:26px;font-weight:900;line-height:1}
+    .dm-cover-n span{font-size:11px;color:var(--muted);font-weight:800;margin-top:3px}
+    .dm-cover-b{flex:1;min-width:0}
+    .dm-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--card2)}
+    .dm-bar i{display:block;height:100%}
+    .dm-leg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;margin-top:7px}
+    .dm-leg span{display:inline-flex;align-items:center;gap:5px}
+    .dm-leg i{width:9px;height:9px;border-radius:3px;display:inline-block}
+    @media (max-width:640px){.dm-cover{flex-direction:column;align-items:stretch}.dm-cover-n{flex-direction:row;gap:8px;align-items:baseline}}
+    </style>
 @endif
 
 <div class="card">
@@ -114,6 +140,7 @@
     {{-- الفلاتر: بحث ← القناة ← السلسلة ← الموافقة ← الحالة ← من/إلى --}}
     <form class="searchbar" method="GET">
         @if ($f['late'] ?? false)<input type="hidden" name="late" value="1">@endif
+        @if ($f['scope'] ?? false)<input type="hidden" name="scope" value="{{ $f['scope'] }}">@endif
         <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
             <input type="text" name="q" value="{{ $f['q'] ?? '' }}" placeholder="🔍 {{ __('ops.search_po_ph') }}"></label>
         <label class="fl"><span>{{ __('ui.l_channel') }}</span>

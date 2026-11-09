@@ -1850,7 +1850,7 @@ class OpsController extends Controller
 
         return view('ops.pos', [
             'sum' => $sum,
-            'demand' => $shortage->report()['totals'] + ['open_orders' => $shortage->openOrders()->count()],
+            'demand' => $shortage->report()['totals'],
             'pos' => $q->latest()->paginate(30)->withQueryString(),
             // ⚠️ كل الأرقام من نفس الأساس المفلتر — رقم فوق وجدول تحت
             // من نطاقين = شاشة بتكدب
@@ -1871,7 +1871,7 @@ class OpsController extends Controller
             // دايالوج الأساين بس — دايالوج الإنشاء اليدوي اتشال (2026-08-06)
             'couriers' => User::fieldVisibleTo(User::where('role', 'driver'))->get(),
             'reps' => User::fieldVisibleTo(User::whereIn('role', User::FIELD_WORK_ROLES))->orderBy('name')->get(),
-            'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'rep', 'from', 'to']),
+            'filters' => $request->only(['status', 'approval', 'late', 'q', 'channel', 'group', 'rep', 'from', 'to', 'scope']),
         ]);
     }
 
@@ -1919,8 +1919,25 @@ class OpsController extends Controller
             // (٢٢/٩) فلتر المندوب — صفحة المندوب بتفتح «كل أوامره» من هنا
             ->when($request->integer('rep'), fn ($q2, $r) => $q2->where('assigned_to', $r))
             ->when($request->string('from')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '>=', $d))
-            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d));
+            ->when($request->string('to')->value(), fn ($q2, $d) => $q2->whereDate('created_at', '<=', $d))
+            // ═══ الفلتر السريع (٩/١١ — طلب المالك «أفلتر بالأوامر المستنية بس») ═══
+            // open = مفتوح (مستني/جاري التسليم ومش مرفوض) · awaiting = مستني قرار
+            // الحسابات · covered = مفتوح وليه أمر تجهيز حي. فاضي = كل الأوامر.
+            ->when(in_array($request->string('scope')->value(), self::PO_SCOPES, true), function ($q2) use ($request) {
+                $q2->whereIn('purchase_orders.status', \App\Services\PoShortage::OPEN_STATUSES)
+                    ->where(fn ($w) => $w->whereNull('purchase_orders.approval_status')
+                        ->orWhere('purchase_orders.approval_status', '<>', 'rejected'));
+
+                match ($request->string('scope')->value()) {
+                    'awaiting' => $q2->where('purchase_orders.approval_status', 'pending'),
+                    'covered' => $q2->whereHas('pickOrder', fn ($p) => $p->whereIn('status', \App\Services\PoShortage::LIVE_PICK)),
+                    default => null,
+                };
+            });
     }
+
+    /** قيم الفلتر السريع — نفس الترتيب في الشاشتين */
+    public const PO_SCOPES = ['open', 'awaiting', 'covered'];
 
     /**
      * أوامر التصدير — نفس فلاتر الشاشة كلها (بحث/قناة/سلسلة/تواريخ

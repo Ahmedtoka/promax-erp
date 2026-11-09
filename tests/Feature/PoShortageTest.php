@@ -127,6 +127,10 @@ class PoShortageTest extends TestCase
         $this->assertEqualsWithDelta(round((40 + 80) / 156 * 100, 1), $r->coverage, 0.001);
         $this->assertSame(1, $t['short_products']);
         $this->assertSame(36, $t['short_units']);
+        // كلهم مستنيين الحسابات ومالهمش أمر تجهيز (NULL مايضيعش العدّ)
+        $this->assertSame(116, $t['awaiting_units']);
+        $this->assertSame(3, $t['need_orders']);
+        $this->assertSame(80, $t['free_for_need']);
     }
 
     public function test_a_po_with_a_reserving_pick_order_is_covered_not_double_counted(): void
@@ -219,7 +223,13 @@ class PoShortageTest extends TestCase
         $admin = $this->makeAdmin();
 
         $this->actingAs($admin)->get(route('ops.po.shortage'))
-            ->assertOk()->assertSee('Short Item')->assertSee('Plenty Item')->assertSee($po->number);
+            ->assertOk()->assertSee('Short Item')->assertSee('Plenty Item')->assertSee($po->number)
+            // الإجابة فوق + الشرح + تولتيب العمود
+            ->assertSee(__('shortage.verdict_short'))->assertSee(__('shortage.how'))
+            ->assertSee(__('shortage.t_free'), false);
+
+        $this->actingAs($admin)->get(route('ops.po.shortage', ['status' => 'delivered']))
+            ->assertOk()->assertSee(__('shortage.verdict_none'))->assertSee(__('shortage.empty_title'));
 
         $this->actingAs($admin)->get(route('ops.po.shortage', ['short' => 1]))
             ->assertOk()->assertSee('Short Item')->assertDontSee('Plenty Item');
@@ -249,11 +259,86 @@ class PoShortageTest extends TestCase
 
         $res->assertOk()
             ->assertSee(__('shortage.box_title'))
-            ->assertSee(route('ops.po.shortage', ['approval' => 'pending']), false);
+            // الرابط بنفس الفلاتر + «كل المفتوح» عشان الأرقام تطابق الشاشة
+            ->assertSee(e(route('ops.po.shortage', ['scope' => 'open', 'approval' => 'pending'])), false);
         $this->assertSame(15, $res->viewData('demand')['short_units']);
         $this->assertSame(1, $res->viewData('demand')['open_orders']);
 
         $res = $this->actingAs($this->makeAdmin())->get(route('ops.pos', ['status' => 'delivered']));
         $this->assertSame(0, $res->viewData('demand')['open_orders']);
+    }
+    public function test_quick_scope_splits_awaiting_and_covered_and_the_screen_defaults_to_awaiting(): void
+    {
+        $a = $this->makeProduct(['name_en' => 'Scoped Item']);
+        $this->shelve($a, 100);
+        $waiting = $this->po([[$a, 30]]);
+        $covered = $this->po([[$a, 12]], ['approval_status' => 'approved']);
+        $this->pick($a, 12, 'requested', $covered);
+        $this->po([[$a, 500]], ['status' => 'delivered']);
+
+        $this->assertSame(42, $this->report(['scope' => 'open'])['totals']['ordered_units']);
+        $this->assertSame(30, $this->report(['scope' => 'awaiting'])['totals']['ordered_units']);
+        $this->assertSame(12, $this->report(['scope' => 'covered'])['totals']['ordered_units']);
+        $this->assertSame(1, $this->report(['scope' => 'covered'])['totals']['open_orders']);
+
+        $admin = $this->makeAdmin();
+        // الشاشة من غير scope = «مستني الحسابات»
+        $res = $this->actingAs($admin)->get(route('ops.po.shortage'))->assertOk()
+            ->assertSee(__('shortage.scope_hint_awaiting'));
+        $this->assertSame('awaiting', $res->viewData('filters')['scope']);
+        $this->assertSame(30, $res->viewData('t')['ordered_units']);
+
+        // ولوحة الأوامر: نفس الفلتر السريع على القايمة
+        $res = $this->actingAs($admin)->get(route('ops.pos', ['scope' => 'awaiting']))->assertOk();
+        $this->assertSame([$waiting->id], $res->viewData('pos')->pluck('id')->all());
+        $res = $this->actingAs($admin)->get(route('ops.pos', ['scope' => 'covered']))->assertOk();
+        $this->assertSame([$covered->id], $res->viewData('pos')->pluck('id')->all());
+        // من غير scope اللوحة زي ما هي — كل الأوامر
+        $this->assertCount(3, $this->actingAs($admin)->get(route('ops.pos'))->viewData('pos'));
+    }
+
+    public function test_available_stock_is_per_warehouse_and_orders_say_where_they_can_be_served_from(): void
+    {
+        $a = $this->makeProduct();
+        $b = $this->makeProduct();
+        $w2 = $this->makeWarehouse();
+        $loc2 = Location::create(['warehouse_id' => $w2->id, 'code' => 'B-01', 'stand' => 'B', 'level' => 1]);
+
+        $this->shelve($a, 10);                         // مخزن ١: a=10
+        $b2 = Batch::create(['product_id' => $a->id, 'warehouse_id' => $w2->id, 'batch_no' => 'W2A',
+            'produced_on' => today()->subMonth(), 'expires_on' => today()->addMonths(3),
+            'qty_received' => 40, 'qty_remaining' => 40, 'cost' => 5]);
+        BatchLocation::create(['batch_id' => $b2->id, 'location_id' => $loc2->id, 'product_id' => $a->id, 'qty' => 40]);
+        // حجز في مخزن ٢ مايقدرش ياكل رف مخزن ١
+        PickOrderItem::create(['pick_order_id' => PickOrder::create([
+            'number' => 'PK-W2', 'warehouse_id' => $w2->id, 'assigned_to' => $this->makeRep()->id,
+            'purpose' => PickOrder::PURPOSE_VAN_LOAD, 'status' => 'requested'])->id,
+            'product_id' => $a->id, 'location_id' => $loc2->id, 'qty_requested' => 5]);
+        $this->shelve($b, 3);                          // مخزن ١: b=3
+
+        $home = $this->po([[$a, 8]], ['due_at' => now()->addHour()]);                 // من مخزنه
+        $moved = $this->po([[$a, 30]], ['due_at' => now()->addHours(2)]);             // مخزنه فيه 2 بس ← مخزن ٢
+        $split = $this->po([[$a, 6]], ['due_at' => now()->addHours(3)]);              // 2 في ١ + 5 في ٢
+        $short = $this->po([[$b, 9]], ['due_at' => now()->addHours(4)]);              // ناقص 6
+
+        $r = $this->report()['rows']->firstWhere('product_id', $a->id);
+        $this->assertSame([$w2->id => 35, $this->wh->id => 10], $r->free_by_wh);
+        $this->assertSame(45, $r->free);
+        $t = $this->report()['totals'];
+        $this->assertSame(35, $t['by_warehouse'][$w2->id]['units']);
+        $this->assertEqualsWithDelta(35 * 11.4, $t['by_warehouse'][$w2->id]['value'], 0.01);
+        $this->assertEqualsWithDelta(48 * 11.4, $t['free_value'], 0.01); // a 45 + b 3
+
+        $this->actingAs($this->makeAdmin());
+        $o = (new PoShortage(Request::create('/')))->orders()->keyBy('id');
+        $this->assertSame(['can', [$this->wh->id]], [$o[$home->id]->state, $o[$home->id]->from]);
+        $this->assertSame(['other', [$w2->id]], [$o[$moved->id]->state, $o[$moved->id]->from]);
+        $this->assertSame('split', $o[$split->id]->state);
+        $this->assertEqualsCanonicalizing([$this->wh->id, $w2->id], $o[$split->id]->from);
+        $this->assertSame(['short', [$b->id => 6]], [$o[$short->id]->state, $o[$short->id]->missing]);
+
+        // الشاشة بتقول المخزن والباتش
+        $this->actingAs($this->makeAdmin())->get(route('ops.po.shortage'))->assertOk()
+            ->assertSee('W2A')->assertSee(__('shortage.wh_title'));
     }
 }
