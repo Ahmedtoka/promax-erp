@@ -1168,7 +1168,8 @@ class Access
             return $decision;
         }
 
-        return self::roleDefault($user->role, $routeName);
+        // الراوت المغطّي بأكشن: افتراضي الأكشن (زي `action()` من غير صفوف)
+        return self::baseDefault($user->role, $routeName, fn (string $page) => self::allows($user, $page));
     }
 
     /**
@@ -1208,7 +1209,7 @@ class Access
     public static function roleEffective(string $role, string $routeName): bool
     {
         return self::roleOverride($role, $routeName)
-            ?? self::roleDefault($role, $routeName);
+            ?? self::baseDefault($role, $routeName, fn (string $page) => self::roleEffective($role, $page));
     }
 
     /**
@@ -1246,8 +1247,11 @@ class Access
             return false;
         }
 
+        $base = (string) $custom->base_role;
+
         return self::resolveMap(\App\Models\RolePermission::mapFor($roleKey), $routeName)
-            ?? self::roleEffective((string) $custom->base_role, $routeName);
+            ?? self::roleOverride($base, $routeName)
+            ?? self::baseDefault($base, $routeName, fn (string $page) => self::effectiveFor($roleKey, $page));
     }
 
     /** نفس `effectiveFor` للزراير — مخصص ← رول أساسي ← افتراضي الكود */
@@ -1349,7 +1353,8 @@ class Access
      * حل خريطة استثناءات (يوزر أو رول) لراوت — المنطق الواحد المشترك.
      *
      * الترتيب (قرار المالك 2026-08-05): إخفاء القسم بيغلب الكل ←
-     * أطول بادئة صفحة مطابقة ← أكشن بيغطي الراوت ← منح القسم كله.
+     * أطول بادئة صفحة مطابقة ← منح القسم كله. الراوت المغطّي بأكشن
+     * (قرار ٦، ٩/١١): إخفاء القسم ← صف الراوت بالظبط ← صف الأكشن.
      *
      * @param array<string, bool> $map
      */
@@ -1366,6 +1371,16 @@ class Access
 
         if ($group !== null && ($map[$group] ?? null) === false) {
             return false;
+        }
+
+        // ⚠️ راوت عليه أكشن (قرار ٦، ٩/١١): صف الراوت بالظبط أو صف الأكشن بس —
+        // منح/منع الصفحة أو القسم مابيلمسوش، وإلا «الصفحة من غير الزرار» مستحيلة
+        if (($action = self::actionKeyFor($routeName)) !== null) {
+            if (array_key_exists($routeName, $map)) {
+                return $map[$routeName];
+            }
+
+            return array_key_exists($action, $map) ? $map[$action] : null;
         }
 
         // ٢. الصفحة/الراوت نفسه — أطول بادئة مطابقة بتكسب
@@ -1387,24 +1402,73 @@ class Access
             return $best;
         }
 
-        // ٣. أكشن متظبط عليه استثناء وبيغطي الراوت ده
-        foreach (self::ACTIONS as $key => $def) {
-            if (! array_key_exists($key, $map)) {
-                continue;
-            }
-            foreach ($def[3] as $covered) {
-                if (self::matches($routeName, $covered)) {
-                    return $map[$key];
-                }
-            }
-        }
-
-        // ٤. القسم كله ممنوح صراحةً
+        // ٣. القسم كله ممنوح صراحةً
         if ($group !== null && ($map[$group] ?? null) === true) {
             return true;
         }
 
         return null;
+    }
+
+    /**
+     * الأكشن اللي بيغطي الراوت ده — null لو مالوش. الاسم بالظبط في ACTIONS،
+     * أو راوت كتابة تحت بادئته. لو أكتر من واحد: أطول بادئة (التيست بيضمن
+     * إن مفيش تداخل أصلاً).
+     *
+     * ⚠️ شاشة GET تحت بادئة أكشن من غير ما تتكتب بالاسم (`gl.golive.run.progress`
+     * تحت `gl.golive.run`، `wh.receipt.putaway.form` تحت `wh.receipt.putaway`)
+     * مش مغطّية — عرض بيتبع صفحته، وإلا المحاسب يفقد شاشة التقدّم ومدير الفرع
+     * فورم الترصيف من غير أي صف.
+     */
+    public static function actionKeyFor(string $routeName): ?string
+    {
+        if (array_key_exists($routeName, self::$actionCache)) {
+            return self::$actionCache[$routeName];
+        }
+
+        $found = null;
+        $len = -1;
+        $isView = null;
+
+        foreach (self::ACTIONS as $key => $def) {
+            foreach ($def[3] as $covered) {
+                if (! self::matches($routeName, $covered) || strlen($covered) <= $len) {
+                    continue;
+                }
+
+                if ($routeName !== $covered) {
+                    $isView ??= in_array('GET',
+                        \Illuminate\Support\Facades\Route::getRoutes()->getByName($routeName)?->methods() ?? [], true);
+
+                    if ($isView) {
+                        continue;
+                    }
+                }
+
+                $found = $key;
+                $len = strlen($covered);
+            }
+        }
+
+        return self::$actionCache[$routeName] = $found;
+    }
+
+    /** @var array<string, ?string> */
+    private static array $actionCache = [];
+
+    /**
+     * افتراضي الكود للراوت (من غير أي صف): الراوت المغطّي بأكشن بيتبع افتراضي
+     * الأكشن، والباقي خريطة SCREENS. `$sees` = الرول شايف صفحة الأكشن؟
+     *
+     * @param \Closure(string): bool $sees
+     */
+    private static function baseDefault(string $role, string $routeName, \Closure $sees): bool
+    {
+        $action = self::isLocked($routeName) ? null : self::actionKeyFor($routeName);
+
+        return $action !== null
+            ? self::actionDefault($role, $action, $sees)
+            : self::roleDefault($role, $routeName);
     }
 
     /** افتراضي الرول من خريطة SCREENS — من غير استثناءات اليوزر */

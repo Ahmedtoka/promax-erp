@@ -71,6 +71,11 @@ final class LinkGuard
             return false;
         }
 
+        // راوت عليه أكشن (قرار ٦): `allows` هو نفس قرار `EnsureRole` بالظبط
+        if (! Access::isLocked($name) && Access::actionKeyFor($name) !== null) {
+            return self::rowAllowed($user, $route);
+        }
+
         if (($override = Access::userOverride($user, $name)) !== null) {
             return $override;
         }

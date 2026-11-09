@@ -520,6 +520,8 @@
 </div>
 
 {{-- ═══════════ إضافة ═══════════ --}}
+{{-- ⚠️ الفورم نفسه بنفس حارس الزرار — مدير الفرع من غير المنحة الـPOST بيرفضه --}}
+@if ($canWrite)
 <dialog id="dlgNewLead">
     <form class="dlg" method="POST" action="{{ route('erp.leads.store') }}" style="max-height:86vh;overflow-y:auto">
         @csrf
@@ -572,6 +574,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 {{-- ═══════════ تعديل ═══════════ --}}
 <dialog id="dlgEditLead">

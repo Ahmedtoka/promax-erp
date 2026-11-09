@@ -30,6 +30,17 @@ class EnsureRole
         // والرولز ووقت الشغل والمساعد — البوابة نفسها بس
         $overridable = $routeName !== null && ! \App\Support\Access::isLocked($routeName);
 
+        // ⚠️ راوت عليه أكشن (قرار ٦، ٩/١١): القرار كله من `Access::allows` —
+        // صف الراوت/الأكشن (أي طبقة) وإلا افتراضي الأكشن. منح الصفحة مابيعدّيش
+        // `role:` هنا، ومنح الأكشن بيعدّيه. افتراضي الأكشن = `role:` (RoleAccessTest).
+        if ($overridable && \App\Support\Access::actionKeyFor($routeName) !== null) {
+            if (! \App\Support\Access::allows($user, $routeName)) {
+                abort(403, __('common.forbidden'));
+            }
+
+            return $next($request);
+        }
+
         if ($overridable
             && ($override = \App\Support\Access::userOverride($user, $routeName)) !== null) {
             if ($override === false) {
