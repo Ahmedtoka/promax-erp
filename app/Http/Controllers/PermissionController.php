@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Role;
 use App\Models\RolePermission;
 use App\Models\User;
+use App\Services\PermissionMatrix;
 use App\Support\Access;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -146,73 +147,66 @@ class PermissionController extends Controller
             : ($pageOk && in_array($role, $roles, true));
     }
 
-    /** كل المفاتيح المسموح كتابتها — أقسام وصفحات وأزرار متسجلة بس */
-    private function validKeys(): array
-    {
-        return array_merge(
-            array_keys(Access::ACTIONS),
-            array_keys(Access::NAV),
-            array_map(fn ($l) => $l[0], array_merge(...array_values(Access::NAV))),
-        );
-    }
-
+    /**
+     * حفظ استثناءات يوزر — من الخدمة (الفرق + صف نشاط واحد، ٩/١١).
+     * مفاتيح مجهولة/مقفولة بتتجاهل هناك (`PermissionMatrix::validKeys`).
+     */
     public function save(Request $request, User $user)
     {
         // ⚠️ استثناءات على أدمن ممنوعة — وعلى رولز الميدان مالهاش معنى ويب
         abort_if($user->role === 'admin' || ! Access::isWebRole($user), 403);
 
-        $valid = $this->validKeys();
-        $perms = (array) $request->input('perm', []);
-
-        DB::transaction(function () use ($user, $perms, $valid) {
-            foreach ($perms as $key => $val) {
-                if (! in_array($key, $valid, true)) {
-                    continue;   // مفتاح مش متسجل — مايتكتبش
-                }
-
-                if ($val === '' || $val === null) {
-                    // وراثة = مفيش صف
-                    $user->permissions()->where('perm', $key)->delete();
-                } else {
-                    $user->permissions()->updateOrCreate(
-                        ['perm' => $key],
-                        ['allow' => (bool) (int) $val],
-                    );
-                }
-            }
-        });
+        PermissionMatrix::save($user, (array) $request->input('perm', []));
 
         return back()->with('ok', __('perm.saved', ['name' => $user->name]));
     }
 
-    /** حفظ استثناءات رول كامل — تاب الرولز (٢٣/٨) */
+    /** حفظ استثناءات رول كامل — أساسي أو مخصص `c:<id>` (٢٣/٨، ٩/١١) */
     public function saveRole(Request $request, string $role)
     {
-        abort_if($role === 'admin' || ! in_array($role, Access::WEB_ROLES, true), 403);
+        $subject = $this->roleSubject($role);
 
-        $valid = $this->validKeys();
+        PermissionMatrix::save($subject instanceof Role ? $subject->key() : $subject, (array) $request->input('perm', []));
+
+        $name = $subject instanceof Role ? $subject->displayName() : __('enums.role.'.$role);
+
+        return back()->with('ok', __('perm.saved_role', ['role' => $name]));
+    }
+
+    /**
+     * معاينة الفرق قبل الحفظ (JSON) — `role` (مفتاح) أو `user` (id) + `perm[]`.
+     * مفيش كتابة: الخدمة بتجرّب جوه ترانزاكشن بيترجع.
+     */
+    public function diff(Request $request)
+    {
         $perms = (array) $request->input('perm', []);
 
-        DB::transaction(function () use ($role, $perms, $valid) {
-            foreach ($perms as $key => $val) {
-                if (! in_array($key, $valid, true)) {
-                    continue;
-                }
+        if ($request->filled('user')) {
+            $user = User::find((int) $request->input('user'));
+            abort_if($user === null || $user->role === 'admin' || ! Access::isWebRole($user), 403);
 
-                if ($val === '' || $val === null) {
-                    RolePermission::where('role', $role)->where('perm', $key)->delete();
-                } else {
-                    RolePermission::updateOrCreate(
-                        ['role' => $role, 'perm' => $key],
-                        ['allow' => (bool) (int) $val],
-                    );
-                }
-            }
-        });
+            return response()->json(['changes' => PermissionMatrix::diff($user, $perms)]);
+        }
 
-        // ⚠️ من غير المسح ده التعديل مايبانش غير بعد ساعة كاش
-        RolePermission::flush();
+        $subject = $this->roleSubject((string) $request->input('role', ''));
 
-        return back()->with('ok', __('perm.saved_role', ['role' => __('enums.role.'.$role)]));
+        return response()->json(['changes' => PermissionMatrix::diff(
+            $subject instanceof Role ? $subject->key() : $subject, $perms,
+        )]);
+    }
+
+    /** رول أساسي (غير الأدمن) أو مخصص موجود — وإلا 403 */
+    private function roleSubject(string $role): string|Role
+    {
+        if (str_starts_with($role, 'c:')) {
+            $custom = Role::fromKey($role);
+            abort_if($custom === null, 403);
+
+            return $custom;
+        }
+
+        abort_if(! in_array($role, Role::BASE_ROLES(), true), 403);
+
+        return $role;
     }
 }

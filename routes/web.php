@@ -446,6 +446,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // وإلا لارافيل هتحاول تعمل route-model-binding على كلمة «role»
         Route::post('/permissions/role/{role}', [\App\Http\Controllers\PermissionController::class, 'saveRole'])
             ->middleware('role:admin')->name('perms.role.save');
+        // معاينة الفرق قبل الحفظ (٩/١١) — ثابت قبل `{user}`، ومقفول ببادئة `erp.perms`
+        Route::post('/permissions/diff', [\App\Http\Controllers\PermissionController::class, 'diff'])
+            ->middleware('role:admin')->name('perms.diff');
         Route::post('/permissions/{user}', [\App\Http\Controllers\PermissionController::class, 'save'])
             ->middleware('role:admin')->name('perms.save');
         // الرولز المخصصة (٩/١١) — `clone` ثابت قبل `{role}`

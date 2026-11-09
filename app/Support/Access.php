@@ -1411,6 +1411,26 @@ class Access
     }
 
     /**
+     * قرار طبقة واحدة (خريطة يوزر أو رول أساسي/مخصص) على مفتاح — قراءة بس،
+     * لبادج المصدر في المصفوفة. نفس اللي `allows`/`action` بيبصّوا عليه في
+     * الطبقة دي بالظبط؛ null = الطبقة مالهاش رأي (وراثة). القسم = صفه هو.
+     *
+     * @param array<string, bool> $map
+     */
+    public static function layerDecision(array $map, string $key): ?bool
+    {
+        if (str_starts_with($key, 'act.')) {
+            return ! self::isLocked($key) && array_key_exists($key, $map) ? $map[$key] : null;
+        }
+
+        if (str_starts_with($key, 'nav.')) {
+            return array_key_exists($key, $map) ? $map[$key] : null;
+        }
+
+        return self::resolveMap($map, $key);
+    }
+
+    /**
      * الأكشن اللي بيغطي الراوت ده (نفس مطابقة البادئة) — null لو مالوش.
      * لو أكتر من واحد: أطول بادئة (التيست بيضمن إن مفيش تداخل أصلاً).
      * ده اللي بيحدد الصفوف (الراوت بالظبط ← الأكشن) و`screensOf` كمان.
