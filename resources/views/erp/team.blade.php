@@ -14,7 +14,17 @@
     // ⚠️ زرار الباسورد للأدمن بس — الراوت نفسه `role:admin`، ومدير
     // القنوات لو شافه هياخد 403 (وأصلاً مينفعش يقدر يغيّر باسورد
     // الأدمن ويستلم السيستم).
-    $canSetPassword = auth()->user()->isAdmin();
+    $isAdminUser = auth()->user()->isAdmin();
+    // ⚠️ غير الأدمن (استثناء `act.team.manage`) بيدير الفريق بس مايلمسش الأدمن ولا الرولز المخصصة (السيرفر بيرفض)
+    $canSetPassword = $isAdminUser || \App\Support\Access::action(auth()->user(), 'act.team.manage');
+
+    // الرولز المخصصة الفعّالة (للأدمن بس) + خريطة c:<id> → الرول الأساسي لشروط الفورم
+    $customRoles = $isAdminUser
+        ? collect(\App\Models\Role::maps())->filter(fn ($r) => $r->active)->sortBy(fn ($r) => $r->displayName())->values()
+        : collect();
+    $customBase = $customRoles->mapWithKeys(fn ($r) => [$r->key() => $r->base_role])->all();
+    // مفتاح الرول في الفلتر والتعديل: c:<id> للمخصص وإلا الأساسي
+    $roleKeyOf = fn ($u) => $u->permRoleKey() ?? $u->role;
 @endphp
 
 @section('actions')
@@ -38,8 +48,8 @@
         <label class="fl"><span>{{ __('team.role') }}</span>
             <select id="tmRole" onchange="tmFilter()">
                 <option value="">{{ __('ui.all_of', ['x' => __('uib.roles')]) }}</option>
-                @foreach ($users->pluck('role')->unique()->sort() as $rk)
-                    <option value="{{ $rk }}">{{ __('enums.role.'.$rk) }}</option>
+                @foreach ($users->groupBy($roleKeyOf)->map(fn ($g) => $g->first()->roleLabel())->sort() as $rk => $rl)
+                    <option value="{{ $rk }}">{{ $rl }}</option>
                 @endforeach
             </select></label>
         <label class="fl"><span>{{ __('ui.l_status') }}</span>
@@ -53,7 +63,7 @@
         <table>
             <tr><th>{{ __('common.name') }}</th><th>{{ __('common.code') }}</th><th>{{ __('team.role') }}</th><th>{{ __('team.email') }}</th><th>{{ __('team.zone') }}</th><th>{{ __('branch.branch') }}</th><th>{{ __('branch.plate') }}</th><th>{{ __('common.status') }}</th><th>{{ __('team.app_token') }}</th>@if ($canSetPassword)<th></th>@endif</tr>
             @foreach ($users as $u)
-                <tr data-role="{{ $u->role }}" data-active="{{ $u->active ? 1 : 0 }}">
+                <tr data-role="{{ $roleKeyOf($u) }}" data-active="{{ $u->active ? 1 : 0 }}">
                     <td>
                         <div style="display:flex;gap:9px;align-items:center">
                             @include('partials._avatar', ['u' => $u, 'size' => 32])
@@ -87,7 +97,7 @@
                             <span class="badge b-gold">{{ __('team.token_countable', ['count' => $u->tokens_count]) }}</span>
                         @else — @endif
                     </td>
-                    @if ($canSetPassword)
+                    @if ($canSetPassword && ($isAdminUser || $u->role !== 'admin'))
                         @php
                             // ⚠️ **مش `@json([...])` متعدد الأسطر** — ده الفخ
                             // المسجّل في سكيل المشروع: بيكسر بارسر Blade
@@ -96,7 +106,7 @@
                             $uPayload = json_encode([
                                 'id' => $u->id, 'name' => $u->name, 'name_en' => $u->name_en,
                                 'email' => $u->email, 'code' => $u->code, 'phone' => $u->phone,
-                                'role' => $u->role, 'branch_id' => $u->branch_id,
+                                'role' => $isAdminUser ? $roleKeyOf($u) : $u->role, 'branch_id' => $u->branch_id,
                                 'zone_id' => $u->zone_id, 'warehouse_id' => $u->warehouse_id,
                                 'active' => (bool) $u->active,
                                 'avatar_url' => $u->avatarUrl(),
@@ -111,6 +121,8 @@
                                 🔑
                             </button>
                         </td>
+                    @elseif ($canSetPassword)
+                        <td></td>
                     @endif
                 </tr>
             @endforeach
@@ -215,8 +227,16 @@
                 <label class="f">{{ __('team.role') }} *</label>
                 <select name="role" id="uRole" required style="width:100%" onchange="userRoleSync()">
                     @foreach (array_keys(\App\Models\User::ROLES) as $rk)
+                        @continue($rk === 'admin' && ! $isAdminUser)
                         <option value="{{ $rk }}">{{ __('enums.role.'.$rk) }}</option>
                     @endforeach
+                    @if ($customRoles->isNotEmpty())
+                        <optgroup label="{{ __('team.custom_roles_group') }}">
+                            @foreach ($customRoles as $cr)
+                                <option value="{{ $cr->key() }}">{{ $cr->displayName() }}</option>
+                            @endforeach
+                        </optgroup>
+                    @endif
                 </select>
                 <div style="font-size:11px;color:var(--muted);margin-top:4px" id="uSelfNote" hidden>
                     {{ __('team.cannot_change_own_role') }}
@@ -405,6 +425,7 @@ function tmFilter() {
 const PASS_URL = @js(route('erp.team.password', ['user' => '__ID__']));
 const USER_URL = @js(route('erp.team.update', ['user' => '__ID__']));
 const STORE_URL = @js(route('erp.team.store'));
+const CUSTOM_BASE = @js($customBase);   // c:<id> → الرول الأساسي
 const T_NEW = @js(__('team.new_user'));
 const T_EDIT = @js(__('team.edit_user'));
 
@@ -460,9 +481,14 @@ function openUser(u) {
 
 // أمين المخزن لازم له مخزن — النجمة بتظهر مع الرول
 function userRoleSync() {
-    const isKeeper = document.getElementById('uRole').value === 'warehouse_keeper';
+    const rv = document.getElementById('uRole').value;
+    const base = CUSTOM_BASE[rv] || rv;   // الرول المخصص بيتصرف زي أساسه
+    const isKeeper = base === 'warehouse_keeper';
     document.getElementById('uWhStar').hidden = !isKeeper;
     document.getElementById('uWarehouse').required = isKeeper;
+    // الفرع إجباري لميداني/مدير فرع على رول مخصص (السيرفر بيفرضه)
+    document.getElementById('uBranch').required = !!CUSTOM_BASE[rv]
+        && ['sales_agent', 'driver', 'promoter', 'branch_manager'].indexOf(base) !== -1;
 }
 
 function openPass(id, name, isField) {

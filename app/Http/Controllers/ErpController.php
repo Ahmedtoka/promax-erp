@@ -2868,6 +2868,8 @@ class ErpController extends Controller
      */
     public function setPassword(Request $request, User $user)
     {
+        $this->guardAdminTarget($request, $user);
+
         $data = $request->validate([
             // ⚠️ `confirmed` — غلطة كتابة في باسورد بيتكتب مرة واحدة
             // بتقفل الحساب من غير ما حد يعرف الحرف اللي اتكتب غلط.
@@ -2887,8 +2889,12 @@ class ErpController extends Controller
     }
 
     /** قواعد فورم اليوزر — مصدر واحد للإضافة والتعديل */
-    private function userRules(?User $user = null): array
+    private function userRules(?User $user = null, ?\App\Models\Role $custom = null, bool $byAdmin = true): array
     {
+        // ⚠️ اللي بيدير الفريق من غير ما يكون أدمن (استثناء `act.team.manage`)
+        // مايقدرش يختار أدمن ولا رول مخصص — ده تصعيد صلاحيات.
+        $roles = $byAdmin ? array_keys(User::ROLES) : array_values(array_diff(array_keys(User::ROLES), ['admin']));
+
         return [
             'name' => ['required', 'string', 'max:190'],
             // ⚠️ **إجباري على السيرفر كمان** (2026-08-08). الفورم عليه
@@ -2902,8 +2908,13 @@ class ErpController extends Controller
             'code' => ['nullable', 'string', 'max:30',
                 \Illuminate\Validation\Rule::unique('users', 'code')->ignore($user?->id)],
             'phone' => ['nullable', 'string', 'max:30'],
-            'role' => ['required', \Illuminate\Validation\Rule::in(array_keys(User::ROLES))],
-            'branch_id' => ['nullable', 'exists:branches,id'],
+            'role' => ['required', \Illuminate\Validation\Rule::in($roles)],
+            // الرول المخصص ميداني/مدير فرع الأساس: الفرع إجباري (spec §4)
+            'branch_id' => [
+                $custom !== null && (in_array($custom->base_role, User::FIELD_ROLES, true) || $custom->base_role === 'branch_manager')
+                    ? 'required' : 'nullable',
+                'exists:branches,id',
+            ],
             'zone_id' => ['nullable', 'exists:zones,id'],
             // ⚠️ أمين المخزن من غير مخزن مايعرفش يفتح أي شاشة شغل —
             // كل شاشات `wh.` بتفلتر بمخزنه.
@@ -2911,28 +2922,78 @@ class ErpController extends Controller
         ];
     }
 
+    /** الأدمن بس هو اللي يلمس يوزر أدمن (تعديل/باسورد) */
+    private function guardAdminTarget(Request $request, User $user): void
+    {
+        abort_if($user->role === 'admin' && $request->user()->role !== 'admin', 403, __('common.forbidden'));
+    }
+
+    /**
+     * يتحقق من فورم اليوزر ويحوّل `c:<id>` لرول أساسي + id الرول المخصص.
+     *
+     * ⚠️ الفاليديشن على نسخة متحوّلة (الرول = الأساسي) عشان `required_if:role,warehouse_keeper`
+     * يشتغل على الأساس — والـold() بيرجع الاختيار الأصلي `c:<id>` للفورم.
+     *
+     * @return array{0: array, 1: ?int, 2: bool} [data, custom_role_id, custom_chosen]
+     */
+    private function validatedUser(Request $request, ?User $user, array $extra = []): array
+    {
+        $byAdmin = $request->user()->role === 'admin';
+        $input = $request->all();
+        $custom = null;
+
+        if ($byAdmin && is_string($input['role'] ?? null) && ($c = \App\Models\Role::fromKey($input['role'])) && $c->active) {
+            $custom = $c;
+            $input['role'] = $c->base_role;
+        }
+
+        $data = \Illuminate\Support\Facades\Validator::make($input, $this->userRules($user, $custom, $byAdmin) + $extra)->validate();
+
+        return [$data, $custom?->id];
+    }
+
     public function storeUser(Request $request)
     {
-        $data = $request->validate($this->userRules() + [
+        [$data, $customId] = $this->validatedUser($request, null, [
             'password' => ['required', 'string', 'min:8', 'max:100'],
         ]);
 
         // الكاست `hashed` على الموديل بيشفّر الباسورد بنفسه
-        User::create($data
+        $new = User::create($data
             + $this->avatarData($request)
             + ['active' => $request->boolean('active', true)]);
+
+        // ⚠️ `custom_role_id` مش fillable (منع mass-assignment) — بيتحط صريح بعد الفاليديشن
+        if ($customId !== null) {
+            $new->custom_role_id = $customId;
+            $new->save();
+        }
 
         return back()->with('ok', __('team.user_added', ['name' => $data['name']]));
     }
 
     public function updateUser(Request $request, User $user)
     {
-        $data = $this->guardSelfEdit($request, $user,
-            $request->validate($this->userRules($user)));
+        $this->guardAdminTarget($request, $user);
+
+        [$data, $customId] = $this->validatedUser($request, $user);
+        $roleSent = $data['role'] ?? null;
+        $oldRole = $user->role;
+        $data = $this->guardSelfEdit($request, $user, $data);
 
         $user->update($data
             + $this->avatarData($request, $user)
             + ['active' => $request->boolean('active')]);
+
+        // الرول الأساسي المختار بيمسح المخصص؛ الأدمن مايغيّرش رول نفسه، وغير الأدمن
+        // اللي ماغيّرش الرول مايمسحش رول مخصص ماقدرش يختاره
+        $byAdmin = $request->user()->role === 'admin';
+        $self = $user->id === $request->user()->id;
+
+        if (! $self && ($byAdmin || $roleSent !== $oldRole)) {
+            $user->custom_role_id = $customId;
+            $user->save();
+        }
 
         return back()->with('ok', __('team.user_updated', ['name' => $user->displayName()]));
     }

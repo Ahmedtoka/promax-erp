@@ -300,6 +300,26 @@ class User extends Authenticatable
         return $role !== null && $role->active ? $role : null;
     }
 
+    /**
+     * يوزرات الويب (٩/١١): رول أساسي ويب ومن غير رول مخصص فعّال قافل الويب،
+     * أو رول مخصص فعّال `web_login=1` (حتى لو أساسه ميداني). الأدمن دايماً جوه.
+     */
+    public function scopeWebUsers(\Illuminate\Database\Eloquent\Builder $q): \Illuminate\Database\Eloquent\Builder
+    {
+        $table = $q->getModel()->getTable();
+        $custom = fn (bool $web) => Role::query()->select('id')->where('active', true)->where('web_login', $web);
+
+        return $q->where(function ($w) use ($table, $custom) {
+            $w->where($table.'.role', 'admin')
+                ->orWhere(function ($b) use ($table, $custom) {
+                    $b->whereIn($table.'.role', \App\Support\Access::WEB_ROLES)
+                        ->where(fn ($c) => $c->whereNull($table.'.custom_role_id')
+                            ->orWhereNotIn($table.'.custom_role_id', $custom(false)));
+                })
+                ->orWhereIn($table.'.custom_role_id', $custom(true));
+        });
+    }
+
     /** مفتاح الرول المخصص في المصفوفة (`c:<id>`) أو null */
     public function permRoleKey(): ?string
     {

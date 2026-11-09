@@ -106,7 +106,7 @@ class ActivityController extends Controller
         ];
 
         // يوزرات الويب اللي مافتحوش السيستم خالص النهارده
-        $silent = User::where('active', true)->whereIn('role', Access::WEB_ROLES)
+        $silent = User::where('active', true)->webUsers()
             ->whereNotIn('id', array_keys($rows))->orderBy('name')->get();
 
         if ($state = $request->string('state')->value()) {
@@ -157,7 +157,6 @@ class ActivityController extends Controller
             ->orderBy('name')->get();
 
         $rows = ActivityStats::rows($a, $b, $all->pluck('id')->all());
-        $webRoles = Access::WEB_ROLES;
 
         $list = [];
 
@@ -165,7 +164,7 @@ class ActivityController extends Controller
             $sum = ActivityStats::summarize($rows[$u->id] ?? []);
 
             // الميداني اللي مالوش ويب ومافيش له حركة مش «مافتحش» — ده طبيعي
-            if ($sum['total'] === 0 && ! in_array($u->role, $webRoles, true)) {
+            if ($sum['total'] === 0 && ! Access::isWebRole($u)) {
                 continue;
             }
 

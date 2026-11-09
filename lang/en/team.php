@@ -5,6 +5,8 @@ return [
     'team' => 'Team',
     'users_and_roles' => 'Users & Permissions',
     'role' => 'Role',
+    'custom_roles_group' => 'Custom roles',
+    'custom_roles_group' => 'Custom roles',
     'email' => 'Email',
     'zone' => 'Zone',
     'zones' => 'Zones',

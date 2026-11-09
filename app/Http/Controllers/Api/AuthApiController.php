@@ -26,6 +26,11 @@ class AuthApiController extends Controller
             return response()->json(['message' => __('api.bad_credentials')], 401);
         }
 
+        // الرول المخصص (٩/١١) — `app_login` مقفول = مفيش أبلكيشن مهما كان الأساس
+        if ($user->activeCustomRole()?->app_login === false) {
+            return response()->json(['message' => __('api.no_app_access')], 403);
+        }
+
         // الأدمن والمدير بيدخلوا الأبلكيشن كمان (شاشة متابعة وموافقات).
         // ⚠️ **أمين المخزن اتفتح له** (2026-08-09) — بقت له شاشة
         // تجهيز حقيقية على الموبايل. والمحاسب بيشوف إشعاراته
@@ -94,6 +99,8 @@ class AuthApiController extends Controller
             'code' => $u->code,
             'role' => $u->role,
             'role_label' => $u->roleLabel(),
+            // اسم الرول المخصص (أو null) — `role` فوق بيفضل الأساسي والأبلكيشن مايتغيرش
+            'custom_role' => $u->activeCustomRole()?->displayName(),
             'zone' => $u->zone?->displayName(),
             'zone_id' => $u->zone?->id,
             'channel' => $u->channel?->displayName(),

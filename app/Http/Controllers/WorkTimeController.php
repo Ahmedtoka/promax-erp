@@ -182,7 +182,7 @@ class WorkTimeController extends Controller
      */
     private function board(Carbon $a, Carbon $b, bool $detail = false): array
     {
-        $users = User::where('active', true)->whereIn('role', Access::WEB_ROLES)->orderBy('name')->get();
+        $users = User::where('active', true)->webUsers()->orderBy('name')->get();
         $ids = $users->pluck('id')->all();
         $minutes = WorkTime::minutes($a, $b, $ids);
         $actions = WorkTime::actions($a, $b, $ids);

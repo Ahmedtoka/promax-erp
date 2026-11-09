@@ -31,11 +31,11 @@ class PermissionController extends Controller
     {
         $roles = array_values(array_diff(Access::WEB_ROLES, ['admin']));
 
-        $users = User::whereIn('role', Access::WEB_ROLES)
+        $users = User::webUsers()
             ->where('role', '!=', 'admin')
             ->where('active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'role', 'code']);
+            ->get(['id', 'name', 'name_en', 'role', 'code', 'custom_role_id']);
 
         // ═══ تاب الرولز — ?role=manager ═══
         $role = $request->query('role');
@@ -159,7 +159,7 @@ class PermissionController extends Controller
     public function save(Request $request, User $user)
     {
         // ⚠️ استثناءات على أدمن ممنوعة — وعلى رولز الميدان مالهاش معنى ويب
-        abort_if($user->role === 'admin' || ! in_array($user->role, Access::WEB_ROLES, true), 403);
+        abort_if($user->role === 'admin' || ! Access::isWebRole($user), 403);
 
         $valid = $this->validKeys();
         $perms = (array) $request->input('perm', []);
