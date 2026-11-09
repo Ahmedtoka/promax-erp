@@ -248,6 +248,7 @@
 <div class="card">
     <h3>🤝 {{ __('settle.close_btn') }}
         <span class="side">{{ __('settle.due_total') }}: {{ $fmt($due_total) }}</span></h3>
+    @if (\App\Support\Access::action(auth()->user(), 'act.repclose.close'))
     <form method="POST" action="{{ route('erp.repclose.store', $rep) }}"
           onsubmit="return confirm(@js(__('settle.close_confirm')))">
         @csrf
@@ -294,6 +295,7 @@
             <button class="btn gold" type="submit" style="font-size:14px;padding:10px 22px">🤝 {{ __('settle.close_btn') }}</button>
         </div>
     </form>
+    @endif
 </div>
 
 {{-- ═══════════════════════════════════════════════════════════

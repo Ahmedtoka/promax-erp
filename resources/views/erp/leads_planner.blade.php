@@ -69,7 +69,7 @@
             @endforeach
         </div>
 
-        <form method="POST" action="{{ route('erp.leads.planner.save') }}" style="margin-top:12px"
+        <form method="POST" action="{{ route('erp.leads.planner.save') }}" style="margin-top:12px" @unless (\App\Support\Access::action(auth()->user(), 'act.leads.plan')) inert @endunless
               onsubmit="document.getElementById('lpDays').value = lpSerialize();">
             @csrf
             <input type="hidden" name="rep_id" value="{{ $repId }}">

@@ -120,7 +120,7 @@
                     @for ($m = 1; $m <= 12; $m++)
                         @php $locked = \App\Models\Target::monthLocked($year, $m); @endphp
                         <td class="num" style="{{ $curBg($m) }}">
-                            @if ($isAdmin && ! $locked && $m < 12)
+                            @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && ! $locked && $m < 12)
                                 <input type="number" step="0.01" min="0" dir="ltr"
                                        value="{{ $grid['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                        data-action="{{ route('erp.targets.annual.rebalance', $grid['node_id']) }}"
@@ -142,7 +142,7 @@
                             $mp = $pctOf($grid['achieved'][$m], $grid['targets'][$m]);
                         @endphp
                         <td class="num" style="{{ $curBg($m) }}">
-                            @if ($isAdmin && $locked)
+                            @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && $locked)
                                 <input type="number" step="0.01" min="0" dir="ltr" form="manualForm"
                                        name="manual[{{ $m }}]"
                                        value="{{ $grid['manuals'][$m] !== null ? $grid['manuals'][$m] + 0 : '' }}"
@@ -184,7 +184,7 @@
             </table>
         </div>
 
-        @if ($isAdmin && $hasLockedMonths)
+        @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && $hasLockedMonths)
             <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
                 <span style="font-size:11px;color:var(--muted)">✍️ {{ __('targets.manual_hint') }}</span>
                 <button class="btn" type="submit" form="manualForm" style="margin-inline-start:auto">💾 {{ __('targets.save_manual') }}</button>
@@ -193,7 +193,7 @@
     </div>
 
     {{-- فورمات الجريد — برّه الجدول عشان مفيش تداخل فورمات --}}
-    @if ($isAdmin)
+    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company'))
         <form id="rbForm" method="POST" action="{{ route('erp.targets.annual.rebalance', $grid['node_id']) }}">
             @csrf
             <input type="hidden" name="year" value="{{ $year }}">
@@ -212,7 +212,7 @@
 {{-- ═══ كارت توزيع المديرين — أدمن بس ═══ --}}
 {{-- الجدول data-plain: جواه أكورديون وجداول متداخلة، وأدوات الجداول --}}
 {{-- العامة (سورت/تجميع) هتلخبطه — الإجماليات مكتوبة سيرفر في tfoot. --}}
-@if ($managersCard !== null)
+@if ($managersCard !== null && \App\Support\Access::action($viewer, 'act.targets.annual_company'))
     @php
         $mgCols = $curMonth > 0 ? 8 : 7;
         $mgSumAmt = 0.0;
@@ -325,7 +325,7 @@
                                             @for ($m = 1; $m <= 12; $m++)
                                                 @php $locked = \App\Models\Target::monthLocked($year, $m); @endphp
                                                 <td class="num" style="{{ $curBg($m) }}">
-                                                    @if ($isAdmin && ! $locked && $m < 12)
+                                                    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && ! $locked && $m < 12)
                                                         <input type="number" step="0.01" min="0" dir="ltr"
                                                                value="{{ $row['targets'][$m] + 0 }}" data-month="{{ $m }}"
                                                                data-action="{{ route('erp.targets.annual.rebalance', $row['node_id']) }}"
@@ -346,7 +346,7 @@
                                                     $mp = $pctOf($row['achieved_months'][$m], $row['targets'][$m]);
                                                 @endphp
                                                 <td class="num" style="{{ $curBg($m) }}">
-                                                    @if ($isAdmin && $locked)
+                                                    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && $locked)
                                                         <input type="number" step="0.01" min="0" dir="ltr"
                                                                form="mgrManual{{ $row['node_id'] }}"
                                                                name="manual[{{ $m }}]"
@@ -374,7 +374,7 @@
                                             <td class="num {{ $achClass($accPct) }}" style="border-inline-start:2px solid var(--border)"><b>{{ $accPct }}%</b></td>
                                         </tr>
                                     </table>
-                                    @if ($isAdmin && $hasLockedMonths)
+                                    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && $hasLockedMonths)
                                         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
                                             <span style="font-size:11px;color:var(--muted)">✍️ {{ __('targets.manual_hint') }}</span>
                                             <button class="btn sm" type="submit" form="mgrManual{{ $row['node_id'] }}"
@@ -414,7 +414,7 @@
     </div>
 
     {{-- فورمات اليدوي بتاعة المديرين — برّه فورم التوزيع (ممنوع تداخل فورمات) --}}
-    @if ($isAdmin && $hasLockedMonths)
+    @if (\App\Support\Access::action($viewer, 'act.targets.annual_company') && $hasLockedMonths)
         @foreach ($managersCard['rows'] as $row)
             @if ($row['node_id'] !== null)
                 <form id="mgrManual{{ $row['node_id'] }}" method="POST"
@@ -448,7 +448,7 @@
         <h3>👥 {{ __('targets.reps_title', ['name' => $b['manager']->displayName()]) }}
             <span class="side num">{{ $fmt($b['achieved']) }} / {{ $fmt($b['annual']) }}</span></h3>
 
-        <form method="POST" action="{{ route('erp.targets.annual.reps', $b['node_id']) }}" data-split>
+        <form method="POST" action="{{ route('erp.targets.annual.reps', $b['node_id']) }}" data-split @unless (\App\Support\Access::action(auth()->user(), 'act.targets.annual')) inert @endunless>
             @csrf
             <input type="hidden" name="year" value="{{ $year }}">
             <div class="tablewrap">

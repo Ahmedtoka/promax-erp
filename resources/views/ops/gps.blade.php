@@ -16,12 +16,12 @@
 @section('content')
 
 @php
-    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.field.gps');
+    $canGps = \App\Support\Access::action(auth()->user(), 'act.field.gps');
     $fresh = fn ($d) => $d->gps_time && $d->gps_time->gt(now()->subMinutes(15));
 @endphp
 
 {{-- ═══ كارت الحساب — أدمن بس ═══ --}}
-@if ($isAdmin)
+@if ($canGps)
 <div class="card" style="margin-bottom:14px">
     <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
         <form method="POST" action="{{ route('ops.gps.credentials') }}"
@@ -67,7 +67,7 @@
     @if ($devices->isEmpty())
         <div class="empty">{{ __('gps.empty') }}</div>
     @else
-    <form method="POST" action="{{ route('ops.gps.save') }}">
+    <form method="POST" action="{{ route('ops.gps.save') }}" @unless ($canGps) inert @endunless>
         @csrf
         {{-- الجدول بياخد ستايل اللياوت العام — مفيش كلاس (زي invoices) --}}
         <table>
@@ -91,9 +91,9 @@
                         @if ($d->name)<div style="font-size:10px;color:var(--muted)">{{ $d->name }}</div>@endif
                     </td>
                     <td><input name="d[{{ $d->id }}][plate]" value="{{ $d->plate }}"
-                               style="width:110px" @disabled(! $isAdmin)></td>
+                               style="width:110px" @disabled(! $canGps)></td>
                     <td>
-                        <select name="d[{{ $d->id }}][user_id]" @disabled(! $isAdmin)>
+                        <select name="d[{{ $d->id }}][user_id]" @disabled(! $canGps)>
                             <option value="">—</option>
                             @foreach ($field as $f)
                                 <option value="{{ $f->id }}" @selected($d->user_id === $f->id)>
@@ -118,13 +118,13 @@
                     <td dir="ltr">{{ $d->battery !== null && $d->battery >= 0 ? $d->battery.'%' : '—' }}</td>
                     {{-- التشيك بوكس مع رفيق مخفي بـ0 — عشان الفورم يبعت القيمة دايماً --}}
                     <td><input type="checkbox" name="d[{{ $d->id }}][active]" value="1"
-                               @checked($d->active) @disabled(! $isAdmin)></td>
+                               @checked($d->active) @disabled(! $canGps)></td>
                 </tr>
             @endforeach
             </tbody>
         </table>
 
-        @if ($isAdmin)
+        @if ($canGps)
             <div style="margin-top:12px">
                 <button class="btn gold" type="submit">💾 {{ __('gps.save_links') }}</button>
             </div>

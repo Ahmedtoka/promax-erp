@@ -262,8 +262,7 @@ class JourneyController extends Controller
     {
         $viewer = $request->user();
 
-        abort_unless($viewer !== null
-            && ($viewer->isAdmin() || $viewer->role === 'manager'), 403);
+        abort_unless(\App\Support\Access::action($viewer, 'act.field.wipe'), 403);
 
         $deleted = 0;
 

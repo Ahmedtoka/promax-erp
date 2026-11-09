@@ -325,9 +325,11 @@
          الإيقاف بالظبط: فورم جوه فورم غلط HTML، فكل خانات الصف
          مربوطة بفورمها بخاصية `form`. --}}
     @foreach ($clients as $c)
+        @if (\App\Support\Access::action(auth()->user(), 'act.clients.geo'))
         <form id="geo-{{ $c->id }}" method="POST" action="{{ route('erp.clients.geo', $c) }}">
             @csrf
         </form>
+        @endif
     @endforeach
 
     @include('partials._pagination', ['p' => $clients])

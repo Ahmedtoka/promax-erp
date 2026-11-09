@@ -22,7 +22,7 @@
     </div>
 @endif
 
-<form method="POST" action="{{ route('erp.app_version.save') }}" enctype="multipart/form-data">
+<form method="POST" action="{{ route('erp.app_version.save') }}" enctype="multipart/form-data" @unless (\App\Support\Access::action(auth()->user(), 'act.app_version.manage')) inert @endunless>
     @csrf
 
     <div class="card">

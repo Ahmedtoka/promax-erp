@@ -157,8 +157,10 @@
 <div class="card">
     <h3>🌳 {{ __('coa.tree_title') }}
         <span class="side">
+            @if (\App\Support\Access::action(auth()->user(), 'act.gl.coa_draft'))
             <button class="btn sm gold" type="button" onclick="coaAdd(null, '')">＋ {{ __('coa.add_root') }}</button>
             <button class="btn sm" type="button" onclick="openDlg('dlgCoaImport')">📥 {{ __('coa.import_btn') }}</button>
+            @endif
         </span></h3>
 
     @if (! count($flat))
@@ -223,6 +225,7 @@
                         @else — @endif
                     </td>
                     <td style="white-space:nowrap">
+                        @if (\App\Support\Access::action(auth()->user(), 'act.gl.coa_draft'))
                         <form method="POST" action="{{ route('gl.coa.move', $a) }}" style="display:inline">@csrf
                             <button class="btn sm" name="dir" value="up" title="{{ __('coa.move_up') }}">▲</button>
                             <button class="btn sm" name="dir" value="down" title="{{ __('coa.move_down') }}">▼</button>
@@ -235,6 +238,7 @@
                               onsubmit="return confirm(@js(__('coa.confirm_delete')))">@csrf @method('DELETE')
                             <button class="btn sm red" title="{{ __('common.delete') }}">🗑</button>
                         </form>
+                        @endif
                     </td>
                 </tr>
             @endforeach
@@ -246,6 +250,7 @@
 </div>
 
 {{-- ═══ رفع الملف ═══ --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.gl.coa_draft'))
 <dialog id="dlgCoaImport">
     <form class="dlg" method="POST" action="{{ route('gl.coa.import') }}" enctype="multipart/form-data">
         @csrf
@@ -263,8 +268,10 @@
         </div>
     </form>
 </dialog>
+@endif
 
 {{-- ═══ حساب جديد ═══ --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.gl.coa_draft'))
 <dialog id="dlgCoaAdd">
     <form class="dlg" method="POST" action="{{ route('gl.coa.store') }}">
         @csrf
@@ -281,6 +288,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 {{-- ═══ نقل تحت حساب تاني + ربط مبيعات السيستم ═══ --}}
 @if ($ready && count($flat))

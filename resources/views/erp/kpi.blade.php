@@ -207,7 +207,7 @@
 {{-- ═══ المدخلات اليدوية الشهرية ═══ --}}
 <div class="card">
     <h3>✍️ {{ __('kpi.inputs_title') }} <span class="side">{{ __('kpi.inputs_sub') }}</span></h3>
-    <form method="POST" action="{{ route('erp.kpi.inputs') }}">
+    <form method="POST" action="{{ route('erp.kpi.inputs') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.kpi.inputs')) inert @endunless>
         @csrf
         <input type="hidden" name="period" value="{{ $period }}">
         <div class="tablewrap">

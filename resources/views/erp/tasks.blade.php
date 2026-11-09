@@ -20,8 +20,10 @@
 @section('title', __('tasks.title'))
 
 @section('actions')
+    @if (\App\Support\Access::action(auth()->user(), 'act.tasks.create'))
     <button class="btn gold" type="button" onclick="document.getElementById('dlgAddTask').showModal()">
         ➕ {{ __('tasks.add') }}</button>
+    @endif
 @endsection
 
 @section('content')
@@ -194,6 +196,7 @@
 @endif
 
 {{-- ═══ ديالوج إضافة مهمة — العرض على الفورم (فخ dialog>form الموثق) ═══ --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.tasks.create'))
 <dialog id="dlgAddTask" class="tk-dlg">
     <form method="POST" action="{{ route('erp.tasks.store') }}" enctype="multipart/form-data">
         @csrf
@@ -255,6 +258,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 @endsection
 

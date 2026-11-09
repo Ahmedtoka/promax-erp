@@ -5,7 +5,9 @@
 @section('actions')
     <a class="btn" href="{{ route('erp.reports.hub') }}">← {{ __('rpt.hub_title') }}</a>
     <a class="btn" href="{{ route('erp.reports.quotations', array_filter(request()->only(['q', 'creator_id'])) + $range->query() + ['export' => 1]) }}">⬇️ {{ __('common.export_screen') }}</a>
+    @if (\App\Support\Access::action(auth()->user(), 'act.quotations.save'))
     <a class="btn gold" href="{{ route('erp.reports.quotation') }}">➕ {{ __('rpt.qts_new') }}</a>
+    @endif
 @endsection
 
 @section('content')
@@ -90,7 +92,9 @@
                     </td>
                     <td class="act">
                         <a class="btn sm" href="{{ route('erp.reports.quotations.show', $qt) }}">🖨️ {{ __('rpt.qts_open') }}</a>
+                        @if (\App\Support\Access::action(auth()->user(), 'act.quotations.save'))
                         <a class="btn sm" href="{{ route('erp.reports.quotations.edit', $qt) }}">✏️ {{ __('rpt.qt_edit') }}</a>
+                        @endif
                     </td>
                 </tr>
             @empty

@@ -22,7 +22,7 @@
     $isChains = $mode === 'chains';
     $fmt0 = fn ($n) => number_format((float) $n);
     $fmt2 = fn ($n) => number_format((float) $n, 2);
-    $saveUrl = route('erp.audit.save', $isChains ? 'chains' : 'clients');
+    $canAudit = \App\Support\Access::action(auth()->user(), 'act.audit.review'); $saveUrl = route('erp.audit.save', $isChains ? 'chains' : 'clients');
 
     // مربع سامري: رقم فوق + عنوان + **وصف بيقول السؤال اللي بيجاوبه**
     // كل مربع بيفلتر الجدول تحت بحالته (٢٢/٩) — `$key` هو قيمة `show`
@@ -102,7 +102,7 @@
     @endforeach
 </div>
 
-<form method="POST" action="{{ $saveUrl }}" enctype="multipart/form-data" id="auditForm">
+<form method="POST" action="{{ $saveUrl }}" enctype="multipart/form-data" id="auditForm" @unless ($canAudit) inert @endunless>
     @csrf
 
     <div class="card" style="padding:0;overflow:auto">
@@ -191,10 +191,12 @@
                         @if ($a?->statement_path)
                             <a href="{{ $a->statementUrl() }}" target="_blank" rel="noopener"
                                style="font-size:11px;font-weight:700">📎 {{ Str::limit($a->statement_name, 20) }}</a>
+                            @if ($canAudit)
                             <button class="btn sm" type="submit" formnovalidate
                                     formaction="{{ route('erp.audit.statement.delete', $a) }}"
                                     onclick="return confirm(@js(__('audit.remove_confirm')))"
                                     style="margin-inline-start:4px">🗑</button>
+                            @endif
                         @else
                             <input type="file" name="files[{{ $r['id'] }}]" @disabled($lockAfterAcc)
                                    accept=".xlsx,.xls,.csv,.pdf,image/*" style="width:100%;font-size:11px">
@@ -226,12 +228,14 @@
 
                     {{-- تأكيد مدير القناة من عند العميل --}}
                     <td>
+                        @if ($canAudit)
                         <button class="btn sm {{ $a?->confirmed_at ? 'gold' : '' }}" type="submit" formnovalidate
                                 @disabled($a === null)
                                 formaction="{{ $a ? route('erp.audit.confirm', $a) : '#' }}"
                                 title="{{ $a?->confirmed_at ? $a->confirmed_at->format('Y-m-d') : __('audit.confirm_hint') }}">
                             {{ $a?->confirmed_at ? '✅' : '☐' }}
                         </button>
+                        @endif
                     </td>
 
                     <td><button class="btn sm" type="submit" name="only" value="{{ $r['id'] }}">💾</button></td>

@@ -70,7 +70,7 @@
         @endif
     </div>
 
-    <form method="POST" action="{{ route('online.products.save') }}">
+    <form method="POST" action="{{ route('online.products.save') }}" @unless ($canAct) inert @endunless>
         @csrf
         <div class="tablewrap">
             {{-- جدول ربط (سيلكت وخانة لكل صف) — إكسيل الجدول بيقرا النص بس فكان هيطلّع الربط فاضي (٢٢/٩) --}}

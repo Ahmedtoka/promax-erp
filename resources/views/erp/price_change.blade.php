@@ -93,7 +93,7 @@
 @if ($run->isDraft())
     {{-- نطاق الفرع + تاريخ «من» — بيعيدوا المعاينة --}}
     <div class="card">
-        <form method="POST" action="{{ route('erp.prices.change.refresh', $run) }}" class="searchbar" style="flex-wrap:wrap">
+        <form method="POST" action="{{ route('erp.prices.change.refresh', $run) }}" class="searchbar" style="flex-wrap:wrap" @unless (\App\Support\Access::action(auth()->user(), 'act.prices.change')) inert @endunless>
             @csrf
             @if ($showBranchAsk)
                 <div class="alert warn" style="width:100%;margin:0 0 8px">
@@ -205,16 +205,20 @@
                     <button class="btn green" type="submit">{{ __('reprice.btn_apply') }}</button>
                 </form>
             @endif
+            @if (\App\Support\Access::action(auth()->user(), 'act.prices.change'))
             <form method="POST" action="{{ route('erp.prices.change.master', $run) }}"
                   onsubmit="return confirm(@js($cfMaster))">
                 @csrf
                 <button class="btn gold" type="submit">{{ __('reprice.btn_master') }}</button>
             </form>
+            @endif
+            @if (\App\Support\Access::action(auth()->user(), 'act.prices.change'))
             <form method="POST" action="{{ route('erp.prices.change.cancel', $run) }}"
                   onsubmit="return confirm(@js($cfCancel))">
                 @csrf
                 <button class="btn red" type="submit">{{ __('reprice.btn_cancel') }}</button>
             </form>
+            @endif
         </div>
     </div>
 @endif

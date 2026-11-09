@@ -82,6 +82,8 @@
         <button type="button" class="btn" onclick="openDlg('dlgReassignPo')">
             🔁 {{ __('ops.po_reassign') }}
         </button>
+    @endif
+    @if (! in_array($po->status, ['delivered', 'cancelled'], true) && \App\Support\Access::action(auth()->user(), 'act.ka.reprice'))
         {{-- إعادة التسعير (٢٤/٨) — نفس أداة الفاتورة: قايمة العميل
              الحالية + خصمه الساري، والمعتمد بيرجع للحسابات --}}
         <form method="POST" action="{{ route('ops.pos.reprice', $po) }}" style="display:inline"

@@ -451,7 +451,7 @@ class TargetPlanController extends Controller
 
         // عقدة الشركة والمدير أدمن بس — والمندوب/العميل لصاحب الشجرة
         if (in_array($target->kind, [Target::KIND_COMPANY, Target::KIND_MANAGER], true)) {
-            abort_unless($actor->isAdmin(), 403, __('targets.not_your_subtree'));
+            abort_unless(\App\Support\Access::action($actor, 'act.targets.annual_company'), 403, __('targets.not_your_subtree'));
         } else {
             $this->assertSubtree($actor, $target);
         }

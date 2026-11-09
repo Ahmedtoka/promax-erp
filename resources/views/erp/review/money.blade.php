@@ -91,12 +91,14 @@
                     @endforeach
                     <td style="min-width:190px">
                         @if ($r['type'] === 'group')
+                            @if (\App\Support\Access::action(auth()->user(), 'act.review.mark'))
                             <form method="POST" action="{{ route('erp.review.opening', $e) }}" style="display:flex;gap:4px;flex-wrap:wrap">
                                 @csrf
                                 <input type="number" step="0.01" name="amount" value="{{ $e->opening_balance }}" placeholder="{{ __('review.opening_chain') }}" style="width:120px;padding:6px 8px">
                                 <input type="date" name="as_of" value="{{ $e->opening_as_of?->toDateString() ?? \App\Models\ReviewCheck::FIRST_MONTH.'-01' }}" style="width:130px;padding:6px 8px">
                                 <button class="btn sm gold" type="submit">{{ __('review.save') }}</button>
                             </form>
+                            @endif
                         @else
                             <a class="btn sm rv-edit" href="{{ route('erp.clients.show', $e) }}" target="_blank" rel="noopener">{{ __('review.opening_client') }}</a>
                         @endif

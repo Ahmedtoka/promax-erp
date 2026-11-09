@@ -208,5 +208,6 @@ return [
     'act_hr_fingerprint' => 'Manage fingerprint devices',
     'act_app_version_manage' => 'Upload an app version',
     'act_wh_fix_qty' => 'Fix a batch quantity after receiving',
+    'act_field_wipe' => 'Wipe all journey plans',
     'act_handover_mark' => 'Handover screen marks',
 ];

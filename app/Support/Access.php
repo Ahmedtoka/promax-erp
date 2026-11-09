@@ -914,7 +914,9 @@ class Access
         // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync', 'ops.journeys.wipe']],
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
+        // مسح خطوط السير كلها (فريقه بس لغير الأدمن) — مفتاح لوحده لأنه هدّام
+        'act.field.wipe' => ['perm.act_field_wipe', 'ops.journeys', null, ['ops.journeys.wipe']],
         'act.field.decide' => ['perm.act_field_decide', 'ops.requests', ['manager'], ['ops.requests.decide', 'ops.replenishments.assign', 'ops.replenishments.cancel', 'ops.replenishments.update', 'ops.rep.close', 'ops.requests.revise']],
 
         // ═══ الموردين والمشتريات ═══
@@ -1043,7 +1045,7 @@ class Access
         'act.custody.clear' => ['perm.act_custody_clear', 'ops.vans', [], ['ops.rep.clear']],
         // تصحيح كمية باتش بعد الاستلام — أدمن بس (`role:admin` فوق بوابة المخزن)
         'act.wh.fix_qty' => ['perm.act_wh_fix_qty', 'wh.receipts', [], ['wh.batch.fixqty']],
-        'act.ka.reprice' => ['perm.act_ka_reprice', 'ops.pos', ['manager'], ['ops.pos.reprice', 'ops.pos.reprice.bulk']],
+        'act.ka.reprice' => ['perm.act_ka_reprice', 'ops.pos', ['manager'], ['ops.pos.reprice', 'ops.pos.reprice.check', 'ops.pos.reprice.bulk']],
         // الفلوس
         'act.invoices.edit' => ['perm.act_invoices_edit', 'ops.invoices', [], ['ops.invoices.renumber', 'ops.invoices.items', 'ops.invoices.paper', 'ops.invoices.payment', 'ops.invoices.reassign', 'ops.invoices.redate', 'ops.invoices.reprice']],
         'act.invoices.delete' => ['perm.act_invoices_delete', 'ops.invoices', [], ['ops.invoices.destroy']],
@@ -1521,7 +1523,7 @@ class Access
 
             foreach (self::ACTIONS as $def) {
                 foreach ($def[3] as $route) {
-                    $covered[$route] = true;
+                    $covered[] = $route;
                 }
             }
 
@@ -1530,9 +1532,15 @@ class Access
             foreach (\Illuminate\Support\Facades\Route::getRoutes() as $route) {
                 $name = $route->getName();
 
-                if ($name === null || ! in_array('GET', $route->methods(), true)
-                    || isset($covered[$name]) || self::isLocked($name)) {
+                if ($name === null || ! in_array('GET', $route->methods(), true) || self::isLocked($name)) {
                     continue;
+                }
+
+                // ⚠️ نفس مطابقة البادئة اللي `resolveMap` بيغطي بيها وقت التشغيل
+                foreach ($covered as $c) {
+                    if (self::matches($name, $c)) {
+                        continue 2;
+                    }
                 }
 
                 $owner = null;
@@ -1551,6 +1559,7 @@ class Access
             foreach ($map as &$list) {
                 sort($list);
             }
+            unset($list);
 
             self::$screenCache = $map;
         }

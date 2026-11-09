@@ -42,6 +42,7 @@
                 <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()"></label>
         </form>
         @if (! $close)
+            @if (\App\Support\Access::action(auth()->user(), 'act.dayclose.close'))
             <form method="POST" action="{{ route('erp.dayclose.store') }}" style="margin-inline-start:auto;display:flex;gap:8px;align-items:center"
                   onsubmit="return confirm(@js(__('incent.close_day_confirm')))">
                 @csrf
@@ -49,6 +50,7 @@
                 <input type="text" name="notes" maxlength="1000" placeholder="{{ __('settle.note') }}" style="min-width:240px">
                 <button class="btn gold" type="submit">🔒 {{ __('incent.close_day') }}</button>
             </form>
+            @endif
         @endif
     </div>
 

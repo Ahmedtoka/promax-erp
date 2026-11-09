@@ -65,7 +65,7 @@
                 <td><span class="badge {{ $badge[$p->status] ?? 'b-gray' }}">{{ $p->statusLabel() }}</span></td>
                 <td>{{ $p->decider?->name ?? '—' }}</td>
                 <td data-noprint style="white-space:nowrap">
-                    @if ($canDecide)
+                    @if ($canDecide && \App\Support\Access::action(auth()->user(), 'act.hr.leave_decide'))
                         @foreach (['approved' => 'perm_approve', 'rejected' => 'perm_reject'] as $dec => $lbl)
                             <form method="POST" action="{{ route('hr.permissions.decide', $p) }}" style="display:inline">
                                 @csrf<input type="hidden" name="decision" value="{{ $dec }}">
@@ -73,7 +73,7 @@
                             </form>
                         @endforeach
                     @endif
-                    @if ($canCancel)
+                    @if ($canCancel && \App\Support\Access::action(auth()->user(), 'act.hr.leave_decide'))
                         <form method="POST" action="{{ route('hr.permissions.decide', $p) }}" style="display:inline">
                             @csrf<input type="hidden" name="decision" value="cancelled">
                             <button class="btn sm" type="submit">{{ __('fp.perm_cancel') }}</button>

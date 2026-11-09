@@ -397,7 +397,7 @@
 {{-- ═══ مودال «تعديل البنود» (٢٢ أغسطس ٢٠٢٦) — أدمن بس ═══
      كمية/حذف/إضافة — البضاعة بترجع أو بتتخصم من عهدة المندوب
      والقيود بتتظبط. الداتا من editItemsPayload (عهدة مفتوحة بس). --}}
-@if (($editItemsAdd ?? null) !== null)
+@if (($editItemsAdd ?? null) !== null && \App\Support\Access::action(auth()->user(), 'act.invoices.edit'))
 <dialog id="dlgEditItems">
     <form class="dlg" method="POST" action="{{ route('ops.invoices.items', $inv) }}"
           style="max-width:560px" id="eiForm"

@@ -56,7 +56,7 @@
 
 {{-- ═══ بار التطبيق: مندوب + يوم + المحدد + Apply ═══ --}}
 <div class="card" style="margin-bottom:12px">
-    <form method="POST" action="{{ route('erp.leads.route.save') }}" id="rtForm"
+    <form method="POST" action="{{ route('erp.leads.route.save') }}" id="rtForm" @unless (\App\Support\Access::action(auth()->user(), 'act.leads.plan')) inert @endunless
           style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;
                  background:var(--blue-050,#E8F1FF);border:1px solid var(--royal-blue,#12399B);
                  border-radius:12px;padding:12px 14px;margin:0"

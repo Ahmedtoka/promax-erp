@@ -92,6 +92,7 @@
 </div>
 
 {{-- ═══ مودال مندوب أونلاين جديد ═══ --}}
+@if ($canAct)
 <dialog id="dlgCourier">
     <form class="dlg" method="POST" action="{{ route('online.couriers.store') }}">
         @csrf
@@ -107,6 +108,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 @endsection
 

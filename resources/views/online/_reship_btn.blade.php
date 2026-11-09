@@ -5,7 +5,7 @@
     ⚠️ بيسأل (٧/١٠): يتجهز من جديد، ولا الطرد في إيدي وجاهز للشحن على طول
     (البضاعة بتتخصم دلوقتي لأن المرتجع كان رجّعها الرف).
 --}}
-@if ($o->status === 'returned' && in_array(auth()->user()->role, ['admin', 'manager'], true))
+@if ($o->status === 'returned' && \App\Support\Access::action(auth()->user(), 'act.online.orders'))
     <details class="reship-pick" style="display:inline-block;position:relative">
         <summary class="btn sm gold" style="list-style:none;cursor:pointer">🔁 {{ __('online.act_reship') }}</summary>
         <form method="POST" action="{{ route('online.reship', $o) }}"

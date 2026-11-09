@@ -70,12 +70,14 @@
         @endif
 
         {{-- ═══ إصلاح التغطية بأثر رجعي — للتسكينات القديمة ═══ --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.managers.assign'))
         <form method="POST" action="{{ route('erp.managers.clients.repair') }}"
               style="margin-top:10px" onsubmit="return confirm(@js(__('perm.cov_confirm')))">
             @csrf
             <button class="btn gold" type="submit">🔧 {{ __('perm.cov_btn') }}</button>
             <span class="s" style="margin-inline-start:8px;color:var(--muted)">{{ __('perm.cov_hint') }}</span>
         </form>
+        @endif
     </div>
 @endif
 
@@ -156,11 +158,13 @@
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $c->code }}</div></td>
                             <td>{{ $c->channel?->displayName() ?? '—' }}</td>
                             <td>
+                                @if (\App\Support\Access::action(auth()->user(), 'act.managers.assign'))
                                 <form method="POST" action="{{ route('erp.managers.unassign', $c) }}"
                                       onsubmit="return confirm(@json(__('perm.unassign_confirm')))">
                                     @csrf @method('DELETE')
                                     <button class="btn sm red" type="submit">✕</button>
                                 </form>
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -191,7 +195,7 @@
             <button class="btn" type="submit">{{ __('common.search') }}</button>
         </form>
 
-        <form method="POST" action="{{ route('erp.managers.assign') }}">
+        <form method="POST" action="{{ route('erp.managers.assign') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.managers.assign')) inert @endunless>
             @csrf
             <input type="hidden" name="manager_id" value="{{ $manager->id }}">
             <div class="tablewrap" style="max-height:56vh;overflow-y:auto">
@@ -249,11 +253,13 @@
                                 <div style="font-size:10.5px;color:var(--muted)">{{ $u2->code }}</div></td>
                             <td><span class="badge b-purple">{{ $u2->roleLabel() }}</span></td>
                             <td>
+                                @if (\App\Support\Access::action(auth()->user(), 'act.managers.assign'))
                                 <form method="POST" action="{{ route('erp.managers.team.unassign', $u2) }}"
                                       onsubmit="return confirm(@json(__('perm.team_unassign_confirm')))">
                                     @csrf @method('DELETE')
                                     <button class="btn sm red" type="submit">✕</button>
                                 </form>
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -268,7 +274,7 @@
     <div class="card">
         <h3>📥 {{ __('perm.unassigned_team') }}
             <span class="side">{{ __('perm.team_pool_hint') }}</span></h3>
-        <form method="POST" action="{{ route('erp.managers.team.assign') }}">
+        <form method="POST" action="{{ route('erp.managers.team.assign') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.managers.assign')) inert @endunless>
             @csrf
             <input type="hidden" name="manager_id" value="{{ $manager->id }}">
             <div class="tablewrap" style="max-height:48vh;overflow-y:auto">

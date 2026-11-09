@@ -169,11 +169,13 @@
                                title="{{ __('stock.van_transfer') }}">🔄</a>
                         @endif
                         @if ($r['state'] === 'open')
+                            @if (\App\Support\Access::action(auth()->user(), 'act.field.decide'))
                             <form method="POST" action="{{ route('ops.rep.close', $u) }}" style="display:inline"
                                   onsubmit="return confirm(@js(__('field.vans_close_confirm', ['name' => $u->displayName()])))">
                                 @csrf
                                 <button class="btn sm red" type="submit">🔒 {{ __('field.vans_close') }}</button>
                             </form>
+                            @endif
                         @endif
                     </td>
                 </tr>

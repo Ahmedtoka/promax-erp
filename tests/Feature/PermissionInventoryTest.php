@@ -117,7 +117,7 @@ class PermissionInventoryTest extends TestCase
                 $route = $routes->getByName($screen);
 
                 if ($route === null || ! in_array('GET', $route->methods(), true)
-                    || Access::isLocked($screen) || $this->covered($screen)) {
+                    || Access::isLocked($screen) || $this->coveredByPrefix($screen)) {
                     $bad[] = "$page → $screen";
                 }
             }
@@ -180,6 +180,207 @@ class PermissionInventoryTest extends TestCase
         $this->assertSame([], $missing);
     }
 
+    /**
+     * فحص ساكن للبليدات: أي `route('<راوت مغطّي بأكشن>')` لازم يبقى جوه `@if`
+     * فيه `Access::action`/`Access::allows` (أو متغيّر في نفس الملف متاخد منهم).
+     * من غيرها منع الأكشن بيرمي 403 والزرار لسه باين — والمنح مابيبيّنوش.
+     */
+    public function test_buttons_of_covered_routes_are_guarded_in_blades(): void
+    {
+        $keyOf = [];
+
+        foreach (Access::ACTIONS as $key => [, , , $routes]) {
+            if (in_array($key, self::LEGACY_UNAUDITED_KEYS, true)) {
+                continue;
+            }
+            foreach ($routes as $route) {
+                $keyOf[$route] = $key;
+            }
+        }
+
+        $root = resource_path('views').DIRECTORY_SEPARATOR;
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root));
+        $bad = [];
+
+        foreach ($files as $file) {
+            if (! str_ends_with((string) $file, '.blade.php')) {
+                continue;
+            }
+
+            $rel = str_replace('\\', '/', substr((string) $file, strlen($root)));
+            $src = str_replace("\r\n", "\n", (string) file_get_contents((string) $file));
+            $lines = explode("\n", $src);
+            preg_match_all('/(\$\w+)\s*=[^;]*Access::(?:action|allows)/', $src, $m);
+            $guardVars = array_unique($m[1]);
+
+            foreach ($lines as $i => $line) {
+                if (! preg_match_all('/route\(\s*[\'"]([a-z0-9_.]+)[\'"]/', $line, $mm)) {
+                    continue;
+                }
+
+                foreach ($mm[1] as $route) {
+                    if (! isset($keyOf[$route]) || isset(self::GUARD_ALLOW["$rel|$route"]) || isset(self::GUARD_ALLOW["$rel|*"])) {
+                        continue;
+                    }
+
+                    // الحارس على نفس السطر (`@unless (...) inert @endunless`) أو في `@if` فوقه
+                    if (! $this->guarded([$line, ...$this->enclosingConditions($lines, $i)], $guardVars)) {
+                        $bad[] = "$rel:".($i + 1)." $route ({$keyOf[$route]})";
+                    }
+                }
+            }
+        }
+
+        $this->assertSame([], $bad, "زراير راوتها مغطّي بأكشن ومش محروسة:\n  ".implode("\n  ", $bad));
+    }
+
+    /** إعفاءات الفحص الساكن: «الملف|الراوت» ⇒ السبب (لينك JS زرّاره محروس في مكان تاني...) */
+    private const GUARD_ALLOW = [
+        // الصفحة نفسها راوت مغطّي بنفس الأكشن — مابتتفتحش من غيره
+        'erp/client_form.blade.php|*' => 'erp.clients.new/edit/clone are covered by act.clients.create/edit; zone/chain quick-add and the dupe check are JS helpers of that form',
+        'erp/quotation_form.blade.php|*' => 'erp.reports.quotation / quotations.edit are covered by act.quotations.save',
+        'erp/kpi_setup.blade.php|*' => 'erp.kpi.setup is covered by act.kpi.setup',
+        'ops/return_new.blade.php|*' => 'ops.returns.new is covered by act.returns.create',
+        'ops/po_reprice_check.blade.php|*' => 'ops.pos.reprice.check is covered by act.ka.reprice',
+        // URL في الجافاسكربت — العنصر اللي بيستخدمه محروس في نفس الملف
+        'erp/app_version.blade.php|erp.app_version.chunk' => 'JS upload URL used only by the upload form, which is inert without the key',
+        'erp/client_locations.blade.php|erp.client_locations.confirm' => 'JS URL; the confirm controls are guarded with Access::allows(erp.client_locations.confirm)',
+        'erp/review/_tabs.blade.php|erp.review.mark' => 'JS fetch URL; the ✓/✗ buttons in review/_mark are guarded with act.review.mark',
+        'erp/zones.blade.php|erp.zones.store' => 'JS URL; the zone dialog and its openers are guarded with act.org.manage',
+        'erp/zones.blade.php|erp.zones.update' => 'JS URL; the zone dialog and its openers are guarded with act.org.manage',
+        'gl/coa.blade.php|gl.coa.update' => 'JS inline-edit URL; the server enforces act.gl.coa_draft (row actions and dialogs are guarded)',
+        'gl/coa.blade.php|gl.coa.move' => 'JS move-under URL; the move form and buttons are guarded with act.gl.coa_draft',
+        'ops/geo_planner.blade.php|ops.geo.plan' => 'JS config of the planner map; the server enforces act.field.plan',
+        'ops/geo_planner.blade.php|ops.geo.unplan' => 'JS config of the planner map; the server enforces act.field.plan',
+        'ops/geo_planner.blade.php|ops.geo.distribute' => 'JS config of the planner map; the server enforces act.field.plan',
+        'ops/geo_planner.blade.php|ops.geo.assign' => 'JS config of the planner map; the server enforces act.field.plan',
+    ];
+
+    /** مفاتيح قبل جرد ٩/١١ لسه زرايرها ماتراجعتش — الفحص بيتخطاها لحد ما تتراجع */
+    private const LEGACY_UNAUDITED_KEYS = [
+        'act.clients.activate',
+        'act.clients.collect',
+        'act.clients.edit',
+        'act.contracts.manage',
+        'act.custody.handout',
+        'act.gl.admin',
+        'act.gl.post',
+        'act.handover.meta',
+        'act.hr.advances',
+        'act.hr.employees',
+        'act.hr.leave_balances',
+        'act.hr.payroll',
+        'act.hr.payroll_approve',
+        'act.hr.payroll_pay',
+        'act.hr.settings',
+        'act.import.run',
+        'act.ka.create',
+        'act.ka.decide',
+        'act.ka.edit',
+        'act.leads.manage',
+        'act.mfg.boms_edit',
+        'act.mfg.specs_edit',
+        'act.money.eta',
+        'act.org.structure',
+        'act.prices.activate',
+        'act.prices.edit',
+        'act.prices.propagate',
+        'act.products.edit',
+        'act.purchase_requests.create',
+        'act.purchasing.manage',
+        'act.purchasing.receive',
+        'act.supplier_contracts.manage',
+        'act.suppliers.manage',
+        'act.suppliers.pay',
+        'act.warehouses.manage',
+        'act.wh.count',
+        'act.wh.count_manage',
+        'act.wh.pick',
+        'act.wh.pick_raise',
+        'act.wh.putaway',
+        'act.wh.receive',
+        'act.wh.transfer',
+        'act.wh.transfer_receive',
+        'act.wh.van_transfer',
+    ];
+
+    /** @param list<string> $guardVars */
+    private function guarded(array $conditions, array $guardVars): bool
+    {
+        foreach ($conditions as $c) {
+            if (preg_match('/Access::(action|allows)/', $c)) {
+                return true;
+            }
+            foreach ($guardVars as $v) {
+                if (preg_match('/'.preg_quote($v, '/').'\b/', $c)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * شروط الـ`@if`/`@elseif`/`@unless` المفتوحة فوق السطر ده (من غير فرع `@else`).
+     *
+     * @param list<string> $lines
+     * @return list<string>
+     */
+    private function enclosingConditions(array $lines, int $i): array
+    {
+        $conds = [];
+        $depth = 0;
+        $inElse = false;
+        $re = '/@(endif|endunless|if|unless|elseif|else)\b(\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?/';
+
+        for ($j = $i; $j >= 0; $j--) {
+            $text = $lines[$j];
+
+            if ($j === $i) {
+                $text = substr($text, 0, (int) strpos($text, 'route('));
+            }
+
+            preg_match_all($re, $text, $tokens, PREG_SET_ORDER);
+
+            foreach (array_reverse($tokens) as $t) {
+                $d = $t[1];
+
+                if ($d === 'endif' || $d === 'endunless') {
+                    $depth++;
+                } elseif ($d === 'if' || $d === 'unless') {
+                    if ($depth > 0) {
+                        $depth--;
+                    } else {
+                        if (! $inElse) {
+                            $conds[] = $this->fullCondition($lines, $j, $t[0]);
+                        }
+                        $inElse = false;
+                    }
+                } elseif ($depth === 0 && $d === 'elseif') {
+                    if (! $inElse) {
+                        $conds[] = $this->fullCondition($lines, $j, $t[0]);
+                    }
+                    $inElse = true;
+                } elseif ($depth === 0 && $d === 'else') {
+                    $inElse = true;
+                }
+            }
+        }
+
+        return $conds;
+    }
+
+    /** شرط `@if` اللي قوسه مابيتقفلش على نفس السطر — بيكمّل من السطور اللي بعده (لحد ٥) */
+    private function fullCondition(array $lines, int $j, string $token): string
+    {
+        if (str_contains($token, '(')) {
+            return $token;
+        }
+
+        return implode(' ', array_slice($lines, $j, 5));
+    }
+
     // ═══════════════ مساعدات ═══════════════
 
     /** @return array<string, \Illuminate\Routing\Route> */
@@ -234,6 +435,20 @@ class PermissionInventoryTest extends TestCase
         foreach (Access::ACTIONS as [, , , $routes]) {
             if (in_array($name, $routes, true)) {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** نفس مطابقة البادئة اللي `resolveMap` بيستخدمها وقت التشغيل */
+    private function coveredByPrefix(string $name): bool
+    {
+        foreach (Access::ACTIONS as [, , , $routes]) {
+            foreach ($routes as $c) {
+                if ($name === $c || str_starts_with($name, $c.'.')) {
+                    return true;
+                }
             }
         }
 

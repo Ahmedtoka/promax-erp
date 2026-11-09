@@ -84,7 +84,7 @@
                         @if ($r->decision_note)<div style="color:var(--muted);font-size:10.5px">↳ {{ $r->decision_note }}</div>@endif</td>
                     <td><span class="badge {{ $r->statusBadge() }}">{{ $r->statusLabel() }}</span></td>
                     <td data-noprint style="white-space:nowrap">
-                        @if ($r->status === 'pending' && $isApprovals)
+                        @if ($r->status === 'pending' && $isApprovals && \App\Support\Access::action(auth()->user(), 'act.hr.leave_decide'))
                             <form method="POST" action="{{ route('hr.leave.decide', $r) }}" style="display:inline-flex;gap:4px">
                                 @csrf
                                 <input type="text" name="note" maxlength="300" placeholder="{{ __('hrm.leave_decision_note') }}" style="width:130px">

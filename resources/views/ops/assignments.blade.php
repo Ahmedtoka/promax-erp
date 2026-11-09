@@ -57,12 +57,14 @@
             <div style="font-weight:900;font-size:15px">{{ __('assign.orphans_title', ['n' => $health['orphans']]) }}</div>
             <div style="font-size:11.5px;color:var(--muted)">{{ __('assign.orphans_sub') }}</div>
         </div>
+        @if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
         <form method="POST" action="{{ route('ops.assignments.auto') }}"
               onsubmit="return confirm(@js(__('assign.auto_confirm')))">
             @csrf
             <input type="hidden" name="manager_id" value="{{ $manager->id }}">
             <button class="btn gold" type="submit">⚡ {{ __('assign.auto_btn') }}</button>
         </form>
+        @endif
         <button class="btn" type="button" onclick="asgOpenOrphans()">{{ __('assign.open_list') }}</button>
     </div>
 @endif
@@ -168,7 +170,7 @@
                     <b style="font-size:12px">{{ __('assign.will_run') }}</b>
                     <div id="asgRunList" style="font-size:12px;line-height:2.1;margin-top:6px"></div>
                 </div>
-                <form id="asgForm" method="POST" action="{{ route('ops.assignments.apply') }}"
+                <form id="asgForm" method="POST" action="{{ route('ops.assignments.apply') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.field.plan')) inert @endunless
                       onsubmit="return asgSubmit()">
                     @csrf
                     <input type="hidden" name="rep_id" id="asgRepId">

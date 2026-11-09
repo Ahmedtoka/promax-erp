@@ -43,6 +43,7 @@
 <div class="card">
     <h3>🖐️ {{ __('fp.devices_title') }} <span class="side">{{ __('fp.devices_sub') }}</span></h3>
 
+    @if (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint'))
     <form method="POST" action="{{ route('hr.fingerprint.store') }}" class="searchbar" data-noprint>
         @csrf
         <label class="fl"><span>{{ __('fp.serial') }}</span><input type="text" name="serial" id="fpSerial" dir="ltr" required maxlength="40" value="{{ old('serial') }}"></label>
@@ -54,6 +55,7 @@
             </select></label>
         <button class="btn green" type="submit">➕ {{ __('fp.add_device') }}</button>
     </form>
+    @endif
 
     @forelse ($devices as $d)
         <div class="card" style="margin-top:10px" data-device="{{ $d->id }}">
@@ -67,7 +69,7 @@
                     · {{ __('fp.counts') }}: {{ $d->users_count ?? '—' }} / {{ $d->fp_count ?? '—' }} / {{ $d->logs_count ?? '—' }}</span>
             </h3>
 
-            <form method="POST" action="{{ route('hr.fingerprint.update', $d) }}" class="searchbar" data-noprint>
+            <form method="POST" action="{{ route('hr.fingerprint.update', $d) }}" class="searchbar" data-noprint @unless (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint')) inert @endunless>
                 @csrf
                 <label class="fl"><span>{{ __('fp.device_name') }}</span><input type="text" name="name" value="{{ $d->name }}" required maxlength="80"></label>
                 <label class="fl"><span>{{ __('fp.location') }}</span><input type="text" name="location" value="{{ $d->location }}" maxlength="120"></label>
@@ -83,17 +85,21 @@
 
             <div class="searchbar" data-noprint>
                 <strong>{{ __('fp.commands') }}:</strong>
+                @if (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint'))
                 <form method="POST" action="{{ route('hr.fingerprint.command', $d) }}" style="display:flex;gap:6px;align-items:center">
                     @csrf<input type="hidden" name="action" value="resync">
                     <input type="date" name="from" value="{{ today()->subDays(7)->format('Y-m-d') }}" required>
                     <input type="date" name="to" value="{{ today()->format('Y-m-d') }}">
                     <button class="btn sm" type="submit">🔄 {{ __('fp.cmd_resync') }}</button>
                 </form>
+                @endif
                 @foreach (['users' => '👥', 'pull_users' => '⬇', 'info' => 'ℹ️'] as $act => $ic)
+                    @if (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint'))
                     <form method="POST" action="{{ route('hr.fingerprint.command', $d) }}">
                         @csrf<input type="hidden" name="action" value="{{ $act }}">
                         <button class="btn sm" type="submit">{{ $ic }} {{ __('fp.cmd_'.$act) }}</button>
                     </form>
+                    @endif
                 @endforeach
             </div>
         </div>
@@ -105,6 +111,7 @@
 <div class="grid2">
     <div class="card">
         <h3>🔗 {{ __('fp.map_title') }} <span class="side">{{ __('fp.map_sub') }}</span></h3>
+        @if (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint'))
         <form method="POST" action="{{ route('hr.fingerprint.map') }}" class="searchbar" data-noprint id="mapForm">
             @csrf
             <label class="fl wide"><span>{{ __('hr.employee') }}</span>
@@ -115,6 +122,7 @@
             <label class="fl"><span>{{ __('fp.pin') }}</span><input type="text" name="pin" id="mapPin" dir="ltr" maxlength="20"></label>
             <button class="btn green" type="submit">🔗 {{ __('fp.map') }}</button>
         </form>
+        @endif
 
         @if ($unmapped->isNotEmpty())
             <h4 style="margin:10px 0 4px">⚠️ {{ __('fp.unmapped_title') }}</h4>
@@ -158,7 +166,7 @@
         <p class="muted">{{ __('fp.setup_test', ['url' => $pingUrl]) }}</p>
 
         <h4 style="margin:12px 0 4px">🔔 {{ __('fp.settings') }}</h4>
-        <form method="POST" action="{{ route('hr.fingerprint.settings') }}" data-noprint>
+        <form method="POST" action="{{ route('hr.fingerprint.settings') }}" data-noprint @unless (\App\Support\Access::action(auth()->user(), 'act.hr.fingerprint')) inert @endunless>
             @csrf
             <label><input type="checkbox" name="notify_all" value="1" @checked($notifyAll) onchange="this.form.submit()"> {{ __('fp.notify_all') }}</label>
             <p class="muted" style="font-size:12px">{{ __('fp.notify_hint') }}</p>

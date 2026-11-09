@@ -208,5 +208,6 @@ return [
     'act_hr_fingerprint' => 'إدارة أجهزة البصمة',
     'act_app_version_manage' => 'رفع إصدار الأبلكيشن',
     'act_wh_fix_qty' => 'تصحيح كمية باتش بعد الاستلام',
+    'act_field_wipe' => 'مسح خطوط السير كلها',
     'act_handover_mark' => 'علامات شاشات التسليم',
 ];

@@ -120,7 +120,7 @@
                     <td style="white-space:normal;max-width:200px;color:var(--muted);font-size:11px">{{ $r->note }}</td>
                     @if ($manager)
                         <td>
-                            @if ($r->status === 'pending')
+                            @if ($r->status === 'pending' && \App\Support\Access::action(auth()->user(), 'act.field.decide'))
                                 <button class="btn sm gold" onclick='assignRpl({!! $rJson !!})'>{{ __('ops.assign') }}</button>
                                 {{-- تعديل الطلب المستني (١٢/٨) — قبل التنزيل بس --}}
                                 <button class="btn sm" onclick='editRpl({!! $rJson !!})'>✏️ {{ __('common.edit') }}</button>

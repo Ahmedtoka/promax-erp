@@ -15,6 +15,7 @@
                 JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP,
             );
         @endphp
+        @if (\App\Support\Access::action(auth()->user(), 'act.field.wipe'))
         <form method="POST" action="{{ route('ops.journeys.wipe') }}" style="display:inline"
               onsubmit="return confirm({!! $wipeMsg !!})">
             @csrf
@@ -22,6 +23,7 @@
                 🗑 {{ auth()->user()?->role === 'manager' ? __('journey.wipe_team') : __('journey.wipe_all') }}
             </button>
         </form>
+        @endif
     @endif
 @endsection
 
@@ -106,12 +108,14 @@
                 <span class="jb-grow"></span>
 
                 <a class="btn" href="{{ route('ops.geo') }}">🗺️ {{ __('journey.map_btn') }}</a>
+                @if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
                 <button type="button" class="btn" onclick="openDlg('dlgCopy')">
                     ⧉ {{ __('journey.copy_btn') }}
                 </button>
                 <button type="button" class="btn gold" id="jbSaveBtn" onclick="jbSave()">
                     ✓ {{ __('journey.save_btn') }}
                 </button>
+                @endif
             </div>
 
             <div class="jb-statsrow">
@@ -148,13 +152,16 @@
 </div>
 
 {{-- فورم الحفظ — بيتملى بالجافاسكربت ويتبعت --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
 <form method="POST" action="{{ route('ops.journeys.sync') }}" id="syncForm" style="display:none">
     @csrf
     <input type="hidden" name="user_id" value="{{ $rep->id }}">
     <div id="syncFields"></div>
 </form>
+@endif
 
 {{-- ═══ انسخ من مندوب ═══ --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
 <dialog id="dlgCopy">
     <form class="dlg" method="POST" action="{{ route('ops.journeys.copy') }}">
         @csrf
@@ -175,6 +182,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 {{-- ═══ تفاصيل يوم من النبضة ═══ --}}
 <dialog id="dlgPulse">
@@ -294,6 +302,7 @@
     function markDirty() {
         state.dirty = true;
         const b = document.getElementById('jbSaveBtn');
+        if (! b) { return; }
         b.classList.add('pulsing');
         b.title = T.unsaved;
     }

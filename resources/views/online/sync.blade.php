@@ -3,7 +3,7 @@
 @section('title', __('online.sync_title'))
 
 @php
-    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.online.sync_settings');
+    $canSettings = \App\Support\Access::action(auth()->user(), 'act.online.sync_settings');
     $canAct = \App\Support\Access::action(auth()->user(), 'act.online.orders');
     $canSync = \App\Support\Access::action(auth()->user(), 'act.online.sync');
     $money = fn ($v) => number_format((float) $v, 2);
@@ -30,7 +30,7 @@
 @endif
 
 {{-- ═══ إعدادات شوبيفاي — أدمن بس، وبتظهر مفتوحة لو الربط ناقص ═══ --}}
-@if ($isAdmin)
+@if ($canSettings)
     <details class="card" style="margin-bottom:12px" @if (! $ready || ! ($settings['online_warehouse_id'] ?? '')) open @endif>
         <summary style="cursor:pointer;font-weight:900">⚙️ {{ __('online.settings') }}
             @if (! $ready)

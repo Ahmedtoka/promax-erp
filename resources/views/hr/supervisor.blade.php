@@ -54,12 +54,14 @@
                     <td><span class="badge {{ $badge[$st] ?? 'b-gray' }}">{{ __('hr.state_'.$st) }}</span></td>
                     <td data-noprint style="white-space:nowrap">
                         @foreach ($next[$e->id] ?? [] as $type)
+                            @if (\App\Support\Access::action(auth()->user(), 'act.hr.supervisor_punch'))
                             <form method="POST" action="{{ route('hr.attendance.supervisor.punch') }}" style="display:inline">
                                 @csrf
                                 <input type="hidden" name="employee_id" value="{{ $e->id }}">
                                 <input type="hidden" name="type" value="{{ $type }}">
                                 <button class="btn sm {{ $btn[$type] }}" type="submit">{{ __('hr.punch_'.$type) }}</button>
                             </form>
+                            @endif
                         @endforeach
                     </td>
                 </tr>

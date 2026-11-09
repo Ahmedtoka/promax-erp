@@ -4,7 +4,7 @@
 
 @php
     $fmt = fn ($n) => number_format((float) $n);
-    $isAdmin = \App\Support\Access::action(auth()->user(), 'act.review.stock_reset');
+    $canReset = \App\Support\Access::action(auth()->user(), 'act.review.stock_reset');
 @endphp
 
 @section('content')
@@ -33,7 +33,7 @@
                     <td><b>{{ $w->displayName() }}</b><div class="rv-sub" dir="ltr">{{ $w->code }}</div></td>
                     <td class="num"><b>{{ __('review.pieces', ['n' => $fmt($s->q ?? 0)]) }}</b><div class="rv-sub">{{ __('review.col_batches', ['n' => (int) ($s->batches ?? 0)]) }}</div></td>
                     <td>
-                        @if ($isAdmin && (int) ($s->q ?? 0) > 0)
+                        @if ($canReset && (int) ($s->q ?? 0) > 0)
                             <form method="POST" action="{{ route('erp.review.stock.zero', $w) }}"
                                   onsubmit="const v = prompt(@js(__('review.zero_confirm', ['wh' => $w->displayName(), 'code' => $w->code]))); if (v === null) return false; this.confirm.value = v; return true;">
                                 @csrf <input type="hidden" name="confirm">
@@ -44,7 +44,7 @@
                     </td>
                     <td class="num">
                         {{ __('review.pieces', ['n' => $fmt($en->q ?? 0)]) }}<div class="rv-sub">{{ (int) ($en->n ?? 0) }} ×</div>
-                        @if ($isAdmin)
+                        @if ($canReset)
                             <button type="button" class="btn sm gold" onclick="rvBatch({{ $w->id }}, @js($w->displayName()))">{{ __('review.add_batch') }}</button>
                         @endif
                     </td>
@@ -118,7 +118,7 @@
     </div>
 </div>
 
-@if ($isAdmin)
+@if ($canReset)
 <dialog id="dlgBatch">
     <form class="dlg" method="POST" id="fBatch">
         @csrf

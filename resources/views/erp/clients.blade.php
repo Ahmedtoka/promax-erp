@@ -399,8 +399,10 @@
                         {{-- ⚠️ `stopPropagation` — الصف كله كليكابل، ومن غيرها
                              الضغط على الزرار بيروح لكارت العميل مش للاستنساخ. --}}
                         <td onclick="event.stopPropagation()">
+                            @if (\App\Support\Access::action(auth()->user(), 'act.clients.create'))
                             <a class="btn sm" href="{{ route('erp.clients.clone', $c) }}"
                                title="{{ __('client.clone_client') }}">⧉</a>
+                            @endif
                         </td>
                     @endif
                 </tr>

@@ -31,7 +31,7 @@
     @if ($manager)
         <button class="btn gold" onclick="openDlg('dlgEditP')">{{ __('stock.edit_product') }}</button>
     @endif
-    @if (auth()->user()?->role === 'admin')
+    @if (\App\Support\Access::action(auth()->user(), 'act.products.delete'))
         {{-- مسح نهائي — للصنف اللي نزل غلط ومحصلش عليه أي حركة.
              السيرفر بيرفض لو فيه أي حركة ويقول فيه إيه بالظبط. --}}
         <form method="POST" action="{{ route('erp.products.destroy', $p) }}" style="display:inline"

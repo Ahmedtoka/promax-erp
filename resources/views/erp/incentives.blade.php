@@ -10,7 +10,7 @@
     <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
 @endif
 
-<form method="POST" action="{{ route('erp.incentives.save') }}">
+<form method="POST" action="{{ route('erp.incentives.save') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.incentives.manage')) inert @endunless>
     @csrf
 
     <div class="card">

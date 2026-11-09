@@ -13,7 +13,9 @@
 
 @section('actions')
     @if (\App\Support\Access::allows(auth()->user(), 'ops.assignments'))<a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>@endif
+    @if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
     <button class="btn gold" onclick="openZone(null)">+ {{ __('team.new_zone') }}</button>
+    @endif
 @endsection
 
 @section('content')
@@ -250,7 +252,9 @@
                                     'active' => (bool) $z->active,
                                 ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP);
                             @endphp
+                            @if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
                             <button class="btn sm" type="button" onclick='openZone({!! $zPayload !!})'>✎ {{ __('common.edit') }}</button>
+                            @endif
                         </td>
                     </tr>
                 @endforeach
@@ -260,6 +264,7 @@
 @endforeach
 
 {{-- ═══════════ إضافة / تعديل منطقة ═══════════ --}}
+@if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
 <dialog id="dlgZone">
     <form class="dlg" method="POST" id="zoneForm" action="{{ route('erp.zones.store') }}">
         @csrf
@@ -332,6 +337,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 @endsection
 

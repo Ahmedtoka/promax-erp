@@ -75,7 +75,9 @@
         <a class="btn" href="{{ route('erp.clients.edit', $c) }}">✎ {{ __('common.edit') }}</a>
         {{-- عضو سلسلة؟ الزرار بيتسمى باسم اللي المالك بيدوّر عليه:
              «فرع بنفس شروط السلسلة» (١٢/٨) — نفس الاستنساخ بالظبط --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.clients.create'))
         <a class="btn" href="{{ route('erp.clients.clone', $c) }}">⧉ {{ $c->group_id ? __('client.new_branch_like_chain') : __('client.clone_client') }}</a>
+        @endif
     @endif
     @if (\App\Support\Access::action(auth()->user(), 'act.clients.delete'))
         {{-- تنضيف الزيارات الفاضية — اللي بتقف في وش مسح العميل.

@@ -98,11 +98,13 @@
                         @endif
                     </td>
                     <td>
+                        @if (\App\Support\Access::action(auth()->user(), 'act.field.force_out'))
                         <form method="POST" action="{{ route('ops.open_visits.out', $v) }}" style="display:inline"
                               onsubmit="return confirm(@js(__('ops.ov_confirm', ['rep' => $v->user?->displayName() ?? '—', 'client' => $v->client?->displayName() ?? '—'])))">
                             @csrf
                             <button class="btn sm red" type="submit">🚪 {{ __('ops.ov_force_out') }}</button>
                         </form>
+                        @endif
                     </td>
                 </tr>
             @empty
@@ -141,11 +143,13 @@
                     <td dir="ltr">{{ $w->checked_in_at?->format('Y-m-d h:i A') ?? '—' }}</td>
                     <td dir="ltr" style="font-weight:800">{{ $w->checked_in_at ? $dur($w->checked_in_at) : '—' }}</td>
                     <td>
+                        @if (\App\Support\Access::action(auth()->user(), 'act.field.force_out'))
                         <form method="POST" action="{{ route('ops.open_visits.wh_out', $w) }}" style="display:inline"
                               onsubmit="return confirm(@js(__('ops.ov_confirm', ['rep' => $w->user?->displayName() ?? '—', 'client' => $w->warehouse?->displayName() ?? '—'])))">
                             @csrf
                             <button class="btn sm red" type="submit">🚪 {{ __('ops.ov_force_out') }}</button>
                         </form>
+                        @endif
                     </td>
                 </tr>
             @empty
@@ -210,7 +214,7 @@
                     </td>
                     <td>
                         {{-- زرار من غير صلاحية = 403 في الوش: المدير بيشوف نفسه في القايمة لكن مايخرّجش نفسه --}}
-                        @if (\App\Support\Scope::canStaff(auth()->user(), $r['user']))
+                        @if (\App\Support\Scope::canStaff(auth()->user(), $r['user']) && \App\Support\Access::action(auth()->user(), 'act.field.force_out'))
                             <button class="btn sm red" type="button"
                                     onclick="openDlg('dlgAtt{{ $r['user']->id }}')">🚪 {{ __('ops.att_force_out') }}</button>
                         @endif
@@ -233,6 +237,7 @@
         $attLive = $r['day']->liveMinutes();
         $attDefault = number_format(min(24, max(0.25, round($attLive / 60 * 4) / 4)), 2, '.', '');
     @endphp
+    @if (\App\Support\Access::action(auth()->user(), 'act.field.force_out'))
     <dialog id="dlgAtt{{ $r['user']->id }}">
         <form class="dlg" method="POST" action="{{ route('ops.att.force_out', $r['user']) }}">
             @csrf
@@ -263,6 +268,7 @@
             </div>
         </form>
     </dialog>
+    @endif
 @endforeach
 
 @endsection

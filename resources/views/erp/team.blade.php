@@ -131,7 +131,9 @@
 <div class="card">
     <h3>📍 {{ __('team.zones') }}
         <span class="side">
+            @if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
             <button class="btn sm" onclick="openDlg('dlgZone')">+ {{ __('team.new_zone') }}</button>
+            @endif
         </span>
     </h3>
     <div class="tablewrap">
@@ -312,6 +314,7 @@
 {{-- ═══════════ منطقة جديدة ═══════════ --}}
 @endif
 
+@if (\App\Support\Access::action(auth()->user(), 'act.org.manage'))
 <dialog id="dlgZone">
     <form class="dlg" method="POST" action="{{ route('erp.zones.store') }}">
         @csrf
@@ -349,6 +352,7 @@
         </div>
     </form>
 </dialog>
+@endif
 
 @if ($canManageTeam)
 <dialog id="dlgPass">

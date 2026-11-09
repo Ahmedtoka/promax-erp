@@ -25,14 +25,16 @@
             <label class="fl"><span>{{ __('ui.l_month') }}</span>
                 <input type="month" name="month" value="{{ $month->format('Y-m') }}" onchange="this.form.submit()"></label>
         </form>
+        @if (\App\Support\Access::action(auth()->user(), 'act.targets.edit'))
         <form method="POST" action="{{ route('erp.targets.copy') }}" style="margin-inline-start:auto">
             @csrf
             <input type="hidden" name="month" value="{{ $month->format('Y-m') }}">
             <button class="btn" type="submit">📋 {{ __('incent.copy_prev') }}</button>
         </form>
+        @endif
     </div>
 
-    <form method="POST" action="{{ route('erp.targets.save') }}">
+    <form method="POST" action="{{ route('erp.targets.save') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.targets.edit')) inert @endunless>
         @csrf
         <input type="hidden" name="month" value="{{ $month->format('Y-m') }}">
         <div class="tablewrap tg-tbl">

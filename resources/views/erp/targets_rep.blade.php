@@ -100,7 +100,7 @@
             <span class="badge b-gray">{{ count($rows) }}</span>
         </div>
 
-        <form method="POST" action="{{ route('erp.targets.annual.clients', $repNode->id) }}" data-split>
+        <form method="POST" action="{{ route('erp.targets.annual.clients', $repNode->id) }}" data-split @unless (\App\Support\Access::action(auth()->user(), 'act.targets.annual')) inert @endunless>
             @csrf
             <input type="hidden" name="year" value="{{ $year }}">
             <div class="tablewrap">

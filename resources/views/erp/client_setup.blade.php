@@ -57,7 +57,7 @@
 @section('content')
 
 <form method="POST" id="setupForm"
-      action="{{ $isChains ? route('erp.setup.chains.save') : route('erp.setup.clients.save') }}">
+      action="{{ $isChains ? route('erp.setup.chains.save') : route('erp.setup.clients.save') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.setup.save')) inert @endunless>
 @csrf
 
 {{-- تخضير الصف المتراجع + ستايل لابل «الساري» --}}

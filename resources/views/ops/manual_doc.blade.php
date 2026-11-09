@@ -57,7 +57,7 @@
     </div>
 
     {{-- ═══ فاتورة ═══ --}}
-    <form method="POST" action="{{ route('ops.manual.invoice') }}" class="md-pane" data-pane="inv"
+    <form method="POST" action="{{ route('ops.manual.invoice') }}" class="md-pane" data-pane="inv" @unless (\App\Support\Access::action(auth()->user(), 'act.money.manual')) inert @endunless
           onsubmit="return mdSubmit(this, 'inv')">
         @csrf
         <div class="searchbar" style="flex-wrap:wrap">
@@ -92,7 +92,7 @@
     </form>
 
     {{-- ═══ مرتجع ═══ --}}
-    <form method="POST" action="{{ route('ops.manual.return') }}" class="md-pane" data-pane="ret"
+    <form method="POST" action="{{ route('ops.manual.return') }}" class="md-pane" data-pane="ret" @unless (\App\Support\Access::action(auth()->user(), 'act.money.manual')) inert @endunless
           style="display:none" onsubmit="return mdSubmit(this, 'ret')">
         @csrf
         <div class="searchbar" style="flex-wrap:wrap">
@@ -118,7 +118,7 @@
     </form>
 
     {{-- ═══ هدية ═══ --}}
-    <form method="POST" action="{{ route('ops.manual.gift') }}" class="md-pane" data-pane="gift"
+    <form method="POST" action="{{ route('ops.manual.gift') }}" class="md-pane" data-pane="gift" @unless (\App\Support\Access::action(auth()->user(), 'act.money.manual')) inert @endunless
           style="display:none" onsubmit="return mdSubmit(this, 'gift')">
         @csrf
         <div class="searchbar">
@@ -142,7 +142,7 @@
          تحويل) + المرجع وبيانات الشيك حسب الطريقة — التاريخ والعميل
          والمندوب من الهيدر فوق زي باقي التابات بالحرف ═══ --}}
     {{-- ⚠️ `enctype` لازم — صورة الإثبات ملف، ومن غيره `$request->file()` بترجّع null في صمت --}}
-    <form method="POST" action="{{ route('ops.manual.collection') }}" class="md-pane" data-pane="col"
+    <form method="POST" action="{{ route('ops.manual.collection') }}" class="md-pane" data-pane="col" @unless (\App\Support\Access::action(auth()->user(), 'act.money.manual')) inert @endunless
           style="display:none" enctype="multipart/form-data" onsubmit="return mdSubmitCollect(this)">
         @csrf
         <div id="mdDirectHint" class="alert info" style="display:none;margin-bottom:10px">{{ __('ops.md_direct_hint') }}</div>

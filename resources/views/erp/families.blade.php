@@ -43,7 +43,7 @@
         <span>⚠️</span><span>{{ __('stock.families_recompute_warn') }}</span>
     </div>
 
-    <form method="POST" action="{{ route('erp.families.save') }}">
+    <form method="POST" action="{{ route('erp.families.save') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.families.manage')) inert @endunless>
         @csrf
         <div class="tablewrap fam-tbl">
             {{-- جدول إدخال مش داتا — من غير زرار الإكسيل (٢٢/٩) --}}
@@ -92,7 +92,7 @@
     <h3>📦 {{ __('stock.assign_products') }}
         <span class="side">{{ __('stock.assign_products_hint') }}</span></h3>
 
-    <form method="POST" action="{{ route('erp.families.assign') }}">
+    <form method="POST" action="{{ route('erp.families.assign') }}" @unless (\App\Support\Access::action(auth()->user(), 'act.families.manage')) inert @endunless>
         @csrf
         <div class="searchbar" style="margin-bottom:10px">
             <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
