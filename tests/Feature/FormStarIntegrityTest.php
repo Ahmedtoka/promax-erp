@@ -114,7 +114,11 @@ class FormStarIntegrityTest extends TestCase
         'gl/expenses:safe_id' => 'L4-D9: falls back to Safe::forLegacy(paid_from); the form requires it unless rep cash',
         'gl/expenses:cost_center_id' => 'L4-D9: falls back to the safe center then the company; the form requires it',
         'gl/expenses:attachment' => 'L4-D9: receipt required on the form; legacy rows without one show a no-receipt badge',
-        'gl/expenses:account_id' => 'empty = the category account (required_without:category_id, and the category is required on the form)',
+        // الرولز المخصصة (٩/١١): الاسمين `required` فعلاً، بس جوه
+        // `RoleController::nameRules()` اللي بيتدمج في validate — الفحص النصي مابيتبعش الهيلبر
+        'erp/perms/_roles:name_ar' => 'required in RoleController::nameRules(), merged into validate(); the text scan cannot follow the helper',
+        'erp/perms/_roles:name_en' => 'required in RoleController::nameRules(), merged into validate(); the text scan cannot follow the helper',
+        'gl/expenses:account_id' =>'empty = the category account (required_without:category_id, and the category is required on the form)',
     ];
 
     // ═══════════════════ 1. الخريطة نفسها ═══════════════════

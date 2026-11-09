@@ -7,7 +7,6 @@ return [
     'wh_breakdown' => 'Item split across warehouses',
     'l_role' => 'role',
     'shelves' => 'shelves',
-    'perm_group_setting' => 'Whole ":x" section setting',
 
     // ═══ Visual review 22 Sep — every number explains itself ═══
     // Product catalogue
@@ -73,12 +72,6 @@ return [
     'oc_coll_how' => 'Collected from these open orders — an order closes as "completed" when nothing remains',
 
     // Permissions
-    'perm_find' => 'Find a screen or action',
-    'perm_find_ph' => 'Screen, section or action name',
-    'perm_only_changed' => 'Overrides only (not inherited)',
-    'perm_fold_all' => 'Collapse all',
-    'perm_open_all' => 'Expand all',
-    'perm_fold_tip' => 'Click to collapse or expand the section',
 
     // Product card
     'shelf_life_how' => 'used to derive the expiry date when a receipt has none',

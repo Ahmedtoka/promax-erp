@@ -442,6 +442,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ===== الصلاحيات وتسكين عملاء المديرين — أدمن بس (2026-08-05) =====
         Route::get('/permissions', [\App\Http\Controllers\PermissionController::class, 'index'])
             ->middleware('role:admin')->name('perms');
+        // إكسيل ورقة الرول (٩/١١) — مقفول ببادئة `erp.perms`
+        Route::get('/permissions/sheet-excel', [\App\Http\Controllers\PermissionController::class, 'sheetExcel'])
+            ->middleware('role:admin')->name('perms.sheet.excel');
         // ⚠️ المسار الثابت `role/{role}` قبل البارامتري `{user}` —
         // وإلا لارافيل هتحاول تعمل route-model-binding على كلمة «role»
         Route::post('/permissions/role/{role}', [\App\Http\Controllers\PermissionController::class, 'saveRole'])

@@ -377,6 +377,32 @@ class PermissionMatrix
         return $out;
     }
 
+    /** اسم المفتاح للعرض — الصفحات العامة والشاشات اسمها المفتاح نفسه */
+    public static function labelOf(string $key): string
+    {
+        return self::label($key);
+    }
+
+    /**
+     * خانة واحدة (مفتاح واحد لموضوع واحد) — لتاب «مين معاه الصلاحية»
+     * من غير ما نبني الشجرة كلها لكل رول.
+     *
+     * @return array{effective:bool, source:string, via:?string, override:?bool}
+     */
+    public static function cell(string|User $subject, string $key): array
+    {
+        $s = self::subject($subject);
+        $locked = Access::isLocked($key);
+        [$source, $via] = $key === Access::PUBLIC_GROUP ? ['code', null] : self::sourceOf($s, $key);
+
+        return [
+            'effective' => self::effective($s, $key),
+            'source' => $locked ? 'code' : $source,
+            'via' => $locked ? null : $via,
+            'override' => ($locked || $key === Access::PUBLIC_GROUP) ? null : self::override($s, $key),
+        ];
+    }
+
     private static function label(string $key): string
     {
         if (isset(Access::ACTIONS[$key])) {
