@@ -25,8 +25,8 @@ class ReturnItem extends Model
     protected function casts(): array
     {
         return [
-            'list_price' => 'decimal:2',
-            'price' => 'decimal:2',
+            'list_price' => 'decimal:4',
+            'price' => 'decimal:4',
             'total' => 'decimal:2',
             'tax' => 'decimal:2',
         ];

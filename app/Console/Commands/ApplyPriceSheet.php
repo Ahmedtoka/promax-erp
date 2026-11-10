@@ -430,7 +430,11 @@ class ApplyPriceSheet extends Command
             ->union(DB::table('purchase_orders')->select('client_id')->where('status', '!=', 'cancelled'))
             ->pluck('client_id')->unique()->filter()->all();
 
-        $before = Client::whereIn('id', $withDocs)->pluck('balance', 'id')->all();
+        // ⚠️ الرصيد «قبل» لكل عميل ليه أي مستند — فواتير أو أوامر أو **مرتجعات**
+        // (عميل مالوش غير مرتجعات كان بيتسجّل «قبل» بعد التعديل)
+        $withAny = array_values(array_unique(array_merge($withDocs,
+            DB::table('returns')->whereNotNull('client_id')->distinct()->pluck('client_id')->all())));
+        $before = Client::whereIn('id', $withAny)->pluck('balance', 'id')->all();
         $runs = [];
 
         $splitClients = Client::whereIn('price_list_id', $splitIds)->pluck('id')->all();
