@@ -327,9 +327,12 @@ class ApplyPriceSheet extends Command
                 if (! $l) {
                     continue;
                 }
+                // العقود المنتهية تاريخ — `listRowFor` مابيقراهاش، فمابتمنعش التوقيف
+                $liveContracts = Contract::where('price_list_id', $l->id)->where('active', true)->get()
+                    ->filter(fn ($ct) => ! $ct->isExpired())->count();
                 $refs = Client::where('price_list_id', $l->id)->count()
                     + ClientGroup::where('price_list_id', $l->id)->count()
-                    + Contract::where('price_list_id', $l->id)->where('active', true)->count();
+                    + $liveContracts;
                 if ($refs > 0) {
                     $this->logRow('retire', 'price_list', $l->id, $code, 'active', (bool) $l->active, (bool) $l->active, "⚠️ لسه عليها {$refs} (فرع/سلسلة/عقد) — اتسابت");
 
@@ -352,14 +355,16 @@ class ApplyPriceSheet extends Command
 
     private function rename(): void
     {
-        if (empty($this->plan['renames_approved'])) {
-            foreach ($this->plan['renames'] ?? [] as $code => $name) {
-                $this->logRow('rename', 'price_list', null, $code, 'name', PriceList::where('code', $code)->value('name'), $name, 'TODO(answer) مستني موافقة على الأسماء');
-            }
+        // `renames_approved`: true = الكل، أو قايمة أكواد اتوافق عليها بس
+        $ok = $this->plan['renames_approved'] ?? false;
+        $approved = fn (string $code) => $ok === true || (is_array($ok) && in_array($code, $ok, true));
 
-            return;
-        }
         foreach ($this->plan['renames'] ?? [] as $code => $name) {
+            if (! $approved($code)) {
+                $this->logRow('rename', 'price_list', null, $code, 'name', PriceList::where('code', $code)->value('name'), $name, 'TODO(answer) مستني موافقة على الاسم');
+
+                continue;
+            }
             $l = PriceList::where('code', $code)->first();
             if ($l && $l->name !== $name) {
                 $this->snapshot['lists'][] = ['id' => $l->id, 'name' => $l->name];
