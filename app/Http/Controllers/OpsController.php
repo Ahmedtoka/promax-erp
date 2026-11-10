@@ -2642,9 +2642,34 @@ class OpsController extends Controller
                     ->first();
             }
 
+            // ═══ (١٠/١١) سعر الملف قدام سعر السيستم — تنبيه بس ═══
+            // السعر اللي بيتسجّل دايماً من قايمة العميل. لو اللي في الملف
+            // مختلف عن غير الشامل **و** عن الشامل، بنقول «السعر على السيستم
+            // كذا وانت رافع كذا» — للفرع المتوقع.
+            $priceWarnings = [];
+            if ($guess !== null) {
+                $guessFull = Client::find($guess->id);
+                foreach ($parsed['items'] as $it) {
+                    if (($it['file_price'] ?? null) === null) {
+                        continue;
+                    }
+                    $q = \App\Services\Pricing::quote($guessFull, Product::find($it['product_id']));
+                    $fp = (float) $it['file_price'];
+                    if (abs($fp - round($q['unit_price'], 2)) > 0.01 && abs($fp - $q['unit_incl']) > 0.01) {
+                        $priceWarnings[] = __('ops.po_price_warn', [
+                            'item' => $it['name'],
+                            'excl' => number_format($q['unit_price'], 2),
+                            'incl' => number_format($q['unit_incl'], 2),
+                            'file' => number_format($fp, 2),
+                        ]);
+                    }
+                }
+            }
+
             $entries[] = [
                 'file' => $origName,
                 'sheet_path' => $dir.'/'.$safe,
+                'price_warnings' => $priceWarnings,
                 'po_no' => $parsed['po_no'],
                 'store_name' => $parsed['store_name'],
                 'store_id' => $parsed['store_id'],
@@ -2921,6 +2946,17 @@ class OpsController extends Controller
                     'barcode' => array_search('barcode', $lower, true),
                     'sku' => array_search('sku', $lower, true),
                     'qty' => array_search('total pc', $lower, true),
+                    // (١٠/١١) عمود السعر في شيت العميل — **للمقارنة بس**. السعر
+                    // الفعلي دايماً من قايمة العميل (غير شامل + ضريبة).
+                    'price' => (function () use ($lower) {
+                        foreach (['unit cost', 'cost price', 'unit price', 'net cost', 'net price', 'price', 'cost', 'سعر الوحدة', 'السعر'] as $h) {
+                            if (($i = array_search($h, $lower, true)) !== false) {
+                                return $i;
+                            }
+                        }
+
+                        return false;
+                    })(),
                 ];
 
                 continue;
@@ -2952,6 +2988,8 @@ class OpsController extends Controller
                 continue;
             }
 
+            $filePrice = $cols['price'] !== false ? \App\Services\Sheet::number($cells[$cols['price']] ?? null) : null;
+
             // نفس الصنف في سطرين — الكميات بتتجمع
             if (isset($items[$product->id])) {
                 $items[$product->id]['qty'] += $qty;
@@ -2960,6 +2998,7 @@ class OpsController extends Controller
                     'product_id' => $product->id,
                     'name' => $product->displayName(),
                     'qty' => $qty,
+                    'file_price' => $filePrice !== null && (float) $filePrice > 0 ? (float) $filePrice : null,
                 ];
             }
         }
@@ -5318,10 +5357,12 @@ class OpsController extends Controller
                             $line->delete();
                         } else {
                             $newQty = (int) $line->qty - $r;
+                            // (١٠/١١) السطر مترسي على الشامل — `Tax::line`
+                            $calc = \App\Services\Tax::line((float) $line->price, $newQty, (float) $line->tax_rate);
                             $line->update([
                                 'qty' => $newQty,
-                                'total' => round((float) $line->price * $newQty, 2),
-                                'tax' => round((float) $line->price * $newQty * (float) $line->tax_rate, 2),
+                                'total' => $calc['net'],
+                                'tax' => $calc['tax'],
                             ]);
                         }
 
@@ -5377,10 +5418,11 @@ class OpsController extends Controller
 
                         if ($sameLine !== null) {
                             $newQty = (int) $sameLine->qty + $q;
+                            $calc = \App\Services\Tax::line((float) $sameLine->price, $newQty, (float) $sameLine->tax_rate);
                             $sameLine->update([
                                 'qty' => $newQty,
-                                'total' => round((float) $sameLine->price * $newQty, 2),
-                                'tax' => round((float) $sameLine->price * $newQty * (float) $sameLine->tax_rate, 2),
+                                'total' => $calc['net'],
+                                'tax' => $calc['tax'],
                             ]);
                         } else {
                             InvoiceItem::create([
@@ -5391,9 +5433,9 @@ class OpsController extends Controller
                                 'list_price' => $listPrice,
                                 'price' => $price,
                                 'unit_cost' => \App\Services\Pricing::costFor($cItem->product, $cItem->batch),
-                                'total' => round($price * $q, 2),
+                                'total' => \App\Services\Tax::line((float) $price, $q, (float) $taxRate)['net'],
                                 'tax_rate' => $taxRate,
-                                'tax' => round($price * $q * $taxRate, 2),
+                                'tax' => \App\Services\Tax::line((float) $price, $q, (float) $taxRate)['tax'],
                             ]);
                         }
                     }

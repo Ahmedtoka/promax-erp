@@ -957,9 +957,10 @@ class PriceChangeEngineTest extends TestCase
         $resync = PriceChange::draft($this->admin, 'client', ['client_id' => $c->id, 'price_list_id' => null]);
         PriceChange::apply($resync, $this->admin);
 
-        // 12 × 0.9 = 10.80 × 3 = 32.40 + 4.54 = 36.94
-        $this->assertEqualsWithDelta(36.94, (float) $inv->fresh()->grand_total, 0.001);
-        $this->assertEqualsWithDelta(36.94, (float) $po->fresh()->grand_total, 0.001);
+        // (١٠/١١) السطر مترسي على الشامل: 12 × 0.9 = 10.80 → شامل 12.31 × 3 = 36.93
+        // (كان 32.40 + 4.54 = 36.94 لما الضريبة كانت بتتضرب في الصافي)
+        $this->assertEqualsWithDelta(36.93, (float) $inv->fresh()->grand_total, 0.001);
+        $this->assertEqualsWithDelta(36.93, (float) $po->fresh()->grand_total, 0.001);
         $this->assertLedgerReconciles($c);
     }
 

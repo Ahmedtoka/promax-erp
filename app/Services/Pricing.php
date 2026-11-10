@@ -267,8 +267,14 @@ class Pricing
         $listPrice = self::listPrice($product, $listRow ?? $list);
         $discountPct = $client->effectiveDiscount();
 
-        $unitPrice = round($listPrice * (1 - $discountPct), 2);
+        // ⚠️ (١٠/١١) سعر الوحدة غير شامل بـ٤ أرقام عشرية — بالرقمين كان
+        // ٦٣ شامل بيبقى ٥٥٫٢٦ وفاتورة ١٠٠ قطعة تطلع مش زي الورق.
+        $unitPrice = round($listPrice * (1 - $discountPct), 4);
         $unitCost = self::costFor($product, $batch);
+
+        // السطر مترسي على الشامل (الكمية × السعر الشامل = الورق) — `Tax::line`
+        $taxRate = Tax::rate($client, $product);
+        $line = Tax::line($unitPrice, $qty, $taxRate);
 
         $margin = round($unitPrice - $unitCost, 2);
 
@@ -282,8 +288,12 @@ class Pricing
             'margin' => $margin,
             'margin_pct' => $unitPrice > 0 ? round($margin / $unitPrice, 4) : 0.0,
             'qty' => $qty,
-            'line_total' => round($unitPrice * $qty, 2),
+            'line_total' => $line['net'],
             'line_cost' => round($unitCost * $qty, 2),
+            'tax_rate' => $taxRate,
+            'unit_incl' => $line['unit_incl'],
+            'line_incl' => $line['incl'],
+            'line_tax' => $line['tax'],
         ];
     }
 
@@ -300,7 +310,7 @@ class Pricing
      */
     public static function unitPrice(Client $client, Product $product): float
     {
-        return round(self::listPriceFor($client, $product) * (1 - $client->effectiveDiscount()), 2);
+        return round(self::listPriceFor($client, $product) * (1 - $client->effectiveDiscount()), 4);
     }
 
     /**

@@ -116,7 +116,8 @@ class InvoiceRepricer
             }
 
             $taxRate = Tax::rate($client, $item->product);
-            $lineTax = Tax::on($quote['line_total'], $client, $item->product);
+            // (١٠/١١) السطر مترسي على الشامل — نفس `Tax::line` اللي جوه quote
+            $lineTax = $quote['line_tax'];
 
             $lines[] = [
                 'item_id' => $item->id,

@@ -894,4 +894,7 @@ return [
     'ph_value' => 'Value',
     'ph_by' => 'Sent By',
     'ph_none' => 'No orders sent in this period.',
+    // (2026-11-10) PO import: price comes from the client list; the file price is only compared
+    'po_price_warn_head' => 'File prices differ from the system — the order will use the client list prices:',
+    'po_price_warn' => ':item — system price :excl excl. (:incl incl.), file says :file',
 ];

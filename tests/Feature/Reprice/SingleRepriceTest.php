@@ -196,15 +196,16 @@ class SingleRepriceTest extends TestCase
         $invoice->refresh();
         $item = $invoice->items()->first();
 
-        // 12 × 0.9 = 10.80 × 3 = 32.40 · ضريبة 4.54 (4.536)
+        // (١٠/١١) السطر مترسي على الشامل: 12 × 0.9 = 10.80 → شامل 12.31 × 3 = 36.93
+        // → صافي 32.39 + ضريبة 4.54 (كان 32.40 لما الضريبة بتتضرب في الصافي)
         $this->assertEqualsWithDelta(12.0, (float) $item->list_price, 0.001);
         $this->assertEqualsWithDelta(10.80, (float) $item->price, 0.001);
-        $this->assertEqualsWithDelta(32.40, (float) $item->total, 0.001);
+        $this->assertEqualsWithDelta(32.39, (float) $item->total, 0.001);
         $this->assertEqualsWithDelta(36.0, (float) $invoice->subtotal, 0.001);
-        $this->assertEqualsWithDelta(3.60, (float) $invoice->discount, 0.001);
+        $this->assertEqualsWithDelta(36.0 - (float) $invoice->total, (float) $invoice->discount, 0.001);
         $this->assertEqualsWithDelta(0.10, (float) $invoice->discount_pct, 0.0001);
         $this->assertSame('custom_discount', $invoice->discount_source);
-        $this->assertEqualsWithDelta(32.40, (float) $invoice->total, 0.001);
+        $this->assertEqualsWithDelta(32.39, (float) $invoice->total, 0.001);
         $this->assertEqualsWithDelta(
             (float) $invoice->total + (float) $invoice->tax_total,
             (float) $invoice->grand_total,

@@ -2243,7 +2243,8 @@ class FieldApiController extends Controller
                     // ⚠️ الضريبة على الصافي **بعد الخصم**، وسطر بسطر —
                     // الفاتورة ممكن تجمع صنف خاضع وصنف معفى.
                     $taxRate = \App\Services\Tax::rate($client, $item->product);
-                    $lineTax = \App\Services\Tax::on($quote['line_total'], $client, $item->product);
+                    // (١٠/١١) السطر مترسي على الشامل — الضريبة من `Tax::line` جوه quote
+                    $lineTax = $quote['line_tax'];
 
                     $rows[] = [
                         'product_id' => $item->product_id,
@@ -2876,9 +2877,10 @@ class FieldApiController extends Controller
                         $net += (float) $item->total;
                         $taxTotal += (float) $item->tax;
                     } else {
-                        $lineNet = round($dq * (float) $item->price, 2);
-                        $net += $lineNet;
-                        $taxTotal += round($lineNet * (float) ($item->tax_rate ?? 0), 2);
+                        // (١٠/١١) نفس `Tax::line`: مترسي على الشامل زي الورق
+                        $part = \App\Services\Tax::line((float) $item->price, $dq, (float) ($item->tax_rate ?? 0));
+                        $net += $part['net'];
+                        $taxTotal += $part['tax'];
                     }
                 }
 

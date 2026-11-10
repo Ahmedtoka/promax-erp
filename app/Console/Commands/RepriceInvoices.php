@@ -314,8 +314,7 @@ class RepriceInvoices extends Command
             $listPrice = (float) $item->list_price;
             $qty = (int) $item->qty;
 
-            $price = round($listPrice * (1 - $pct), 2);
-            $total = round($price * $qty, 2);
+            $price = round($listPrice * (1 - $pct), 4);
 
             // ⚠️ الضريبة بتتحسب على الصافي **بعد الخصم** سطر بسطر —
             // نفس `storeInvoice`. الفاتورة ممكن تجمع صنف خاضع ومعفى.
@@ -323,9 +322,10 @@ class RepriceInvoices extends Command
                 ? \App\Services\Tax::rate($client, $item->product)
                 : (float) $item->tax_rate;
 
-            $tax = $item->product
-                ? \App\Services\Tax::on($total, $client, $item->product)
-                : round($total * $taxRate, 2);
+            // (١٠/١١) السطر مترسي على الشامل — نفس `Tax::line` بتاع الفاتورة
+            $lineCalc = \App\Services\Tax::line($price, $qty, $taxRate);
+            $total = $lineCalc['net'];
+            $tax = $lineCalc['tax'];
 
             $subtotal += round($listPrice * $qty, 2);
 

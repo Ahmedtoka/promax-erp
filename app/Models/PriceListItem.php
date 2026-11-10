@@ -12,7 +12,7 @@ class PriceListItem extends Model
 
     protected function casts(): array
     {
-        return ['price' => 'decimal:2'];
+        return ['price' => 'decimal:4'];
     }
 
     public function list(): BelongsTo

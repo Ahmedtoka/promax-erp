@@ -434,14 +434,15 @@ class PriceChange
                     continue;
                 }
 
-                $price = round((float) $price, 2);
+                // (١٠/١١) ٤ أرقام عشرية — غير الشامل لازم يرجع للشامل بالظبط
+                $price = round((float) $price, 4);
 
                 $item = PriceListItem::firstOrNew([
                     'price_list_id' => $list->id,
                     'product_id' => (int) $productId,
                 ]);
 
-                if ($item->exists && abs((float) $item->price - $price) < 0.005) {
+                if ($item->exists && abs((float) $item->price - $price) < 0.00005) {
                     continue;
                 }
 
@@ -913,10 +914,11 @@ class PriceChange
                 continue;
             }
 
-            $price = round((float) $price, 2);
+            // (١٠/١١) أسعار القوايم غير شاملة بـ٤ أرقام عشرية (٦٣ ÷ 1.14 = 55.2632)
+            $price = round((float) $price, 4);
             $old = isset($current[$productId]) ? (float) $current[$productId] : null;
 
-            if ($old !== null && abs($old - $price) < self::EPS) {
+            if ($old !== null && abs($old - $price) < 0.00005) {
                 continue;
             }
 

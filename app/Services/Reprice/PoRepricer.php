@@ -201,8 +201,10 @@ class PoRepricer
                 return ['not_priced' => $product->displayName(), 'changed' => false, 'after' => [], 'lines' => []];
             }
 
-            $lineTotal = round((int) $item->qty * $price, 2);
-            $lineTax = Tax::on($lineTotal, $client, $product);
+            // (١٠/١١) السطر مترسي على الشامل (الكمية × الشامل = الورق)
+            $line = Tax::line((float) $price, (int) $item->qty, Tax::rate($client, $product));
+            $lineTotal = $line['net'];
+            $lineTax = $line['tax'];
 
             // سعر القايمة قبل الخصم — نفس احتياطي `fillItems`
             $listPrice = Pricing::listPriceFor($client, $product);
@@ -368,11 +370,11 @@ class PoRepricer
                 $listPrice = (float) $price;
             }
 
-            $lineTotal = round($qty * $price, 2);
-
-            // الضريبة سطر بسطر من `Tax` — نفس قاعدة الفاتورة بالظبط
+            // الضريبة سطر بسطر — (١٠/١١) مترسية على الشامل بنفس `Tax::line` بتاع الفاتورة
             $taxRate = \App\Services\Tax::rate($client, $product);
-            $lineTax = \App\Services\Tax::on($lineTotal, $client, $product);
+            $line = \App\Services\Tax::line((float) $price, $qty, $taxRate);
+            $lineTotal = $line['net'];
+            $lineTax = $line['tax'];
 
             PurchaseOrderItem::create([
                 'purchase_order_id' => $po->id,

@@ -333,8 +333,10 @@ class Returns
                         }
 
                         $taxRate = Tax::rate($client, $product);
-                        $lineTotal = round($left * $unitPrice, 2);
-                        $lineTax = round($lineTotal * $taxRate, 2);
+                        // (١٠/١١) نفس `Tax::line` بتاع البيع — المرتجع بيرجع نفس الشامل
+                        $calc = Tax::line((float) $unitPrice, $left, (float) $taxRate);
+                        $lineTotal = $calc['net'];
+                        $lineTax = $calc['tax'];
 
                         ReturnItem::create([
                             'return_id' => $doc->id,

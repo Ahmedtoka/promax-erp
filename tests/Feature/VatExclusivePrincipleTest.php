@@ -71,12 +71,13 @@ class VatExclusivePrincipleTest extends TestCase
         $res = $this->sellApi($rep, $client, [['product_id' => $product->id, 'qty' => 3]]);
         $res->assertStatus(201);
 
-        // 3 × 78.95 = 236.85 صافي، ضريبة 33.16، شامل 270.01
+        // (١٠/١١) السطر مترسي على الشامل: 78.95 × 1.14 = 90 → 3 × 90 = 270 شامل،
+        // صافي 236.84، ضريبة 33.16
         $line = $res->json('invoice.items.0');
         $this->assertNotNull($line, 'الرد لازم يرجّع سطور الفاتورة');
-        $this->assertEqualsWithDelta(236.85, $line['net'], 0.001);
+        $this->assertEqualsWithDelta(236.84, $line['net'], 0.001);
         $this->assertEqualsWithDelta(33.16, $line['tax'], 0.001);
-        $this->assertEqualsWithDelta(270.01, $line['incl'], 0.001);
+        $this->assertEqualsWithDelta(270.00, $line['incl'], 0.001);
 
         // ⚠️ الضريبة مرة واحدة: مجموع الشامل = grand_total
         $this->assertEqualsWithDelta((float) $res->json('invoice.grand_total'), $line['incl'], 0.001);
@@ -92,7 +93,7 @@ class VatExclusivePrincipleTest extends TestCase
         $page->assertOk();
         $page->assertSee('vatLinesToggle', false);
         $page->assertSee('c-vat', false);
-        $page->assertSee('270.01');             // شامل السطر = 236.85 + 33.16
+        $page->assertSee('270.00');             // شامل السطر = 236.84 + 33.16
         // فاتورة المندوب (من زيارة) بتفتح والأعمدة ظاهرة
         $this->assertMatchesRegularExpression('/id="vatLinesToggle"\s+checked/', $page->getContent());
     }

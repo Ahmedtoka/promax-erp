@@ -91,6 +91,38 @@ class Tax
     }
 
     /**
+     * ═══ حساب سطر مطابق للورق (قرار المالك ١٠/١١/٢٠٢٦) ═══
+     *
+     * السعر المتخزّن غير شامل (٤ أرقام عشرية)، بس الورق والأبلكيشن بيجمعوا
+     * **الكمية × السعر الشامل** (٦٣، ١٠١٫٢٥، ٥٨٫٥٠ …). لو حسبنا الصافي
+     * الأول وضربنا الضريبة فيه، ١٠٠ × ٦٣ كانت بتطلع ٦٣٠٠٫٧٨ بدل ٦٣٠٠.
+     *
+     * فالسطر الخاضع بيترسى على الشامل:
+     *   سعر الوحدة شامل = round(غير الشامل × (1 + النسبة)، 2)
+     *   السطر شامل     = round(سعر الوحدة شامل × الكمية، 2)   ← = الورق بالظبط
+     *   السطر صافي     = round(السطر شامل ÷ (1 + النسبة)، 2)
+     *   الضريبة        = السطر شامل − السطر صافي           ← مفيش تقريب مرتين
+     *
+     * السطر المعفى: صافي = round(round(غير الشامل، 2) × الكمية، 2) — زي زمان.
+     *
+     * @return array{unit_incl: float, incl: float, net: float, tax: float}
+     */
+    public static function line(float $unitExcl, int|float $qty, float $rate): array
+    {
+        if ($rate <= 0) {
+            $net = round(round($unitExcl, 2) * $qty, 2);
+
+            return ['unit_incl' => round($unitExcl, 2), 'incl' => $net, 'net' => $net, 'tax' => 0.0];
+        }
+
+        $unitIncl = round($unitExcl * (1 + $rate), 2);
+        $incl = round($unitIncl * $qty, 2);
+        $net = round($incl / (1 + $rate), 2);
+
+        return ['unit_incl' => $unitIncl, 'incl' => $incl, 'net' => $net, 'tax' => round($incl - $net, 2)];
+    }
+
+    /**
      * ملخص فاتورة من سطورها.
      *
      * كل سطر لازم يكون فيه `total` (صافي بعد الخصم) و `tax`.

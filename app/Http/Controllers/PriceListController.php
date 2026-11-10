@@ -255,7 +255,7 @@ class PriceListController extends Controller
                 $price = round($price / $step) * $step;
             }
 
-            $rows[(int) $pid] = round($price, 2);
+            $rows[(int) $pid] = round($price, 4);
         }
 
         return $this->draftOrNothing($request, $priceList, $rows, __('price.bulk_done', [

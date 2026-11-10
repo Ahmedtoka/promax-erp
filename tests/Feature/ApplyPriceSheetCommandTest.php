@@ -44,19 +44,54 @@ class ApplyPriceSheetCommandTest extends TestCase
         $this->assertFalse((bool) $c->fresh()->taxable);
     }
 
-    public function test_apply_fixes_rounding_incl_items_and_taxable_but_not_cashvan(): void
+    public function test_apply_takes_new_from_the_sheet_converts_incl_items_and_splits_cashvan_vat(): void
     {
         [$new, $net, $cash, $p, $c] = $this->scene();
+        $p->update(['barcode' => '6220000000001']);
+        $plan = tempnam(sys_get_temp_dir(), 'plan');
+        file_put_contents($plan, json_encode([
+            // سعر المستهلك في الشيت 100 → ÷ 1.14 بـ٤ أرقام
+            'items' => [['list' => 'new', 'barcode' => '6220000000001', 'price' => round(100 / 1.14, 4), 'why' => 'rounding (sheet)']],
+            'vat_split_lists' => ['CashVan'],
+        ]));
 
-        $this->artisan('prices:apply-sheet', ['--apply' => true])->assertSuccessful();
+        $this->artisan('prices:apply-sheet', ['--apply' => true, '--plan' => $plan, '--no-docs' => true])->assertSuccessful();
 
         $price = fn ($l) => (float) PriceListItem::where(['price_list_id' => $l->id, 'product_id' => $p->id])->value('price');
-        $this->assertEqualsWithDelta(87.72, $price($new), 0.001, 'new: round(100 ÷ 1.14) = 87.72');
-        $this->assertEqualsWithDelta(87.72, (float) $p->fresh()->price_new, 0.001, 'عمود الصنف لازم يتزامن مع القايمة');
-        $this->assertEqualsWithDelta(87.72, $price($net), 0.001, 'الشامل المتسجّل غلط يتحوّل لغير شامل');
-        $this->assertEqualsWithDelta(100.0, $price($cash), 0.001, 'الكاش فان مابيتلمسش');
+        $this->assertEqualsWithDelta(87.7193, $price($new), 0.00001, 'new = سعر الشيت ÷ 1.14 بـ٤ أرقام');
+        $this->assertEqualsWithDelta(87.7193, (float) $p->fresh()->price_new, 0.00001, 'عمود الصنف لازم يتزامن مع القايمة');
+        $this->assertEqualsWithDelta(87.7193, $price($net), 0.00001, 'الشامل المتسجّل غلط يتحوّل لغير شامل');
+        $this->assertEqualsWithDelta(87.7193, $price($cash), 0.00001, 'الكاش فان: الشامل ÷ 1.14 (المبلغ للعميل ثابت)');
         $this->assertTrue((bool) $c->fresh()->taxable, 'الكل خاضع');
         $this->assertNull(Client::whereNull('price_list_id')->where('id', $c->id)->first(), 'مفيش عميل من غير قايمة');
+    }
+
+    public function test_vat_split_keeps_what_the_customer_paid_and_the_balance(): void
+    {
+        $c = $this->makeClient(['taxable' => false]);
+        $p = $this->makeProduct(['price_new' => 80]);
+        $inv = \App\Models\Invoice::create(['number' => 'INV-T1', 'client_id' => $c->id, 'user_id' => $this->makeAdmin()->id, 'payment' => 'credit', 'price_list' => 'CashVan',
+            'subtotal' => 800, 'discount' => 0, 'total' => 800, 'tax_total' => 0, 'grand_total' => 800]);
+        \App\Models\InvoiceItem::create(['invoice_id' => $inv->id, 'product_id' => $p->id, 'qty' => 10, 'list_price' => 80, 'price' => 80,
+            'unit_cost' => 0, 'total' => 800, 'tax_rate' => 0, 'tax' => 0]);
+        \App\Models\Transaction::create(['client_id' => $c->id, 'date' => today(), 'memo' => 't', 'debit' => 800, 'credit' => 0, 'kind' => 'sale',
+            'source_type' => \App\Models\Invoice::class, 'source_id' => $inv->id]);
+        $c->recalculate();
+        $before = (float) $c->fresh()->balance;
+
+        $r = \App\Services\Reprice\VatSplit::invoice($inv);
+        $c->recalculate();
+
+        $inv->refresh();
+        $it = $inv->items()->first();
+        $this->assertNotNull($r);
+        $this->assertEqualsWithDelta(800.00, (float) $inv->grand_total, 0.001, 'المبلغ اللي اتدفع ثابت');
+        $this->assertEqualsWithDelta(701.75, (float) $inv->total, 0.001, '800 ÷ 1.14');
+        $this->assertEqualsWithDelta(98.25, (float) $inv->tax_total, 0.001);
+        $this->assertEqualsWithDelta(70.1754, (float) $it->price, 0.00005, '80 ÷ 1.14');
+        $this->assertEqualsWithDelta(0.14, (float) $it->tax_rate, 0.0001);
+        $this->assertEqualsWithDelta($before, (float) $c->fresh()->balance, 0.001, 'الرصيد ثابت');
+        $this->assertNull(\App\Services\Reprice\VatSplit::invoice($inv->fresh()), 'مرة تانية = مفيش تغيير');
     }
 
     public function test_plan_assigns_list_and_discount_through_every_layer_and_retires_empty_lists(): void

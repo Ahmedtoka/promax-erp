@@ -259,7 +259,8 @@ class ManualDocController extends Controller
                     }
 
                     $taxRate = \App\Services\Tax::rate($client, $item->product);
-                    $lineTax = \App\Services\Tax::on($quote['line_total'], $client, $item->product);
+                    // (١٠/١١) السطر مترسي على الشامل — الضريبة من `Tax::line` جوه quote
+                    $lineTax = $quote['line_tax'];
 
                     $rows[] = [
                         'product_id' => $item->product_id,

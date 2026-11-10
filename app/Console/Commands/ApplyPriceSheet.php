@@ -32,8 +32,9 @@ use Illuminate\Support\Facades\Storage;
  *
  * ⚠️ **أسعار وخصومات العملاء مش في الكود** (الريبو عام) — بتيجي من ملف
  * الخطة (`--plan`) اللي بيتحفظ برا الريبو. الكود فيه القواعد العامة بس:
- *   rounding  أسعار المستهلك أرقام صحيحة → new/old = round(صحيح ÷ 1.14، 2)
+ *   rounding  new/old = سعر المستهلك في الشيت ÷ 1.14 (٤ أرقام، من الخطة)
  *   incl      بند في قايمة صافية = سعر المستهلك الشامل بالظبط → يتحوّل لغير شامل
+ *   vatsplit  قوايم الكاش فان/بونجور (شاملة) ÷ 1.14، ومستنداتهم فصل ضريبة بنفس المبلغ
  *   items     بنود من الخطة (أسعار الشيت غير الشاملة) — بتكسب على اللي فوق
  *   taxable   كل العملاء والسلاسل خاضعين (قرار ١٠/١١)
  *   reactivate فروع اتقفلت غلط كـ«مكرر» ترجع active (من الخطة)
@@ -55,7 +56,8 @@ class ApplyPriceSheet extends Command
         {--user= : اليوزر اللي التعديلات تتسجّل باسمه (الافتراضي أول أدمن)}
         {--log= : مسار نسخة إضافية من سجل التغييرات}
         {--rollback= : رجّع snapshot اتعمل قبل كده}
-        {--only= : خطوات معيّنة: rounding,incl,items,taxable,reactivate,link,assign,lists,retire,rename}';
+        {--only= : خطوات معيّنة: rounding,incl,items,taxable,reactivate,link,assign,lists,retire,rename,docs}
+        {--no-docs : من غير إعادة تسعير المستندات}';
 
     protected $description = 'تطبيق شيت أسعار العملاء على البيانات الأساسية (dry-run افتراضياً)';
 
@@ -103,9 +105,6 @@ class ApplyPriceSheet extends Command
             if ($want('rounding') || $want('incl') || $want('items')) {
                 $this->listItems($want, $by);
             }
-            if ($want('taxable')) {
-                $this->taxable();
-            }
             if ($want('reactivate')) {
                 $this->reactivate();
             }
@@ -118,11 +117,19 @@ class ApplyPriceSheet extends Command
             if ($want('lists')) {
                 $this->everyClientHasList();
             }
+            // بعد النقل: الفرع اللي طلع من الكاش فان لسلسلته بياخد الضريبة
+            if ($want('taxable')) {
+                $this->taxable();
+            }
             if ($want('retire')) {
                 $this->retire();
             }
             if ($want('rename')) {
                 $this->rename();
+            }
+            // آخر خطوة: كل المستندات من القوايم الصح (قرار ١٠/١١: إعادة تسعير في المكان)
+            if ($want('docs') && ! $this->option('no-docs') && $by) {
+                $this->docs($by);
             }
         };
 
@@ -152,33 +159,28 @@ class ApplyPriceSheet extends Command
         $retiring = array_merge($this->plan['deactivate'] ?? [], $this->plan['delete'] ?? []);
         $target = []; // list_id => [product_id => [price, why]]
 
-        if ($want('rounding')) {
-            foreach (PriceList::whereIn('code', ['new', 'old'])->get() as $list) {
-                foreach ($list->items()->get() as $it) {
-                    $p = (float) $it->price;
-                    $incl = $p * self::VAT;
-                    if ($p <= 0 || abs($incl - round($incl)) >= 0.02) {
-                        continue;
-                    }
-                    $t = round(round($incl) / self::VAT, 2);
-                    if (abs($t - $p) >= 0.005) {
-                        $target[$list->id][$it->product_id] = [$t, 'rounding'];
-                    }
-                }
-            }
-        }
+        // ⚠️ (١٠/١١) قايمتي new/old بتيجي من الخطة: سعر المستهلك في الشيت ÷ 1.14
+        // (٤ أرقام) — «أسعار الشيت زي ما هي». مفيش تخمين ولا تقريب لربع جنيه.
 
         if ($want('incl') && ($new = PriceList::where('code', 'new')->first())) {
+            // ⚠️ سعر المستهلك الشامل من **أسعار الشيت في الخطة** لو موجودة —
+            // القايمة القديمة مقطوعة (87.71 × 1.14 = 99.99 مش 100) وكانت بتفوّت بنود
+            $planNew = [];
+            foreach ($this->plan['items'] ?? [] as $row) {
+                if (($row['list'] ?? null) === 'new' && ($pid = Product::where('barcode', $row['barcode'])->value('id'))) {
+                    $planNew[$pid] = (float) $row['price'];
+                }
+            }
             $consumerIncl = [];
             foreach ($new->items()->get() as $it) {
-                $consumerIncl[$it->product_id] = round((float) $it->price * self::VAT);
+                $consumerIncl[$it->product_id] = round(($planNew[$it->product_id] ?? (float) $it->price) * self::VAT, 2);
             }
-            $lists = PriceList::whereNotIn('code', array_merge(['new', 'old'], self::OUT_OF_SCOPE, $retiring))->get();
+            $lists = PriceList::whereNotIn('code', array_merge(['new', 'old'], self::OUT_OF_SCOPE, $this->plan['vat_split_lists'] ?? [], $retiring))->get();
             foreach ($lists as $list) {
                 foreach ($list->items()->get() as $it) {
                     $ci = $consumerIncl[$it->product_id] ?? 0;
                     if ($ci > 0 && abs((float) $it->price - $ci) < 0.005) {
-                        $target[$list->id][$it->product_id] = [round($ci / self::VAT, 2), 'incl→excl'];
+                        $target[$list->id][$it->product_id] = [round($ci / self::VAT, 4), 'incl→excl'];
                     }
                 }
             }
@@ -193,7 +195,21 @@ class ApplyPriceSheet extends Command
 
                     continue;
                 }
-                $target[$list->id][$pid] = [round((float) $row['price'], 2), $row['why'] ?? 'plan'];
+                $target[$list->id][$pid] = [round((float) $row['price'], 4), $row['why'] ?? 'plan'];
+            }
+        }
+
+        // ═══ (١٠/١١) قوايم الكاش فان/بونجور: أسعارها شاملة → ÷ 1.14 (المبلغ للعميل ثابت) ═══
+        if ($want('items')) {
+            foreach ($this->plan['vat_split_lists'] ?? [] as $code) {
+                if (! ($l = PriceList::where('code', $code)->first())) {
+                    continue;
+                }
+                foreach ($l->items()->get() as $it) {
+                    if ((float) $it->price > 0) {
+                        $target[$l->id][$it->product_id] = [round((float) $it->price / self::VAT, 4), 'vat-split'];
+                    }
+                }
             }
         }
 
@@ -202,12 +218,13 @@ class ApplyPriceSheet extends Command
             $prices = [];
             foreach ($map as $pid => [$price, $why]) {
                 $cur = PriceListItem::where(['price_list_id' => $listId, 'product_id' => $pid])->value('price');
-                if ($cur !== null && abs((float) $cur - $price) < 0.005) {
+                if ($cur !== null && abs((float) $cur - $price) < 0.00005) {
                     continue;
                 }
                 $prices[$pid] = $price;
                 $this->snapshot['items'][] = ['price_list_id' => $listId, 'product_id' => $pid, 'price' => $cur === null ? null : (float) $cur];
-                $this->logRow($why === 'rounding' ? 'rounding' : ($why === 'incl→excl' ? 'incl' : 'items'), 'price_list_item', $listId,
+                $step = match (true) { str_starts_with($why, 'rounding') => 'rounding', $why === 'incl→excl' => 'incl', $why === 'vat-split' => 'vatsplit', default => 'items' };
+                $this->logRow($step, 'price_list_item', $listId,
                     $list->code.' · '.$this->pname($pid), 'price', $cur === null ? null : (float) $cur, $price, $why);
             }
             if ($prices === []) {
@@ -228,10 +245,26 @@ class ApplyPriceSheet extends Command
 
     private function taxable(): void
     {
+        // ⚠️ قوايم الكاش فان/بونجور أسعارها نوع «شامل» واتباعت من غير ضريبة.
+        // لو العميل بقى خاضع وقايمته ماتحوّلتش، الضريبة هتتضاف فوق = ضريبة مرتين.
+        // لحد قرار أحمد (`plan.taxable_out_of_scope`) بيتسابوا ويتسجّلوا «مستني قرار».
+        $outIds = PriceList::whereIn('code', self::OUT_OF_SCOPE)->pluck('id')->all();
+        $flipOut = (bool) ($this->plan['taxable_out_of_scope'] ?? false) || ! empty($this->plan['vat_split_lists']);
+
         foreach (Client::where(fn ($q) => $q->where('taxable', false)->orWhereNull('taxable'))->get() as $c) {
+            if (! $flipOut && in_array((int) $c->price_list_id, $outIds, true)) {
+                $this->logRow('taxable', 'client', $c->id, $c->code.' '.$c->name, 'taxable', false, false, 'TODO(answer) كاش فان/بونجور: قايمتهم شاملة — مستني قرار');
+
+                continue;
+            }
             $this->setClient($c, ['taxable' => true], 'taxable', 'الكل خاضع (قرار ١٠/١١)');
         }
         foreach (ClientGroup::where(fn ($q) => $q->where('taxable', false)->orWhereNull('taxable'))->get() as $g) {
+            if (! $flipOut && in_array((int) $g->price_list_id, $outIds, true)) {
+                $this->logRow('taxable', 'client_group', $g->id, 'سلسلة '.$g->name, 'taxable', $g->taxable, $g->taxable, 'TODO(answer) كاش فان/بونجور — مستني قرار');
+
+                continue;
+            }
             $this->setGroup($g, ['taxable' => true], 'taxable', 'الكل خاضع (قرار ١٠/١١)');
         }
     }
@@ -370,6 +403,119 @@ class ApplyPriceSheet extends Command
                 $this->snapshot['lists'][] = ['id' => $l->id, 'name' => $l->name];
                 $this->logRow('rename', 'price_list', $l->id, $code, 'name', $l->name, $name, 'الاسم بس — الكود ثابت (المستندات شايلاه)');
                 $l->forceFill(['name' => $name])->save();
+            }
+        }
+    }
+
+    // ═══════════════════════ المستندات ═══════════════════════
+
+    /**
+     * إعادة تسعير **كل** الفواتير وأوامر التوريد في المكان من القوايم الصح
+     * (قرار أحمد ١٠/١١: مفيش حاجة اترفعت ضريبي، والهدف السيستم = الورق).
+     *
+     * من محرك PriceChange بنفس طريق الشاشة: لكل عميل مسودة «عميل» من غير
+     * قايمة ولا خصم = إعادة مزامنة المستندات بس ← معاينة ← تطبيق. كل مستند
+     * بيتسجّل في `price_change_docs` بسطوره قبل وبعد، والرصيد بيتحسب تاني.
+     *
+     * ⚠️ عملاء الكاش فان/بونجور مستنيين قرار الضريبة — بيتسابوا لحد
+     * `plan.taxable_out_of_scope`.
+     */
+    private function docs(User $by): void
+    {
+        $splitIds = PriceList::whereIn('code', $this->plan['vat_split_lists'] ?? [])->pluck('id')->all();
+        $outIds = array_values(array_diff(PriceList::whereIn('code', self::OUT_OF_SCOPE)->pluck('id')->all(), $splitIds));
+        $flipOut = (bool) ($this->plan['taxable_out_of_scope'] ?? false);
+
+        $withDocs = DB::table('invoices')->select('client_id')
+            ->union(DB::table('purchase_orders')->select('client_id')->where('status', '!=', 'cancelled'))
+            ->pluck('client_id')->unique()->filter()->all();
+
+        $before = Client::whereIn('id', $withDocs)->pluck('balance', 'id')->all();
+        $runs = [];
+
+        $splitClients = Client::whereIn('price_list_id', $splitIds)->pluck('id')->all();
+
+        foreach (Client::whereIn('id', $withDocs)->whereNotIn('id', $splitClients)->orderBy('id')->get() as $c) {
+            if (! $flipOut && in_array((int) $c->price_list_id, $outIds, true)) {
+                $this->logRow('docs', 'client', $c->id, $c->code.' '.$c->name, 'documents', null, null, 'TODO(answer) كاش فان/بونجور — المستندات مستنية قرار الضريبة');
+
+                continue;
+            }
+            try {
+                $run = PriceChange::draft($by, 'client', ['client_id' => $c->id, 'price_list_id' => null]);
+                PriceChange::apply($run, $by);
+                $runs[] = $run->id;
+            } catch (\App\Exceptions\Rejected $e) {
+                // «مفيش حاجة اتغيرت» أو مستند محجوز — بيتسجّل ونكمّل
+                $this->logRow('docs', 'client', $c->id, $c->code.' '.$c->name, 'documents', null, null, 'اتساب: '.$e->getMessage());
+            }
+        }
+
+        foreach (\App\Models\PriceChangeDoc::whereIn('run_id', $runs)->orderBy('id')->get() as $d) {
+            if ($d->outcome !== 'changed') {
+                if ($d->outcome === 'skipped') {
+                    $this->logRow('docs', $d->doc_type, $d->doc_id, $d->number, 'grand', (float) $d->before_grand, (float) $d->before_grand, 'اتساب: '.$d->reason.' '.$d->reason_detail);
+                }
+
+                continue;
+            }
+            $row = ['step' => 'docs', 'entity' => $d->doc_type, 'id' => $d->doc_id, 'label' => $d->number.' · '.($d->doc_date?->format('Y-m-d') ?? ''),
+                'field' => 'grand', 'before' => (float) $d->before_grand, 'after' => (float) $d->after_grand,
+                'why' => sprintf('صافي %s→%s · ضريبة %s→%s · run #%d', $d->before_net, $d->after_net, $d->before_tax, $d->after_tax, $d->run_id),
+                'client_id' => $d->client_id, 'lines' => is_string($d->lines) ? json_decode($d->lines, true) : $d->lines];
+            $this->log[] = $row;
+        }
+
+        // ═══ اللي PriceChange سابه: أوامر اتسلّمت/مع السواق/بسعر ثابت، فواتير عليها
+        // مرتجع، والمرتجعات — إعادة تسعير في المكان (FullResync) ═══
+        $skipIds = array_merge($flipOut ? [] : Client::whereIn('price_list_id', $outIds)->pluck('id')->all(), $splitClients);
+        $touched = [];
+        $logDoc = function (string $type, $doc, ?array $r) use (&$touched) {
+            if ($r === null) {
+                return;
+            }
+            if (isset($r['skip'])) {
+                $this->logRow('docs', $type, $doc->id, $doc->number, 'grand', (float) $doc->grand_total, (float) $doc->grand_total, 'اتساب: '.$r['skip']);
+
+                return;
+            }
+            $touched[$doc->client_id] = true;
+            $this->log[] = ['step' => 'docs', 'entity' => $type, 'id' => $doc->id, 'label' => $doc->number.' · '.$doc->created_at?->format('Y-m-d'),
+                'field' => 'grand', 'before' => $r['before']['grand'], 'after' => $r['after']['grand'],
+                'why' => sprintf('في المكان · صافي %s→%s · ضريبة %s→%s', $r['before']['net'], $r['after']['net'], $r['before']['tax'], $r['after']['tax'])
+                    .(isset($r['sale_before']) && $r['sale_before'] !== null ? sprintf(' · قيد البيع %s→%s', $r['sale_before'], $r['sale_after']) : ''),
+                'client_id' => $doc->client_id, 'lines' => $r['lines']];
+        };
+
+        $invWithReturns = DB::table('return_items')->whereNotNull('invoice_id')->distinct()->pluck('invoice_id')->all();
+        foreach (\App\Models\Invoice::whereIn('id', $invWithReturns)->whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $inv) {
+            $logDoc('invoice', $inv, \App\Services\Reprice\FullResync::invoice($inv));
+        }
+        foreach (\App\Models\PurchaseOrder::whereIn('status', ['delivered', 'arrived', 'pending'])->whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $po) {
+            $logDoc('po', $po, \App\Services\Reprice\FullResync::po($po));
+        }
+        foreach (\App\Models\ClientReturn::whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $ret) {
+            $logDoc('return', $ret, \App\Services\Reprice\FullResync::clientReturn($ret));
+        }
+        // ═══ الكاش فان/بونجور: فصل الضريبة جوه نفس المبلغ (VatSplit) — الرصيد ثابت ═══
+        foreach (\App\Models\Invoice::whereIn('client_id', $splitClients)->orderBy('id')->get() as $d) {
+            $logDoc('invoice', $d, \App\Services\Reprice\VatSplit::invoice($d));
+        }
+        foreach (\App\Models\PurchaseOrder::whereIn('client_id', $splitClients)->orderBy('id')->get() as $d) {
+            $logDoc('po', $d, \App\Services\Reprice\VatSplit::po($d));
+        }
+        foreach (\App\Models\ClientReturn::whereIn('client_id', $splitClients)->orderBy('id')->get() as $d) {
+            $logDoc('return', $d, \App\Services\Reprice\VatSplit::clientReturn($d));
+        }
+
+        foreach (Client::whereIn('id', array_keys($touched))->get() as $c) {
+            $c->recalculate();
+        }
+        $before += Client::whereIn('id', array_keys($touched))->whereNotIn('id', array_keys($before))->pluck('balance', 'id')->all();
+
+        foreach (Client::whereIn('id', array_keys($before))->get(['id', 'code', 'name', 'balance']) as $c) {
+            if (abs((float) $c->balance - (float) $before[$c->id]) >= 0.005) {
+                $this->logRow('docs', 'client', $c->id, $c->code.' '.$c->name, 'balance', (float) $before[$c->id], (float) $c->balance, 'الرصيد بعد إعادة تسعير مستنداته');
             }
         }
     }

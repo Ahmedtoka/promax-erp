@@ -18,9 +18,9 @@ class PurchaseOrderItem extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'decimal:2',
+            'price' => 'decimal:4',
             'total' => 'decimal:2',
-            'list_price' => 'decimal:2',
+            'list_price' => 'decimal:4',
             'discount_pct' => 'decimal:4',
         ];
     }

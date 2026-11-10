@@ -83,6 +83,15 @@
                                     ⛔ {{ __('ops.po_dup_badge', ['number' => $isDup]) }}
                                 </div>
                             @endif
+                            @if (($e['price_warnings'] ?? []) !== [])
+                                {{-- (١٠/١١) السعر بيتاخد من قايمة العميل — ده تنبيه بس --}}
+                                <div style="margin-top:4px;font-size:11.5px;color:var(--orange,#B26A00);font-weight:700">
+                                    ⚠️ {{ __('ops.po_price_warn_head') }}
+                                    <ul style="margin:2px 0 0;padding-inline-start:18px;font-weight:600">
+                                        @foreach ($e['price_warnings'] as $w)<li>{{ $w }}</li>@endforeach
+                                    </ul>
+                                </div>
+                            @endif
                             @if ($e['unknown'] !== [])
                                 <div class="badge b-red" style="font-size:10px;margin-top:4px">
                                     {{ __('ops.po_unknown_barcodes', ['codes' => implode('، ', $e['unknown'])]) }}
