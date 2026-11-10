@@ -1,0 +1,311 @@
+# Document-by-document review (المراجعة — مستند مستند) — Design (2026-11-10)
+
+Status: **approved by Ahmed 2026-11-10 («موافق، ابدأ») — all defaults in §11
+accepted.** Q3 (which paper number a PO serial holds) was not answered: the PO
+field is a generic «السيريال الورقي», free text, same as invoices.
+
+Built notes: the client-side per-table Excel covers the queue (it is not
+paginated), so there is no server export; analytics tab sits next to the docs
+tab; after an action the page refreshes only that row and the overall bar.
+
+## 1. Intent
+
+After tonight's price fix (`PRICE_DECISIONS_2026-11-10.md`: excl.-VAT base,
+everyone taxable, every invoice and PO repriced in place, 4-dp unit prices),
+the accountant sits with the paper copies and matches the system **one
+document at a time**:
+
+> «المحاسب يفتح المراجعة، يشوف كل السلاسل والعملاء اللي من غير سلسلة، ويراجع
+> كل فاتورة وكل أمر توريد واحد واحد على الورق… ويعلّم ✓ اتراجع. ولو فيه غلط
+> يصلّحه في نفس الشاشة من غير ما يدوّر في صفحات تانية.»
+
+What makes it special for Ahmed is the **audit**: he wants to see that the
+accountant really checked each document, not clicked ✓ ✓ ✓.
+
+Scale (local live copy, 10/11): 442 invoices (426 with a paper serial), 218
+non-cancelled POs (188 delivered, 4 arrived, 26 pending), 84 chains, 33 mother
+companies, 154 clients without a chain. One accountant + 6 admins.
+
+## 2. Goals / non-goals / anti-goals
+
+Goals
+- One screen, **`/erp/review/docs`**, a 5th tab of the existing review module
+  («المستندات»). Every invoice + every non-cancelled PO, chain and solo clients.
+- Find a document in one keystroke-and-type: system number, paper serial,
+  branch/client name or code, phone, chain, amount.
+- Filters: mother → chain → client, rep, date range (`_range` partial), doc
+  type, review status (pending / reviewed / has issue / changed after review).
+- Per document: paper fields **side by side** with system values; ✓ reviewed,
+  ✗ issue (+ note); inline fixes: paper serial, lines (add / remove / qty),
+  rep, date. After a line fix the document **reprices from the client's
+  correct list** with the pricing helpers the price-fix session lands on master.
+- Progress to 100%: overall, per mother, per chain, per solo client. Per row:
+  #invoices, #POs, money (excl / VAT / incl), pieces, distinct products,
+  reviewed vs left.
+- Full audit: every ✓ / ✗ / reopen / edit is (a) in the activity centre
+  (`erp.activity`) and (b) in an append-only review event log with
+  before → after values and the money delta.
+- Reviewer analytics (`/erp/review/docs/people`): per user per day — count,
+  median seconds between consecutive reviews, fast-streak flags, edits, money
+  changed; drill into a user's timeline.
+- Keyboard-first, fast, built for a 4-hour session.
+
+Non-goals
+- No new pricing logic. Repricing = the existing / landing helpers
+  (`InvoiceRepricer`, `PoRepricer`, `FullResync`, `Pricing`, `Tax::line`).
+- No ETA upload, no GL redesign (GL is reposted the way existing edits do it).
+- Returns, gifts and collections are not reviewed here (later, same pattern).
+- The mobile app is untouched.
+
+Anti-goals (would be a failure even if it "works")
+- A ✓ that can be given without opening the document (bulk ✓). **There is no
+  bulk ✓.** ✓ is only on the open document.
+- An edit that changes money without a before → after record.
+- Silent stock damage: an edit that moves custody/warehouse stock on a day
+  whose stock was already re-counted from paper (see §6.3).
+- Slowness: each ✓ must round-trip in < 300 ms and jump to the next document.
+
+## 3. Who
+
+Default (Q2): review + inline edits = **accountant and admin** (and any custom
+role granted the new keys). Reopen a reviewed document = **admin only**.
+Manager / branch_manager keep seeing the existing four tabs; they see the docs
+tab read-only unless granted.
+
+New permission keys in the custom-roles catalog (`Access.php` `act.` list,
+ar/en descriptions + risk):
+- `act.review.docs` — open the docs tab and mark ✓ / ✗ (low risk).
+- `act.review.docs_edit` — inline fixes: serial, lines, rep, date (high risk:
+  changes money). Routes: `erp.review.docs.serial|lines|rep|date`.
+- `act.review.docs_reopen` — clear a ✓ (medium). Default admin only.
+- `erp.review.docs.people` analytics page — admin only by default.
+The `role:` middleware on each route matches the defaults (RoleAccessTest).
+
+## 4. Data model
+
+### 4.1 Status — reuse `review_checks`
+`entity_type` gains `invoice` and `po`; `phase = 'docs'`; `item = 'doc'`.
+One row per document (the existing unique key fits). `status` ok | issue,
+`note`, `user_id`, and two snapshots taken at ✓ time:
+`system_net` = net excl. VAT, `system_balance` = grand total incl.
+Already in `AppServiceProvider::AUDITED`, so every ✓ shows in `erp.activity`.
+
+Derived state shown on screen:
+- **pending** — no row.
+- **reviewed ✓** — status ok and the document's grand total still equals the
+  snapshot.
+- **changed after review ⚠** — status ok but grand total ≠ snapshot (someone
+  edited it elsewhere, or a later reprice moved it). Counts as *not* done.
+- **issue ✗** — status issue (note required).
+
+### 4.2 New `doc_review_events` (append-only)
+| col | |
+|---|---|
+| id, created_at | |
+| user_id | who |
+| doc_type, doc_id | invoice / po |
+| action | `ok`, `issue`, `reopen`, `serial`, `lines`, `rep`, `date`, `open` |
+| before, after | JSON (serial; lines `[{product, qty, unit_excl, net, tax}]` + totals; rep id/name; date) |
+| net_delta, grand_delta | decimal(14,2), money moved by this event (0 for non-money) |
+| seconds_since_prev | seconds since this user's previous `ok`/`issue` event (null for first of a session gap > 30 min) |
+| open_ms | how long the document was open on screen before the ✓ (sent by the page; informative) |
+| note | |
+
+Never updated or deleted (no update route; model refuses `updating`/`deleting`).
+Each event is also written to `activity_logs` via `ActivityLog::record` with
+a readable title («✓ راجع INV-1407», «عدّل بنود INV-1407: 1,973.58 → 1,940.10»),
+because `InvoiceItem` / `PurchaseOrderItem` are not audited models.
+
+`open` events (document opened) are recorded only as `open_ms` on the next
+`ok`/`issue` — not as rows — to keep the table small. (My call.)
+
+### 4.3 `purchase_orders.paper_ref`
+New nullable `string(30)` + index, mirroring `invoices.paper_ref` (Q3 decides
+what paper number it holds).
+
+Migration: `2026_11_11_000100_doc_review.php` (additive only: one table, one
+column). Safe on live.
+
+## 5. Screen
+
+Route `GET /erp/review/docs` → `ReviewDocsController@index`. Two-pane layout
+(RTL aware), full height:
+
+```
+┌ tabs: لوحة · بيانات · حسابات · مخزن · [المستندات] ───────────────────────┐
+│ progress: ███████░░░ 62% (409/660) · فواتير 300/442 · أوامر 109/218 · ✗ 7 │
+├───────────────────────────────┬──────────────────────────────────────────┤
+│ 🔎 [ search: رقم/سيريال/فرع/تليفون ]│  INV-1407 · فاتورة · 22/10 · آجل      │
+│ filters: أم ▾ سلسلة ▾ عميل ▾ مندوب ▾│  العميل CL-372 كارفور المعادي (سلسلة…) │
+│ النوع ▾  الحالة ▾  من–إلى          │  ┌ الورق ───────┬ السيستم ─────────┐  │
+│ ───────────────────────────── │  │ سيريال [1145 ]│ ⚠ مكرر مع INV-1425│  │
+│ chain group header  38/52 ███ │  │ التاريخ       │ 22/10 [✎]         │  │
+│ ● INV-1407 1145  1,973.58 ✓   │  │ المندوب       │ أحمد س. [✎]       │  │
+│ ○ INV-1425 1145  1,973.58     │  └───────────────┴──────────────────┘  │
+│ ○ PO-0218  —    12,400.00 ✗   │  lines: صنف · كمية · سعر غير شامل ·     │
+│ …  (virtualised, grouped)     │   ضريبة · شامل · [vs list price ✓/≠]    │
+│                               │  totals: net · VAT · incl  (= paper?)   │
+│                               │  [✓ مطابق  Enter] [✗ مشكلة  X] [✎ بنود E]│
+│                               │  history: who/when/what (events)        │
+└───────────────────────────────┴──────────────────────────────────────────┘
+```
+
+Left — the queue
+- Grouped mother → chain → branch (solo clients under «من غير سلسلة»); each
+  group header shows its own progress bar and reviewed/total.
+- Row: status chip, system number, paper serial (or «ناقص» chip), date,
+  client, incl. total, flags (duplicate serial, missing serial, price ≠ list,
+  changed after review, locked).
+- Default sort: client group, then date, then number — the order the paper
+  files are usually in. Toggle sort by paper serial.
+- Default filter: **pending** (like the existing tabs).
+
+Right — the document
+- Header with type, system number, status, payment, client (+ chain, mother,
+  list name), PO status for POs.
+- **Paper vs system** block. Paper serial is an input (Enter saves). Date and
+  rep show with a ✎ that turns into a date input / rep select.
+- Lines table: product, qty, unit excl. (4 dp), VAT, incl., and the client's
+  **current list price** next to it with ✓ or ≠ so price mismatches jump out.
+  Excl / VAT / incl columns follow the price-fix session's VAT toggle partial
+  (`ops/_vat_lines_toggle`) once it is on master.
+- Totals: net, VAT, incl.; an optional «إجمالي الورق» input — if typed, shows
+  the difference (stored on the ✓ as `paper_net` style note; informative).
+- Edit lines (E): the table becomes editable (qty inputs, remove ×, add product
+  with type-ahead from the client's priced products). **Preview** shows the new
+  totals from the client's list before saving; Save writes, reprices, logs.
+- Actions: ✓ مطابق (Enter), ✗ فيه مشكلة (X, note required), reopen (admin).
+- Event history of this document at the bottom.
+
+Keyboard
+`/` search · `J` / `↓` next · `K` / `↑` previous · `Enter` ✓ and go to next ·
+`X` issue · `S` focus serial · `D` date · `R` rep · `E` edit lines · `Esc`
+cancel edit · `?` shortcut sheet. Shortcuts are off while typing in an input.
+
+Mechanics
+- Server-rendered Blade like the rest of the module; the right pane loads via
+  `GET /erp/review/docs/{type}/{id}` (HTML fragment) and actions POST JSON,
+  then the page swaps the fragment and advances. URL keeps `?doc=inv-1407` so
+  refresh/back lands on the same document.
+- Queue loads only ids + display columns (one query per type, no N+1); the
+  pane loads one document's lines.
+- Per-table Excel export of the filtered queue (house style), with status,
+  reviewer, reviewed-at and seconds-on-document.
+
+## 6. Inline fixes — behaviour
+
+All fixes: inside one DB transaction; guards first; one `doc_review_events`
+row + one activity row; if the document was ✓, the ✓ is **cleared** back to
+pending (default, Q2) and the event says so.
+
+Common guards (same family as the existing tools): ETA exported/submitted →
+locked; `PeriodGuard::assertOpen` on the document date (and on the new date
+for a date change); consignment invoice → lines locked. Locked documents show
+a lock chip with the reason and can still be ✓ / ✗.
+
+### 6.1 Paper serial
+Save on Enter. Trim; empty = clear. **Duplicates warn, don't block** (default
+Q4): the live copy already has 10 serials used twice — some are two reps' books
+(1371: rep 17 in Sep, rep 9 in Oct), some look like the same invoice entered
+twice (1145: same client, same 1,973.58, 22/10 and 27/10). The warning links to
+the other document; "duplicate serial" is also a filter.
+
+### 6.2 Rep
+Invoice: `user_id`; PO: `assigned_to`. Select limited to field reps
+(`User::FIELD_WORK_ROLES`, active, scope-checked with `Scope::assertRep`).
+Moves who gets the sale in KPIs/commission; no stock move (see 6.3).
+
+### 6.3 Lines — the stock question (Q1)
+The existing invoice editor (`OpsController::editInvoiceItems`) moves goods in
+and out of the rep's **open** custody and refuses when that day's custody is
+closed — which is the case for almost every document the accountant will
+touch. Delivered PO lines have no editor at all.
+
+**Default (recommended): review edits fix the document and its money only;
+stock is not moved.** Reason: warehouses and rep custody were zeroed and
+re-counted from paper on 7/11, so the stock on the system is already the paper
+stock; moving it again for an old document would double-count. The edit:
+1. rewrites the lines (qty, add, remove; PO: `qty` and, for delivered POs,
+   `delivered_qty`),
+2. reprices the document from the client's current list via the landed
+   helpers (invoice: `InvoiceRepricer::plan/apply`; PO: `PoRepricer` /
+   `FullResync::po`), unit cost kept from the old line or `Pricing::costFor`,
+3. updates the sale transaction (and the linked cash collection for cash
+   invoices, as `repriceInvoice` does), `client->recalculate()`, GL repost,
+4. logs before → after lines and totals.
+The pane says plainly: «التعديل ده بيصلّح المستند والفلوس بس — المخزن
+ماتحرّكش». For a document dated **after** the stock reset this is flagged on
+the event so Ahmed can see it.
+Not allowed: emptying a document (use the existing delete tool), a product
+with zero list price (rejected, as everywhere), returns linked to the invoice
+(blocked, as everywhere).
+
+Pending (undelivered) POs: line edits go through the same rebuild the PO
+editor uses (`fillPoItems`) — no stock has moved yet; an approved PO goes
+back to the accounting queue exactly as `updatePo` does. (Builder: reuse, do
+not copy-paste; extract only if needed and coordinate with the price session.)
+
+### 6.4 Date
+Invoice: `created_at` day (time kept) + its transactions' `date`, same as
+`redateInvoice`. PO: `delivered_at` for delivered POs (the sale date) + its
+transactions' `date`; `due_at` for pending POs. Not after today.
+
+## 7. Progress and per-group figures
+
+For every node (overall, mother, chain, solo client): invoices, POs, net excl,
+VAT, incl, transactions (sale rows), pieces, distinct products, reviewed,
+issue, changed-after-review, left, % = reviewed / total. Computed in two
+grouped queries per doc type keyed by client, folded up in PHP (same pattern
+as `MonthFigures`). Shown in the queue group headers and on the review
+dashboard as a new card «المستندات».
+
+## 8. Reviewer analytics — `/erp/review/docs/people`
+
+Per user per day: documents ✓/✗, median and p10 seconds between consecutive
+reviews, median open time, **fast flags**, edits by kind, money changed
+(sum |grand_delta| and net), issues raised. Click a user → timeline of events
+with the gap column coloured.
+
+Fast-click rule (default, my call): a review is *fast* if
+`seconds_since_prev < 8` **and** the document has ≥ 1 line; a **streak** is
+≥ 5 fast reviews in a row → red flag on that day with the list of documents,
+so Ahmed can pull those papers and spot-check. Thresholds live in one constant.
+
+## 9. Testing
+
+Feature tests on `promax_test` (`tests/Feature/Review/DocReview*Test.php`):
+access per role + custom-role keys (RoleAccessTest stays green); ✓ / ✗ /
+reopen; ✓ snapshot → «changed after review»; serial save + duplicate warning;
+rep change; date change (closed period refused); line edit reprices from the
+list, keeps stock untouched, updates transactions and balance, writes event
+with before/after and deltas, clears ✓; locked documents; fast-streak
+computation; search finds by serial / number / phone / branch; progress
+numbers. Full suite green before commit.
+
+QA click-through on `promax_qa` (port 8010): review 10 documents with the
+keyboard, one of each fix, check the activity centre and the people page.
+
+## 10. Delivery
+
+One commit on master (my files only), after pulling the price session's work.
+Server: `git pull` · `php artisan migrate --force --path=database/migrations/2026_11_11_000100_doc_review.php` · `php artisan optimize:clear`.
+
+## 11. Questions for Ahmed (answers change what gets built)
+
+1. **Stock on line edits** — default: fix the document + money only, no stock
+   move (stock was re-counted 7/11). Alternative: move rep custody like the
+   current admin editor (blocked on most old documents).
+2. **Who** — default: accountant + admin review and edit; only admin reopens a
+   ✓; any edit on a ✓ document clears the ✓ back to pending.
+3. **PO paper serial** — which paper number is it: our delivery invoice serial,
+   or the chain's PO number?
+4. **Duplicate paper serial** — default: warn + link to the other document,
+   don't block.
+
+## 12. Calls I made (check while reading)
+- Reuse `review_checks` for status + new append-only `doc_review_events`.
+- Cancelled POs excluded; pending POs included.
+- No bulk ✓, ever.
+- Fast-click threshold 8 s / streak 5.
+- `open` time recorded only on the ✓ event.
+- Analytics page admin-only by default.

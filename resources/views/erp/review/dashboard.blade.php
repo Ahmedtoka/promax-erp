@@ -40,6 +40,18 @@
             <div class="rv-sub">{{ __('review.done_of', ['done' => $a['done'], 'total' => $a['total']]) }}</div>
         @endforeach
     </a>
+    @if ($docs)
+        <a class="card rv-phase" href="{{ route('erp.review.docs') }}">
+            <div class="rv-ph-head"><span class="rv-num">4</span> 🧾 <b>{{ __('review.dash_docs') }}</b></div>
+            <div class="rv-sub">{{ __('review.dash_docs_sub') }}</div>
+            <div class="rv-big">{{ $docs['pct'] }}%</div>
+            <div class="rv-bar"><b style="width:{{ $docs['total'] ? round($docs['issue'] * 100 / $docs['total']) : 0 }}%"></b><i style="width:{{ $docs['pct'] }}%"></i></div>
+            <div class="rv-sub">{{ __('review.docs_progress', ['ok' => $docs['ok'], 'total' => $docs['total']]) }}
+                · {{ __('review.docs_inv_progress', ['ok' => $docs['ok_inv'], 'n' => $docs['invoices']]) }}
+                · {{ __('review.docs_po_progress', ['ok' => $docs['ok_po'], 'n' => $docs['pos']]) }}
+                · <span style="color:#DC2626">✗ {{ $docs['issue'] }}</span></div>
+        </a>
+    @endif
 </div>
 
 <div class="rv-two">

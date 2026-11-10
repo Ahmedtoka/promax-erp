@@ -830,6 +830,24 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/review/mark', [\App\Http\Controllers\ReviewController::class, 'mark'])->name('review.mark');
             Route::post('/review/opening/{group}', [\App\Http\Controllers\ReviewController::class, 'chainOpening'])->name('review.opening');
         });
+        // ===== المراجعة مستند مستند (١١/١١) — المحاسب والأدمن؛ فتح ✓ تاني والتحليل أدمن بس =====
+        // ⚠️ الثابت (`people`) قبل البارامتري `{type}/{id}`
+        Route::middleware('role:admin')->group(function () {
+            Route::get('/review/docs/people', [\App\Http\Controllers\ReviewDocsController::class, 'people'])->name('review.docs.people');
+            Route::post('/review/docs/{type}/{id}/reopen', [\App\Http\Controllers\ReviewDocsController::class, 'reopen'])
+                ->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('review.docs.reopen');
+        });
+        Route::middleware('role:admin,accountant')->prefix('/review/docs')->name('review.docs')
+            ->controller(\App\Http\Controllers\ReviewDocsController::class)->group(function () {
+                Route::get('/', 'index');
+                Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.pane');
+                Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.mark');
+                Route::post('/{type}/{id}/serial', 'serial')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.serial');
+                Route::post('/{type}/{id}/rep', 'rep')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.rep');
+                Route::post('/{type}/{id}/date', 'date')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.date');
+                Route::post('/{type}/{id}/preview', 'preview')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.preview');
+                Route::post('/{type}/{id}/lines', 'lines')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.lines');
+            });
         Route::middleware('role:admin')->group(function () {
             Route::post('/review/stock/{warehouse}/zero', [\App\Http\Controllers\ReviewController::class, 'zeroWarehouse'])->name('review.stock.zero');
             Route::post('/review/stock/{warehouse}/batch', [\App\Http\Controllers\ReviewController::class, 'addBatch'])->name('review.stock.batch');

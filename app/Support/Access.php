@@ -52,6 +52,8 @@ class Access
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.channels',
             // مراجعة إعادة التشغيل (٥/١١) — التصفير وإدخال الأرصدة أدمن بس
             'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
+            // مراجعة المستندات مستند مستند (١١/١١) — للمحاسب والأدمن بس
+            '!erp.review.docs',
             'erp.contracts', 'erp.leads', 'erp.dues', 'erp.stock',
             'erp.batches', 'erp.reports', 'erp.kpi', 'erp.team', 'erp.zones',
             'erp.geo', 'erp.products', 'erp.branches', 'erp.vehicles', 'erp.warehouses',
@@ -112,6 +114,8 @@ class Access
             'erp.divisions', '!erp.divisions.assign',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
             'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
+            // مراجعة المستندات مستند مستند (١١/١١) — للمحاسب والأدمن بس
+            '!erp.review.docs',
             // عقد السلسلة `role:admin,manager` (تدقيق ١٥/٩)
             '!erp.groups.contract',
             // ⚠️ **محفظة الليدز قراءة بس.** الجدولة وخط السير والحصاد
@@ -177,6 +181,8 @@ class Access
             'docs',
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
             'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
+            // مراجعة المستندات (١١/١١): فتح ✓ تاني وتحليل المراجِعين أدمن بس
+            '!erp.review.docs.reopen', '!erp.review.docs.people',
             // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
             '!erp.client_locations.confirm', '!erp.groups.contract',
@@ -1037,6 +1043,10 @@ class Access
         'act.audit.review' => ['perm.act_audit_review', 'erp.audit.clients', null, ['erp.audit.save', 'erp.audit.confirm', 'erp.audit.statement.delete']],
         'act.review.mark' => ['perm.act_review_mark', 'erp.review', null, ['erp.review.mark', 'erp.review.opening']],
         'act.review.stock_reset' => ['perm.act_review_stock_reset', 'erp.review', [], ['erp.review.stock.zero', 'erp.review.stock.batch']],
+        // المراجعة مستند مستند (١١/١١): العلامة · التصليح في المكان (فلوس) · فتح ✓ تاني (أدمن)
+        'act.review.docs' => ['perm.act_review_docs', 'erp.review.docs', null, ['erp.review.docs.mark']],
+        'act.review.docs_edit' => ['perm.act_review_docs_edit', 'erp.review.docs', null, ['erp.review.docs.serial', 'erp.review.docs.rep', 'erp.review.docs.date', 'erp.review.docs.preview', 'erp.review.docs.lines']],
+        'act.review.docs_reopen' => ['perm.act_review_docs_reopen', 'erp.review.docs', [], ['erp.review.docs.reopen']],
         'act.leads.clear_assign' => ['perm.act_leads_clear_assign', 'erp.leads', [], ['erp.leads.clearassign']],
         'act.leads.plan' => ['perm.act_leads_plan', 'erp.leads.planner', null, ['erp.leads.planner.save', 'erp.leads.route.save']],
         'act.tasks.create' => ['perm.act_tasks_create', 'erp.tasks', null, ['erp.tasks.store']],

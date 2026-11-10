@@ -53,6 +53,8 @@ class PermissionCatalog
         'act.custody.clear' => self::CRITICAL,
         'act.ka.reprice' => self::CRITICAL,
         'act.review.stock_reset' => self::CRITICAL,
+        // بيعدّل بنود/مندوب/تاريخ مستند بأثر رجعي ويعيد تسعيره (١١/١١)
+        'act.review.docs_edit' => self::CRITICAL,
         'act.online.sync_settings' => self::CRITICAL,
         'act.hr.payroll_pay' => self::CRITICAL,
         'act.app_version.manage' => self::CRITICAL,

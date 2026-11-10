@@ -74,6 +74,9 @@ class ReviewController extends Controller
             'people' => $people, 'names' => $names,
             'recent' => $recent, 'labels' => $this->labels($recent),
             'months' => ReviewCheck::months(),
+            // (١١/١١) المرحلة ٤ — للي معاه التاب بس
+            'docs' => \App\Support\Access::allows($user, 'erp.review.docs')
+                ? \App\Services\Review\DocQueue::stats(\App\Services\Review\DocQueue::all($user)) : null,
         ]);
     }
 
@@ -436,9 +439,16 @@ class ReviewController extends Controller
             'warehouse' => Warehouse::whereIn('id', ($byType['warehouse'] ?? collect())->pluck('entity_id'))->get()->keyBy('id'),
             'rep' => User::whereIn('id', ($byType['rep'] ?? collect())->pluck('entity_id'))->get()->keyBy('id'),
         ];
+        // (١١/١١) علامات المستندات — الاسم = رقم المستند
+        $numbers = [
+            'invoice' => \App\Models\Invoice::whereIn('id', ($byType['invoice'] ?? collect())->pluck('entity_id'))->pluck('number', 'id'),
+            'po' => \App\Models\PurchaseOrder::whereIn('id', ($byType['po'] ?? collect())->pluck('entity_id'))->pluck('number', 'id'),
+        ];
 
         foreach ($checks as $c) {
-            $out[$c->id] = $models[$c->entity_type][$c->entity_id]?->displayName() ?? '#'.$c->entity_id;
+            $out[$c->id] = isset($numbers[$c->entity_type])
+                ? ($numbers[$c->entity_type][$c->entity_id] ?? '#'.$c->entity_id)
+                : ($models[$c->entity_type][$c->entity_id] ?? null)?->displayName() ?? '#'.$c->entity_id;
         }
 
         return $out;
