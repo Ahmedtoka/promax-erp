@@ -50,4 +50,11 @@ return [
 
     // ═══ Proforma multi-page split (2026-08-10) ═══
     'page_of' => 'Page :p of :t',
+    // ═══ VAT per line (2026-11-10) — stored price is always excl. VAT ═══
+    'vat_lines' => 'VAT and incl. per line',
+    'vat_lines_hint' => 'Shows VAT and the incl. price on every line, to match the printed rep invoice. The figures themselves do not change.',
+    'price_excl' => 'Price excl. VAT',
+    'total_excl' => 'Total excl. VAT',
+    'total_incl' => 'Total incl. VAT',
+    'per_unit' => 'per unit',
 ];

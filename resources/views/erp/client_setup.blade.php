@@ -36,7 +36,7 @@
         return $txt;
     };
     $liveInc = fn ($l) => $l['inclusive'] === false ? $MIX
-        : ($l['inclusive'] === null ? '—' : ($l['inclusive'] ? __('client.tax_inclusive') : __('client.tax_added')));
+        : ($l['inclusive'] === null ? '—' : ($l['inclusive'] ? __('client.tax_exempt') : __('client.tax_added')));
 
     $reviewedCount = $rows->filter(fn ($r) => $isChains ? $r->reviewed_at : $r->setup_reviewed_at)->count();
 @endphp

@@ -66,6 +66,7 @@
 
 @section('actions')
     <a class="btn" href="{{ route('ops.pos') }}">← {{ __('ops.purchase_orders') }}</a>
+    @include('ops._vat_lines_toggle', ['vatDefault' => false])
     @if (\App\Support\Access::allows(auth()->user(), 'ops.po.print'))<a class="btn" href="{{ route('ops.po.print', $po) }}" target="_blank">🖨️ {{ __('ops.print') }}</a>@endif
     @if ($po->sheet_path)
         <a class="btn" href="{{ route('ops.po.sheet', $po) }}">📎 {{ __('ops.po_sheet') }}</a>
@@ -167,7 +168,7 @@
     {{-- ═══ البنود — الأرقام المخزّنة على السطور، مفيش إعادة حساب ═══ --}}
     <div class="card" id="poItems">
         <h3>🧺 {{ __('ops.items') }} <span class="side">{{ $po->items->count() }}</span></h3>
-        <div class="tablewrap">
+        <div class="tablewrap" data-vat-scope>
             <table>
                 <tr>
                     <th>{{ __('stock.item') }}</th>
@@ -175,8 +176,9 @@
                     <th data-nosum>{{ __('doc.discount_pct') }}</th>
                     <th data-nosum>{{ __('doc.unit_price') }}</th>
                     <th>{{ __('common.qty') }}</th>
-                    <th>{{ __('common.total') }}</th>
-                    <th>{{ __('tax.tax') }}</th>
+                    <th>{{ __('doc.total_excl') }}</th>
+                    <th class="c-vat">{{ __('tax.tax') }}</th>
+                    <th class="c-vat">{{ __('doc.total_incl') }}</th>
                     @if ($po->status === 'delivered')<th>{{ __('ops.po_delivered_qty') }}</th>@endif
                 </tr>
                 @foreach ($po->items as $item)
@@ -196,7 +198,8 @@
                         <td class="num">{{ $fmt($item->price) }}</td>
                         <td class="num"><b>{{ $fmt0($item->qty) }}</b></td>
                         <td class="num">{{ $fmt($item->total) }}</td>
-                        <td class="num">{{ $fmt($item->tax) }}</td>
+                        <td class="num c-vat">{{ $fmt($item->tax) }}</td>
+                        <td class="num c-vat"><b>{{ $fmt((float) $item->total + (float) $item->tax) }}</b></td>
                         @if ($po->status === 'delivered')
                             <td class="num {{ (int) $item->delivered_qty !== (int) $item->qty ? 'neg' : 'pos' }}">{{ $fmt0($item->delivered_qty) }}</td>
                         @endif
@@ -205,12 +208,21 @@
                 <tr>
                     <td colspan="5" style="text-align:end;font-weight:800">{{ __('doc.net_before_tax') }}</td>
                     <td class="num" style="font-weight:800">{{ $fmt($po->total) }}</td>
+                    <td class="num c-vat" style="font-weight:800">{{ $fmt($po->tax_total) }}</td>
+                    <td class="num c-vat" style="font-weight:800">{{ $fmt((float) $po->total + (float) $po->tax_total) }}</td>
+                    @if ($po->status === 'delivered')<td></td>@endif
+                </tr>
+                {{-- (١٠/١١) الضريبة لوحدها لما أعمدة الضريبة مخفية --}}
+                <tr>
+                    <td colspan="5" style="text-align:end;font-weight:800">{{ __('tax.tax') }}</td>
                     <td class="num" style="font-weight:800">{{ $fmt($po->tax_total) }}</td>
+                    <td class="c-vat" colspan="2"></td>
                     @if ($po->status === 'delivered')<td></td>@endif
                 </tr>
                 <tr>
                     <td colspan="5" style="text-align:end;font-weight:800">{{ __('doc.total_with_tax') }}</td>
-                    <td class="num pos" colspan="2" style="font-weight:800;font-size:14px">{{ $fmt($po->grand_total) }}</td>
+                    <td class="num pos" style="font-weight:800;font-size:14px">{{ $fmt($po->grand_total) }}</td>
+                    <td class="c-vat" colspan="2"></td>
                     @if ($po->status === 'delivered')<td></td>@endif
                 </tr>
             </table>

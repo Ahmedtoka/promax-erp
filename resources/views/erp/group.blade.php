@@ -615,8 +615,9 @@
                 <label class="f">{{ __('client.chain_apply_inclusive') }}</label>
                 <select name="apply_inclusive" style="width:100%">
                     <option value="">— {{ __('client.chain_apply_keep_any') }} —</option>
-                    <option value="inclusive">{{ __('client.chain_inclusive') }}</option>
+                    {{-- خاضع الأول (١٠/١١): الكل خاضع، والمعفى استثناء بشهادة --}}
                     <option value="exclusive">{{ __('client.chain_exclusive') }}</option>
+                    <option value="inclusive">{{ __('client.chain_inclusive') }}</option>
                 </select>
                 @if (\Illuminate\Support\Facades\Schema::hasColumn('client_groups', 'commercial_register'))
                     <label class="f" style="margin-top:10px">{{ __('client.commercial_register') }}</label>

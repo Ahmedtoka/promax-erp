@@ -2407,6 +2407,17 @@ class FieldApiController extends Controller
                 'grand_total' => (float) $invoice->grand_total,
                 'payment' => $invoice->payment,
                 'time' => $invoice->created_at->toIso8601String(),
+                // ═══ سطور الفاتورة زي ما اتخزّنت (١٠/١١/٢٠٢٦) ═══
+                // المندوب بيشوف الشامل بس. الشامل هنا = `total + tax` المخزّنين
+                // على السطر — الأبلكيشن بيعرضه زي ما هو، ومابيضربش في نسبة
+                // تاني (عشان الضريبة ماتتحسبش مرتين أبداً).
+                'items' => $invoice->items->map(fn ($it) => [
+                    'product_id' => $it->product_id,
+                    'qty' => (int) $it->qty,
+                    'net' => round((float) $it->total, 2),
+                    'tax' => round((float) $it->tax, 2),
+                    'incl' => round((float) $it->total + (float) $it->tax, 2),
+                ])->values(),
             ],
         ], $status);
     }

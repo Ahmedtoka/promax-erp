@@ -14,6 +14,7 @@
 @section('actions')
     <a class="btn" href="{{ route('ops.pos') }}">← {{ __('ops.purchase_orders') }}</a>
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
+    @include('ops._vat_lines_toggle', ['vatDefault' => false])
 @endsection
 
 @section('content')

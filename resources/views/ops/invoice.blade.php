@@ -18,8 +18,12 @@
     $co = \App\Models\Setting::docHeader();
     $hasTax = $inv->hasTax();
 
-    // عدد الأعمدة — بيفرق مع/بلا عمود الضريبة (للصف الفاضي وصف الإجمالي)
-    $colsDoc = $hasTax ? 8 : 7;
+    // عدد الأعمدة — بيفرق مع/بلا عمودي الضريبة والشامل (للصف الفاضي وصف الإجمالي).
+    // ⚠️ (١٠/١١) عمودي الضريبة والشامل `c-vat` — بيظهروا بمربع «الضريبة لكل سطر».
+    $colsDoc = $hasTax ? 9 : 7;
+    // فاتورة المندوب (من زيارة) بتفتح والأعمدة ظاهرة عشان تتطابق مع
+    // الفاتورة المطبوعة من الأبلكيشن (شامل). الباقي يبدأ بغير الشامل بس.
+    $vatDefault = $hasTax && $inv->visit_id !== null;
     $qtyTotalDoc = (int) $inv->items->sum('qty');
 
     // ═══ تقسيم السطور على ورقات A4 — نفس منطق أمر التوريد ═══
@@ -102,6 +106,9 @@
     <a class="btn" href="{{ route('ops.invoices.export', $inv) }}">📊 {{ __('ops.inv_excel') }}</a>
     <button class="btn" type="button" onclick="window.print()" title="{{ __('ops.pdf_hint') }}">📄 {{ __('ops.save_pdf') }}</button>
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print') }}</button>
+    @if ($hasTax)
+        @include('ops._vat_lines_toggle', ['vatDefault' => $vatDefault])
+    @endif
 @endsection
 
 @section('content')
@@ -136,7 +143,7 @@
 
 @foreach ($pagesDoc as $pageItemsDoc)
 @php $isLastDoc = $loop->last; @endphp
-<div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}">
+<div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}" data-vat-scope>
     <img class="bolt-mark po-bolt" src="{{ asset('brand/bolt.svg') }}" alt="">
 
     {{-- ═══ الهيدر المضغوط — بيتكرر على كل ورقة ═══ --}}
@@ -216,9 +223,12 @@
                 <th class="c-item">{{ __('stock.item') }}</th>
                 <th class="c-qty">{{ __('stock.unit') }}</th>
                 <th class="num c-qty">{{ __('common.qty') }}</th>
-                <th class="num">{{ __('common.price') }}</th>
-                <th class="num">{{ __('common.total') }}</th>
-                @if ($hasTax)<th class="num">{{ __('tax.tax') }}</th>@endif
+                <th class="num">{{ $hasTax ? __('doc.price_excl') : __('common.price') }}</th>
+                <th class="num">{{ $hasTax ? __('doc.total_excl') : __('common.total') }}</th>
+                @if ($hasTax)
+                    <th class="num c-vat">{{ __('tax.tax') }}</th>
+                    <th class="num c-vat">{{ __('doc.total_incl') }}</th>
+                @endif
             </tr>
 
             @foreach ($pageItemsDoc as $iDoc => $it)
@@ -236,7 +246,7 @@
                     <td class="num">{{ $fmtDoc($it->price) }}</td>
                     <td class="num"><b>{{ $fmtDoc($it->total) }}</b></td>
                     @if ($hasTax)
-                        <td class="num s">
+                        <td class="num s c-vat">
                             @if ((float) $it->tax > 0)
                                 {{ $fmtDoc($it->tax) }}
                                 <div class="s">{{ rtrim(rtrim(number_format((float) $it->tax_rate * 100, 2), '0'), '.') }}%</div>
@@ -244,13 +254,17 @@
                                 {{ __('tax.exempt') }}
                             @endif
                         </td>
+                        {{-- الشامل = غير الشامل + ضريبته المخزّنة — جمع بس، مش ضرب في نسبة --}}
+                        <td class="num c-vat"><b>{{ $fmtDoc((float) $it->total + (float) $it->tax) }}</b>
+                            @if ((float) $it->qty > 0)<div class="s">{{ $fmtDoc(((float) $it->total + (float) $it->tax) / (float) $it->qty) }} / {{ __('doc.per_unit') }}</div>@endif
+                        </td>
                     @endif
                 </tr>
             @endforeach
 
             @if ($isLastDoc)
                 @for ($r = 0; $r < $padRows; $r++)
-                    <tr class="pad">@for ($c = 0; $c < $colsDoc; $c++)<td>@if ($c === 0)&nbsp;@endif</td>@endfor</tr>
+                    <tr class="pad">@for ($c = 0; $c < $colsDoc; $c++)<td @if ($c >= 7) class="c-vat" @endif>@if ($c === 0)&nbsp;@endif</td>@endfor</tr>
                 @endfor
 
                 <tr class="sum">
@@ -258,7 +272,10 @@
                     <td class="num"><b>{{ number_format($qtyTotalDoc) }}</b></td>
                     <td></td>
                     <td class="num"><b>{{ $fmtDoc($inv->total) }}</b></td>
-                    @if ($hasTax)<td class="num"><b>{{ $fmtDoc($inv->tax_total) }}</b></td>@endif
+                    @if ($hasTax)
+                        <td class="num c-vat"><b>{{ $fmtDoc($inv->tax_total) }}</b></td>
+                        <td class="num c-vat"><b>{{ $fmtDoc((float) $inv->total + (float) $inv->tax_total) }}</b></td>
+                    @endif
                 </tr>
             @endif
         </table>

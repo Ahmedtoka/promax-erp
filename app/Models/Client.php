@@ -124,6 +124,16 @@ class Client extends Model
         self::LOC_SRC_APP,
     ];
 
+    /**
+     * ⚠️ **كل عميل خاضع للضريبة إلا لو اتقال غير كده** (قرار ١٠/١١/٢٠٢٦).
+     * السعر المتخزّن غير شامل دايماً والضريبة فوقه — «شامل» عرض بس.
+     * من غير الافتراضي ده أي مسار بيعمل عميل من غير ما يبعت `taxable`
+     * (تحويل ليد، طلب عميل، الأبلكيشن) كان بينزّله معفى في صمت.
+     */
+    protected $attributes = [
+        'taxable' => true,
+    ];
+
     protected $fillable = [
         'code', 'name', 'name_en', 'phone', 'address', 'zone_id', 'rep_id', 'manager_id',
         'contacts', 'category', 'payment_terms', 'payment_days', 'payment_days_from', 'status',

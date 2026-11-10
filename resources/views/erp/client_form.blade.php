@@ -1105,7 +1105,7 @@
         <input type="hidden" name="taxable" value="0">
         <label style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:800;margin-bottom:14px">
             <input type="checkbox" name="taxable" value="1" id="taxable"
-                   @checked(old('taxable', $src?->taxable ? 1 : 0))
+                   @checked(old('taxable', $src ? ($src->taxable ? 1 : 0) : 1))
                    onchange="toggleTax()">
             {{ __('client.taxable') }}
         </label>

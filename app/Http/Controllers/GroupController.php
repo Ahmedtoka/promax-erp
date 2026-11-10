@@ -447,7 +447,8 @@ class GroupController extends Controller
         $group->update($this->validated($request));
 
         // ═══ شامل/خاضع على السلسلة وفروعها (٣/١١) ═══
-        // شامل = مفيش ضريبة فوق السعر (`taxable=false`) — نفس شاشة الإعداد.
+        // `inclusive` = **معفى** (`taxable=false`) — الاسم تاريخي بس (قرار
+        // ١٠/١١/٢٠٢٦: السعر غير شامل دايماً، و«شامل» عرض بس مش حالة ضريبية).
         // ⚠️ بيأثر على الفواتير الجاية بس؛ المستندات القديمة زي ما هي.
         if ($request->filled('apply_inclusive')) {
             $taxable = $request->string('apply_inclusive')->toString() === 'exclusive';

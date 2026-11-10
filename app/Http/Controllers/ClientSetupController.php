@@ -344,7 +344,10 @@ class ClientSetupController extends Controller
         $out = [
             'division' => $data['division'] ?? null,
             'fulfillment_mode' => $data['fulfillment_mode'] ?? null,
-            // شامل = مفيش ضريبة فوق السعر
+            // ⚠️ الخانة اسمها `inclusive` لأسباب تاريخية بس — معناها دلوقتي
+            // **«معفى من الضريبة»** (قرار ١٠/١١/٢٠٢٦). السعر المتخزّن غير شامل
+            // دايماً، و«شامل» بقت عرض بس — فالخانة دي مابقتش طريقة لإظهار
+            // سعر شامل، وأي حد يعلّمها بيعفي العميل فعلاً.
             'taxable' => ! (bool) ($data['inclusive'] ?? false),
             'discount' => isset($data['discount']) && $data['discount'] !== null
                 ? round((float) $data['discount'], 2) / 100

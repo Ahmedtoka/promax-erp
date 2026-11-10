@@ -11,6 +11,7 @@
 @section('actions')
     <a class="btn" href="{{ route('ops.po.approvals') }}">← {{ __('ops.po_approvals') }}</a>
     <button class="btn gold" onclick="window.print()">🖨️ {{ __('ops.print_all') }} ({{ $pos->count() }})</button>
+    @include('ops._vat_lines_toggle', ['vatDefault' => false])
 @endsection
 
 @section('content')

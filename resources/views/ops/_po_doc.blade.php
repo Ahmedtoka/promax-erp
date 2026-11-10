@@ -85,7 +85,7 @@
 
 @foreach ($pagesDoc as $pageItemsDoc)
 @php $isLastDoc = $loop->last; @endphp
-<div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}">
+<div class="doc po-doc has-bolt{{ $isLastDoc ? '' : ' po-cont' }}" data-vat-scope>
     <img class="bolt-mark po-bolt" src="{{ asset('brand/bolt.svg') }}" alt="">
 
     {{-- ═══ الهيدر المضغوط: اللوجو وجنبه البيانات · والناحية
@@ -168,7 +168,10 @@
                 <th class="num">{{ __('doc.unit_price') }}</th>
                 <th class="num c-disc">{{ __('doc.discount_pct') }}</th>
                 <th class="num">{{ __('doc.price_after_discount') }}</th>
-                <th class="num">{{ __('common.total') }}</th>
+                <th class="num">{{ __('doc.total_excl') }}</th>
+                {{-- (١٠/١١) الضريبة والشامل لكل سطر — بيظهروا بمربع «الضريبة لكل سطر» --}}
+                <th class="num c-vat">{{ __('tax.tax') }}</th>
+                <th class="num c-vat">{{ __('doc.total_incl') }}</th>
             </tr>
 
             @foreach ($pageItemsDoc as $iDoc => $it)
@@ -193,13 +196,16 @@
                     </td>
                     <td class="num"><b>{{ $fmtDoc($it->price) }}</b></td>
                     <td class="num"><b>{{ $fmtDoc($it->total) }}</b></td>
+                    <td class="num s c-vat">{{ (float) $it->tax > 0 ? $fmtDoc($it->tax) : __('tax.exempt') }}</td>
+                    {{-- الشامل = غير الشامل + الضريبة المخزّنة على السطر (جمع، مش ضرب تاني) --}}
+                    <td class="num c-vat"><b>{{ $fmtDoc((float) $it->total + (float) $it->tax) }}</b></td>
                 </tr>
             @endforeach
 
             @if ($isLastDoc)
                 {{-- صفوف فاضية لحد ١٥ — بتثبّت الشكل وبتمنع الإضافة بالإيد --}}
                 @for ($r = 0; $r < $padRows; $r++)
-                    <tr class="pad"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+                    <tr class="pad"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="c-vat"></td><td class="c-vat"></td></tr>
                 @endfor
 
                 <tr class="sum">
@@ -208,6 +214,8 @@
                     <td colspan="2"></td>
                     <td></td>
                     <td class="num"><b>{{ $fmtDoc($netDoc) }}</b></td>
+                    <td class="num c-vat"><b>{{ $fmtDoc($taxDoc) }}</b></td>
+                    <td class="num c-vat"><b>{{ $fmtDoc($grandDoc) }}</b></td>
                 </tr>
             @endif
         </table>
