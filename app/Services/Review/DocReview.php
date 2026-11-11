@@ -5,16 +5,19 @@ namespace App\Services\Review;
 use App\Exceptions\Rejected;
 use App\Models\ActivityLog;
 use App\Models\Client;
+use App\Models\ClientReturn;
 use App\Models\DocReviewEvent;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Models\ReturnItem;
 use App\Models\ReviewCheck;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Pricing;
+use App\Services\Reprice\FullResync;
 use App\Services\Reprice\InvoiceGl;
 use App\Services\Reprice\InvoiceRepricer;
 use App\Services\Reprice\PoRepricer;
@@ -51,36 +54,69 @@ class DocReview
 
     // ═══════════════════════ القراءة ═══════════════════════
 
-    public static function find(string $type, int $id): Invoice|PurchaseOrder
+    public static function find(string $type, int $id): Invoice|PurchaseOrder|ClientReturn
     {
         return match ($type) {
             'invoice' => Invoice::findOrFail($id),
             'po' => PurchaseOrder::where('status', '!=', 'cancelled')->findOrFail($id),
+            'return' => ClientReturn::findOrFail($id),
             default => abort(404),
         };
     }
 
-    public static function typeOf(Invoice|PurchaseOrder $doc): string
+    public static function typeOf(Invoice|PurchaseOrder|ClientReturn $doc): string
     {
-        return $doc instanceof Invoice ? 'invoice' : 'po';
+        return $doc instanceof Invoice ? 'invoice' : ($doc instanceof ClientReturn ? 'return' : 'po');
+    }
+
+    /** مفتاح الصف في الطابور: inv-12 / po-7 / ret-3 */
+    public static function keyOf(Invoice|PurchaseOrder|ClientReturn $doc): string
+    {
+        return self::keyFor(self::typeOf($doc), (int) $doc->id);
+    }
+
+    public static function keyFor(string $type, int $id): string
+    {
+        return ['invoice' => 'inv-', 'po' => 'po-', 'return' => 'ret-'][$type].$id;
+    }
+
+    /** «inv-12» ← ['invoice', 12] */
+    public static function parseKey(string $key): array
+    {
+        $type = match (true) {
+            str_starts_with($key, 'inv-') => 'invoice',
+            str_starts_with($key, 'ret-') => 'return',
+            default => 'po',
+        };
+
+        return [$type, (int) substr($key, strpos($key, '-') + 1)];
+    }
+
+    /**
+     * دفتر السيريال: الفواتير والأوامر دفتر واحد، وأذون المرتجع دفتر لوحده —
+     * «١٢» على إذن مرتجع مش مكرر مع فاتورة «١٢».
+     */
+    public static function serialKey(string $type, ?string $serial): ?string
+    {
+        return $serial === null ? null : ($type === 'return' ? 'R:'.$serial : $serial);
     }
 
     /** تاريخ المستند اللي بيتراجع على الورق: يوم الفاتورة / يوم تسليم الأمر */
-    public static function dateOf(Invoice|PurchaseOrder $doc): ?Carbon
+    public static function dateOf(Invoice|PurchaseOrder|ClientReturn $doc): ?Carbon
     {
-        if ($doc instanceof Invoice) {
+        if ($doc instanceof Invoice || $doc instanceof ClientReturn) {
             return $doc->created_at;
         }
 
         return $doc->delivered_at ?? $doc->due_at ?? $doc->created_at;
     }
 
-    public static function repOf(Invoice|PurchaseOrder $doc): ?int
+    public static function repOf(Invoice|PurchaseOrder|ClientReturn $doc): ?int
     {
-        return $doc instanceof Invoice ? $doc->user_id : $doc->assigned_to;
+        return $doc instanceof PurchaseOrder ? $doc->assigned_to : $doc->user_id;
     }
 
-    public static function check(Invoice|PurchaseOrder $doc): ?ReviewCheck
+    public static function check(Invoice|PurchaseOrder|ClientReturn $doc): ?ReviewCheck
     {
         return ReviewCheck::with('user:id,name,name_en')->where([
             'entity_type' => self::typeOf($doc), 'entity_id' => $doc->id, 'item' => self::ITEM,
@@ -112,7 +148,7 @@ class DocReview
      *
      * @return array{all: array<string,string>, lines: array<string,string>}
      */
-    public static function locks(Invoice|PurchaseOrder $doc): array
+    public static function locks(Invoice|PurchaseOrder|ClientReturn $doc): array
     {
         $all = [];
         $lines = [];
@@ -129,7 +165,7 @@ class DocReview
             if ($b !== null && $b['key'] !== 'eta_locked') {
                 $lines[$b['key']] = __(InvoiceRepricer::BLOCKER_MESSAGES[$b['key']]);
             }
-        } else {
+        } elseif ($doc instanceof PurchaseOrder) {
             if ($doc->status === 'arrived') {
                 $lines['po_in_delivery'] = __('review.lock_po_in_delivery');
             }
@@ -142,7 +178,7 @@ class DocReview
     }
 
     /** لقطة المستند للسجل: البنود والإجماليات */
-    public static function snapshot(Invoice|PurchaseOrder $doc): array
+    public static function snapshot(Invoice|PurchaseOrder|ClientReturn $doc): array
     {
         $doc->load('items.product');
 
@@ -152,6 +188,7 @@ class DocReview
                 'name' => $l->product?->displayName(),
                 'qty' => (int) $l->qty,
                 'delivered_qty' => $doc instanceof PurchaseOrder && $l->delivered_qty !== null ? (int) $l->delivered_qty : null,
+                'condition' => $doc instanceof ClientReturn ? $l->condition : null,
                 'price' => (float) $l->price,
                 'total' => (float) $l->total,
                 'tax' => (float) $l->tax,
@@ -167,7 +204,7 @@ class DocReview
      *
      * @return list<array{type: string, id: int, number: string}>
      */
-    public static function duplicates(Invoice|PurchaseOrder $doc, ?string $serial = null): array
+    public static function duplicates(Invoice|PurchaseOrder|ClientReturn $doc, ?string $serial = null): array
     {
         $serial = self::normSerial($serial ?? $doc->paper_ref);
         if ($serial === null) {
@@ -177,7 +214,7 @@ class DocReview
         $out = [];
 
         // ⚠️ (١٢/١١) المقارنة على الشكل الموحّد مش بالـSQL `=`: «١٣٧٤» و«1374» و«13 74» نفس الورقة
-        foreach (self::serialIndex()[$serial] ?? [] as $d) {
+        foreach (self::serialIndex()[self::serialKey($type, $serial)] ?? [] as $d) {
             if ($d['type'] === $type && $d['id'] === $doc->id) {
                 continue;
             }
@@ -221,13 +258,19 @@ class DocReview
                 $out[$k][] = ['type' => 'po', 'id' => (int) $d->id, 'number' => (string) $d->number];
             }
         }
+        // أذون المرتجع — دفتر لوحده (`serialKey`)
+        foreach (DB::table('returns')->whereNotNull('paper_ref')->where('paper_ref', '!=', '')->get(['id', 'number', 'paper_ref']) as $d) {
+            if (($k = self::serialKey('return', self::normSerial($d->paper_ref))) !== null) {
+                $out[$k][] = ['type' => 'return', 'id' => (int) $d->id, 'number' => (string) $d->number];
+            }
+        }
 
         return $out;
     }
 
     // ═══════════════════════ العلامة ═══════════════════════
 
-    public static function mark(User $user, Invoice|PurchaseOrder $doc, string $status, ?string $note, ?int $openMs = null): ReviewCheck
+    public static function mark(User $user, Invoice|PurchaseOrder|ClientReturn $doc, string $status, ?string $note, ?int $openMs = null): ReviewCheck
     {
         $current = self::check($doc);
         $state = self::state($current, (float) $doc->grand_total);
@@ -245,8 +288,8 @@ class DocReview
             throw new Rejected(__('review.serial_required'));
         }
         // (١٢/١١) إثبات الاستلام: تحذير بالافتراضي — شرط لو `review.po_proof_required`
-        if ($status === ReviewCheck::OK && config('review.po_proof_required') && self::needsProof($doc) && ! self::hasProof($doc)) {
-            throw new Rejected(__('review.proof_required'));
+        if ($status === ReviewCheck::OK && self::proofHard($doc) && self::needsProof($doc) && ! self::hasProof($doc)) {
+            throw new Rejected(__($doc instanceof ClientReturn ? 'review.ret_proof_required' : 'review.proof_required'));
         }
 
         return DB::transaction(function () use ($user, $doc, $status, $note, $openMs, $current) {
@@ -270,7 +313,7 @@ class DocReview
     }
 
     /** فتح ✓ تاني — الأدمن بس (الراوت) */
-    public static function reopen(User $user, Invoice|PurchaseOrder $doc, ?string $note): void
+    public static function reopen(User $user, Invoice|PurchaseOrder|ClientReturn $doc, ?string $note): void
     {
         $current = self::check($doc);
         if ($current === null) {
@@ -287,7 +330,7 @@ class DocReview
     // ═══════════════════════ التصليح ═══════════════════════
 
     /** @return list<array{type: string, id: int, number: string}> المكرر (تحذير) */
-    public static function setSerial(User $user, Invoice|PurchaseOrder $doc, ?string $serial): array
+    public static function setSerial(User $user, Invoice|PurchaseOrder|ClientReturn $doc, ?string $serial): array
     {
         $serial = self::normSerial($serial);
         $old = $doc->paper_ref;
@@ -306,26 +349,57 @@ class DocReview
 
     // ═══════════════════════ إثبات الاستلام (أوامر التوريد بس) ═══════════════════════
 
-    /** الأمر اتسلّم فعلاً — قبل التسليم مفيش إثبات يتطلب */
-    public static function needsProof(Invoice|PurchaseOrder $doc): bool
+    /**
+     * الأمر اتسلّم فعلاً — قبل التسليم مفيش إثبات يتطلب. المرتجع دايماً: البضاعة
+     * رجعت والدائن اتقيّد، فإمضاء/ختم العميل على الإذن هو اللي يثبت إنها رجعت.
+     */
+    public static function needsProof(Invoice|PurchaseOrder|ClientReturn $doc): bool
     {
-        return $doc instanceof PurchaseOrder && $doc->status === 'delivered';
+        return ($doc instanceof PurchaseOrder && $doc->status === 'delivered') || $doc instanceof ClientReturn;
     }
 
-    /** إذن استلام من العميل أو إمضاء/ختم على ورقتنا — أي واحد يكفي */
-    public static function hasProof(PurchaseOrder|Invoice $doc): bool
+    /** إذن استلام من العميل أو إمضاء/ختم على ورقتنا — أي واحد يكفي. المرتجع: إمضاء/ختم العميل */
+    public static function hasProof(Invoice|PurchaseOrder|ClientReturn $doc): bool
     {
+        if ($doc instanceof ClientReturn) {
+            return (bool) $doc->paper_signed;
+        }
+
         return $doc instanceof PurchaseOrder && ($doc->receipt_note || $doc->paper_signed);
+    }
+
+    /** الإثبات شرط ✓ ولا تحذير — مفتاح لكل نوع في `config/review.php` */
+    public static function proofHard(Invoice|PurchaseOrder|ClientReturn $doc): bool
+    {
+        return match (true) {
+            $doc instanceof PurchaseOrder => (bool) config('review.po_proof_required'),
+            $doc instanceof ClientReturn => (bool) config('review.return_proof_required'),
+            default => false,
+        };
     }
 
     /**
      * علامات إثبات الاستلام. شيل الإثبات كله من أمر متعلّم ✓ بيرجّعه «لسه»
      * (اللي اتراجع على أساسه اتشال)؛ إضافة إثبات مابتلمسش ✓.
      */
-    public static function setProof(User $user, Invoice|PurchaseOrder $doc, bool $receipt, ?string $receiptNo, bool $signed): void
+    public static function setProof(User $user, Invoice|PurchaseOrder|ClientReturn $doc, bool $receipt, ?string $receiptNo, bool $signed): void
     {
-        if (! $doc instanceof PurchaseOrder) {
+        if ($doc instanceof Invoice) {
             throw new Rejected(__('review.proof_po_only'));
+        }
+        // المرتجع: إمضاء/ختم العميل بس — مفيش «إذن استلام» من العميل على بضاعة راجعة
+        if ($doc instanceof ClientReturn) {
+            $old = ['paper_signed' => (bool) $doc->paper_signed];
+            $new = ['paper_signed' => $signed];
+            if ($old === $new) {
+                return;
+            }
+            DB::transaction(function () use ($user, $doc, $old, $new) {
+                $doc->update($new);
+                self::event($user, $doc, 'proof', $old, $new, 0, 0, clearsReview: $old['paper_signed'] && ! $new['paper_signed']);
+            });
+
+            return;
         }
         $receiptNo = self::normSerial($receiptNo);
         if ($receiptNo !== null) {
@@ -345,7 +419,7 @@ class DocReview
         });
     }
 
-    public static function setRep(User $user, Invoice|PurchaseOrder $doc, int $repId): void
+    public static function setRep(User $user, Invoice|PurchaseOrder|ClientReturn $doc, int $repId): void
     {
         self::assertUnlocked($doc);
 
@@ -355,7 +429,7 @@ class DocReview
         }
         Scope::assertRep($user, $rep, $doc->client);
 
-        $col = $doc instanceof Invoice ? 'user_id' : 'assigned_to';
+        $col = $doc instanceof PurchaseOrder ? 'assigned_to' : 'user_id';
         $old = $doc->{$col};
         if ((int) $old === $rep->id) {
             return;
@@ -369,12 +443,12 @@ class DocReview
         });
     }
 
-    public static function setDate(User $user, Invoice|PurchaseOrder $doc, string $date): void
+    public static function setDate(User $user, Invoice|PurchaseOrder|ClientReturn $doc, string $date): void
     {
         self::assertUnlocked($doc);
 
         $day = Carbon::parse($date)->startOfDay();
-        $delivered = $doc instanceof Invoice || $doc->status === 'delivered';
+        $delivered = ! $doc instanceof PurchaseOrder || $doc->status === 'delivered';
 
         // اليوم اللي البيع اتقيّد فيه مايبقاش بكرة
         if ($delivered && $day->gt(today())) {
@@ -396,6 +470,15 @@ class DocReview
                     ->update(['date' => $new->toDateString()]);
                 $doc->client?->recalculate();
                 InvoiceGl::repost($doc, 'reviewRedate');
+            } elseif ($doc instanceof ClientReturn) {
+                // المرتجع: نفس الفاتورة — اليوم الجديد بساعته، والدائن (والرد الكاش) معاه
+                $new = $day->copy()->setTimeFrom($doc->created_at);
+                $doc->forceFill(['created_at' => $new])->save();
+                foreach (self::returnTxs($doc) as $tx) {
+                    $tx->forceFill(['date' => $new->toDateString()])->save();
+                }
+                $doc->client?->recalculate();
+                self::returnGl($doc);
             } elseif ($delivered) {
                 $new = $day->copy()->setTimeFrom($doc->delivered_at ?? now());
                 $doc->forceFill(['delivered_at' => $new])->save();
@@ -418,7 +501,7 @@ class DocReview
      * @param  array<int,int>  $qty  product_id => قطع
      * @return array{lines: list<array>, net: float, tax: float, grand: float, not_priced: ?string}
      */
-    public static function previewLines(Invoice|PurchaseOrder $doc, array $qty): array
+    public static function previewLines(Invoice|PurchaseOrder|ClientReturn $doc, array $qty): array
     {
         $client = Client::findOrFail($doc->client_id);
         $rows = [];
@@ -429,13 +512,18 @@ class DocReview
             if ($product === null) {
                 continue;
             }
-            $price = $doc instanceof Invoice
-                ? (float) Pricing::quote($client, $product, null, $q)['unit_price']
-                : (float) $client->priceFor($product);
+            if ($doc instanceof ClientReturn) {
+                [$price, $rate] = self::returnPrice($doc, $client, $product);
+            } else {
+                $price = $doc instanceof Invoice
+                    ? (float) Pricing::quote($client, $product, null, $q)['unit_price']
+                    : (float) $client->priceFor($product);
+                $rate = Tax::rate($client, $product);
+            }
             if ($price <= 0) {
                 return ['lines' => [], 'net' => 0, 'tax' => 0, 'grand' => 0, 'not_priced' => $product->displayName()];
             }
-            $calc = Tax::line($price, $q, Tax::rate($client, $product));
+            $calc = Tax::line($price, $q, $rate);
             $lines[] = ['product_id' => $pid, 'name' => $product->displayName(), 'qty' => $q, 'price' => $price,
                 'total' => $calc['net'], 'tax' => $calc['tax']];
             $rows[] = ['total' => $calc['net'], 'tax' => $calc['tax']];
@@ -452,7 +540,7 @@ class DocReview
      *
      * @param  array<int,int>  $qty  product_id => قطع (الحذف = صفر أو غياب)
      */
-    public static function saveLines(User $user, Invoice|PurchaseOrder $doc, array $qty, ?string $note = null): void
+    public static function saveLines(User $user, Invoice|PurchaseOrder|ClientReturn $doc, array $qty, ?string $note = null): void
     {
         self::assertUnlocked($doc, lines: true);
 
@@ -475,7 +563,11 @@ class DocReview
         }
 
         DB::transaction(function () use ($user, $doc, $target, $before, $note) {
-            $doc instanceof Invoice ? self::writeInvoiceLines($doc, $target) : self::writePoLines($doc, $target);
+            match (true) {
+                $doc instanceof Invoice => self::writeInvoiceLines($doc, $target),
+                $doc instanceof ClientReturn => self::writeReturnLines($doc, $target),
+                default => self::writePoLines($doc, $target),
+            };
             $doc->refresh();
             $after = self::snapshot($doc);
 
@@ -504,7 +596,7 @@ class DocReview
         return $out;
     }
 
-    private static function assertUnlocked(Invoice|PurchaseOrder $doc, bool $lines = false): void
+    private static function assertUnlocked(Invoice|PurchaseOrder|ClientReturn $doc, bool $lines = false): void
     {
         $l = self::locks($doc);
         $msgs = $l['all'] + ($lines ? $l['lines'] : []);
@@ -637,9 +729,108 @@ class DocReview
     }
 
     /**
+     * سعر بند المرتجع — نفس قاعدة `Returns::create` / `FullResync::clientReturn`:
+     * سعر سطر الفاتورة اللي رجع منه (سعر يوم البيع)، وإلا سعر العميل الحالي.
+     *
+     * @return array{0: float, 1: float} [السعر غير شامل، نسبة الضريبة]
+     */
+    public static function returnPrice(ClientReturn $ret, Client $client, Product $product): array
+    {
+        $src = ReturnItem::where('return_id', $ret->id)->where('product_id', $product->id)->whereNotNull('invoice_item_id')
+            ->orderBy('id')->first()?->invoiceItem;
+        if ($src !== null) {
+            return [(float) $src->price, (float) $src->tax_rate];
+        }
+
+        return [(float) Pricing::unitPrice($client, $product), (float) Tax::rate($client, $product)];
+    }
+
+    /** قيود المرتجع: الدائن، والرد الكاش (مصدره ممكن يكون الزيارة) */
+    private static function returnTxs(ClientReturn $ret)
+    {
+        return Transaction::whereIn('id', array_filter([$ret->transaction_id, $ret->refund_transaction_id]))
+            ->orWhere(fn ($q) => $q->where('source_type', ClientReturn::class)->where('source_id', $ret->id))
+            ->get()->unique('id');
+    }
+
+    /** إعادة ترحيل قيود المرتجع في الدفتر — زي `InvoiceGl::repost` (الفشل مايوقفش التصليح) */
+    private static function returnGl(ClientReturn $ret): void
+    {
+        try {
+            $ledger = app(\App\Services\Gl\Ledger::class);
+            foreach (self::returnTxs($ret) as $tx) {
+                $ledger->repost($tx);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('gl.repost failed', ['return' => $ret->id, 'event' => 'reviewReturn', 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * بنود المرتجع: الكميات بس، والتسعير من `FullResync::clientReturn` (سعر سطر
+     * الفاتورة الأصلية، وإلا قايمة العميل) — وبعدين الدائن والرد الكاش ورصيد العميل.
+     * ⚠️ العهدة ماتتحرّكش (قرار ١٠/١١) — زي باقي الأنواع.
+     */
+    private static function writeReturnLines(ClientReturn $ret, array $target): void
+    {
+        $ret->load('items.product');
+
+        foreach ($target + array_fill_keys($ret->items->pluck('product_id')->all(), 0) as $pid => $want) {
+            $want = $target[$pid] ?? 0;
+            $lines = $ret->items->where('product_id', $pid)->sortByDesc('id');
+            $have = (int) $lines->sum('qty');
+
+            if ($want < $have) {
+                $give = $have - $want;
+                foreach ($lines as $line) {
+                    if ($give <= 0) {
+                        break;
+                    }
+                    $r = min((int) $line->qty, $give);
+                    $r >= (int) $line->qty ? $line->delete() : $line->update(['qty' => (int) $line->qty - $r]);
+                    $give -= $r;
+                }
+            } elseif ($want > $have) {
+                if ($first = $lines->sortBy('id')->first()) {
+                    $first->update(['qty' => (int) $first->qty + ($want - $have)]);
+                } else {
+                    // صنف جديد على الإذن: سليم ومن غير سطر فاتورة — بيتسعّر من قايمة العميل
+                    ReturnItem::create([
+                        'return_id' => $ret->id, 'product_id' => $pid, 'invoice_id' => null, 'invoice_item_id' => null,
+                        'qty' => $want, 'condition' => ClientReturn::CONDITION_GOOD,
+                        'list_price' => 0, 'price' => 0, 'total' => 0, 'tax_rate' => 0, 'tax' => 0,
+                    ]);
+                }
+            }
+        }
+
+        $ret->refresh();
+        $res = FullResync::clientReturn($ret);
+        if (isset($res['skip'])) {
+            throw new Rejected(__('review.ret_not_priced', ['why' => $res['skip']]));
+        }
+        $ret->refresh()->load('items');
+
+        $ret->forceFill([
+            'good_units' => (int) $ret->items->where('condition', ClientReturn::CONDITION_GOOD)->sum('qty'),
+            'damaged_units' => (int) $ret->items->where('condition', ClientReturn::CONDITION_DAMAGED)->sum('qty'),
+        ])->save();
+
+        // الدائن صف صف (عشان أوبزرفر الدفتر) — والرد الكاش بنفس المبلغ عشان الرصيد مايتغيّرش
+        foreach (self::returnTxs($ret) as $tx) {
+            $col = $tx->kind === 'refund' ? 'debit' : 'credit';
+            if (in_array($tx->kind, ['return', 'refund'], true)) {
+                $tx->forceFill([$col => (float) $ret->grand_total, 'tax' => (float) $ret->tax_total])->save();
+            }
+        }
+        $ret->client?->recalculate();
+        self::returnGl($ret);
+    }
+
+    /**
      * صف السجل + سجل النشاط. أي تعديل على مستند متعلّم ✓ بيرجّعه «لسه».
      */
-    private static function event(User $user, Invoice|PurchaseOrder $doc, string $action, ?array $before, ?array $after,
+    private static function event(User $user, Invoice|PurchaseOrder|ClientReturn $doc, string $action, ?array $before, ?array $after,
         float $netDelta, float $grandDelta, ?string $note = null, ?int $openMs = null, bool $clearsReview = true, array $extra = []): DocReviewEvent
     {
         $type = self::typeOf($doc);
@@ -716,7 +907,9 @@ class DocReview
                 break;
             case 'proof':
                 $yn = fn ($v) => $v ? __('review.yes') : __('review.no');
-                $out[__('review.proof_receipt')] = [$yn($b['receipt_note'] ?? false), $yn($a['receipt_note'] ?? false)];
+                if (array_key_exists('receipt_note', $a) || array_key_exists('receipt_note', $b)) {
+                    $out[__('review.proof_receipt')] = [$yn($b['receipt_note'] ?? false), $yn($a['receipt_note'] ?? false)];
+                }
                 if (($b['receipt_note_no'] ?? null) !== ($a['receipt_note_no'] ?? null)) {
                     $out[__('review.proof_receipt_no')] = [$b['receipt_note_no'] ?? null, $a['receipt_note_no'] ?? null];
                 }

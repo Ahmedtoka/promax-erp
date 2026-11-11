@@ -203,6 +203,11 @@ class ReviewController extends Controller
             'ok_grand' => round(array_sum(array_map(fn ($r) => $r['docs']['ok_grand'], $rows)), 2),
             'docs' => array_sum(array_map(fn ($r) => $r['docs']['docs'], $rows)),
             'ok' => array_sum(array_map(fn ($r) => $r['docs']['ok'], $rows)),
+            // (١٢/١١) المرتجعات: مبيعات − مرتجعات = صافي، والمتراجع منه
+            'sales' => round(array_sum(array_map(fn ($r) => $r['docs']['sales'], $rows)), 2),
+            'ret' => round(array_sum(array_map(fn ($r) => $r['docs']['ret'], $rows)), 2),
+            'net' => round(array_sum(array_map(fn ($r) => $r['docs']['net'], $rows)), 2),
+            'ok_net' => round(array_sum(array_map(fn ($r) => $r['docs']['ok_net'], $rows)), 2),
         ];
 
         $per = $this->perPage($request, 25);

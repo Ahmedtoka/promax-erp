@@ -15,7 +15,7 @@ class DocReviewEvent extends Model
 {
     public const UPDATED_AT = null;
 
-    public const TYPES = ['invoice', 'po'];
+    public const TYPES = ['invoice', 'po', 'return'];
 
     /** الأحداث اللي بتتحسب «مراجعة» في التحليل (الوقت بين مستند والتاني) */
     public const REVIEW_ACTIONS = ['ok', 'issue'];

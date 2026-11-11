@@ -368,3 +368,33 @@ note (إذن استلام) or a signature/stamp on our delivery paper.
 - Queue: warning flag `noproof` (counts in «أي تنبيه»), positive filters `receipt`
   and `signed`; search matches the note number. Dashboard card per chain/client:
   delivered, proven, unproven and unproven value. CSV export has three proof columns.
+
+## Addendum 4 — Returns as a third doc type (12/11, Ahmed)
+
+"زي ما فيه مبيعات فيه مرتجعات" — client returns (`returns` / `ClientReturn`) join the
+same queue next to invoices and POs.
+
+- **Queue**: type chips «فواتير · أوامر توريد · مرتجعات»; row key `ret-{id}`, tag «م»,
+  amount shown as −grand. Same mother → chain → branch grouping. Each row carries its
+  original invoices (from `return_items.invoice_id`) — searchable, in the CSV, and
+  linked in the pane (opens the invoice in the queue, ↗ opens the invoice screen).
+- **Paper vs system**: `returns.paper_ref` = paper return-note serial, required for ✓
+  like invoices. Its own serial book: a return «12» is not a duplicate of invoice «12»
+  (`DocReview::serialKey` prefixes `R:`). Date, rep, lines, paper total vs credit total.
+- **Proof**: `returns.paper_signed` = «إمضاء / ختم العميل» on the return note. The goods
+  came back and a credit was booked, so the client's signature is the proof. It shares
+  the `noproof` flag and `signed` tag with POs. Soft by default;
+  `REVIEW_RETURN_PROOF_REQUIRED=true` makes it a hard ✓ condition.
+- **Prices**: each line is compared with the sale it reverses (its invoice line's
+  price), or with the client list price when it has no invoice line (pre-system stock).
+  A mismatch raises the `ret_price` flag and the red "prices" check.
+- **Inline line edit**: quantities only. Repricing goes through the existing
+  `FullResync::clientReturn` rule (original invoice line price, else the client's
+  current price). Then the `return` credit and the cash `refund` debit get the new
+  grand, the client is recalculated, and GL entries are reposted. Custody and stock do
+  not move (same decision as 10/11). New products are added as good, unlinked lines.
+- **Money**: progress counts returns in every % (overall, per chain/client). Stats
+  money = sales − returns, plus a separate returns value. The money tab shows
+  sales − returns = net, and the reviewed net. That net matches the client balance
+  built from the same documents.
+- Migration: `2026_11_12_000200_return_doc_review.php` (add-only: `paper_ref`, `paper_signed`).

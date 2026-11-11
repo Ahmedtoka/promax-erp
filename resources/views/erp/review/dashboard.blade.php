@@ -49,6 +49,8 @@
             <div class="rv-sub">{{ __('review.docs_progress', ['ok' => $docs['ok'], 'total' => $docs['total']]) }}
                 · {{ __('review.docs_inv_progress', ['ok' => $docs['ok_inv'], 'n' => $docs['invoices']]) }}
                 · {{ __('review.docs_po_progress', ['ok' => $docs['ok_po'], 'n' => $docs['pos']]) }}
+                · {{ __('review.docs_ret_progress', ['ok' => $docs['ok_ret'], 'n' => $docs['returns']]) }}
+                @if ($docs['returns'])· <span dir="ltr">{{ __('review.dash_ret_value', ['v' => number_format($docs['ret_grand'], 2)]) }}</span>@endif
                 · <span style="color:#DC2626">✗ {{ $docs['issue'] }}</span></div>
         </a>
     @endif

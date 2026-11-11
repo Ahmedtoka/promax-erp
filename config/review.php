@@ -23,4 +23,10 @@ return [
     'month_needs_all_docs' => (bool) env('REVIEW_MONTH_NEEDS_ALL_DOCS', false),
     'daily_target' => (int) env('REVIEW_DAILY_TARGET', 150),
     'po_proof_required' => (bool) env('REVIEW_PO_PROOF_REQUIRED', false),
+
+    /*
+     * (١٢/١١ — أحمد) إمضاء / ختم العميل على إذن المرتجع: false (الافتراضي) =
+     * تحذير أحمر بيتأكد بضغطة تانية، true = مفيش ✓ لمرتجع من غير إمضاء/ختم.
+     */
+    'return_proof_required' => (bool) env('REVIEW_RETURN_PROOF_REQUIRED', false),
 ];

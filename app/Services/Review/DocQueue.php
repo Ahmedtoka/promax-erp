@@ -19,6 +19,9 @@ use Illuminate\Support\Facades\DB;
  */
 class DocQueue
 {
+    /** أنواع المستندات في المراجعة — `ReviewCheck.entity_type` و`doc_review_events.doc_type` */
+    public const TYPES = ['invoice', 'po', 'return'];
+
     public const STATUSES = ['pending', 'ok', 'issue', 'changed'];
 
     /**
@@ -28,8 +31,8 @@ class DocQueue
      */
     public static function all(?User $user, ?string $only = null): Collection
     {
-        // `$only` = «inv-12» / «po-7»: صف واحد بعد حركة (من غير ما نبني الطابور كله)
-        [$onlyType, $onlyId] = $only === null ? [null, null] : [str_starts_with($only, 'inv-') ? 'invoice' : 'po', (int) substr($only, strpos($only, '-') + 1)];
+        // `$only` = «inv-12» / «po-7» / «ret-3»: صف واحد بعد حركة (من غير ما نبني الطابور كله)
+        [$onlyType, $onlyId] = $only === null ? [null, null] : DocReview::parseKey($only);
 
         $clients = Client::visibleTo(Client::query(), $user)
             ->where('category', '!=', 'internal')
@@ -41,7 +44,8 @@ class DocQueue
         $mothers = MotherCompany::whereIn('id', $groups->pluck('mother_company_id')->filter()->unique())
             ->get(['id', 'name', 'name_en'])->keyBy('id');
         $reps = User::whereIn('id', DB::table('invoices')->whereIn('client_id', $ids)->distinct()->pluck('user_id')
-            ->merge(DB::table('purchase_orders')->whereIn('client_id', $ids)->distinct()->pluck('assigned_to'))->filter()->unique())
+            ->merge(DB::table('purchase_orders')->whereIn('client_id', $ids)->distinct()->pluck('assigned_to'))
+            ->merge(DB::table('returns')->whereIn('client_id', $ids)->distinct()->pluck('user_id'))->filter()->unique())
             ->get(['id', 'name', 'name_en'])->keyBy('id');
 
         $invItems = DB::table('invoice_items')->whereIn('invoice_id', DB::table('invoices')->whereIn('client_id', $ids)->select('id'))
@@ -51,14 +55,33 @@ class DocQueue
             ->when($onlyType !== null, fn ($q) => $q->where('purchase_order_id', $onlyType === 'po' ? $onlyId : 0))
             ->groupBy('purchase_order_id')->selectRaw('purchase_order_id AS id, SUM(COALESCE(delivered_qty, qty)) AS pcs, COUNT(DISTINCT product_id) AS products')->get()->keyBy('id');
 
+        $retItems = DB::table('return_items')->whereIn('return_id', DB::table('returns')->whereIn('client_id', $ids)->select('id'))
+            ->when($onlyType !== null, fn ($q) => $q->where('return_id', $onlyType === 'return' ? $onlyId : 0))
+            ->groupBy('return_id')->selectRaw('return_id AS id, SUM(qty) AS pcs, COUNT(DISTINCT product_id) AS products')->get()->keyBy('id');
+        // (١٢/١١) المرتجع ← فواتيره الأصلية (من بنوده)، والبنود اللي اتسعّرت غير سعر البيع
+        $retLinks = [];
+        $retOff = [];
+        if ($onlyType === null || $onlyType === 'return') {
+            $retIds = DB::table('returns')->whereIn('client_id', $ids)->when($onlyType !== null, fn ($q) => $q->where('id', $onlyId))->select('id');
+            foreach (DB::table('return_items')->join('invoices', 'invoices.id', '=', 'return_items.invoice_id')->whereIn('return_items.return_id', $retIds)
+                ->distinct()->get(['return_items.return_id', 'invoices.id', 'invoices.number']) as $l) {
+                $retLinks[(int) $l->return_id][] = ['id' => (int) $l->id, 'number' => (string) $l->number];
+            }
+            $retOff = DB::table('return_items')->join('invoice_items', 'invoice_items.id', '=', 'return_items.invoice_item_id')
+                ->whereIn('return_items.return_id', $retIds)
+                // للقرش: ٨٧٫٧٢ قدام ٨٧٫٧١٩٣ (عشري ٢ قدام ٤ — نفس الفلوس) مش فرق؛ ١٠٠ قدام ٨٧٫٧٢ فرق
+                ->whereRaw('ABS(return_items.price - invoice_items.price) >= 0.005')
+                ->distinct()->pluck('return_items.return_id')->flip()->all();
+        }
+
         $checks = [];
-        foreach (ReviewCheck::with('user:id,name,name_en')->whereIn('entity_type', ['invoice', 'po'])->where('item', DocReview::ITEM)
+        foreach (ReviewCheck::with('user:id,name,name_en')->whereIn('entity_type', self::TYPES)->where('item', DocReview::ITEM)
             ->when($onlyType !== null, fn ($q) => $q->where('entity_type', $onlyType)->where('entity_id', $onlyId))->get() as $c) {
             $checks[$c->entity_type][$c->entity_id] = $c;
         }
 
         $rows = collect();
-        $make = function (string $type, object $d, ?object $agg) use ($clients, $groups, $mothers, $reps, $checks) {
+        $make = function (string $type, object $d, ?object $agg) use ($clients, $groups, $mothers, $reps, $checks, $retLinks) {
             $c = $clients[$d->client_id] ?? null;
             $g = $c?->group_id ? ($groups[$c->group_id] ?? null) : null;
             $m = $g?->mother_company_id ? ($mothers[$g->mother_company_id] ?? null) : null;
@@ -67,7 +90,7 @@ class DocQueue
             return [
                 'type' => $type,
                 'id' => (int) $d->id,
-                'key' => ($type === 'invoice' ? 'inv-' : 'po-').$d->id,
+                'key' => DocReview::keyFor($type, (int) $d->id),
                 'number' => (string) $d->number,
                 'paper_ref' => DocReview::normSerial($d->paper_ref),
                 'date' => substr((string) $d->doc_at, 0, 10),
@@ -96,6 +119,8 @@ class DocQueue
                 'receipt' => (bool) ($d->receipt_note ?? false),
                 'receipt_no' => $d->receipt_note_no ?? null,
                 'signed' => (bool) ($d->paper_signed ?? false),
+                // المرتجع: فواتيره الأصلية
+                'links' => $type === 'return' ? ($retLinks[(int) $d->id] ?? []) : [],
             ];
         };
 
@@ -110,6 +135,11 @@ class DocQueue
             ->get() as $d) {
             $rows->push($make('po', $d, $poItems[$d->id] ?? null));
         }
+        foreach (DB::table('returns')->whereIn('client_id', $ids)
+            ->when($onlyType !== null, fn ($q) => $onlyType === 'return' ? $q->where('id', $onlyId) : $q->whereRaw('0 = 1'))
+            ->get(['id', 'number', 'paper_ref', 'paper_signed', 'client_id', 'user_id AS rep_id', 'created_at AS doc_at', 'policy AS st', 'total', 'tax_total', 'grand_total']) as $d) {
+            $rows->push($make('return', $d, $retItems[$d->id] ?? null));
+        }
 
         // السيريال المكرر — بين الفواتير والأوامر مع بعض، على الشكل الموحّد، وعلى **كل**
         // المستندات (مش اللي اليوزر شايفه بس) — نفس اللي اللوحة بتقوله «مكرر مع …»
@@ -120,18 +150,19 @@ class DocQueue
         $today = now()->toDateString();
         $first = ReviewCheck::FIRST_MONTH.'-01';
 
-        return $rows->map(function ($r) use ($dups, $repriced, $clients, $today, $first) {
-            $r['dup'] = $r['paper_ref'] !== null && isset($dups[$r['paper_ref']]);
+        return $rows->map(function ($r) use ($dups, $repriced, $clients, $today, $first, $retOff) {
+            $r['dup'] = $r['paper_ref'] !== null && isset($dups[DocReview::serialKey($r['type'], $r['paper_ref'])]);
             $clientRep = $clients[$r['client_id']]->rep_id ?? null;
             $r['flags'] = array_values(array_filter([
                 $r['paper_ref'] === null ? 'noserial' : null,
                 $r['dup'] ? 'dup' : null,
                 // أمر لسه ماتسلّمش تاريخه «ميعاد التسليم» — المستقبل فيه طبيعي
-                ((($r['type'] === 'invoice' || $r['status_doc'] === 'delivered') && $r['date'] > $today) || $r['date'] < $first) ? 'odd_date' : null,
+                ((($r['type'] !== 'po' || $r['status_doc'] === 'delivered') && $r['date'] > $today) || $r['date'] < $first) ? 'odd_date' : null,
                 ($clientRep && $r['rep_id'] && (int) $clientRep !== $r['rep_id']) ? 'rep_off' : null,
                 isset($repriced[$r['key']]) ? 'repriced' : null,
                 $r['state'] === 'changed' ? 'changed' : null,
                 self::unproven($r) ? 'noproof' : null,
+                ($r['type'] === 'return' && isset($retOff[$r['id']])) ? 'ret_price' : null,
             ]));
             // علامات «كويسة» (مش تنبيه — مش في «أي تنبيه»): إذن استلام / إمضاء-ختم
             $r['tags'] = array_values(array_filter([$r['receipt'] ? 'receipt' : null, $r['signed'] ? 'signed' : null]));
@@ -140,14 +171,21 @@ class DocQueue
         });
     }
 
-    public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed', 'noproof'];
+    public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed', 'noproof', 'ret_price'];
 
     /** فلاتر إثبات الاستلام الإيجابية (مش تنبيهات) */
     public const PROOF_TAGS = ['receipt', 'signed'];
 
-    /** أمر توريد اتسلّم ومفيش عليه لا إذن استلام ولا إمضاء/ختم = فلوس مستنية إثبات */
+    /**
+     * أمر توريد اتسلّم ومفيش عليه لا إذن استلام ولا إمضاء/ختم = فلوس مستنية إثبات.
+     * مرتجع من غير إمضاء/ختم العميل = دائن اتقيّد من غير ما يثبت إن البضاعة رجعت.
+     */
     public static function unproven(array $r): bool
     {
+        if ($r['type'] === 'return') {
+            return ! $r['signed'];
+        }
+
         return $r['type'] === 'po' && $r['status_doc'] === 'delivered' && ! $r['receipt'] && ! $r['signed'];
     }
 
@@ -211,10 +249,10 @@ class DocQueue
      */
     public static function repricedKeys(?string $onlyType, ?int $onlyId): array
     {
-        $map = ['Invoice' => 'inv-', 'PurchaseOrder' => 'po-'];
+        $map = ['Invoice' => 'inv-', 'PurchaseOrder' => 'po-', 'ClientReturn' => 'ret-'];
 
         return DB::table('activity_logs')
-            ->whereIn('subject_type', $onlyType === null ? array_keys($map) : [$onlyType === 'invoice' ? 'Invoice' : 'PurchaseOrder'])
+            ->whereIn('subject_type', $onlyType === null ? array_keys($map) : [['invoice' => 'Invoice', 'po' => 'PurchaseOrder', 'return' => 'ClientReturn'][$onlyType]])
             ->when($onlyId !== null, fn ($q) => $q->where('subject_id', $onlyId))
             ->where('event', 'updated')->where('created_at', '>=', self::PRICE_FIX_DAY)
             ->where('changes', 'like', '%grand_total%')
@@ -231,9 +269,12 @@ class DocQueue
     public static function overall(?User $user): array
     {
         $ids = Client::visibleTo(Client::query(), $user)->where('category', '!=', 'internal')->select('id');
-        $checks = ReviewCheck::whereIn('entity_type', ['invoice', 'po'])->where('item', DocReview::ITEM)
+        $checks = ReviewCheck::whereIn('entity_type', self::TYPES)->where('item', DocReview::ITEM)
             ->get(['entity_type', 'entity_id', 'status', 'system_balance'])->keyBy(fn ($c) => $c->entity_type.$c->entity_id);
         $rows = collect();
+        foreach (DB::table('returns')->whereIn('client_id', $ids)->get(['id', 'grand_total']) as $d) {
+            $rows->push(['type' => 'return', 'state' => DocReview::state($checks['return'.$d->id] ?? null, (float) $d->grand_total)]);
+        }
         foreach (DB::table('invoices')->whereIn('client_id', $ids)->get(['id', 'grand_total']) as $d) {
             $rows->push(['type' => 'invoice', 'state' => DocReview::state($checks['invoice'.$d->id] ?? null, (float) $d->grand_total)]);
         }
@@ -249,6 +290,8 @@ class DocQueue
             'invoices' => $rows->where('type', 'invoice')->count(), 'pos' => $rows->where('type', 'po')->count(),
             'ok_inv' => $rows->where('type', 'invoice')->where('state', 'ok')->count(),
             'ok_po' => $rows->where('type', 'po')->where('state', 'ok')->count(),
+            'returns' => $rows->where('type', 'return')->count(),
+            'ok_ret' => $rows->where('type', 'return')->where('state', 'ok')->count(),
             'pct' => self::pct($ok, $total),
         ];
     }
@@ -271,28 +314,36 @@ class DocQueue
             return [];
         }
 
-        $checks = ReviewCheck::whereIn('entity_type', ['invoice', 'po'])->where('item', DocReview::ITEM)
+        $checks = ReviewCheck::whereIn('entity_type', self::TYPES)->where('item', DocReview::ITEM)
             ->get(['id', 'entity_type', 'entity_id', 'status', 'system_balance'])->keyBy(fn ($c) => $c->entity_type.$c->entity_id);
 
         $docs = DB::table('invoices')->whereIn('client_id', $ids)
             ->selectRaw("'invoice' AS t, id, client_id, grand_total, created_at AS doc_at")
             ->unionAll(DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
                 ->selectRaw("'po' AS t, id, client_id, grand_total, COALESCE(delivered_at, due_at, created_at) AS doc_at"))
+            ->unionAll(DB::table('returns')->whereIn('client_id', $ids)
+                ->selectRaw("'return' AS t, id, client_id, grand_total, created_at AS doc_at"))
             ->get();
 
         $out = [];
         foreach ($docs as $d) {
             $state = DocReview::state($checks[$d->t.$d->id] ?? null, (float) $d->grand_total);
             $o = &$out[(int) $d->client_id];
-            $o ??= ['docs' => 0, 'ok' => 0, 'issue' => 0, 'grand' => 0.0, 'ok_grand' => 0.0, 'months' => []];
+            $o ??= self::MONEY_BLANK;
             $m = substr((string) $d->doc_at, 0, 7);
+            $isRet = $d->t === 'return';
             $o['docs']++;
             $o['grand'] += (float) $d->grand_total;
+            // (١٢/١١) المبيعات والمرتجعات لوحدهم: الرصيد = مبيعات − مرتجعات
+            $o[$isRet ? 'ret' : 'sales'] += (float) $d->grand_total;
+            $o['ret_docs'] += $isRet ? 1 : 0;
             $o['months'][$m]['docs'] = ($o['months'][$m]['docs'] ?? 0) + 1;
             $o['months'][$m]['ok'] ??= 0;
             if ($state === 'ok') {
                 $o['ok']++;
                 $o['ok_grand'] += (float) $d->grand_total;
+                $o[$isRet ? 'ok_ret' : 'ok_sales'] += (float) $d->grand_total;
+                $o['ok_ret_docs'] += $isRet ? 1 : 0;
                 $o['months'][$m]['ok']++;
             } elseif ($state === 'issue') {
                 $o['issue']++;
@@ -304,6 +355,15 @@ class DocQueue
     }
 
     /**
+     * `grand`/`ok_grand` = حجم المستندات (مبيعات + مرتجعات) — عليه نسبة الإنجاز.
+     * `sales`/`ret` وصافيهم = الرصيد اللي المستندات بتقوله (مبيعات − مرتجعات).
+     */
+    public const MONEY_BLANK = ['docs' => 0, 'ok' => 0, 'issue' => 0, 'grand' => 0.0, 'ok_grand' => 0.0,
+        'sales' => 0.0, 'ok_sales' => 0.0, 'ret' => 0.0, 'ok_ret' => 0.0, 'ret_docs' => 0, 'ok_ret_docs' => 0, 'months' => []];
+
+    private const MONEY_KEYS = ['docs', 'ok', 'issue', 'grand', 'ok_grand', 'sales', 'ok_sales', 'ret', 'ok_ret', 'ret_docs', 'ok_ret_docs'];
+
+    /**
      * جمع `moneyByClient` لمجموعة عملاء (سلسلة).
      *
      * @param  array<int, array>  $byClient
@@ -311,13 +371,13 @@ class DocQueue
      */
     public static function moneySum(array $byClient, iterable $clientIds): array
     {
-        $o = ['docs' => 0, 'ok' => 0, 'issue' => 0, 'grand' => 0.0, 'ok_grand' => 0.0, 'months' => []];
+        $o = self::MONEY_BLANK;
         foreach ($clientIds as $id) {
             $c = $byClient[(int) $id] ?? null;
             if ($c === null) {
                 continue;
             }
-            foreach (['docs', 'ok', 'issue', 'grand', 'ok_grand'] as $k) {
+            foreach (self::MONEY_KEYS as $k) {
                 $o[$k] += $c[$k];
             }
             foreach ($c['months'] as $m => $x) {
@@ -325,8 +385,11 @@ class DocQueue
                 $o['months'][$m]['ok'] = ($o['months'][$m]['ok'] ?? 0) + $x['ok'];
             }
         }
-        $o['grand'] = round($o['grand'], 2);
-        $o['ok_grand'] = round($o['ok_grand'], 2);
+        foreach (['grand', 'ok_grand', 'sales', 'ok_sales', 'ret', 'ok_ret'] as $k) {
+            $o[$k] = round($o[$k], 2);
+        }
+        $o['net'] = round($o['sales'] - $o['ret'], 2);
+        $o['ok_net'] = round($o['ok_sales'] - $o['ok_ret'], 2);
 
         return $o;
     }
@@ -392,7 +455,7 @@ class DocQueue
                 return false;
             }
             if ($nq !== '') {
-                $hay = $norm(implode(' ', [$r['number'], $r['paper_ref'], $r['receipt_no'] ?? '', $r['client'], $r['client_code'], $r['phone'], $r['group'], $r['mother'], $r['rep']]));
+                $hay = $norm(implode(' ', [$r['number'], $r['paper_ref'], $r['receipt_no'] ?? '', implode(' ', array_column($r['links'] ?? [], 'number')), $r['client'], $r['client_code'], $r['phone'], $r['group'], $r['mother'], $r['rep']]));
                 $hit = str_contains($hay, $nq) || ($amount !== null && abs($r['grand'] - $amount) < 0.01)
                     || ($serialQ !== null && $r['paper_ref'] !== null && str_contains($r['paper_ref'], $serialQ));
                 if (! $hit) {
@@ -432,9 +495,12 @@ class DocQueue
             'total' => $total,
             'invoices' => $rows->where('type', 'invoice')->count(),
             'pos' => $rows->where('type', 'po')->count(),
-            'net' => round($rows->sum('net'), 2),
-            'tax' => round($rows->sum('tax'), 2),
-            'grand' => round($rows->sum('grand'), 2),
+            'returns' => $rows->where('type', 'return')->count(),
+            // (١٢/١١) الفلوس = مبيعات − مرتجعات (زي الرصيد)، وقيمة المرتجعات لوحدها
+            'net' => round($rows->sum(fn ($r) => $r['type'] === 'return' ? -$r['net'] : $r['net']), 2),
+            'tax' => round($rows->sum(fn ($r) => $r['type'] === 'return' ? -$r['tax'] : $r['tax']), 2),
+            'grand' => round($rows->sum(fn ($r) => $r['type'] === 'return' ? -$r['grand'] : $r['grand']), 2),
+            'ret_grand' => round($rows->where('type', 'return')->sum('grand'), 2),
             'pcs' => (int) $rows->sum('pcs'),
             'products' => (int) $rows->sum('products'),
             'ok' => $ok,
@@ -443,6 +509,7 @@ class DocQueue
             'pending' => $rows->where('state', 'pending')->count(),
             'ok_inv' => $rows->where('type', 'invoice')->where('state', 'ok')->count(),
             'ok_po' => $rows->where('type', 'po')->where('state', 'ok')->count(),
+            'ok_ret' => $rows->where('type', 'return')->where('state', 'ok')->count(),
             'pct' => self::pct($ok, $total),
         ];
     }

@@ -72,6 +72,8 @@ class ClientReturn extends Model
         'source', 'policy', 'subtotal', 'discount', 'total', 'tax_total', 'grand_total',
         'good_units', 'damaged_units', 'transaction_id', 'refund_transaction_id',
         'idem_key', 'note', 'created_by',
+        // (١٢/١١) المراجعة مستند مستند: رقم إذن المرتجع الورقي + إمضاء/ختم العميل
+        'paper_ref', 'paper_signed',
     ];
 
     protected function casts(): array
@@ -82,6 +84,7 @@ class ClientReturn extends Model
             'total' => 'decimal:2',
             'tax_total' => 'decimal:2',
             'grand_total' => 'decimal:2',
+            'paper_signed' => 'boolean',
         ];
     }
 

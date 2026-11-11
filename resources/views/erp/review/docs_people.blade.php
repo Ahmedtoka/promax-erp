@@ -76,7 +76,7 @@
                     <tr class="{{ $fast ? 'pp-fastrow' : '' }}">
                         <td dir="ltr">{{ $e->created_at->format('H:i:s') }}</td>
                         <td>{{ __('review.ev_'.$e->action, ['number' => '']) }}</td>
-                        <td dir="ltr"><a href="{{ route('erp.review.docs', ['doc' => ($e->doc_type === 'invoice' ? 'inv-' : 'po-').$e->doc_id, 'status' => 'all']) }}" target="_blank" rel="noopener">{{ $e->number }}</a></td>
+                        <td dir="ltr"><a href="{{ route('erp.review.docs', ['doc' => \App\Services\Review\DocReview::keyFor($e->doc_type, (int) $e->doc_id), 'status' => 'all']) }}" target="_blank" rel="noopener">{{ $e->number }}</a></td>
                         <td dir="ltr" class="{{ $fast ? 'pp-bad' : '' }}">{{ $e->seconds_since_prev === null ? '—' : __('review.p_sec', ['s' => $e->seconds_since_prev]) }}</td>
                         <td dir="ltr">{{ $e->open_ms === null ? '—' : __('review.p_sec', ['s' => round($e->open_ms / 1000, 1)]) }}</td>
                         <td dir="ltr">{{ (float) $e->grand_delta != 0 ? $money($e->grand_delta) : '' }}</td>

@@ -19,7 +19,7 @@ class ReviewCheck extends Model
      */
     public function quietInActivity(): bool
     {
-        return in_array($this->entity_type, ['invoice', 'po'], true);
+        return in_array($this->entity_type, ['invoice', 'po', 'return'], true);
     }
 
     public const OK = 'ok';

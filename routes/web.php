@@ -836,20 +836,20 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/review/docs/people', [\App\Http\Controllers\ReviewDocsController::class, 'people'])->name('review.docs.people');
             Route::get('/review/docs/people/export', [\App\Http\Controllers\ReviewDocsController::class, 'peopleExport'])->name('review.docs.people.export');
             Route::post('/review/docs/{type}/{id}/reopen', [\App\Http\Controllers\ReviewDocsController::class, 'reopen'])
-                ->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('review.docs.reopen');
+                ->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('review.docs.reopen');
         });
         Route::middleware('role:admin,accountant')->prefix('/review/docs')->name('review.docs')
             ->controller(\App\Http\Controllers\ReviewDocsController::class)->group(function () {
                 Route::get('/', 'index');
                 Route::get('/export', 'export')->name('.export');
-                Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.pane');
-                Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.mark');
-                Route::post('/{type}/{id}/serial', 'serial')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.serial');
-                Route::post('/{type}/{id}/proof', 'proof')->whereIn('type', ['po'])->whereNumber('id')->name('.proof');
-                Route::post('/{type}/{id}/rep', 'rep')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.rep');
-                Route::post('/{type}/{id}/date', 'date')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.date');
-                Route::post('/{type}/{id}/preview', 'preview')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.preview');
-                Route::post('/{type}/{id}/lines', 'lines')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.lines');
+                Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.pane');
+                Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.mark');
+                Route::post('/{type}/{id}/serial', 'serial')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.serial');
+                Route::post('/{type}/{id}/proof', 'proof')->whereIn('type', ['po', 'return'])->whereNumber('id')->name('.proof');
+                Route::post('/{type}/{id}/rep', 'rep')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.rep');
+                Route::post('/{type}/{id}/date', 'date')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.date');
+                Route::post('/{type}/{id}/preview', 'preview')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.preview');
+                Route::post('/{type}/{id}/lines', 'lines')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.lines');
             });
         Route::middleware('role:admin')->group(function () {
             Route::post('/review/stock/{warehouse}/zero', [\App\Http\Controllers\ReviewController::class, 'zeroWarehouse'])->name('review.stock.zero');

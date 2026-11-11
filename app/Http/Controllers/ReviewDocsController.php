@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\Rejected;
 use App\Models\Client;
 use App\Models\ClientGroup;
+use App\Models\ClientReturn;
 use App\Models\DocReviewEvent;
 use App\Models\Invoice;
 use App\Models\MotherCompany;
@@ -143,6 +144,8 @@ class ReviewDocsController extends Controller
             'docs' => $m['docs'], 'ok' => $m['ok'], 'issue' => $m['issue'],
             'grand' => $m['grand'], 'ok_grand' => $m['ok_grand'],
             'pct' => DocQueue::pct($m['ok_grand'], $m['grand']),
+            // (١٢/١١) المرتجعات: الرصيد = مبيعات − مرتجعات
+            'sales' => $m['sales'], 'ret' => $m['ret'], 'net' => $m['net'], 'ok_net' => $m['ok_net'], 'ret_docs' => $m['ret_docs'],
             'proof' => $proof['delivered'] > 0 ? $proof : null,
             'money_url' => Access::allows($user, 'erp.review.money') ? route('erp.review.money', $money + ['show' => 'all']) : null,
         ];
@@ -191,7 +194,7 @@ class ReviewDocsController extends Controller
             $data = $res->getData(true);
             $data['warn'] = __('review.serial_dup', ['docs' => implode('، ', array_column($dups, 'number'))]);
             // المستندات التانية اللي بقت مكررة معاه — الشاشة بتعلّمها ⚠ من غير ريلود
-            $data['dup_keys'] = array_map(fn ($d) => ($d['type'] === 'invoice' ? 'inv-' : 'po-').$d['id'], $dups);
+            $data['dup_keys'] = array_map(fn ($d) => DocReview::keyFor($d['type'], $d['id']), $dups);
             $res->setData($data);
         }
 
@@ -246,7 +249,7 @@ class ReviewDocsController extends Controller
         $old = (float) $doc->grand_total;
 
         return $this->run($request, $doc, fn () => DocReview::saveLines($request->user(), $doc, $qty, $note),
-            fn () => __('review.lines_saved', ['old' => number_format($old, 2), 'new' => number_format((float) $doc->fresh()->grand_total, 2)]));
+            fn () => __($doc instanceof ClientReturn ? 'review.ret_lines_saved' : 'review.lines_saved', ['old' => number_format($old, 2), 'new' => number_format((float) $doc->fresh()->grand_total, 2)]));
     }
 
     // ═══════════════════════ المراجِعين ═══════════════════════
@@ -267,6 +270,7 @@ class ReviewDocsController extends Controller
             $nums = [
                 'invoice' => Invoice::whereIn('id', $timeline->where('doc_type', 'invoice')->pluck('doc_id'))->pluck('number', 'id'),
                 'po' => PurchaseOrder::whereIn('id', $timeline->where('doc_type', 'po')->pluck('doc_id'))->pluck('number', 'id'),
+                'return' => ClientReturn::whereIn('id', $timeline->where('doc_type', 'return')->pluck('doc_id'))->pluck('number', 'id'),
             ];
             $timeline = $timeline->map(fn ($e) => $e->setAttribute('number', $nums[$e->doc_type][$e->doc_id] ?? '#'.$e->doc_id));
         }
@@ -290,15 +294,16 @@ class ReviewDocsController extends Controller
         $rows = DocQueue::byStatus(DocQueue::filter(DocQueue::all($request->user()), $f), $f['status']);
         $head = [__('review.f_type'), '#', __('review.serial'), __('review.doc_date'), __('review.f_client'), __('review.doc_client'),
             __('review.f_chain'), __('review.f_mother'), __('review.doc_rep'), __('review.tot_net'), __('review.tot_vat'), __('review.tot_incl'),
-            __('review.f_status'), __('review.x_flags'), __('review.proof_receipt'), __('review.proof_receipt_no'), __('review.proof_signed'),
+            __('review.f_status'), __('review.x_flags'), __('review.proof_receipt'), __('review.proof_receipt_no'), __('review.proof_signed'), __('review.ret_orig'),
             __('review.x_by'), __('review.x_at'), __('review.log_note')];
-        $yn = fn ($r, $k) => $r['type'] !== 'po' ? '' : ($r[$k] ? __('review.yes') : __('review.no'));
+        // إذن الاستلام لأوامر التوريد بس؛ الإمضاء/الختم للأوامر والمرتجعات
+        $yn = fn ($r, $k) => $r['type'] === 'invoice' || ($k === 'receipt' && $r['type'] !== 'po') ? '' : ($r[$k] ? __('review.yes') : __('review.no'));
 
         return $this->csv('doc-review-'.now()->format('Ymd-Hi').'.csv', $head, $rows->map(fn ($r) => [
             __('review.type_'.$r['type']), $r['number'], $r['paper_ref'], $r['date'], $r['client_code'], $r['client'],
             $r['group'], $r['mother'], $r['rep'], $r['net'], $r['tax'], $r['grand'],
             __('review.st_'.$r['state']), implode(' / ', array_map(fn ($x) => __('review.flag_'.$x), $r['flags'])),
-            $yn($r, 'receipt'), $r['receipt_no'], $yn($r, 'signed'), $r['by'], $r['at'], $r['note'],
+            $yn($r, 'receipt'), $r['receipt_no'], $yn($r, 'signed'), implode(' ', array_column($r['links'] ?? [], 'number')), $r['by'], $r['at'], $r['note'],
         ]));
     }
 
@@ -312,6 +317,7 @@ class ReviewDocsController extends Controller
         $nums = [
             'invoice' => Invoice::whereIn('id', $events->where('doc_type', 'invoice')->pluck('doc_id'))->pluck('number', 'id'),
             'po' => PurchaseOrder::whereIn('id', $events->where('doc_type', 'po')->pluck('doc_id'))->pluck('number', 'id'),
+            'return' => ClientReturn::whereIn('id', $events->where('doc_type', 'return')->pluck('doc_id'))->pluck('number', 'id'),
         ];
         $head = ['#', __('review.x_at'), __('review.x_by'), __('review.f_type'), __('review.x_number'), __('review.x_action'),
             __('review.x_before'), __('review.x_after'), __('review.x_net_delta'), __('review.x_grand_delta'), __('review.x_seconds'), __('review.x_open'), __('review.log_note')];
@@ -347,7 +353,7 @@ class ReviewDocsController extends Controller
 
         return [
             'q' => $request->string('q')->trim()->value(),
-            'type' => in_array($request->string('type')->value(), ['invoice', 'po'], true) ? $request->string('type')->value() : '',
+            'type' => in_array($request->string('type')->value(), DocQueue::TYPES, true) ? $request->string('type')->value() : '',
             'mother' => $request->integer('mother') ?: '',
             'group' => $request->string('group')->value() === 'solo' ? 'solo' : ($request->integer('group') ?: ''),
             'client' => $request->integer('client') ?: '',
@@ -363,7 +369,7 @@ class ReviewDocsController extends Controller
         ];
     }
 
-    private function doc(Request $request, string $type, int $id): Invoice|PurchaseOrder
+    private function doc(Request $request, string $type, int $id): Invoice|PurchaseOrder|ClientReturn
     {
         abort_unless(in_array($type, DocReviewEvent::TYPES, true), 404);
         $doc = DocReview::find($type, $id);
@@ -384,7 +390,7 @@ class ReviewDocsController extends Controller
     }
 
     /** نفّذ وارجع JSON موحّد: الرسالة + اللوحة الجديدة + صف الطابور + الإنجاز */
-    private function run(Request $request, Invoice|PurchaseOrder $doc, callable $fn, string|callable $msg): JsonResponse
+    private function run(Request $request, Invoice|PurchaseOrder|ClientReturn $doc, callable $fn, string|callable $msg): JsonResponse
     {
         try {
             $fn();
@@ -395,8 +401,7 @@ class ReviewDocsController extends Controller
         }
 
         $doc->refresh();
-        $key = (DocReview::typeOf($doc) === 'invoice' ? 'inv-' : 'po-').$doc->id;
-        $row = DocQueue::all($request->user(), $key)->first();
+        $row = DocQueue::all($request->user(), DocReview::keyOf($doc))->first();
 
         return response()->json([
             'ok' => true,
@@ -409,7 +414,7 @@ class ReviewDocsController extends Controller
         ]);
     }
 
-    private function paneData(User $user, Invoice|PurchaseOrder $doc): array
+    private function paneData(User $user, Invoice|PurchaseOrder|ClientReturn $doc): array
     {
         $type = DocReview::typeOf($doc);
         $doc->load(['items.product', 'client.group.motherCompany']);
@@ -417,9 +422,11 @@ class ReviewDocsController extends Controller
         $check = DocReview::check($doc);
 
         // سعر القايمة الصح النهارده لكل صنف — جنب سعر السطر عشان الفرق يبان
-        $priceOf = fn (Product $p) => $type === 'invoice'
-            ? (float) Pricing::quote($client, $p, null, 1)['unit_price']
-            : (float) $client->priceFor($p);
+        $priceOf = fn (Product $p) => match ($type) {
+            'invoice' => (float) Pricing::quote($client, $p, null, 1)['unit_price'],
+            'return' => (float) Pricing::unitPrice($client, $p),
+            default => (float) $client->priceFor($p),
+        };
 
         $listPrices = [];
         foreach ($doc->items as $l) {
@@ -439,13 +446,26 @@ class ReviewDocsController extends Controller
         $repId = DocReview::repOf($doc);
         $dups = DocReview::duplicates($doc);
         $state = DocReview::state($check, (float) $doc->grand_total);
-        $offLines = $doc->items->filter(fn ($l) => isset($listPrices[$l->product_id]) && abs($listPrices[$l->product_id] - (float) $l->price) >= 0.00005)->count();
-        $delivered = $type === 'invoice' || $doc->status === 'delivered';
+        // (١٢/١١) المرتجع بيتقارن بسعر البيع اللي بيعكسه (سطر الفاتورة)، وإلا بالقايمة
+        $salePrices = [];
+        if ($type === 'return') {
+            $doc->loadMissing('items.invoiceItem.invoice');
+            foreach ($doc->items as $l) {
+                if ($l->invoiceItem !== null) {
+                    $salePrices[$l->id] = (float) $l->invoiceItem->price;
+                }
+            }
+        }
+        $refPrice = fn ($l) => $salePrices[$l->id] ?? ($listPrices[$l->product_id] ?? null);
+        $offLines = $doc->items->filter(fn ($l) => $refPrice($l) !== null && ($type === 'return'
+            ? abs($refPrice($l) - (float) $l->price) >= 0.005   // المرتجع: للقرش (عشري ٢ قدام ٤ مش فرق)
+            : abs($refPrice($l) - (float) $l->price) >= 0.00005))->count();
+        $delivered = $type !== 'po' || $doc->status === 'delivered';
         $checks = [
             'serial' => [filled($doc->paper_ref) && $dups === [], filled($doc->paper_ref) ? ($dups === [] ? $doc->paper_ref : __('review.f_flag_dup')) : __('review.serial_missing')],
             'date' => [$date !== null && ! ($delivered && $date->isAfter(today()->endOfDay())) && $date->format('Y-m') >= ReviewCheck::FIRST_MONTH, $date?->format('Y-m-d') ?? '—'],
             'rep' => [! $client->rep_id || ! $repId || (int) $client->rep_id === (int) $repId, $client->rep_id && (int) $client->rep_id !== (int) $repId ? __('review.chk_rep_off', ['rep' => $client->rep?->displayName() ?? '#'.$client->rep_id]) : ''],
-            'prices' => [$offLines === 0, $offLines ? __('review.chk_prices_off', ['n' => $offLines]) : ''],
+            'prices' => [$offLines === 0, $offLines ? __($type === 'return' ? 'review.chk_ret_prices_off' : 'review.chk_prices_off', ['n' => $offLines]) : ''],
             'total' => [$state !== 'changed', $state === 'changed' ? __('review.st_changed') : ''],
         ];
         // (١٢/١١) إثبات الاستلام — أوامر التوريد بس، وبعد التسليم بس
@@ -456,12 +476,19 @@ class ReviewDocsController extends Controller
                 ? [DocReview::hasProof($doc), $parts ? implode(' + ', $parts) : __('review.proof_none')]
                 : [null, __('review.proof_not_delivered')]] + $checks;
         }
-        if (isset(DocQueue::repricedKeys($type, $doc->id)[($type === 'invoice' ? 'inv-' : 'po-').$doc->id])) {
+        // المرتجع: إمضاء/ختم العميل على إذن المرتجع
+        if ($type === 'return') {
+            $checks = array_slice($checks, 0, 1, true)
+                + ['proof' => [DocReview::hasProof($doc), $doc->paper_signed ? __('review.ret_signed') : __('review.ret_proof_none')]] + $checks;
+        }
+        if (isset(DocQueue::repricedKeys($type, $doc->id)[DocReview::keyOf($doc)])) {
             $checks['repriced'] = [null, __('review.flag_repriced_hint')];
         }
 
         return [
-            'doc' => $doc, 'type' => $type, 'key' => ($type === 'invoice' ? 'inv-' : 'po-').$doc->id,
+            'doc' => $doc, 'type' => $type, 'key' => DocReview::keyOf($doc),
+            'salePrices' => $salePrices,
+            'retLinks' => $type === 'return' ? $doc->items->pluck('invoiceItem.invoice')->filter()->unique('id')->values() : collect(),
             'client' => $client, 'check' => $check, 'state' => DocReview::state($check, (float) $doc->grand_total),
             'date' => DocReview::dateOf($doc), 'repId' => DocReview::repOf($doc),
             'rep' => ($r = DocReview::repOf($doc)) ? User::find($r) : null,
@@ -471,7 +498,7 @@ class ReviewDocsController extends Controller
             'canEdit' => Access::allows($user, 'erp.review.docs.lines'),
             'canReopen' => Access::allows($user, 'erp.review.docs.reopen'),
             'canProof' => Access::allows($user, 'erp.review.docs.proof'),
-            'proofHard' => (bool) config('review.po_proof_required'),
+            'proofHard' => DocReview::proofHard($doc),
             'afterReset' => DocReview::dateOf($doc)?->gte(Carbon::parse(DocReview::STOCK_RESET_DAY)) ?? false,
         ];
     }

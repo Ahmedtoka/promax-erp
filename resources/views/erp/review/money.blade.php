@@ -45,6 +45,9 @@
     </div>
     <div><span class="rv-sub">{{ __('review.m_docs_count') }}</span><b dir="ltr">{{ number_format($totals['ok']) }} / {{ number_format($totals['docs']) }}</b></div>
     <div><span class="rv-sub">{{ __('review.m_unreviewed') }}</span><b dir="ltr" class="mn-left">{{ $fmt($totals['grand'] - $totals['ok_grand']) }}</b></div>
+    {{-- (١٢/١١) الرصيد = مبيعات − مرتجعات، والاتنين متراجعين --}}
+    <div><span class="rv-sub">{{ __('review.m_sales_ret') }}</span><b dir="ltr">{{ $fmt($totals['sales']) }} − {{ $fmt($totals['ret']) }} = {{ $fmt($totals['net']) }}</b></div>
+    <div><span class="rv-sub">{{ __('review.m_net_reviewed') }}</span><b dir="ltr">{{ $fmt($totals['ok_net']) }}</b></div>
 </div>
 
 <div class="card">
@@ -99,6 +102,9 @@
                             </div>
                             <div class="rv-bar thin"><i style="width:{{ $dp }}%"></i></div>
                             <div class="rv-sub" dir="ltr">{{ $fmt($d['ok_grand']) }} / {{ $fmt($d['grand']) }}</div>
+                            @if ($d['ret_docs'] > 0)
+                                <div class="rv-sub" title="{{ __('review.m_sales_ret') }}: {{ $fmt($d['sales']) }} − {{ $fmt($d['ret']) }} = {{ $fmt($d['net']) }} · {{ __('review.m_net_reviewed') }} {{ $fmt($d['ok_net']) }}">↩ {{ __('review.m_ret_n', ['n' => $d['ret_docs'], 'v' => $fmt($d['ret'])]) }}</div>
+                            @endif
                             @if ($canDocs)<a class="mn-go" href="{{ $docsUrl($r) }}">{{ __('review.m_open_docs') }}</a>@endif
                         @else
                             <span class="rv-sub">{{ __('review.m_no_docs') }}</span>

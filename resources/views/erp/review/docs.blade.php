@@ -24,6 +24,7 @@
             <span data-o="label">{{ __('review.docs_progress', ['ok' => $overall['ok'], 'total' => $overall['total']]) }}</span>
             <span class="rv-sub" data-o="inv">{{ __('review.docs_inv_progress', ['ok' => $overall['ok_inv'], 'n' => $overall['invoices']]) }}</span>
             <span class="rv-sub" data-o="po">{{ __('review.docs_po_progress', ['ok' => $overall['ok_po'], 'n' => $overall['pos']]) }}</span>
+            <span class="rv-sub" data-o="ret">{{ __('review.docs_ret_progress', ['ok' => $overall['ok_ret'], 'n' => $overall['returns']]) }}</span>
             <span class="dq-bad" data-o="issue" title="{{ __('review.st_issue') }}">✗ {{ $overall['issue'] }}</span>
             <span class="dq-warn" data-o="changed" title="{{ __('review.st_changed') }}">⚠ {{ $overall['changed'] }}</span>
         </div>
@@ -48,6 +49,11 @@
             <b>{{ $context['pct'] }}% <small dir="ltr">{{ $money($context['ok_grand']) }} / {{ $money($context['grand']) }}</small></b>
             <div class="rv-bar thin"><i style="width:{{ $context['pct'] }}%"></i></div>
         </div>
+        @if ($context['ret_docs'] > 0)
+            {{-- (١٢/١١) الرصيد = مبيعات − مرتجعات (من المستندات نفسها) --}}
+            <div><span class="rv-sub">{{ __('review.ctx_sales_ret') }}</span>
+                <b dir="ltr" title="{{ __('review.ctx_ok_net', ['v' => $money($context['ok_net'])]) }}">{{ $money($context['sales']) }} − {{ $money($context['ret']) }} = {{ $money($context['net']) }}</b></div>
+        @endif
         @if ($context['proof'])
             <div><span class="rv-sub">📦 {{ __('review.proof_title') }} — {{ __('review.proof_n', ['p' => $context['proof']['proven'], 'n' => $context['proof']['delivered']]) }}</span>
                 <b>@if ($context['proof']['unproven'])<a href="{{ $qs(['flag' => 'noproof', 'status' => 'all']) }}" class="dq-risk">{{ $context['proof']['unproven'] }} {{ __('review.proof_risk') }} · <span dir="ltr">{{ $money($context['proof']['unproven_grand']) }}</span></a>@else<span class="dq-proven">✓ {{ $context['proof']['pct'] }}%</span>@endif</b></div>
@@ -67,7 +73,7 @@
             <kbd>/</kbd>
         </label>
         <div class="dq-seg" role="group" aria-label="{{ __('review.f_type') }}">
-            @foreach (['' => __('review.f_type_all'), 'invoice' => __('review.type_invoice'), 'po' => __('review.type_po')] as $t => $lbl)
+            @foreach (['' => __('review.f_type_all'), 'invoice' => __('review.type_invoices'), 'po' => __('review.type_pos'), 'return' => __('review.type_returns')] as $t => $lbl)
                 <a href="{{ $qs(['type' => $t ?: null]) }}" class="{{ $f['type'] === $t ? 'on' : '' }}">{{ $lbl }}</a>
             @endforeach
         </div>
@@ -138,7 +144,7 @@
         @endforeach
     </div>
     <a class="dq-export" href="{{ route('erp.review.docs.export', request()->except(['doc', 'page', 'per'])) }}" title="{{ __('review.x_export_hint') }}">⬇ {{ __('review.x_export') }}</a>
-    <span class="rv-sub dq-scoped"><b dir="ltr">{{ $money($scoped['grand']) }}</b> · {{ __('review.g_stats', ['inv' => $scoped['invoices'], 'po' => $scoped['pos'], 'pcs' => number_format($scoped['pcs']), 'products' => number_format($scoped['products'])]) }}</span>
+    <span class="rv-sub dq-scoped"><b dir="ltr" @if ($scoped['returns']) title="{{ __('review.scoped_net_hint', ['r' => $money($scoped['ret_grand'])]) }}" @endif>{{ $money($scoped['grand']) }}</b> · {{ __('review.g_stats', ['inv' => $scoped['invoices'], 'po' => $scoped['pos'], 'ret' => $scoped['returns'], 'pcs' => number_format($scoped['pcs']), 'products' => number_format($scoped['products'])]) }}</span>
 </div>
 
 <div class="dq">
@@ -183,11 +189,11 @@
                         @foreach ($g['rows'] as $r)
                             <tr data-key="{{ $r['key'] }}" data-type="{{ $r['type'] }}" data-id="{{ $r['id'] }}" data-state="{{ $r['state'] }}" data-flags="{{ implode(' ', array_merge($r['flags'], $r['tags'])) }}" class="dq-row st-{{ $r['state'] }}" tabindex="-1">
                                 <td class="c-dot"><span class="dot" title="{{ __('review.st_'.$r['state']) }}"></span></td>
-                                <td dir="ltr" class="c-num"><span class="tg {{ $r['type'] }}">{{ $r['type'] === 'invoice' ? __('review.tag_invoice') : __('review.tag_po') }}</span><b>{{ $r['number'] }}</b>@foreach (array_intersect($r['flags'], ['odd_date', 'rep_off', 'repriced', 'noproof']) as $fx)<i class="fx f-{{ $fx }}" title="{{ __('review.flag_'.$fx) }}">{{ __('review.flag_'.$fx.'_ico') }}</i>@endforeach</td>
+                                <td dir="ltr" class="c-num"><span class="tg {{ $r['type'] }}">{{ __('review.tag_'.$r['type']) }}</span><b>{{ $r['number'] }}</b>@foreach (array_intersect($r['flags'], ['odd_date', 'rep_off', 'repriced', 'noproof', 'ret_price']) as $fx)<i class="fx f-{{ $fx }}" title="{{ __('review.flag_'.$fx) }}">{{ __('review.flag_'.$fx.'_ico') }}</i>@endforeach</td>
                                 <td dir="ltr" class="c-serial">@if ($r['paper_ref']){{ $r['paper_ref'] }}@if ($r['dup']) <span class="flag" title="{{ __('review.f_flag_dup') }}">⚠</span>@endif @else<span class="miss">{{ __('review.serial_missing') }}</span>@endif</td>
                                 <td dir="ltr" class="c-date" title="{{ $r['date'] }}">{{ substr($r['date'], 5) }}</td>
                                 <td class="c-client" title="{{ $r['client_code'] }} · {{ $r['client'] }}{{ $r['rep'] ? ' — '.$r['rep'] : '' }}">{{ $r['client'] }} <span class="cc">{{ $r['client_code'] }}</span></td>
-                                <td dir="ltr" class="c-grand num">{{ $money($r['grand']) }}</td>
+                                <td dir="ltr" class="c-grand num" @if ($r['links']) title="{{ __('review.ret_orig') }}: {{ implode(' · ', array_column($r['links'], 'number')) }}" @endif>{{ $r['type'] === 'return' ? '−' : '' }}{{ $money($r['grand']) }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -222,7 +228,7 @@
     if (\App\Support\Access::allows($u, 'erp.review.docs.mark')) { $urls['mark'] = route('erp.review.docs.mark', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.reopen')) { $urls['reopen'] = route('erp.review.docs.reopen', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.serial')) { $urls['serial'] = route('erp.review.docs.serial', ['type' => '__T', 'id' => 0]); }
-    if (\App\Support\Access::allows($u, 'erp.review.docs.proof')) { $urls['proof'] = route('erp.review.docs.proof', ['type' => 'po', 'id' => 0]); }
+    if (\App\Support\Access::allows($u, 'erp.review.docs.proof')) { $urls['proof'] = route('erp.review.docs.proof', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.rep')) { $urls['rep'] = route('erp.review.docs.rep', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.date')) { $urls['date'] = route('erp.review.docs.date', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.preview')) { $urls['preview'] = route('erp.review.docs.preview', ['type' => '__T', 'id' => 0]); }
@@ -337,6 +343,7 @@
 [dir=rtl] .dq-row.cur td:first-child{box-shadow:inset -3px 0 0 var(--royal-blue)}
 .tg{display:inline-block;font:900 9.5px/1 inherit;padding:3px 4px;border-radius:4px;margin-inline-end:5px;background:#E0E7FF;color:#3730A3;vertical-align:1px}
 .tg.po{background:#CFFAFE;color:#155E75}
+.tg.return{background:#FFE4E6;color:#9F1239}
 .c-client .cc{color:var(--muted);font-size:11px}
 .miss{color:#B45309;font-weight:800;font-size:11px}
 .flag{color:#B45309}
@@ -356,6 +363,7 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 .dp-num{font-size:18px;margin-inline:4px}
 .dp-type{font-size:10.5px;font-weight:900;padding:3px 7px;border-radius:5px;background:#E0E7FF;color:#3730A3}
 .dp-type.po{background:#CFFAFE;color:#155E75}
+.dp-type.return{background:#FFE4E6;color:#9F1239}
 .dp-open{font-size:12px;font-weight:800}
 .chip{display:inline-flex;gap:4px;align-items:center;padding:2px 9px;border-radius:999px;border:1px solid var(--border);background:var(--card);font-size:11px;font-weight:800;color:var(--text)}
 .chip.st-ok{background:#F0FDF4;border-color:#86EFAC;color:#166534}
@@ -479,7 +487,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
     const CONFIRM_RED = @js((bool) config('review.confirm_red_checks'));   // config/review.php
     const VIEW = { status: @js($f['status']), flag: @js($f['flag']) };
     const POS = @js(\App\Services\Review\DocQueue::PROOF_TAGS);   // علامات كويسة — مش في «أي تنبيه»
-    const FX = @js(collect(['odd_date', 'rep_off', 'repriced', 'noproof'])->mapWithKeys(fn ($k) => [$k => [__('review.flag_'.$k.'_ico'), __('review.flag_'.$k)]]));
+    const FX = @js(collect(['odd_date', 'rep_off', 'repriced', 'noproof', 'ret_price'])->mapWithKeys(fn ($k) => [$k => [__('review.flag_'.$k.'_ico'), __('review.flag_'.$k)]]));
     const PAGE = { next: @js($page->hasMorePages() ? $page->nextPageUrl() : null), prev: @js($page->currentPage() > 1 ? $page->previousPageUrl() : null) };
     const T = {
         issue: @js(__('review.issue_prompt')), reopen: @js(__('review.reopen_prompt')),
@@ -488,6 +496,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         prog: @js(__('review.docs_progress', ['ok' => '__OK', 'total' => '__TOTAL'])),
         inv: @js(__('review.docs_inv_progress', ['ok' => '__OK', 'n' => '__N'])),
         po: @js(__('review.docs_po_progress', ['ok' => '__OK', 'n' => '__N'])),
+        ret: @js(__('review.docs_ret_progress', ['ok' => '__OK', 'n' => '__N'])), retProofFirst: @js(__('review.ret_proof_required')),
         st: @js(collect(['pending', 'ok', 'issue', 'changed'])->mapWithKeys(fn ($s) => [$s => __('review.st_'.$s)])),
         missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), proofFirst: @js(__('review.proof_required')), paperDiff: @js(__('review.chk_paper_diff')),
     };
@@ -508,7 +517,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
 
     async function open(key, scroll = true) {
         const tr = document.querySelector('.dq-row[data-key="' + key + '"]');
-        const [type, id] = tr ? [tr.dataset.type, tr.dataset.id] : [key.startsWith('inv-') ? 'invoice' : 'po', key.split('-')[1]];
+        const [type, id] = tr ? [tr.dataset.type, tr.dataset.id] : [key.startsWith('inv-') ? 'invoice' : (key.startsWith('ret-') ? 'return' : 'po'), key.split('-')[1]];
         rows().forEach(r => r.classList.toggle('cur', r === tr));
         if (tr && scroll) tr.scrollIntoView({ block: 'nearest' });
         cur = key;
@@ -598,7 +607,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         tr.querySelector('.dot').title = T.st[r.state] || '';
         tr.querySelector('.c-serial').innerHTML = r.paper_ref ? escapeHtml(r.paper_ref) + (r.dup ? ' <span class="flag">⚠</span>' : '') : '<span class="miss">' + escapeHtml(T.missing) + '</span>';
         tr.querySelector('.c-date').textContent = String(r.date).slice(5); tr.querySelector('.c-date').title = r.date;
-        tr.querySelector('.c-grand').textContent = fmt(r.grand);
+        tr.querySelector('.c-grand').textContent = (r.type === 'return' ? '−' : '') + fmt(r.grand);
         tr.classList.add('flash'); setTimeout(() => tr.classList.remove('flash'), 900);
         if (was !== r.state) { bumpGroup(tr.closest('.dq-g'), was, r.state); bumpChips(was, r.state); }
     }
@@ -644,6 +653,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         q('label').textContent = T.prog.replace('__OK', o.ok).replace('__TOTAL', o.total);
         q('inv').textContent = T.inv.replace('__OK', o.ok_inv).replace('__N', o.invoices);
         q('po').textContent = T.po.replace('__OK', o.ok_po).replace('__N', o.pos);
+        q('ret').textContent = T.ret.replace('__OK', o.ok_ret).replace('__N', o.returns);
         q('issue').textContent = '✗ ' + o.issue; q('changed').textContent = '⚠ ' + o.changed;
         q('bok').style.width = (o.total ? o.ok * 100 / o.total : 0) + '%';
         q('bissue').style.width = (o.total ? o.issue * 100 / o.total : 0) + '%';
@@ -670,7 +680,10 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         // ✗ السيريال (وإثبات الاستلام لو المفتاح شغال) = شرط مش تحذير: مفيش تأكيد بالضغطة التانية
         const hard = pane.querySelector('.dp-checks .bad[data-hard]');
         if (hard) {
-            if (hard.dataset.chk === 'proof') { toast(T.proofFirst, 'bad'); pane.querySelector('.dp-receipt')?.focus(); return; }
+            if (hard.dataset.chk === 'proof') {
+                const ret = pane.querySelector('.dp')?.dataset.type === 'return';
+                toast(ret ? T.retProofFirst : T.proofFirst, 'bad'); pane.querySelector(ret ? '.dp-signed' : '.dp-receipt')?.focus(); return;
+            }
             toast(T.serialFirst, 'bad');
             const s = pane.querySelector('.dp-serial'); s?.focus(); s?.select();
             return;
@@ -690,8 +703,8 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
     // إثبات الاستلام — بيتحفظ أول ما الصح يتغير (أو Enter في رقم الإذن)
     function saveProof() {
         const dp = pane.querySelector('.dp'), r = dp?.querySelector('.dp-receipt'), s = dp?.querySelector('.dp-signed'), n = dp?.querySelector('.dp-receipt-no');
-        if (!r || !s) return Promise.resolve(null);
-        return post('proof', { receipt_note: r.checked ? 1 : 0, receipt_note_no: n ? n.value : '', paper_signed: s.checked ? 1 : 0 });
+        if (!s) return Promise.resolve(null);   // المرتجع: إمضاء/ختم بس — مفيش إذن استلام
+        return post('proof', { receipt_note: r?.checked ? 1 : 0, receipt_note_no: n ? n.value : '', paper_signed: s.checked ? 1 : 0 });
     }
     async function markIssue() {
         if (!pane.querySelector('.dp-issue')) return;
