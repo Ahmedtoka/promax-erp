@@ -169,19 +169,57 @@ class DocReview
      */
     public static function duplicates(Invoice|PurchaseOrder $doc, ?string $serial = null): array
     {
-        $serial = trim((string) ($serial ?? $doc->paper_ref));
-        if ($serial === '') {
+        $serial = self::normSerial($serial ?? $doc->paper_ref);
+        if ($serial === null) {
             return [];
         }
         $type = self::typeOf($doc);
         $out = [];
 
-        foreach (Invoice::where('paper_ref', $serial)->when($type === 'invoice', fn ($q) => $q->whereKeyNot($doc->id))->get(['id', 'number']) as $d) {
-            $out[] = ['type' => 'invoice', 'id' => $d->id, 'number' => (string) $d->number];
+        // ⚠️ (١٢/١١) المقارنة على الشكل الموحّد مش بالـSQL `=`: «١٣٧٤» و«1374» و«13 74» نفس الورقة
+        foreach (self::serialIndex()[$serial] ?? [] as $d) {
+            if ($d['type'] === $type && $d['id'] === $doc->id) {
+                continue;
+            }
+            $out[] = $d;
         }
-        foreach (PurchaseOrder::where('paper_ref', $serial)->where('status', '!=', 'cancelled')
-            ->when($type === 'po', fn ($q) => $q->whereKeyNot($doc->id))->get(['id', 'number']) as $d) {
-            $out[] = ['type' => 'po', 'id' => $d->id, 'number' => (string) $d->number];
+
+        return $out;
+    }
+
+    /**
+     * السيريال الورقي بشكل واحد: أرقام عربي/فارسي ← إنجليزي، من غير مسافات،
+     * والحروف كابيتال. «١٣٧٤ » و«13 74» و«1374» = «1374». فاضي = null.
+     */
+    public static function normSerial(?string $s): ?string
+    {
+        if ($s === null) {
+            return null;
+        }
+        $s = strtr($s, ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9']);
+        $s = mb_strtoupper((string) preg_replace('/\s+/u', '', $s));
+
+        return $s === '' ? null : mb_substr($s, 0, 30);
+    }
+
+    /**
+     * كل السيريالات (فواتير + أوامر مش ملغية) متجمعة بالشكل الموحّد.
+     *
+     * @return array<string, list<array{type: string, id: int, number: string}>>
+     */
+    public static function serialIndex(): array
+    {
+        $out = [];
+        foreach (DB::table('invoices')->whereNotNull('paper_ref')->where('paper_ref', '!=', '')->get(['id', 'number', 'paper_ref']) as $d) {
+            if (($k = self::normSerial($d->paper_ref)) !== null) {
+                $out[$k][] = ['type' => 'invoice', 'id' => (int) $d->id, 'number' => (string) $d->number];
+            }
+        }
+        foreach (DB::table('purchase_orders')->whereNotNull('paper_ref')->where('paper_ref', '!=', '')->where('status', '!=', 'cancelled')->get(['id', 'number', 'paper_ref']) as $d) {
+            if (($k = self::normSerial($d->paper_ref)) !== null) {
+                $out[$k][] = ['type' => 'po', 'id' => (int) $d->id, 'number' => (string) $d->number];
+            }
         }
 
         return $out;
@@ -200,6 +238,11 @@ class DocReview
         }
         if ($status === ReviewCheck::ISSUE && trim((string) $note) === '') {
             throw new Rejected(__('review.doc_issue_note'));
+        }
+        // ⚠️ (١٢/١١ — أحمد) السيريال الورقي شرط ✓ مش تحذير: مستند من غير ورقة
+        // مايتعلّمش «مطابق للورق» حتى لو اتأكد مرتين. ✗ مسموح (ممكن الورقة نفسها ضايعة).
+        if ($status === ReviewCheck::OK && self::normSerial($doc->paper_ref) === null) {
+            throw new Rejected(__('review.serial_required'));
         }
 
         return DB::transaction(function () use ($user, $doc, $status, $note, $openMs, $current) {
@@ -242,10 +285,10 @@ class DocReview
     /** @return list<array{type: string, id: int, number: string}> المكرر (تحذير) */
     public static function setSerial(User $user, Invoice|PurchaseOrder $doc, ?string $serial): array
     {
-        $serial = filled($serial) ? mb_substr(trim($serial), 0, 30) : null;
+        $serial = self::normSerial($serial);
         $old = $doc->paper_ref;
 
-        if ((string) $old === (string) $serial) {
+        if ((string) self::normSerial($old) === (string) $serial && (string) $old === (string) $serial) {
             return self::duplicates($doc, $serial);
         }
 

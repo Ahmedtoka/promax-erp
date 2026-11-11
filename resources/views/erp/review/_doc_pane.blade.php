@@ -61,7 +61,7 @@
     {{-- (١٢/١١) فحص أوتوماتيك قبل ✓ — الأحمر بيطلب Enter تانية للتأكيد --}}
     <div class="dp-checks" aria-label="{{ __('review.checks_title') }}">
         @foreach ($checks as $ck => [$ok, $why])
-            <span class="{{ $ok === null ? 'info' : ($ok ? 'good' : 'bad') }}" title="{{ $why }}">{{ $ok === null ? '•' : ($ok ? '✓' : '✗') }} {{ __('review.chk_'.$ck) }}</span>
+            <span class="{{ $ok === null ? 'info' : ($ok ? 'good' : 'bad') }}" data-chk="{{ $ck }}" @if ($ck === 'serial') data-hard="1" @endif title="{{ $why }}">{{ $ok === null ? '•' : ($ok ? '✓' : '✗') }} {{ __('review.chk_'.$ck) }}</span>
         @endforeach
     </div>
 
@@ -76,43 +76,49 @@
     @endif
 
     {{-- ═══ الورقة | السيستم ═══ --}}
-    <div class="dp-sbs">
-        <section class="slip" aria-label="{{ __('review.paper') }}">
-            <h4>🧾 {{ __('review.paper') }}</h4>
-            <label class="fl"><span>{{ __('review.serial') }} <kbd>S</kbd></span>
-                <input class="dp-serial" name="paper_ref" value="{{ $doc->paper_ref }}" maxlength="30" autocomplete="off" dir="ltr"
-                       placeholder="{{ __('review.serial_missing') }}" title="{{ __('review.serial_hint') }}" @unless ($canEdit) readonly @endunless>
-            </label>
-            @if ($dups !== [])
-                <div class="dp-dup">⚠ {{ __('review.dup_with') }}
-                    @foreach ($dups as $d)
-                        <a href="#" data-goto="{{ ($d['type'] === 'invoice' ? 'inv-' : 'po-').$d['id'] }}" dir="ltr">{{ $d['number'] }}</a>
-                    @endforeach
-                </div>
-            @endif
-            <label class="fl"><span>{{ __('review.paper_total') }}</span>
-                <input class="dp-ptotal" inputmode="decimal" dir="ltr" autocomplete="off" data-grand="{{ $grand }}">
-            </label>
-            <div class="dp-pdiff" hidden>{{ __('review.paper_diff') }}: <b dir="ltr"></b></div>
-        </section>
-
-        <section class="sys" aria-label="{{ __('review.system') }}">
-            <h4>🖥 {{ __('review.system') }}</h4>
-            <div class="sys-row">
-                <span>{{ __('review.doc_date') }} <kbd>D</kbd></span>
-                <span class="sys-val">
+    {{-- ═══ الورقة | السيستم — سطر سطر: اللي على الورق جنب اللي في السيستم (١٢/١١) ═══ --}}
+    <table class="cmp" data-plain>
+        <thead><tr>
+            <th></th>
+            <th class="cmp-paper">🧾 {{ __('review.paper') }}</th>
+            <th class="cmp-sys">🖥 {{ __('review.system') }}</th>
+        </tr></thead>
+        <tbody>
+            <tr>
+                <th scope="row">{{ __('review.col_serial') }} <kbd>S</kbd></th>
+                <td class="cmp-paper">
+                    <input class="dp-serial" name="paper_ref" value="{{ $doc->paper_ref }}" maxlength="30" autocomplete="off" dir="ltr" inputmode="numeric"
+                           placeholder="{{ __('review.serial_missing') }}" title="{{ __('review.serial_hint') }}" aria-label="{{ __('review.serial') }}" @unless ($canEdit) readonly @endunless>
+                </td>
+                <td class="cmp-sys">
+                    @if ($dups !== [])
+                        <span class="dp-dup">⚠ {{ __('review.dup_with') }}
+                            @foreach ($dups as $d)<a href="#" data-goto="{{ ($d['type'] === 'invoice' ? 'inv-' : 'po-').$d['id'] }}" dir="ltr">{{ $d['number'] }}</a>@endforeach
+                        </span>
+                    @elseif (filled($doc->paper_ref))
+                        <span class="cmp-ok">✓ {{ __('review.serial_unique') }}</span>
+                    @else
+                        <span class="cmp-na">—</span>
+                    @endif
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">{{ __('review.doc_date') }} <kbd>D</kbd></th>
+                <td class="cmp-paper cmp-na">{{ __('review.cmp_look') }}</td>
+                <td class="cmp-sys">
                     @if ($editable)
                         <input type="date" class="dp-date" value="{{ $date?->format('Y-m-d') }}" @if ($isInv || $doc->status === 'delivered') max="{{ today()->toDateString() }}" @endif aria-label="{{ __('review.doc_date') }}">
                     @else
                         <b dir="ltr">{{ $date?->format('Y-m-d') }}</b>
                     @endif
-                </span>
-            </div>
-            <div class="sys-row">
-                <span>{{ __('review.doc_rep') }} <kbd>R</kbd></span>
-                <span class="sys-val">
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">{{ __('review.doc_rep') }} <kbd>R</kbd></th>
+                <td class="cmp-paper cmp-na">{{ __('review.cmp_look') }}</td>
+                <td class="cmp-sys">
                     @if ($editable)
-                        <select class="dp-rep">
+                        <select class="dp-rep" aria-label="{{ __('review.doc_rep') }}">
                             @unless ($rep)<option value="">—</option>@endunless
                             @foreach ($reps as $r)
                                 <option value="{{ $r->id }}" @selected($r->id === (int) $repId)>{{ $r->displayName() }}</option>
@@ -121,13 +127,22 @@
                     @else
                         <b>{{ $rep?->displayName() ?? '—' }}</b>
                     @endif
-                </span>
-            </div>
-            <div class="sys-row"><span>{{ __('review.tot_net') }}</span><b dir="ltr">{{ $money($doc->total) }}</b></div>
-            <div class="sys-row"><span>{{ __('review.tot_vat') }}</span><b dir="ltr">{{ $money($doc->tax_total) }}</b></div>
-            <div class="sys-row big"><span>{{ __('review.tot_incl') }}</span><b dir="ltr">{{ $money($grand) }}</b></div>
-        </section>
-    </div>
+                </td>
+            </tr>
+            <tr class="cmp-total">
+                <th scope="row">{{ __('review.tot_incl') }} <kbd>P</kbd></th>
+                <td class="cmp-paper">
+                    <input class="dp-ptotal" inputmode="decimal" dir="ltr" autocomplete="off" data-grand="{{ $grand }}" placeholder="{{ __('review.paper_total_ph') }}" aria-label="{{ __('review.paper_total') }}">
+                </td>
+                <td class="cmp-sys"><b dir="ltr" class="cmp-grand">{{ $money($grand) }}</b>
+                    <span class="cmp-sub" dir="ltr">{{ __('review.cmp_net_vat', ['net' => $money($doc->total), 'vat' => $money($doc->tax_total)]) }}</span></td>
+            </tr>
+            <tr class="dp-pdiff" hidden>
+                <th scope="row">{{ __('review.paper_diff') }}</th>
+                <td colspan="2"><b dir="ltr"></b> <span class="pd-txt" data-ok="{{ __('review.pdiff_ok') }}" data-bad="{{ __('review.pdiff_bad') }}"></span></td>
+            </tr>
+        </tbody>
+    </table>
 
     {{-- ═══ البنود ═══ --}}
     <div class="dp-lines">

@@ -74,9 +74,9 @@
     {{-- (١٢/١١) التنبيهات الأوتوماتيك — العدد = اللي لسه ماتراجعش بالتنبيه ده --}}
     <div class="dq-f-row dq-flags" role="group" aria-label="{{ __('review.f_flag') }}">
         <span class="rv-sub">{{ __('review.f_flag') }}</span>
-        <a href="{{ $qs(['flag' => $f['flag'] === 'any' ? null : 'any']) }}" class="fchip {{ $f['flag'] === 'any' ? 'on' : '' }}">{{ __('review.flag_any') }}</a>
+        <a href="{{ $qs(['flag' => $f['flag'] === 'any' ? null : 'any']) }}" class="fchip {{ $f['flag'] === 'any' ? 'on' : '' }}" data-flag="any">{{ __('review.flag_any') }} <b>{{ $flagCounts['any'] }}</b></a>
         @foreach (\App\Services\Review\DocQueue::FLAGS as $fk)
-            <a href="{{ $qs(['flag' => $f['flag'] === $fk ? null : $fk]) }}" class="fchip f-{{ $fk }} {{ $f['flag'] === $fk ? 'on' : '' }} {{ $flagCounts[$fk] ? '' : 'zero' }}"
+            <a href="{{ $qs(['flag' => $f['flag'] === $fk ? null : $fk]) }}" class="fchip f-{{ $fk }} {{ $f['flag'] === $fk ? 'on' : '' }} {{ $flagCounts[$fk] ? '' : 'zero' }}" data-flag="{{ $fk }}"
                title="{{ __('review.flag_'.$fk.'_hint') }}"><i aria-hidden="true">{{ __('review.flag_'.$fk.'_ico') }}</i>{{ __('review.flag_'.$fk) }} <b>{{ $flagCounts[$fk] }}</b></a>
         @endforeach
     </div>
@@ -171,7 +171,7 @@
                             </td>
                         </tr>
                         @foreach ($g['rows'] as $r)
-                            <tr data-key="{{ $r['key'] }}" data-type="{{ $r['type'] }}" data-id="{{ $r['id'] }}" data-state="{{ $r['state'] }}" class="dq-row st-{{ $r['state'] }}" tabindex="-1">
+                            <tr data-key="{{ $r['key'] }}" data-type="{{ $r['type'] }}" data-id="{{ $r['id'] }}" data-state="{{ $r['state'] }}" data-flags="{{ implode(' ', $r['flags']) }}" class="dq-row st-{{ $r['state'] }}" tabindex="-1">
                                 <td class="c-dot"><span class="dot" title="{{ __('review.st_'.$r['state']) }}"></span></td>
                                 <td dir="ltr" class="c-num"><span class="tg {{ $r['type'] }}">{{ $r['type'] === 'invoice' ? __('review.tag_invoice') : __('review.tag_po') }}</span><b>{{ $r['number'] }}</b>@foreach (array_intersect($r['flags'], ['odd_date', 'rep_off', 'repriced']) as $fx)<i class="fx f-{{ $fx }}" title="{{ __('review.flag_'.$fx) }}">{{ __('review.flag_'.$fx.'_ico') }}</i>@endforeach</td>
                                 <td dir="ltr" class="c-serial">@if ($r['paper_ref']){{ $r['paper_ref'] }}@if ($r['dup']) <span class="flag" title="{{ __('review.f_flag_dup') }}">⚠</span>@endif @else<span class="miss">{{ __('review.serial_missing') }}</span>@endif</td>
@@ -244,9 +244,12 @@
 .dq-filters{padding:10px 12px}
 .dq-f-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .dq-f-sel{margin-top:8px;align-items:flex-end}
-.dq-f-sel>.fl{flex:1 1 140px;max-width:210px}
-.dq-f-sel>.dq-month{flex:0 1 120px}
-.dq-f-sel .rng{display:flex;gap:8px;flex-wrap:nowrap}.dq-f-sel .rng .fl{min-width:0;width:132px}
+.dq-f-sel{gap:6px;flex-wrap:nowrap}
+.dq-f-sel>.fl{flex:1 1 110px;max-width:210px;min-width:0}
+.dq-f-sel>.dq-month{flex:0 1 100px}
+.dq-f-sel .ssel,.dq-f-sel .ssel-btn{min-width:0;max-width:100%}
+.dq-f-sel .rng{display:flex;gap:6px;flex-wrap:nowrap;flex:0 0 auto}.dq-f-sel .rng .fl{min-width:0;width:122px}
+@media (max-width:900px){.dq-f-sel{flex-wrap:wrap}}
 .dq-search{flex:1 1 300px;display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:9px;padding:0 9px;background:var(--card)}
 .dq-search:focus-within{border-color:var(--royal-blue);box-shadow:0 0 0 3px rgba(18,57,155,.12)}
 .dq-search input{border:0!important;box-shadow:none!important;padding:7px 2px!important;flex:1;min-width:0;font-size:13px!important;background:transparent}
@@ -362,21 +365,28 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 .dp-lock{background:#F1F5F9;color:#334155}.dp-lock a{margin-inline-start:6px}
 .dp-warn{background:#FFFBEB;color:#92400E;border:1px solid #FCD34D}
 .dp-note{background:#EFF6FF;color:#1E3A8A}
-.dp-sbs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-/* الورقة: سطور دفتر خفيفة وحافة مخرّمة — الحاجة الوحيدة اللي بتشبه الورق في الشاشة */
-.slip{padding:9px 11px 10px;border-radius:4px;border:1px solid #E2E8F0;border-inline-start:3px dashed #94A3B8;
-      background:#fff repeating-linear-gradient(180deg,transparent 0 25px,#E7EEFF 25px 26px)}
-.slip h4,.sys h4{margin:0 0 6px;font-size:12px;color:var(--muted)}
-.slip .fl{display:flex;margin-bottom:7px}.slip input{width:100%;background:#fff}
-.slip input.dp-serial{font-size:15px!important;font-weight:800;letter-spacing:.5px}
-.slip input.dp-serial:placeholder-shown{border-color:#F59E0B;background:#FFFBEB}
-.dp-dup{font-size:11.5px;color:#B45309;margin:-3px 0 7px}.dp-dup a{margin-inline-start:6px;font-weight:800}
-.dp-pdiff{font-size:12px}.dp-pdiff.bad b{color:var(--red)}.dp-pdiff.good b{color:var(--green)}
-.sys{padding:9px 11px;border-radius:8px;background:#F8FAFC;border:1px solid var(--border)}
-.sys-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-bottom:1px dashed #E2E8F0;font-size:12.5px;min-height:30px}
-.sys-row:last-child{border-bottom:0}.sys-row.big b{font-size:16px}
-.sys-val{display:flex;gap:6px;align-items:center;min-width:0}
-.sys-val select,.sys-val input{max-width:150px;font-size:12px!important;padding:3px 6px!important}
+/* الورقة | السيستم — جدول مقارنة: نفس السطر، عمود الورقة شكل الدفتر */
+.cmp{width:100%;border-collapse:separate;border-spacing:0;margin-bottom:8px;font-size:12px;table-layout:fixed}
+.cmp thead th{background:none!important;color:var(--muted);font-size:11px;font-weight:800;padding:0 6px 4px;border:0;text-align:start}
+.cmp thead th:first-child{width:92px}
+.cmp tbody th{background:none!important;color:var(--muted);font-weight:700;font-size:11.5px;padding:3px 6px;border:0;text-align:start;white-space:nowrap}
+.cmp tbody th kbd{font-size:9px;padding:1px 3px}
+.cmp td{padding:3px 6px;border:0;border-bottom:1px dashed #E2E8F0;max-width:none;overflow:visible;white-space:nowrap;background:none!important}
+.cmp td.cmp-paper{background:#FFFDF5!important;border-inline:1px dashed #CBD5E1}
+.cmp tbody tr:first-child td.cmp-paper{border-top:1px dashed #CBD5E1}
+.cmp tbody tr:last-child td{border-bottom:0}
+.cmp input,.cmp select{width:100%;min-width:0;padding:3px 7px!important;font-size:12px!important;border-radius:6px!important}
+.cmp input.dp-serial{font-size:13.5px!important;font-weight:800;letter-spacing:.5px}
+.cmp input.dp-serial:placeholder-shown{border-color:#F59E0B;background:#FFFBEB}
+.cmp .cmp-na{color:#94A3B8;font-size:11px}
+.cmp .cmp-ok{color:#15803D;font-weight:700;font-size:11.5px}
+.cmp-grand{font-size:14px;font-variant-numeric:tabular-nums}
+.cmp-sub{display:block;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cmp tr.cmp-total.bad td{background:#FEF2F2!important}.cmp tr.cmp-total.bad .cmp-grand{color:var(--red)}
+.cmp tr.cmp-total.good td{background:#F0FDF4!important}.cmp tr.cmp-total.good .cmp-grand{color:#15803D}
+.dp-pdiff td{font-size:12px}.dp-pdiff.bad b{color:var(--red)}.dp-pdiff.good b{color:var(--green)}
+.dp-pdiff.bad .pd-txt{color:var(--red);font-weight:700}.dp-pdiff.good .pd-txt{color:#15803D;font-weight:700}
+.dp-dup{font-size:11px;color:#B45309;white-space:normal}.dp-dup a{margin-inline-start:5px;font-weight:800}
 .dp-lines .tablewrap{border:1px solid var(--border)}
 .dp-lines table{table-layout:auto}
 .dp-lines table td,.dp-lines table th{padding:5px 7px;font-size:11.5px}
@@ -397,15 +407,42 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 .ev-i{width:16px;text-align:center;font-weight:900}.ev-money{margin-inline-start:6px;font-weight:800}
 .dp.busy{opacity:.55;pointer-events:none}
 
+.dq-row.gone td{opacity:.45;text-decoration:line-through;text-decoration-color:#94A3B8}
+.dq-row.gone.cur td{opacity:.8}
+
+/* ═══ مقاس الخط (طلب أحمد ١٢/١١: «صغّر الكلام») — كله في مكان واحد ═══ */
+main:has(.dq) .dq-t td{font-size:12px;padding:5px 7px}
+main:has(.dq) .dq-t th{font-size:11px;padding:6px 7px}
+main:has(.dq) .dq-gh td{padding:4px 8px}
+main:has(.dq) .dq-gh-name b{font-size:12px}
+main:has(.dq) .dq-top{padding:8px 12px;gap:12px}
+main:has(.dq) .dq-pct b{font-size:26px}
+main:has(.dq) .dq-top-line{font-size:12px;gap:10px}
+main:has(.dq) .dq-filters{padding:8px 10px}
+main:has(.dq) .dq-search input{font-size:12.5px!important;padding:5px 2px!important}
+main:has(.dq) .dq-seg a{font-size:11.5px;padding:3px 9px}
+main:has(.dq) .fchip{font-size:11px;padding:2px 8px}
+main:has(.dq) .dq-f-sel select,main:has(.dq) .dq-f-sel input,main:has(.dq) .dq-f-sel .ssel-btn{font-size:12px!important;padding:4px 8px!important}
+main:has(.dq) .dq-status{margin-bottom:8px}
+main:has(.dq) .dp{padding:10px 12px 12px;font-size:12px}
+main:has(.dq) .dp-num{font-size:16px}
+main:has(.dq) .dp-client{font-size:12px;margin:4px 0 6px}
+main:has(.dq) .dp-bar{padding:6px 12px;margin:0 -12px 8px}
+main:has(.dq) .dp-bar .btn{padding:4px 11px;font-size:12px}
+main:has(.dq) .dp-checks{gap:4px;margin-bottom:8px}
+main:has(.dq) .dp-checks span{font-size:10.5px;padding:2px 6px;border-radius:6px}
+main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px;padding:4px 6px}
+
 @media (max-width:1100px){.dq{grid-template-columns:1fr}.dq-pane{position:static;max-height:none}.dq-wrap{max-height:60vh}}
 @media (max-width:640px){
+    .cmp thead th:first-child{width:62px}.cmp tbody th{font-size:11px;padding:3px 4px}.cmp tbody th kbd{display:none}
+    .cmp td{padding:3px 4px}.cmp td.cmp-na{font-size:0}.cmp input[type=date]{font-size:11px!important;padding:3px 2px!important}
     .dq-top{flex-wrap:wrap;gap:8px}.dq-pct b{font-size:24px}
     .dq-f-sel>.fl{flex:1 1 calc(50% - 4px);max-width:calc(50% - 4px);min-width:0}.dq-f-sel>.dq-month{flex-basis:100%;max-width:none}
     .dq-f-sel .rng{flex:1 1 100%;width:100%}.dq-f-sel .rng .fl{flex:1 1 0;width:auto;min-width:0}.dq-f-sel .rng input{width:100%;min-width:0}
     .dq-f-sel .ssel,.dq-f-sel .ssel-btn{min-width:0;max-width:100%}
     .dq-status{flex-direction:column;align-items:stretch}.dq-st{overflow-x:auto;max-width:100%}
     .tg{display:none}
-    .dp-sbs{grid-template-columns:1fr}
     .dq-t th:nth-child(3),.dq-t td.c-serial,.dq-t th:nth-child(4),.dq-t td.c-date,.dq-t th:nth-child(5),.dq-t td.c-client{display:none}
     .dq-gh-bar,.dq-gh-m{display:none}
     .dq-ctx{gap:10px}
@@ -418,6 +455,7 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
     const URLS = @js($urls);
     const CSRF = @js(csrf_token());
     const CONFIRM_RED = @js((bool) config('review.confirm_red_checks'));   // config/review.php
+    const VIEW = { status: @js($f['status']), flag: @js($f['flag']) };
     const PAGE = { next: @js($page->hasMorePages() ? $page->nextPageUrl() : null), prev: @js($page->currentPage() > 1 ? $page->previousPageUrl() : null) };
     const T = {
         issue: @js(__('review.issue_prompt')), reopen: @js(__('review.reopen_prompt')),
@@ -427,7 +465,7 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
         inv: @js(__('review.docs_inv_progress', ['ok' => '__OK', 'n' => '__N'])),
         po: @js(__('review.docs_po_progress', ['ok' => '__OK', 'n' => '__N'])),
         st: @js(collect(['pending', 'ok', 'issue', 'changed'])->mapWithKeys(fn ($s) => [$s => __('review.st_'.$s)])),
-        missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')),
+        missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), paperDiff: @js(__('review.chk_paper_diff')),
     };
     const pane = document.getElementById('dqPane');
     const rows = () => [...document.querySelectorAll('.dq-row')];
@@ -497,6 +535,17 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
             if (kind === 'preview') return data;
             if (!data.ok) { toast(data.message || ('⚠️ ' + res.status), 'bad'); return null; }
             if (data.row) paintRow(data.row);
+            (data.dup_keys || []).forEach(k => {
+                const tr = document.querySelector('.dq-row[data-key="' + k + '"]');
+                if (!tr) return;
+                const fl = (tr.dataset.flags || '').split(' ').filter(Boolean);
+                if (fl.includes('dup')) return;
+                const nf = [...fl, 'dup'];
+                bumpFlags(tr.dataset.state, fl, tr.dataset.state, nf);
+                tr.dataset.flags = nf.join(' ');
+                const c = tr.querySelector('.c-serial');
+                if (!c.querySelector('.flag')) c.insertAdjacentHTML('beforeend', ' <span class="flag">⚠</span>');
+            });
             if (data.overall) paintOverall(data.overall);
             if (data.pane && dp.dataset.key === cur) { pane.innerHTML = data.pane; bindPane(); }
             toast(data.message);
@@ -509,9 +558,15 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
     function paintRow(r) {
         const tr = document.querySelector('.dq-row[data-key="' + r.key + '"]');
         if (!tr) return;
-        const was = tr.dataset.state;
+        const was = tr.dataset.state, wasFlags = (tr.dataset.flags || '').split(' ').filter(Boolean);
         tr.dataset.state = r.state;
+        tr.dataset.flags = (r.flags || []).join(' ');
         tr.className = 'dq-row st-' + r.state + (r.key === cur ? ' cur' : '');
+        bumpFlags(was, wasFlags, r.state, r.flags || []);
+        // اتشال من الفلتر الحالي (مثلاً اتكتبله سيريال وانت على «من غير سيريال») — بيفضل باهت لحد الريلود
+        const inFlag = !VIEW.flag || (VIEW.flag === 'any' ? (r.flags || []).length > 0 : (r.flags || []).includes(VIEW.flag));
+        tr.classList.toggle('gone', !inFlag);
+        tr.title = inFlag ? '' : T.gone;
         tr.querySelector('.dot').title = T.st[r.state] || '';
         tr.querySelector('.c-serial').innerHTML = r.paper_ref ? escapeHtml(r.paper_ref) + (r.dup ? ' <span class="flag">⚠</span>' : '') : '<span class="miss">' + escapeHtml(T.missing) + '</span>';
         tr.querySelector('.c-date').textContent = String(r.date).slice(5); tr.querySelector('.c-date').title = r.date;
@@ -529,6 +584,22 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
         g.querySelector('.g-bo').style.width = (tot ? ok * 100 / tot : 0) + '%';
         g.querySelector('.g-bi').style.width = (tot ? iss * 100 / tot : 0) + '%';
         const gi = g.querySelector('.g-iss'); gi.hidden = !iss; gi.querySelector('b').textContent = iss;
+    }
+
+    // عدّادات شيب التنبيهات = اللي في تاب الحالة الحالي بالتنبيه ده — فرق قبل/بعد
+    function bumpFlags(wasState, wasFlags, nowState, nowFlags) {
+        const counted = (st, fl) => (VIEW.status === 'all' || st === VIEW.status) ? fl : [];
+        const a = counted(wasState, wasFlags), b = counted(nowState, nowFlags);
+        const delta = {};
+        a.forEach(f => delta[f] = (delta[f] || 0) - 1); b.forEach(f => delta[f] = (delta[f] || 0) + 1);
+        delta.any = (b.length ? 1 : 0) - (a.length ? 1 : 0);
+        Object.entries(delta).forEach(([f, d]) => {
+            if (!d) return;
+            const chip = document.querySelector('.fchip[data-flag="' + f + '"]'), bb = chip?.querySelector('b');
+            if (!bb) return;
+            const n = Math.max(0, (+bb.textContent || 0) + d);
+            bb.textContent = n; chip.classList.toggle('zero', n === 0 && f !== 'any');
+        });
     }
 
     function bumpChips(was, now) {
@@ -553,7 +624,22 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 
     async function markOk() {
         if (!pane.querySelector('.dp-ok')) return;
-        // فيه تنبيه أحمر؟ أول Enter بيوريه، التاني (خلال ٥ ثواني) بيأكد ✓
+        // سيريال اتكتب ومااتحفظش (من غير Enter)؟ يتحفظ الأول والفحص يتحسب تاني
+        const s0 = pane.querySelector('.dp-serial');
+        if (s0 && !s0.readOnly && s0.value.trim() !== (s0.defaultValue || '').trim()) {
+            const pt0 = pane.querySelector('.dp-ptotal')?.value || '';
+            const d = await post('serial', { paper_ref: s0.value });
+            if (!d) return;
+            const pt1 = pane.querySelector('.dp-ptotal');
+            if (pt1 && pt0) { pt1.value = pt0; pt1.dispatchEvent(new Event('input')); }
+        }
+        // ✗ السيريال = شرط مش تحذير: مفيش تأكيد بالضغطة التانية
+        if (pane.querySelector('.dp-checks .bad[data-hard]')) {
+            toast(T.serialFirst, 'bad');
+            const s = pane.querySelector('.dp-serial'); s?.focus(); s?.select();
+            return;
+        }
+        // فيه تنبيه أحمر تاني؟ أول Enter بيوريه، التاني (خلال ٥ ثواني) بيأكد ✓
         const dp0 = pane.querySelector('.dp'), bad = CONFIRM_RED ? pane.querySelectorAll('.dp-checks .bad').length : 0;
         if (bad && !(dp0._armed && Date.now() - dp0._armed < 5000)) {
             dp0._armed = Date.now();
@@ -594,10 +680,14 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
         const pt = dp.querySelector('.dp-ptotal'), pd = dp.querySelector('.dp-pdiff');
         pt?.addEventListener('input', () => {
             const v = parseFloat(pt.value.replace(/,/g, ''));
-            if (isNaN(v)) { pd.hidden = true; return; }
+            if (isNaN(v)) { pd.hidden = true; paperChip(null, 0); return; }
             const diff = Math.round((Number(pt.dataset.grand) - v) * 100) / 100;
-            pd.hidden = false; pd.querySelector('b').textContent = fmt(diff);
-            pd.className = 'dp-pdiff ' + (Math.abs(diff) < 0.005 ? 'good' : 'bad');
+            const good = Math.abs(diff) < 0.005;
+            pd.hidden = false; pd.querySelector('b').textContent = (diff > 0 ? '+' : '') + fmt(diff);
+            const tx = pd.querySelector('.pd-txt'); if (tx) tx.textContent = good ? tx.dataset.ok : tx.dataset.bad;
+            pd.className = 'dp-pdiff ' + (good ? 'good' : 'bad');
+            pt.closest('tr')?.classList.toggle('bad', !good); pt.closest('tr')?.classList.toggle('good', good);
+            paperChip(good, diff);
         });
         pt?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pt.blur(); } });
 
@@ -639,6 +729,20 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
             const delta = Math.round((d.grand - d.before.grand) * 100) / 100;
             box.innerHTML = '<b>' + escapeHtml(T.after) + '</b> — ' + escapeHtml(T.net) + ' <b dir="ltr">' + fmt(d.net) + '</b> · ' + escapeHtml(T.vat) + ' <b dir="ltr">' + fmt(d.tax) + '</b> · ' + escapeHtml(T.incl) + ' <b dir="ltr">' + fmt(d.grand) + '</b><br>' + escapeHtml(T.delta) + ': <b dir="ltr" class="' + (delta > 0 ? 'd-up' : 'd-down') + '">' + (delta > 0 ? '+' : '') + fmt(delta) + '</b> <span class="rv-sub">(' + fmt(d.before.grand) + ' → ' + fmt(d.grand) + ')</span>';
         }
+    }
+
+    // شيب «الإجمالي»: من السيرفر (اتغيّر بعد ✓؟) + إجمالي الورقة اللي اتكتب — الأسوأ يكسب
+    function paperChip(good, diff) {
+        const c = pane.querySelector('.dp-checks [data-chk="total"]');
+        if (!c) return;
+        c.dataset.server ??= c.className;
+        c.dataset.serverWhy ??= c.title;
+        const serverBad = c.dataset.server.includes('bad');
+        const bad = serverBad || good === false;
+        c.className = bad ? 'bad' : 'good';
+        c.title = good === false ? T.paperDiff.replace(':d', fmt(diff)) : c.dataset.serverWhy;
+        c.dataset.label ??= c.textContent.trim().replace(/^[✓✗•]\s*/, '');
+        c.textContent = (bad ? '✗' : '✓') + ' ' + c.dataset.label;
     }
 
     function debounce(fn, ms) { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; }

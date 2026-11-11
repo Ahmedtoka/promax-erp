@@ -381,4 +381,13 @@ return [
     'x_open' => 'Seconds open',
     'month_docs_warn' => 'Only :ok of :n documents of this month are reviewed — the balance is not assured until the rest are.',
     'month_docs_block' => 'Cannot match this month: only :ok of :n of its documents are reviewed — review the rest first.',
+    'serial_unique' => 'not duplicated',
+    'cmp_look' => 'check on paper',
+    'paper_total_ph' => 'type the paper total',
+    'cmp_net_vat' => 'net :net · VAT :vat',
+    'pdiff_ok' => 'matches the system',
+    'pdiff_bad' => 'paper differs from the system',
+    'row_gone' => 'This document no longer matches the current filter — it disappears on reload',
+    'serial_required' => 'Enter the paper serial first — no ✓ without a paper',
+    'chk_paper_diff' => 'Paper total differs from the system by :d',
 ];

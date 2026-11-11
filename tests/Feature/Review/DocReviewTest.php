@@ -39,6 +39,8 @@ class DocReviewTest extends TestCase
 
     private Product $product2;
 
+    private int $serialSeq = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -66,7 +68,7 @@ class DocReviewTest extends TestCase
     private function invoice(array $attrs = []): Invoice
     {
         $inv = Invoice::create(array_merge([
-            'number' => 'INV-'.random_int(10000, 99999), 'paper_ref' => null,
+            'number' => 'INV-'.random_int(10000, 99999), 'paper_ref' => 'T-'.(++$this->serialSeq),
             'client_id' => $this->client->id, 'user_id' => $this->rep->id, 'payment' => 'credit', 'price_list' => 'la',
             'subtotal' => 30, 'discount_pct' => 0, 'discount' => 0, 'total' => 30, 'tax_total' => 4.2, 'grand_total' => 34.2,
             'eta_status' => 'ready', 'cost_total' => 15,
@@ -180,7 +182,7 @@ class DocReviewTest extends TestCase
     public function test_serial_saves_warns_on_duplicate_and_clears_review(): void
     {
         $other = $this->invoice(['paper_ref' => '1145']);
-        $inv = $this->invoice();
+        $inv = $this->invoice(['paper_ref' => 'OLD-1']);
         DocReview::mark($this->accountant, $inv, 'ok', null);
 
         $this->actingAs($this->accountant)->postJson(route('erp.review.docs.serial', ['type' => 'invoice', 'id' => $inv->id]), ['paper_ref' => ' 1145 '])
@@ -190,7 +192,7 @@ class DocReviewTest extends TestCase
 
         $this->assertSame('1145', $inv->fresh()->paper_ref);
         $ev = DocReviewEvent::where('action', 'serial')->sole();
-        $this->assertNull($ev->before['paper_ref']);
+        $this->assertSame('OLD-1', $ev->before['paper_ref']);
         $this->assertTrue($ev->after['review_cleared']);
 
         // الأمر كمان ليه سيريال
@@ -319,7 +321,7 @@ class DocReviewTest extends TestCase
     public function test_search_and_filters_and_progress(): void
     {
         $a = $this->invoice(['paper_ref' => '7781']);
-        $b = $this->invoice();
+        $b = $this->invoice(['paper_ref' => null]);
         $po = $this->deliveredPo();
         DocReview::mark($this->accountant, $a, 'ok', null);
 
@@ -343,7 +345,7 @@ class DocReviewTest extends TestCase
     /** (١٢/١١) «السجل والاسم»: سطر واحد مقروء — نوع قصير، رقم المستند والعميل، قبل ← بعد بالعربي */
     public function test_activity_log_row_is_readable_and_not_duplicated(): void
     {
-        $inv = $this->invoice();
+        $inv = $this->invoice(['paper_ref' => null]);
         $before = ActivityLog::max('id') ?? 0;
 
         $this->actingAs($this->accountant)->postJson(route('erp.review.docs.serial', ['type' => 'invoice', 'id' => $inv->id]), ['paper_ref' => 'P-55'])->assertOk();
@@ -411,7 +413,7 @@ class DocReviewTest extends TestCase
         $other = $this->makeRep();
         $this->client->update(['rep_id' => $other->id]);
         $a = $this->invoice(['paper_ref' => 'S-1']);
-        $b = $this->invoice();
+        $b = $this->invoice(['paper_ref' => null]);
         $b->forceFill(['created_at' => Carbon::parse('2026-12-01 10:00')])->save();
         ActivityLog::create(['user_id' => $this->admin->id, 'event' => 'updated', 'subject_type' => 'Invoice', 'subject_id' => $a->id,
             'title' => $a->number, 'changes' => ['grand_total' => ['30.00', 34.2]], 'created_at' => '2026-11-10 22:00:00']);
@@ -424,6 +426,7 @@ class DocReviewTest extends TestCase
         $this->assertSame(2, DocQueue::filter($all, ['flag' => 'any'])->count());
 
         DocReview::mark($this->accountant, $a, 'ok', null);
+        $b->update(['paper_ref' => 'S-2']);
         DocReview::mark($this->accountant, $b->fresh(), 'ok', null);
         $all = DocQueue::all($this->admin);
         $s1 = DocQueue::filter($all, ['by' => $this->accountant->id, 'day' => '2026-11-11', 'sample' => 1]);
@@ -479,5 +482,72 @@ class DocReviewTest extends TestCase
 
         config(['review.confirm_red_checks' => false]);
         $this->actingAs($this->accountant)->get(route('erp.review.docs'))->assertOk()->assertSee('const CONFIRM_RED = false;', false);
+    }
+
+    /** (١٢/١١) «فلتر السيريال فيه مشكلة»: أرقام عربي/مسافات، المكرر، البحث، العدادات، والتزامن بعد الحفظ */
+    public function test_serial_filters_search_counts_and_sync(): void
+    {
+        $this->assertSame('1374', DocReview::normSerial(' ١٣ ٧٤ '));
+        $this->assertSame('A-0776', DocReview::normSerial('a-0776'));
+        $this->assertNull(DocReview::normSerial('  '));
+
+        $legacy = $this->invoice(['paper_ref' => '١٣٧٤', 'number' => 'INV-90001']);   // اتكتب قبل التوحيد بكيبورد عربي
+        $b = $this->invoice(['number' => 'INV-90002', 'paper_ref' => null]);
+        $c = $this->invoice(['number' => 'INV-90003', 'paper_ref' => null]);
+        $po = $this->deliveredPo();
+
+        // الحفظ بيوحّد، والمكرر بيتمسك مع القديم المكتوب بأرقام عربي
+        $res = $this->actingAs($this->accountant)->postJson(route('erp.review.docs.serial', ['type' => 'invoice', 'id' => $b->id]), ['paper_ref' => '13 74'])->assertOk();
+        $this->assertSame('1374', $b->fresh()->paper_ref);
+        $res->assertJsonPath('row.paper_ref', '1374')->assertJsonPath('dup_keys', ['inv-'.$legacy->id]);
+        $this->assertNotContains('noserial', $res->json('row.flags'));
+        $this->assertContains('dup', $res->json('row.flags'));
+
+        $all = DocQueue::all($this->admin);
+        $this->assertEqualsCanonicalizing([$legacy->id, $b->id], DocQueue::filter($all, ['flag' => 'dup'])->pluck('id')->all());
+        $this->assertEqualsCanonicalizing(['inv-'.$c->id, 'po-'.$po->id], DocQueue::filter($all, ['flag' => 'noserial'])->pluck('key')->all());
+        // البحث بالسيريال بأرقام عربي أو إنجليزي
+        $this->assertEqualsCanonicalizing([$legacy->id, $b->id], DocQueue::filter($all, ['q' => '١٣٧٤'])->pluck('id')->all());
+        $this->assertEqualsCanonicalizing([$legacy->id, $b->id], DocQueue::filter($all, ['q' => '1374'])->pluck('id')->all());
+
+        // عدد الشيب = اللي هيظهر: مع تاب الحالة ومع فلتر النوع
+        DocReview::mark($this->accountant, $legacy->fresh(), 'ok', null);
+        $page = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['status' => 'pending']))->assertOk();
+        $this->assertSame(2, $page->viewData('flagCounts')['noserial']);   // c + الأمر
+        $this->assertSame(1, $page->viewData('flagCounts')['dup']);        // b بس — legacy اتراجع
+        $all2 = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['status' => 'all', 'type' => 'invoice']))->assertOk();
+        $this->assertSame(1, $all2->viewData('flagCounts')['noserial']);   // c من غير الأمر
+        $this->assertSame(
+            DocQueue::byStatus(DocQueue::filter(DocQueue::all($this->admin), ['flag' => 'noserial', 'type' => 'invoice']), 'all')->count(),
+            $all2->viewData('flagCounts')['noserial']);
+
+        // الترقيم بيحتفظ بالفلتر
+        $res = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['status' => 'all', 'flag' => 'noserial', 'per' => 25]))->assertOk();
+        parse_str((string) parse_url($res->viewData('page')->url(1), PHP_URL_QUERY), $qq);
+        $this->assertSame('noserial', $qq['flag'] ?? null);
+    }
+
+    /** (١٢/١١ — أحمد) السيريال شرط ✓: مرفوض حتى لو اتأكد، وبعد حفظه الفحص بيخضر و✓ واحدة تعدّي */
+    public function test_missing_serial_blocks_ok_and_checks_refresh_after_save(): void
+    {
+        $po = $this->deliveredPo();   // من غير سيريال
+        $mark = fn () => $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'po', 'id' => $po->id]), ['status' => 'ok']);
+
+        $mark()->assertStatus(422)->assertJsonPath('message', __('review.serial_required'));
+        $mark()->assertStatus(422);   // «الضغطة التانية» مالهاش أي معنى عند السيرفر
+        $this->assertSame(0, ReviewCheck::where('entity_type', 'po')->count());
+        // ✗ مسموح من غير سيريال (الورقة نفسها ممكن تكون ضايعة)
+        // اللوحة بتقول السيريال أحمر وإنه شرط
+        $this->actingAs($this->accountant)->get(route('erp.review.docs.pane', ['type' => 'po', 'id' => $po->id]))
+            ->assertOk()->assertSee('data-hard="1"', false)->assertSee('class="bad" data-chk="serial"', false);
+
+        // حفظ السيريال ← الرد فيه الفحص الجديد أخضر، و✓ واحدة تعدّي
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.serial', ['type' => 'po', 'id' => $po->id]), ['paper_ref' => '٥٥٠١'])
+            ->assertOk()->assertJsonPath('checks.serial.ok', true)->assertJsonPath('row.paper_ref', '5501');
+        $mark()->assertOk()->assertJsonPath('row.state', 'ok');
+
+        $inv = $this->invoice(['paper_ref' => null]);
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'invoice', 'id' => $inv->id]), ['status' => 'issue', 'note' => 'الورقة ضايعة'])
+            ->assertOk()->assertJsonPath('row.state', 'issue');
     }
 }

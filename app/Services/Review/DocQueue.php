@@ -69,7 +69,7 @@ class DocQueue
                 'id' => (int) $d->id,
                 'key' => ($type === 'invoice' ? 'inv-' : 'po-').$d->id,
                 'number' => (string) $d->number,
-                'paper_ref' => $d->paper_ref !== null && trim($d->paper_ref) !== '' ? trim($d->paper_ref) : null,
+                'paper_ref' => DocReview::normSerial($d->paper_ref),
                 'date' => substr((string) $d->doc_at, 0, 10),
                 'client_id' => (int) $d->client_id,
                 'client' => $c?->displayName() ?? '#'.$d->client_id,
@@ -107,13 +107,9 @@ class DocQueue
             $rows->push($make('po', $d, $poItems[$d->id] ?? null));
         }
 
-        // السيريال المكرر — بين الفواتير والأوامر مع بعض
-        $dups = $onlyType === null
-            ? $rows->whereNotNull('paper_ref')->countBy('paper_ref')->filter(fn ($n) => $n > 1)
-            : $rows->whereNotNull('paper_ref')->mapWithKeys(fn ($r) => [$r['paper_ref'] => 1
-                + DB::table('invoices')->where('paper_ref', $r['paper_ref'])->when($r['type'] === 'invoice', fn ($q) => $q->where('id', '!=', $r['id']))->count()
-                + DB::table('purchase_orders')->where('paper_ref', $r['paper_ref'])->where('status', '!=', 'cancelled')->when($r['type'] === 'po', fn ($q) => $q->where('id', '!=', $r['id']))->count()])
-                ->filter(fn ($n) => $n > 1);
+        // السيريال المكرر — بين الفواتير والأوامر مع بعض، على الشكل الموحّد، وعلى **كل**
+        // المستندات (مش اللي اليوزر شايفه بس) — نفس اللي اللوحة بتقوله «مكرر مع …»
+        $dups = collect(DocReview::serialIndex())->map(fn ($l) => count($l))->filter(fn ($n) => $n > 1);
 
         // (١٢/١١) التنبيهات الأوتوماتيك — بتفرز الطابور وبتظهر جنب الرقم
         $repriced = self::repricedKeys($onlyType, $onlyId);
@@ -285,11 +281,13 @@ class DocQueue
     public static function filter(Collection $rows, array $f): Collection
     {
         $q = trim((string) ($f['q'] ?? ''));
-        $norm = fn (string $s) => mb_strtolower(Client::normalizeArabic($s));
+        $digits = fn (string $s) => strtr($s, ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9']);
+        $norm = fn (string $s) => mb_strtolower(Client::normalizeArabic($digits($s)));
+        $serialQ = DocReview::normSerial($q);
         $nq = $q === '' ? '' : $norm($q);
         $amount = is_numeric(str_replace(',', '', $q)) ? (float) str_replace(',', '', $q) : null;
 
-        $out = $rows->filter(function ($r) use ($f, $nq, $norm, $amount) {
+        $out = $rows->filter(function ($r) use ($f, $nq, $norm, $amount, $serialQ) {
             if (! empty($f['type']) && $r['type'] !== $f['type']) {
                 return false;
             }
@@ -326,7 +324,8 @@ class DocQueue
             }
             if ($nq !== '') {
                 $hay = $norm(implode(' ', [$r['number'], $r['paper_ref'], $r['client'], $r['client_code'], $r['phone'], $r['group'], $r['mother'], $r['rep']]));
-                $hit = str_contains($hay, $nq) || ($amount !== null && abs($r['grand'] - $amount) < 0.01);
+                $hit = str_contains($hay, $nq) || ($amount !== null && abs($r['grand'] - $amount) < 0.01)
+                    || ($serialQ !== null && $r['paper_ref'] !== null && str_contains($r['paper_ref'], $serialQ));
                 if (! $hit) {
                     return false;
                 }

@@ -87,7 +87,8 @@ class ReviewDocsController extends Controller
             ],
             'context' => $this->context($user, $f, $scoped),
             'pace' => ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
-            'flagCounts' => collect(DocQueue::FLAGS)->mapWithKeys(fn ($k) => [$k => DocQueue::filter($all, ['flag' => $k] + array_intersect_key($f, array_flip(['type', 'mother', 'group', 'client', 'rep', 'from', 'to'])))->where('state', '!=', 'ok')->count()]),
+            // ⚠️ (١٢/١١) عدد الشيب = عدد اللي هيظهر لو دوست عليه بالظبط: كل الفلاتر الحالية + تاب الحالة
+            'flagCounts' => collect([...DocQueue::FLAGS, 'any'])->mapWithKeys(fn ($k) => [$k => DocQueue::byStatus(DocQueue::filter($all, ['flag' => $k, 'sample' => ''] + $f), $f['status'])->count()]),
             'sampleBy' => $f['by'] !== '' ? User::find($f['by'])?->displayName() : null,
             'f' => $f,
             'open' => $request->string('doc')->value(),
@@ -186,6 +187,8 @@ class ReviewDocsController extends Controller
         if ($dups !== []) {
             $data = $res->getData(true);
             $data['warn'] = __('review.serial_dup', ['docs' => implode('، ', array_column($dups, 'number'))]);
+            // المستندات التانية اللي بقت مكررة معاه — الشاشة بتعلّمها ⚠ من غير ريلود
+            $data['dup_keys'] = array_map(fn ($d) => ($d['type'] === 'invoice' ? 'inv-' : 'po-').$d['id'], $dups);
             $res->setData($data);
         }
 
@@ -380,7 +383,9 @@ class ReviewDocsController extends Controller
             'message' => is_callable($msg) ? $msg() : $msg,
             'row' => $row,
             'overall' => DocQueue::overall($request->user()),
-            'pane' => view('erp.review._doc_pane', $this->paneData($request->user(), $doc))->render(),
+            // اللوحة بتتبني تاني من السيرفر بعد كل حفظ — الفحص بيتحسب على الداتا الجديدة
+            'pane' => view('erp.review._doc_pane', $pd = $this->paneData($request->user(), $doc))->render(),
+            'checks' => collect($pd['checks'])->map(fn ($c) => ['ok' => $c[0], 'why' => $c[1]]),
         ]);
     }
 
