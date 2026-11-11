@@ -19,6 +19,7 @@
 @section('actions')
     <a class="btn" href="{{ route('ops.journeys') }}">📘 {{ __('assign.journeys') }}</a>
     <a class="btn" href="{{ route('ops.live') }}">🖥️ {{ __('assign.live') }}</a>
+    @include('ops._distribute')
 @endsection
 
 @section('content')

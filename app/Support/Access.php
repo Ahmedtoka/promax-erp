@@ -589,11 +589,12 @@ class Access
             // مين عامل «إن» فين دلوقتي + الإخراج الإداري (١١/٨)
             ['ops.open_visits', '🔓', 'nav.open_visits', 'ops.open_visits', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
-            ['ops.journeys', '🗺️', 'nav.journeys', 'ops.journeys', null],
-            // الخريطة الجغرافية وخط السير (١٣/٨) — المحافظة ← المنطقة
-            // ← المحل، والتخطيط من نفس الشاشة. النمط بالظبط `ops.geo`
-            // عشان `ops.geo.zone/plan/unplan` مايلوّنوش اللينك لوحدهم.
+            // ═══ خط السير (١١/١١) — نفس تلات شاشات المحتملين للعملاء ═══
+            // الراسم (خريطة) ← جدولة الأسبوع (بورد) ← متابعة الأسبوع.
+            // `ops.geo` اسم الراوت القديم عن قصد (الصلاحيات المتخزنة عليه).
             ['ops.geo', '🧭', 'nav.geo_planner', 'ops.geo', null],
+            ['ops.journeys', '📅', 'nav.journeys', 'ops.journeys', null],
+            ['ops.journeys.week', '👁', 'nav.journeys_week', 'ops.journeys.week', null],
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
@@ -927,7 +928,7 @@ class Access
         // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.journeys.store', 'ops.journeys.destroy', 'ops.journeys.reorder', 'ops.geo.plan', 'ops.geo.unplan', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.geo.save', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
         // مسح خطوط السير كلها (فريقه بس لغير الأدمن) — مفتاح لوحده لأنه هدّام.
         // ⚠️ `['manager']` مش `null`: مايتورثش من مجرد رؤية الصفحة، لازم منح صريح
         'act.field.wipe' => ['perm.act_field_wipe', 'ops.journeys', ['manager'], ['ops.journeys.wipe']],

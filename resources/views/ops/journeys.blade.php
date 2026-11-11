@@ -3,8 +3,9 @@
 @section('title', __('journey.page'))
 
 @section('actions')
+    <a class="btn" href="{{ route('ops.geo', array_filter(['rep' => $rep?->id])) }}">🧭 {{ __('journey.builder_btn') }}</a>
+    <a class="btn" href="{{ route('ops.journeys.week', ['week' => $weekStart->toDateString()]) }}">👁 {{ __('journey.follow_btn') }}</a>
     <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
-    <a class="btn" href="{{ route('ops.live') }}">📡 {{ __('journey.live') }}</a>
     {{-- زرار الخطر: مسح كل الخطط والبدء من أول وجديد. الأدمن بيمسح
          الكل والمدير فريقه بس. آمن على الزيارات: FK بتاع
          visits.journey_plan_id بيصفّر مش بيمسح. --}}
@@ -28,6 +29,7 @@
 @endsection
 
 @section('content')
+
 
 @if ($rep === null)
     <div class="card"><div class="alert warn">{{ __('journey.no_reps') }}</div></div>
@@ -107,7 +109,8 @@
 
                 <span class="jb-grow"></span>
 
-                <a class="btn" href="{{ route('ops.geo') }}">🗺️ {{ __('journey.map_btn') }}</a>
+                <a class="btn sm" href="{{ route('ops.rep_day', $rep->id) }}">👤 {{ __('ui.l_rep') }} ↗</a>
+                <a class="btn sm" href="{{ route('ops.geo', ['rep' => $rep->id]) }}">🧭 {{ __('journey.builder_btn') }}</a>
                 @if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
                 <button type="button" class="btn" onclick="openDlg('dlgCopy')">
                     ⧉ {{ __('journey.copy_btn') }}
@@ -118,6 +121,7 @@
                 @endif
             </div>
 
+            <div class="dash-hint" style="margin-top:8px">{{ __('journey.arm_hint') }}</div>
             <div class="jb-statsrow">
                 <span class="s" id="jbWeekStats"></span>
                 <span class="jb-grow"></span>
@@ -128,6 +132,34 @@
         </div>
 
         <div class="jb-week" id="jbWeek"></div>
+
+        {{-- ═══ جدول الخطة (١١/١١) — نفس البورد كجدول عشان الإكسيل ═══ --}}
+        <div class="card" style="margin-bottom:14px">
+            <h3 style="margin:0 0 8px">📋 {{ __('journey.plan_table') }} — {{ $rep->displayName() }}</h3>
+            <table id="jbTable">
+                <thead><tr>
+                    <th>{{ __('journey.col_day') }}</th><th>{{ __('journey.col_no') }}</th>
+                    <th>{{ __('journey.col_code') }}</th><th>{{ __('journey.col_client') }}</th>
+                    <th>{{ __('journey.col_zone') }}</th><th>{{ __('journey.col_freq') }}</th>
+                    <th>{{ __('journey.col_first') }}</th><th>{{ __('journey.col_time') }}</th>
+                    <th>{{ __('journey.col_due') }}</th>
+                </tr></thead>
+                <tbody>
+                    @foreach ([6, 0, 1, 2, 3, 4, 5] as $d)
+                        @foreach (collect($board['plans'])->where('weekday', $d)->sortBy('sort')->values() as $i => $p)
+                            <tr>
+                                <td>{{ __('journey.day_'.$d) }}</td><td>{{ $i + 1 }}</td>
+                                <td>{{ $p['client']['code'] }}</td><td>{{ $p['client']['name'] }}</td>
+                                <td>{{ $p['client']['zone'] ?? '—' }}</td>
+                                <td>{{ __('journey.freq_'.$p['every_weeks']) }}</td>
+                                <td>{{ $p['starts_on'] ?? '—' }}</td><td>{{ $p['time'] ?: '—' }}</td>
+                                <td>{{ $p['due'] ? '✓' : __('journey.not_due') }}</td>
+                            </tr>
+                        @endforeach
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
 
         {{-- ═══════════ نبضة الشهر — النمط مفرود على التواريخ ═══════════ --}}
         <div class="card">
@@ -142,7 +174,7 @@
             </div>
 
             <div class="jb-pulse-head">
-                @foreach ($weekdays as $d)
+                @foreach ([6, 0, 1, 2, 3, 4, 5] as $d)
                     <div>{{ __('journey.day_'.$d) }}</div>
                 @endforeach
             </div>
@@ -184,6 +216,42 @@
 </dialog>
 @endif
 
+{{-- ═══ خريطة اليوم (زي جدولة المحتملين) — عرض بس ═══ --}}
+<dialog id="dlgDayMap" class="wide">
+    <div class="dlg">
+        <h4 style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            🗺️ <span id="dmTitle"></span> <span class="badge b-blue" id="dmCount"></span>
+        </h4>
+        <div id="dmMap" style="height:52vh;border-radius:12px;border:1px solid var(--border)"></div>
+        <div id="dmList" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgDayMap')">{{ __('common.close') }}</button>
+        </div>
+    </div>
+</dialog>
+
+{{-- ═══ تعديل محطة: التردد / أول زيارة / الوقت (١١/١١) ═══ --}}
+<dialog id="dlgStop">
+    <div class="dlg">
+        <h4 id="stTitle">{{ __('journey.edit_title') }}</h4>
+        <label class="fl"><span>{{ __('journey.col_freq') }}</span>
+            <select id="stFreq" style="width:100%">
+                @foreach ($frequencies as $fq)
+                    <option value="{{ $fq }}">{{ __('journey.freq_'.$fq) }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl" style="margin-top:8px"><span>{{ __('journey.col_first') }}</span>
+            <input type="date" id="stFirst" style="width:100%"></label>
+        <div class="dash-hint">{{ __('journey.edit_first_hint') }}</div>
+        <label class="fl" style="margin-top:8px"><span>{{ __('journey.col_time') }}</span>
+            <input type="time" id="stTime" style="width:100%"></label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" type="button" onclick="closeDlg('dlgStop')">{{ __('common.cancel') }}</button>
+            <button class="btn gold" type="button" onclick="stopApply()">{{ __('journey.edit_apply') }}</button>
+        </div>
+    </div>
+</dialog>
+
 {{-- ═══ تفاصيل يوم من النبضة ═══ --}}
 <dialog id="dlgPulse">
     <div class="dlg">
@@ -208,12 +276,13 @@
     $dayDates = [];
     foreach ($weekdays as $d) {
         $dayNames[$d] = __('journey.day_'.$d);
-        $dayDates[$d] = $weekStart->copy()->addDays($d)->format('j/n');
+        $dayDates[$d] = $weekStart->copy()->addDays(($d - 6 + 7) % 7)->format('j/n');
     }
 
     // نبضة الشهر للجافاسكربت: التاريخ ← عملاؤه (بحالة اتزار/لأ)
     $pulse = [
-        'firstCol' => $monthStart->dayOfWeek,
+        // السبت أول عمود (١١/١١)
+        'firstCol' => ($monthStart->dayOfWeek + 1) % 7,
         'days' => collect($calendar)->map(fn ($rows, $key) => [
             'date' => $key,
             'rows' => $rows,
@@ -246,6 +315,8 @@
         // محافظة ← منطقة بالأعداد (٢٨/٨)
         'allGovs' => __('journey.all_govs'),
         'allZones' => __('journey.all_zones'),
+        'notDue' => __('journey.not_due'),
+        'dayMap' => __('journey.day_map'),
     ];
 @endphp
 <script>
@@ -256,6 +327,10 @@
     const T = {!! json_encode($jsT, $jsFlags) !!};
     const TODAY_DOW = {{ (int) $today }};
     const MAX_PER_DAY = 8;
+    // ترتيب الأعمدة من السبت للجمعة (زي جدولة المحتملين)
+    const ORDER = [6, 0, 1, 2, 3, 4, 5];
+    // المتسلّح من البول — دوسة على يوم بتنزله آخره
+    let armed = null;
     // من غير act.field.plan البورد قراءة بس: مفيش سحب ولا «فيه تعديل مش محفوظ»
     const CAN_PLAN = @json(\App\Support\Access::action(auth()->user(), 'act.field.plan'));
 
@@ -276,6 +351,9 @@
             pid: p.id,
             freq: p.every_weeks,
             time: p.time,
+            at: p.visit_at || '',
+            first: p.starts_on || '',
+            due: p.due,
             c: p.client,
         });
     });
@@ -494,6 +572,16 @@
             tt('unassignedN', {n: state.pool.length});
 
         holder.querySelectorAll('.jb-crow').forEach(bindDragRow);
+        holder.querySelectorAll('.jb-crow:not([data-fromday])').forEach(function (el) {
+            el.addEventListener('click', function () {
+                if (! CAN_PLAN) { return; }
+                const cid = +el.dataset.cid;
+                armed = armed === cid ? null : cid;
+                renderSide();
+                document.querySelectorAll('.jb-day').forEach(function (d) { d.classList.toggle('armed', armed !== null); });
+            });
+            if (+el.dataset.cid === armed) el.classList.add('armed');
+        });
     }
 
     // ═══════════════ الأعمدة ═══════════════
@@ -508,28 +596,33 @@
         const holder = document.getElementById('jbWeek');
         let html = '';
 
-        for (let d = 0; d <= 6; d++) {
+        ORDER.forEach(function (d) {
             const items = state.days[d];
-            const st = dayState(items.length);
-            const over = items.length - MAX_PER_DAY;
+            // ⚠️ العدّ والتحذير على **المستحق** في الأسبوع المعروض (قرار §10.8)
+            const dueN = items.filter(function (it) { return it.due !== false; }).length;
+            const st = dayState(dueN);
+            const over = dueN - MAX_PER_DAY;
 
-            html += '<div class="jb-day ' + st + (d === TODAY_DOW ? ' istoday' : '') + '" data-day="' + d + '">';
+            html += '<div class="jb-day ' + st + (d === TODAY_DOW ? ' istoday' : '') + (armed !== null ? ' armed' : '') + '" data-day="' + d + '">';
             html += '<div class="jb-dayhead">' +
                 '<b>' + DAY_NAMES[d] + '</b>' +
                 '<span class="dt">' + DAY_DATES[d] + '</span>' +
-                '<span class="cnt">' + items.length +
+                '<span class="jb-dmap" title="' + esc(T.dayMap) + '" onclick="event.stopPropagation();dayMapOpen(' + d + ')">🗺</span>' +
+                '<span class="cnt">' + dueN + (dueN !== items.length ? '/' + items.length : '') +
                 (st === 'over' ? ' · ' + T.overload : '') + '</span></div>';
 
             html += '<div class="jb-daybody" data-day="' + d + '">';
 
             items.forEach(function (it, i) {
-                html += '<div class="jb-chip" draggable="true" data-day="' + d + '" data-idx="' + i + '">' +
+                html += '<div class="jb-chip' + (it.due === false ? ' notdue' : '') + '" draggable="true" data-day="' + d + '" data-idx="' + i + '"' +
+                    (it.due === false ? ' title="' + esc(T.notDue) + '"' : '') + '>' +
                     '<span class="num">' + (i + 1) + '</span>' +
-                    '<span class="nm">' + esc(it.c.name) + '</span>' +
+                    '<span class="nm" onclick="event.stopPropagation();stopEdit(' + d + ',' + i + ')">' + esc(it.c.name) + '</span>' +
+                    (it.first ? '<span class="fq">📅 ' + esc(it.first.slice(5)) + '</span>' : '') +
                     (it.freq === 2 ? '<span class="fq">' + esc(T.freq2) + '</span>' : '') +
                     (it.freq === 4 ? '<span class="fq">' + esc(T.freq4) + '</span>' : '') +
                     (it.time ? '<span class="fq">🕒 ' + esc(it.time) + '</span>' : '') +
-                    '<button type="button" class="x" onclick="removeChip(' + d + ',' + i + ')">✕</button>' +
+                    '<button type="button" class="x" onclick="event.stopPropagation();removeChip(' + d + ',' + i + ')">✕</button>' +
                     '</div>';
             });
 
@@ -537,16 +630,19 @@
                 html += '<div class="jb-empty">' + (d === 6 ? T.dayOff : T.dragHere) + '</div>';
             }
 
-            html += '<button type="button" class="jb-add" onclick="focusSearch()">＋ ' + esc(T.addBtn) + '</button>';
+            html += '<button type="button" class="jb-add" onclick="event.stopPropagation();focusSearch()">＋ ' + esc(T.addBtn) + '</button>';
 
             if (st === 'over') {
                 html += '<div class="jb-warn">' + tt('overHint', {n: over}) + '</div>';
             }
 
             html += '</div></div>';
-        }
+        });
 
         holder.innerHTML = html;
+        holder.querySelectorAll('.jb-day').forEach(function (el) {
+            el.addEventListener('click', function () { dropArmed(+el.dataset.day); });
+        });
 
         holder.querySelectorAll('.jb-chip').forEach(bindDragChip);
         holder.querySelectorAll('.jb-daybody').forEach(bindDropZone);
@@ -630,7 +726,7 @@
             const i = state.pool.findIndex(function (c) { return c.id === drag.cid; });
             if (i < 0) return;
             const c = state.pool.splice(i, 1)[0];
-            state.days[day].splice(index, 0, {pid: null, freq: 1, time: '', c: c});
+            state.days[day].splice(index, 0, {pid: null, freq: 1, time: '', at: '', first: '', due: true, c: c});
         } else {
             const from = state.days[drag.day];
             if (drag.idx < 0 || drag.idx >= from.length) return;
@@ -655,6 +751,104 @@
         renderSide();
     }
 
+    // ═══ تسليح وإنزال (فلو جدولة المحتملين) ═══
+    function dropArmed(day) {
+        if (armed === null || ! CAN_PLAN) return;
+        const i = state.pool.findIndex(function (c) { return c.id === armed; });
+        armed = null;
+        if (i < 0) { renderWeek(); renderSide(); return; }
+        const c = state.pool.splice(i, 1)[0];
+        state.days[day].push({pid: null, freq: 1, time: '', at: '', first: '', due: true, c: c});
+        markDirty();
+        renderWeek();
+        renderSide();
+    }
+
+    // ═══ تعديل محطة (التردد / أول زيارة / الوقت) ═══
+    let editing = null;
+    function stopEdit(day, idx) {
+        if (! CAN_PLAN) return;
+        const it = state.days[day][idx];
+        editing = {day: day, idx: idx};
+        document.getElementById('stTitle').textContent = it.c.name;
+        document.getElementById('stFreq').value = String(it.freq);
+        document.getElementById('stFirst').value = it.first || '';
+        document.getElementById('stTime').value = it.at || '';
+        openDlg('dlgStop');
+    }
+    function stopApply() {
+        if (!editing) return;
+        const it = state.days[editing.day][editing.idx];
+        it.freq = +document.getElementById('stFreq').value;
+        it.first = document.getElementById('stFirst').value;
+        it.at = document.getElementById('stTime').value;
+        it.time = it.at;
+        let day = editing.day;
+        // أول زيارة بتحدد اليوم — المحطة بتتنقل لعمودها
+        if (it.first) {
+            const wd = new Date(it.first + 'T00:00:00').getDay();
+            if (wd !== day) {
+                state.days[day].splice(editing.idx, 1);
+                state.days[wd].push(it);
+                day = wd;
+            }
+        }
+        editing = null;
+        closeDlg('dlgStop');
+        markDirty();
+        renderWeek();
+    }
+
+    // ═══ خريطة اليوم — أرقام ١ ٢ ٣ متوصلين بخط ═══
+    let dmMap = null, dmLayer = null;
+    function dayMapOpen(day) {
+        const list = state.days[day] || [];
+        document.getElementById('dmTitle').textContent = DAY_NAMES[day] + ' ' + DAY_DATES[day];
+        document.getElementById('dmCount').textContent = list.length;
+        const box = document.getElementById('dmList');
+        box.innerHTML = '';
+        list.forEach(function (it, i) {
+            const chip = document.createElement('span');
+            chip.className = 'badge ' + (it.c.lat != null ? 'b-blue' : 'b-gray');
+            chip.style.cssText = 'font-size:11px;padding:4px 9px';
+            chip.innerHTML = '<b>' + (i + 1) + '</b> ' + esc(it.c.name) + (it.c.lat != null ? '' : ' 📍✕');
+            box.appendChild(chip);
+        });
+        openDlg('dlgDayMap');
+        if (dmMap === null) {
+            dmMap = L.map('dmMap', {scrollWheelZoom: false});
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19, attribution: '&copy; OpenStreetMap',
+            }).addTo(dmMap);
+            dmLayer = L.layerGroup().addTo(dmMap);
+            dmMap.on('click', function () { dmMap.scrollWheelZoom.enable(); });
+            dmMap.on('mouseout', function () { dmMap.scrollWheelZoom.disable(); });
+        }
+        dmLayer.clearLayers();
+        const pts = [];
+        list.forEach(function (it, i) {
+            if (it.c.lat == null || it.c.lng == null) return;
+            const m = L.marker([it.c.lat, it.c.lng], {icon: L.divIcon({
+                className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+                html: '<div style="width:28px;height:28px;border-radius:50%;background:#12399B;border:2.5px solid #fff;'
+                    + 'box-shadow:0 2px 5px rgba(0,0,0,.35);color:#fff;font:900 12px Cairo,Inter,sans-serif;'
+                    + 'display:flex;align-items:center;justify-content:center">' + (i + 1) + '</div>',
+            })});
+            m.bindTooltip('<b>' + (i + 1) + '. ' + esc(it.c.name) + '</b>', {direction: 'top', offset: [0, -12]});
+            dmLayer.addLayer(m);
+            pts.push([it.c.lat, it.c.lng]);
+        });
+        if (pts.length > 1) {
+            dmLayer.addLayer(L.polyline(pts, {color: '#12399B', weight: 3.5, dashArray: '8 8', opacity: .9}));
+        }
+        setTimeout(function () {
+            dmMap.invalidateSize();
+            if (pts.length === 1) dmMap.setView(pts[0], 14);
+            else if (pts.length) dmMap.fitBounds(L.latLngBounds(pts).pad(0.2));
+            else dmMap.setView([30.05, 31.4], 10);
+        }, 120);
+    }
+
     // ═══════════════ وزّع تلقائي بالمنطقة ═══════════════
     // عملاء نفس الزون في نفس اليوم، والزون بيروح لليوم الأخف —
     // السبت إجازة. توزيع محلي: راجعه وبعدين احفظ.
@@ -677,7 +871,7 @@
                 if (state.days[d].length < min) { min = state.days[d].length; best = d; }
             }
             byZone[z].forEach(function (c) {
-                state.days[best].push({pid: null, freq: 1, time: '', c: c});
+                state.days[best].push({pid: null, freq: 1, time: '', at: '', first: '', due: true, c: c});
             });
         });
 
@@ -709,6 +903,9 @@
                 add('rows[' + i + '][client_id]', it.c.id);
                 add('rows[' + i + '][weekday]', d);
                 add('rows[' + i + '][sort]', idx + 1);
+                add('rows[' + i + '][every_weeks]', it.freq || 1);
+                add('rows[' + i + '][starts_on]', it.first || '');
+                add('rows[' + i + '][visit_at]', it.at || '');
                 i++;
             });
         }
@@ -858,7 +1055,8 @@
   border-radius:50%;min-width:17px;height:17px;display:inline-flex;align-items:center;
   justify-content:center;flex-shrink:0}
 .jb-day.over .jb-chip .num{background:#E8890C}
-.jb-chip .nm{flex:1;min-width:0;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jb-chip .nm{flex:1;min-width:0;font-weight:800;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;word-break:break-word}
+.jb-chip{flex-wrap:wrap}
 .jb-chip .fq{font-size:9px;color:var(--royal-blue);background:var(--blue-050);
   border-radius:10px;padding:1px 6px;flex-shrink:0}
 .jb-chip .x{background:none;border:none;color:var(--muted);cursor:pointer;
@@ -871,6 +1069,14 @@
 .jb-add:hover{color:var(--royal-blue);border-color:var(--royal-blue)}
 .jb-warn{background:#FFF6E0;border:1px solid #F0D48A;color:#8A6D00;border-radius:9px;
   padding:7px 8px;font-size:10px;font-weight:800;margin-top:6px;line-height:1.6}
+
+/* ═══ (١١/١١) تسليح + غير مستحق + خريطة اليوم ═══ */
+.jb-day.armed{border-color:#0F7A38;box-shadow:0 0 0 3px rgba(15,122,56,.15);cursor:pointer}
+.jb-crow.armed{background:#EFFAF3;box-shadow:inset 0 0 0 1.5px #0F7A38}
+.jb-chip.notdue{opacity:.5;border-style:dashed}
+.jb-chip .nm{cursor:pointer}
+.jb-dmap{cursor:pointer;font-size:13px;opacity:.75}
+.jb-dmap:hover{opacity:1}
 
 /* ═══ نبضة الشهر ═══ */
 .jb-pulse-lg{display:flex;gap:14px;margin-bottom:10px}

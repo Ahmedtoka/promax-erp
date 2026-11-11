@@ -258,10 +258,8 @@ class PermissionInventoryTest extends TestCase
         'erp/zones.blade.php|erp.zones.update' => 'JS URL; the zone dialog and its openers are guarded with act.org.manage',
         'gl/coa.blade.php|gl.coa.update' => 'JS inline-edit URL; the server enforces act.gl.coa_draft (row actions and dialogs are guarded)',
         'gl/coa.blade.php|gl.coa.move' => 'JS move-under URL; the move form and buttons are guarded with act.gl.coa_draft',
-        'ops/geo_planner.blade.php|ops.geo.plan' => 'JS config of the planner map; the server enforces act.field.plan',
-        'ops/geo_planner.blade.php|ops.geo.unplan' => 'JS config of the planner map; the server enforces act.field.plan',
-        'ops/geo_planner.blade.php|ops.geo.distribute' => 'JS config of the planner map; the server enforces act.field.plan',
-        'ops/geo_planner.blade.php|ops.geo.assign' => 'JS config of the planner map; the server enforces act.field.plan',
+        'ops/_distribute.blade.php|ops.geo.distribute' => 'JS config of the distribute dialog; the whole partial is inside Access::action(act.field.plan)',
+        'ops/_distribute.blade.php|ops.geo.assign' => 'JS config of the distribute dialog; the whole partial is inside Access::action(act.field.plan)',
     ];
 
     /** مفاتيح قبل جرد ٩/١١ لسه زرايرها ماتراجعتش — الفحص بيتخطاها لحد ما تتراجع */

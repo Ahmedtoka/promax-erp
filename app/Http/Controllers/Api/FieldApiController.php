@@ -944,11 +944,15 @@ class FieldApiController extends Controller
         // ⚠️ الزيارة بتتربط بخطة اليوم لو العميل ده فيها. من غير
         // الربط ده الشاشة اللايف مش هتفرّق بين زيارة من الخطة وزيارة
         // بره الخطة، ونسبة الإنجاز هتبقى رقم بلا معنى.
+        // ⚠️ (١١/١١) مستحقة النهارده فعلاً (`dueOn`) مش بس نفس اليوم —
+        // عميل كل أسبوعين في أسبوعه الفاضي كان بيتربط بالخطة.
         $plan = \App\Models\JourneyPlan::where('user_id', $user->id)
             ->where('client_id', $client->id)
             ->where('weekday', today()->dayOfWeek)
             ->where('active', true)
-            ->value('id');
+            ->get()
+            ->first(fn ($p) => $p->dueOn(today()))
+            ?->id;
 
         $visit = Visit::create([
             'user_id' => $user->id,

@@ -1,6 +1,12 @@
 # Client route planner — port the leads planner to real clients — Design (2026-11-11)
 
-Status: **draft — waiting for Ahmed's approval.** Nothing is built yet.
+Status: **approved by Ahmed 2026-11-11 («موافق، ابدأ») — all §10 calls accepted. Built same day.**
+
+Built notes: route names kept (`ops.geo` = builder at `/ops/route-builder`, old
+`/ops/geo-planner` redirects as `ops.geo.legacy`); new `ops.geo.save` and
+`ops.journeys.week`; `ops.geo.zone/plan/unplan` and `ops.journeys.store/destroy/reorder`
+removed. Follow-up also skips days before a plan was created (so a stop added
+today is never "missed" yesterday). The board's plan table gives the per-table Excel.
 
 ## 1. Intent
 

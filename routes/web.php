@@ -1435,20 +1435,18 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/assignments/auto', [\App\Http\Controllers\JourneyController::class, 'autoAssignReps'])
                 ->name('assignments.auto');
 
-            // ═══ الخريطة الجغرافية وخط السير (١٣ أغسطس ٢٠٢٦) ═══
-            // نفس رولز «تسكين العملاء» و«خطط السير» بالظبط — الشاشة
-            // بتعرض عملاء الفريق وبتكتب خطط سير، فمالهاش تبقى أوسع.
-            // ⚠️ الراوت الثابت قبل البارامتري: `/geo-planner/plan`
-            // و`/geo-planner/unplan` مسارهم POST و`/zone/{zone}` GET،
-            // فمفيش تعارض — بس الترتيب متسايب زي ما هو للوضوح.
-            Route::get('/geo-planner', [\App\Http\Controllers\JourneyController::class, 'geo'])
+            // ═══ راسم خط السير للعملاء (١١/١١/٢٠٢٦) — بدل الشاشة الجغرافية ═══
+            // نفس فلو «راسم خط السير» بتاع المحتملين بالحرف على `journey_plans`.
+            // ⚠️ اسم الراوت فضل `ops.geo` عن قصد: الأدوار المخصّصة والصلاحيات
+            // المتخزنة على الاسم ده بتفضل شغالة. اللينك القديم بيتحوّل.
+            Route::get('/route-builder', [\App\Http\Controllers\RoutePlannerController::class, 'builder'])
                 ->name('geo');
-            Route::get('/geo-planner/zone/{zone}', [\App\Http\Controllers\JourneyController::class, 'geoZone'])
-                ->name('geo.zone');
-            Route::post('/geo-planner/plan', [\App\Http\Controllers\JourneyController::class, 'geoPlan'])
-                ->name('geo.plan');
-            Route::post('/geo-planner/unplan', [\App\Http\Controllers\JourneyController::class, 'geoUnplan'])
-                ->name('geo.unplan');
+            Route::post('/route-builder', [\App\Http\Controllers\RoutePlannerController::class, 'builderSave'])
+                ->name('geo.save');
+            Route::redirect('/geo-planner', '/ops/route-builder')->name('geo.legacy');
+            // متابعة الأسبوع — مخطط / اتزار / فات (زي متابعة المحتملين)
+            Route::get('/journeys/week', [\App\Http\Controllers\RoutePlannerController::class, 'week'])
+                ->name('journeys.week');
             // ═══ التوزيع التلقائي (١٣ أغسطس ٢٠٢٦) ═══
             // `distribute` معاينة (GET، مفيش كتابة) و`assign` هو اللي
             // بيكتب `rep_id` — الاتنين تحت نفس أكشن `act.field.plan`.
@@ -1464,15 +1462,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/live/{user}', [\App\Http\Controllers\JourneyController::class, 'repDay'])
                 ->name('rep_day');
 
-            Route::post('/journeys', [\App\Http\Controllers\JourneyController::class, 'store'])
-                ->name('journeys.store');
             // مسح شامل لخطوط السير — «أعملها من أول وجديد» (١١/٨)
             Route::post('/journeys/wipe', [\App\Http\Controllers\JourneyController::class, 'wipe'])
                 ->name('journeys.wipe');
-            Route::delete('/journeys/{journeyPlan}', [\App\Http\Controllers\JourneyController::class, 'destroy'])
-                ->name('journeys.destroy');
-            Route::post('/journeys/reorder', [\App\Http\Controllers\JourneyController::class, 'reorder'])
-                ->name('journeys.reorder');
             // ═══ بورد الدراج أند دروب (٢١/٨) ═══
             // `sync` بيحفظ صورة البورد كلها دفعة واحدة، و`copy`
             // بينسخ نمط مندوب تاني — نفس رولز باقي راوتات الخطط.

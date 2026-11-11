@@ -31,31 +31,26 @@ class JourneyController extends Controller
     public function index(Request $request)
     {
         // ⚠️ سكوب الفرع — مدير المعادي بيشوف فريق المعادي بس
-        $reps = User::fieldVisibleTo(Branch::scope(User::with('zone')))
-            ->whereIn('role', User::FIELD_WORK_ROLES)
-            ->where('active', true)
-            ->orderBy('name')
-            ->get();
-
-        // ═══ المدير الميداني (١١ أغسطس ٢٠٢٦): بيعمل خط سير **لنفسه** ═══
-        // القايمة فوق «فريق الشارع» — والمدير مش في `FIELD_ROLES` عن
-        // قصد (عشان تقارير الفريق). هنا بس بيضيف نفسه عشان ينظّم
-        // شغله، و`Scope::assertRep` في store/destroy/reorder بتسمح
-        // له **على نفسه بس**. شاشات الأدمن زي ما هي.
+        // (١١/١١) المصدر بقى `RoutePool::reps` — نفس قايمة الراسم والمتابعة
         $viewer = $request->user();
-
-        if ($viewer !== null && $viewer->role === 'manager'
-            && ! $reps->contains('id', $viewer->id)) {
-            $reps->push($viewer->load('zone'));
-        }
+        $reps = \App\Services\RoutePool::reps($viewer);
 
         $rep = $request->filled('rep')
             ? $reps->firstWhere('id', (int) $request->input('rep'))
             : $reps->first();
 
-        // عدّ زرار المسح الشامل — «هتمسح X خطة» في رسالة التأكيد.
-        // نفس سكوب `wipe()` بالظبط: الأدمن الكل، والمدير فريقه.
         $wipeCount = $this->wipeQuery($viewer)->count();
+
+        // ═══ الأسبوع من السبت للجمعة (١١/١١ — نفس جدولة المحتملين) ═══
+        // ⚠️ للعرض بس: الخطة نمط أسبوعي — الأسبوع بيحدد التواريخ فوق
+        // الأعمدة وإيه «مستحق» فيه (كل أسبوعين/شهري).
+        try {
+            $weekStart = $request->filled('week')
+                ? Carbon::parse((string) $request->input('week'))->startOfWeek(Carbon::SATURDAY)
+                : today()->startOfWeek(Carbon::SATURDAY);
+        } catch (\Throwable) {
+            $weekStart = today()->startOfWeek(Carbon::SATURDAY);
+        }
 
         if ($rep === null) {
             return view('ops.journeys', [
@@ -63,101 +58,34 @@ class JourneyController extends Controller
                 'available' => collect(), 'weekdays' => JourneyPlan::WEEKDAYS,
                 'frequencies' => JourneyPlan::FREQUENCIES, 'today' => today()->dayOfWeek,
                 'wipeCount' => $wipeCount,
-                'weekStart' => today()->startOfWeek(Carbon::SUNDAY),
+                'weekStart' => $weekStart,
                 'board' => ['pool' => [], 'plans' => []],
             ]);
         }
 
         $week = Journeys::week($rep);
+        $weekPlans = collect($week)->flatten();
 
-        // ⚠️ العملاء المتاحين للإضافة = عملاء المندوب اللي **لسه**
-        // مش في خطته. عرض العملاء كلهم بيخلّي حد يحط عميل مندوب تاني
-        // في الخطة والاتنين يروحوا نفس المحل.
-        //
-        // ═══ بول الفريق (١١/٨ مساءً) ═══ «عملاء المندوب» بقت بول
-        // فريقه: أي عميل تحت نفس مديره ينفع يتخطط له — تغطية الغايب
-        // من غير نقل عملاء. عميل فريق تاني برضه مش بيظهر.
-        $planned = collect($week)->flatten()->pluck('client_id')->unique();
+        // ⚠️ المتاح للإضافة = بول المندوب اللي **لسه** مش في خطته
+        $planned = $weekPlans->pluck('client_id')->unique();
 
-        $available = Client::visibleTo(
-            // ⚠️ `channel` للبورد (٢١/٨) — شيبس الفلترة بالقناة في السايدبار
-            Client::with(['zone', 'group', 'channel'])->where('status', 'active')
-                ->where(function ($q) use ($rep) {
-                    // المدير الميداني (١١/٨): محطات خطته من عملاءه
-                    // المتسكّنين له (`manager_id`) — نفس مرساة الزيارة.
-                    if ($rep->role === 'manager') {
-                        $q->where('manager_id', $rep->id);
-
-                        return;
-                    }
-
-                    $q->where('rep_id', $rep->id);
-
-                    // البول المشترك — كل عملاء مديره
-                    if ($rep->manager_id !== null) {
-                        $q->orWhere('manager_id', $rep->manager_id);
-                    }
-
-                    if ($rep->zone_id) {
-                        $q->orWhere('zone_id', $rep->zone_id);
-                    }
-                })
-                ->whereNotIn('id', $planned),
-            $request->user()
-        )
+        $available = \App\Services\RoutePool::poolQuery($rep, $viewer)
+            ->whereNotIn('id', $planned)
             ->orderBy('name')
             ->get();
-
-        // ═══ ملاح الأسبوع (بورد ٢١/٨) — تواريخ فوق أعمدة الأيام ═══
-        //
-        // الخطة نمط أسبوعي؛ الأسبوع المختار **للعرض والسياق** (تواريخ
-        // الأعمدة + شهر النبضة الافتراضي) مش لتخزين تواريخ.
-        try {
-            $weekStart = $request->filled('week')
-                ? Carbon::parse((string) $request->input('week'))
-                    ->startOfWeek(Carbon::SUNDAY)
-                : today()->startOfWeek(Carbon::SUNDAY);
-        } catch (\Throwable) {
-            $weekStart = today()->startOfWeek(Carbon::SUNDAY);
-        }
-
-        // ═══ داتا البورد (الدراج أند دروب ٢١/٨) — جاهزة للجافاسكربت ═══
-        //
-        // ⚠️ آخر زيارة بكويري مجمّع واحد للبول كله — مش كويري لكل عميل
-        $weekPlans = collect($week)->flatten();
 
         \Illuminate\Database\Eloquent\Collection::make(
             $weekPlans->pluck('client')->filter()->unique('id')->values()
         )->loadMissing(['zone', 'channel', 'group']);
 
-        $poolIds = $available->pluck('id')
-            ->merge($weekPlans->pluck('client_id'))->unique()->values();
+        $lastVisitAt = \App\Services\RoutePool::lastVisits(
+            $available->pluck('id')->merge($weekPlans->pluck('client_id'))
+        );
 
-        $lastVisitAt = $poolIds->isEmpty()
-            ? collect()
-            : Visit::whereIn('client_id', $poolIds)
-                ->whereNotNull('checked_in_at')
-                ->selectRaw('client_id, MAX(checked_in_at) as t')
-                ->groupBy('client_id')
-                ->pluck('t', 'client_id');
+        $clientRow = fn (Client $c) => \App\Services\RoutePool::row($c, $lastVisitAt);
 
-        $clientRow = fn (Client $c) => [
-            'id' => $c->id,
-            'name' => $c->fullName(),
-            'zone' => $c->zone?->displayName(),
-            // المحافظة: من الزون الأول (المخطط بيشتغل بالزونز) وإلا
-            // من العميل نفسه — لفلتر محافظة ← منطقة (٢٨/٨)
-            'gov' => $c->zone?->governorateLabel() ?: $c->governorateLabel(),
-            'channel' => $c->channel?->displayName(),
-            // فرع سلسلة ولا فردي — البول بيتفصل سكشنين (٢٨/٨)
-            'chain' => $c->group?->displayName(),
-            'balance' => (float) $c->balance,
-            // كتلة بحث عابرة اللغات — نفس فكرة الأبلكيشن
-            'q' => mb_strtolower(trim($c->fullName().' '.$c->name_en.' '
-                .($c->group?->name_en ?? '').' '.($c->zone?->displayName() ?? ''))),
-            'last_days' => ($t = $lastVisitAt->get($c->id)) !== null
-                ? Carbon::parse($t)->diffInDays(now()) : null,
-        ];
+        // تاريخ كل يوم في الأسبوع المعروض (السبت أول عمود)
+        $dateOf = fn (int $wd) => $weekStart->copy()->addDays(($wd - Carbon::SATURDAY + 7) % 7);
 
         $board = [
             'pool' => $available->map($clientRow)->values()->all(),
@@ -166,16 +94,17 @@ class JourneyController extends Controller
                 'weekday' => (int) $p->weekday,
                 'sort' => (int) $p->sort,
                 'every_weeks' => (int) $p->every_weeks,
+                'starts_on' => $p->starts_on?->toDateString(),
+                'visit_at' => $p->visit_at ? substr((string) $p->visit_at, 0, 5) : '',
                 'time' => $p->visitTimeLabel(),
+                // مستحقة في الأسبوع المعروض؟ — الغير مستحقة بتترسم باهتة
+                'due' => $p->dueOn($dateOf((int) $p->weekday)),
                 'client' => $p->client !== null ? $clientRow($p->client) : null,
             ])->filter(fn ($r) => $r['client'] !== null)->values()->all(),
         ];
 
         // ═══ عرض الشهر — النمط الأسبوعي مفرود على تواريخ حقيقية ═══
-        // (طلب المالك 2026-08-03): «عاوز الخطة بالشهر وقدامي بالتواريخ».
-        // الخطة نمط، فكل يوم في الشهر بنسأل dueOn() — والتردد (كل
-        // أسبوعين/شهري) بيبان صح على التقويم بدل ما يفضل رقم مخفي.
-        $month = (string) $request->input('month', $weekStart->format('Y-m'));
+        $month = (string) $request->input('month', $weekStart->copy()->addDays(3)->format('Y-m'));
 
         try {
             $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
@@ -193,18 +122,12 @@ class JourneyController extends Controller
             ->get()
             ->groupBy(fn ($v) => $v->created_at->toDateString().'|'.$v->client_id);
 
-        $allPlans = JourneyPlan::with('client.group')
-            ->where('user_id', $rep->id)
-            ->where('active', true)
-            ->orderBy('weekday')->orderBy('sort')
-            ->get();
-
         $calendar = [];
 
         for ($d = $monthStart->copy(); $d->month === $monthStart->month; $d->addDay()) {
             $key = $d->toDateString();
 
-            $calendar[$key] = $allPlans
+            $calendar[$key] = $weekPlans
                 ->filter(fn (JourneyPlan $p) => $p->dueOn($d->copy()))
                 ->map(fn (JourneyPlan $p) => [
                     'name' => $p->client?->fullName() ?? '—',
@@ -280,107 +203,6 @@ class JourneyController extends Controller
         return back()->with('ok', __('journey.wiped', ['count' => $deleted]));
     }
 
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
-            'weekday' => ['required', 'integer', 'between:0,6'],
-            'every_weeks' => ['required', 'in:1,2,4'],
-            'client_ids' => ['required', 'array', 'min:1'],
-            'client_ids.*' => ['integer', 'exists:clients,id'],
-        ]);
-
-        // ⚠️ **`store` كانت بتتجاهل فلتر `index` نفسه** (تدقيق ٨/٨):
-        // الشاشة بتوري مناديب الفريق بس، لكن الـPOST كان بيقبل أي
-        // `user_id` وأي `client_ids`. نفس حارس `assign` بالظبط.
-        $rep = User::with('zones')->findOrFail($data['user_id']);
-
-        Scope::assertRep($request->user(), $rep);
-
-        foreach (Client::whereIn('id', $data['client_ids'])->get() as $c) {
-            Scope::assertClient($request->user(), $c);
-            Scope::assertSameTeam($rep, $c);
-            Scope::assertInZone($rep, $c);
-        }
-
-        $added = 0;
-
-        DB::transaction(function () use ($data, &$added) {
-            // ⚠️ الترتيب بيكمّل من آخر رقم موجود في اليوم ده. البداية
-            // من صفر في كل إضافة بتخلي العملاء الجداد يتصدّروا الخطة
-            // والمندوب يبدأ يومه من آخر المشوار.
-            $sort = (int) JourneyPlan::where('user_id', $data['user_id'])
-                ->where('weekday', $data['weekday'])
-                ->max('sort');
-
-            foreach ($data['client_ids'] as $clientId) {
-                // ⚠️ `firstOrCreate` مش `create` — العميل ممكن يكون
-                // في الخطة خلاص والـ UNIQUE هيرمي استثناء يوقّف الباقي
-                $plan = JourneyPlan::firstOrCreate(
-                    [
-                        'user_id' => $data['user_id'],
-                        'client_id' => $clientId,
-                        'weekday' => $data['weekday'],
-                    ],
-                    [
-                        'every_weeks' => (int) $data['every_weeks'],
-                        'sort' => ++$sort,
-                        'active' => true,
-                    ],
-                );
-
-                if ($plan->wasRecentlyCreated) {
-                    $added++;
-                }
-            }
-        });
-
-        return back()->with('ok', __('journey.added', ['count' => $added]));
-    }
-
-    public function destroy(Request $request, JourneyPlan $journeyPlan)
-    {
-        // ⚠️ **كان بلا أي فحص ملكية** — أي مدير بيمسح من خطة أي
-        // مندوب في الشركة بالـid. الفحص على المندوب صاحب الخطة.
-        Scope::assertRep($request->user(), $journeyPlan->user);
-
-        $journeyPlan->delete();
-
-        return back()->with('ok', __('journey.removed'));
-    }
-
-    /** ترتيب الزيارات في اليوم */
-    public function reorder(Request $request)
-    {
-        $data = $request->validate([
-            'order' => ['required', 'array'],
-            'order.*' => ['integer', 'exists:journey_plans,id'],
-        ]);
-
-        DB::transaction(function () use ($data, $request) {
-            // ⚠️ **كل الصفوف لازم تكون نفس المندوب ونفس اليوم.**
-            // `exists:` بتتأكد إن الصف موجود بس — بوست بايت أو معدّل
-            // كان بيرقّم يوم مندوب تاني ويخربط خط سيره في صمت.
-            $plans = JourneyPlan::with('user')->whereIn('id', $data['order'])->get();
-
-            abort_if(
-                $plans->pluck('user_id')->unique()->count() > 1
-                    || $plans->pluck('weekday')->unique()->count() > 1,
-                422,
-            );
-
-            // ⚠️ والفحص فوق بيضمن **اتساق** الصفوف بس، مش **ملكيتها**.
-            // من غير السطر ده أي مدير بيعيد ترتيب يوم أي مندوب.
-            Scope::assertRep($request->user(), $plans->first()?->user);
-
-            foreach ($data['order'] as $i => $id) {
-                JourneyPlan::whereKey($id)->update(['sort' => $i + 1]);
-            }
-        });
-
-        return back()->with('ok', __('journey.reordered'));
-    }
-
     /**
      * ═══ حفظ بورد الدراج أند دروب دفعة واحدة (٢١/٨) ═══
      *
@@ -406,6 +228,11 @@ class JourneyController extends Controller
             'rows.*.client_id' => ['required', 'integer', 'exists:clients,id'],
             'rows.*.weekday' => ['required', 'integer', 'between:0,6'],
             'rows.*.sort' => ['required', 'integer', 'min:1'],
+            // ═══ (١١/١١) التردد وأول زيارة والوقت من البورد نفسه ═══
+            // اختياريين — بوست من غيرهم بيسيب القيم الموجودة زي ما هي
+            'rows.*.every_weeks' => ['nullable', 'integer', 'in:1,2,4'],
+            'rows.*.starts_on' => ['nullable', 'date_format:Y-m-d'],
+            'rows.*.visit_at' => ['nullable', 'date_format:H:i'],
         ]);
 
         $rep = User::with('zones')->findOrFail($data['user_id']);
@@ -447,8 +274,15 @@ class JourneyController extends Controller
                 ->delete();
 
             foreach ($rows as $r) {
+                $sched = self::boardSchedule($r);
+
+                // ⚠️ أول زيارة بتحدد اليوم — السيرفر بيشتق اليوم منها
+                if (! empty($sched['starts_on'])) {
+                    $r['weekday'] = Carbon::createFromFormat('Y-m-d', $sched['starts_on'])->dayOfWeek;
+                }
+
                 if (! empty($r['id'])) {
-                    $existing->get((int) $r['id'])?->update([
+                    $existing->get((int) $r['id'])?->update($sched + [
                         'weekday' => (int) $r['weekday'],
                         'sort' => (int) $r['sort'],
                     ]);
@@ -464,7 +298,7 @@ class JourneyController extends Controller
                         'client_id' => (int) $r['client_id'],
                         'weekday' => (int) $r['weekday'],
                     ],
-                    [
+                    $sched + [
                         'every_weeks' => 1,
                         'sort' => (int) $r['sort'],
                         'active' => true,
@@ -482,6 +316,27 @@ class JourneyController extends Controller
             'added' => $added,
             'removed' => $removed,
         ]));
+    }
+
+    /**
+     * حقول الجدولة اللي البورد بعتها فعلاً — المفتاح الغايب ما بيتلمسش.
+     * فاضي = null (المستخدم مسح التاريخ/الوقت).
+     */
+    private static function boardSchedule(array $r): array
+    {
+        $out = [];
+
+        if (array_key_exists('every_weeks', $r) && $r['every_weeks'] !== null && $r['every_weeks'] !== '') {
+            $out['every_weeks'] = (int) $r['every_weeks'];
+        }
+
+        foreach (['starts_on', 'visit_at'] as $k) {
+            if (array_key_exists($k, $r)) {
+                $out[$k] = ($r[$k] ?? '') === '' ? null : $r[$k];
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -1033,678 +888,6 @@ class JourneyController extends Controller
     }
 
     // ═════════════ الخريطة الجغرافية وخط السير (١٣ أغسطس ٢٠٢٦) ═════════════
-
-    /**
-     * ═══════════════════════════════════════════════════════════
-     * «شاشة فيها إجمالي العملاء بالمحافظة والمناطق والمناديب،
-     *  وأقدر منها أعمل خط سير أسرع» — طلب المالك ١٣ أغسطس ٢٠٢٦
-     * ═══════════════════════════════════════════════════════════
-     *
-     * تلات مستويات: فرق المديرين فوق ← شجرة محافظة/منطقة في النص ←
-     * لوحة المنطقة بعملاءها (AJAX) اللي بيتعمل منها خط السير.
-     *
-     * ⚠️ **الكتابة بتمر على نفس مسار `store()`** — نفس الموديل ونفس
-     * حراس `Scope` ونفس منع التكرار. مفيش كاتب موازي لخطط السير:
-     * كاتب تاني معناه قاعدة تتصلّح في مكان وتفضل غلط في التاني.
-     *
-     * ⚠️ **العميل بيتجمّع بعمود `clients.governorate` مش بمحافظة
-     * الزون.** العمود على العميل هو المصدر المعتمد (`Client::governorateLabel`)
-     * — عميل اتنقل لزون في محافظة تانية وعموده لسه القديم بيبان
-     * في مكانه الصح، والتجميع بمحافظة الزون كان هينقله في صمت.
-     *
-     * ⚠️ **مفيش N+1**: الشجرة كلها من كويريز مجمّعة (`GROUP BY`)،
-     * وعملاء المنطقة مابيتحمّلوش غير لما اللوحة تتفتح — 670+ عميل
-     * في الصفحة الأولى كان هيخلّيها تقيلة على الفاضي.
-     */
-    public function geo(Request $request)
-    {
-        $viewer = $request->user();
-
-        // ═══ ١. كروت فرق المديرين ═══
-        // ⚠️ المدير بيشوف كارته هو بس — نفس سكوب `managerPools`.
-        $managers = Branch::scope(User::where('role', 'manager')->where('active', true))
-            ->when($viewer !== null && $viewer->role === 'manager',
-                fn ($q) => $q->whereKey($viewer->id))
-            ->orderBy('name')
-            ->get();
-
-        $managerIds = $managers->pluck('id');
-
-        // كويري واحدة لكل الفرق — مش كويري لكل مدير
-        // ⚠️ `Branch::scope` + `fieldVisibleTo` هنا كمان: الشاشة
-        // دلوقتي `role:admin,manager` بس، وأول ما تتفتح لمدير فرع
-        // الكويري دي هي الوحيدة اللي كانت هتعدّي الفروع.
-        $teamReps = $managerIds->isEmpty()
-            ? collect()
-            : User::fieldVisibleTo(Branch::scope(User::query()), $viewer)
-                ->whereIn('manager_id', $managerIds)
-                ->whereIn('role', User::FIELD_ROLES)
-                ->where('active', true)
-                ->orderBy('name')
-                ->get();
-
-        // ═══ عدّ البول: مدير × مندوب — كويري واحدة ═══
-        // ⚠️ **مش `GROUP BY rep_id` لوحده.** عدّ المندوب على مستوى
-        // الشركة كله بيتحط جنب إجمالي المدير فبيطلع صف شيبس مجموعها
-        // مش الرقم الكبير اللي فوقه: عميل مدير تاني متسكّن على مندوب
-        // من الفريق ده كان بيزوّد الشيب، وعميل بلا `rep_id` كان
-        // بيدخل الإجمالي ومايظهرش في أي شيب. التجميع بالاتنين مع بعض
-        // بيخلّي **كل عميل في البول له شيب واحد بالظبط**، والمجموع
-        // بيطابق العنوان بالمليم.
-        $poolRows = $managerIds->isEmpty()
-            ? collect()
-            : Branch::scope(Client::visibleTo(Client::query(), $viewer))
-                ->where('status', 'active')
-                ->whereIn('manager_id', $managerIds)
-                ->selectRaw('manager_id, rep_id, COUNT(*) as n')
-                ->groupBy('manager_id', 'rep_id')
-                ->get();
-
-        // تغطية جغرافية لكل مدير: مناطق + محافظات مميزة
-        $cover = Branch::scope(Client::visibleTo(Client::query(), $viewer))
-            ->where('status', 'active')
-            ->whereNotNull('manager_id')
-            ->selectRaw('manager_id, COUNT(DISTINCT zone_id) as zn, COUNT(DISTINCT governorate) as gn')
-            ->groupBy('manager_id')
-            ->get()
-            ->keyBy('manager_id');
-
-        // مناديب ظاهرين في البول بس مش في فريق المدير (داتا قديمة)
-        // — بيتجابوا في كويري واحدة عشان الشيب مايختفيش والمجموع
-        // مايتفركشش
-        $strayIds = $poolRows->pluck('rep_id')->filter()
-            ->diff($teamReps->pluck('id'))
-            ->diff($managerIds)
-            ->unique()->values();
-
-        $strays = $strayIds->isEmpty()
-            ? collect()
-            : User::whereIn('id', $strayIds->all())->get()->keyBy('id');
-
-        $byManager = $poolRows->groupBy('manager_id');
-        $repsByManager = $teamReps->groupBy('manager_id');
-
-        // ═══ فصل الرولز جوه الفريق (طلب المالك ١٣ أغسطس ٢٠٢٦) ═══
-        // «افصلي المناديب عن السواقين» — الشيبس كانت خليط واحد، فمدير
-        // عنده ٦ ناس مابتقولش كام مندوب بيع وكام سواق. الصفوف بقت
-        // مسمّاة بالرول، وكل شيب لسه بعدد عملاء صاحبه — فالمجموع
-        // بيفضل مطابق للرقم الكبير بالمليم زي ما كان.
-        $teams = $managers->map(function (User $m) use ($byManager, $repsByManager, $strays, $cover) {
-            $rows = $byManager->get($m->id, collect());
-
-            // 0 = «بدون مندوب أساسي» — مفتاح صالح في PHP وrep_id عمره
-            // ما هيبقى 0 في الداتابيز
-            $counts = $rows->mapWithKeys(fn ($r) => [(int) ($r->rep_id ?? 0) => (int) $r->n]);
-
-            $team = $repsByManager->get($m->id, collect());
-
-            $groups = [];
-
-            // ⚠️ الترتيب من `User::FIELD_ROLES` نفسها مش قايمة محلية —
-            // رول ميداني جديد بيظهر هنا لوحده من غير ما حد يفتكر.
-            foreach (User::FIELD_ROLES as $role) {
-                $members = $team->where('role', $role)
-                    ->map(fn (User $r) => [
-                        'user' => $r,
-                        'clients' => (int) ($counts[$r->id] ?? 0),
-                    ])
-                    ->values();
-
-                if ($members->isEmpty()) {
-                    continue;
-                }
-
-                $groups[] = [
-                    'role' => $role,
-                    'label' => __('journey.geo_role_'.$role),
-                    'reps' => $members->all(),
-                    'clients' => (int) $members->sum('clients'),
-                ];
-            }
-
-            // مناديب من بره الفريق ليهم عملاء في البول — بيبانوا عشان
-            // المجموع يقفل، واللي بيقرا يعرف إن فيه تسكين غريب
-            $others = collect();
-
-            foreach ($counts as $rid => $n) {
-                if ($rid === 0 || $rid === (int) $m->id || $team->contains('id', $rid)) {
-                    continue;
-                }
-
-                if ($strays->has($rid)) {
-                    $others->push(['user' => $strays->get($rid), 'clients' => $n]);
-                }
-            }
-
-            if ($others->isNotEmpty()) {
-                $groups[] = [
-                    'role' => 'other',
-                    'label' => __('journey.geo_role_other'),
-                    'reps' => $others->values()->all(),
-                    'clients' => (int) $others->sum('clients'),
-                ];
-            }
-
-            return [
-                'manager' => $m,
-                'groups' => $groups,
-                // عدد مناديب البيع — زرار «توزيع تلقائي» مالوش لازمة
-                // من غيرهم (السواق والبروموتر مستبعدين افتراضياً)
-                'sales_count' => (int) $team->where('role', 'sales_agent')->count(),
-                'driver_count' => (int) $team->where('role', 'driver')->count(),
-                'own' => (int) ($counts[$m->id] ?? 0),
-                'no_rep' => (int) ($counts[0] ?? 0),
-                'clients' => (int) $rows->sum('n'),
-                'zones' => (int) ($cover[$m->id]->zn ?? 0),
-                'govs' => (int) ($cover[$m->id]->gn ?? 0),
-            ];
-        })->values()->all();
-
-        // ═══ ٢. فلتر الفريق — باراميتر مش فلترة متصفح ═══
-        // ⚠️ الفلترة في الكويري عن قصد: مع 670+ عميل، فلترة الشجرة
-        // في المتصفح معناها إن الأرقام (المحافظات والمناطق والنِسَب)
-        // تفضل بتاعة الكل والعناوين تكدب على اللي بيقرا.
-        $picked = $request->filled('manager')
-            ? $managers->firstWhere('id', (int) $request->input('manager'))
-            : null;
-
-        $search = trim((string) $request->input('q', ''));
-
-        // ═══ فلتر «بدون مندوب» (إصلاح ١٣ أغسطس ٢٠٢٦) ═══
-        // ⚠️ **ده كان باج**: شيب «بدون مندوب» في كارت المدير كان جوه
-        // اللينك بتاع الكارت كله، فالدوسة عليه كانت بتفلتر على المدير
-        // وبس — والشاشة اللي بتفتح مليانة **مناديب** في عمود «بيغطيها».
-        // بقى فلتر حقيقي في السيرفر: الشجرة والأرقام واللوحة كلها
-        // بتتقص على `rep_id IS NULL`.
-        $noRepOnly = $request->boolean('norep');
-
-        // مُنتج الكويري الأساسية — كل نداء بيرجّع بيلدر نضيف عشان
-        // `selectRaw` بتاع كويري ماتسربش على اللي بعدها
-        $base = function () use ($viewer, $picked, $search, $noRepOnly) {
-            $q = Branch::scope(Client::visibleTo(Client::query(), $viewer))
-                ->where('status', 'active');
-
-            if ($picked !== null) {
-                $q->where('manager_id', $picked->id);
-            }
-
-            if ($noRepOnly) {
-                $q->whereNull('rep_id');
-            }
-
-            if ($search !== '') {
-                Client::search($q, $search);
-            }
-
-            return $q;
-        };
-
-        // ═══ ٣. الشجرة — أربع كويريز مجمّعة وبس ═══
-        // (أ) عدّ العملاء بالمحافظة × المنطقة — بتخدم المستويين مع بعض
-        $cells = $base()
-            ->selectRaw('governorate, zone_id, COUNT(*) as n')
-            ->groupBy('governorate', 'zone_id')
-            ->get();
-
-        // (ب) اللي مالوش خطة سير شغالة — بنفس التجميع
-        $noPlanCells = $base()
-            ->whereNotIn('id', JourneyPlan::where('active', true)->select('client_id'))
-            ->selectRaw('governorate, zone_id, COUNT(*) as n')
-            ->groupBy('governorate', 'zone_id')
-            ->get()
-            ->mapWithKeys(fn ($r) => [($r->governorate ?: '_none').'|'.($r->zone_id ?: '_none') => (int) $r->n]);
-
-        // (ج) مين بيغطي كل منطقة — من `rep_id` بتاع عملاءها
-        $zoneRepCells = $base()
-            ->whereNotNull('rep_id')
-            ->whereNotNull('zone_id')
-            ->selectRaw('zone_id, rep_id, COUNT(*) as n')
-            ->groupBy('zone_id', 'rep_id')
-            ->get();
-
-        // (د) الأرقام العامة — كويري واحدة بتلات مجاميع
-        $agg = $base()
-            ->selectRaw('COUNT(*) as total, SUM(rep_id IS NULL) as no_rep, SUM(lat IS NULL) as no_loc')
-            ->first();
-
-        // لوك-أب صغيّرة (عشرات الصفوف): أسماء المناطق + المناديب
-        $zoneNames = Zone::whereIn('id', $cells->pluck('zone_id')->filter()->unique()->all())
-            ->get()->keyBy('id');
-
-        $repUsers = User::whereIn('id', $zoneRepCells->pluck('rep_id')->unique()->all())
-            ->get()->keyBy('id');
-
-        $repsByZone = $zoneRepCells->groupBy('zone_id');
-
-        $total = (int) ($agg->total ?? 0);
-        $noPlanTotal = (int) $noPlanCells->sum();
-
-        // ═══ بناء الشجرة في الذاكرة — مفيش كويري جوه اللوب ═══
-        $tree = [];
-
-        foreach ($cells as $cell) {
-            $gk = $cell->governorate ?: '_none';
-            $zk = $cell->zone_id ? (int) $cell->zone_id : null;
-            $n = (int) $cell->n;
-
-            $tree[$gk] ??= [
-                'key' => $gk,
-                'label' => $gk === '_none' ? __('geo.no_governorate') : Governorates::label($gk),
-                'clients' => 0,
-                'no_plan' => 0,
-                'zones' => [],
-            ];
-
-            $tree[$gk]['clients'] += $n;
-
-            $noPlan = $noPlanCells[$gk.'|'.($zk ?: '_none')] ?? 0;
-            $tree[$gk]['no_plan'] += $noPlan;
-
-            $zone = $zk !== null ? $zoneNames->get($zk) : null;
-
-            $tree[$gk]['zones'][] = [
-                'id' => $zk,
-                'name' => $zone?->displayName() ?? __('journey.geo_no_zone'),
-                'code' => $zone?->code,
-                'clients' => $n,
-                'no_plan' => $noPlan,
-                'reps' => $zk === null ? [] : $repsByZone->get($zk, collect())
-                    ->sortByDesc('n')
-                    ->map(fn ($r) => ['user' => $repUsers->get($r->rep_id), 'n' => (int) $r->n])
-                    ->filter(fn ($r) => $r['user'] !== null)
-                    ->values()->all(),
-            ];
-        }
-
-        // ⚠️ ترتيب المحافظات جغرافي (`Governorates::keys`) مش أبجدي —
-        // القاهرة الكبرى فوق لأنها أغلب العملاء، و«بدون محافظة» آخر
-        // حاجة لأنها بند تنضيف مش مكان.
-        $order = array_flip(Governorates::keys());
-
-        uasort($tree, fn ($a, $b) => ($order[$a['key']] ?? 900) <=> ($order[$b['key']] ?? 900));
-
-        foreach ($tree as $gk => $row) {
-            usort($tree[$gk]['zones'], fn ($a, $b) => $b['clients'] <=> $a['clients']);
-        }
-
-        // ═══ ٤. أول زيارة لكل (يوم × تردد) — معاينة التاريخ ═══
-        // ⚠️ **مفيش جدول تواريخ.** الخطة نمط أسبوعي، والمالك عايز
-        // «يختار تاريخ» — فبنحسب أول استحقاق من `dueOn` نفسها ونعرضه
-        // جنب الاختيار. لو حسبناه في الجافاسكربت كان هيتفرّع منطق
-        // التردد لنسختين، وأول تعديل في `epoch()` هيخلّيهم مختلفين.
-        $nextDue = [];
-
-        foreach (JourneyPlan::WEEKDAYS as $w) {
-            foreach (JourneyPlan::FREQUENCIES as $f) {
-                $d = JourneyPlan::nextDue($w, $f);
-
-                $nextDue[$w.'-'.$f] = $d === null
-                    ? '—'
-                    : __('journey.day_'.$w).' — '.$d->format('Y-m-d');
-            }
-        }
-
-        return view('ops.geo_planner', [
-            'teams' => $teams,
-            'picked' => $picked,
-            'tree' => array_values($tree),
-            'total' => $total,
-            // ⚠️ «بدون محافظة» بند تنضيف مش محافظة — عدّه في الرقم
-            // كان بيدي «١٤ محافظة» والشركة شغالة في ١٣
-            'govCount' => count(array_diff(array_keys($tree), ['_none'])),
-            'zoneCount' => $cells->pluck('zone_id')->filter()->unique()->count(),
-            'noPlanTotal' => $noPlanTotal,
-            'noRepTotal' => (int) ($agg->no_rep ?? 0),
-            'noLocTotal' => (int) ($agg->no_loc ?? 0),
-            'nextDue' => $nextDue,
-            'filters' => ['q' => $search, 'manager' => $picked?->id, 'norep' => $noRepOnly],
-        ]);
-    }
-
-    /**
-     * لوحة المنطقة — JSON خفيف بيتحمّل وقت الفتح بس.
-     *
-     * ⚠️ **AJAX مش تضمين.** 670+ عميل موزّعين على ~49 منطقة: تضمينهم
-     * كلهم في الصفحة معناه صفحة بميجابايت الناس هتفتحها عشان تبص على
-     * منطقة واحدة. اللوحة بتجيب منطقتها وبس.
-     *
-     * ⚠️ **العرض متسكوب زي الكتابة**: `visibleTo` + `Branch::scope`.
-     * فلترة القايمة مش حماية، بس الرد ده بيتقري من الشاشة فلازم
-     * يبقى نفس السكوب اللي الحارس هيطبّقه وقت الحفظ.
-     *
-     * ⚠️ **نفس فلتر `q` بتاع الشجرة لازم يتبعت هنا** — صف بيقول
-     * «٣ محلات» يفتح لوحة فيها ٤٠، و«اختيار الكل» يخطّط لمحلات
-     * اللي بيبص عمره ما شافها.
-     *
-     * ⚠️ **الخطط بتتقسم قسمين**: `plans` اللي الفاعل مسؤول عنها
-     * (`Scope::canRep`) — دي اللي ليها زرار شيل والفورم بيتملى منها،
-     * و`foreign` خطط فرق تانية بتتعرض للعلم بس. لو رجّعناهم مع بعض،
-     * زرار «شيل» كان بيبعت الاتنين في دفعة واحدة و`geoUnplan` يرمي
-     * 403 على الكل — والمستخدم يشوف «حصل خطأ» من غير سبب.
-     */
-    public function geoZone(Request $request, Zone $zone)
-    {
-        $viewer = $request->user();
-        $search = trim((string) $request->input('q', ''));
-
-        // ⚠️ نفس فلتر «بدون مندوب» بتاع الشجرة لازم يوصل هنا — صف
-        // بيقول «٤ محلات بلا مندوب» يفتح لوحة فيها ٤٠ محل، والمالك
-        // يفتكر الفلتر مابيشتغلش.
-        $noRepOnly = $request->boolean('norep');
-
-        $clients = Branch::scope(
-            Client::visibleTo(Client::with(['group', 'rep']), $viewer)
-        )
-            ->where('status', 'active')
-            ->where('zone_id', $zone->id)
-            ->when($request->filled('manager'),
-                fn ($q) => $q->where('manager_id', (int) $request->input('manager')))
-            ->when($noRepOnly, fn ($q) => $q->whereNull('rep_id'))
-            ->when($search !== '', fn ($q) => Client::search($q, $search))
-            ->orderBy('name')
-            ->get();
-
-        // ═══ سياق المحافظة (طلب المالك ١٣/٨) ═══
-        // «في الشاشة الثانية عاوز المحافظة والمناطق» — اللوحة كانت
-        // بتقول اسم المنطقة وبس. دلوقتي فيها **المحافظة › المنطقة**
-        // وكام محل في كل مستوى، عشان اللي بيخطط يعرف نسبة المنطقة
-        // من محافظتها قبل ما يوزّع أيام الأسبوع.
-        //
-        // ⚠️ العدّ بعمود `clients.governorate` مش بمحافظة الزون —
-        // نفس مصدر الشجرة بالظبط (`geo()`)، وإلا الرقمين بيختلفوا.
-        $govKey = (string) ($zone->governorate ?? '');
-
-        $govBase = fn () => Branch::scope(Client::visibleTo(Client::query(), $viewer))
-            ->where('status', 'active')
-            ->when($request->filled('manager'),
-                fn ($q) => $q->where('manager_id', (int) $request->input('manager')))
-            ->when($noRepOnly, fn ($q) => $q->whereNull('rep_id'))
-            ->when($search !== '', fn ($q) => Client::search($q, $search))
-            ->when($govKey !== '', fn ($q) => $q->where('governorate', $govKey),
-                fn ($q) => $q->whereNull('governorate'));
-
-        $govClients = (int) $govBase()->count();
-        $govZones = (int) $govBase()->distinct()->count('zone_id');
-
-        // ⚠️ `active` بس — نفس تعريف «مخطط» اللي الشجرة والـKPIs
-        // شغالين بيه (`geo()` بتعدّ اللي مالوش خطة `active`). خطة
-        // موقوفة كانت هتوري بادج أخضر في اللوحة والصف نفسه محسوب
-        // «مش في خطة» في الشجرة.
-        $plans = $clients->isEmpty()
-            ? collect()
-            : JourneyPlan::with('user')
-                ->whereIn('client_id', $clients->pluck('id'))
-                ->where('active', true)
-                ->orderBy('weekday')->orderBy('sort')
-                ->get()
-                ->groupBy('client_id');
-
-        // ⚠️ `with('zones')` إجباري — `Scope::inZone` بتقرا مناطق
-        // المندوب، ومن غير التحميل المسبق دي كويري لكل مندوب لكل عميل.
-        $reps = User::fieldVisibleTo(Branch::scope(User::with('zones')), $viewer)
-            ->whereIn('role', User::FIELD_WORK_ROLES)
-            ->where('active', true)
-            ->orderBy('name')
-            ->get()
-            ->filter(fn (User $r) => Scope::canRep($viewer, $r))
-            ->values();
-
-        $rows = $clients->map(function (Client $c) use ($reps, $plans, $viewer) {
-            // المسموح لهم فعلاً على العميل ده — نفس الفحص اللي
-            // `geoPlan` هيعمله في السيرفر، عشان القايمة ماتوريش
-            // اختيار بيترفض بعدين
-            $allowed = $reps
-                ->filter(fn (User $r) => Scope::sameTeam($r, $c) && Scope::inZone($r, $c))
-                ->map(fn (User $r) => ['id' => $r->id, 'name' => $r->displayName()])
-                ->values()->all();
-
-            $all = $plans->get($c->id, collect());
-
-            // ⚠️ نفس فلتر `geoPlan` بالحرف — لو اللوحة رجّعت خطة
-            // الفاعل مش مسؤول عنها كخطة عادية، «شيل» يرمي 403
-            // والحفظ يضيف محطة تانية لنفس المحل بدل ما يحرّك القديمة
-            $mine = $all->filter(fn (JourneyPlan $p) => Scope::canRep($viewer, $p->user))->values();
-            $foreign = $all->reject(fn (JourneyPlan $p) => Scope::canRep($viewer, $p->user))->values();
-
-            return [
-                'id' => $c->id,
-                'name' => $c->fullName(),
-                'code' => (string) $c->code,
-                'category' => $c->categoryLabel(),
-                'category_class' => $c->categoryClass(),
-                'rep_id' => $c->rep_id ? (int) $c->rep_id : null,
-                'rep' => $c->rep?->displayName(),
-                'has_location' => $c->lat !== null,
-                'reps' => $allowed,
-                'plans' => $mine->map(fn (JourneyPlan $p) => [
-                    'id' => $p->id,
-                    'user_id' => (int) $p->user_id,
-                    'user' => $p->user?->displayName() ?? '—',
-                    'weekday' => (int) $p->weekday,
-                    'every_weeks' => (int) $p->every_weeks,
-                    // مرساة التاريخ والوقت — بتملى خانتي الصف عند الفتح
-                    // (`Y-m-d` للتاريخ و`H:i` لخانة الوقت، والعرض `h:i A`)
-                    'starts_on' => $p->starts_on?->format('Y-m-d'),
-                    'visit_at' => $p->visitTimeValue(),
-                    'visit_label' => $p->visitTimeLabel(),
-                    'label' => __('journey.geo_planned_as', [
-                        'rep' => $p->user?->displayName() ?? '—',
-                        'day' => $p->weekdayLabel(),
-                        'freq' => $p->frequencyLabel(),
-                    ]),
-                ])->values()->all(),
-                'foreign' => $foreign->map(fn (JourneyPlan $p) => __('journey.geo_planned_as', [
-                    'rep' => $p->user?->displayName() ?? '—',
-                    'day' => $p->weekdayLabel(),
-                    'freq' => $p->frequencyLabel(),
-                ]))->values()->all(),
-            ];
-        })->values()->all();
-
-        return response()->json([
-            'zone' => [
-                'id' => $zone->id,
-                'name' => $zone->displayName(),
-                'code' => (string) $zone->code,
-                'governorate' => $zone->governorateLabel(),
-                'gov_clients' => $govClients,
-                'gov_zones' => $govZones,
-                'zone_clients' => $clients->count(),
-                // كام محل في المنطقة لسه بلا مسؤول أساسي — منها بيبان
-                // زرار «وزّع المنطقة دي» جوه اللوحة
-                'zone_no_rep' => (int) $clients->whereNull('rep_id')->count(),
-            ],
-            'clients' => $rows,
-        ]);
-    }
-
-    /**
-     * حفظ خط السير للمحلات المحددة — دفعة واحدة في ترانزاكشن واحدة.
-     *
-     * ⚠️ **نفس حراس `store()` بالحرف**: `assertRep` + `assertClient` +
-     * `assertSameTeam` + `assertInZone` (وفيها تخطي بول الفريق بتاع
-     * ١١/٨). الحارس **قبل** الترانزاكشن — صف واحد مرفوض بيوقّف الدفعة
-     * كلها، مايبقاش نص خط سير محفوظ ونصه لأ.
-     *
-     * ═══ منع التكرار — تلات حالات بالترتيب ═══
-     * 1. نفس (مندوب × عميل × يوم) موجودة → **تحديث التردد** وتفعيلها.
-     * 2. للعميل خطة **واحدة** بس (لأي مندوب الفاعل مسؤول عنه) →
-     *    **بتتحرّك**: المندوب واليوم والتردد بيتغيّروا في نفس الصف.
-     *    ده اللي يمنع نفس المحل يتحط لمندوبين والاتنين يروحوه.
-     * 3. للعميل أكتر من خطة (زيارتين في الأسبوع بقرار) → **بنضيف**
-     *    صف جديد ومابنلمسش القديم. تحويل الحالة دي لتحديث كان هيقلّم
-     *    خطة أسبوعين لواحدة في صمت.
-     *
-     * ⚠️ و`firstOrCreate` في حالة الإضافة زي `store()` — الـUNIQUE
-     * `(user_id, client_id, weekday)` بيرمي استثناء يوقّف الباقي.
-     */
-    public function geoPlan(Request $request)
-    {
-        $data = $request->validate([
-            'rows' => ['required', 'array', 'min:1'],
-            'rows.*.client_id' => ['required', 'integer', 'exists:clients,id'],
-            'rows.*.user_id' => ['required', 'integer', 'exists:users,id'],
-            'rows.*.weekday' => ['required', 'integer', 'between:0,6'],
-            'rows.*.every_weeks' => ['required', 'integer', 'in:1,2,4'],
-            // ═══ تاريخ أول زيارة ووقتها (١٣ أغسطس ٢٠٢٦) ═══
-            // الاتنين اختياريين — الحفظ من غيرهم بيفضل شغّال زي ما كان.
-            'rows.*.starts_on' => ['nullable', 'date_format:Y-m-d'],
-            'rows.*.visit_at' => ['nullable', 'date_format:H:i'],
-        ]);
-
-        $viewer = $request->user();
-
-        // ⚠️ **اليوم بيتشتق من التاريخ في السيرفر** لما التاريخ يتبعت.
-        // الشاشة بتعمل نفس الاشتقاق عشان المستخدم يشوفه، بس الاعتماد
-        // عليها معناه إن بوست معدّل يحفظ خطة يوم اتنين بتاريخ بداية
-        // يوم خميس — نمط مايستحقش في تاريخه المعروض أبداً.
-        $rows = collect($data['rows'])->map(function (array $row) {
-            $start = $row['starts_on'] ?? null;
-
-            if ($start !== null && $start !== '') {
-                $row['weekday'] = (int) Carbon::createFromFormat('Y-m-d', $start)
-                    ->startOfDay()->dayOfWeek;
-            } else {
-                $row['starts_on'] = null;
-            }
-
-            if (($row['visit_at'] ?? '') === '') {
-                $row['visit_at'] = null;
-            }
-
-            return $row;
-        });
-
-        $reps = User::with('zones')->whereIn('id', $rows->pluck('user_id')->unique()->all())
-            ->get()->keyBy('id');
-        $clients = Client::whereIn('id', $rows->pluck('client_id')->unique()->all())
-            ->get()->keyBy('id');
-
-        foreach ($rows as $row) {
-            $rep = $reps->get((int) $row['user_id']);
-            $client = $clients->get((int) $row['client_id']);
-
-            Scope::assertRep($viewer, $rep);
-            Scope::assertClient($viewer, $client);
-            Scope::assertSameTeam($rep, $client);
-            Scope::assertInZone($rep, $client);
-        }
-
-        // خطط العملاء دول كلها مرة واحدة — مش كويري لكل صف
-        $existing = JourneyPlan::with('user')
-            ->whereIn('client_id', $rows->pluck('client_id')->unique()->all())
-            ->get()
-            ->filter(fn (JourneyPlan $p) => Scope::canRep($viewer, $p->user))
-            ->groupBy('client_id');
-
-        // بذرة الترتيب لكل (مندوب × يوم) — بتزيد في الذاكرة بعد كده
-        $seed = JourneyPlan::whereIn('user_id', $reps->keys()->all())
-            ->selectRaw('user_id, weekday, MAX(sort) as mx')
-            ->groupBy('user_id', 'weekday')
-            ->get()
-            ->mapWithKeys(fn ($r) => [$r->user_id.'|'.$r->weekday => (int) $r->mx])
-            ->all();
-
-        $added = 0;
-        $moved = 0;
-
-        // فحص واحد للريكوست كله — مش لكل صف
-        $hasSchedule = \Illuminate\Support\Facades\Schema::hasColumn('journey_plans', 'starts_on');
-
-        DB::transaction(function () use ($rows, $existing, $hasSchedule, &$seed, &$added, &$moved) {
-            foreach ($rows as $row) {
-                $clientId = (int) $row['client_id'];
-                $userId = (int) $row['user_id'];
-                $weekday = (int) $row['weekday'];
-                $freq = (int) $row['every_weeks'];
-
-                // ⚠️ المرساة بتتكتب في **كل** المسارات التلاتة بنفس
-                // الشكل — لو مسار واحد نساها، تعديل خطة موجودة كان
-                // هيسيب تاريخ بداية قديم جنب يوم جديد.
-                //
-                // ⚠️ **والحارس مش رفاهية**: السيرفر اللايف بيترفع
-                // بالإيد، فممكن الكود يوصل قبل المايجريشن. من غير
-                // الفحص ده، حفظ خط السير — اللي كان شغّال — كان
-                // هيرمي «عمود مش موجود» على كل دفعة.
-                $schedule = $hasSchedule ? [
-                    'starts_on' => $row['starts_on'] ?? null,
-                    'visit_at' => $row['visit_at'] ?? null,
-                ] : [];
-
-                $mine = $existing->get($clientId, collect());
-
-                // ١. نفس المندوب ونفس اليوم — تحديث التردد وبس
-                $same = $mine->first(fn (JourneyPlan $p) => (int) $p->user_id === $userId
-                    && (int) $p->weekday === $weekday);
-
-                if ($same !== null) {
-                    $same->update($schedule + ['every_weeks' => $freq, 'active' => true]);
-
-                    continue;
-                }
-
-                $key = $userId.'|'.$weekday;
-                $seed[$key] = ($seed[$key] ?? 0) + 1;
-
-                // ٢. خطة واحدة بس للعميل — بتتحرّك مكانها
-                if ($mine->count() === 1) {
-                    $mine->first()->update($schedule + [
-                        'user_id' => $userId,
-                        'weekday' => $weekday,
-                        'every_weeks' => $freq,
-                        'sort' => $seed[$key],
-                        'active' => true,
-                    ]);
-                    $moved++;
-
-                    continue;
-                }
-
-                // ٣. مفيش خطة، أو أكتر من واحدة (متعدد الأيام بقرار)
-                $plan = JourneyPlan::firstOrCreate(
-                    ['user_id' => $userId, 'client_id' => $clientId, 'weekday' => $weekday],
-                    $schedule + ['every_weeks' => $freq, 'sort' => $seed[$key], 'active' => true],
-                );
-
-                if ($plan->wasRecentlyCreated) {
-                    $added++;
-                } else {
-                    $plan->update($schedule + ['every_weeks' => $freq, 'active' => true]);
-                }
-            }
-        });
-
-        return response()->json([
-            'ok' => true,
-            'message' => __('journey.geo_saved', ['added' => $added, 'moved' => $moved]),
-        ]);
-    }
-
-    /** شيل محطات من خط السير — نفس حارس `destroy()` صف صف */
-    public function geoUnplan(Request $request)
-    {
-        $data = $request->validate([
-            'plan_ids' => ['required', 'array', 'min:1'],
-            'plan_ids.*' => ['integer', 'exists:journey_plans,id'],
-        ]);
-
-        $plans = JourneyPlan::with('user')->whereIn('id', $data['plan_ids'])->get();
-
-        foreach ($plans as $plan) {
-            Scope::assertRep($request->user(), $plan->user);
-        }
-
-        $removed = 0;
-
-        DB::transaction(function () use ($plans, &$removed) {
-            $removed = (int) JourneyPlan::whereIn('id', $plans->pluck('id')->all())->delete();
-        });
-
-        return response()->json([
-            'ok' => true,
-            'message' => __('journey.geo_removed', ['count' => $removed]),
-        ]);
-    }
 
     /**
      * ═══════════════════════════════════════════════════════════

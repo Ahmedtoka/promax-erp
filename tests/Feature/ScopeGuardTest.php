@@ -223,22 +223,25 @@ class ScopeGuardTest extends TestCase
             ->assertForbidden();
     }
 
-    /** ونفس الحارس على خطة السير — `store` كانت بتتجاهل فلتر `index` */
+    /** ونفس الحارس على خطة السير — راسم خط السير (١١/١١ بدل `store`) */
     public function test_journey_plan_respects_team_scope(): void
     {
         [$mgrA] = $this->team('A');
         [, $repB, $clientB] = $this->team('B');
 
         $this->actingAs($mgrA)
-            ->post(route('ops.journeys.store'), [
-                'user_id' => $repB->id,
+            ->post(route('ops.geo.save'), [
+                'rep_id' => $repB->id,
                 'weekday' => 1,
                 'every_weeks' => 1,
-                'client_ids' => [$clientB->id],
+                'ids' => [$clientB->id],
             ])
             ->assertForbidden();
+
+        $this->assertSame(0, JourneyPlan::count());
     }
 
+    /** البورد (`sync`) على مندوب فريق تاني — 403 ومفيش مسح (بدل `destroy`) */
     public function test_journey_plan_delete_respects_team_scope(): void
     {
         [$mgrA] = $this->team('A');
@@ -254,8 +257,10 @@ class ScopeGuardTest extends TestCase
         ]);
 
         $this->actingAs($mgrA)
-            ->delete(route('ops.journeys.destroy', $plan))
+            ->post(route('ops.journeys.sync'), ['user_id' => $repB->id, 'rows' => []])
             ->assertForbidden();
+
+        $this->assertNotNull($plan->fresh());
     }
 
     /**

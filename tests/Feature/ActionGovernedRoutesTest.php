@@ -123,13 +123,13 @@ class ActionGovernedRoutesTest extends TestCase
         $this->assertSame('ops.assignments', Access::ACTIONS['act.field.plan'][1]);
 
         $plain = $this->customOn('accountant', []);
-        $this->assertFalse(Access::allows($plain, 'ops.journeys.store'));
-        $this->assertSame(403, $this->gate($plain, 'ops.journeys.store'));
+        $this->assertFalse(Access::allows($plain, 'ops.journeys.sync'));
+        $this->assertSame(403, $this->gate($plain, 'ops.journeys.sync'));
 
         $u = $this->customOn('accountant', ['ops.assignments' => true]);
         $key = $u->permRoleKey();
 
-        foreach (['ops.journeys.store', 'ops.assignments.assign', 'ops.geo.plan'] as $route) {
+        foreach (['ops.journeys.sync', 'ops.assignments.assign', 'ops.geo.save'] as $route) {
             $this->assertSame('act.field.plan', Access::actionKeyFor($route));
             $this->assertTrue(Access::allows($u, $route), $route);
             $this->assertTrue(Access::effectiveFor($key, $route), $route);
@@ -163,13 +163,13 @@ class ActionGovernedRoutesTest extends TestCase
 
     public function test_page_deny_does_not_close_covered_routes_but_group_deny_does(): void
     {
-        // منع صفحة ops.journeys: صف البادئة مابيقفلش ops.journeys.store (أكشن
+        // منع صفحة ops.journeys: صف البادئة مابيقفلش ops.journeys.sync (أكشن
         // act.field.plan صفحته ops.assignments) — بس المسح صفحته ops.journeys
         // فافتراضيه («الرول ∧ شايف الصفحة») بيقفل
         $u = $this->customOn('manager', ['ops.journeys' => false]);
         $this->assertFalse(Access::allows($u, 'ops.journeys'));
-        $this->assertTrue(Access::allows($u, 'ops.journeys.store'));
-        $this->assertSame(200, $this->gate($u, 'ops.journeys.store'));
+        $this->assertTrue(Access::allows($u, 'ops.journeys.sync'));
+        $this->assertSame(200, $this->gate($u, 'ops.journeys.sync'));
         $this->assertFalse(Access::allows($u, 'ops.journeys.wipe'));
         $this->assertSame(403, $this->gate($u, 'ops.journeys.wipe'));
 
