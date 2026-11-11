@@ -37,6 +37,7 @@ use Illuminate\Support\Facades\Storage;
  *   vatsplit  قوايم الكاش فان/بونجور (شاملة) ÷ 1.14، ومستنداتهم فصل ضريبة بنفس المبلغ
  *   items     بنود من الخطة (أسعار الشيت غير الشاملة) — بتكسب على اللي فوق
  *   taxable   كل العملاء والسلاسل خاضعين (قرار ١٠/١١)
+ *   activate  قوايم صافي موقوفة بترجع شغّالة (من الخطة `activate`) — قبل ما العملاء يتنقلوا عليها
  *   reactivate فروع اتقفلت غلط كـ«مكرر» ترجع active (من الخطة)
  *   link      فروع سايبة تتربط بسلستها (من الخطة)
  *   assign    قايمة + خصم لكل عميل/سلسلة — عميل، عقده السارٍ، السلسلة وعقدها (من الخطة)
@@ -56,7 +57,7 @@ class ApplyPriceSheet extends Command
         {--user= : اليوزر اللي التعديلات تتسجّل باسمه (الافتراضي أول أدمن)}
         {--log= : مسار نسخة إضافية من سجل التغييرات}
         {--rollback= : رجّع snapshot اتعمل قبل كده}
-        {--only= : خطوات معيّنة: rounding,incl,items,taxable,reactivate,link,assign,lists,retire,rename,docs}
+        {--only= : خطوات معيّنة: rounding,incl,items,activate,taxable,reactivate,link,assign,lists,retire,rename,docs}
         {--no-docs : من غير إعادة تسعير المستندات}';
 
     protected $description = 'تطبيق شيت أسعار العملاء على البيانات الأساسية (dry-run افتراضياً)';
@@ -104,6 +105,9 @@ class ApplyPriceSheet extends Command
         $run = function () use ($want, $by) {
             if ($want('rounding') || $want('incl') || $want('items')) {
                 $this->listItems($want, $by);
+            }
+            if ($want('activate')) {
+                $this->activateLists();
             }
             if ($want('reactivate')) {
                 $this->reactivate();
@@ -306,6 +310,31 @@ class ApplyPriceSheet extends Command
      * العميل نفسه، وعقده الشخصي السارٍ (بيكسب عليه)، وبيانات السلسلة
      * وعقدها السارٍ (عشان أي فرع جديد ياخدهم).
      */
+    /**
+     * قوايم بترجع شغّالة (شيت ١١/١١: أوسكار بقى صافي بأسعاره — «الاستهلاكي × ٠٫٨ + ضريبة»
+     * وبروكب ١٢٠ — مايتقلش لخصم واحد على قايمة، فرجعت قايمة `oscar`).
+     *
+     * ⚠️ **قبل `assign`** — `Pricing::listRowFor` بيتجاهل القايمة الموقوفة، فالعميل
+     * اللي يتنقل عليها وهي موقوفة كان هيتحاسب بالافتراضية في صمت.
+     */
+    private function activateLists(): void
+    {
+        foreach ($this->plan['activate'] ?? [] as $code) {
+            $l = PriceList::where('code', $code)->first();
+            if (! $l) {
+                $this->logRow('activate', 'price_list', null, $code, 'active', null, null, '⚠️ القايمة مش موجودة');
+
+                continue;
+            }
+            if ($l->active) {
+                continue;
+            }
+            $this->snapshot['lists'][] = ['id' => $l->id, 'active' => false];
+            $this->logRow('activate', 'price_list', $l->id, $code, 'active', false, true, 'ترجع شغّالة: عملاء الشيت عليها');
+            $l->forceFill(['active' => true, 'activated_at' => now()])->save();
+        }
+    }
+
     private function assign(): void
     {
         foreach ($this->plan['assign'] ?? [] as $a) {

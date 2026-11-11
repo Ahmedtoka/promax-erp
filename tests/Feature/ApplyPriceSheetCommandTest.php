@@ -121,4 +121,31 @@ class ApplyPriceSheetCommandTest extends TestCase
         $this->assertFalse((bool) $net->fresh()->active, 'القايمة اللي فضيت تتوقف');
         $this->assertNull(PriceList::where('code', 'deadlist')->first(), 'القايمة اللي مالهاش أي مرجع تتمسح');
     }
+
+    public function test_activate_turns_a_stopped_net_list_on_before_clients_move_onto_it(): void
+    {
+        // شيت ١١/١١: أوسكار رجع على قايمة oscar الصافي — كانت موقوفة، و`listRowFor`
+        // بيتجاهل الموقوفة فالعميل كان هيتحاسب بالافتراضية في صمت
+        [$new, , , $p, $c] = $this->scene();
+        $p->update(['barcode' => '6220000000009']);
+        $oscar = PriceList::create(['code' => 'oscar', 'name' => 'اوسكار', 'active' => false, 'is_default' => false]);
+
+        $plan = tempnam(sys_get_temp_dir(), 'plan');
+        file_put_contents($plan, json_encode([
+            'items' => [['list' => 'oscar', 'barcode' => '6220000000009', 'price' => 80, 'why' => 'sheet']],
+            'activate' => ['oscar'],
+            'assign' => [['label' => 'Oscar', 'source' => 'sheet', 'list' => 'oscar', 'discount' => 0, 'clients' => [$c->code], 'groups' => []]],
+        ]));
+
+        $this->artisan('prices:apply-sheet', ['--apply' => true, '--plan' => $plan, '--only' => 'items,activate,assign'])->assertSuccessful();
+
+        $this->assertTrue((bool) $oscar->fresh()->active);
+        $this->assertSame($oscar->id, \App\Services\Pricing::listRowFor($c->fresh())->id);
+        $this->assertEqualsWithDelta(80.0, \App\Services\Pricing::quote($c->fresh(), $p)['unit_price'], 0.0001);
+
+        // الرجوع بيرجّعها موقوفة
+        $snap = collect(\Illuminate\Support\Facades\Storage::files('price-sheet'))->filter(fn ($f) => str_contains($f, 'snapshot-'))->sort()->last();
+        $this->artisan('prices:apply-sheet', ['--rollback' => $snap, '--apply' => true])->assertSuccessful();
+        $this->assertFalse((bool) $oscar->fresh()->active);
+    }
 }
