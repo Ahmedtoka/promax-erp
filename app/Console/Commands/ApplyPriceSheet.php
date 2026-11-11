@@ -64,6 +64,9 @@ class ApplyPriceSheet extends Command
 
     private const VAT = 1.14;
 
+    /** علامة في ملاحظات القايمة: الضريبة اتفصلت (الأسعار اتقسمت ÷ 1.14) — عشان ماتتقسمش تاني */
+    private const SPLIT_MARK = '[vat-split:done]';
+
     /** برا النطاق — مابتتلمسش (قرار ١٠/١١: الكاش فان لوحده بعدين) */
     private const OUT_OF_SCOPE = ['CashVan', 'totalfranchise'];
 
@@ -209,6 +212,16 @@ class ApplyPriceSheet extends Command
                 if (! ($l = PriceList::where('code', $code)->first())) {
                     continue;
                 }
+                // ⚠️⚠️ **مرة واحدة بس** (١١/١١): القسمة على ١.١٤ مش idempotent — تشغيل
+                // الأمر تاني (خطة جديدة، أو --apply اتعاد) كان هيقسم قايمة الكاش فان
+                // تاني (١٧١٫٩٣ ← ١٥٠٫٨٢) والعميل يتحاسب أقل ١٢٪ في صمت.
+                if ($this->alreadySplit($l)) {
+                    $this->line("vat-split: {$code} اتفصلت قبل كده — اتسابت");
+
+                    continue;
+                }
+                $this->snapshot['lists'][] = ['id' => $l->id, 'notes' => $l->notes];
+                $l->forceFill(['notes' => trim(((string) $l->notes)."\n".self::SPLIT_MARK.' '.now()->toDateString())])->save();
                 foreach ($l->items()->get() as $it) {
                     if ((float) $it->price > 0) {
                         $target[$l->id][$it->product_id] = [round((float) $it->price / self::VAT, 4), 'vat-split'];
@@ -243,6 +256,26 @@ class ApplyPriceSheet extends Command
                 PriceChange::writeListPrices($list, $prices);
             }
         }
+    }
+
+    /**
+     * القايمة اتفصلت ضريبتها قبل كده؟
+     *
+     * العلامة في الملاحظات، أو — لنسخ اتطبّق عليها الأمر قبل العلامة (QA والمحلي ١٠/١١) —
+     * مستندات عملاء القايمة: قبل الفصل كانت كلها من غير ضريبة، وبعده كلها بضريبة.
+     */
+    private function alreadySplit(PriceList $l): bool
+    {
+        if (str_contains((string) $l->notes, self::SPLIT_MARK)) {
+            return true;
+        }
+        $lines = DB::table('invoice_items')->join('invoices', 'invoices.id', '=', 'invoice_items.invoice_id')
+            ->join('clients', 'clients.id', '=', 'invoices.client_id')
+            ->where('clients.price_list_id', $l->id)->where('invoice_items.qty', '>', 0);
+        $taxed = (clone $lines)->where('invoice_items.tax', '>', 0)->count();
+        $untaxed = (clone $lines)->where('invoice_items.tax', '=', 0)->count();
+
+        return $taxed > 0 && $untaxed === 0;
     }
 
     // ═══════════════════════ العملاء والسلاسل ═══════════════════════

@@ -64,6 +64,11 @@ class ApplyPriceSheetCommandTest extends TestCase
         $this->assertEqualsWithDelta(87.7193, $price($cash), 0.00001, 'الكاش فان: الشامل ÷ 1.14 (المبلغ للعميل ثابت)');
         $this->assertTrue((bool) $c->fresh()->taxable, 'الكل خاضع');
         $this->assertNull(Client::whereNull('price_list_id')->where('id', $c->id)->first(), 'مفيش عميل من غير قايمة');
+
+        // ⚠️ (١١/١١) تشغيل تاني (خطة جديدة أو --apply اتعاد) مايقسمش الكاش فان تاني
+        $this->artisan('prices:apply-sheet', ['--apply' => true, '--plan' => $plan, '--no-docs' => true])->assertSuccessful();
+        $this->assertEqualsWithDelta(87.7193, $price($cash), 0.00001, 'الكاش فان اتقسم مرة واحدة بس');
+        $this->assertStringContainsString('[vat-split:done]', (string) $cash->fresh()->notes);
     }
 
     public function test_vat_split_keeps_what_the_customer_paid_and_the_balance(): void
