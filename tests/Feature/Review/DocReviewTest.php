@@ -459,4 +459,25 @@ class DocReviewTest extends TestCase
         $this->actingAs($this->accountant)->get(route('erp.review'))->assertOk()
             ->assertSee(__('review.dash_issues', ['n' => 1]))->assertSee('الكمية غلط')->assertSee(__('review.dash_pace'));
     }
+
+    /** (١٢/١١) مفاتيح config/review.php: منع «طابق الشهر» قبل مراجعة مستنداته، وتأكيد الأحمر */
+    public function test_review_switches_month_block_and_red_confirm(): void
+    {
+        $a = $this->invoice();
+        $mark = fn () => $this->actingAs($this->accountant)->postJson(route('erp.review.mark'), [
+            'entity_type' => 'client', 'entity_id' => $this->client->id, 'items' => ['m:2026-10'], 'status' => 'ok',
+        ]);
+
+        config(['review.month_needs_all_docs' => true]);
+        $mark()->assertStatus(422)->assertJsonPath('message', __('review.month_docs_block', ['ok' => 0, 'n' => 1]));
+        DocReview::mark($this->accountant, $a, 'ok', null);
+        $mark()->assertOk();
+
+        config(['review.month_needs_all_docs' => false]);
+        $this->invoice();   // مستند جديد في نفس الشهر لسه ماتراجعش — تحذير بس، مش منع
+        $mark()->assertOk();
+
+        config(['review.confirm_red_checks' => false]);
+        $this->actingAs($this->accountant)->get(route('erp.review.docs'))->assertOk()->assertSee('const CONFIRM_RED = false;', false);
+    }
 }

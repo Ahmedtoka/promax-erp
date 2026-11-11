@@ -417,6 +417,7 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 (() => {
     const URLS = @js($urls);
     const CSRF = @js(csrf_token());
+    const CONFIRM_RED = @js((bool) config('review.confirm_red_checks'));   // config/review.php
     const PAGE = { next: @js($page->hasMorePages() ? $page->nextPageUrl() : null), prev: @js($page->currentPage() > 1 ? $page->previousPageUrl() : null) };
     const T = {
         issue: @js(__('review.issue_prompt')), reopen: @js(__('review.reopen_prompt')),
@@ -553,7 +554,7 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
     async function markOk() {
         if (!pane.querySelector('.dp-ok')) return;
         // فيه تنبيه أحمر؟ أول Enter بيوريه، التاني (خلال ٥ ثواني) بيأكد ✓
-        const dp0 = pane.querySelector('.dp'), bad = pane.querySelectorAll('.dp-checks .bad').length;
+        const dp0 = pane.querySelector('.dp'), bad = CONFIRM_RED ? pane.querySelectorAll('.dp-checks .bad').length : 0;
         if (bad && !(dp0._armed && Date.now() - dp0._armed < 5000)) {
             dp0._armed = Date.now();
             const box = pane.querySelector('.dp-checks'); box.classList.remove('armed'); void box.offsetWidth; box.classList.add('armed');

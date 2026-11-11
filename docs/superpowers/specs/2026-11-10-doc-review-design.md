@@ -342,9 +342,12 @@ and «هي السورس الوحيد لنجاح السيستم ومراجعة ا
 - Exports: queue CSV with the current filters (all pages, reviewer/time/flags/note) and the full review trail CSV
   (admin) — UTF-8 with BOM for Excel.
 
-**Asked Ahmed (process changes, defaults applied until he answers):**
+**Asked Ahmed (process changes, defaults applied until he answers; both switchable in `config/review.php` / `.env`):**
 1. Block «متطابق» on a client/month unless all documents are reviewed and the balance agrees? — default: show, don't block.
 2. Five manual ticks per document vs automatic checks + one ✓? — default: automatic checks + one ✓ (built).
 
 **Not built / left:** issue owner + resolved status as separate fields (an ✗ is resolved by re-marking ✓; needs a
 column if he wants owners); daily target per person as a setting; the ERP layout itself has no phone breakpoint.
+
+Switches (`config/review.php`): `REVIEW_CONFIRM_RED` (default true), `REVIEW_MONTH_NEEDS_ALL_DOCS` (default false =
+warn in the month dialog; true = server refuses ✓ on the month until its documents are all ✓), `REVIEW_DAILY_TARGET` (150).

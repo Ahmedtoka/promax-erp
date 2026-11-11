@@ -111,8 +111,6 @@ class ReviewerStats
         return round($v[$lo] + ($v[$hi] - $v[$lo]) * ($i - $lo), 1);
     }
 
-    /** هدف اليوم لكل مستند — قابل للتعديل من هنا لحد ما يبقى ليه إعداد */
-    public const DAILY_TARGET = 150;
 
     /**
      * (١٢/١١) سرعة الإنجاز والمتوقع: ✓ النهارده، متوسط آخر ٥ أيام اشتغل فيها
@@ -147,7 +145,7 @@ class ReviewerStats
         return [
             'today' => $today, 'avg' => $avg, 'remaining' => $remaining,
             'eta_days' => $avg > 0 ? (int) ceil($remaining / $avg) : null,
-            'target' => self::DAILY_TARGET, 'people' => $people,
+            'target' => (int) config('review.daily_target', 150), 'people' => $people,
         ];
     }
 }

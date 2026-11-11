@@ -99,7 +99,7 @@ window.rvSend = async function (type, id, items, status, note, extra) {
     if (note) body.append('note', note);
     Object.entries(extra || {}).forEach(([k, v]) => { if (v !== null && v !== '') body.append(k, v); });
     const res = await fetch(@js(route('erp.review.mark')), { method: 'POST', body, headers: { 'Accept': 'application/json' } });
-    if (!res.ok) { alert('⚠️ ' + res.status); return null; }
+    if (!res.ok) { const j = await res.json().catch(() => ({})); alert('⚠️ ' + (j.message || res.status)); return null; }
     const data = await res.json();
     document.querySelectorAll('.rv[data-type="' + type + '"][data-id="' + id + '"]').forEach(box => {
         const c = data.checks[box.dataset.item];

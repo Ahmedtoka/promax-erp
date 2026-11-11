@@ -332,6 +332,23 @@ class ReviewController extends Controller
             ? ReviewCheck::missingItems(Client::findOrFail($data['entity_id']))
             : [];
 
+        // (١٢/١١) «طابق الشهر» ممنوع لحد ما مستندات الشهر تتراجع كلها — لو المفتاح شغال
+        if ($data['status'] === 'ok' && config('review.month_needs_all_docs')
+            && in_array($data['entity_type'], ['client', 'group'], true)) {
+            $ids = $data['entity_type'] === 'group'
+                ? $this->clientsQuery($request->user())->where('group_id', $data['entity_id'])->pluck('id')->all()
+                : [(int) $data['entity_id']];
+            $docs = DocQueue::moneySum(DocQueue::moneyByClient($ids), $ids);
+            foreach ($data['items'] as $item) {
+                $m = str_starts_with($item, 'm:') ? ($docs['months'][substr($item, 2)] ?? null) : null;
+                if ($m !== null && $m['ok'] < $m['docs']) {
+                    $msg = __('review.month_docs_block', ['ok' => $m['ok'], 'n' => $m['docs']]);
+
+                    return $request->expectsJson() ? response()->json(['ok' => false, 'message' => $msg], 422) : back()->withErrors(['items' => $msg]);
+                }
+            }
+        }
+
         foreach ($data['items'] as $item) {
             $phase = ReviewCheck::phaseOf($data['entity_type'], $item);
             abort_if($phase === null, 422);

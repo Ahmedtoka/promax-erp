@@ -379,4 +379,6 @@ return [
     'x_grand_delta' => 'Total delta',
     'x_seconds' => 'Seconds since previous',
     'x_open' => 'Seconds open',
+    'month_docs_warn' => 'Only :ok of :n documents of this month are reviewed — the balance is not assured until the rest are.',
+    'month_docs_block' => 'Cannot match this month: only :ok of :n of its documents are reviewed — review the rest first.',
 ];

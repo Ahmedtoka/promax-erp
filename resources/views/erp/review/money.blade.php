@@ -133,7 +133,7 @@
                                 {{-- ⚠️ القيم في data-* مش جوه onclick — @js بيطلّع علامات تنصيص بتكسر الأتريبيوت --}}
                                 <button type="button" class="btn sm rv-month"
                                         data-type="{{ $r['type'] }}" data-id="{{ $e->id }}" data-month="{{ $m }}" data-name="{{ $e->displayName() }}"
-                                        data-net="{{ $f['net'] }}" data-bal="{{ $f['balance'] }}"
+                                        data-net="{{ $f['net'] }}" data-bal="{{ $f['balance'] }}" data-dok="{{ $md['ok'] }}" data-dn="{{ $md['docs'] }}"
                                         onclick="rvMonth(this.dataset.type, +this.dataset.id, this.dataset.month, this.dataset.name, +this.dataset.net, +this.dataset.bal)">{{ __('review.month_match') }}</button>
                                 @if ($md['docs'] > 0 && $canDocs)
                                     <a class="mc-docs {{ $md['ok'] >= $md['docs'] ? 'done' : '' }}" href="{{ $docsUrl($r, $m) }}" title="{{ __('review.m_month_docs_hint') }}">📄 <span dir="ltr">{{ $md['ok'] }}/{{ $md['docs'] }}</span></a>
@@ -172,6 +172,7 @@
     <form class="dlg" onsubmit="return rvMonthSave(event)">
         <h4 id="mTitle"></h4>
         <div class="alert info" style="margin-bottom:10px"><span>ℹ️</span><span>{{ __('review.month_hint') }}</span></div>
+        <div class="alert warn" id="mDocsWarn" style="margin-bottom:10px" hidden><span>⚠️</span><span></span></div>
         <div class="frow">
             <div><label class="f">{{ __('review.month_net') }} — {{ __('review.month_paper') }}</label>
                 <input type="number" step="0.01" id="mNet" required style="width:100%">
@@ -218,6 +219,7 @@
 
 <script>
 let rvM = null;
+const MONTH_BLOCK = @js((bool) config('review.month_needs_all_docs'));   // config/review.php
 function rvMonth(type, id, month, name, net, bal) {
     rvM = { type, id, month, net, bal };
     document.getElementById('mTitle').textContent = @js(__('review.month_dialog', ['month' => '__M__', 'name' => '__N__'])).replace('__M__', month).replace('__N__', name);
@@ -225,6 +227,12 @@ function rvMonth(type, id, month, name, net, bal) {
     document.getElementById('mSysBal').textContent = bal.toLocaleString();
     document.getElementById('mNet').value = '';
     document.getElementById('mBal').value = '';
+    // (١٢/١١) مستندات الشهر لسه ماتراجعتش كلها؟ تحذير (أو منع لو config/review.php بيقول كده)
+    const btn = document.querySelector('.rv-month[data-type="' + type + '"][data-id="' + id + '"][data-month="' + month + '"]');
+    const dok = +(btn?.dataset.dok || 0), dn = +(btn?.dataset.dn || 0);
+    const w = document.getElementById('mDocsWarn');
+    w.hidden = !(dn > 0 && dok < dn);
+    w.querySelector('span:last-child').textContent = (MONTH_BLOCK ? @js(__('review.month_docs_block', ['ok' => '__OK', 'n' => '__N'])) : @js(__('review.month_docs_warn', ['ok' => '__OK', 'n' => '__N']))).replace('__OK', dok).replace('__N', dn);
     openDlg('dlgMonth');
 }
 async function rvMonthSave(ev) {
