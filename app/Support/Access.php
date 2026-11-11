@@ -1045,7 +1045,7 @@ class Access
         'act.review.stock_reset' => ['perm.act_review_stock_reset', 'erp.review', [], ['erp.review.stock.zero', 'erp.review.stock.batch']],
         // المراجعة مستند مستند (١١/١١): العلامة · التصليح في المكان (فلوس) · فتح ✓ تاني (أدمن)
         'act.review.docs' => ['perm.act_review_docs', 'erp.review.docs', null, ['erp.review.docs.mark']],
-        'act.review.docs_edit' => ['perm.act_review_docs_edit', 'erp.review.docs', null, ['erp.review.docs.serial', 'erp.review.docs.rep', 'erp.review.docs.date', 'erp.review.docs.preview', 'erp.review.docs.lines']],
+        'act.review.docs_edit' => ['perm.act_review_docs_edit', 'erp.review.docs', null, ['erp.review.docs.serial', 'erp.review.docs.proof', 'erp.review.docs.rep', 'erp.review.docs.date', 'erp.review.docs.preview', 'erp.review.docs.lines']],
         'act.review.docs_reopen' => ['perm.act_review_docs_reopen', 'erp.review.docs', [], ['erp.review.docs.reopen']],
         'act.leads.clear_assign' => ['perm.act_leads_clear_assign', 'erp.leads', [], ['erp.leads.clearassign']],
         'act.leads.plan' => ['perm.act_leads_plan', 'erp.leads.planner', null, ['erp.leads.planner.save', 'erp.leads.route.save']],

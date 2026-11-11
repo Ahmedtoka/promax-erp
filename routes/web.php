@@ -845,6 +845,7 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.pane');
                 Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.mark');
                 Route::post('/{type}/{id}/serial', 'serial')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.serial');
+                Route::post('/{type}/{id}/proof', 'proof')->whereIn('type', ['po'])->whereNumber('id')->name('.proof');
                 Route::post('/{type}/{id}/rep', 'rep')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.rep');
                 Route::post('/{type}/{id}/date', 'date')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.date');
                 Route::post('/{type}/{id}/preview', 'preview')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.preview');

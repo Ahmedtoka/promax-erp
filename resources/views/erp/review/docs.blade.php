@@ -48,6 +48,10 @@
             <b>{{ $context['pct'] }}% <small dir="ltr">{{ $money($context['ok_grand']) }} / {{ $money($context['grand']) }}</small></b>
             <div class="rv-bar thin"><i style="width:{{ $context['pct'] }}%"></i></div>
         </div>
+        @if ($context['proof'])
+            <div><span class="rv-sub">📦 {{ __('review.proof_title') }} — {{ __('review.proof_n', ['p' => $context['proof']['proven'], 'n' => $context['proof']['delivered']]) }}</span>
+                <b>@if ($context['proof']['unproven'])<a href="{{ $qs(['flag' => 'noproof', 'status' => 'all']) }}" class="dq-risk">{{ $context['proof']['unproven'] }} {{ __('review.proof_risk') }} · <span dir="ltr">{{ $money($context['proof']['unproven_grand']) }}</span></a>@else<span class="dq-proven">✓ {{ $context['proof']['pct'] }}%</span>@endif</b></div>
+        @endif
         @if ($context['money_url'])<a class="btn sm" href="{{ $context['money_url'] }}">↩ {{ __('review.ctx_back_money') }}</a>@endif
     </section>
 @endif
@@ -77,6 +81,12 @@
         <a href="{{ $qs(['flag' => $f['flag'] === 'any' ? null : 'any']) }}" class="fchip {{ $f['flag'] === 'any' ? 'on' : '' }}" data-flag="any">{{ __('review.flag_any') }} <b>{{ $flagCounts['any'] }}</b></a>
         @foreach (\App\Services\Review\DocQueue::FLAGS as $fk)
             <a href="{{ $qs(['flag' => $f['flag'] === $fk ? null : $fk]) }}" class="fchip f-{{ $fk }} {{ $f['flag'] === $fk ? 'on' : '' }} {{ $flagCounts[$fk] ? '' : 'zero' }}" data-flag="{{ $fk }}"
+               title="{{ __('review.flag_'.$fk.'_hint') }}"><i aria-hidden="true">{{ __('review.flag_'.$fk.'_ico') }}</i>{{ __('review.flag_'.$fk) }} <b>{{ $flagCounts[$fk] }}</b></a>
+        @endforeach
+        {{-- إثبات الاستلام (أوامر التوريد) — علامات كويسة، مش تنبيه --}}
+        <span class="rv-sub dq-f-sep">{{ __('review.f_proof') }}</span>
+        @foreach (\App\Services\Review\DocQueue::PROOF_TAGS as $fk)
+            <a href="{{ $qs(['flag' => $f['flag'] === $fk ? null : $fk]) }}" class="fchip pos f-{{ $fk }} {{ $f['flag'] === $fk ? 'on' : '' }} {{ $flagCounts[$fk] ? '' : 'zero' }}" data-flag="{{ $fk }}"
                title="{{ __('review.flag_'.$fk.'_hint') }}"><i aria-hidden="true">{{ __('review.flag_'.$fk.'_ico') }}</i>{{ __('review.flag_'.$fk) }} <b>{{ $flagCounts[$fk] }}</b></a>
         @endforeach
     </div>
@@ -171,9 +181,9 @@
                             </td>
                         </tr>
                         @foreach ($g['rows'] as $r)
-                            <tr data-key="{{ $r['key'] }}" data-type="{{ $r['type'] }}" data-id="{{ $r['id'] }}" data-state="{{ $r['state'] }}" data-flags="{{ implode(' ', $r['flags']) }}" class="dq-row st-{{ $r['state'] }}" tabindex="-1">
+                            <tr data-key="{{ $r['key'] }}" data-type="{{ $r['type'] }}" data-id="{{ $r['id'] }}" data-state="{{ $r['state'] }}" data-flags="{{ implode(' ', array_merge($r['flags'], $r['tags'])) }}" class="dq-row st-{{ $r['state'] }}" tabindex="-1">
                                 <td class="c-dot"><span class="dot" title="{{ __('review.st_'.$r['state']) }}"></span></td>
-                                <td dir="ltr" class="c-num"><span class="tg {{ $r['type'] }}">{{ $r['type'] === 'invoice' ? __('review.tag_invoice') : __('review.tag_po') }}</span><b>{{ $r['number'] }}</b>@foreach (array_intersect($r['flags'], ['odd_date', 'rep_off', 'repriced']) as $fx)<i class="fx f-{{ $fx }}" title="{{ __('review.flag_'.$fx) }}">{{ __('review.flag_'.$fx.'_ico') }}</i>@endforeach</td>
+                                <td dir="ltr" class="c-num"><span class="tg {{ $r['type'] }}">{{ $r['type'] === 'invoice' ? __('review.tag_invoice') : __('review.tag_po') }}</span><b>{{ $r['number'] }}</b>@foreach (array_intersect($r['flags'], ['odd_date', 'rep_off', 'repriced', 'noproof']) as $fx)<i class="fx f-{{ $fx }}" title="{{ __('review.flag_'.$fx) }}">{{ __('review.flag_'.$fx.'_ico') }}</i>@endforeach</td>
                                 <td dir="ltr" class="c-serial">@if ($r['paper_ref']){{ $r['paper_ref'] }}@if ($r['dup']) <span class="flag" title="{{ __('review.f_flag_dup') }}">⚠</span>@endif @else<span class="miss">{{ __('review.serial_missing') }}</span>@endif</td>
                                 <td dir="ltr" class="c-date" title="{{ $r['date'] }}">{{ substr($r['date'], 5) }}</td>
                                 <td class="c-client" title="{{ $r['client_code'] }} · {{ $r['client'] }}{{ $r['rep'] ? ' — '.$r['rep'] : '' }}">{{ $r['client'] }} <span class="cc">{{ $r['client_code'] }}</span></td>
@@ -212,6 +222,7 @@
     if (\App\Support\Access::allows($u, 'erp.review.docs.mark')) { $urls['mark'] = route('erp.review.docs.mark', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.reopen')) { $urls['reopen'] = route('erp.review.docs.reopen', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.serial')) { $urls['serial'] = route('erp.review.docs.serial', ['type' => '__T', 'id' => 0]); }
+    if (\App\Support\Access::allows($u, 'erp.review.docs.proof')) { $urls['proof'] = route('erp.review.docs.proof', ['type' => 'po', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.rep')) { $urls['rep'] = route('erp.review.docs.rep', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.date')) { $urls['date'] = route('erp.review.docs.date', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.preview')) { $urls['preview'] = route('erp.review.docs.preview', ['type' => '__T', 'id' => 0]); }
@@ -407,6 +418,17 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 .ev-i{width:16px;text-align:center;font-weight:900}.ev-money{margin-inline-start:6px;font-weight:800}
 .dp.busy{opacity:.55;pointer-events:none}
 
+/* إثبات الاستلام */
+.fchip.pos b{color:#15803D}.fchip.pos.on{background:#F0FDF4;border-color:#22C55E;color:#166534}
+.dq-f-sep{margin-inline-start:8px}
+.cmp .pf{display:inline-flex;gap:5px;align-items:center;font-weight:700;cursor:pointer;white-space:nowrap;font-size:11.5px}
+.cmp .pf input{width:auto;margin:0;accent-color:var(--green)}
+.cmp .pf-row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}.cmp .pf-row .dp-receipt-no{flex:1 1 100%;min-width:0}
+.cmp tr.cmp-proof.bad td.cmp-paper{background:#FEF2F2!important}
+.cmp .cmp-bad{color:#B91C1C;font-weight:800;font-size:11.5px;white-space:normal}
+.cmp td.cmp-sys .cmp-na{white-space:normal}
+.dq-risk{color:#B91C1C;text-decoration:none;font-size:13px}.dq-proven{color:#15803D;font-size:13px}
+
 .dq-row.gone td{opacity:.45;text-decoration:line-through;text-decoration-color:#94A3B8}
 .dq-row.gone.cur td{opacity:.8}
 
@@ -436,7 +458,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
 @media (max-width:1100px){.dq{grid-template-columns:1fr}.dq-pane{position:static;max-height:none}.dq-wrap{max-height:60vh}}
 @media (max-width:640px){
     .cmp thead th:first-child{width:62px}.cmp tbody th{font-size:11px;padding:3px 4px}.cmp tbody th kbd{display:none}
-    .cmp td{padding:3px 4px}.cmp td.cmp-na{font-size:0}.cmp input[type=date]{font-size:11px!important;padding:3px 2px!important}
+    .cmp td{padding:3px 4px}.cmp td.cmp-na{font-size:0}.cmp .pf-row{flex-wrap:wrap}.cmp input[type=date]{font-size:11px!important;padding:3px 2px!important}
     .dq-top{flex-wrap:wrap;gap:8px}.dq-pct b{font-size:24px}
     .dq-f-sel>.fl{flex:1 1 calc(50% - 4px);max-width:calc(50% - 4px);min-width:0}.dq-f-sel>.dq-month{flex-basis:100%;max-width:none}
     .dq-f-sel .rng{flex:1 1 100%;width:100%}.dq-f-sel .rng .fl{flex:1 1 0;width:auto;min-width:0}.dq-f-sel .rng input{width:100%;min-width:0}
@@ -456,6 +478,8 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
     const CSRF = @js(csrf_token());
     const CONFIRM_RED = @js((bool) config('review.confirm_red_checks'));   // config/review.php
     const VIEW = { status: @js($f['status']), flag: @js($f['flag']) };
+    const POS = @js(\App\Services\Review\DocQueue::PROOF_TAGS);   // علامات كويسة — مش في «أي تنبيه»
+    const FX = @js(collect(['odd_date', 'rep_off', 'repriced', 'noproof'])->mapWithKeys(fn ($k) => [$k => [__('review.flag_'.$k.'_ico'), __('review.flag_'.$k)]]));
     const PAGE = { next: @js($page->hasMorePages() ? $page->nextPageUrl() : null), prev: @js($page->currentPage() > 1 ? $page->previousPageUrl() : null) };
     const T = {
         issue: @js(__('review.issue_prompt')), reopen: @js(__('review.reopen_prompt')),
@@ -465,7 +489,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         inv: @js(__('review.docs_inv_progress', ['ok' => '__OK', 'n' => '__N'])),
         po: @js(__('review.docs_po_progress', ['ok' => '__OK', 'n' => '__N'])),
         st: @js(collect(['pending', 'ok', 'issue', 'changed'])->mapWithKeys(fn ($s) => [$s => __('review.st_'.$s)])),
-        missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), paperDiff: @js(__('review.chk_paper_diff')),
+        missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), proofFirst: @js(__('review.proof_required')), paperDiff: @js(__('review.chk_paper_diff')),
     };
     const pane = document.getElementById('dqPane');
     const rows = () => [...document.querySelectorAll('.dq-row')];
@@ -559,12 +583,16 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         const tr = document.querySelector('.dq-row[data-key="' + r.key + '"]');
         if (!tr) return;
         const was = tr.dataset.state, wasFlags = (tr.dataset.flags || '').split(' ').filter(Boolean);
+        const nowFlags = (r.flags || []).concat(r.tags || []);
         tr.dataset.state = r.state;
-        tr.dataset.flags = (r.flags || []).join(' ');
+        tr.dataset.flags = nowFlags.join(' ');
         tr.className = 'dq-row st-' + r.state + (r.key === cur ? ' cur' : '');
-        bumpFlags(was, wasFlags, r.state, r.flags || []);
+        bumpFlags(was, wasFlags, r.state, nowFlags);
         // اتشال من الفلتر الحالي (مثلاً اتكتبله سيريال وانت على «من غير سيريال») — بيفضل باهت لحد الريلود
-        const inFlag = !VIEW.flag || (VIEW.flag === 'any' ? (r.flags || []).length > 0 : (r.flags || []).includes(VIEW.flag));
+        const inFlag = !VIEW.flag || (VIEW.flag === 'any' ? (r.flags || []).length > 0 : nowFlags.includes(VIEW.flag));
+        const cn = tr.querySelector('.c-num');
+        cn.querySelectorAll('.fx').forEach(x => x.remove());
+        (r.flags || []).filter(f => FX[f]).forEach(f => cn.insertAdjacentHTML('beforeend', '<i class="fx f-' + f + '" title="' + escapeHtml(FX[f][1]) + '">' + escapeHtml(FX[f][0]) + '</i>'));
         tr.classList.toggle('gone', !inFlag);
         tr.title = inFlag ? '' : T.gone;
         tr.querySelector('.dot').title = T.st[r.state] || '';
@@ -592,7 +620,8 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         const a = counted(wasState, wasFlags), b = counted(nowState, nowFlags);
         const delta = {};
         a.forEach(f => delta[f] = (delta[f] || 0) - 1); b.forEach(f => delta[f] = (delta[f] || 0) + 1);
-        delta.any = (b.length ? 1 : 0) - (a.length ? 1 : 0);
+        const warn = l => l.some(f => !POS.includes(f));
+        delta.any = (warn(b) ? 1 : 0) - (warn(a) ? 1 : 0);
         Object.entries(delta).forEach(([f, d]) => {
             if (!d) return;
             const chip = document.querySelector('.fchip[data-flag="' + f + '"]'), bb = chip?.querySelector('b');
@@ -633,8 +662,15 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
             const pt1 = pane.querySelector('.dp-ptotal');
             if (pt1 && pt0) { pt1.value = pt0; pt1.dispatchEvent(new Event('input')); }
         }
-        // ✗ السيريال = شرط مش تحذير: مفيش تأكيد بالضغطة التانية
-        if (pane.querySelector('.dp-checks .bad[data-hard]')) {
+        // رقم إذن اتكتب ومااتحفظش؟ يتحفظ الأول
+        const rn = pane.querySelector('.dp-receipt-no');
+        if (rn && !rn.readOnly && rn.value.trim() !== (rn.defaultValue || '').trim()) {
+            if (!await saveProof()) return;
+        }
+        // ✗ السيريال (وإثبات الاستلام لو المفتاح شغال) = شرط مش تحذير: مفيش تأكيد بالضغطة التانية
+        const hard = pane.querySelector('.dp-checks .bad[data-hard]');
+        if (hard) {
+            if (hard.dataset.chk === 'proof') { toast(T.proofFirst, 'bad'); pane.querySelector('.dp-receipt')?.focus(); return; }
             toast(T.serialFirst, 'bad');
             const s = pane.querySelector('.dp-serial'); s?.focus(); s?.select();
             return;
@@ -650,6 +686,12 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         const key = cur;
         const d = await post('mark', { status: 'ok', open_ms: Math.round(performance.now() - openedAt) });
         if (d && key === cur) nextPending();
+    }
+    // إثبات الاستلام — بيتحفظ أول ما الصح يتغير (أو Enter في رقم الإذن)
+    function saveProof() {
+        const dp = pane.querySelector('.dp'), r = dp?.querySelector('.dp-receipt'), s = dp?.querySelector('.dp-signed'), n = dp?.querySelector('.dp-receipt-no');
+        if (!r || !s) return Promise.resolve(null);
+        return post('proof', { receipt_note: r.checked ? 1 : 0, receipt_note_no: n ? n.value : '', paper_signed: s.checked ? 1 : 0 });
     }
     async function markIssue() {
         if (!pane.querySelector('.dp-issue')) return;
@@ -674,6 +716,17 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
             if (serial.readOnly) return;
             if (serial.value.trim() === (serial.defaultValue || '').trim()) { serial.blur(); return; }
             await post('serial', { paper_ref: serial.value });
+            document.activeElement?.blur();
+        });
+
+        dp.querySelector('.dp-receipt')?.addEventListener('change', saveProof);
+        dp.querySelector('.dp-signed')?.addEventListener('change', saveProof);
+        const rno = dp.querySelector('.dp-receipt-no');
+        rno?.addEventListener('keydown', async e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault(); e.stopPropagation();
+            if (rno.readOnly || rno.value.trim() === (rno.defaultValue || '').trim()) { rno.blur(); return; }
+            await saveProof();
             document.activeElement?.blur();
         });
 
@@ -781,6 +834,9 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
             case 'r': case 'R': if (dp) { e.preventDefault(); dp.querySelector('.dp-rep')?.focus(); } break;
             case 'e': case 'E': if (dp?._openEdit) { e.preventDefault(); dp._openEdit(); } break;
             case 'p': case 'P': if (dp) { e.preventDefault(); dp.querySelector('.dp-ptotal')?.focus(); } break;
+            case '1': { const c = dp?.querySelector('.dp-receipt:not(:disabled)'); if (c) { e.preventDefault(); c.click(); } break; }
+            case '2': { const c = dp?.querySelector('.dp-signed:not(:disabled)'); if (c) { e.preventDefault(); c.click(); } break; }
+            case 'n': case 'N': { const c = dp?.querySelector('.dp-receipt-no'); if (c) { e.preventDefault(); c.focus(); c.select(); } break; }
             case '?': document.getElementById('dqKeys').showModal(); break;
         }
     });

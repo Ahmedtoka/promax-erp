@@ -92,6 +92,10 @@ class DocQueue
                 'by_id' => $chk?->user_id ? (int) $chk->user_id : null,
                 'at' => $chk?->updated_at?->format('Y-m-d H:i'),
                 'note' => $chk?->note,
+                // إثبات الاستلام — أوامر التوريد بس (الفواتير false)
+                'receipt' => (bool) ($d->receipt_note ?? false),
+                'receipt_no' => $d->receipt_note_no ?? null,
+                'signed' => (bool) ($d->paper_signed ?? false),
             ];
         };
 
@@ -102,7 +106,7 @@ class DocQueue
         }
         foreach (DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
             ->when($onlyType !== null, fn ($q) => $onlyType === 'po' ? $q->where('id', $onlyId) : $q->whereRaw('0 = 1'))
-            ->selectRaw('id, number, paper_ref, client_id, assigned_to AS rep_id, COALESCE(delivered_at, due_at, created_at) AS doc_at, status AS st, total, tax_total, grand_total')
+            ->selectRaw('id, number, paper_ref, receipt_note, receipt_note_no, paper_signed, client_id, assigned_to AS rep_id, COALESCE(delivered_at, due_at, created_at) AS doc_at, status AS st, total, tax_total, grand_total')
             ->get() as $d) {
             $rows->push($make('po', $d, $poItems[$d->id] ?? null));
         }
@@ -127,13 +131,74 @@ class DocQueue
                 ($clientRep && $r['rep_id'] && (int) $clientRep !== $r['rep_id']) ? 'rep_off' : null,
                 isset($repriced[$r['key']]) ? 'repriced' : null,
                 $r['state'] === 'changed' ? 'changed' : null,
+                self::unproven($r) ? 'noproof' : null,
             ]));
+            // علامات «كويسة» (مش تنبيه — مش في «أي تنبيه»): إذن استلام / إمضاء-ختم
+            $r['tags'] = array_values(array_filter([$r['receipt'] ? 'receipt' : null, $r['signed'] ? 'signed' : null]));
 
             return $r;
         });
     }
 
-    public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed'];
+    public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed', 'noproof'];
+
+    /** فلاتر إثبات الاستلام الإيجابية (مش تنبيهات) */
+    public const PROOF_TAGS = ['receipt', 'signed'];
+
+    /** أمر توريد اتسلّم ومفيش عليه لا إذن استلام ولا إمضاء/ختم = فلوس مستنية إثبات */
+    public static function unproven(array $r): bool
+    {
+        return $r['type'] === 'po' && $r['status_doc'] === 'delivered' && ! $r['receipt'] && ! $r['signed'];
+    }
+
+    /**
+     * (١٢/١١) إثبات استلام أوامر التوريد المتسلّمة: الإجمالي ولكل سلسلة (أو عميل
+     * من غير سلسلة) — كام أمر عليه إثبات، وكام لأ، وفلوس اللي من غير إثبات
+     * (السلسلة مابتدفعهاش غير بالإثبات = فلوس في خطر).
+     *
+     * @return array{total: array<string, int|float>, groups: list<array<string, mixed>>}
+     */
+    public static function proofStats(Collection $rows): array
+    {
+        $blank = ['delivered' => 0, 'proven' => 0, 'receipt' => 0, 'signed' => 0, 'unproven' => 0, 'grand' => 0.0, 'unproven_grand' => 0.0];
+        $total = $blank;
+        $groups = [];
+        foreach ($rows as $r) {
+            if ($r['type'] !== 'po' || $r['status_doc'] !== 'delivered') {
+                continue;
+            }
+            $k = $r['group_id'] ? 'g'.$r['group_id'] : 'c'.$r['client_id'];
+            $groups[$k] ??= $blank + [
+                'label' => $r['group'] ?? $r['client'], 'solo' => $r['group_id'] === null, 'mother' => $r['mother'],
+                'filter' => $r['group_id'] ? ['group' => $r['group_id']] : ['client' => $r['client_id']],
+            ];
+            foreach ([&$total, &$groups[$k]] as &$o) {
+                $o['delivered']++;
+                $o['grand'] += $r['grand'];
+                $o['receipt'] += $r['receipt'] ? 1 : 0;
+                $o['signed'] += $r['signed'] ? 1 : 0;
+                if (self::unproven($r)) {
+                    $o['unproven']++;
+                    $o['unproven_grand'] += $r['grand'];
+                } else {
+                    $o['proven']++;
+                }
+            }
+            unset($o);
+        }
+        $fix = function (array $o) {
+            $o['grand'] = round($o['grand'], 2);
+            $o['unproven_grand'] = round($o['unproven_grand'], 2);
+            $o['pct'] = self::pct($o['proven'], $o['delivered']);
+
+            return $o;
+        };
+        $groups = array_map($fix, array_values($groups));
+        // الأكتر فلوس من غير إثبات الأول
+        usort($groups, fn ($a, $b) => [$b['unproven_grand'], $a['label']] <=> [$a['unproven_grand'], $b['label']]);
+
+        return ['total' => $fix($total), 'groups' => $groups];
+    }
 
     /** يوم بدء تصليح الأسعار — أي مستند إجماليه اتغير من بعده من بره المراجعة بيتعلّم «اتسعّر» */
     public const PRICE_FIX_DAY = '2026-11-10';
@@ -312,7 +377,11 @@ class DocQueue
                 return false;
             }
             $flag = $f['flag'] ?? '';
-            if ($flag === 'any' ? $r['flags'] === [] : ($flag !== '' && ! in_array($flag, $r['flags'], true))) {
+            if (in_array($flag, self::PROOF_TAGS, true)) {
+                if (! in_array($flag, $r['tags'] ?? [], true)) {
+                    return false;
+                }
+            } elseif ($flag === 'any' ? $r['flags'] === [] : ($flag !== '' && ! in_array($flag, $r['flags'], true))) {
                 return false;
             }
             // عينة المراجِع التاني: مستندات راجعها فلان يوم كذا
@@ -323,7 +392,7 @@ class DocQueue
                 return false;
             }
             if ($nq !== '') {
-                $hay = $norm(implode(' ', [$r['number'], $r['paper_ref'], $r['client'], $r['client_code'], $r['phone'], $r['group'], $r['mother'], $r['rep']]));
+                $hay = $norm(implode(' ', [$r['number'], $r['paper_ref'], $r['receipt_no'] ?? '', $r['client'], $r['client_code'], $r['phone'], $r['group'], $r['mother'], $r['rep']]));
                 $hit = str_contains($hay, $nq) || ($amount !== null && abs($r['grand'] - $amount) < 0.01)
                     || ($serialQ !== null && $r['paper_ref'] !== null && str_contains($r['paper_ref'], $serialQ));
                 if (! $hit) {

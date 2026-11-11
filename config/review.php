@@ -14,9 +14,13 @@
  *                                    false = تحذير بس لو مستندات الشهر لسه ماتراجعتش كلها،
  *                                    true  = ممنوع ✓ الشهر لحد ما كل مستنداته تتراجع ✓.
  *   REVIEW_DAILY_TARGET=150        — هدف المستندات في اليوم (شريط السرعة).
+ *   REVIEW_PO_PROOF_REQUIRED=false — أمر توريد اتسلّم من غير إثبات استلام (لا إذن ولا إمضاء/ختم):
+ *                                    false = فحص أحمر بيتأكد بالضغطة التانية (زي باقي التحذيرات)،
+ *                                    true  = ممنوع ✓ لحد ما يتعلّم إذن أو إمضاء/ختم (زي السيريال).
  */
 return [
     'confirm_red_checks' => (bool) env('REVIEW_CONFIRM_RED', true),
     'month_needs_all_docs' => (bool) env('REVIEW_MONTH_NEEDS_ALL_DOCS', false),
     'daily_target' => (int) env('REVIEW_DAILY_TARGET', 150),
+    'po_proof_required' => (bool) env('REVIEW_PO_PROOF_REQUIRED', false),
 ];

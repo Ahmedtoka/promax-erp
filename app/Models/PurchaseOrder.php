@@ -44,6 +44,8 @@ class PurchaseOrder extends Model
         'image_path', 'prep_started_at',
         // السيريال الورقي (مراجعة المستندات ١١/١١) — زي الفاتورة
         'paper_ref',
+        // إثبات الاستلام (مراجعة المستندات ١٢/١١): إذن استلام العميل و/أو إمضاء/ختم على ورقتنا
+        'receipt_note', 'receipt_note_no', 'paper_signed',
         // تدقيق الإلغاء (٢١/٨) — مين لغى وإمتى
         'cancelled_by', 'cancelled_at',
         // تعديل الأسعار (Lane 13)
@@ -93,6 +95,8 @@ class PurchaseOrder extends Model
             'prep_started_at' => 'datetime',
             'approved_at' => 'datetime',
             'was_edited' => 'boolean',
+            'receipt_note' => 'boolean',
+            'paper_signed' => 'boolean',
             'edited_at' => 'datetime',
             // تدقيق الإلغاء (٢١/٨)
             'cancelled_at' => 'datetime',

@@ -351,3 +351,20 @@ column if he wants owners); daily target per person as a setting; the ERP layout
 
 Switches (`config/review.php`): `REVIEW_CONFIRM_RED` (default true), `REVIEW_MONTH_NEEDS_ALL_DOCS` (default false =
 warn in the month dialog; true = server refuses ✓ on the month until its documents are all ✓), `REVIEW_DAILY_TARGET` (150).
+
+## Addendum 3 — PO proof of delivery (2026-11-12, Ahmed)
+
+Chains pay a purchase order only against proof it was delivered: their own receiving
+note (إذن استلام) or a signature/stamp on our delivery paper.
+
+- Columns on `purchase_orders` (migration `2026_11_12_000100_po_delivery_proof`):
+  `receipt_note` bool, `receipt_note_no` string(40) nullable, `paper_signed` bool.
+- PO pane, paper column: «يوجد إذن استلام» (+ optional note number) and
+  «إمضاء / ختم على الورقة». Saved instantly (keys `1`, `2`, `N`); a note number
+  implies the receiving note. Logged as a `proof` event with before → after.
+  Removing all proof from a ✓ PO reopens it; adding proof leaves ✓ alone.
+- Check chip «إثبات استلام» on delivered POs (info on undelivered). Default soft
+  (red, confirmed by the second press); `REVIEW_PO_PROOF_REQUIRED=true` makes it block ✓.
+- Queue: warning flag `noproof` (counts in «أي تنبيه»), positive filters `receipt`
+  and `signed`; search matches the note number. Dashboard card per chain/client:
+  delivered, proven, unproven and unproven value. CSV export has three proof columns.

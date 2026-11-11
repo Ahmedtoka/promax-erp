@@ -85,10 +85,10 @@ class ReviewDocsController extends Controller
                 'changed' => $scoped->where('state', 'changed')->count(),
                 'all' => $scoped->count(),
             ],
-            'context' => $this->context($user, $f, $scoped),
+            'context' => $this->context($user, $f, $all),
             'pace' => ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
             // ⚠️ (١٢/١١) عدد الشيب = عدد اللي هيظهر لو دوست عليه بالظبط: كل الفلاتر الحالية + تاب الحالة
-            'flagCounts' => collect([...DocQueue::FLAGS, 'any'])->mapWithKeys(fn ($k) => [$k => DocQueue::byStatus(DocQueue::filter($all, ['flag' => $k, 'sample' => ''] + $f), $f['status'])->count()]),
+            'flagCounts' => collect([...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS])->mapWithKeys(fn ($k) => [$k => DocQueue::byStatus(DocQueue::filter($all, ['flag' => $k, 'sample' => ''] + $f), $f['status'])->count()]),
             'sampleBy' => $f['by'] !== '' ? User::find($f['by'])?->displayName() : null,
             'f' => $f,
             'open' => $request->string('doc')->value(),
@@ -109,7 +109,7 @@ class ReviewDocsController extends Controller
      *
      * @return array<string, mixed>|null
      */
-    private function context(User $user, array $f, \Illuminate\Support\Collection $scoped): ?array
+    private function context(User $user, array $f, \Illuminate\Support\Collection $all): ?array
     {
         if ($f['client'] !== '') {
             $c = Client::visibleTo(Client::whereKey($f['client']), $user)->first(['id', 'code', 'name', 'name_en', 'group_id', 'balance']);
@@ -134,6 +134,8 @@ class ReviewDocsController extends Controller
         }
 
         $m = DocQueue::moneySum(DocQueue::moneyByClient($ids), $ids);
+        // إثبات استلام أوامر السلسلة/العميل ده (كل أوامره، من غير باقي الفلاتر)
+        $proof = DocQueue::proofStats($all->whereIn('client_id', $ids))['total'];
 
         return [
             'kind' => $kind, 'label' => $label,
@@ -141,6 +143,7 @@ class ReviewDocsController extends Controller
             'docs' => $m['docs'], 'ok' => $m['ok'], 'issue' => $m['issue'],
             'grand' => $m['grand'], 'ok_grand' => $m['ok_grand'],
             'pct' => DocQueue::pct($m['ok_grand'], $m['grand']),
+            'proof' => $proof['delivered'] > 0 ? $proof : null,
             'money_url' => Access::allows($user, 'erp.review.money') ? route('erp.review.money', $money + ['show' => 'all']) : null,
         ];
     }
@@ -193,6 +196,20 @@ class ReviewDocsController extends Controller
         }
 
         return $res;
+    }
+
+    /** (١٢/١١) إثبات استلام أمر التوريد: إذن استلام (ورقمه) و/أو إمضاء-ختم */
+    public function proof(Request $request, string $type, int $id): JsonResponse
+    {
+        $doc = $this->doc($request, $type, $id);
+        $data = $request->validate([
+            'receipt_note' => ['required', 'boolean'],
+            'receipt_note_no' => ['nullable', 'string', 'max:40'],
+            'paper_signed' => ['required', 'boolean'],
+        ]);
+
+        return $this->run($request, $doc, fn () => DocReview::setProof($request->user(), $doc, (bool) $data['receipt_note'],
+            $data['receipt_note_no'] ?? null, (bool) $data['paper_signed']), __('review.proof_saved'));
     }
 
     public function rep(Request $request, string $type, int $id): JsonResponse
@@ -273,12 +290,15 @@ class ReviewDocsController extends Controller
         $rows = DocQueue::byStatus(DocQueue::filter(DocQueue::all($request->user()), $f), $f['status']);
         $head = [__('review.f_type'), '#', __('review.serial'), __('review.doc_date'), __('review.f_client'), __('review.doc_client'),
             __('review.f_chain'), __('review.f_mother'), __('review.doc_rep'), __('review.tot_net'), __('review.tot_vat'), __('review.tot_incl'),
-            __('review.f_status'), __('review.x_flags'), __('review.x_by'), __('review.x_at'), __('review.log_note')];
+            __('review.f_status'), __('review.x_flags'), __('review.proof_receipt'), __('review.proof_receipt_no'), __('review.proof_signed'),
+            __('review.x_by'), __('review.x_at'), __('review.log_note')];
+        $yn = fn ($r, $k) => $r['type'] !== 'po' ? '' : ($r[$k] ? __('review.yes') : __('review.no'));
 
         return $this->csv('doc-review-'.now()->format('Ymd-Hi').'.csv', $head, $rows->map(fn ($r) => [
             __('review.type_'.$r['type']), $r['number'], $r['paper_ref'], $r['date'], $r['client_code'], $r['client'],
             $r['group'], $r['mother'], $r['rep'], $r['net'], $r['tax'], $r['grand'],
-            __('review.st_'.$r['state']), implode(' / ', array_map(fn ($x) => __('review.flag_'.$x), $r['flags'])), $r['by'], $r['at'], $r['note'],
+            __('review.st_'.$r['state']), implode(' / ', array_map(fn ($x) => __('review.flag_'.$x), $r['flags'])),
+            $yn($r, 'receipt'), $r['receipt_no'], $yn($r, 'signed'), $r['by'], $r['at'], $r['note'],
         ]));
     }
 
@@ -334,7 +354,7 @@ class ReviewDocsController extends Controller
             'rep' => $request->integer('rep') ?: '',
             'from' => $request->date('from')?->toDateString() ?? '',
             'to' => $request->date('to')?->toDateString() ?? '',
-            'flag' => in_array($request->string('flag')->value(), [...DocQueue::FLAGS, 'any'], true) ? $request->string('flag')->value() : '',
+            'flag' => in_array($request->string('flag')->value(), [...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS], true) ? $request->string('flag')->value() : '',
             // عينة المراجِع التاني (من صفحة المراجِعين)
             'by' => $request->integer('by') ?: '',
             'day' => $request->date('day')?->toDateString() ?? '',
@@ -428,6 +448,14 @@ class ReviewDocsController extends Controller
             'prices' => [$offLines === 0, $offLines ? __('review.chk_prices_off', ['n' => $offLines]) : ''],
             'total' => [$state !== 'changed', $state === 'changed' ? __('review.st_changed') : ''],
         ];
+        // (١٢/١١) إثبات الاستلام — أوامر التوريد بس، وبعد التسليم بس
+        if ($type === 'po') {
+            $parts = array_filter([$doc->receipt_note ? __('review.proof_receipt').($doc->receipt_note_no ? ' '.$doc->receipt_note_no : '') : null,
+                $doc->paper_signed ? __('review.proof_signed') : null]);
+            $checks = array_slice($checks, 0, 1, true) + ['proof' => DocReview::needsProof($doc)
+                ? [DocReview::hasProof($doc), $parts ? implode(' + ', $parts) : __('review.proof_none')]
+                : [null, __('review.proof_not_delivered')]] + $checks;
+        }
         if (isset(DocQueue::repricedKeys($type, $doc->id)[($type === 'invoice' ? 'inv-' : 'po-').$doc->id])) {
             $checks['repriced'] = [null, __('review.flag_repriced_hint')];
         }
@@ -442,6 +470,8 @@ class ReviewDocsController extends Controller
             'reps' => User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'role']),
             'canEdit' => Access::allows($user, 'erp.review.docs.lines'),
             'canReopen' => Access::allows($user, 'erp.review.docs.reopen'),
+            'canProof' => Access::allows($user, 'erp.review.docs.proof'),
+            'proofHard' => (bool) config('review.po_proof_required'),
             'afterReset' => DocReview::dateOf($doc)?->gte(Carbon::parse(DocReview::STOCK_RESET_DAY)) ?? false,
         ];
     }

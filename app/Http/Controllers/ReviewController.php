@@ -404,7 +404,7 @@ class ReviewController extends Controller
     private function docsCard(?User $user): array
     {
         if (! \App\Support\Access::allows($user, 'erp.review.docs')) {
-            return ['docs' => null, 'docPace' => null, 'docIssues' => collect()];
+            return ['docs' => null, 'docPace' => null, 'docIssues' => collect(), 'docProof' => null];
         }
         $all = DocQueue::all($user);
 
@@ -412,6 +412,7 @@ class ReviewController extends Controller
             'docs' => DocQueue::stats($all),
             'docPace' => \App\Services\Review\ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
             'docIssues' => $all->where('state', 'issue')->sortBy('at')->take(15)->values(),
+            'docProof' => DocQueue::proofStats($all),
         ];
     }
 

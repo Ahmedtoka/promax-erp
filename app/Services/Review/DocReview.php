@@ -244,6 +244,10 @@ class DocReview
         if ($status === ReviewCheck::OK && self::normSerial($doc->paper_ref) === null) {
             throw new Rejected(__('review.serial_required'));
         }
+        // (١٢/١١) إثبات الاستلام: تحذير بالافتراضي — شرط لو `review.po_proof_required`
+        if ($status === ReviewCheck::OK && config('review.po_proof_required') && self::needsProof($doc) && ! self::hasProof($doc)) {
+            throw new Rejected(__('review.proof_required'));
+        }
 
         return DB::transaction(function () use ($user, $doc, $status, $note, $openMs, $current) {
             $check = ReviewCheck::updateOrCreate(
@@ -298,6 +302,47 @@ class DocReview
         });
 
         return self::duplicates($doc, $serial);
+    }
+
+    // ═══════════════════════ إثبات الاستلام (أوامر التوريد بس) ═══════════════════════
+
+    /** الأمر اتسلّم فعلاً — قبل التسليم مفيش إثبات يتطلب */
+    public static function needsProof(Invoice|PurchaseOrder $doc): bool
+    {
+        return $doc instanceof PurchaseOrder && $doc->status === 'delivered';
+    }
+
+    /** إذن استلام من العميل أو إمضاء/ختم على ورقتنا — أي واحد يكفي */
+    public static function hasProof(PurchaseOrder|Invoice $doc): bool
+    {
+        return $doc instanceof PurchaseOrder && ($doc->receipt_note || $doc->paper_signed);
+    }
+
+    /**
+     * علامات إثبات الاستلام. شيل الإثبات كله من أمر متعلّم ✓ بيرجّعه «لسه»
+     * (اللي اتراجع على أساسه اتشال)؛ إضافة إثبات مابتلمسش ✓.
+     */
+    public static function setProof(User $user, Invoice|PurchaseOrder $doc, bool $receipt, ?string $receiptNo, bool $signed): void
+    {
+        if (! $doc instanceof PurchaseOrder) {
+            throw new Rejected(__('review.proof_po_only'));
+        }
+        $receiptNo = self::normSerial($receiptNo);
+        if ($receiptNo !== null) {
+            $receipt = true;   // رقم إذن = فيه إذن
+        }
+        $old = ['receipt_note' => (bool) $doc->receipt_note, 'receipt_note_no' => $doc->receipt_note_no, 'paper_signed' => (bool) $doc->paper_signed];
+        $new = ['receipt_note' => $receipt, 'receipt_note_no' => $receipt ? $receiptNo : null, 'paper_signed' => $signed];
+        if ($old === $new) {
+            return;
+        }
+        $hadProof = $old['receipt_note'] || $old['paper_signed'];
+        $nowProof = $new['receipt_note'] || $new['paper_signed'];
+
+        DB::transaction(function () use ($user, $doc, $old, $new, $hadProof, $nowProof) {
+            $doc->update($new);
+            self::event($user, $doc, 'proof', $old, $new, 0, 0, clearsReview: $hadProof && ! $nowProof);
+        });
     }
 
     public static function setRep(User $user, Invoice|PurchaseOrder $doc, int $repId): void
@@ -668,6 +713,14 @@ class DocReview
                 break;
             case 'rep':
                 $out[__('review.doc_rep')] = [$b['rep'] ?? null, $a['rep'] ?? null];
+                break;
+            case 'proof':
+                $yn = fn ($v) => $v ? __('review.yes') : __('review.no');
+                $out[__('review.proof_receipt')] = [$yn($b['receipt_note'] ?? false), $yn($a['receipt_note'] ?? false)];
+                if (($b['receipt_note_no'] ?? null) !== ($a['receipt_note_no'] ?? null)) {
+                    $out[__('review.proof_receipt_no')] = [$b['receipt_note_no'] ?? null, $a['receipt_note_no'] ?? null];
+                }
+                $out[__('review.proof_signed')] = [$yn($b['paper_signed'] ?? false), $yn($a['paper_signed'] ?? false)];
                 break;
             case 'date':
                 $out[__('review.doc_date')] = [$b['date'] ?? null, $a['date'] ?? null];

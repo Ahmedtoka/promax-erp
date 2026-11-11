@@ -81,6 +81,43 @@
         @endforeach
     </div>
 </div>
+
+{{-- (١٢/١١) إثبات استلام أوامر التوريد — فلوس من غير إثبات = فلوس في خطر --}}
+@if ($docProof && $docProof['total']['delivered'] > 0)
+    @php $pt = $docProof['total']; @endphp
+    <div class="card dash-proof">
+        <h3>📦 {{ __('review.dash_proof') }}</h3>
+        <div class="rv-sub">{{ __('review.dash_proof_sub') }}</div>
+        <div class="dash-pace">
+            <div><span class="rv-sub">{{ __('review.pf_delivered') }}</span><b>{{ number_format($pt['delivered']) }}</b></div>
+            <div><span class="rv-sub">{{ __('review.pf_proven') }} — {{ __('review.pf_split', ['r' => $pt['receipt'], 's' => $pt['signed']]) }}</span><b style="color:#15803D">{{ number_format($pt['proven']) }} <small>({{ $pt['pct'] }}%)</small></b></div>
+            <div><span class="rv-sub">{{ __('review.pf_unproven') }}</span><b style="color:#B91C1C">{{ number_format($pt['unproven']) }}</b></div>
+            <div><span class="rv-sub">{{ __('review.pf_risk') }}</span><b style="color:#B91C1C" dir="ltr">{{ number_format($pt['unproven_grand'], 2) }}</b></div>
+        </div>
+        <div class="tablewrap">
+            <table>
+                <thead><tr>
+                    <th>{{ __('review.pf_chain') }}</th><th class="num">{{ __('review.pf_delivered') }}</th><th class="num">{{ __('review.pf_proven') }}</th>
+                    <th class="num">{{ __('review.pf_unproven') }}</th><th class="num">{{ __('review.pf_pct') }}</th><th class="num">{{ __('review.pf_risk') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($docProof['groups'] as $g)
+                    <tr>
+                        <td><a href="{{ route('erp.review.docs', $g['filter'] + ['type' => 'po', 'status' => 'all', 'flag' => $g['unproven'] ? 'noproof' : null]) }}"><b>{{ $g['label'] }}</b></a>
+                            <span class="rv-sub">{{ $g['solo'] ? __('review.solo_group') : ($g['mother'] ?? '') }}</span></td>
+                        <td class="num">{{ $g['delivered'] }}</td>
+                        <td class="num">{{ $g['proven'] }}</td>
+                        <td class="num" @if ($g['unproven']) style="color:#B91C1C;font-weight:800" @endif>{{ $g['unproven'] }}</td>
+                        <td class="num">{{ $g['pct'] }}%</td>
+                        <td class="num" dir="ltr" @if ($g['unproven_grand'] > 0) style="color:#B91C1C;font-weight:800" @endif>{{ number_format($g['unproven_grand'], 2) }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+        @if ($pt['unproven'])<a class="btn sm" href="{{ route('erp.review.docs', ['type' => 'po', 'status' => 'all', 'flag' => 'noproof']) }}">📦 {{ __('review.pf_open') }} ({{ $pt['unproven'] }})</a>@endif
+    </div>
+@endif
 @endif
 
 <div class="rv-two">

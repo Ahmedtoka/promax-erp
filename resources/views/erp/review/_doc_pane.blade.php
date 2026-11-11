@@ -14,7 +14,8 @@
     $poEditUrl = ! $isInv && isset($lockLines['po_approved']) && \App\Support\Access::allows($u, 'ops.po.edit') ? route('ops.po.edit', $doc) : null;
     $chain = $client?->group;
     $mother = $chain?->motherCompany;
-    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅'];
+    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅', 'proof' => '📦'];
+    $yn = fn ($v) => $v ? '✓' : '✗';
 @endphp
 <div class="dp" data-key="{{ $key }}" data-type="{{ $type }}" data-id="{{ $doc->id }}" data-state="{{ $state }}"
      data-edit="{{ $editable ? 1 : 0 }}" data-lines="{{ $linesEditable ? 1 : 0 }}">
@@ -61,7 +62,7 @@
     {{-- (١٢/١١) فحص أوتوماتيك قبل ✓ — الأحمر بيطلب Enter تانية للتأكيد --}}
     <div class="dp-checks" aria-label="{{ __('review.checks_title') }}">
         @foreach ($checks as $ck => [$ok, $why])
-            <span class="{{ $ok === null ? 'info' : ($ok ? 'good' : 'bad') }}" data-chk="{{ $ck }}" @if ($ck === 'serial') data-hard="1" @endif title="{{ $why }}">{{ $ok === null ? '•' : ($ok ? '✓' : '✗') }} {{ __('review.chk_'.$ck) }}</span>
+            <span class="{{ $ok === null ? 'info' : ($ok ? 'good' : 'bad') }}" data-chk="{{ $ck }}" @if ($ck === 'serial' || ($ck === 'proof' && $proofHard)) data-hard="1" @endif title="{{ $why }}">{{ $ok === null ? '•' : ($ok ? '✓' : '✗') }} {{ __('review.chk_'.$ck) }}</span>
         @endforeach
     </div>
 
@@ -102,6 +103,30 @@
                     @endif
                 </td>
             </tr>
+            @unless ($isInv)
+                {{-- (١٢/١١) إثبات الاستلام: إذن استلام العميل و/أو إمضاء/ختم على ورقتنا — بيتحفظ على طول --}}
+                @php
+                    $needProof = \App\Services\Review\DocReview::needsProof($doc);
+                    $hasProof = \App\Services\Review\DocReview::hasProof($doc);
+                @endphp
+                <tr class="cmp-proof {{ $needProof && ! $hasProof ? 'bad' : '' }}">
+                    <th scope="row">{{ __('review.proof_receipt') }} <kbd>1</kbd></th>
+                    <td class="cmp-paper"><div class="pf-row">
+                        <label class="pf"><input type="checkbox" class="dp-receipt" @checked($doc->receipt_note) @disabled(! $canProof)> {{ __('review.proof_receipt_has') }}</label>
+                        <input class="dp-receipt-no" value="{{ $doc->receipt_note_no }}" maxlength="40" dir="ltr" autocomplete="off"
+                               placeholder="{{ __('review.proof_no_ph') }}" aria-label="{{ __('review.proof_receipt_no') }}" @unless ($canProof) readonly @endunless>
+                    </div></td>
+                    <td class="cmp-sys" rowspan="2">
+                        @if (! $needProof)<span class="cmp-na">{{ __('review.proof_not_delivered') }}</span>
+                        @elseif ($hasProof)<span class="cmp-ok">✓ {{ __('review.proof_has') }}</span>
+                        @else<span class="cmp-bad">✗ {{ __('review.proof_none') }}</span>@endif
+                    </td>
+                </tr>
+                <tr class="cmp-proof {{ $needProof && ! $hasProof ? 'bad' : '' }}">
+                    <th scope="row">{{ __('review.proof_signed') }} <kbd>2</kbd></th>
+                    <td class="cmp-paper"><label class="pf"><input type="checkbox" class="dp-signed" @checked($doc->paper_signed) @disabled(! $canProof)> {{ __('review.proof_signed_label') }}</label></td>
+                </tr>
+            @endunless
             <tr>
                 <th scope="row">{{ __('review.doc_date') }} <kbd>D</kbd></th>
                 <td class="cmp-paper cmp-na">{{ __('review.cmp_look') }}</td>
@@ -223,6 +248,8 @@
                     <span class="rv-sub" dir="ltr">{{ $e->created_at?->format('Y-m-d H:i:s') }}</span>
                     @if ((float) $e->grand_delta != 0)<span class="ev-money" dir="ltr">{{ $money($e->before['grand'] ?? 0) }} → {{ $money($e->after['grand'] ?? 0) }} ({{ $e->grand_delta > 0 ? '+' : '' }}{{ $money($e->grand_delta) }})</span>@endif
                     @if ($e->action === 'serial')<span dir="ltr">{{ $e->before['paper_ref'] ?? '—' }} → {{ $e->after['paper_ref'] ?? '—' }}</span>@endif
+                    @if ($e->action === 'proof')<span>{{ __('review.proof_receipt') }} {{ $yn($e->before['receipt_note'] ?? false) }} → {{ $yn($e->after['receipt_note'] ?? false) }}@if (! empty($e->after['receipt_note_no'])) <b dir="ltr">{{ $e->after['receipt_note_no'] }}</b>@endif
+                        · {{ __('review.proof_signed') }} {{ $yn($e->before['paper_signed'] ?? false) }} → {{ $yn($e->after['paper_signed'] ?? false) }}</span>@endif
                     @if ($e->action === 'rep'){{ $e->before['rep'] ?? '—' }} → {{ $e->after['rep'] ?? '—' }}@endif
                     @if ($e->action === 'date')<span dir="ltr">{{ $e->before['date'] ?? '—' }} → {{ $e->after['date'] ?? '—' }}</span>@endif
                     @if ($e->seconds_since_prev !== null)<span class="rv-sub">· {{ __('review.ev_seconds', ['s' => $e->seconds_since_prev]) }}</span>@endif

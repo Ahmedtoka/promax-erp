@@ -550,4 +550,105 @@ class DocReviewTest extends TestCase
         $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'invoice', 'id' => $inv->id]), ['status' => 'issue', 'note' => 'الورقة ضايعة'])
             ->assertOk()->assertJsonPath('row.state', 'issue');
     }
+
+    /** (١٢/١١ — أحمد) إثبات استلام أمر التوريد: إذن استلام و/أو إمضاء-ختم — بيتحفظ، بيتسجل، بيحرّك الفحص والفلاتر */
+    public function test_po_proof_saves_logs_and_drives_check_and_flags(): void
+    {
+        $po = $this->deliveredPo();
+        $po->update(['paper_ref' => 'PF-1']);
+        $url = fn (string $r) => route('erp.review.docs.'.$r, ['type' => 'po', 'id' => $po->id]);
+
+        // من غير إثبات: الفحص أحمر بس مش شرط (الافتراضي) — والتنبيه في الطابور
+        $this->actingAs($this->accountant)->get($url('pane'))->assertOk()
+            ->assertSee('class="bad" data-chk="proof"', false)->assertDontSee('data-chk="proof" data-hard', false)
+            ->assertSee(__('review.proof_none'));
+        $page = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['status' => 'all', 'type' => 'po']))->assertOk();
+        $this->assertSame(1, $page->viewData('flagCounts')['noproof']);
+        $this->assertSame(0, $page->viewData('flagCounts')['receipt']);
+        $this->assertTrue(in_array('noproof', DocQueue::all($this->accountant, 'po-'.$po->id)->first()['flags'], true));
+
+        // رقم إذن بالأرقام العربي = فيه إذن، والرد فيه الفحص الجديد أخضر والعلامة
+        $before = ActivityLog::max('id') ?? 0;
+        $this->actingAs($this->accountant)->postJson($url('proof'), ['receipt_note' => 0, 'receipt_note_no' => '٧٧ 1', 'paper_signed' => 0])
+            ->assertOk()->assertJsonPath('checks.proof.ok', true)->assertJsonPath('row.tags', ['receipt'])->assertJsonPath('row.flags', []);
+        $po->refresh();
+        $this->assertTrue($po->receipt_note);
+        $this->assertSame('771', $po->receipt_note_no);
+        $this->assertFalse($po->paper_signed);
+        $ev = DocReviewEvent::where('doc_type', 'po')->where('doc_id', $po->id)->where('action', 'proof')->sole();
+        $this->assertFalse($ev->before['receipt_note']);
+        $this->assertTrue($ev->after['receipt_note']);
+        $log = ActivityLog::where('id', '>', $before)->where('event', 'action')->sole();
+        $this->assertSame([__('review.no'), __('review.yes')], $log->changes[__('review.proof_receipt')]);
+        $this->assertSame([null, '771'], $log->changes[__('review.proof_receipt_no')]);
+
+        // البحث برقم الإذن، وفلتر «إذن استلام»
+        $this->assertSame([$po->id], DocQueue::filter(DocQueue::all($this->accountant), ['q' => '771'])->pluck('id')->all());
+        $this->assertSame([$po->id], DocQueue::filter(DocQueue::all($this->accountant), ['flag' => 'receipt'])->pluck('id')->all());
+        $this->assertSame([], DocQueue::filter(DocQueue::all($this->accountant), ['flag' => 'signed'])->pluck('id')->all());
+
+        // ✓ — وبعدين شيل الإثبات كله ← يرجع «لسه» (اللي اتراجع على أساسه اتشال)
+        DocReview::mark($this->accountant, $po->fresh(), 'ok', null);
+        $this->actingAs($this->accountant)->postJson($url('proof'), ['receipt_note' => 1, 'receipt_note_no' => '771', 'paper_signed' => 1])->assertOk()
+            ->assertJsonPath('row.state', 'ok');   // إضافة إثبات مابتلمسش ✓
+        $this->actingAs($this->accountant)->postJson($url('proof'), ['receipt_note' => 0, 'receipt_note_no' => '', 'paper_signed' => 0])->assertOk()
+            ->assertJsonPath('row.state', 'pending')->assertJsonPath('checks.proof.ok', false);
+        $this->assertNull($po->fresh()->receipt_note_no);
+
+        // الفواتير مالهاش إثبات استلام
+        $this->expectException(\App\Exceptions\Rejected::class);
+        DocReview::setProof($this->accountant, $this->invoice(), true, null, false);
+    }
+
+    /** المفتاح: من غير إثبات تحذير بالافتراضي (✓ بتعدّي)، وشرط لو `review.po_proof_required` */
+    public function test_proof_switch_soft_by_default_and_hard_when_on(): void
+    {
+        $soft = $this->deliveredPo();
+        $soft->update(['paper_ref' => 'PF-2']);
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'po', 'id' => $soft->id]), ['status' => 'ok'])->assertOk();
+
+        config(['review.po_proof_required' => true]);
+        $po = $this->deliveredPo();
+        $po->update(['paper_ref' => 'PF-3']);
+        $mark = fn () => $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'po', 'id' => $po->id]), ['status' => 'ok']);
+        $mark()->assertStatus(422)->assertJsonPath('message', __('review.proof_required'));
+        $this->assertMatchesRegularExpression('/data-chk="proof"\s+data-hard="1"/',
+            $this->actingAs($this->accountant)->get(route('erp.review.docs.pane', ['type' => 'po', 'id' => $po->id]))->getContent());
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.proof', ['type' => 'po', 'id' => $po->id]), ['receipt_note' => 0, 'paper_signed' => 1])->assertOk();
+        $mark()->assertOk()->assertJsonPath('row.state', 'ok');
+
+        // أمر لسه ماتسلّمش: مفيش إثبات مطلوب
+        $pending = $this->deliveredPo();
+        $pending->update(['paper_ref' => 'PF-4', 'status' => 'pending']);
+        $this->actingAs($this->accountant)->get(route('erp.review.docs.pane', ['type' => 'po', 'id' => $pending->id]))
+            ->assertSee('class="info" data-chk="proof"', false)->assertSee(__('review.proof_not_delivered'));
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'po', 'id' => $pending->id]), ['status' => 'ok'])->assertOk();
+    }
+
+    /** فلوس من غير إثبات لكل سلسلة/عميل — في اللوحة الرئيسية وشريط السلسلة والتصدير */
+    public function test_proof_stats_dashboard_context_and_export(): void
+    {
+        $a = $this->deliveredPo();
+        $b = $this->deliveredPo();
+        $c = $this->deliveredPo();
+        $c->update(['status' => 'pending']);   // مش متسلّم — مايتحسبش
+        DocReview::setProof($this->accountant, $b, false, null, true);
+
+        $st = DocQueue::proofStats(DocQueue::all($this->accountant));
+        $this->assertSame(2, $st['total']['delivered']);
+        $this->assertSame(1, $st['total']['proven']);
+        $this->assertSame(1, $st['total']['signed']);
+        $this->assertSame(1, $st['total']['unproven']);
+        $this->assertEqualsWithDelta(34.2, $st['total']['unproven_grand'], 0.001);
+        $this->assertSame(['client' => $this->client->id], $st['groups'][0]['filter']);
+
+        $this->actingAs($this->accountant)->get(route('erp.review'))->assertOk()
+            ->assertSee(__('review.dash_proof'))->assertSee(__('review.pf_open'));
+        $ctx = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['client' => $this->client->id]))->assertOk()->viewData('context');
+        $this->assertSame(1, $ctx['proof']['unproven']);
+
+        $body = $this->actingAs($this->accountant)->get(route('erp.review.docs.export', ['status' => 'all', 'type' => 'po']))->streamedContent();
+        $this->assertStringContainsString(__('review.proof_signed'), $body);
+        $this->assertStringContainsString(__('review.flag_noproof'), $body);
+    }
 }

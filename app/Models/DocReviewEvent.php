@@ -20,7 +20,7 @@ class DocReviewEvent extends Model
     /** الأحداث اللي بتتحسب «مراجعة» في التحليل (الوقت بين مستند والتاني) */
     public const REVIEW_ACTIONS = ['ok', 'issue'];
 
-    public const EDIT_ACTIONS = ['serial', 'lines', 'rep', 'date'];
+    public const EDIT_ACTIONS = ['serial', 'lines', 'rep', 'date', 'proof'];
 
     /** أقل من كده بين مراجعة والتانية = سريعة. ٥ ورا بعض = علم أحمر */
     public const FAST_SECONDS = 8;
