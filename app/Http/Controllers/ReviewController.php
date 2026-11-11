@@ -12,6 +12,7 @@ use App\Models\ReviewStockMove;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Pricing;
+use App\Services\Review\DocQueue;
 use App\Services\Review\MonthFigures;
 use App\Services\Review\StockReset;
 use Illuminate\Http\Request;
@@ -75,8 +76,7 @@ class ReviewController extends Controller
             'recent' => $recent, 'labels' => $this->labels($recent),
             'months' => ReviewCheck::months(),
             // (١١/١١) المرحلة ٤ — للي معاه التاب بس
-            'docs' => \App\Support\Access::allows($user, 'erp.review.docs')
-                ? \App\Services\Review\DocQueue::stats(\App\Services\Review\DocQueue::all($user)) : null,
+            ...$this->docsCard($user),
         ]);
     }
 
@@ -115,7 +115,8 @@ class ReviewController extends Controller
             default => ! in_array($state($id), ['done', 'issue'], true),
         }));
 
-        $clients = $q->whereIn('id', $keep)->orderBy('group_id')->orderBy('name')->paginate(60)->withQueryString();
+        $per = $this->perPage($request, 25);
+        $clients = $q->whereIn('id', $keep)->orderBy('group_id')->orderBy('name')->paginate($per)->withQueryString();
 
         return view('erp.review.data', [
             'clients' => $clients,
@@ -124,6 +125,7 @@ class ReviewController extends Controller
             'missing' => $clients->getCollection()->mapWithKeys(fn ($c) => [$c->id => ReviewCheck::missingItems($c)]),
             'counts' => $counts,
             'show' => $show,
+            'per' => $per,
             'filters' => $request->only(['q', 'group', 'mother']),
             'groups' => ClientGroup::where('active', true)->orderBy('name')->get(['id', 'name', 'name_en']),
             'mothers' => MotherCompany::orderBy('name')->get(['id', 'name', 'name_en']),
@@ -146,6 +148,11 @@ class ReviewController extends Controller
             ->whereNotIn('status', ['delivered', 'cancelled'])
             ->groupBy('client_id')->selectRaw('client_id, COUNT(*) AS n')->pluck('n', 'client_id');
 
+        // (١٢/١١) الربط بالمراجعة مستند مستند: رصيد كل سطر دلوقتي، وكام من
+        // فلوس مستنداته اتراجعت ✓، وكل شهر مستنداته خلصت ولا لأ
+        $docs = DocQueue::moneyByClient($allIds);
+        $balances = Client::whereIn('id', $allIds)->pluck('balance', 'id');
+
         $rows = [];
 
         foreach ($groups as $g) {
@@ -154,6 +161,8 @@ class ReviewController extends Controller
                 'type' => 'group', 'model' => $g, 'branches' => $ids->count(),
                 'figures' => MonthFigures::sum($figures, $ids),
                 'pending_pos' => (int) $ids->sum(fn ($id) => $pendingPos[$id] ?? 0),
+                'balance' => round((float) $ids->sum(fn ($id) => (float) ($balances[$id] ?? 0)), 2),
+                'docs' => DocQueue::moneySum($docs, $ids),
             ];
         }
         foreach ($solo as $c) {
@@ -161,6 +170,8 @@ class ReviewController extends Controller
                 'type' => 'client', 'model' => $c, 'branches' => 1,
                 'figures' => MonthFigures::sum($figures, [$c->id]),
                 'pending_pos' => (int) ($pendingPos[$c->id] ?? 0),
+                'balance' => round((float) ($balances[$c->id] ?? 0), 2),
+                'docs' => DocQueue::moneySum($docs, [$c->id]),
             ];
         }
 
@@ -186,9 +197,22 @@ class ReviewController extends Controller
             default => ! in_array($r['state'], ['done', 'issue'], true),
         }));
 
+        $totals = [
+            'balance' => round(array_sum(array_column($rows, 'balance')), 2),
+            'grand' => round(array_sum(array_map(fn ($r) => $r['docs']['grand'], $rows)), 2),
+            'ok_grand' => round(array_sum(array_map(fn ($r) => $r['docs']['ok_grand'], $rows)), 2),
+            'docs' => array_sum(array_map(fn ($r) => $r['docs']['docs'], $rows)),
+            'ok' => array_sum(array_map(fn ($r) => $r['docs']['ok'], $rows)),
+        ];
+
+        $per = $this->perPage($request, 25);
+        $page = $this->paginateArray($request, $rows, $per);
+
         return view('erp.review.money', [
-            'rows' => $rows, 'checks' => $checks, 'months' => ReviewCheck::months(),
+            'rows' => $page->items(), 'page' => $page, 'per' => $per, 'totals' => $totals,
+            'checks' => $checks, 'months' => ReviewCheck::months(),
             'counts' => $counts, 'show' => $show, 'filters' => $request->only('q'),
+            'canDocs' => \App\Support\Access::allows($user, 'erp.review.docs'),
         ]);
     }
 
@@ -353,6 +377,44 @@ class ReviewController extends Controller
     }
 
     // ═══════════════════════ مساعدات ═══════════════════════
+
+    public const PER_PAGE = [25, 50, 100, 200];
+
+    /**
+     * (١٢/١١) كارت المرحلة ٤ في الداشبورد: الإنجاز + السرعة والمتوقع + قايمة
+     * المستندات المفتوح عليها ✗ (أقدم الأول) — للي معاه التاب بس.
+     */
+    private function docsCard(?User $user): array
+    {
+        if (! \App\Support\Access::allows($user, 'erp.review.docs')) {
+            return ['docs' => null, 'docPace' => null, 'docIssues' => collect()];
+        }
+        $all = DocQueue::all($user);
+
+        return [
+            'docs' => DocQueue::stats($all),
+            'docPace' => \App\Services\Review\ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
+            'docIssues' => $all->where('state', 'issue')->sortBy('at')->take(15)->values(),
+        ];
+    }
+
+    /** مقاس الصفحة من `?per=` — من القايمة بس */
+    private function perPage(Request $request, int $default): int
+    {
+        $n = $request->integer('per');
+
+        return in_array($n, self::PER_PAGE, true) ? $n : $default;
+    }
+
+    /** ترقيم سيرفر لمصفوفة جاهزة (صفوف الحسابات بتتبني في PHP) */
+    private function paginateArray(Request $request, array $rows, int $per): \Illuminate\Pagination\LengthAwarePaginator
+    {
+        $last = max(1, (int) ceil(count($rows) / $per));
+        $p = min($last, max(1, $request->integer('page', 1)));
+
+        return new \Illuminate\Pagination\LengthAwarePaginator(array_slice($rows, ($p - 1) * $per, $per), count($rows), $per, $p,
+            ['path' => $request->url(), 'query' => $request->except('page')]);
+    }
 
     private function clientsQuery(?User $user)
     {

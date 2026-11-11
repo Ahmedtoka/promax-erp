@@ -309,3 +309,42 @@ Server: `git pull` · `php artisan migrate --force --path=database/migrations/20
 - Fast-click threshold 8 s / streak 5.
 - `open` time recorded only on the ✓ event.
 - Analytics page admin-only by default.
+
+---
+
+## Addendum — 2026-11-12: rework after Ahmed's first look
+
+Ahmed: «الجداول بايظة والزراير كبيرة… لما بدوس مطابق المفروض يعد ويغير لونها… اربطها ببعض… اظبط السجل والاسم… اهم شيء الفلترات وسهولة العمل»
+and «هي السورس الوحيد لنجاح السيستم ومراجعة الداتا والاعتماد عليه». No new migration.
+
+**Built (fixes):**
+- Compact density on all review tabs (scoped to pages with the review tabs), segmented tab strip, one shared
+  server pager (`erp.review._pager`: «عرض ١–٢٥ من ٢٢٢», 25/50/100/200) on بيانات العملاء, الحسابات والشهور, المستندات.
+- المستندات: one table, chain header rows; ✓ recolours the row, updates chain counters, status chips and overall
+  % at once and opens the next *pending* document; chain progress counts all its documents (was the status-filtered
+  list, so it sat at 0/n). Filters apply on change; month picker; serial Enter saves then the next Enter = ✓.
+- Linking: الحسابات والشهور shows each chain/client balance now, how much of its document money is reviewed
+  (% + bar), and 📄 ok/total per month — each opens the queue filtered to that chain/client (and month); the queue
+  shows a chain/client strip with balance + reviewed share + ↩ back.
+- Activity log: one readable row per action — type «فاتورة/أمر توريد» with link, number + client in the title,
+  «حقل: قبل ← بعد» in Arabic. Duplicate request rows and «ReviewCheck #5» noise removed; rejected attempts still logged.
+
+**Built (trust features, no process change):**
+- Auto-flags with counts that filter the queue: no serial, duplicate serial, odd date (future / before Aug), rep ≠ the
+  client's rep, repriced since the price fix (10/11, from the change log), changed after ✓. Icons beside the number.
+- Automatic checklist in the pane (serial, date, rep, list prices, total, repriced). A red check makes the first
+  Enter a warning; a second Enter within 5 s confirms ✓ (keeps one-key speed, stops blind ✓).
+- Pace: today vs a daily target (150, constant `ReviewerStats::DAILY_TARGET`), 5-day average, remaining ≈ working
+  days to 100%, per reviewer — on the queue and the dashboard.
+- Open issues list (✗ documents, oldest first, note + who) on the dashboard, linking into the queue.
+- Second-reviewer spot check: on المراجِعين each reviewer-day has «🔎 5» → a fixed random sample of the documents
+  they ✓'d that day; a wrong one is reopened and marked ✗ (existing admin reopen).
+- Exports: queue CSV with the current filters (all pages, reviewer/time/flags/note) and the full review trail CSV
+  (admin) — UTF-8 with BOM for Excel.
+
+**Asked Ahmed (process changes, defaults applied until he answers):**
+1. Block «متطابق» on a client/month unless all documents are reviewed and the balance agrees? — default: show, don't block.
+2. Five manual ticks per document vs automatic checks + one ✓? — default: automatic checks + one ✓ (built).
+
+**Not built / left:** issue owner + resolved status as separate fields (an ✗ is resolved by re-marking ✓; needs a
+column if he wants owners); daily target per person as a setting; the ERP layout itself has no phone breakpoint.

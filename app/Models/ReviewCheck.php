@@ -13,6 +13,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ReviewCheck extends Model
 {
+    /**
+     * علامة مراجعة مستند (فاتورة/أمر) ليها سطرها المقروء من `DocReview` —
+     * فالمراقب العام مايكتبش «ReviewCheck #5» جنبه (١٢/١١).
+     */
+    public function quietInActivity(): bool
+    {
+        return in_array($this->entity_type, ['invoice', 'po'], true);
+    }
+
     public const OK = 'ok';
     public const ISSUE = 'issue';
 

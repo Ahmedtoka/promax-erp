@@ -43,6 +43,12 @@ class TrackVisit
         'presence/ping',
     ];
 
+    /**
+     * راوتات بتتنادي من جوه شاشة كذا مرة في الدقيقة (لوحة المستند،
+     * معاينة البنود) — الحركة الحقيقية بتتسجل من الخدمة نفسها.
+     */
+    private const QUIET_ROUTES = ['erp.review.docs.pane', 'erp.review.docs.preview'];
+
     /** عمرها ما تتخزن */
     private const SECRET = ['password', 'password_confirmation', 'current_password', '_token', '_method', 'token', 'pin'];
 
@@ -71,6 +77,11 @@ class TrackVisit
 
             // الأبلكيشن بيسحب بياناته بـGET طول الوقت — ده مش «فتح صفحة»
             if (str_starts_with($path, 'api/')) {
+                return;
+            }
+
+            // (١٢/١١) لوحة المستند جوه شاشة المراجعة — جزء من الصفحة مش صفحة
+            if (in_array((string) $request->route()?->getName(), self::QUIET_ROUTES, true)) {
                 return;
             }
 
@@ -109,6 +120,11 @@ class TrackVisit
         // الخروج ليه حدثه — وصف «أكشن» فوقه تكرار
         $name = (string) $request->route()?->getName();
 
+        // (١٢/١١) معاينة البنود بتتبعت مع كل رقم بيتكتب — قراءة مش حركة
+        if (in_array($name, self::QUIET_ROUTES, true)) {
+            return;
+        }
+
         if (in_array($name, ['login', 'logout', 'login.attempt'], true) || in_array($path, ['login', 'logout'], true)) {
             return;
         }
@@ -119,6 +135,13 @@ class TrackVisit
         // أخطاء السيشن. من غير الفحص ده الحفظة المرفوضة كانت هتبان ناجحة.
         $failed = $code >= 400
             || ($request->hasSession() && $request->session()->has('errors'));
+
+        // (١٢/١١) حركات مراجعة المستند الناجحة ليها سطر مقروء من `DocReview`
+        // (رقم المستند والعميل وقبل ← بعد) — سطر «أكشن mark» جنبه تكرار.
+        // المرفوضة بتفضل تتسجل هنا عشان تبان في «أكشنات اترفضت».
+        if (! $failed && str_starts_with($name, 'erp.review.docs.')) {
+            return;
+        }
 
         ActivityLog::record('action', [
             'title' => mb_substr($name !== '' ? $name : $path, 0, 180),

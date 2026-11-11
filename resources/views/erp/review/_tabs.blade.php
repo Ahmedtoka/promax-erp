@@ -1,4 +1,4 @@
-{{-- تابات مراجعة إعادة التشغيل + سكريبت العلامات المشترك (٥/١١) --}}
+{{-- تابات مراجعة إعادة التشغيل + الكثافة المشتركة + سكريبت العلامات (٥/١١ — إعادة تظبيط ١٢/١١) --}}
 @php
     $tabs = [
         'erp.review' => __('review.tab_dashboard'),
@@ -12,29 +12,67 @@
     $tabs = array_filter($tabs, fn ($r) => \App\Support\Access::allows(auth()->user(), $r), ARRAY_FILTER_USE_KEY);
     $here = request()->route()?->getName();
 @endphp
-<div class="rv-tabs">
+<nav class="rv-tabs" aria-label="{{ __('review.tab_dashboard') }}">
     @foreach ($tabs as $r => $label)
-        <a href="{{ route($r) }}" class="{{ $here === $r ? 'on' : '' }}">{{ $label }}</a>
+        <a href="{{ route($r) }}" class="{{ $here === $r ? 'on' : '' }}" @if ($here === $r) aria-current="page" @endif>{{ $label }}</a>
     @endforeach
-</div>
+</nav>
 
 <style>
-.rv-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
-.rv-tabs a{padding:9px 16px;border-radius:999px;background:var(--card);border:1px solid var(--border);font-weight:800;font-size:13px;color:var(--text)}
-.rv-tabs a.on{background:var(--royal-blue);color:#fff;border-color:var(--royal-blue)}
-.rv{display:inline-flex;gap:3px;align-items:center;margin-top:4px}
-.rv button{border:1px solid var(--border);background:var(--card);border-radius:7px;min-width:28px;height:26px;cursor:pointer;font-weight:900;font-size:13px;line-height:1;color:var(--muted)}
-.rv[data-status="ok"] .y{background:#16A34A;border-color:#16A34A;color:#fff}
-.rv[data-status="issue"] .n{background:#DC2626;border-color:#DC2626;color:#fff}
-.rv .meta{font-size:10px;color:var(--muted);margin-inline-start:4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ═══ شاشات المراجعة: كثافة شغل (بلاغ أحمد ١٢/١١ «الجداول بايظة والزراير كبيرة») ═══
+   ⚠️ متقفلة على الصفحة اللي فيها التابات دي بس (`main:has(.rv-tabs)`) — باقي
+   السيستم مالوش دعوة. المحاسب بيقعد ساعات قدام الشاشات دي: صف أوطى، زرار
+   على قد الكلام، والجدول يبان كله من غير سكرول بالعرض. */
+main:has(.rv-tabs) .card{padding:12px 14px;margin-bottom:12px}
+main:has(.rv-tabs) table{font-size:12.5px}
+main:has(.rv-tabs) th{padding:7px 8px;font-size:11.5px}
+main:has(.rv-tabs) td{padding:6px 8px;max-width:260px}
+main:has(.rv-tabs) .btn{padding:5px 12px;font-size:12px;border-radius:8px;line-height:1.35}
+main:has(.rv-tabs) .btn.sm{padding:3px 9px;font-size:11.5px;border-radius:7px}
+main:has(.rv-tabs) input:not([type=checkbox]):not([type=radio]),main:has(.rv-tabs) select{padding:5px 9px;font-size:12.5px;border-radius:8px}
+main:has(.rv-tabs) .fl{min-width:0;gap:3px}
+main:has(.rv-tabs) .fl>span{font-size:10.5px}
+main:has(.rv-tabs) .kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+main:has(.rv-tabs) .kpi{padding:9px 12px}
+main:has(.rv-tabs) .kpi .val{font-size:22px}
+main:has(.rv-tabs) .tbl-xl{padding:3px 9px;font-size:11px;border-radius:7px}
+main:has(.rv-tabs) .tbl-bar{margin-bottom:6px}
+main:has(.rv-tabs) .searchbar{gap:8px;margin-bottom:10px}
+
+.rv-tabs{display:flex;gap:2px;flex-wrap:wrap;margin-bottom:12px;padding:3px;background:var(--card2);border:1px solid var(--border);border-radius:11px;width:max-content;max-width:100%}
+.rv-tabs a{padding:6px 13px;border-radius:8px;font-weight:800;font-size:12.5px;color:var(--muted);white-space:nowrap;text-decoration:none}
+.rv-tabs a:hover{color:var(--text);background:var(--card)}
+.rv-tabs a.on{background:var(--card);color:var(--royal-blue);box-shadow:0 1px 2px rgba(10,10,15,.08),0 0 0 1px var(--border)}
+
+/* ✓ ✗ على بند */
+.rv{display:inline-flex;gap:3px;align-items:center;margin-top:3px}
+.rv button{border:1px solid var(--border);background:var(--card);border-radius:6px;min-width:24px;height:22px;cursor:pointer;font-weight:900;font-size:12px;line-height:1;color:var(--muted);padding:0}
+.rv button:hover{border-color:var(--royal-blue);color:var(--royal-blue)}
+.rv[data-status="ok"] .y{background:var(--green);border-color:var(--green);color:#fff}
+.rv[data-status="issue"] .n{background:var(--red);border-color:var(--red);color:#fff}
+.rv .meta{font-size:10px;color:var(--muted);margin-inline-start:3px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr.rv-done td{background:#F0FDF4}
 tr.rv-issue td{background:#FEF2F2}
-.rv-miss{display:inline-block;padding:4px 9px;border-radius:7px;background:#FFF4E5;border:1px dashed #F59E0B;color:#B45309;font-weight:800;font-size:12px}
+.rv-miss{display:inline-block;padding:2px 8px;border-radius:6px;background:#FFF4E5;border:1px dashed #F59E0B;color:#B45309;font-weight:800;font-size:11px}
 .rv-val{font-weight:700}
 .rv-sub{font-size:11px;color:var(--muted)}
-.rv-bar{height:10px;background:var(--border);border-radius:99px;overflow:hidden;margin:10px 0 6px}
-.rv-bar i{display:block;height:100%;background:linear-gradient(90deg,#16A34A,#22C55E)}
-.rv-bar b{display:block;height:100%;background:#DC2626;float:inline-start}
+.rv-bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:8px 0 4px}
+.rv-bar i{display:block;height:100%;background:var(--green);transition:width .35s ease}
+.rv-bar b{display:block;height:100%;background:var(--red);float:inline-start;transition:width .35s ease}
+
+/* الترقيم الموحّد لشاشات المراجعة (`erp.review._pager`) */
+.rv-pager{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12px}
+.rv-pager a,.rv-pager span.cur{min-width:28px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);font-weight:800;text-decoration:none}
+.rv-pager a:hover{border-color:var(--royal-blue);color:var(--royal-blue)}
+.rv-pager span.cur{background:var(--royal-blue);border-color:var(--royal-blue);color:#fff}
+.rv-pager .gap{color:var(--muted);padding:0 2px}
+.rv-pager .info{color:var(--muted);margin-inline-end:auto}
+.rv-pager .info b{color:var(--text)}
+.rv-pager select{padding:3px 6px!important;font-size:11.5px!important;width:auto}
+@media (max-width:640px){
+    .rv-tabs{width:100%;overflow-x:auto;flex-wrap:nowrap}
+    main:has(.rv-tabs) .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 </style>
 
 <script>

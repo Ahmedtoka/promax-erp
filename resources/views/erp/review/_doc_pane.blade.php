@@ -14,7 +14,7 @@
     $poEditUrl = ! $isInv && isset($lockLines['po_approved']) && \App\Support\Access::allows($u, 'ops.po.edit') ? route('ops.po.edit', $doc) : null;
     $chain = $client?->group;
     $mother = $chain?->motherCompany;
-    $evIcon = ['ok' => '✓', 'issue' => '✗', 'reopen' => '↺', 'serial' => '#', 'lines' => '✎', 'rep' => '👤', 'date' => '📅'];
+    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅'];
 @endphp
 <div class="dp" data-key="{{ $key }}" data-type="{{ $type }}" data-id="{{ $doc->id }}" data-state="{{ $state }}"
      data-edit="{{ $editable ? 1 : 0 }}" data-lines="{{ $linesEditable ? 1 : 0 }}">
@@ -34,12 +34,35 @@
     </header>
 
     <div class="dp-client">
-        <b>{{ $client?->code }} · {{ $client?->displayName() }}</b>
+        <b><span dir="ltr">{{ $client?->code }}</span> · {{ $client?->displayName() }}</b>
         <span class="rv-sub">
             {{ $chain ? $chain->displayName() : __('review.solo_group') }}@if ($mother) · {{ $mother->displayName() }}@endif
             · {{ __('review.doc_list') }}: {{ \App\Services\Pricing::listRowFor($client)?->displayName() ?? '—' }}
             · {{ $isInv ? __('review.pay_'.($doc->payment === 'cash' ? 'cash' : 'credit')) : __('review.po_'.(in_array($doc->status, ['pending', 'arrived', 'delivered'], true) ? $doc->status : 'pending')) }}
         </span>
+    </div>
+
+    {{-- ═══ العلامة — فوق وثابتة: ✓ مايحتاجش سكرول ═══ --}}
+    <div class="dp-bar">
+        @if ($state !== 'ok')
+            <button type="button" class="btn ok dp-ok">{{ __('review.btn_ok') }} <kbd>Enter</kbd></button>
+            <button type="button" class="btn bad dp-issue">{{ __('review.btn_issue') }} <kbd>X</kbd></button>
+        @elseif ($canReopen)
+            <button type="button" class="btn dp-reopen">↺ {{ __('review.btn_reopen') }}</button>
+        @endif
+        @if ($check)
+            <span class="who">{{ $check->status === 'ok'
+                ? __('review.reviewed_by', ['by' => $check->user?->displayName(), 'at' => $check->updated_at?->format('Y-m-d H:i')])
+                : __('review.issue_by', ['by' => $check->user?->displayName(), 'at' => $check->updated_at?->format('Y-m-d H:i')]) }}@if ($check->note) — <b>{{ $check->note }}</b>@endif</span>
+        @endif
+    </div>
+
+
+    {{-- (١٢/١١) فحص أوتوماتيك قبل ✓ — الأحمر بيطلب Enter تانية للتأكيد --}}
+    <div class="dp-checks" aria-label="{{ __('review.checks_title') }}">
+        @foreach ($checks as $ck => [$ok, $why])
+            <span class="{{ $ok === null ? 'info' : ($ok ? 'good' : 'bad') }}" title="{{ $why }}">{{ $ok === null ? '•' : ($ok ? '✓' : '✗') }} {{ __('review.chk_'.$ck) }}</span>
+        @endforeach
     </div>
 
     @foreach ($lockAll + $lockLines as $k => $msg)
@@ -78,9 +101,10 @@
             <div class="sys-row">
                 <span>{{ __('review.doc_date') }} <kbd>D</kbd></span>
                 <span class="sys-val">
-                    <b dir="ltr">{{ $date?->format('Y-m-d') }}</b>
                     @if ($editable)
-                        <input type="date" class="dp-date" value="{{ $date?->format('Y-m-d') }}" @if ($isInv || $doc->status === 'delivered') max="{{ today()->toDateString() }}" @endif>
+                        <input type="date" class="dp-date" value="{{ $date?->format('Y-m-d') }}" @if ($isInv || $doc->status === 'delivered') max="{{ today()->toDateString() }}" @endif aria-label="{{ __('review.doc_date') }}">
+                    @else
+                        <b dir="ltr">{{ $date?->format('Y-m-d') }}</b>
                     @endif
                 </span>
             </div>
@@ -125,7 +149,7 @@
                         <td>{{ $l->product?->code }} · {{ $l->product?->displayName() }}</td>
                         <td dir="ltr">{{ $q }}@if (! $isInv && $l->delivered_qty !== null && (int) $l->delivered_qty !== (int) $l->qty) <span class="rv-sub">/ {{ (int) $l->qty }}</span>@endif</td>
                         <td dir="ltr">{{ rtrim(rtrim(number_format((float) $l->price, 4, '.', ','), '0'), '.') }}</td>
-                        <td dir="ltr" title="{{ $off ? __('review.price_off') : __('review.price_ok') }}">
+                        <td dir="ltr" class="c-list" title="{{ $off ? __('review.price_off') : __('review.price_ok') }}">
                             {{ $now === null ? '—' : rtrim(rtrim(number_format($now, 4, '.', ','), '0'), '.') }} {{ $off ? '≠' : '✓' }}
                         </td>
                         <td dir="ltr">{{ $money($l->total) }}</td>
@@ -138,7 +162,7 @@
         </div>
 
         @if ($linesEditable)
-            <button type="button" class="btn ghost dp-edit-lines">{{ __('review.btn_edit_lines') }} <kbd>E</kbd></button>
+            <button type="button" class="btn sm dp-edit-lines">✎ {{ __('review.btn_edit_lines') }} <kbd>E</kbd></button>
 
             <form class="dp-lines-form" hidden>
                 <div class="dp-note">ℹ️ {{ __('review.lines_stock_note') }}@if ($afterReset)<br>⚠ {{ __('review.lines_after_reset') }}@endif</div>
@@ -172,24 +196,6 @@
                 </div>
             </form>
         @endif
-    </div>
-
-    {{-- ═══ العلامة ═══ --}}
-    <div class="dp-mark">
-        @if ($check)
-            <div class="rv-sub">{{ $check->status === 'ok'
-                ? __('review.reviewed_by', ['by' => $check->user?->displayName(), 'at' => $check->updated_at?->format('Y-m-d H:i')])
-                : __('review.issue_by', ['by' => $check->user?->displayName(), 'at' => $check->updated_at?->format('Y-m-d H:i')]) }}
-                @if ($check->note) — <b>{{ $check->note }}</b>@endif</div>
-        @endif
-        <div class="dp-actions">
-            @if ($state !== 'ok')
-                <button type="button" class="btn ok dp-ok">{{ __('review.btn_ok') }} <kbd>Enter</kbd></button>
-                <button type="button" class="btn bad dp-issue">{{ __('review.btn_issue') }} <kbd>X</kbd></button>
-            @elseif ($canReopen)
-                <button type="button" class="btn ghost dp-reopen">↺ {{ __('review.btn_reopen') }}</button>
-            @endif
-        </div>
     </div>
 
     {{-- ═══ السجل ═══ --}}

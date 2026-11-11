@@ -24,14 +24,15 @@
 <div class="card">
     <form class="searchbar" method="GET">
         <input type="hidden" name="show" value="{{ $show }}">
+        <input type="hidden" name="per" value="{{ $per }}">
         <label class="fl grow"><span>{{ __('ui.l_search') }}</span>
             <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="🔍 {{ __('client.find_client') }}"></label>
         <label class="fl"><span>{{ __('review.filter_chain') }}</span>
-            <select name="group"><option value="">{{ __('review.all') }}</option>
+            <select name="group" onchange="this.form.submit()"><option value="">{{ __('review.all') }}</option>
                 @foreach ($groups as $g)<option value="{{ $g->id }}" @selected((int) ($filters['group'] ?? 0) === $g->id)>{{ $g->displayName() }}</option>@endforeach
             </select></label>
         <label class="fl"><span>{{ __('review.filter_mother') }}</span>
-            <select name="mother"><option value="">{{ __('review.all') }}</option>
+            <select name="mother" onchange="this.form.submit()"><option value="">{{ __('review.all') }}</option>
                 @foreach ($mothers as $m)<option value="{{ $m->id }}" @selected((int) ($filters['mother'] ?? 0) === $m->id)>{{ $m->displayName() }}</option>@endforeach
             </select></label>
         <button class="btn gold" type="submit">{{ __('common.search') }}</button>
@@ -97,7 +98,7 @@
             </tbody>
         </table>
     </div>
-    <div style="margin-top:12px">{{ $clients->links() }}</div>
+    @include('erp.review._pager', ['p' => $clients, 'per' => $per])
 </div>
 
 @endsection

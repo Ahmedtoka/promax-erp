@@ -33,7 +33,7 @@ class DocQueue
 
         $clients = Client::visibleTo(Client::query(), $user)
             ->where('category', '!=', 'internal')
-            ->get(['id', 'code', 'name', 'name_en', 'phone', 'group_id'])->keyBy('id');
+            ->get(['id', 'code', 'name', 'name_en', 'phone', 'group_id', 'rep_id'])->keyBy('id');
         $ids = $clients->keys()->all();
 
         $groups = ClientGroup::whereIn('id', $clients->pluck('group_id')->filter()->unique())
@@ -89,6 +89,7 @@ class DocQueue
                 'products' => (int) ($agg->products ?? 0),
                 'state' => DocReview::state($chk, (float) $d->grand_total),
                 'by' => $chk?->user?->displayName(),
+                'by_id' => $chk?->user_id ? (int) $chk->user_id : null,
                 'at' => $chk?->updated_at?->format('Y-m-d H:i'),
                 'note' => $chk?->note,
             ];
@@ -114,7 +115,51 @@ class DocQueue
                 + DB::table('purchase_orders')->where('paper_ref', $r['paper_ref'])->where('status', '!=', 'cancelled')->when($r['type'] === 'po', fn ($q) => $q->where('id', '!=', $r['id']))->count()])
                 ->filter(fn ($n) => $n > 1);
 
-        return $rows->map(fn ($r) => $r + ['dup' => $r['paper_ref'] !== null && isset($dups[$r['paper_ref']])]);
+        // (١٢/١١) التنبيهات الأوتوماتيك — بتفرز الطابور وبتظهر جنب الرقم
+        $repriced = self::repricedKeys($onlyType, $onlyId);
+        $today = now()->toDateString();
+        $first = ReviewCheck::FIRST_MONTH.'-01';
+
+        return $rows->map(function ($r) use ($dups, $repriced, $clients, $today, $first) {
+            $r['dup'] = $r['paper_ref'] !== null && isset($dups[$r['paper_ref']]);
+            $clientRep = $clients[$r['client_id']]->rep_id ?? null;
+            $r['flags'] = array_values(array_filter([
+                $r['paper_ref'] === null ? 'noserial' : null,
+                $r['dup'] ? 'dup' : null,
+                // أمر لسه ماتسلّمش تاريخه «ميعاد التسليم» — المستقبل فيه طبيعي
+                ((($r['type'] === 'invoice' || $r['status_doc'] === 'delivered') && $r['date'] > $today) || $r['date'] < $first) ? 'odd_date' : null,
+                ($clientRep && $r['rep_id'] && (int) $clientRep !== $r['rep_id']) ? 'rep_off' : null,
+                isset($repriced[$r['key']]) ? 'repriced' : null,
+                $r['state'] === 'changed' ? 'changed' : null,
+            ]));
+
+            return $r;
+        });
+    }
+
+    public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed'];
+
+    /** يوم بدء تصليح الأسعار — أي مستند إجماليه اتغير من بعده من بره المراجعة بيتعلّم «اتسعّر» */
+    public const PRICE_FIX_DAY = '2026-11-10';
+
+    /**
+     * مستندات إجماليها اتغير من يوم تصليح الأسعار — من سجل التعديلات (المراقب العام
+     * بيسجل grand_total قبل ← بعد)، من غير تعديلات شاشة المراجعة نفسها.
+     *
+     * @return array<string, true>  «inv-12» => true
+     */
+    public static function repricedKeys(?string $onlyType, ?int $onlyId): array
+    {
+        $map = ['Invoice' => 'inv-', 'PurchaseOrder' => 'po-'];
+
+        return DB::table('activity_logs')
+            ->whereIn('subject_type', $onlyType === null ? array_keys($map) : [$onlyType === 'invoice' ? 'Invoice' : 'PurchaseOrder'])
+            ->when($onlyId !== null, fn ($q) => $q->where('subject_id', $onlyId))
+            ->where('event', 'updated')->where('created_at', '>=', self::PRICE_FIX_DAY)
+            ->where('changes', 'like', '%grand_total%')
+            ->where(fn ($q) => $q->whereNull('route')->orWhere('route', 'not like', 'erp.review.docs%'))
+            ->distinct()->get(['subject_type', 'subject_id'])
+            ->mapWithKeys(fn ($r) => [$map[$r->subject_type].$r->subject_id => true])->all();
     }
 
     /**
@@ -143,8 +188,97 @@ class DocQueue
             'invoices' => $rows->where('type', 'invoice')->count(), 'pos' => $rows->where('type', 'po')->count(),
             'ok_inv' => $rows->where('type', 'invoice')->where('state', 'ok')->count(),
             'ok_po' => $rows->where('type', 'po')->where('state', 'ok')->count(),
-            'pct' => $total === 0 ? 0 : (int) floor($ok * 100 / $total),
+            'pct' => self::pct($ok, $total),
         ];
+    }
+
+    /**
+     * (١٢/١١) المراجعة مستند مستند ← الحسابات: لكل عميل كام مستند وكام فلوس
+     * اتراجعوا، ولكل شهر كمان — عشان شاشة «الحسابات والشهور» تقول الرصيد ده
+     * متراجع منه قد إيه، والشهر ده مستنداته خلصت ولا لأ.
+     *
+     * ⚠️ نفس تعريف الحالة بتاع الطابور (`DocReview::state`) — ✓ اللي إجمالي
+     * المستند اتغير بعده بيتحسب «اتغيّر» مش متراجع.
+     *
+     * @param  iterable<int>  $clientIds
+     * @return array<int, array{docs:int, ok:int, issue:int, grand:float, ok_grand:float, months: array<string, array{docs:int, ok:int}>}>
+     */
+    public static function moneyByClient(iterable $clientIds): array
+    {
+        $ids = collect($clientIds)->map(fn ($i) => (int) $i)->unique()->values()->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        $checks = ReviewCheck::whereIn('entity_type', ['invoice', 'po'])->where('item', DocReview::ITEM)
+            ->get(['id', 'entity_type', 'entity_id', 'status', 'system_balance'])->keyBy(fn ($c) => $c->entity_type.$c->entity_id);
+
+        $docs = DB::table('invoices')->whereIn('client_id', $ids)
+            ->selectRaw("'invoice' AS t, id, client_id, grand_total, created_at AS doc_at")
+            ->unionAll(DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
+                ->selectRaw("'po' AS t, id, client_id, grand_total, COALESCE(delivered_at, due_at, created_at) AS doc_at"))
+            ->get();
+
+        $out = [];
+        foreach ($docs as $d) {
+            $state = DocReview::state($checks[$d->t.$d->id] ?? null, (float) $d->grand_total);
+            $o = &$out[(int) $d->client_id];
+            $o ??= ['docs' => 0, 'ok' => 0, 'issue' => 0, 'grand' => 0.0, 'ok_grand' => 0.0, 'months' => []];
+            $m = substr((string) $d->doc_at, 0, 7);
+            $o['docs']++;
+            $o['grand'] += (float) $d->grand_total;
+            $o['months'][$m]['docs'] = ($o['months'][$m]['docs'] ?? 0) + 1;
+            $o['months'][$m]['ok'] ??= 0;
+            if ($state === 'ok') {
+                $o['ok']++;
+                $o['ok_grand'] += (float) $d->grand_total;
+                $o['months'][$m]['ok']++;
+            } elseif ($state === 'issue') {
+                $o['issue']++;
+            }
+            unset($o);
+        }
+
+        return $out;
+    }
+
+    /**
+     * جمع `moneyByClient` لمجموعة عملاء (سلسلة).
+     *
+     * @param  array<int, array>  $byClient
+     * @param  iterable<int>  $clientIds
+     */
+    public static function moneySum(array $byClient, iterable $clientIds): array
+    {
+        $o = ['docs' => 0, 'ok' => 0, 'issue' => 0, 'grand' => 0.0, 'ok_grand' => 0.0, 'months' => []];
+        foreach ($clientIds as $id) {
+            $c = $byClient[(int) $id] ?? null;
+            if ($c === null) {
+                continue;
+            }
+            foreach (['docs', 'ok', 'issue', 'grand', 'ok_grand'] as $k) {
+                $o[$k] += $c[$k];
+            }
+            foreach ($c['months'] as $m => $x) {
+                $o['months'][$m]['docs'] = ($o['months'][$m]['docs'] ?? 0) + $x['docs'];
+                $o['months'][$m]['ok'] = ($o['months'][$m]['ok'] ?? 0) + $x['ok'];
+            }
+        }
+        $o['grand'] = round($o['grand'], 2);
+        $o['ok_grand'] = round($o['ok_grand'], 2);
+
+        return $o;
+    }
+
+    /** نسبة بكسر عشري لما تكون صغيرة — «0%» بعد أول ✓ من ٦٦٠ كان بيبان إن مفيش حاجة حصلت */
+    public static function pct(int|float $part, int|float $whole): int|float
+    {
+        if ($whole <= 0) {
+            return 0;
+        }
+        $p = $part * 100 / $whole;
+
+        return $p >= 10 ? (int) floor($p) : floor($p * 10) / 10;
     }
 
     /** فلاتر الشكل (مش الحالة) — اللي النسب بتتحسب عليها */
@@ -155,7 +289,7 @@ class DocQueue
         $nq = $q === '' ? '' : $norm($q);
         $amount = is_numeric(str_replace(',', '', $q)) ? (float) str_replace(',', '', $q) : null;
 
-        return $rows->filter(function ($r) use ($f, $nq, $norm, $amount) {
+        $out = $rows->filter(function ($r) use ($f, $nq, $norm, $amount) {
             if (! empty($f['type']) && $r['type'] !== $f['type']) {
                 return false;
             }
@@ -179,10 +313,15 @@ class DocQueue
             if (! empty($f['to']) && $r['date'] > $f['to']) {
                 return false;
             }
-            if (($f['flag'] ?? '') === 'dup' && ! $r['dup']) {
+            $flag = $f['flag'] ?? '';
+            if ($flag === 'any' ? $r['flags'] === [] : ($flag !== '' && ! in_array($flag, $r['flags'], true))) {
                 return false;
             }
-            if (($f['flag'] ?? '') === 'noserial' && $r['paper_ref'] !== null) {
+            // عينة المراجِع التاني: مستندات راجعها فلان يوم كذا
+            if (! empty($f['by']) && $r['by_id'] !== (int) $f['by']) {
+                return false;
+            }
+            if (! empty($f['day']) && substr((string) $r['at'], 0, 10) !== $f['day']) {
                 return false;
             }
             if ($nq !== '') {
@@ -195,6 +334,15 @@ class DocQueue
 
             return true;
         })->values();
+
+        // عينة ثابتة (نفس المستندات كل ما الصفحة تتفتح لنفس المراجِع واليوم) — مش «أول ن»
+        $n = (int) ($f['sample'] ?? 0);
+        if ($n > 0) {
+            $seed = ($f['by'] ?? '').'|'.($f['day'] ?? '');
+            $out = $out->sortBy(fn ($r) => crc32($seed.'|'.$r['key']))->take($n)->values();
+        }
+
+        return $out;
     }
 
     public static function byStatus(Collection $rows, string $status): Collection
@@ -227,7 +375,7 @@ class DocQueue
             'pending' => $rows->where('state', 'pending')->count(),
             'ok_inv' => $rows->where('type', 'invoice')->where('state', 'ok')->count(),
             'ok_po' => $rows->where('type', 'po')->where('state', 'ok')->count(),
-            'pct' => $total === 0 ? 0 : (int) floor($ok * 100 / $total),
+            'pct' => self::pct($ok, $total),
         ];
     }
 

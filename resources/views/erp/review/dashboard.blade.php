@@ -54,6 +54,35 @@
     @endif
 </div>
 
+@if ($docs)
+<div class="rv-two">
+    <div class="card">
+        <h3>❌ {{ __('review.dash_issues', ['n' => $docs['issue']]) }}</h3>
+        @forelse ($docIssues as $r)
+            <a class="dash-iss" href="{{ route('erp.review.docs', ['status' => 'issue', 'doc' => $r['key']]) }}">
+                <b dir="ltr">{{ $r['number'] }}</b> <span>{{ $r['client'] }}</span>
+                <span class="rv-sub">{{ $r['note'] }}</span>
+                <span class="rv-sub dash-iss-by">{{ $r['by'] }} · {{ $r['at'] ? \Illuminate\Support\Carbon::parse($r['at'])->diffForHumans() : '' }}</span>
+            </a>
+        @empty
+            <div class="rv-sub">{{ __('review.dash_no_issues') }}</div>
+        @endforelse
+    </div>
+    <div class="card">
+        <h3>⏱ {{ __('review.dash_pace') }}</h3>
+        <div class="dash-pace">
+            <div><span class="rv-sub">{{ __('review.pace_today_lbl') }}</span><b>{{ $docPace['today'] }} <small>/ {{ $docPace['target'] }}</small></b></div>
+            <div><span class="rv-sub">{{ __('review.pace_avg_lbl') }}</span><b>{{ $docPace['avg'] }}</b></div>
+            <div><span class="rv-sub">{{ __('review.pace_left_lbl') }}</span><b>{{ number_format($docPace['remaining']) }}</b></div>
+            <div><span class="rv-sub">{{ __('review.pace_eta_lbl') }}</span><b>{{ $docPace['eta_days'] ?? '—' }}</b></div>
+        </div>
+        @foreach ($docPace['people'] as $p)
+            <div class="dash-pp"><b>{{ $p['user'] }}</b><span class="rv-sub">{{ __('review.pace_person', ['t' => $p['today'], 'a' => $p['avg']]) }}</span></div>
+        @endforeach
+    </div>
+</div>
+@endif
+
 <div class="rv-two">
     <div class="card">
         <h3>👥 {{ __('review.people') }}</h3>
@@ -107,12 +136,18 @@
 </div>
 
 <style>
-.rv-phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+.rv-phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px}
 .rv-phase{display:block;color:var(--text);transition:.15s;margin:0}
 .rv-phase:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
 .rv-ph-head{font-size:15px;display:flex;gap:8px;align-items:center}
 .rv-num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--royal-blue);color:#fff;font-weight:900;font-size:13px}
-.rv-big{font-size:38px;font-weight:900;margin-top:10px;color:var(--royal-blue)}
+.dash-iss{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;padding:7px 0;border-bottom:1px dashed var(--border);color:var(--text);text-decoration:none;font-size:12.5px}
+.dash-iss:hover b{color:var(--royal-blue)}
+.dash-iss .rv-sub{grid-column:1/-1}
+.dash-pace{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+.dash-pace>div{display:flex;flex-direction:column}.dash-pace b{font-size:20px}.dash-pace small{font-size:12px;color:var(--muted)}
+.dash-pp{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border);font-size:12.5px}
+.rv-big{font-size:30px;font-weight:900;margin-top:6px;color:var(--royal-blue)}
 .rv-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
 </style>
 

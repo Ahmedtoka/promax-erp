@@ -63,6 +63,12 @@ class ActivityObserver
 
     private function write(string $event, Model $model, array $changes): void
     {
+        // (١٢/١١) الموديل اللي بيكتب سطر سجل مقروء بنفسه بيقول «سيبني» —
+        // علامة مراجعة المستند كانت بتطلع «ReviewCheck #5» جنب السطر الحقيقي
+        if (method_exists($model, 'quietInActivity') && $model->quietInActivity()) {
+            return;
+        }
+
         ActivityLog::record($event, [
             'subject_type' => class_basename($model),
             'subject_id' => $model->getKey(),

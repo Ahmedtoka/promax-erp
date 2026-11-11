@@ -110,4 +110,44 @@ class ReviewerStats
 
         return round($v[$lo] + ($v[$hi] - $v[$lo]) * ($i - $lo), 1);
     }
+
+    /** هدف اليوم لكل مستند — قابل للتعديل من هنا لحد ما يبقى ليه إعداد */
+    public const DAILY_TARGET = 150;
+
+    /**
+     * (١٢/١١) سرعة الإنجاز والمتوقع: ✓ النهارده، متوسط آخر ٥ أيام اشتغل فيها
+     * حد، والباقي ÷ المتوسط = كام يوم شغل لحد ١٠٠٪. لكل مراجِع ولإجمالي.
+     *
+     * @return array{today:int, avg:float, remaining:int, eta_days:?int, target:int, people: list<array{user:string, today:int, avg:float}>}
+     */
+    public static function pace(int $remaining): array
+    {
+        $since = today()->subDays(30);
+        $rows = DocReviewEvent::where('action', 'ok')->where('created_at', '>=', $since)
+            ->selectRaw('user_id, DATE(created_at) AS d, COUNT(*) AS n')->groupBy('user_id', 'd')->get();
+
+        $byDay = $rows->groupBy('d')->map(fn ($g) => (int) $g->sum('n'))->sortKeys();
+        $todayKey = today()->toDateString();
+        $today = (int) ($byDay[$todayKey] ?? 0);
+        $recent = $byDay->except($todayKey)->take(-5);
+        $avg = $recent->isEmpty() ? (float) $today : round($recent->avg(), 1);
+
+        $names = User::whereIn('id', $rows->pluck('user_id')->unique())->get()->keyBy('id');
+        $people = $rows->groupBy('user_id')->map(function ($g, $uid) use ($names, $todayKey) {
+            $days = $g->keyBy('d');
+            $past = $g->where('d', '!=', $todayKey)->sortBy('d')->take(-5);
+
+            return [
+                'user' => $names[$uid]?->displayName() ?? '#'.$uid,
+                'today' => (int) ($days[$todayKey]->n ?? 0),
+                'avg' => $past->isEmpty() ? 0.0 : round($past->avg('n'), 1),
+            ];
+        })->sortByDesc('today')->values()->all();
+
+        return [
+            'today' => $today, 'avg' => $avg, 'remaining' => $remaining,
+            'eta_days' => $avg > 0 ? (int) ceil($remaining / $avg) : null,
+            'target' => self::DAILY_TARGET, 'people' => $people,
+        ];
+    }
 }

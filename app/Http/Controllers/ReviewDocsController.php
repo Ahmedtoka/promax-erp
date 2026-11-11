@@ -34,6 +34,8 @@ use Illuminate\Validation\ValidationException;
  */
 class ReviewDocsController extends Controller
 {
+    public const PER_PAGE = [25, 50, 100, 200];
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -43,12 +45,38 @@ class ReviewDocsController extends Controller
         $scoped = DocQueue::filter($all, $f);
         $shown = DocQueue::byStatus($scoped, $f['status']);
 
+        // ⚠️ (١٢/١١) نسبة كل سلسلة من **كل** مستنداتها (بفلاتر الشكل)، مش من
+        // اللي ظاهر بفلتر الحالة — على «لسه» كانت كل سلسلة بتقول ٠ من ن
+        // للأبد، حتى بعد ما تعلّم نصها ✓.
+        $groupStats = $scoped->groupBy(fn ($r) => $r['group_id'] ? 'g'.$r['group_id'] : 'c'.$r['client_id'])
+            ->map(fn ($g) => DocQueue::stats($g));
+
+        // الترقيم على الصفوف بترتيب العرض (أم ← سلسلة ← فرع) — والسلسلة اللي
+        // بتتقسم على صفحتين عنوانها بيتكرر فوق الجزء التاني
+        $flat = collect(DocQueue::grouped($shown))->flatMap(fn ($g) => $g['rows']->map(fn ($r) => $r + ['_g' => $g['key'], '_label' => $g['label'], '_solo' => $g['solo'], '_mother' => $g['mother']]));
+        $per = in_array($request->integer('per'), self::PER_PAGE, true) ? $request->integer('per') : 50;
+        $page = new \Illuminate\Pagination\LengthAwarePaginator($flat->forPage(max(1, $request->integer('page', 1)), $per)->values(), $flat->count(), $per,
+            max(1, $request->integer('page', 1)), ['path' => $request->url(), 'query' => $request->except(['page', 'doc'])]);
+        // الصفحة المطلوبة بعد آخر صفحة (فلتر ضيّق النتيجة) ← آخر صفحة
+        if ($page->isEmpty() && $page->currentPage() > 1 && $flat->isNotEmpty()) {
+            return redirect($page->url($page->lastPage()));
+        }
+
+        $groups = [];
+        foreach ($page->getCollection()->groupBy('_g') as $k => $rows) {
+            $first = $rows->first();
+            $groups[] = ['key' => $k, 'label' => $first['_label'], 'solo' => $first['_solo'], 'mother' => $first['_mother'],
+                'stats' => $groupStats[$k] ?? DocQueue::stats($rows), 'rows' => $rows];
+        }
+
         $groupIds = $all->pluck('group_id')->filter()->unique();
 
         return view('erp.review.docs', [
             'overall' => DocQueue::overall($request->user()),
             'scoped' => DocQueue::stats($scoped),
-            'groups' => DocQueue::grouped($shown),
+            'groups' => $groups,
+            'page' => $page,
+            'per' => $per,
             'count' => $shown->count(),
             'counts' => [
                 'pending' => $scoped->where('state', 'pending')->count(),
@@ -57,16 +85,63 @@ class ReviewDocsController extends Controller
                 'changed' => $scoped->where('state', 'changed')->count(),
                 'all' => $scoped->count(),
             ],
+            'context' => $this->context($user, $f, $scoped),
+            'pace' => ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
+            'flagCounts' => collect(DocQueue::FLAGS)->mapWithKeys(fn ($k) => [$k => DocQueue::filter($all, ['flag' => $k] + array_intersect_key($f, array_flip(['type', 'mother', 'group', 'client', 'rep', 'from', 'to'])))->where('state', '!=', 'ok')->count()]),
+            'sampleBy' => $f['by'] !== '' ? User::find($f['by'])?->displayName() : null,
             'f' => $f,
             'open' => $request->string('doc')->value(),
             'mothers' => MotherCompany::whereIn('id', $all->pluck('mother_id')->filter()->unique())->orderBy('name')->get(['id', 'name', 'name_en']),
             'chains' => ClientGroup::whereIn('id', $groupIds)->orderBy('name')->get(['id', 'name', 'name_en']),
             'clientOpts' => $all->unique('client_id')->sortBy('client')->mapWithKeys(fn ($r) => [$r['client_id'] => $r['client_code'].' · '.$r['client']]),
+            'monthOpts' => $all->map(fn ($r) => substr($r['date'], 0, 7))->filter()->unique()->sortDesc()->values(),
             'repOpts' => $all->whereNotNull('rep_id')->unique('rep_id')->sortBy('rep')->mapWithKeys(fn ($r) => [$r['rep_id'] => $r['rep']]),
             'canEdit' => Access::allows($user, 'erp.review.docs.lines'),
             'canReopen' => Access::allows($user, 'erp.review.docs.reopen'),
             'canPeople' => Access::allows($user, 'erp.review.docs.people'),
         ]);
+    }
+
+    /**
+     * (١٢/١١) شريط السلسلة/العميل فوق الطابور لما الفلتر على واحد بس: رصيده
+     * دلوقتي، وفلوس مستنداته المتراجعة من الإجمالي، ولينك يرجّع للحسابات.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function context(User $user, array $f, \Illuminate\Support\Collection $scoped): ?array
+    {
+        if ($f['client'] !== '') {
+            $c = Client::visibleTo(Client::whereKey($f['client']), $user)->first(['id', 'code', 'name', 'name_en', 'group_id', 'balance']);
+            if ($c === null) {
+                return null;
+            }
+            $ids = [$c->id];
+            $label = trim($c->code.' · '.$c->displayName());
+            $kind = 'client';
+            $money = ['q' => $c->code];
+        } elseif ($f['group'] !== '' && $f['group'] !== 'solo') {
+            $g = ClientGroup::find($f['group']);
+            if ($g === null) {
+                return null;
+            }
+            $ids = Client::visibleTo(Client::where('group_id', $g->id), $user)->pluck('id')->all();
+            $label = $g->displayName();
+            $kind = 'group';
+            $money = ['q' => $g->name];
+        } else {
+            return null;
+        }
+
+        $m = DocQueue::moneySum(DocQueue::moneyByClient($ids), $ids);
+
+        return [
+            'kind' => $kind, 'label' => $label,
+            'balance' => round((float) Client::whereIn('id', $ids)->sum('balance'), 2),
+            'docs' => $m['docs'], 'ok' => $m['ok'], 'issue' => $m['issue'],
+            'grand' => $m['grand'], 'ok_grand' => $m['ok_grand'],
+            'pct' => DocQueue::pct($m['ok_grand'], $m['grand']),
+            'money_url' => Access::allows($user, 'erp.review.money') ? route('erp.review.money', $money + ['show' => 'all']) : null,
+        ];
     }
 
     /** لوحة المستند الواحد — HTML بيتحط جنب الطابور */
@@ -186,6 +261,61 @@ class ReviewDocsController extends Controller
         ]);
     }
 
+    // ═══════════════════════ التصدير ═══════════════════════
+
+    /** الطابور بالفلاتر الحالية (كل الصفحات) — مين راجع إيه وإمتى والتنبيهات */
+    public function export(Request $request)
+    {
+        $f = $this->filters($request);
+        $rows = DocQueue::byStatus(DocQueue::filter(DocQueue::all($request->user()), $f), $f['status']);
+        $head = [__('review.f_type'), '#', __('review.serial'), __('review.doc_date'), __('review.f_client'), __('review.doc_client'),
+            __('review.f_chain'), __('review.f_mother'), __('review.doc_rep'), __('review.tot_net'), __('review.tot_vat'), __('review.tot_incl'),
+            __('review.f_status'), __('review.x_flags'), __('review.x_by'), __('review.x_at'), __('review.log_note')];
+
+        return $this->csv('doc-review-'.now()->format('Ymd-Hi').'.csv', $head, $rows->map(fn ($r) => [
+            __('review.type_'.$r['type']), $r['number'], $r['paper_ref'], $r['date'], $r['client_code'], $r['client'],
+            $r['group'], $r['mother'], $r['rep'], $r['net'], $r['tax'], $r['grand'],
+            __('review.st_'.$r['state']), implode(' / ', array_map(fn ($x) => __('review.flag_'.$x), $r['flags'])), $r['by'], $r['at'], $r['note'],
+        ]));
+    }
+
+    /** سجل المراجعة الكامل للفترة — كل ✓ وكل تعديل بقبل ← بعد */
+    public function peopleExport(Request $request)
+    {
+        $from = ($request->date('from') ?? today()->subDays(13))->startOfDay();
+        $to = ($request->date('to') ?? today())->endOfDay();
+        $events = DocReviewEvent::with('user:id,name,name_en')->whereBetween('created_at', [$from, $to])
+            ->when($request->integer('user'), fn ($q, $u) => $q->where('user_id', $u))->orderBy('id')->get();
+        $nums = [
+            'invoice' => Invoice::whereIn('id', $events->where('doc_type', 'invoice')->pluck('doc_id'))->pluck('number', 'id'),
+            'po' => PurchaseOrder::whereIn('id', $events->where('doc_type', 'po')->pluck('doc_id'))->pluck('number', 'id'),
+        ];
+        $head = ['#', __('review.x_at'), __('review.x_by'), __('review.f_type'), __('review.x_number'), __('review.x_action'),
+            __('review.x_before'), __('review.x_after'), __('review.x_net_delta'), __('review.x_grand_delta'), __('review.x_seconds'), __('review.x_open'), __('review.log_note')];
+        $brief = fn (?array $x) => $x === null ? '' : collect($x)->except('lines')->map(fn ($v, $k) => $k.': '.(is_scalar($v) || $v === null ? (string) $v : json_encode($v, JSON_UNESCAPED_UNICODE)))->implode(' | ');
+
+        return $this->csv('doc-review-trail-'.$from->format('Ymd').'-'.$to->format('Ymd').'.csv', $head, $events->map(fn ($e) => [
+            $e->id, $e->created_at?->format('Y-m-d H:i:s'), $e->user?->displayName(), __('review.type_'.$e->doc_type),
+            $nums[$e->doc_type][$e->doc_id] ?? '#'.$e->doc_id, __('review.ev_'.$e->action, ['number' => '']),
+            $brief($e->before), $brief($e->after), (float) $e->net_delta, (float) $e->grand_delta,
+            $e->seconds_since_prev, $e->open_ms !== null ? round($e->open_ms / 1000, 1) : null, $e->note,
+        ]));
+    }
+
+    /** CSV بـBOM عشان إكسيل يفتح العربي صح */
+    private function csv(string $name, array $head, iterable $rows)
+    {
+        return response()->streamDownload(function () use ($head, $rows) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($out, $head);
+            foreach ($rows as $r) {
+                fputcsv($out, $r);
+            }
+            fclose($out);
+        }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     // ═══════════════════════ مساعدات ═══════════════════════
 
     private function filters(Request $request): array
@@ -201,7 +331,11 @@ class ReviewDocsController extends Controller
             'rep' => $request->integer('rep') ?: '',
             'from' => $request->date('from')?->toDateString() ?? '',
             'to' => $request->date('to')?->toDateString() ?? '',
-            'flag' => in_array($request->string('flag')->value(), ['dup', 'noserial'], true) ? $request->string('flag')->value() : '',
+            'flag' => in_array($request->string('flag')->value(), [...DocQueue::FLAGS, 'any'], true) ? $request->string('flag')->value() : '',
+            // عينة المراجِع التاني (من صفحة المراجِعين)
+            'by' => $request->integer('by') ?: '',
+            'day' => $request->date('day')?->toDateString() ?? '',
+            'sample' => min(50, max(0, $request->integer('sample'))) ?: '',
             'status' => in_array($status, [...DocQueue::STATUSES, 'all'], true) ? $status : 'pending',
         ];
     }
@@ -275,13 +409,31 @@ class ReviewDocsController extends Controller
 
         $events = DocReviewEvent::with('user:id,name,name_en')->where(['doc_type' => $type, 'doc_id' => $doc->id])->latest('id')->limit(30)->get();
 
+        // (١٢/١١) فحص أوتوماتيك قبل ✓ — [سليم؟ (null = معلومة)، السبب]
+        $date = DocReview::dateOf($doc);
+        $repId = DocReview::repOf($doc);
+        $dups = DocReview::duplicates($doc);
+        $state = DocReview::state($check, (float) $doc->grand_total);
+        $offLines = $doc->items->filter(fn ($l) => isset($listPrices[$l->product_id]) && abs($listPrices[$l->product_id] - (float) $l->price) >= 0.00005)->count();
+        $delivered = $type === 'invoice' || $doc->status === 'delivered';
+        $checks = [
+            'serial' => [filled($doc->paper_ref) && $dups === [], filled($doc->paper_ref) ? ($dups === [] ? $doc->paper_ref : __('review.f_flag_dup')) : __('review.serial_missing')],
+            'date' => [$date !== null && ! ($delivered && $date->isAfter(today()->endOfDay())) && $date->format('Y-m') >= ReviewCheck::FIRST_MONTH, $date?->format('Y-m-d') ?? '—'],
+            'rep' => [! $client->rep_id || ! $repId || (int) $client->rep_id === (int) $repId, $client->rep_id && (int) $client->rep_id !== (int) $repId ? __('review.chk_rep_off', ['rep' => $client->rep?->displayName() ?? '#'.$client->rep_id]) : ''],
+            'prices' => [$offLines === 0, $offLines ? __('review.chk_prices_off', ['n' => $offLines]) : ''],
+            'total' => [$state !== 'changed', $state === 'changed' ? __('review.st_changed') : ''],
+        ];
+        if (isset(DocQueue::repricedKeys($type, $doc->id)[($type === 'invoice' ? 'inv-' : 'po-').$doc->id])) {
+            $checks['repriced'] = [null, __('review.flag_repriced_hint')];
+        }
+
         return [
             'doc' => $doc, 'type' => $type, 'key' => ($type === 'invoice' ? 'inv-' : 'po-').$doc->id,
             'client' => $client, 'check' => $check, 'state' => DocReview::state($check, (float) $doc->grand_total),
             'date' => DocReview::dateOf($doc), 'repId' => DocReview::repOf($doc),
             'rep' => ($r = DocReview::repOf($doc)) ? User::find($r) : null,
             'locks' => DocReview::locks($doc), 'dups' => DocReview::duplicates($doc),
-            'listPrices' => $listPrices, 'products' => $products, 'events' => $events,
+            'listPrices' => $listPrices, 'products' => $products, 'events' => $events, 'checks' => $checks,
             'reps' => User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'role']),
             'canEdit' => Access::allows($user, 'erp.review.docs.lines'),
             'canReopen' => Access::allows($user, 'erp.review.docs.reopen'),

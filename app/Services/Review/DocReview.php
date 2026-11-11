@@ -582,14 +582,80 @@ class DocReview
             'note' => filled($note) ? mb_substr(trim($note), 0, 500) : null,
         ]);
 
+        // ⚠️ (١٢/١١) سطر مقروء في سجل النشاط: اسم الموديل القصير (عشان اللينك
+        // واسم «فاتورة» يطلعوا صح)، العنوان فيه رقم المستند والعميل، والتفاصيل
+        // «حقل: قبل ← بعد» بالعربي — مش JSON متداخل.
+        $doc->loadMissing('client');
+        $title = __('review.ev_'.$action, ['number' => $doc->number])
+            .($doc->client ? ' · '.trim($doc->client->code.' '.$doc->client->displayName()) : '')
+            .($grandDelta != 0.0 ? ' ('.number_format((float) ($before['grand'] ?? 0), 2).' → '.number_format((float) ($after['grand'] ?? 0), 2).')' : '');
+
         ActivityLog::record('action', [
-            'subject_type' => $doc::class,
+            'subject_type' => class_basename($doc),
             'subject_id' => $doc->id,
-            'title' => mb_substr(__('review.ev_'.$action, ['number' => $doc->number])
-                .($grandDelta != 0.0 ? ' ('.number_format((float) ($before['grand'] ?? 0), 2).' → '.number_format((float) ($after['grand'] ?? 0), 2).')' : ''), 0, 190),
-            'changes' => ['review_event' => $ev->id, 'before' => $before, 'after' => $after],
+            'title' => mb_substr($title, 0, 190),
+            'changes' => self::logChanges($action, $before, $after === null ? null : $after + $extra, $note, $grandDelta),
         ]);
 
         return $ev;
+    }
+
+    /**
+     * تفاصيل سطر السجل: «الحقل بالعربي ⇒ [قبل، بعد]» — نفس شكل التعديلات
+     * العادية في مركز النشاط، فبيتقري من غير ما حد يفك JSON.
+     *
+     * @return array<string, mixed>
+     */
+    private static function logChanges(string $action, ?array $before, ?array $after, ?string $note, float $grandDelta): array
+    {
+        $b = $before ?? [];
+        $a = $after ?? [];
+        $st = fn ($s) => $s === null ? null : __('review.st_'.$s);
+        $out = [];
+
+        switch ($action) {
+            case 'ok': case 'issue': case 'reopen':
+                $out[__('review.log_state')] = [$st($b['status'] ?? 'pending'), $st($a['status'] ?? 'pending')];
+                if (isset($a['grand'])) {
+                    $out[__('review.tot_incl')] = number_format((float) $a['grand'], 2);
+                }
+                break;
+            case 'serial':
+                $out[__('review.serial')] = [$b['paper_ref'] ?? null, $a['paper_ref'] ?? null];
+                break;
+            case 'rep':
+                $out[__('review.doc_rep')] = [$b['rep'] ?? null, $a['rep'] ?? null];
+                break;
+            case 'date':
+                $out[__('review.doc_date')] = [$b['date'] ?? null, $a['date'] ?? null];
+                break;
+            case 'lines':
+                $out[__('review.tot_net')] = [number_format((float) ($b['net'] ?? 0), 2), number_format((float) ($a['net'] ?? 0), 2)];
+                $out[__('review.tot_incl')] = [number_format((float) ($b['grand'] ?? 0), 2), number_format((float) ($a['grand'] ?? 0), 2)];
+                $q = fn (array $lines) => collect($lines)->groupBy('product_id')
+                    ->map(fn ($g) => ['name' => $g->first()['name'] ?? '#'.$g->first()['product_id'], 'qty' => (int) $g->sum(fn ($l) => $l['delivered_qty'] ?? $l['qty'])]);
+                $qb = $q($b['lines'] ?? []);
+                $qa = $q($a['lines'] ?? []);
+                foreach ($qb->keys()->merge($qa->keys())->unique()->take(12) as $pid) {
+                    $x = $qb[$pid]['qty'] ?? 0;
+                    $y = $qa[$pid]['qty'] ?? 0;
+                    if ($x !== $y) {
+                        $out[mb_substr($qa[$pid]['name'] ?? $qb[$pid]['name'], 0, 60)] = [$x, $y];
+                    }
+                }
+                if (! empty($a['stock_untouched'])) {
+                    $out[__('review.log_stock')] = __('review.log_stock_untouched');
+                }
+                break;
+        }
+
+        if (! empty($a['review_cleared'])) {
+            $out[__('review.log_cleared')] = __('review.log_cleared_yes');
+        }
+        if (filled($note)) {
+            $out[__('review.log_note')] = mb_substr(trim($note), 0, 120);
+        }
+
+        return $out;
     }
 }

@@ -142,7 +142,7 @@ class DocReviewTest extends TestCase
         $ev = DocReviewEvent::sole();
         $this->assertSame('ok', $ev->action);
         $this->assertSame(12000, (int) $ev->open_ms);
-        $this->assertTrue(ActivityLog::where('subject_type', Invoice::class)->where('subject_id', $inv->id)->where('event', 'action')->exists());
+        $this->assertTrue(ActivityLog::where('subject_type', 'Invoice')->where('subject_id', $inv->id)->where('event', 'action')->exists());
 
         $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'invoice', 'id' => $inv->id]), ['status' => 'ok'])
             ->assertStatus(422)->assertJsonPath('message', __('review.doc_already_ok'));
@@ -338,5 +338,125 @@ class DocReviewTest extends TestCase
         $this->actingAs($this->accountant)->get(route('erp.review.docs', ['q' => '7781', 'status' => 'all']))
             ->assertOk()->assertSee($a->number)->assertDontSee($b->number);
         $this->actingAs($this->accountant)->get(route('erp.review.docs'))->assertOk()->assertDontSee($a->number)->assertSee($b->number);
+    }
+
+    /** (١٢/١١) «السجل والاسم»: سطر واحد مقروء — نوع قصير، رقم المستند والعميل، قبل ← بعد بالعربي */
+    public function test_activity_log_row_is_readable_and_not_duplicated(): void
+    {
+        $inv = $this->invoice();
+        $before = ActivityLog::max('id') ?? 0;
+
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.serial', ['type' => 'invoice', 'id' => $inv->id]), ['paper_ref' => 'P-55'])->assertOk();
+        $this->actingAs($this->accountant)->postJson(route('erp.review.docs.mark', ['type' => 'invoice', 'id' => $inv->id]), ['status' => 'ok'])->assertOk();
+
+        $rows = ActivityLog::where('id', '>', $before)->where('event', 'action')->orderBy('id')->get();
+        $this->assertSame(['Invoice', 'Invoice'], $rows->pluck('subject_type')->all(), 'no route-level duplicate rows');
+        $ok = $rows->last();
+        $this->assertSame($this->accountant->name, $ok->user_name);
+        $this->assertStringContainsString($inv->number, $ok->title);
+        $this->assertStringContainsString($this->client->displayName(), $ok->title);
+        $this->assertSame([__('review.st_pending'), __('review.st_ok')], $ok->changes[__('review.log_state')]);
+        $this->assertSame([null, 'P-55'], $rows->first()->changes[__('review.serial')]);
+        // علامة المستند مابتطلعش «ReviewCheck #5» في السجل
+        $this->assertFalse(ActivityLog::where('id', '>', $before)->where('subject_type', 'ReviewCheck')->exists());
+        // ومركز النشاط بيفتح من غير أخطاء
+        $this->actingAs($this->admin)->get(route('erp.activity', ['tab' => 'log']))->assertOk()->assertSee($inv->number);
+    }
+
+    /** (١٢/١١) الحسابات ← المستندات: الرصيد ومتراجع منه قد إيه، ولينك للطابور ورجوع */
+    public function test_money_tab_shows_reviewed_share_and_links_to_the_queue(): void
+    {
+        $a = $this->invoice();
+        $this->invoice();
+        DocReview::mark($this->accountant, $a, 'ok', null);
+
+        $m = DocQueue::moneyByClient([$this->client->id])[$this->client->id];
+        $this->assertSame(2, $m['docs']);
+        $this->assertSame(1, $m['ok']);
+        $this->assertEqualsWithDelta(34.2, $m['ok_grand'], 0.001);
+        $this->assertEqualsWithDelta(68.4, $m['grand'], 0.001);
+        $this->assertSame(['docs' => 2, 'ok' => 1], $m['months']['2026-10']);
+
+        $docsUrl = route('erp.review.docs', ['client' => $this->client->id, 'status' => 'all']);
+        $this->actingAs($this->accountant)->get(route('erp.review.money', ['show' => 'all']))->assertOk()
+            ->assertSee(__('review.m_docs_n', ['ok' => 1, 'n' => 2]))
+            ->assertSee(e($docsUrl), false);
+
+        // شريط العميل فوق الطابور: رصيده ونسبة المتراجع ورجوع للحسابات
+        $this->actingAs($this->accountant)->get($docsUrl)->assertOk()
+            ->assertSee(__('review.ctx_back_money'))
+            ->assertSee('50%')
+            ->assertSee(number_format((float) $this->client->fresh()->balance, 2));
+    }
+
+    /** (١٢/١١) الترقيم + نسبة السلسلة من كل مستنداتها مش من اللي ظاهر بفلتر الحالة */
+    public function test_queue_pages_and_group_progress_counts_all_states(): void
+    {
+        $a = $this->invoice();
+        $this->invoice();
+        $this->invoice();
+        DocReview::mark($this->accountant, $a, 'ok', null);
+
+        $res = $this->actingAs($this->accountant)->get(route('erp.review.docs', ['per' => 25]))->assertOk();
+        $res->assertSee('data-total="3" data-ok="1"', false);
+        $res->assertSee(__('review.pager_info', ['from' => '<b>1</b>', 'to' => '<b>2</b>', 'n' => '<b>2</b>']), false);
+
+        // مقاس صفحة مش في القايمة ← الافتراضي
+        $this->actingAs($this->accountant)->get(route('erp.review.docs', ['per' => 7, 'status' => 'all']))->assertOk()->assertViewHas('per', 50);
+    }
+
+    /** (١٢/١١) التنبيهات الأوتوماتيك + فلترها + العينة */
+    public function test_auto_flags_filters_and_spot_check_sample(): void
+    {
+        $other = $this->makeRep();
+        $this->client->update(['rep_id' => $other->id]);
+        $a = $this->invoice(['paper_ref' => 'S-1']);
+        $b = $this->invoice();
+        $b->forceFill(['created_at' => Carbon::parse('2026-12-01 10:00')])->save();
+        ActivityLog::create(['user_id' => $this->admin->id, 'event' => 'updated', 'subject_type' => 'Invoice', 'subject_id' => $a->id,
+            'title' => $a->number, 'changes' => ['grand_total' => ['30.00', 34.2]], 'created_at' => '2026-11-10 22:00:00']);
+
+        $rows = DocQueue::all($this->admin)->keyBy('id');
+        $this->assertEqualsCanonicalizing(['rep_off', 'repriced'], $rows[$a->id]['flags']);
+        $this->assertEqualsCanonicalizing(['noserial', 'odd_date', 'rep_off'], $rows[$b->id]['flags']);
+        $all = DocQueue::all($this->admin);
+        $this->assertSame([$a->id], DocQueue::filter($all, ['flag' => 'repriced'])->pluck('id')->all());
+        $this->assertSame(2, DocQueue::filter($all, ['flag' => 'any'])->count());
+
+        DocReview::mark($this->accountant, $a, 'ok', null);
+        DocReview::mark($this->accountant, $b->fresh(), 'ok', null);
+        $all = DocQueue::all($this->admin);
+        $s1 = DocQueue::filter($all, ['by' => $this->accountant->id, 'day' => '2026-11-11', 'sample' => 1]);
+        $this->assertCount(1, $s1);
+        $this->assertSame($s1->pluck('id')->all(), DocQueue::filter($all, ['by' => $this->accountant->id, 'day' => '2026-11-11', 'sample' => 1])->pluck('id')->all(), 'same sample every time');
+        $this->assertCount(0, DocQueue::filter($all, ['by' => $this->admin->id]));
+
+        $this->actingAs($this->admin)->get(route('erp.review.docs', ['status' => 'ok', 'by' => $this->accountant->id, 'day' => '2026-11-11', 'sample' => 1]))
+            ->assertOk()->assertSee(__('review.sample_banner', ['n' => 1, 'who' => $this->accountant->displayName(), 'day' => '2026-11-11']));
+        // الفحص الأوتوماتيك في اللوحة
+        $this->actingAs($this->accountant)->get(route('erp.review.docs.pane', ['type' => 'invoice', 'id' => $a->id]))
+            ->assertOk()->assertSee(__('review.chk_rep_off', ['rep' => $other->displayName()]))->assertSee(__('review.chk_repriced'));
+    }
+
+    /** (١٢/١١) التصدير + الداشبورد (المشاكل المفتوحة والسرعة) */
+    public function test_exports_and_dashboard_issue_list(): void
+    {
+        $a = $this->invoice(['paper_ref' => 'E-9']);
+        DocReview::mark($this->accountant, $a, 'issue', 'الكمية غلط');
+
+        $csv = $this->actingAs($this->accountant)->get(route('erp.review.docs.export', ['status' => 'all']));
+        $csv->assertOk();
+        $body = $csv->streamedContent();
+        $this->assertStringStartsWith(chr(0xEF).chr(0xBB).chr(0xBF), $body);
+        $this->assertStringContainsString($a->number, $body);
+        $this->assertStringContainsString('الكمية غلط', $body);
+
+        $this->actingAs($this->accountant)->get(route('erp.review.docs.people.export'))->assertStatus(403);
+        $trail = $this->actingAs($this->admin)->get(route('erp.review.docs.people.export', ['from' => '2026-11-11', 'to' => '2026-11-11']));
+        $trail->assertOk();
+        $this->assertStringContainsString($a->number, $trail->streamedContent());
+
+        $this->actingAs($this->accountant)->get(route('erp.review'))->assertOk()
+            ->assertSee(__('review.dash_issues', ['n' => 1]))->assertSee('الكمية غلط')->assertSee(__('review.dash_pace'));
     }
 }

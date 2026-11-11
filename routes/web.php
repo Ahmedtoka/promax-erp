@@ -834,12 +834,14 @@ Route::middleware(['auth', 'screen'])->group(function () {
         // ⚠️ الثابت (`people`) قبل البارامتري `{type}/{id}`
         Route::middleware('role:admin')->group(function () {
             Route::get('/review/docs/people', [\App\Http\Controllers\ReviewDocsController::class, 'people'])->name('review.docs.people');
+            Route::get('/review/docs/people/export', [\App\Http\Controllers\ReviewDocsController::class, 'peopleExport'])->name('review.docs.people.export');
             Route::post('/review/docs/{type}/{id}/reopen', [\App\Http\Controllers\ReviewDocsController::class, 'reopen'])
                 ->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('review.docs.reopen');
         });
         Route::middleware('role:admin,accountant')->prefix('/review/docs')->name('review.docs')
             ->controller(\App\Http\Controllers\ReviewDocsController::class)->group(function () {
                 Route::get('/', 'index');
+                Route::get('/export', 'export')->name('.export');
                 Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.pane');
                 Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.mark');
                 Route::post('/{type}/{id}/serial', 'serial')->whereIn('type', ['invoice', 'po'])->whereNumber('id')->name('.serial');

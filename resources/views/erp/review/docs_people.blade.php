@@ -17,6 +17,7 @@
         </select></label>
     @include('partials._range', ['from' => $from, 'to' => $to, 'auto' => true, 'all' => false])
     <button class="btn">{{ __('review.f_apply') }}</button>
+    <a class="btn sm" href="{{ route('erp.review.docs.people.export', request()->only(['from', 'to', 'user'])) }}">⬇ {{ __('review.x_trail') }}</a>
 </form>
 
 <div class="card">
@@ -28,6 +29,7 @@
                 <th>{{ __('review.p_issues') }}</th><th data-nosum>{{ __('review.p_median') }}</th><th data-nosum>{{ __('review.p_p10') }}</th>
                 <th data-nosum>{{ __('review.p_open') }}</th><th>{{ __('review.p_fast') }}</th><th data-nosum>{{ __('review.p_flag') }}</th>
                 <th>{{ __('review.p_edits') }}</th><th>{{ __('review.p_money') }}</th><th data-nosum>{{ __('review.p_span') }}</th>
+                <th data-nosum>{{ __('review.p_sample') }}</th>
             </tr></thead>
             <tbody>
             @forelse ($days as $d)
@@ -48,9 +50,10 @@
                     <td title="{{ collect($d['edits_by'])->map(fn ($n, $k) => __('review.ev_'.$k, ['number' => '']).' '.$n)->implode(' · ') }}">{{ $d['edits'] }}</td>
                     <td dir="ltr">{{ $money($d['money_abs']) }}<br><span class="rv-sub">{{ $d['money_net'] > 0 ? '+' : '' }}{{ $money($d['money_net']) }}</span></td>
                     <td dir="ltr">{{ $d['first'] }} – {{ $d['last'] }}</td>
+                    <td>@if ($d['ok'] > 0)<a class="btn sm" href="{{ route('erp.review.docs', ['status' => 'ok', 'by' => $d['user_id'], 'day' => $d['day'], 'sample' => min(5, $d['ok'])]) }}" title="{{ __('review.p_sample_hint') }}">🔎 {{ min(5, $d['ok']) }}</a>@endif</td>
                 </tr>
             @empty
-                <tr><td colspan="12" class="rv-sub">{{ __('review.p_none') }}</td></tr>
+                <tr><td colspan="13" class="rv-sub">{{ __('review.p_none') }}</td></tr>
             @endforelse
             </tbody>
         </table>
