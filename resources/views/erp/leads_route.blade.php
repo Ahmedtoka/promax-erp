@@ -18,6 +18,8 @@
 
 @section('content')
 
+@include('partials._module_tabs', ['module' => 'leads'])
+
 @if (session('ok'))
     <div class="alert good" style="margin-bottom:12px"><span>✅</span><span>{{ session('ok') }}</span></div>
 @endif

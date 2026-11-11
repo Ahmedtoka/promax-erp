@@ -3,9 +3,8 @@
 @section('title', __('journey.page'))
 
 @section('actions')
-    <a class="btn" href="{{ route('ops.geo', array_filter(['rep' => $rep?->id])) }}">🧭 {{ __('journey.builder_btn') }}</a>
+    <a class="btn" href="{{ route('ops.portfolio') }}">← {{ __('nav.leads_portfolio') }}</a>
     <a class="btn" href="{{ route('ops.journeys.week', ['week' => $weekStart->toDateString()]) }}">👁 {{ __('journey.follow_btn') }}</a>
-    <a class="btn" href="{{ route('ops.assignments') }}">👥 {{ __('journey.assignments') }}</a>
     {{-- زرار الخطر: مسح كل الخطط والبدء من أول وجديد. الأدمن بيمسح
          الكل والمدير فريقه بس. آمن على الزيارات: FK بتاع
          visits.journey_plan_id بيصفّر مش بيمسح. --}}
@@ -30,6 +29,8 @@
 
 @section('content')
 
+@include('partials._module_tabs', ['module' => 'clients'])
+
 
 @if ($rep === null)
     <div class="card"><div class="alert warn">{{ __('journey.no_reps') }}</div></div>
@@ -51,6 +52,24 @@
     $todayKey = today()->toDateString();
     $pulseTitle = $monthStart->copy()->locale($loc)->translatedFormat('F Y');
 @endphp
+
+{{-- ═══ المندوب والأسبوع — نفس كارت جدولة المحتملين بالظبط ═══ --}}
+<div class="card" style="margin-bottom:14px;padding:12px 16px">
+    <form method="GET" action="{{ route('ops.journeys') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
+            <select name="rep" onchange="this.form.submit()">
+                @foreach ($reps as $r)
+                    <option value="{{ $r->id }}" @selected($rep->id === $r->id)>{{ $r->displayName() }} — {{ $r->roleLabel() }}{{ $r->zone ? ' · '.$r->zone->displayName() : '' }}</option>
+                @endforeach
+            </select></label>
+        <label class="fl"><span>{{ __('lead.week_of') }}</span>
+            <input type="date" name="week" value="{{ $weekStart->toDateString() }}" onchange="this.form.submit()"></label>
+        <a class="btn sm" href="{{ route('ops.rep_day', $rep->id) }}">👤 {{ __('ui.l_rep') }} ↗</a>
+        <a class="btn" href="{{ $wLink($prevWeek) }}">→</a>
+        <a class="btn" href="{{ $wLink($nextWeek) }}">←</a>
+        <span style="font-size:12px;color:var(--muted)">{{ $weekLabel }}</span>
+    </form>
+</div>
 
 <div class="jb">
 
@@ -85,53 +104,24 @@
 
     {{-- ═══════════════ البورد ═══════════════ --}}
     <div class="jb-main">
-
-        <div class="card jb-top">
-            <div class="jb-toprow">
-                <form method="GET" action="{{ route('ops.journeys') }}" style="display:inline-flex">
-                    <input type="hidden" name="week" value="{{ $weekStart->toDateString() }}">
-                    {{-- البورد دايماً على مندوب واحد — فمفيش اختيار «الكل»، العنوان بس --}}
-                    <label class="fl wide"><span>{{ __('ui.l_rep') }}</span>
-                    <select name="rep" onchange="this.form.submit()">
-                        @foreach ($reps as $r)
-                            <option value="{{ $r->id }}" @selected($rep->id === $r->id)>
-                                {{ $r->displayName() }} — {{ $r->roleLabel() }}{{ $r->zone ? ' · '.$r->zone->displayName() : '' }}
-                            </option>
-                        @endforeach
-                    </select></label>
-                </form>
-
-                <span class="jb-weeknav">
-                    <a class="btn sm" href="{{ $wLink($prevWeek) }}">‹</a>
-                    <b>{{ $weekLabel }}</b>
-                    <a class="btn sm" href="{{ $wLink($nextWeek) }}">›</a>
-                </span>
-
-                <span class="jb-grow"></span>
-
-                <a class="btn sm" href="{{ route('ops.rep_day', $rep->id) }}">👤 {{ __('ui.l_rep') }} ↗</a>
-                <a class="btn sm" href="{{ route('ops.geo', ['rep' => $rep->id]) }}">🧭 {{ __('journey.builder_btn') }}</a>
-                @if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
-                <button type="button" class="btn" onclick="openDlg('dlgCopy')">
-                    ⧉ {{ __('journey.copy_btn') }}
-                </button>
-                <button type="button" class="btn gold" id="jbSaveBtn" onclick="jbSave()">
-                    ✓ {{ __('journey.save_btn') }}
-                </button>
-                @endif
-            </div>
-
-            <div class="dash-hint" style="margin-top:8px">{{ __('journey.arm_hint') }}</div>
-            <div class="jb-statsrow">
-                <span class="s" id="jbWeekStats"></span>
-                <span class="jb-grow"></span>
-                <span class="jb-lg"><i class="dot d-ok"></i>{{ __('journey.lg_ok') }}</span>
-                <span class="jb-lg"><i class="dot d-over"></i>{{ __('journey.lg_over') }}</span>
-                <span class="jb-lg"><i class="dot d-empty"></i>{{ __('journey.lg_empty') }}</span>
-            </div>
+        <div class="jb-statsrow" style="margin:0 0 4px;border:none;padding:0">
+            <span class="s" id="jbWeekStats"></span>
+            <span class="jb-grow"></span>
+            <span class="jb-lg"><i class="dot d-ok"></i>{{ __('journey.lg_ok') }}</span>
+            <span class="jb-lg"><i class="dot d-over"></i>{{ __('journey.lg_over') }}</span>
+            <span class="jb-lg"><i class="dot d-empty"></i>{{ __('journey.lg_empty') }}</span>
         </div>
 
         <div class="jb-week" id="jbWeek"></div>
+
+        {{-- الحفظ تحت البورد — زي جدولة المحتملين --}}
+        @if (\App\Support\Access::action(auth()->user(), 'act.field.plan'))
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-4px 0 14px">
+            <button type="button" class="btn gold" id="jbSaveBtn" onclick="jbSave()">💾 {{ __('journey.save_btn') }}</button>
+            <button type="button" class="btn" onclick="openDlg('dlgCopy')">⧉ {{ __('journey.copy_btn') }}</button>
+            <span class="dash-hint">{{ __('journey.arm_hint') }}</span>
+        </div>
+        @endif
 
         {{-- ═══ جدول الخطة (١١/١١) — نفس البورد كجدول عشان الإكسيل ═══ --}}
         <div class="card" style="margin-bottom:14px">

@@ -11,12 +11,14 @@
 @section('title', __('journey.wk_title'))
 
 @section('actions')
-    <a class="btn" href="{{ route('ops.geo') }}">🧭 {{ __('journey.builder_btn') }}</a>
+    <a class="btn" href="{{ route('ops.portfolio') }}">← {{ __('nav.leads_portfolio') }}</a>
     <a class="btn gold" href="{{ route('ops.journeys', array_filter(['rep' => $only, 'week' => $start->toDateString()])) }}">
         📅 {{ __('journey.week_btn') }}</a>
 @endsection
 
 @section('content')
+
+@include('partials._module_tabs', ['module' => 'clients'])
 
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
     <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">

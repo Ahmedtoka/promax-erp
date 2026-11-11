@@ -58,6 +58,7 @@ return [
     'group_tasks' => 'إدارة المهام',
     'tasks' => 'المهام',
     'group_leads' => 'العملاء المحتملين',
+    'group_routes' => 'العملاء الحاليين',
     'leads_portfolio' => 'المحفظة',
     'leads_route' => 'راسم خط السير',
     'leads_planner' => 'جدولة الأسبوع',

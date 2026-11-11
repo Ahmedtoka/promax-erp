@@ -173,13 +173,13 @@ class ActionGovernedRoutesTest extends TestCase
         $this->assertFalse(Access::allows($u, 'ops.journeys.wipe'));
         $this->assertSame(403, $this->gate($u, 'ops.journeys.wipe'));
 
-        // منع القسم بيقفل كل حاجة تحته — حتى الراوتس المغطّية
-        $g = $this->customOn('manager', ['nav.group_field' => false]);
+        // منع القسم بيقفل كل حاجة تحته — حتى الراوتس المغطّية (الخطط بقت في nav.group_routes ١١/١١)
+        $g = $this->customOn('manager', ['nav.group_routes' => false]);
         $this->assertFalse(Access::allows($g, 'ops.journeys.wipe'));
         $this->assertSame(403, $this->gate($g, 'ops.journeys.wipe'));
 
         // ومنح القسم مابيفتحش الراوتس المغطّية — الأكشن بيقرر
-        $open = $this->customOn('accountant', ['nav.group_field' => true]);
+        $open = $this->customOn('accountant', ['nav.group_routes' => true]);
         $this->assertTrue(Access::allows($open, 'ops.journeys'));
         $this->assertFalse(Access::allows($open, 'ops.journeys.wipe'));
         $this->assertSame(403, $this->gate($open, 'ops.journeys.wipe'));

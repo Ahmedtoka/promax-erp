@@ -70,6 +70,8 @@
 
 @section('content')
 
+@include('partials._module_tabs', ['module' => 'leads'])
+
 {{-- الملخّص فوق الفلاتر (٢٢/٩) — نفس ترتيب باقي الشاشات --}}
 {{-- كل كارت بيفلتر القايمة تحت بنفس تعريف رقمه، مع باقي الفلاتر زي ما هي (٢٢/٩) --}}
 @php $kUrl = fn (array $x) => request()->fullUrlWithQuery($x + ['page' => null, 'export' => null]).'#leadsList'; @endphp

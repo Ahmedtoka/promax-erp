@@ -19,6 +19,8 @@
 
 @section('content')
 
+@include('partials._module_tabs', ['module' => 'leads'])
+
 {{-- ═══ المندوب والأسبوع ═══ --}}
 <div class="card" style="margin-bottom:14px;padding:12px 16px">
     <form method="GET" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">

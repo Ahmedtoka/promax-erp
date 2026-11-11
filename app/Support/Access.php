@@ -492,6 +492,7 @@ class Access
         'nav.group_online' => '🛒',
         'nav.group_clients' => '👥',
         'nav.group_leads' => '🧲',
+        'nav.group_routes' => '🗺️',
         'nav.group_tasks' => '✅',
         'nav.group_review' => '🧾',
         'nav.group_field' => '🗺️',
@@ -577,6 +578,16 @@ class Access
             ['erp.leads.week', '👁', 'nav.leads_week', 'erp.leads.week', null],
         ],
 
+        // ═══ العملاء الحاليين — خطوط السير (١١/١١ — «زي المحتملين بالظبط») ═══
+        // نفس الأربع تابات بنفس الأيقونات والأسماء والترتيب. `ops.geo` و
+        // `ops.journeys` أسماء الراوتات القديمة عن قصد (الصلاحيات المتخزنة عليها).
+        'nav.group_routes' => [
+            ['ops.portfolio', '✨', 'nav.leads_portfolio', 'ops.portfolio', null],
+            ['ops.geo', '🧭', 'nav.leads_route', 'ops.geo', null],
+            ['ops.journeys', '📅', 'nav.leads_planner', 'ops.journeys', null],
+            ['ops.journeys.week', '👁', 'nav.leads_week', 'ops.journeys.week', null],
+        ],
+
         // ═══ ٧. الميدان — إعداد ← تنفيذ ← متابعة ═══
         'nav.group_field' => [
             ['ops.dashboard', '🛰️', 'nav.ops_dashboard', 'ops.dashboard', null],
@@ -589,12 +600,8 @@ class Access
             // مين عامل «إن» فين دلوقتي + الإخراج الإداري (١١/٨)
             ['ops.open_visits', '🔓', 'nav.open_visits', 'ops.open_visits', null],
             ['ops.assignments', '👥', 'nav.assignments', 'ops.assignments', null],
-            // ═══ خط السير (١١/١١) — نفس تلات شاشات المحتملين للعملاء ═══
-            // الراسم (خريطة) ← جدولة الأسبوع (بورد) ← متابعة الأسبوع.
-            // `ops.geo` اسم الراوت القديم عن قصد (الصلاحيات المتخزنة عليه).
-            ['ops.geo', '🧭', 'nav.geo_planner', 'ops.geo', null],
-            ['ops.journeys', '📅', 'nav.journeys', 'ops.journeys', null],
-            ['ops.journeys.week', '👁', 'nav.journeys_week', 'ops.journeys.week', null],
+            // خطوط السير (الراسم/الجدولة/المتابعة) اتنقلت لمجموعة
+            // `nav.group_routes` (١١/١١) — نفس سكشن المحتملين.
             ['ops.requests', '✅', 'nav.client_requests', 'ops.requests', 'requests'],
             ['ops.merch', '🛒', 'nav.merch_visits', 'ops.merch', null],
             ['ops.tracking', '📍', 'nav.tracking', 'ops.tracking', null],
@@ -928,7 +935,7 @@ class Access
         // الأكشن — هي نفس القرار بالظبط (مين بيزور مين وإمتى) من شاشة
         // تانية. أكشن منفصل كان معناه إن الأدمن يمنع الزرار في شاشة
         // ويسيبه مفتوح في التانية من غير ما ياخد باله.
-        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.geo.save', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
+        'act.field.plan' => ['perm.act_field_plan', 'ops.assignments', null, ['ops.assignments.assign', 'ops.assignments.unassign', 'ops.geo.save', 'ops.portfolio.bulk', 'ops.portfolio.bulkset', 'ops.geo.distribute', 'ops.geo.assign', 'ops.assignments.apply', 'ops.assignments.auto', 'ops.journeys.copy', 'ops.journeys.sync']],
         // مسح خطوط السير كلها (فريقه بس لغير الأدمن) — مفتاح لوحده لأنه هدّام.
         // ⚠️ `['manager']` مش `null`: مايتورثش من مجرد رؤية الصفحة، لازم منح صريح
         'act.field.wipe' => ['perm.act_field_wipe', 'ops.journeys', ['manager'], ['ops.journeys.wipe']],

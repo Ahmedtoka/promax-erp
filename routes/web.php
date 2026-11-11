@@ -1444,6 +1444,13 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::post('/route-builder', [\App\Http\Controllers\RoutePlannerController::class, 'builderSave'])
                 ->name('geo.save');
             Route::redirect('/geo-planner', '/ops/route-builder')->name('geo.legacy');
+            // ✨ محفظة العملاء الحاليين (١١/١١) — زي محفظة المحتملين
+            Route::get('/portfolio', [\App\Http\Controllers\RoutePortfolioController::class, 'index'])
+                ->name('portfolio');
+            Route::post('/portfolio/bulk', [\App\Http\Controllers\RoutePortfolioController::class, 'bulk'])
+                ->name('portfolio.bulk');
+            Route::post('/portfolio/bulk-set', [\App\Http\Controllers\RoutePortfolioController::class, 'bulkSet'])
+                ->name('portfolio.bulkset');
             // متابعة الأسبوع — مخطط / اتزار / فات (زي متابعة المحتملين)
             Route::get('/journeys/week', [\App\Http\Controllers\RoutePlannerController::class, 'week'])
                 ->name('journeys.week');

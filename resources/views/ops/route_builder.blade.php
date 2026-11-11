@@ -12,11 +12,13 @@
 @section('title', __('journey.rb_title'))
 
 @section('actions')
+    <a class="btn" href="{{ route('ops.portfolio') }}">← {{ __('nav.leads_portfolio') }}</a>
     <a class="btn" href="{{ route('ops.journeys') }}">📅 {{ __('journey.week_btn') }}</a>
-    <a class="btn" href="{{ route('ops.journeys.week') }}">👁 {{ __('journey.follow_btn') }}</a>
 @endsection
 
 @section('content')
+
+@include('partials._module_tabs', ['module' => 'clients'])
 
 @if (session('warn'))
     <div class="alert warn" style="margin-bottom:12px"><span>⚠️</span><span>{{ session('warn') }}</span></div>
@@ -385,7 +387,8 @@ a.rb-kpi:hover{border-color:var(--royal-blue,#12399B)}
         m.bindTooltip(tip(c), { direction: 'top', offset: [0, -10] });
         m.on('click', function () { toggle(c.id); });
         markers[c.id] = m;
-        if (!c.extra) bounds.push([c.lat, c.lng]);
+        // الزووم على نقط مصر بس — لوكيشن غلط واحد كان بيفتح الخريطة على العالم كله
+        if (!c.extra && c.lat > 22 && c.lat < 32 && c.lng > 24 && c.lng < 37) bounds.push([c.lat, c.lng]);
     });
     if (bounds.length === 1) map.setView(bounds[0], 14);
     else if (bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.12));

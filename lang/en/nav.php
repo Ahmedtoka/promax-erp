@@ -58,6 +58,7 @@ return [
     'group_tasks' => 'Task Management',
     'tasks' => 'Tasks',
     'group_leads' => 'Leads',
+    'group_routes' => 'Current clients',
     'leads_portfolio' => 'Portfolio',
     'leads_route' => 'Route Builder',
     'leads_planner' => 'Week planner',
