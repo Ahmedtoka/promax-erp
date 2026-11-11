@@ -20,24 +20,92 @@ use Illuminate\Validation\Rule;
  */
 class PriceListController extends Controller
 {
-    public function index()
+    /**
+     * كل القوايم — مين عليها، كام صنف، مبنية على إيه، وآخر استخدام.
+     *
+     * ⚠️ **الافتراضي «الشغّالة بس»** (طلب المالك ١١/١١): بعد تصليح الأسعار
+     * فيه قوايم موقوفة عشان عليها مستندات قديمة — ظهورها جنب الشغّالة
+     * بيلخبط. `status=all` أو `inactive` بيرجّعها.
+     */
+    public function index(Request $request)
     {
-        $lists = PriceList::withCount([
-            'clients as live_clients' => fn ($q) => $q->where('status', 'active'),
-        ])->orderByDesc('is_default')->orderBy('id')->get();
+        $status = in_array($request->query('status'), ['active', 'inactive', 'all'], true)
+            ? $request->query('status') : 'active';
+        $q = trim((string) $request->query('q', ''));
+        $basis = (string) $request->query('basis', '');
+        $sort = in_array($request->query('sort'), ['code', 'name', 'clients', 'chains', 'priced', 'last_invoice', 'ratio'], true)
+            ? $request->query('sort') : 'clients';
+        $dir = $request->query('dir') === 'asc' ? 'asc' : 'desc';
 
-        // ⚠️ الناقص بيتحسب لكل قايمة عشان الشاشة تقول «فاضل 6 أصناف»
-        // بدل ما المستخدم يدوس تفعيل وياخد رفض من غير ما يعرف فين.
-        $totalProducts = Product::sellable()->count();
+        $all = PriceList::orderByDesc('is_default')->orderBy('id')->get();
+        $stats = \App\Services\PriceListOverview::forLists($all);
 
-        foreach ($lists as $l) {
-            $l->missing_count = $l->missingCount();
-            $l->priced_count = $totalProducts - $l->missing_count;
-        }
+        // الكروت فوق بتتحسب على كل القوايم — الفلتر بيأثر على الجدول بس
+        $counts = [
+            'active' => $all->where('active', true)->count(),
+            'inactive' => $all->where('active', false)->count(),
+            'clients' => collect($stats)->sum('clients_active'),
+            'chains' => collect($stats)->sum(fn ($s) => $s['chains']->count()),
+            'unlisted' => \App\Models\Client::where('status', 'active')->whereNull('price_list_id')->count(),
+        ];
+
+        $lists = $all->filter(function ($l) use ($status, $q, $basis, $stats) {
+            if ($status === 'active' && ! $l->active) {
+                return false;
+            }
+            if ($status === 'inactive' && $l->active) {
+                return false;
+            }
+            if ($basis !== '' && $stats[$l->id]['basis']['kind'] !== $basis) {
+                return false;
+            }
+            if ($q !== '') {
+                $hay = mb_strtolower($l->code.' '.$l->name.' '.$l->name_en.' '.$l->notes);
+                // البحث باسم عميل أو سلسلة كمان: «مين واخد قايمة كارفور؟»
+                $hay .= ' '.mb_strtolower($stats[$l->id]['clients']->map(fn ($c) => $c->code.' '.$c->name.' '.$c->name_en)->implode(' '));
+                $hay .= ' '.mb_strtolower($stats[$l->id]['chains']->map(fn ($c) => $c->code.' '.$c->name.' '.$c->name_en)->implode(' '));
+
+                return str_contains($hay, mb_strtolower($q));
+            }
+
+            return true;
+        });
+
+        $key = fn ($l) => match ($sort) {
+            'code' => mb_strtolower($l->code),
+            'name' => mb_strtolower($l->displayName()),
+            'clients' => $stats[$l->id]['clients_active'],
+            'chains' => $stats[$l->id]['chains']->count(),
+            'priced' => $stats[$l->id]['priced'],
+            'last_invoice' => $stats[$l->id]['last_invoice']?->id ?? 0,
+            'ratio' => $stats[$l->id]['basis']['ratio'] ?? 0,
+        };
+        // الشغّالة دايماً قبل الموقوفة لما الاتنين ظاهرين، وبعدين العمود المختار
+        $lists = $lists->sort(function ($a, $b) use ($key, $dir) {
+            if ($a->active !== $b->active) {
+                return $a->active ? -1 : 1;
+            }
+            $c = $key($a) <=> $key($b);
+
+            return $dir === 'asc' ? $c : -$c;
+        })->values();
+
+        $page = max(1, (int) $request->query('page', 1));
+        $per = 25;
+        $paged = new \Illuminate\Pagination\LengthAwarePaginator(
+            $lists->forPage($page, $per)->values(), $lists->count(), $per, $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
         return view('erp.price_lists', [
-            'lists' => $lists,
-            'totalProducts' => $totalProducts,
+            'lists' => $paged,
+            'allLists' => $all,
+            'stats' => $stats,
+            'counts' => $counts,
+            'totalProducts' => Product::sellable()->count(),
+            'filters' => ['q' => $q, 'status' => $status, 'basis' => $basis],
+            'sort' => $sort,
+            'dir' => $dir,
         ]);
     }
 
@@ -64,8 +132,12 @@ class PriceListController extends Controller
             $q->whereKey($priceList->missing()->pluck('id'));
         }
 
+        // مين على القايمة + أساسها — نفس حساب شاشة القوايم بالظبط
+        $stats = \App\Services\PriceListOverview::forLists(collect([$priceList]))[$priceList->id];
+
         return view('erp.price_list', [
             'list' => $priceList,
+            'stats' => $stats,
             'products' => $q->orderBy('family')->orderBy('code')->get(),
             'families' => \App\Models\ProductFamily::options(),
             'filters' => $request->only(['q', 'family', 'missing']),

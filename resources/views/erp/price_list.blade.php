@@ -9,6 +9,10 @@
 
 @php
     $fmt = fn ($n) => number_format((float) $n, 2);
+    // (١١/١١) السعر بيتخزن بـ٤ أرقام عشرية غير شامل — العرض بـ٤ لما تفرق
+    $fmt4 = fn ($n) => \App\Services\PriceListOverview::money4((float) $n);
+    $vat = \App\Services\PriceListOverview::VAT;
+    $b = $stats['basis'];
     $u = auth()->user();
     $canEdit = $u->isAdmin() || $u->role === 'manager';
     $f = $filters;
@@ -63,6 +67,19 @@
         <div class="val {{ $missing > 0 ? 'neg' : 'pos' }}">{{ $missing }}</div>
         <div class="sub2"><span dir="ltr">{{ $missing }} = {{ $total }} − {{ $total - $missing }}</span> {{ __('uia.eq_missing') }}@if ($missing > 0) — {{ __('price.missing_blocks_activation') }}@endif</div>
     </a>
+    <a class="kpi" href="#who">
+        <div class="lbl">👥 {{ __('price.col_clients') }} · 🏬 {{ __('price.col_chains') }}</div>
+        <div class="val">{{ number_format($stats['clients_active']) }} <span style="font-size:13px;color:var(--muted)">· {{ $stats['chains']->count() }}</span></div>
+        <div class="sub2">{{ __('price.ov_clients_sub') }}@if ($stats['clients_other'] > 0) · {{ __('price.ov_other_status', ['n' => $stats['clients_other']]) }}@endif</div>
+    </a>
+    <div class="kpi">
+        <div class="lbl">🧭 {{ __('price.col_basis') }}</div>
+        <div class="val" style="font-size:16px">{{ __('price.basis_'.$b['kind']) }}</div>
+        <div class="sub2">
+            @if ($b['differ'] > 0){{ __('price.ratio_of_new', ['n' => $b['differ'], 'pct' => number_format($b['ratio'] * 100, 1)]) }} · @endif
+            @if ($b['incl_suspect'])<b class="neg">⚠️ {{ __('price.incl_suspect') }}</b>@else<span class="pos">✓ {{ __('price.excl_ok') }}</span>@endif
+        </div>
+    </div>
 </div>
 
 @if (! $list->active && $missing === 0 && $canEdit)
@@ -198,7 +215,8 @@
                     @if ($reference && $reference->id !== $list->id)
                         <th class="num" style="width:120px" data-nosum>{{ $reference->displayName() }}</th>
                     @endif
-                    <th class="num" style="width:140px" data-nosum>{{ __('price.price') }}</th>
+                    <th class="num" style="width:140px" data-nosum>{{ __('price.price_excl') }}</th>
+                    <th class="num" style="width:110px" data-nosum>{{ __('price.price_incl') }}</th>
                 </tr>
 
                 @forelse ($products as $p)
@@ -238,23 +256,28 @@
                         <td style="color:var(--muted);font-size:11.5px">{{ $p->unitLabel() }}</td>
                         @if ($reference && $reference->id !== $list->id)
                             <td class="num" style="color:var(--muted)">
-                                {{ $fmt($reference->priceFor($p)) }}
+                                {{ $fmt4($reference->priceFor($p)) }}
                             </td>
                         @endif
                         <td class="num">
                             @if ($canEdit)
-                                <input type="number" step="0.01" min="0" style="width:110px"
+                                {{-- ⚠️⚠️ **step="any" وقيمة بـ٤ أرقام** (١١/١١): السعر بقى بيتخزن
+                                     بـ٤ (82.8947). الخانة كانت بتعرض 82.89 — وأي «حفظ» للصفحة
+                                     كان هيعمل مسودة تقرّب كل الأسعار لرقمين. --}}
+                                <input type="number" step="any" min="0" style="width:110px"
                                        name="prices[{{ $p->id }}]"
-                                       value="{{ old('prices.'.$p->id, $price > 0 ? number_format($price, 2, '.', '') : '') }}"
+                                       value="{{ old('prices.'.$p->id, $price > 0 ? rtrim(rtrim(number_format($price, 4, '.', ''), '0'), '.') : '') }}"
                                        placeholder="—"
                                        class="{{ $price <= 0 ? 'bad' : '' }}">
                             @else
-                                {{ $price > 0 ? $fmt($price) : '—' }}
+                                {{ $price > 0 ? $fmt4($price) : '—' }}
                             @endif
                         </td>
+                        {{-- الشامل للعرض بس: نفس `Tax::line` — سعر الوحدة الشامل مقرّب لقرشين --}}
+                        <td class="num" style="color:var(--muted)">{{ $price > 0 ? $fmt(round($price * $vat, 2)) : '—' }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px">
+                    <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">
                         {{ __('stock.no_items') }}
                     </td></tr>
                 @endforelse
@@ -267,6 +290,91 @@
             </div>
         @endif
     </form>
+</div>
+
+{{-- ═══ مين على القايمة (١١/١١) ═══
+     السلاسل الأول (كل سلسلة بفروعها، وكام فرع منهم على القايمة دي فعلاً)،
+     وبعدين كل عميل بخصمه وضريبته. ⚠️ عقد الفرع الشخصي الساري بيغلب
+     قايمة العميل في التسعير — فالعقود بتتقال صراحةً. --}}
+<div class="card" id="who">
+    <h3>👥 {{ __('price.who_title') }}
+        <span class="side">{{ __('price.ov_clients_n', ['n' => $stats['clients']->count()]) }} · {{ __('price.ov_chains_n', ['n' => $stats['chains']->count()]) }}</span></h3>
+
+    @if ($stats['contracts'] > 0)
+        <div class="alert info" style="margin-bottom:10px"><span>📄</span><span>{{ __('price.contract_note', ['n' => $stats['contracts']]) }}</span></div>
+    @endif
+
+    @if ($stats['clients']->isEmpty() && $stats['chains']->isEmpty())
+        <div style="text-align:center;color:var(--muted);padding:20px">{{ __('price.no_one') }}</div>
+    @endif
+
+    @if ($stats['chains']->isNotEmpty())
+        @php
+            $onList = $stats['clients']->where('status', 'active')->countBy('group_id');
+        @endphp
+        <div class="tablewrap" style="margin-bottom:14px">
+            <table data-page="25">
+                <thead><tr>
+                    <th>{{ __('price.chain') }}</th>
+                    <th class="num">{{ __('price.branches') }}</th>
+                    <th class="num">{{ __('price.branches_on_list') }}</th>
+                    <th class="num" data-nosum>{{ __('client.discount') }}</th>
+                    <th>{{ __('price.tax') }}</th>
+                    <th>{{ __('common.status') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($stats['chains'] as $g)
+                    <tr>
+                        <td><a href="{{ route('erp.groups.show', $g->id) }}"><b>{{ $g->displayName() }}</b></a>
+                            <div style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $g->code }}</div></td>
+                        <td class="num">{{ $g->branches }}</td>
+                        <td class="num">
+                            @php $n = $onList[$g->id] ?? 0; @endphp
+                            <b @class(['neg' => $n < $g->branches])>{{ $n }}</b>
+                        </td>
+                        <td class="num" dir="ltr">{{ $g->default_discount !== null ? rtrim(rtrim(number_format($g->default_discount * 100, 2), '0'), '.').'%' : '—' }}</td>
+                        <td>@if ($g->taxable === false || $g->taxable === 0)<span class="badge b-orange">{{ __('price.tax_no') }}</span>@else<span class="badge b-green">{{ __('price.tax_yes') }}</span>@endif</td>
+                        <td>@if ($g->active)<span class="badge b-green">{{ __('common.active') }}</span>@else<span class="badge b-gray">{{ __('price.inactive') }}</span>@endif</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
+
+    @if ($stats['clients']->isNotEmpty())
+        <div class="tablewrap" style="max-height:60vh;overflow-y:auto">
+            <table data-page="50">
+                <thead><tr>
+                    <th>{{ __('client.client') }}</th>
+                    <th>{{ __('price.chain') }}</th>
+                    <th class="num" data-nosum>{{ __('client.discount') }}</th>
+                    <th>{{ __('price.tax') }}</th>
+                    <th>{{ __('common.status') }}</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($stats['clients'] as $c)
+                    <tr>
+                        <td><a href="{{ route('erp.clients.show', $c->id) }}"><b>{{ $c->fullName() }}</b></a>
+                            <div style="font-size:10.5px;color:var(--muted)" dir="ltr">{{ $c->code }}</div></td>
+                        <td>@if ($c->group)<a href="{{ route('erp.groups.show', $c->group_id) }}">{{ $c->group->displayName() }}</a>@else<span class="muted">—</span>@endif</td>
+                        <td class="num" dir="ltr">{{ (float) $c->discount > 0 ? rtrim(rtrim(number_format($c->discount * 100, 2), '0'), '.').'%' : '0%' }}</td>
+                        <td>@if ($c->taxable)<span class="badge b-green">{{ __('price.tax_yes') }}</span>@else<span class="badge b-orange">{{ __('price.tax_no') }}</span>@endif</td>
+                        <td>
+                            @if ($c->status === 'active')
+                                <span class="badge b-green">{{ __('client.status_active') }}</span>
+                            @elseif ($c->status === 'rejected')
+                                <span class="badge b-red">{{ __('client.status_rejected') }}</span>
+                            @else
+                                <span class="badge b-orange">{{ __('client.status_waiting') }}</span>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 </div>
 
 {{-- ═══ تعديل بيانات القايمة ═══ --}}
