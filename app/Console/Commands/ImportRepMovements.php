@@ -510,19 +510,10 @@ class ImportRepMovements extends Command
                 $sale->forceFill(['created_at' => $p['at'], 'updated_at' => $p['at']])->saveQuietly();
 
                 if ($p['payment'] === 'cash') {
-                    $coll = Transaction::create([
-                        'client_id' => $client->id,
-                        'date' => $p['at']->toDateString(),
-                        'memo' => __('flash.memo_cash_with_invoice', ['number' => $inv->number]),
-                        'debit' => 0,
-                        'credit' => $p['net'],
-                        'kind' => 'collection',
-                        'method' => Transaction::METHOD_CASH,
-                        'source_type' => \App\Models\Invoice::class,
-                        'source_id' => $inv->id,
-                    ]);
+                    // (١٣/١١) المسار الواحد للكاش المربوط
+                    $coll = \App\Services\Settlement::linkCash($inv, $p['at'], null, false, (float) $p['net'], 0.0);
 
-                    $coll->forceFill(['created_at' => $p['at'], 'updated_at' => $p['at']])->saveQuietly();
+                    $coll?->forceFill(['created_at' => $p['at'], 'updated_at' => $p['at']])->saveQuietly();
                 }
             }
 

@@ -54,8 +54,12 @@ class ManualCollection
         ?string $note = null,
         ?string $proofPath = null,
         float $taxWithheld = 0.0,
+        bool $allowDuplicate = false,
+        bool $allowAdvance = false,
     ): Transaction {
         $amount = round($amount, 2);
+        // (١٣/١١) نفس التحصيل اتسجّل قبل كده؟ أو أكبر من المفتوح؟ — مرفوض إلا بتأكيد صريح
+        Settlement::assertClientCollection($client, $amount, $date, $allowDuplicate, $allowAdvance);
         $taxWithheld = round(max($taxWithheld, 0), 2);
 
         $memo = $note ?: ($rep !== null

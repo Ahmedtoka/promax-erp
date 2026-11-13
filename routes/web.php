@@ -842,6 +842,8 @@ Route::middleware(['auth', 'screen'])->group(function () {
             ->controller(\App\Http\Controllers\ReviewDocsController::class)->group(function () {
                 Route::get('/', 'index');
                 Route::get('/export', 'export')->name('.export');
+                // (١٣/١١ — أحمد) حجم الشغل وحجم اللي خلص — لكل عميل / سلسلة
+                Route::get('/coverage', 'coverage')->name('.coverage');
                 Route::get('/{type}/{id}', 'pane')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.pane');
                 Route::post('/{type}/{id}/mark', 'mark')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.mark');
                 Route::post('/{type}/{id}/undo', 'undo')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.undo');

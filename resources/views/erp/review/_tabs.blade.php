@@ -7,6 +7,7 @@
         'erp.review.stock' => __('review.tab_stock'),
         // (١١/١١) المحاسب والأدمن بس — مدير القناة مالوش التاب دي
         'erp.review.docs' => __('review.tab_docs'),
+        'erp.review.docs.coverage' => __('review.cov_tab'),
         'erp.review.docs.people' => __('review.people_tab'),
     ];
     $tabs = array_filter($tabs, fn ($r) => \App\Support\Access::allows(auth()->user(), $r), ARRAY_FILTER_USE_KEY);

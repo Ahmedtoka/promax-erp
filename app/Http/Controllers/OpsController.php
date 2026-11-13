@@ -5073,29 +5073,6 @@ class OpsController extends Controller
      *   • تحصيل ميداني منفصل (`source_type=Visit`) مابيتلمسش —
      *     ده فلوس اتقبضت فعلاً وليها صورة إثبات.
      */
-    /**
-     * ليه التحويل لكاش ممنوع (null = مسموح): فيه تحصيل مربوط أصلاً لا (حارس التكرار
-     * تحت بيتعامل معاه)؛ غير كده لو رصيد العميل دلوقتي أقل من الفاتورة، يبقى الفاتورة
-     * دي (أو جزء منها) اتدفعت بتحصيل تاني — قيد كاش جديد = تحصيل مرتين.
-     */
-    public static function cashToggleBlocker(Invoice $invoice): ?string
-    {
-        $linked = Transaction::where('source_type', Invoice::class)->where('source_id', $invoice->id)->where('kind', 'collection')->exists();
-        if ($linked) {
-            return null;
-        }
-        $balance = (float) Transaction::where('client_id', $invoice->client_id)->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) AS b')->value('b');
-        if ($balance - (float) $invoice->grand_total < -1.0) {
-            return __('ops.pay_already_collected', [
-                'number' => $invoice->number,
-                'balance' => number_format($balance, 2),
-                'after' => number_format($balance - (float) $invoice->grand_total, 2),
-            ]);
-        }
-
-        return null;
-    }
-
     public function toggleInvoicePayment(Request $request, Invoice $invoice)
     {
         if (in_array((string) $invoice->eta_status, ['exported', 'submitted'], true)) {
@@ -5114,56 +5091,26 @@ class OpsController extends Controller
 
         $to = $invoice->payment === 'cash' ? 'credit' : 'cash';
 
-        // ⚠️ (١٣/١١ — باج INV-1017 / ورقي 560) فاتورة آجل اتحصّلت بعدها بتحصيل ميداني
-        // (`Visit`) — تحويلها لكاش كان بيضيف قيد تحصيل تاني فوق التحصيل الحقيقي، والعميل
-        // اتحصّل منه مرتين (رصيده بقى بالسالب قد الفاتورة). لو التحصيل الجديد هيقلب رصيد
-        // العميل لدائن، الفلوس اتقبضت فعلاً — مانحوّلش.
-        if ($to === 'cash' && ($why = self::cashToggleBlocker($invoice)) !== null) {
-            return back()->withErrors(['payment' => $why]);
-        }
-
-        DB::transaction(function () use ($invoice, $to) {
-            if ($to === 'credit') {
-                // قيد التحصيل **المربوط بالفاتورة دي بس** — مسح صف بصف
-                // (مش مسح جماعي) عشان TransactionObserver::deleted يشوفه
-                // ويشيل قيد الشجرة المقابل (ruling A، مراجعة الجولة ١)
-                Transaction::where('source_type', Invoice::class)
-                    ->where('source_id', $invoice->id)
-                    ->where('kind', 'collection')
-                    ->get()
-                    ->each->delete();
-            } else {
-                // ⚠️ حارس التكرار — لو فيه قيد تحصيل مربوط أصلاً
-                // (دوسة مكررة/داتا قديمة) مانضيفش تاني فوقه.
-                $exists = Transaction::where('source_type', Invoice::class)
-                    ->where('source_id', $invoice->id)
-                    ->where('kind', 'collection')
-                    ->exists();
-
-                if (! $exists) {
-                    // نفس أعمدة قيد الكاش وقت البيع في الـAPI بالحرف —
-                    // الإجمالي شامل الضريبة عشان الرصيد يرجع صفر بالظبط
-                    Transaction::create([
-                        'client_id' => $invoice->client_id,
-                        'date' => $invoice->created_at->toDateString(),
-                        'memo' => __('flash.memo_cash_with_invoice', ['number' => $invoice->number]),
-                        'debit' => 0,
-                        'credit' => $invoice->grand_total,
-                        'tax' => $invoice->tax_total,
-                        'kind' => 'collection',
-                        'source_type' => Invoice::class,
-                        'source_id' => $invoice->id,
-                    ]);
+        // (١٣/١١) المسار الواحد: `Settlement` — الكاش بأثر رجعي بيترفض لو الفاتورة
+        // اتسدّدت (كلها أو جزء) بفلوس تانية (باج INV-1017 / ورقي 560)، وقيد واحد بالكتير
+        try {
+            DB::transaction(function () use ($invoice, $to) {
+                if ($to === 'credit') {
+                    \App\Services\Settlement::unlinkCash($invoice);
+                } else {
+                    \App\Services\Settlement::linkCash($invoice, $invoice->created_at, null, retro: true);
                 }
-            }
 
-            $invoice->update(['payment' => $to]);
+                $invoice->update(['payment' => $to]);
 
-            // أشهر باج في رَنبوك الأرقام: تعديل قيود من غير إعادة حساب
-            $invoice->client->recalculate();
+                // أشهر باج في رَنبوك الأرقام: تعديل قيود من غير إعادة حساب
+                $invoice->client->recalculate();
 
-            $this->repostInvoiceGl($invoice, 'toggleInvoicePayment');
-        });
+                $this->repostInvoiceGl($invoice, 'toggleInvoicePayment');
+            });
+        } catch (\App\Exceptions\Rejected $e) {
+            return back()->withErrors(['payment' => $e->getMessage()]);
+        }
 
         return back()->with('ok', __('ops.pay_toggled', [
             'number' => $invoice->number,
@@ -5707,6 +5654,8 @@ class OpsController extends Controller
         \App\Support\PeriodGuard::assertOpen($date, 'date');
 
         \App\Services\ManualCollection::record(
+            allowDuplicate: $request->boolean('allow_duplicate'),
+            allowAdvance: $request->boolean('allow_advance'),
             actor: $request->user(),
             rep: null,
             client: $client,

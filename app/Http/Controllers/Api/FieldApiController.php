@@ -2345,18 +2345,8 @@ class FieldApiController extends Controller
                 // لو كاش: قيد تحصيل مقابل (دائن) — الرصيد يفضل صفر.
                 // في الأمانة مفيش مديونية أصلاً فمفيش تحصيل مقابلها.
                 if ($data['payment'] === 'cash' && ! $consigned) {
-                    Transaction::create([
-                        'client_id' => $client->id,
-                        'date' => today(),
-                        'memo' => __('flash.memo_cash_with_invoice', ['number' => $invoice->number]),
-                        'debit' => 0,
-                        // التحصيل بالإجمالي عشان الرصيد يرجع صفر بالظبط
-                        'credit' => $grandTotal,
-                        'tax' => $taxTotal,
-                        'kind' => 'collection',
-                        'source_type' => Invoice::class,
-                        'source_id' => $invoice->id,
-                    ]);
+                    // (١٣/١١) المسار الواحد للكاش المربوط — بالإجمالي عشان الرصيد يرجع صفر بالظبط
+                    \App\Services\Settlement::linkCash($invoice, today(), null, false, (float) $grandTotal, (float) $taxTotal);
                 }
 
                 $client->recalculate();
@@ -2935,16 +2925,8 @@ class FieldApiController extends Controller
                     && $grand > 0;
 
                 if ($payCash) {
-                    Transaction::create([
-                        'client_id' => $purchaseOrder->client_id,
-                        'date' => today(),
-                        'memo' => __('flash.memo_po_cash', ['number' => $purchaseOrder->number]),
-                        'debit' => 0,
-                        'credit' => $grand,
-                        'kind' => 'collection',
-                        'source_type' => PurchaseOrder::class,
-                        'source_id' => $purchaseOrder->id,
-                    ]);
+                    // (١٣/١١) المسار الواحد — قيد كاش واحد بالكتير للأمر (والقيد الفريد تحته)
+                    \App\Services\Settlement::linkCash($purchaseOrder, today(), __('flash.memo_po_cash', ['number' => $purchaseOrder->number]), false, (float) $grand, 0.0);
                 }
 
                 $purchaseOrder->client->recalculate();

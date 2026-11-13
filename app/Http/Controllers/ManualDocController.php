@@ -339,18 +339,11 @@ class ManualDocController extends Controller
                 Transaction::whereKey($tx->id)->update(['created_at' => $date]);
 
                 if ($payment === 'cash' && ! $consigned) {
-                    $tx2 = Transaction::create([
-                        'client_id' => $client->id,
-                        'date' => $date->toDateString(),
-                        'memo' => __('flash.memo_cash_with_invoice', ['number' => $invoice->number]),
-                        'debit' => 0,
-                        'credit' => $grandTotal,
-                        'tax' => $taxTotal,
-                        'kind' => 'collection',
-                        'source_type' => Invoice::class,
-                        'source_id' => $invoice->id,
-                    ]);
-                    Transaction::whereKey($tx2->id)->update(['created_at' => $date]);
+                    // (١٣/١١) المسار الواحد للكاش المربوط
+                    $tx2 = \App\Services\Settlement::linkCash($invoice, $date, null, false, (float) $grandTotal, (float) $taxTotal);
+                    if ($tx2 !== null) {
+                        Transaction::whereKey($tx2->id)->update(['created_at' => $date]);
+                    }
                 }
 
                 $client->recalculate();
@@ -584,6 +577,8 @@ class ManualDocController extends Controller
         // ⚠️ القلب المشترك (٧/٩): نفس السيرفس اللي مساعد بروماكس وكارت
         // العميل بينفذوا بيها التحصيل — مصدر واحد للعملية
         \App\Services\ManualCollection::record(
+            allowDuplicate: $request->boolean('allow_duplicate'),
+            allowAdvance: $request->boolean('allow_advance'),
             actor: $request->user(),
             rep: $rep,
             client: $client,

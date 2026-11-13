@@ -425,3 +425,37 @@ same queue next to invoices and POs.
   balance vs ledger, duplicate serials, ✓ changed after review, and every review-pane
   edit before → after. `--fix` is a dry-run; `--fix --apply` takes a snapshot, then
   removes exact duplicate rows and reverts double-collected toggled invoices to credit.
+
+## Addendum 6 — Settlement root fix + workload page (13/11, Ahmed)
+
+**«عاوزين حل للتكرار مرة واحدة»**: the ledger is balance-forward. Field and office
+collections sit on the client, not on an invoice. Only "cash with document"
+collections and a return's credit/refund are linked to one document.
+- `App\Services\Settlement` is the only writer of document-linked cash.
+  - Callers: app cash sale, manual cash invoice, PO cash on delivery, the cash
+    toggle, the rep-movements importer.
+  - It locks the document row and returns the existing row on a repeat.
+  - The amount can never exceed the document total.
+  - With `retro` (the toggle), it refuses when the document is already paid,
+    fully or partly.
+- **Paid state** = `Settlement::coverage()`, derived from the ledger, so it can't
+  drift. A document's own linked cash is applied first; every other credit is
+  applied FIFO to the oldest debt.
+- **DB constraint** (`2026_11_13_000200_transactions_doc_link_unique.php`): a stored
+  generated column `doc_link` (kind|source_type|source_id for invoice / PO / return ×
+  sale / consignment / collection / return / refund) with a UNIQUE index. Visit and
+  office collections stay NULL, so they're unaffected. The migration refuses to run
+  while duplicates exist (run `review:audit --fix --apply` first).
+- **ERP manual collection** (client card, manual-doc screen, assistant): it refuses
+  a same-day same-amount repeat and anything above the client's open balance,
+  unless the accountant ticks «تحصيل تاني فعلاً» / «دفعة مقدمة». Field-app
+  collections keep their unique `idem_key`. They aren't capped, because reps work
+  offline and advances happen.
+
+**Workload page** (`erp.review.docs.coverage`, tab «حجم الشغل»):
+- Per client or per chain: invoices / POs / returns / collections as counts and
+  money, total docs, reviewed ✓, issues, % done.
+- Fully-reviewed rows are highlighted green, and the top-line card shows clients
+  100% done.
+- Sort by work / progress / left / name; filters for mother, chain, search and
+  status; per-table Excel.

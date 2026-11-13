@@ -864,6 +864,11 @@
         </div>
         <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">{{ __('client.tax_withheld_hint') }}</div>
         <div><label class="f">{{ __('client.memo') }}</label><input type="text" name="memo" placeholder="{{ __('client.cash_collection') }}" style="width:100%"></div>
+        {{-- (١٣/١١) حارس التكرار: نفس التحصيل اتسجّل قبل كده، أو أكبر من المفتوح — بيترفض إلا بتأكيد --}}
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px">
+            <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="allow_duplicate" value="1" @checked(old('allow_duplicate'))> {{ __('ops.collect_allow_dup') }}</label>
+            <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="allow_advance" value="1" @checked(old('allow_advance'))> {{ __('ops.collect_allow_adv') }}</label>
+        </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
             <button class="btn" type="button" onclick="closeDlg('dlgCollect')">{{ __('common.cancel') }}</button>
             <button class="btn green" type="submit">{{ __('common.record') }}</button>

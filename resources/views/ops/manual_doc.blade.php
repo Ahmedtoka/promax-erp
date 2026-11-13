@@ -191,6 +191,11 @@
             </div>
         </div>
         <div class="dash-hint" style="margin-top:8px">{{ __('ops.md_collect_hint') }}</div>
+        {{-- (١٣/١١) حارس التكرار: نفس التحصيل اتسجّل قبل كده، أو أكبر من المفتوح — بيترفض إلا بتأكيد --}}
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px">
+            <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="allow_duplicate" value="1" @checked(old('allow_duplicate'))> {{ __('ops.collect_allow_dup') }}</label>
+            <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="allow_advance" value="1" @checked(old('allow_advance'))> {{ __('ops.collect_allow_adv') }}</label>
+        </div>
         <button class="btn gold" type="submit" style="margin-top:12px">✓ {{ __('ops.md_save_collect') }}</button>
     </form>
 </div>

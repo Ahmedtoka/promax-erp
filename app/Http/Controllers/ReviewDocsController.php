@@ -264,6 +264,113 @@ class ReviewDocsController extends Controller
             fn () => __($doc instanceof ClientReturn ? 'review.ret_lines_saved' : 'review.lines_saved', ['old' => number_format($old, 2), 'new' => number_format((float) $doc->fresh()->grand_total, 2)]));
     }
 
+    // ═══════════════════════ حجم الشغل واللي خلص (١٣/١١) ═══════════════════════
+
+    /**
+     * «صفحة أقدر أشوف كام عميل خلص وأكتر عميل خلص مراجعة كاملة، وكل عميل بعدد
+     * الترانزاكشنز بتاعته» — لكل عميل (أو سلسلة): فواتير/أوامر/مرتجعات/تحصيلات
+     * بالعدد والفلوس، والمستندات اللي اتراجعت ✓ ونسبتها. نفس تعريف الحالة بتاع الطابور.
+     */
+    public function coverage(Request $request)
+    {
+        $user = $request->user();
+        $by = $request->string('by')->value() === 'chain' ? 'chain' : 'client';
+        $all = DocQueue::all($user);
+        $f = ['mother' => $request->integer('mother') ?: '', 'group' => $request->integer('group') ?: '', 'q' => $request->string('q')->trim()->value()];
+        $rows = DocQueue::filter($all, ['mother' => $f['mother'], 'group' => $f['group']]);
+
+        $ids = $rows->pluck('client_id')->unique()->values();
+        $coll = \Illuminate\Support\Facades\DB::table('transactions')->whereIn('client_id', $ids)->where('kind', 'collection')
+            ->groupBy('client_id')->selectRaw('client_id, COUNT(*) AS n, SUM(credit) AS amt')->get()->keyBy('client_id');
+
+        $blank = ['inv' => 0, 'inv_amt' => 0.0, 'po' => 0, 'po_amt' => 0.0, 'ret' => 0, 'ret_amt' => 0.0, 'col' => 0, 'col_amt' => 0.0,
+            'docs' => 0, 'ok' => 0, 'issue' => 0, 'changed' => 0, 'clients' => 0, 'done_clients' => 0];
+        $byClient = [];
+        foreach ($rows as $r) {
+            $c = &$byClient[$r['client_id']];
+            $c ??= $blank + ['label' => $r['client'], 'code' => $r['client_code'], 'group' => $r['group'], 'group_id' => $r['group_id'],
+                'mother' => $r['mother'], 'client_id' => $r['client_id']];
+            $t = ['invoice' => 'inv', 'po' => 'po', 'return' => 'ret'][$r['type']];
+            $c[$t]++;
+            $c[$t.'_amt'] += $r['grand'];
+            $c['docs']++;
+            $c['ok'] += $r['state'] === 'ok' ? 1 : 0;
+            $c['issue'] += $r['state'] === 'issue' ? 1 : 0;
+            $c['changed'] += $r['state'] === 'changed' ? 1 : 0;
+            unset($c);
+        }
+        foreach ($byClient as $id => &$c) {
+            $c['col'] = (int) ($coll[$id]->n ?? 0);
+            $c['col_amt'] = (float) ($coll[$id]->amt ?? 0);
+            $c['clients'] = 1;
+            $c['done_clients'] = $c['docs'] > 0 && $c['ok'] === $c['docs'] ? 1 : 0;
+        }
+        unset($c);
+
+        $list = $byClient;
+        if ($by === 'chain') {
+            $list = [];
+            foreach ($byClient as $c) {
+                $k = $c['group_id'] ? 'g'.$c['group_id'] : 'c'.$c['client_id'];
+                $g = &$list[$k];
+                $g ??= $blank + ['label' => $c['group'] ?? $c['label'], 'code' => $c['group_id'] ? '' : $c['code'], 'group' => null,
+                    'group_id' => $c['group_id'], 'mother' => $c['mother'], 'client_id' => $c['group_id'] ? null : $c['client_id']];
+                foreach (array_keys($blank) as $n) {
+                    $g[$n] += $c[$n];
+                }
+                unset($g);
+            }
+        }
+        foreach ($list as &$x) {
+            $x['pct'] = DocQueue::pct($x['ok'], $x['docs']);
+            $x['left'] = $x['docs'] - $x['ok'];
+            $x['done'] = $x['docs'] > 0 && $x['ok'] === $x['docs'];
+            $x['work'] = $x['docs'] + $x['col'];
+        }
+        unset($x);
+        $list = collect($list)->values();
+        if ($f['q'] !== '') {
+            $nq = mb_strtolower(Client::normalizeArabic($f['q']));
+            $list = $list->filter(fn ($x) => str_contains(mb_strtolower(Client::normalizeArabic(implode(' ', [$x['label'], $x['code'], (string) $x['group'], (string) $x['mother']]))), $nq))->values();
+        }
+        $counts = [
+            'all' => $list->count(),
+            'done' => $list->where('done', true)->count(),
+            'partial' => $list->filter(fn ($x) => ! $x['done'] && $x['ok'] > 0)->count(),
+            'none' => $list->filter(fn ($x) => $x['ok'] === 0)->count(),
+        ];
+        $show = in_array($request->string('show')->value(), ['done', 'partial', 'none'], true) ? $request->string('show')->value() : '';
+        $list = match ($show) {
+            'done' => $list->where('done', true),
+            'partial' => $list->filter(fn ($x) => ! $x['done'] && $x['ok'] > 0),
+            'none' => $list->filter(fn ($x) => $x['ok'] === 0),
+            default => $list,
+        };
+        $sort = in_array($request->string('sort')->value(), ['work', 'progress', 'left', 'name'], true) ? $request->string('sort')->value() : 'work';
+        $list = (match ($sort) {
+            'progress' => $list->sortBy([['pct', 'desc'], ['docs', 'desc']]),
+            'left' => $list->sortByDesc('left'),
+            'name' => $list->sortBy('label'),
+            default => $list->sortBy([['work', 'desc'], ['label', 'asc']]),
+        })->values();
+
+        $tot = collect($byClient);
+
+        return view('erp.review.coverage', [
+            'list' => $list, 'by' => $by, 'sort' => $sort, 'show' => $show, 'f' => $f, 'counts' => $counts,
+            'top' => [
+                'clients' => $tot->count(), 'done_clients' => (int) $tot->sum('done_clients'),
+                'docs' => (int) $tot->sum('docs'), 'ok' => (int) $tot->sum('ok'), 'issue' => (int) $tot->sum('issue'),
+                'pct' => DocQueue::pct($tot->sum('ok'), $tot->sum('docs')),
+                'col' => (int) $tot->sum('col'), 'col_amt' => round($tot->sum('col_amt'), 2),
+                'sales_amt' => round($tot->sum('inv_amt') + $tot->sum('po_amt'), 2), 'ret_amt' => round($tot->sum('ret_amt'), 2),
+            ],
+            'mothers' => MotherCompany::whereIn('id', $all->pluck('mother_id')->filter()->unique())->orderBy('name')->get(['id', 'name', 'name_en']),
+            'chains' => ClientGroup::whereIn('id', $all->pluck('group_id')->filter()->unique())->orderBy('name')->get(['id', 'name', 'name_en']),
+        ]);
+    }
+
+
     // ═══════════════════════ المراجِعين ═══════════════════════
 
     public function people(Request $request)
