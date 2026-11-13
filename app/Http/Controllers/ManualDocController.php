@@ -565,6 +565,9 @@ class ManualDocController extends Controller
                     fn () => $direct && $request->input('method') !== Transaction::METHOD_CASH,
                 )],
             'tax_withheld' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            // (١٣/١١) تأكيد صريح لحارس التكرار / التحصيل الزيادة
+            'allow_duplicate' => ['nullable', 'boolean'],
+            'allow_advance' => ['nullable', 'boolean'],
         ]);
 
         [$rep, $client, $date] = $this->anchors($request, $data, allowDirect: $direct);

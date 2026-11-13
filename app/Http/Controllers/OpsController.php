@@ -5642,6 +5642,9 @@ class OpsController extends Controller
             // ⭐ إثبات التحويل/الشيك + ضرايب مخصومة تحت الحساب (٩/٩/٢٠٢٦)
             'proof' => ['nullable', 'file', 'image', 'max:8192'],
             'tax_withheld' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            // (١٣/١١) تأكيد صريح لحارس التكرار / التحصيل الزيادة
+            'allow_duplicate' => ['nullable', 'boolean'],
+            'allow_advance' => ['nullable', 'boolean'],
         ]);
 
         // ⚠️ **القلب المشترك** (٩/٩): نفس `ManualCollection::record` بتاع

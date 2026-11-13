@@ -46,6 +46,8 @@ class ClosedPeriodRejectionTest extends TestCase
             'doc_date' => '2026-09-15',
             'amount' => 500,
             'method' => 'cash',
+            // (١٣/١١) العميل رصيده صفر — التحصيل ده دفعة مقدمة بتأكيد صريح (حارس التحصيل الزيادة)
+            'allow_advance' => 1,
         ], $over);
     }
 
