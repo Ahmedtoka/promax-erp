@@ -23,7 +23,7 @@ class DocReviewEvent extends Model
     /** (١٣/١١) المراجِع اتراجع عن علامته (نفس اليوم) — مش مراجعة ولا تعديل */
     public const UNDO = 'undo';
 
-    public const EDIT_ACTIONS = ['serial', 'lines', 'rep', 'date', 'proof'];
+    public const EDIT_ACTIONS = ['serial', 'lines', 'rep', 'date', 'proof', 'delivered', 'ret_price', 'void_dup'];
 
     /** أقل من كده بين مراجعة والتانية = سريعة. ٥ ورا بعض = علم أحمر */
     public const FAST_SECONDS = 8;

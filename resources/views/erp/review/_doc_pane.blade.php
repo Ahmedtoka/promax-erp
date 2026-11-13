@@ -7,7 +7,11 @@
     $linesEditable = $editable && $lockLines === [];
     $isInv = $type === 'invoice';
     $isRet = $type === 'return';
-    $grand = (float) $doc->grand_total;
+    // (١٣/١١) الأمر اللي اتسلّم: الإجمالي = المسلَّم (= قيد البيع)، مش المطلوب — «اتسلّم ٢٤ ومحسوب ٣٦»
+    $storedGrand = (float) $doc->grand_total;
+    $dlv = $poDelivered ?? null;
+    $partialPo = $type === 'po' && $doc->status === 'delivered' && $dlv !== null && abs($dlv['grand'] - $storedGrand) >= 0.005;
+    $grand = $type === 'po' && $doc->status === 'delivered' && $dlv !== null ? $dlv['grand'] : $storedGrand;
     $u = auth()->user();
     $docUrl = match ($type) {
         'invoice' => \App\Support\Access::allows($u, 'ops.invoice') ? route('ops.invoice', $doc) : null,
@@ -18,7 +22,8 @@
     $poEditUrl = $type === 'po' && isset($lockLines['po_approved']) && \App\Support\Access::allows($u, 'ops.po.edit') ? route('ops.po.edit', $doc) : null;
     $chain = $client?->group;
     $mother = $chain?->motherCompany;
-    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅', 'proof' => '📦', 'undo' => '↶', 'ok' => '✓', 'issue' => '✗', 'reopen' => '↺', 'lines' => '✎'];
+    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅', 'proof' => '📦', 'undo' => '↶', 'ok' => '✓', 'issue' => '✗', 'reopen' => '↺', 'lines' => '✎',
+        'delivered' => '📦', 'ret_price' => '💲', 'void_dup' => '🗑', 'dup_voided' => '🗑'];
     $yn = fn ($v) => $v ? '✓' : '✗';
 @endphp
 <div class="dp" data-key="{{ $key }}" data-type="{{ $type }}" data-id="{{ $doc->id }}" data-state="{{ $state }}"
@@ -82,7 +87,7 @@
     @endforeach
 
     @if ($state === 'changed' && $check)
-        <div class="dp-warn">⚠ {{ __('review.changed_note', ['old' => $money($check->system_balance), 'new' => $money($grand)]) }}</div>
+        <div class="dp-warn">⚠ {{ __('review.changed_note', ['old' => $money($check->system_balance), 'new' => $money($storedGrand)]) }}</div>
     @endif
 
     {{-- ═══ الورقة | السيستم — نفس الصفوف بنفس الترتيب للتلات أنواع (١٣/١١):
@@ -182,7 +187,8 @@
                     <input class="dp-ptotal" inputmode="decimal" dir="ltr" autocomplete="off" data-grand="{{ $grand }}" placeholder="{{ __('review.paper_total_ph') }}" aria-label="{{ __('review.paper_total') }}">
                 </td>
                 <td class="cmp-sys"><b dir="ltr" class="cmp-grand">{{ $money($grand) }}</b>
-                    <span class="cmp-sub" dir="ltr">{{ __('review.cmp_net_vat', ['net' => $money($doc->total), 'vat' => $money($doc->tax_total)]) }}</span></td>
+                    <span class="cmp-sub" dir="ltr">{{ __('review.cmp_net_vat', ['net' => $money($dlv && $doc->status === 'delivered' ? $dlv['net'] : $doc->total), 'vat' => $money($dlv && $doc->status === 'delivered' ? $dlv['tax'] : $doc->tax_total)]) }}</span>
+                    @if ($partialPo)<span class="cmp-sub dp-ordered">{{ __('review.dlv_vs_ordered', ['ordered' => $money($storedGrand)]) }}</span>@endif</td>
             </tr>
             <tr class="dp-pdiff" hidden>
                 <th scope="row">{{ __('review.paper_diff') }}</th>
@@ -212,7 +218,7 @@
                     @endphp
                     <tr class="{{ $off ? 'off' : '' }}">
                         <td class="dl-name">{{ $l->product?->displayName() }}
-                            <small dir="ltr">{{ $l->product?->code }}</small>@if ($isRet && $l->condition === 'damaged')<small class="dl-dmg">{{ __('field.return_cond_damaged') }}</small>@endif</td>
+                            <small dir="ltr">{{ $l->product?->code }}</small>@if ($isRet && $l->manual_price !== null)<small class="dl-man" title="{{ $l->manual_reason }}">✎ {{ __('review.retp_manual_tag') }}</small>@endif @if ($isRet && $l->condition === 'damaged')<small class="dl-dmg">{{ __('field.return_cond_damaged') }}</small>@endif</td>
                         <td dir="ltr" class="num">{{ $q }}@if ($type === 'po' && $l->delivered_qty !== null && (int) $l->delivered_qty !== (int) $l->qty)<small>/ {{ (int) $l->qty }}</small>@endif</td>
                         <td dir="ltr" class="num c-list" title="{{ $isRet ? ($sale === null ? __('review.ret_no_sale') : ($off ? __('review.ret_price_off') : __('review.price_ok'))) : ($off ? __('review.price_off') : __('review.price_ok')) }}">
                             {{ $p4($l->price) }}
@@ -222,7 +228,13 @@
                                 <small>{{ __('review.dl_list') }} {{ $now === null ? '—' : $p4($now) }} {{ $now === null ? '' : ($off ? '≠' : '✓') }}</small>
                             @endif
                         </td>
-                        <td dir="ltr" class="num"><b>{{ $money((float) $l->total + (float) $l->tax) }}</b><small>{{ $money($l->total) }} + {{ $money($l->tax) }}</small></td>
+                        @php
+                            $lt = ['net' => (float) $l->total, 'tax' => (float) $l->tax];
+                            if ($type === 'po' && $doc->status === 'delivered' && $l->delivered_qty !== null && (int) $l->delivered_qty !== (int) $l->qty) {
+                                $lt = \App\Services\Tax::line((float) $l->price, (int) $l->delivered_qty, (float) ($l->tax_rate ?? 0));
+                            }
+                        @endphp
+                        <td dir="ltr" class="num"><b>{{ $money($lt['net'] + $lt['tax']) }}</b><small>{{ $money($lt['net']) }} + {{ $money($lt['tax']) }}</small></td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -266,6 +278,107 @@
         @endif
     </div>
 
+
+    {{-- ═══ (١٣/١١) أدوات حل الملاحظات: المسلَّم · سعر بند المرتجع · مكرر · إلغاء أمر ماتسلّمش ═══ --}}
+    @if ($type === 'po' && $doc->status === 'delivered' && $editable)
+        <button type="button" class="btn sm dp-tool-btn" data-tool="dlv">📦 {{ __('review.dlv_btn') }}</button>
+        <form class="dp-tool dp-dlv-form" data-tool="dlv" hidden>
+            <div class="dp-note">ℹ️ {{ __('review.dlv_note') }}</div>
+            <table class="dp-edit">
+                <thead><tr><th>{{ __('review.col_product') }}</th><th>{{ __('review.dlv_ordered') }}</th><th>{{ __('review.dlv_delivered') }}</th></tr></thead>
+                <tbody>
+                @foreach ($doc->items as $l)
+                    <tr>
+                        <td>{{ $l->product?->code }} · {{ $l->product?->displayName() }}</td>
+                        <td dir="ltr" class="num">{{ (int) $l->qty }}</td>
+                        <td><input type="number" min="0" max="{{ (int) $l->qty }}" step="1" name="dq[{{ $l->id }}]" value="{{ $l->delivered_qty ?? (int) $l->qty }}" dir="ltr" aria-label="{{ __('review.dlv_delivered') }}"></td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+            <label class="fl"><span>{{ __('review.lines_note') }}</span><input name="note" maxlength="500"></label>
+            <div class="dp-actions">
+                <button type="submit" class="btn">{{ __('review.dlv_save') }}</button>
+                <button type="button" class="btn ghost dp-tool-close">{{ __('review.btn_cancel') }}</button>
+            </div>
+        </form>
+    @endif
+
+    @if ($isRet && $editable)
+        <button type="button" class="btn sm dp-tool-btn" data-tool="retp">💲 {{ __('review.retp_btn') }}</button>
+        <form class="dp-tool dp-retp-form" data-tool="retp" hidden>
+            <div class="dp-note">ℹ️ {{ __('review.retp_note') }}</div>
+            <label class="fl"><span>{{ __('review.retp_line') }}</span>
+                <select name="item_id" class="dp-retp-line" required>
+                    @foreach ($doc->items as $l)
+                        <option value="{{ $l->id }}" data-pid="{{ $l->product_id }}">{{ $l->product?->displayName() }} — {{ (int) $l->qty }} × {{ $p4($l->price) }}@if ($l->manual_price !== null) ✎@elseif ($l->invoice_item_id) · {{ $l->invoiceItem?->invoice?->number }}@endif</option>
+                    @endforeach
+                </select></label>
+            <div class="pf-row dp-retp-modes">
+                <label><input type="radio" name="mode" value="invoice" checked> {{ __('review.retp_mode_invoice') }}</label>
+                <label><input type="radio" name="mode" value="manual"> {{ __('review.retp_mode_manual') }}</label>
+                <label><input type="radio" name="mode" value="list"> {{ __('review.retp_mode_list') }}</label>
+            </div>
+            <label class="fl dp-retp-inv"><span>{{ __('review.retp_invoice') }}</span>
+                <select name="invoice_item_id">
+                    <option value="">—</option>
+                    @foreach ($retSources as $pid => $srcs)
+                        @foreach ($srcs as $s)
+                            <option value="{{ $s['id'] }}" data-pid="{{ $pid }}">{{ $s['number'] }} · {{ $s['date'] }} — {{ $s['qty'] }} × {{ $p4($s['price']) }} ({{ __('review.retp_left', ['n' => $s['left']]) }})</option>
+                        @endforeach
+                    @endforeach
+                </select>
+                <small class="rv-sub dp-retp-none" hidden>{{ __('review.retp_no_invoice') }}</small></label>
+            <div class="dp-retp-man" hidden>
+                <label class="fl"><span>{{ __('review.retp_price') }}</span><input name="price" inputmode="decimal" dir="ltr" autocomplete="off"></label>
+                <label class="fl"><span>{{ __('review.retp_reason_l') }}</span><input name="reason" maxlength="190"></label>
+            </div>
+            <div class="dp-actions">
+                <button type="submit" class="btn">{{ __('review.retp_save') }}</button>
+                <button type="button" class="btn ghost dp-tool-close">{{ __('review.btn_cancel') }}</button>
+            </div>
+        </form>
+    @endif
+
+    @if ($canVoid && $lockAll === [])
+        <button type="button" class="btn sm bad dp-tool-btn" data-tool="void">🗑 {{ __('review.dup_btn') }}</button>
+        <form class="dp-tool dp-void-form" data-tool="void" hidden>
+            <div class="dp-warn">⚠ {{ __('review.dup_note', ['number' => $doc->number]) }}@if ($afterReset)<br>{{ __('review.dup_custody') }}@endif</div>
+            <label class="fl"><span>{{ __('review.dup_orig') }}</span>
+                <input name="original" required maxlength="30" dir="ltr" autocomplete="off" placeholder="{{ $isInv ? 'INV-' : 'RET-' }}…"
+                       value="{{ collect($dups)->firstWhere('type', $type)['number'] ?? '' }}"></label>
+            <label class="fl"><span>{{ __('review.lines_note') }}</span><input name="note" maxlength="500"></label>
+            <div class="dp-actions">
+                <button type="submit" class="btn bad">{{ __('review.dup_save') }}</button>
+                <button type="button" class="btn ghost dp-tool-close">{{ __('review.btn_cancel') }}</button>
+            </div>
+        </form>
+    @endif
+
+    @if ($type === 'po' && in_array($doc->status, ['pending', 'arrived'], true))
+        @if ($canCancelPo)
+            <button type="button" class="btn sm bad dp-tool-btn" data-tool="pocancel">⊘ {{ __('review.poc_btn') }}</button>
+            {{-- نفس مسار إلغاء الأمر في العمليات — مفيش قيد على العميل يترد (الأمر ماتسلّمش) --}}
+            <form class="dp-tool" data-tool="pocancel" method="POST" action="{{ route('ops.pos.cancel', $doc) }}" hidden>
+                @csrf
+                <div class="dp-note">ℹ️ {{ __('review.poc_note') }}</div>
+                <label class="fl"><span>{{ __('review.poc_reason') }}</span><input name="reason" required minlength="3" maxlength="300"></label>
+                @if ($doc->status === 'arrived' || $doc->pickOrder?->status === 'handed')
+                    <label class="fl"><span>{{ __('review.poc_goods') }}</span>
+                        <select name="mode"><option value="custody">{{ __('review.poc_mode_custody') }}</option><option value="warehouse">{{ __('review.poc_mode_wh') }}</option></select></label>
+                @else
+                    <input type="hidden" name="mode" value="custody">
+                @endif
+                <div class="dp-actions">
+                    <button type="submit" class="btn bad">{{ __('review.poc_save') }}</button>
+                    <button type="button" class="btn ghost dp-tool-close">{{ __('review.btn_cancel') }}</button>
+                </div>
+            </form>
+        @else
+            <div class="dp-note">ℹ️ {{ __('review.poc_ask_admin') }}</div>
+        @endif
+    @endif
+
     {{-- ═══ السجل ═══ --}}
     <details class="dp-hist" @if ($events->isNotEmpty()) open @endif>
         <summary>{{ __('review.history') }} ({{ $events->count() }})</summary>
@@ -300,6 +413,9 @@
                         }
 
                         return implode('، ', $parts ?: [e(__('review.ev_proof', ['number' => '']))]);
+                    case 'delivered': return e(__('review.evl_delivered')).' — '.$from($money($b['grand'] ?? 0), $money($a['grand'] ?? 0));
+                    case 'ret_price': return e(__('review.evl_ret_price', ['product' => $a['product'] ?? '', 'mode' => __('review.retp_mode_'.($a['mode'] ?? 'list'))])).' — '.$from($money($b['grand'] ?? 0), $money($a['grand'] ?? 0));
+                    case 'dup_voided': return e(__('review.evl_dup_voided', ['number' => $a['duplicate'] ?? '']));
                     default: return e(__('review.ev_'.$e->action, ['number' => '']));
                 }
             };

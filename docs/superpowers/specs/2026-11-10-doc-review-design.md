@@ -459,3 +459,38 @@ collections and a return's credit/refund are linked to one document.
   100% done.
 - Sort by work / progress / left / name; filters for mother, chain, search and
   status; per-table Excel.
+
+## Addendum 7 — Resolving the accountant's open issues (13/11, live notes)
+
+Findings on local `promax` (live copy up to 12/11):
+
+- **POs billed on ordered qty** — the ledger was already right: all 193 delivered
+  POs post delivered qty × price (0 mismatches). The review queue, pane and
+  workload page showed the stored `grand_total` (ordered). 26 delivered POs are
+  partial (56,591.26 gap). Now a delivered PO's money everywhere in review is the
+  delivered value (`DocReview::poDelivered`, same rule as the delivery entry);
+  the ✓/changed state still compares the stored `grand_total`.
+- **Duplicates** (INV-1028 = INV-1092, RET-1003 = RET-1007): same client, lines,
+  amount and day.
+- **Undelivered POs** (PO-2013/2017/2024/2116 pending, PO-2117 arrived) post
+  nothing to the client ledger; they were aborted but never cancelled.
+- **Return prices**: the price was always derived (linked invoice line, else
+  today's list) and nothing could change it. 936 of 1,099 return lines have no
+  invoice link.
+
+Pane tools:
+
+- **Edit delivered** (delivered POs; edit rights): per-line delivered qty
+  0..ordered, ordered untouched, prices from the client list, sale entry =
+  delivered. Stock/custody untouched (decision 10/11). Event `delivered`.
+- **Duplicate of …** (admin, `erp.review.docs.void`): deletes the duplicate's
+  ledger rows one by one (GL follows), its lines and the doc; recalculates the
+  balance; reverses custody only for docs on/after 7/11. Full snapshot + ledger
+  rows in event `void_dup`; `dup_voided` on the original.
+- **Correct a line price** (returns; edit rights): link to a client invoice line
+  of the same product (capped by sold − already returned), manual excl-VAT price
+  with a required reason (`return_items.manual_price/manual_reason`, honoured by
+  `FullResync::clientReturn`), or back to the client list. Credit, cash refund,
+  balance and GL follow. Event `ret_price`.
+- **Cancel order** (pending/arrived POs; `ops.pos.cancel`, admin/manager): the
+  existing cancel path; accountants see a hint instead.

@@ -96,6 +96,10 @@
             <a href="{{ $qs(['flag' => $f['flag'] === $fk ? null : $fk]) }}" class="fchip pos f-{{ $fk }} {{ $f['flag'] === $fk ? 'on' : '' }} {{ $flagCounts[$fk] ? '' : 'zero' }}" data-flag="{{ $fk }}"
                title="{{ __('review.flag_'.$fk.'_hint') }}"><i aria-hidden="true">{{ __('review.flag_'.$fk.'_ico') }}</i>{{ __('review.flag_'.$fk) }} <b>{{ $flagCounts[$fk] }}</b></a>
         @endforeach
+        {{-- (١٣/١١ — أحمد) أوامر لسه ماتسلّمتش: بره الطابور والإجماليات والنسبة — هنا بس عشان تتلغي --}}
+        <span class="rv-sub dq-f-sep">·</span>
+        <a href="{{ $qs(['flag' => $f['flag'] === 'undelivered' ? null : 'undelivered', 'status' => $f['flag'] === 'undelivered' ? null : 'all']) }}" class="fchip f-undelivered {{ $f['flag'] === 'undelivered' ? 'on' : '' }} {{ $flagCounts['undelivered'] ? '' : 'zero' }}" data-flag="undelivered"
+           title="{{ __('review.flag_undelivered_hint') }}"><i aria-hidden="true">⏳</i>{{ __('review.flag_undelivered') }} <b>{{ $flagCounts['undelivered'] }}</b></a>
     </div>
     <div class="dq-f-row dq-f-sel">
         <label class="fl"><span>{{ __('review.f_mother') }}</span>
@@ -235,6 +239,10 @@
     if (\App\Support\Access::allows($u, 'erp.review.docs.date')) { $urls['date'] = route('erp.review.docs.date', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.preview')) { $urls['preview'] = route('erp.review.docs.preview', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.lines')) { $urls['lines'] = route('erp.review.docs.lines', ['type' => '__T', 'id' => 0]); }
+    // (١٣/١١) أدوات حل الملاحظات
+    if (\App\Support\Access::allows($u, 'erp.review.docs.delivered')) { $urls['delivered'] = route('erp.review.docs.delivered', ['type' => '__T', 'id' => 0]); }
+    if (\App\Support\Access::allows($u, 'erp.review.docs.retprice')) { $urls['retprice'] = route('erp.review.docs.retprice', ['type' => '__T', 'id' => 0]); }
+    if (\App\Support\Access::allows($u, 'erp.review.docs.void')) { $urls['void'] = route('erp.review.docs.void', ['type' => '__T', 'id' => 0]); }
 @endphp
 
 <style>
@@ -417,6 +425,19 @@ kbd{font:700 10px/1 ui-monospace,Consolas,monospace;border:1px solid var(--borde
 .dp-lines tr.off td{background:#FFF7ED}
 .dp-lines tr.off td.c-list{color:#C2410C;font-weight:800}
 .dp-edit-lines{margin-top:8px}
+/* (١٣/١١) أدوات حل الملاحظات */
+.dp-tool-btn{margin:8px 6px 0 0}
+.dp-tool{margin-top:10px;padding:10px;border:1px solid #93C5FD;border-radius:8px;background:#F8FBFF;display:grid;gap:8px}
+.dp-tool{min-width:0;max-width:100%;box-sizing:border-box}
+.dp-tool[hidden],.dp-tool [hidden]{display:none}
+.dp-tool .dp-edit{table-layout:fixed}
+.dp-tool .dp-edit td:first-child{white-space:normal;word-break:break-word}
+.dp-tool .dp-edit th:not(:first-child),.dp-tool .dp-edit td:not(:first-child){width:72px;text-align:center}
+.dp-tool .dp-edit input[type=number]{width:64px}
+.dp-tool .fl,.dp-tool .fl input,.dp-tool .fl select{max-width:100%;min-width:0;box-sizing:border-box}
+.dp-retp-modes{gap:14px}
+.dp-ordered{color:#B45309}
+.dl-man{display:inline-block;margin-inline-start:4px;color:#7C3AED;font-weight:800}
 .dp-lines-form{margin-top:10px;padding:10px;border:1px solid #93C5FD;border-radius:8px;background:#F8FBFF}
 .dp-edit{width:100%}.dp-edit td,.dp-edit th{padding:4px 6px;font-size:12px}.dp-edit input{width:80px}
 .dp-edit .x{border:0;background:none;color:var(--red);cursor:pointer;font-weight:900}
@@ -536,6 +557,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         st: @js(collect(['pending', 'ok', 'issue', 'changed'])->mapWithKeys(fn ($s) => [$s => __('review.st_'.$s)])),
         undo: @js(__('review.btn_undo')), undone: @js(__('review.undo_done')),
         missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), proofFirst: @js(__('review.proof_required')), paperDiff: @js(__('review.chk_paper_diff')),
+        voidConfirm: @js(__('review.dup_confirm')),
     };
     const pane = document.getElementById('dqPane');
     const rows = () => [...document.querySelectorAll('.dq-row')];
@@ -821,6 +843,42 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
 
         dp.querySelector('.dp-date')?.addEventListener('change', e => post('date', { date: e.target.value }));
         dp.querySelector('.dp-rep')?.addEventListener('change', e => e.target.value && post('rep', { rep_id: e.target.value }));
+
+        // ═══ (١٣/١١) أدوات: المسلَّم · سعر بند المرتجع · مكرر · إلغاء أمر ═══
+        dp.querySelectorAll('.dp-tool-btn').forEach(b => b.addEventListener('click', () => {
+            const f = dp.querySelector('form.dp-tool[data-tool="' + b.dataset.tool + '"]');
+            if (!f) return;
+            f.hidden = !f.hidden;
+            if (!f.hidden) { f.querySelector('input:not([type=hidden]):not([type=radio]), select')?.focus(); f.scrollIntoView({ block: 'nearest' }); }
+        }));
+        dp.querySelectorAll('.dp-tool-close').forEach(b => b.addEventListener('click', () => { b.closest('form').hidden = true; }));
+        dp.querySelector('.dp-dlv-form')?.addEventListener('submit', e => { e.preventDefault(); post('delivered', new FormData(e.target)); });
+        const rp = dp.querySelector('.dp-retp-form');
+        if (rp) {
+            const sync = () => {
+                const mode = rp.querySelector('input[name=mode]:checked').value;
+                const pid = rp.querySelector('.dp-retp-line').selectedOptions[0]?.dataset.pid;
+                const sel = rp.querySelector('select[name=invoice_item_id]');
+                let any = false;
+                [...sel.options].forEach(o => { if (!o.value) return; const on = o.dataset.pid === pid; o.hidden = !on; any ||= on; if (!on && o.selected) sel.value = ''; });
+                rp.querySelector('.dp-retp-inv').hidden = mode !== 'invoice';
+                rp.querySelector('.dp-retp-none').hidden = any;
+                rp.querySelector('.dp-retp-man').hidden = mode !== 'manual';
+            };
+            rp.addEventListener('change', sync); sync();
+            rp.addEventListener('submit', e => { e.preventDefault(); post('retprice', new FormData(rp)); });
+        }
+        dp.querySelector('.dp-void-form')?.addEventListener('submit', async e => {
+            e.preventDefault();
+            if (!URLS.void || !confirm(T.voidConfirm)) return;
+            const fd = new FormData(e.target); fd.append('_token', CSRF);
+            const res = await fetch(url('void', dp.dataset.type, dp.dataset.id), { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
+            const d = await res.json().catch(() => ({ ok: false, message: '⚠️ ' + res.status }));
+            if (!d.ok) { toast(d.message || ('⚠️ ' + res.status), 'bad'); return; }
+            toast(d.message);
+            // المستند اتشال خالص — الصفحة بتتحمّل تاني على الأصل
+            setTimeout(() => { location.href = setParam(setParam(location.href, 'q', null), 'doc', d.goto); }, 700);
+        });
 
         const form = dp.querySelector('.dp-lines-form');
         if (!form) return;

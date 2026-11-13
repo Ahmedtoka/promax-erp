@@ -359,6 +359,7 @@ return [
     'act_review_docs' => 'Document-by-document review (✓ / ✗)',
     'act_review_docs_edit' => 'Fix a document in the review: serial, lines, rep, date',
     'act_review_docs_reopen' => 'Reopen a reviewed document',
+    'act_review_docs_void' => 'Void a duplicate document (invoice / return)',
     'act_leads_clear_assign' => 'Clear all lead assignments',
     'act_leads_plan' => 'Save lead schedule and route',
     'act_tasks_create' => 'Create a task',

@@ -121,6 +121,9 @@ class DocQueue
                 'signed' => (bool) ($d->paper_signed ?? false),
                 // المرتجع: فواتيره الأصلية
                 'links' => $type === 'return' ? ($retLinks[(int) $d->id] ?? []) : [],
+                // (١٣/١١ — أحمد) أمر لسه ماتسلّمش مش مستند بيع: بره الطابور والإجماليات والنسبة،
+                // وليه شيبة لوحده «لسه ماتسلّمش» عشان يتلاقى ويتلغي
+                'undelivered' => $type === 'po' && $d->st !== 'delivered',
             ];
         };
 
@@ -129,11 +132,22 @@ class DocQueue
             ->get(['id', 'number', 'paper_ref', 'receipt_note', 'receipt_note_no', 'paper_signed', 'client_id', 'user_id AS rep_id', 'created_at AS doc_at', 'payment AS st', 'total', 'tax_total', 'grand_total']) as $d) {
             $rows->push($make('invoice', $d, $invItems[$d->id] ?? null));
         }
+        $dlv = DB::table('purchase_order_items')->whereIn('purchase_order_id', DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', 'delivered')
+            ->when($onlyType !== null, fn ($q) => $q->where('id', $onlyType === 'po' ? $onlyId : 0))->select('id'))
+            ->get(['purchase_order_id', 'qty', 'delivered_qty', 'price', 'total', 'tax', 'tax_rate'])->groupBy('purchase_order_id');
         foreach (DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
             ->when($onlyType !== null, fn ($q) => $onlyType === 'po' ? $q->where('id', $onlyId) : $q->whereRaw('0 = 1'))
             ->selectRaw('id, number, paper_ref, receipt_note, receipt_note_no, paper_signed, client_id, assigned_to AS rep_id, COALESCE(delivered_at, due_at, created_at) AS doc_at, status AS st, total, tax_total, grand_total')
             ->get() as $d) {
-            $rows->push($make('po', $d, $poItems[$d->id] ?? null));
+            $row = $make('po', $d, $poItems[$d->id] ?? null);
+            // (١٣/١١) «اتسلّم ٢٤ ومحسوب ٣٦»: الأمر اللي اتسلّم فلوسه = المسلَّم (= قيد البيع)،
+            // مش المطلوب. الحالة (✓ اتغيّر؟) لسه على `grand_total` المخزن زي ما اتعلّمت.
+            $row['ordered_grand'] = $row['grand'];
+            if ($d->st === 'delivered' && isset($dlv[$d->id])) {
+                $v = DocReview::deliveredFromItems($dlv[$d->id]);
+                [$row['net'], $row['tax'], $row['grand']] = [$v['net'], $v['tax'], $v['grand']];
+            }
+            $rows->push($row);
         }
         foreach (DB::table('returns')->whereIn('client_id', $ids)
             ->when($onlyType !== null, fn ($q) => $onlyType === 'return' ? $q->where('id', $onlyId) : $q->whereRaw('0 = 1'))
@@ -172,6 +186,9 @@ class DocQueue
     }
 
     public const FLAGS = ['noserial', 'dup', 'odd_date', 'rep_off', 'repriced', 'changed', 'noproof', 'ret_price'];
+
+    /** (١٣/١١) شيبة الأوامر اللي ماتسلّمتش — الوحيدة اللي بتوريهم */
+    public const UNDELIVERED = 'undelivered';
 
     /** فلاتر إثبات الاستلام الإيجابية (مش تنبيهات) */
     public const PROOF_TAGS = ['receipt', 'signed'];
@@ -285,7 +302,7 @@ class DocQueue
         foreach (DB::table('invoices')->whereIn('client_id', $ids)->get(['id', 'grand_total']) as $d) {
             $rows->push(['type' => 'invoice', 'state' => DocReview::state($checks['invoice'.$d->id] ?? null, (float) $d->grand_total)]);
         }
-        foreach (DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')->get(['id', 'grand_total']) as $d) {
+        foreach (DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', 'delivered')->get(['id', 'grand_total']) as $d) {
             $rows->push(['type' => 'po', 'state' => DocReview::state($checks['po'.$d->id] ?? null, (float) $d->grand_total)]);
         }
         $total = $rows->count();
@@ -326,15 +343,23 @@ class DocQueue
 
         $docs = DB::table('invoices')->whereIn('client_id', $ids)
             ->selectRaw("'invoice' AS t, id, client_id, grand_total, created_at AS doc_at")
-            ->unionAll(DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
+            ->unionAll(DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', 'delivered')
                 ->selectRaw("'po' AS t, id, client_id, grand_total, COALESCE(delivered_at, due_at, created_at) AS doc_at"))
             ->unionAll(DB::table('returns')->whereIn('client_id', $ids)
                 ->selectRaw("'return' AS t, id, client_id, grand_total, created_at AS doc_at"))
             ->get();
 
+        // (١٣/١١) الأمر اللي اتسلّم فلوسه = المسلَّم (نفس قيد البيع) — الحالة على المخزن
+        $dlvAmt = DB::table('purchase_order_items')->whereIn('purchase_order_id', DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', 'delivered')->select('id'))
+            ->get(['purchase_order_id', 'qty', 'delivered_qty', 'price', 'total', 'tax', 'tax_rate'])->groupBy('purchase_order_id')
+            ->map(fn ($its) => DocReview::deliveredFromItems($its)['grand']);
+
         $out = [];
         foreach ($docs as $d) {
             $state = DocReview::state($checks[$d->t.$d->id] ?? null, (float) $d->grand_total);
+            if ($d->t === 'po' && isset($dlvAmt[$d->id])) {
+                $d->grand_total = $dlvAmt[$d->id];
+            }
             $o = &$out[(int) $d->client_id];
             $o ??= self::MONEY_BLANK;
             $m = substr((string) $d->doc_at, 0, 7);
@@ -423,6 +448,11 @@ class DocQueue
         $amount = is_numeric(str_replace(',', '', $q)) ? (float) str_replace(',', '', $q) : null;
 
         $out = $rows->filter(function ($r) use ($f, $nq, $norm, $amount, $serialQ) {
+            $flag = $f['flag'] ?? '';
+            // (١٣/١١) الأوامر اللي ماتسلّمتش بره كل حاجة إلا شيبتها
+            if (($flag === self::UNDELIVERED) !== (bool) ($r['undelivered'] ?? false)) {
+                return false;
+            }
             if (! empty($f['type']) && ($f['type'] === 'sales' ? $r['type'] === 'return' : $r['type'] !== $f['type'])) {
                 return false;
             }
@@ -446,8 +476,9 @@ class DocQueue
             if (! empty($f['to']) && $r['date'] > $f['to']) {
                 return false;
             }
-            $flag = $f['flag'] ?? '';
-            if (in_array($flag, self::PROOF_TAGS, true)) {
+            if ($flag === self::UNDELIVERED) {
+                // مفيش فلتر تنبيه فوقها
+            } elseif (in_array($flag, self::PROOF_TAGS, true)) {
                 if (! in_array($flag, $r['tags'] ?? [], true)) {
                     return false;
                 }

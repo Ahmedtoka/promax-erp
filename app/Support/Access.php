@@ -182,7 +182,7 @@ class Access
             'erp.overview', 'erp.clients', 'erp.client_locations', 'erp.groups', 'erp.mother_companies', 'erp.contracts',
             'erp.review', '!erp.review.stock.zero', '!erp.review.stock.batch',
             // مراجعة المستندات (١١/١١): فتح ✓ تاني وتحليل المراجِعين أدمن بس
-            '!erp.review.docs.reopen', '!erp.review.docs.people',
+            '!erp.review.docs.reopen', '!erp.review.docs.people', '!erp.review.docs.void',
             // ⚠️ تأكيد اللوكيشن وعقد السلسلة قرارات إدارة (`role:admin,manager[,branch_manager]`)
             // — البادئة كانت بتوري المحاسب الزرار والراوت يرفضه (تدقيق ١٥/٩)
             '!erp.client_locations.confirm', '!erp.groups.contract',
@@ -1053,8 +1053,9 @@ class Access
         'act.review.stock_reset' => ['perm.act_review_stock_reset', 'erp.review', [], ['erp.review.stock.zero', 'erp.review.stock.batch']],
         // المراجعة مستند مستند (١١/١١): العلامة · التصليح في المكان (فلوس) · فتح ✓ تاني (أدمن)
         'act.review.docs' => ['perm.act_review_docs', 'erp.review.docs', null, ['erp.review.docs.mark', 'erp.review.docs.undo']],
-        'act.review.docs_edit' => ['perm.act_review_docs_edit', 'erp.review.docs', null, ['erp.review.docs.serial', 'erp.review.docs.proof', 'erp.review.docs.rep', 'erp.review.docs.date', 'erp.review.docs.preview', 'erp.review.docs.lines']],
+        'act.review.docs_edit' => ['perm.act_review_docs_edit', 'erp.review.docs', null, ['erp.review.docs.serial', 'erp.review.docs.proof', 'erp.review.docs.rep', 'erp.review.docs.date', 'erp.review.docs.preview', 'erp.review.docs.lines', 'erp.review.docs.delivered', 'erp.review.docs.retprice']],
         'act.review.docs_reopen' => ['perm.act_review_docs_reopen', 'erp.review.docs', [], ['erp.review.docs.reopen']],
+        'act.review.docs_void' => ['perm.act_review_docs_void', 'erp.review.docs', [], ['erp.review.docs.void']],
         'act.leads.clear_assign' => ['perm.act_leads_clear_assign', 'erp.leads', [], ['erp.leads.clearassign']],
         'act.leads.plan' => ['perm.act_leads_plan', 'erp.leads.planner', null, ['erp.leads.planner.save', 'erp.leads.route.save']],
         'act.tasks.create' => ['perm.act_tasks_create', 'erp.tasks', null, ['erp.tasks.store']],

@@ -603,7 +603,316 @@ class DocReview
     /** يوم تصفير المخزن والعهد وعدّهم من الورق — قبله البضاعة اتعدّت خلاص */
     public const STOCK_RESET_DAY = '2026-11-07';
 
+    // ═══════════════════════ أدوات حل مشاكل المراجعة (١٣/١١ — ملاحظات سهيلة) ═══════════════════════
+
+    /**
+     * قيمة المسلَّم فعلاً لأمر التوريد — **نفس قاعدة قيد التسليم بالظبط**
+     * (`FieldApiController::deliver`): السطر الكامل بأرقامه المخزنة، والجزئي
+     * `Tax::line(price, dq)`. قبل التسليم = المطلوب (ده اللي على الورقة).
+     *
+     * @return array{net: float, tax: float, grand: float}
+     */
+    public static function poDelivered(PurchaseOrder $po, ?iterable $items = null): array
+    {
+        $items ??= $po->relationLoaded('items') ? $po->items : $po->items()->get();
+        if ($po->status !== 'delivered') {
+            return ['net' => (float) $po->total, 'tax' => (float) $po->tax_total, 'grand' => (float) $po->grand_total];
+        }
+
+        return self::deliveredFromItems($items);
+    }
+
+    /** @return array{net: float, tax: float, grand: float} */
+    public static function deliveredFromItems(iterable $items): array
+    {
+        $net = $tax = 0.0;
+        foreach ($items as $it) {
+            $dq = $it->delivered_qty === null ? (int) $it->qty : (int) $it->delivered_qty;
+            if ($dq === (int) $it->qty) {
+                $net += (float) $it->total;
+                $tax += (float) $it->tax;
+            } else {
+                $p = Tax::line((float) $it->price, $dq, (float) ($it->tax_rate ?? 0));
+                $net += $p['net'];
+                $tax += $p['tax'];
+            }
+        }
+
+        return ['net' => round($net, 2), 'tax' => round($tax, 2), 'grand' => round(round($net, 2) + round($tax, 2), 2)];
+    }
+
+    /**
+     * (١٣/١١) «اتسلّم ٢٤ ومحسوب ٣٦» — تعديل **المسلَّم** لكل بند في أمر اتسلّم،
+     * من غير ما المطلوب يتغيّر. الأسعار من قايمة العميل (`PoRepricer`) وقيد
+     * البيع = المسلَّم بنفس قاعدة التسليم. ⚠️ العهدة ماتتحرّكش (قرار ١٠/١١).
+     *
+     * @param  array<int,int>  $dq  item_id => المسلَّم (صفر = متسلّمش)
+     */
+    public static function saveDelivered(User $user, PurchaseOrder $po, array $dq, ?string $note = null): void
+    {
+        if ($po->status !== 'delivered') {
+            throw new Rejected(__('review.dlv_not_delivered'));
+        }
+        self::assertUnlocked($po);
+        $po->load('items.product');
+
+        $target = [];
+        foreach ($po->items as $it) {
+            $want = array_key_exists($it->id, $dq) ? (int) $dq[$it->id] : ($it->delivered_qty ?? (int) $it->qty);
+            if ($want < 0 || $want > (int) $it->qty) {
+                throw new Rejected(__('review.dlv_over', ['name' => $it->product?->displayName() ?? '#'.$it->product_id, 'max' => (int) $it->qty]));
+            }
+            $target[$it->id] = (int) $want;
+        }
+        if (array_sum($target) === 0) {
+            throw new Rejected(__('review.dlv_all_zero'));
+        }
+        if ($po->items->every(fn ($it) => $target[$it->id] === ($it->delivered_qty ?? (int) $it->qty))) {
+            throw new Rejected(__('review.lines_no_change'));
+        }
+
+        DB::transaction(function () use ($user, $po, $target, $note) {
+            $before = self::snapshot($po) + ['delivered' => self::poDelivered($po)];
+            foreach ($po->items as $it) {
+                $it->forceFill(['delivered_qty' => $target[$it->id]])->save();
+            }
+            self::repricePo($po->fresh(['items.product', 'client']));
+            $po->refresh();
+            $after = self::snapshot($po) + ['delivered' => self::poDelivered($po)];
+
+            self::event($user, $po, 'delivered', ['grand' => $before['delivered']['grand'], 'lines' => $before['lines']],
+                ['grand' => $after['delivered']['grand'], 'lines' => $after['lines']],
+                round($after['delivered']['net'] - $before['delivered']['net'], 2), round($after['delivered']['grand'] - $before['delivered']['grand'], 2), $note,
+                extra: ['stock_untouched' => true]);
+        });
+    }
+
+    /**
+     * (١٣/١١) «المستند مكرر هو نفس رقم …» — إلغاء النسخة المكررة بالكامل:
+     * قيودها صف صف (الشجرة بتتشال مع كل صف)، رصيد العميل، والعهدة لو المستند
+     * بعد تصفير ٧/١١ (قبله البضاعة اتعدّت من الورق). السجل بيحفظ لقطة كاملة
+     * والأصل. أدمن بس (الراوت).
+     */
+    public static function voidDuplicate(User $user, Invoice|ClientReturn $doc, string $originalNumber, ?string $note = null): Invoice|ClientReturn
+    {
+        $orig = ($doc instanceof Invoice ? Invoice::query() : ClientReturn::query())->where('number', trim($originalNumber))->first();
+        if ($orig === null || $orig->id === $doc->id) {
+            throw new Rejected(__('review.dup_orig_missing'));
+        }
+        if ((int) $orig->client_id !== (int) $doc->client_id) {
+            throw new Rejected(__('review.dup_orig_other_client', ['number' => $orig->number]));
+        }
+        self::assertUnlocked($doc);
+        if ($doc instanceof Invoice && DB::table('return_items')->where('invoice_id', $doc->id)->exists()) {
+            throw new Rejected(__('ops.del_inv_has_returns'));
+        }
+        $txs = $doc instanceof Invoice
+            ? Transaction::where('source_type', Invoice::class)->where('source_id', $doc->id)->get()
+            : self::returnTxs($doc);
+        foreach ($txs as $tx) {
+            PeriodGuard::assertOpen($tx->date, 'delete');
+        }
+
+        DB::transaction(function () use ($user, $doc, $orig, $note, $txs) {
+            $before = self::snapshot($doc) + ['ledger' => $txs->map(fn ($t) => ['id' => $t->id, 'kind' => $t->kind, 'date' => (string) $t->date,
+                'debit' => (float) $t->debit, 'credit' => (float) $t->credit])->values()->all()];
+            $custody = self::dateOf($doc)?->gte(Carbon::parse(self::STOCK_RESET_DAY)) ?? false;
+            $extra = ['duplicate_of' => self::keyOf($orig), 'original' => $orig->number, 'custody_reversed' => $custody];
+
+            self::event($user, $doc, 'void_dup', $before, ['grand' => 0.0], -(float) $doc->total, -(float) $doc->grand_total, $note, extra: $extra);
+            self::event($user, $orig, 'dup_voided', null, ['duplicate' => $doc->number, 'grand' => (float) $orig->grand_total], 0, 0, $note, clearsReview: false);
+
+            if ($custody) {
+                $doc instanceof Invoice ? self::custodyBackForInvoice($doc) : self::custodyBackForReturn($doc);
+            }
+
+            foreach ($txs as $tx) {
+                $tx->delete();   // صف صف — TransactionObserver بيشيل قيد الشجرة
+            }
+            ReviewCheck::where(['entity_type' => self::typeOf($doc), 'entity_id' => $doc->id])->delete();
+            $doc->items()->delete();
+            $doc->delete();
+            Client::find($doc->client_id)?->recalculate();
+        });
+
+        return $orig;
+    }
+
+    /**
+     * (١٣/١١) تصحيح سعر بند المرتجع — «الأسعار غلط ومفيش تعديل». قبل كده
+     * السعر كان محسوب دايماً (سطر الفاتورة اللي رجع منه، وإلا قايمة النهارده)
+     * ومفيش ولا طريقة تغيّره. دلوقتي:
+     *   `invoice` = اربط البند بسطر فاتورة للعميل نفسه بنفس الصنف ← سعره
+     *   `manual`  = سعر يدوي (غير شامل) + سبب إجباري — بيعيش بعد أي إعادة تسعير
+     *   `list`    = شيل الربط واليدوي ← قايمة العميل
+     * والدائن والرد الكاش ورصيد العميل والشجرة بيمشوا وراه.
+     */
+    public static function setReturnPrice(User $user, ClientReturn $ret, int $itemId, string $mode, ?int $invoiceItemId = null, ?float $price = null, ?string $reason = null): void
+    {
+        self::assertUnlocked($ret);
+        $line = ReturnItem::where('return_id', $ret->id)->whereKey($itemId)->first();
+        if ($line === null) {
+            throw new Rejected(__('review.retp_bad_line'));
+        }
+
+        $set = match ($mode) {
+            'invoice' => (function () use ($ret, $line, $invoiceItemId) {
+                $src = InvoiceItem::with('invoice')->find($invoiceItemId);
+                if ($src === null || $src->invoice === null || (int) $src->invoice->client_id !== (int) $ret->client_id || (int) $src->product_id !== (int) $line->product_id) {
+                    throw new Rejected(__('review.retp_bad_invoice'));
+                }
+                $taken = (int) ReturnItem::where('invoice_item_id', $src->id)->where('id', '!=', $line->id)->sum('qty');
+                if ($taken + (int) $line->qty > (int) $src->qty) {
+                    throw new Rejected(__('review.retp_over_sold', ['number' => $src->invoice->number, 'sold' => (int) $src->qty, 'taken' => $taken]));
+                }
+
+                return ['invoice_id' => $src->invoice_id, 'invoice_item_id' => $src->id, 'manual_price' => null, 'manual_reason' => null];
+            })(),
+            'manual' => (function () use ($price, $reason) {
+                if ($price === null || $price <= 0 || $price > 100000) {
+                    throw new Rejected(__('review.retp_bad_price'));
+                }
+                if (mb_strlen(trim((string) $reason)) < 3) {
+                    throw new Rejected(__('review.retp_reason'));
+                }
+
+                return ['manual_price' => round($price, 4), 'manual_reason' => mb_substr(trim($reason), 0, 190)];
+            })(),
+            'list' => ['invoice_id' => null, 'invoice_item_id' => null, 'manual_price' => null, 'manual_reason' => null],
+            default => throw new Rejected(__('review.retp_bad_line')),
+        };
+
+        DB::transaction(function () use ($user, $ret, $line, $set, $reason, $mode) {
+            $before = self::snapshot($ret);
+            $line->forceFill($set)->save();
+            $ret->refresh();
+            $res = FullResync::clientReturn($ret);
+            if (isset($res['skip'])) {
+                throw new Rejected(__('review.ret_not_priced', ['why' => $res['skip']]));
+            }
+            $ret->refresh();
+            self::syncReturnTxs($ret);
+            $after = self::snapshot($ret);
+            $line->refresh()->load('product');
+
+            self::event($user, $ret, 'ret_price', $before, $after + ['mode' => $mode, 'product' => $line->product?->displayName(), 'price' => (float) $line->price],
+                round($after['net'] - $before['net'], 2), round($after['grand'] - $before['grand'], 2), $mode === 'manual' ? $reason : null);
+        });
+    }
+
+    /**
+     * سطور فواتير العميل اللي ممكن بند المرتجع يترجع منها — للاختيار في اللوحة.
+     *
+     * @return array<int, list<array{id:int, number:string, date:string, qty:int, price:float, left:int}>>  product_id => سطور
+     */
+    public static function returnSources(ClientReturn $ret): array
+    {
+        $pids = $ret->items->pluck('product_id')->unique()->all();
+        $taken = ReturnItem::whereNotNull('invoice_item_id')->selectRaw('invoice_item_id, SUM(qty) q')->groupBy('invoice_item_id')->pluck('q', 'invoice_item_id');
+        $out = [];
+        foreach (DB::table('invoice_items as ii')->join('invoices as i', 'i.id', '=', 'ii.invoice_id')
+            ->where('i.client_id', $ret->client_id)->whereIn('ii.product_id', $pids)
+            ->orderByDesc('i.created_at')->limit(300)
+            ->get(['ii.id', 'ii.product_id', 'ii.qty', 'ii.price', 'i.number', 'i.created_at']) as $r) {
+            $out[(int) $r->product_id][] = ['id' => (int) $r->id, 'number' => (string) $r->number, 'date' => substr((string) $r->created_at, 0, 10),
+                'qty' => (int) $r->qty, 'price' => (float) $r->price, 'left' => max(0, (int) $r->qty - (int) ($taken[$r->id] ?? 0))];
+        }
+
+        return $out;
+    }
+
     // ═══════════════════════ داخلي ═══════════════════════
+
+    /** أسعار بنود الأمر من قايمة العميل + إجماليه + قيد البيع (بالمسلَّم) لو اتسلّم */
+    private static function repricePo(PurchaseOrder $po): void
+    {
+        $client = $po->client;
+        $plan = PoRepricer::planLines($client, $po->items);
+        if ($plan['not_priced'] !== null) {
+            throw new Rejected(__('stock.po_not_priced', ['name' => $plan['not_priced']]));
+        }
+        $byItem = collect($plan['lines'])->keyBy('item_id');
+
+        foreach ($po->items as $it) {
+            if ($l = $byItem[$it->id] ?? null) {
+                $it->forceFill([
+                    'list_price' => $l['list_price'], 'price' => $l['price'], 'discount_pct' => $l['discount_pct'],
+                    'total' => $l['total'], 'tax_rate' => $l['tax_rate'], 'tax' => $l['tax'],
+                ])->save();
+            }
+        }
+        $po->forceFill([
+            'total' => $plan['after']['net'], 'tax_total' => $plan['after']['tax'], 'grand_total' => $plan['after']['grand'],
+            'price_mode' => $client->priceList(),
+            'was_edited' => true, 'edited_by' => auth()->id(), 'edited_at' => now(),
+        ])->save();
+
+        if ($po->status === 'delivered') {
+            // المسلَّم فعلاً — نفس قاعدة قيد التسليم (السطر الكامل بأرقامه، والجزئي بـTax::line)
+            $d = self::poDelivered($po, $po->fresh('items')->items);
+            $sale = Transaction::where('source_type', PurchaseOrder::class)->where('source_id', $po->id)->where('kind', 'sale')->first();
+            $sale?->forceFill(['debit' => $d['grand'], 'tax' => $d['tax']])->save();
+            $client->recalculate();
+        }
+    }
+
+    /** الدائن والرد الكاش = إجمالي المرتجع (صف صف عشان أوبزرفر الدفتر) + الرصيد + الشجرة */
+    private static function syncReturnTxs(ClientReturn $ret): void
+    {
+        foreach (self::returnTxs($ret) as $tx) {
+            $col = $tx->kind === 'refund' ? 'debit' : 'credit';
+            if (in_array($tx->kind, ['return', 'refund'], true)) {
+                $tx->forceFill([$col => (float) $ret->grand_total, 'tax' => (float) $ret->tax_total])->save();
+            }
+        }
+        $ret->client?->recalculate();
+        self::returnGl($ret);
+    }
+
+    /** نفس `OpsController::destroyInvoice`: البضاعة ترجع لعهدة البايع الحالية سطر بسطر */
+    private static function custodyBackForInvoice(Invoice $inv): void
+    {
+        $custody = $inv->user?->currentCustody();
+        foreach ($inv->items()->lockForUpdate()->get() as $it) {
+            $row = $custody === null ? null : (\App\Models\CustodyItem::where('custody_id', $custody->id)->where('product_id', $it->product_id)
+                ->when($it->batch_id !== null, fn ($w) => $w->where('batch_id', $it->batch_id))
+                ->where('sold', '>=', (int) $it->qty)->lockForUpdate()->first()
+                ?? \App\Models\CustodyItem::where('custody_id', $custody->id)->where('product_id', $it->product_id)
+                    ->where('sold', '>=', (int) $it->qty)->lockForUpdate()->first());
+            if ($row === null) {
+                throw new Rejected(__('ops.del_inv_no_custody'));
+            }
+            $row->decrement('sold', (int) $it->qty);
+        }
+    }
+
+    /** نفس `ReturnController::destroy`: البضاعة الراجعة تطلع من عهدة المرتجع */
+    private static function custodyBackForReturn(ClientReturn $ret): void
+    {
+        $custody = $ret->custody_id !== null ? \App\Models\Custody::find($ret->custody_id) : null;
+        if ($custody === null) {
+            return;   // مرتجع مكتبي مادخلش عهدة
+        }
+        if ((string) $custody->status === 'closed') {
+            throw new Rejected(__('ops.del_ret_custody_closed'));
+        }
+        $by = [];
+        foreach ($ret->items as $it) {
+            $by[(int) $it->product_id][$it->condition] = ($by[(int) $it->product_id][$it->condition] ?? 0) + (int) $it->qty;
+        }
+        foreach ($by as $pid => $cond) {
+            $row = \App\Models\CustodyItem::where(['custody_id' => $custody->id, 'product_id' => $pid, 'batch_id' => null, 'source' => 'custody', 'source_ref_id' => 0])
+                ->lockForUpdate()->first();
+            $good = (int) ($cond[ClientReturn::CONDITION_GOOD] ?? 0);
+            $dmg = (int) ($cond[ClientReturn::CONDITION_DAMAGED] ?? 0);
+            if ($row === null || (int) $row->returned_in < $good || (int) $row->damaged_in < $dmg) {
+                throw new Rejected(__('ops.del_ret_moved'));
+            }
+            $good > 0 && $row->decrement('returned_in', $good);
+            $dmg > 0 && $row->decrement('damaged_in', $dmg);
+        }
+    }
+
 
     /** @return array<int,int> */
     private static function cleanQty(array $qty): array
@@ -709,46 +1018,7 @@ class DocReview
             }
         }
 
-        $po->load('items.product');
-        $client = $po->client;
-        $plan = PoRepricer::planLines($client, $po->items);
-        if ($plan['not_priced'] !== null) {
-            throw new Rejected(__('stock.po_not_priced', ['name' => $plan['not_priced']]));
-        }
-        $byItem = collect($plan['lines'])->keyBy('item_id');
-
-        foreach ($po->items as $it) {
-            if ($l = $byItem[$it->id] ?? null) {
-                $it->forceFill([
-                    'list_price' => $l['list_price'], 'price' => $l['price'], 'discount_pct' => $l['discount_pct'],
-                    'total' => $l['total'], 'tax_rate' => $l['tax_rate'], 'tax' => $l['tax'],
-                ])->save();
-            }
-        }
-        $po->forceFill([
-            'total' => $plan['after']['net'], 'tax_total' => $plan['after']['tax'], 'grand_total' => $plan['after']['grand'],
-            'price_mode' => $client->priceList(),
-            'was_edited' => true, 'edited_by' => auth()->id(), 'edited_at' => now(),
-        ])->save();
-
-        if ($delivered) {
-            // المسلَّم فعلاً — نفس قاعدة قيد التسليم (السطر الكامل بأرقامه، والجزئي بـTax::line)
-            $net = $tax = 0.0;
-            foreach ($po->fresh('items')->items as $it) {
-                $dq = $it->delivered_qty === null ? (int) $it->qty : (int) $it->delivered_qty;
-                if ($dq === (int) $it->qty) {
-                    $net += (float) $it->total;
-                    $tax += (float) $it->tax;
-                } else {
-                    $p = Tax::line((float) $it->price, $dq, (float) ($it->tax_rate ?? 0));
-                    $net += $p['net'];
-                    $tax += $p['tax'];
-                }
-            }
-            $sale = Transaction::where('source_type', PurchaseOrder::class)->where('source_id', $po->id)->where('kind', 'sale')->first();
-            $sale?->forceFill(['debit' => round(round($net, 2) + round($tax, 2), 2), 'tax' => round($tax, 2)])->save();
-            $client->recalculate();
-        }
+        self::repricePo($po->fresh(['items.product', 'client']));
     }
 
     /**
@@ -759,6 +1029,10 @@ class DocReview
      */
     public static function returnPrice(ClientReturn $ret, Client $client, Product $product): array
     {
+        $manual = ReturnItem::where('return_id', $ret->id)->where('product_id', $product->id)->whereNotNull('manual_price')->orderBy('id')->first();
+        if ($manual !== null && (float) $manual->manual_price > 0) {
+            return [(float) $manual->manual_price, (float) Tax::rate($client, $product)];
+        }
         $src = ReturnItem::where('return_id', $ret->id)->where('product_id', $product->id)->whereNotNull('invoice_item_id')
             ->orderBy('id')->first()?->invoiceItem;
         if ($src !== null) {
@@ -840,14 +1114,7 @@ class DocReview
         ])->save();
 
         // الدائن صف صف (عشان أوبزرفر الدفتر) — والرد الكاش بنفس المبلغ عشان الرصيد مايتغيّرش
-        foreach (self::returnTxs($ret) as $tx) {
-            $col = $tx->kind === 'refund' ? 'debit' : 'credit';
-            if (in_array($tx->kind, ['return', 'refund'], true)) {
-                $tx->forceFill([$col => (float) $ret->grand_total, 'tax' => (float) $ret->tax_total])->save();
-            }
-        }
-        $ret->client?->recalculate();
-        self::returnGl($ret);
+        self::syncReturnTxs($ret);
     }
 
     /**

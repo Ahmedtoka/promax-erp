@@ -837,6 +837,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
             Route::get('/review/docs/people/export', [\App\Http\Controllers\ReviewDocsController::class, 'peopleExport'])->name('review.docs.people.export');
             Route::post('/review/docs/{type}/{id}/reopen', [\App\Http\Controllers\ReviewDocsController::class, 'reopen'])
                 ->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('review.docs.reopen');
+            // (١٣/١١) إلغاء المستند المكرر بالكامل (قيود + رصيد + عهدة بعد ٧/١١) — أدمن بس
+            Route::post('/review/docs/{type}/{id}/void', [\App\Http\Controllers\ReviewDocsController::class, 'voidDup'])
+                ->whereIn('type', ['invoice', 'return'])->whereNumber('id')->name('review.docs.void');
         });
         Route::middleware('role:admin,accountant')->prefix('/review/docs')->name('review.docs')
             ->controller(\App\Http\Controllers\ReviewDocsController::class)->group(function () {
@@ -853,6 +856,9 @@ Route::middleware(['auth', 'screen'])->group(function () {
                 Route::post('/{type}/{id}/date', 'date')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.date');
                 Route::post('/{type}/{id}/preview', 'preview')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.preview');
                 Route::post('/{type}/{id}/lines', 'lines')->whereIn('type', ['invoice', 'po', 'return'])->whereNumber('id')->name('.lines');
+                // (١٣/١١) المسلَّم لكل بند في أمر اتسلّم · سعر بند المرتجع (فاتورة / يدوي بسبب / القايمة)
+                Route::post('/{type}/{id}/delivered', 'delivered')->whereIn('type', ['po'])->whereNumber('id')->name('.delivered');
+                Route::post('/{type}/{id}/retprice', 'retPrice')->whereIn('type', ['return'])->whereNumber('id')->name('.retprice');
             });
         Route::middleware('role:admin')->group(function () {
             Route::post('/review/stock/{warehouse}/zero', [\App\Http\Controllers\ReviewController::class, 'zeroWarehouse'])->name('review.stock.zero');

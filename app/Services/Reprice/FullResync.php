@@ -134,7 +134,12 @@ class FullResync
                 continue;
             }
             $src = $ri->invoice_item_id ? InvoiceItem::find($ri->invoice_item_id) : null;
-            if ($src) {
+            if ($ri->manual_price !== null && (float) $ri->manual_price > 0) {
+                // (١٣/١١) سعر يدوي من المراجعة (بسبب) — بيكسب أي مصدر تاني
+                $price = (float) $ri->manual_price;
+                $list = $src ? (float) $src->list_price : Pricing::listPriceFor($client, $ri->product);
+                $rate = $src ? (float) $src->tax_rate : Tax::rate($client, $ri->product);
+            } elseif ($src) {
                 $price = (float) $src->price; $list = (float) $src->list_price; $rate = (float) $src->tax_rate;
             } else {
                 $price = Pricing::unitPrice($client, $ri->product);

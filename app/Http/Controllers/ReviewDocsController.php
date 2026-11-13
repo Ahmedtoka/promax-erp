@@ -91,9 +91,9 @@ class ReviewDocsController extends Controller
                 'all' => $scoped->count(),
             ],
             'context' => $this->context($user, $f, $all),
-            'pace' => ReviewerStats::pace($all->where('state', '!=', 'ok')->count()),
+            'pace' => ReviewerStats::pace($all->where('undelivered', false)->where('state', '!=', 'ok')->count()),
             // ⚠️ (١٢/١١) عدد الشيب = عدد اللي هيظهر لو دوست عليه بالظبط: كل الفلاتر الحالية + تاب الحالة
-            'flagCounts' => collect([...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS])->mapWithKeys(fn ($k) => [$k => DocQueue::byStatus(DocQueue::filter($all, ['flag' => $k, 'sample' => ''] + $f), $f['status'])->count()]),
+            'flagCounts' => collect([...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS, DocQueue::UNDELIVERED])->mapWithKeys(fn ($k) => [$k => DocQueue::byStatus(DocQueue::filter($all, ['flag' => $k, 'sample' => ''] + $f), $f['status'])->count()]),
             'sampleBy' => $f['by'] !== '' ? User::find($f['by'])?->displayName() : null,
             'f' => $f,
             'open' => $request->string('doc')->value(),
@@ -262,6 +262,62 @@ class ReviewDocsController extends Controller
 
         return $this->run($request, $doc, fn () => DocReview::saveLines($request->user(), $doc, $qty, $note),
             fn () => __($doc instanceof ClientReturn ? 'review.ret_lines_saved' : 'review.lines_saved', ['old' => number_format($old, 2), 'new' => number_format((float) $doc->fresh()->grand_total, 2)]));
+    }
+
+    /** (١٣/١١) المسلَّم لكل بند في أمر اتسلّم — «اتسلّم ٢٤ ومحسوب ٣٦» */
+    public function delivered(Request $request, string $type, int $id): JsonResponse
+    {
+        $doc = $this->doc($request, $type, $id);
+        $data = $request->validate([
+            'dq' => ['required', 'array'],
+            'dq.*' => ['required', 'integer', 'min:0', 'max:999999'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+        $old = DocReview::poDelivered($doc)['grand'];
+
+        return $this->run($request, $doc, fn () => DocReview::saveDelivered($request->user(), $doc, array_map('intval', $data['dq']), $data['note'] ?? null),
+            fn () => __('review.dlv_saved', ['old' => number_format($old, 2), 'new' => number_format(DocReview::poDelivered($doc->fresh('items'))['grand'], 2)]));
+    }
+
+    /** (١٣/١١) سعر بند المرتجع: من فاتورة للعميل / يدوي بسبب / قايمة العميل */
+    public function retPrice(Request $request, string $type, int $id): JsonResponse
+    {
+        $doc = $this->doc($request, $type, $id);
+        $data = $request->validate([
+            'item_id' => ['required', 'integer'],
+            'mode' => ['required', 'in:invoice,manual,list'],
+            'invoice_item_id' => ['nullable', 'required_if:mode,invoice', 'integer'],
+            'price' => ['nullable', 'required_if:mode,manual', 'numeric', 'min:0.01', 'max:100000'],
+            'reason' => ['nullable', 'required_if:mode,manual', 'string', 'max:190'],
+        ]);
+        $old = (float) $doc->grand_total;
+
+        return $this->run($request, $doc, fn () => DocReview::setReturnPrice($request->user(), $doc, (int) $data['item_id'], $data['mode'],
+            isset($data['invoice_item_id']) ? (int) $data['invoice_item_id'] : null, isset($data['price']) ? (float) $data['price'] : null, $data['reason'] ?? null),
+            fn () => __('review.retp_saved', ['old' => number_format($old, 2), 'new' => number_format((float) $doc->fresh()->grand_total, 2)]));
+    }
+
+    /** (١٣/١١) «مكرر من …» — المستند بيختفي، فالرد بيقول للشاشة تروح للأصل */
+    public function voidDup(Request $request, string $type, int $id): JsonResponse
+    {
+        $doc = $this->doc($request, $type, $id);
+        $data = $request->validate([
+            'original' => ['required', 'string', 'max:30'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+        $number = $doc->number;
+        try {
+            $orig = DocReview::voidDuplicate($request->user(), $doc, $data['original'], $data['note'] ?? null);
+        } catch (Rejected $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => __('review.dup_voided', ['number' => $number, 'original' => $orig->number]),
+            'removed' => DocReview::keyFor($type, $id),
+            'goto' => DocReview::keyOf($orig),
+        ]);
     }
 
     // ═══════════════════════ حجم الشغل واللي خلص (١٣/١١) ═══════════════════════
@@ -497,7 +553,7 @@ class ReviewDocsController extends Controller
             'rep' => $request->integer('rep') ?: '',
             'from' => $request->date('from')?->toDateString() ?? '',
             'to' => $request->date('to')?->toDateString() ?? '',
-            'flag' => in_array($request->string('flag')->value(), [...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS], true) ? $request->string('flag')->value() : '',
+            'flag' => in_array($request->string('flag')->value(), [...DocQueue::FLAGS, 'any', ...DocQueue::PROOF_TAGS, DocQueue::UNDELIVERED], true) ? $request->string('flag')->value() : '',
             // عينة المراجِع التاني (من صفحة المراجِعين)
             'by' => $request->integer('by') ?: '',
             'day' => $request->date('day')?->toDateString() ?? '',
@@ -638,6 +694,11 @@ class ReviewDocsController extends Controller
             'canProof' => Access::allows($user, 'erp.review.docs.proof'),
             'proofHard' => DocReview::proofHard($doc),
             'afterReset' => DocReview::dateOf($doc)?->gte(Carbon::parse(DocReview::STOCK_RESET_DAY)) ?? false,
+            // (١٣/١١) أدوات حل ملاحظات المراجعة
+            'poDelivered' => $type === 'po' ? DocReview::poDelivered($doc) : null,
+            'retSources' => $type === 'return' ? DocReview::returnSources($doc) : [],
+            'canVoid' => $type !== 'po' && Access::allows($user, 'erp.review.docs.void'),
+            'canCancelPo' => $type === 'po' && in_array($doc->status, ['pending', 'arrived'], true) && Access::allows($user, 'ops.pos.cancel'),
         ];
     }
 }
