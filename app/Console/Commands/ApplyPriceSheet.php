@@ -45,6 +45,12 @@ use Illuminate\Support\Facades\Storage;
  *   retire    توقيف/مسح القوايم اللي فضيت (من الخطة) — بعد النقل، ولو لسه عليها حد بتتساب
  *   rename    أسماء القوايم (من الخطة، لو `renames_approved`) — الكود مابيتغيرش أبداً
  *
+ * ⚠️ (قرار ٢٧ — ١٣/١١) **تغيير يدوي بعد الخطة بيكسب**: عميل أو سلسلة قايمتها
+ * اتغيّرت من شاشة بعد تاريخ الخطة (`generated`) مابتترجعش في `assign` —
+ * بيتسجّل «اتساب» (زي «مترو ماركت» بتاعة د. عمار). وفي `docs` أمر توريد
+ * اتسلّم قبل آخر تغيير يدوي لقايمة عميله بيفضل بسعره (تسعير جديد من وقت
+ * التغيير). `--override-manual` بيلغي الحماية دي.
+ *
  * سجل التغييرات (dry-run و apply): صف لكل حقل اتغيّر — قبل ← بعد — في
  * `storage/app/price-sheet/changelog-*.json` (ونسخة في `--log` لو اتبعت).
  * ده اللي بيغذّي تقرير PRICE_FIX_SUMMARY.
@@ -58,7 +64,8 @@ class ApplyPriceSheet extends Command
         {--log= : مسار نسخة إضافية من سجل التغييرات}
         {--rollback= : رجّع snapshot اتعمل قبل كده}
         {--only= : خطوات معيّنة: rounding,incl,items,activate,taxable,reactivate,link,assign,lists,retire,rename,docs}
-        {--no-docs : من غير إعادة تسعير المستندات}';
+        {--no-docs : من غير إعادة تسعير المستندات}
+        {--override-manual : رجّع حتى العملاء/السلاسل اللي قايمتها اتغيّرت يدوياً بعد تاريخ الخطة (قرار ٢٧ بيمنع ده افتراضياً)}';
 
     protected $description = 'تطبيق شيت أسعار العملاء على البيانات الأساسية (dry-run افتراضياً)';
 
@@ -382,6 +389,9 @@ class ApplyPriceSheet extends Command
             $text = in_array($list->code, Pricing::LISTS, true) ? $list->code : $list->code;
 
             foreach (Client::whereIn('code', $a['clients'] ?? [])->get() as $c) {
+                if ($this->keepManual('client', $c->id, (int) $c->price_list_id, $list->id, $c->code.' '.$c->name)) {
+                    continue;
+                }
                 $this->setClient($c, ['price_list_id' => $list->id, 'price_list' => $text, 'discount' => $d], 'assign', $why);
                 $own = $c->contract;
                 if ($own && $own->active && ! $own->isExpired()) {
@@ -390,6 +400,9 @@ class ApplyPriceSheet extends Command
             }
             foreach ($a['groups'] ?? [] as $gName) {
                 foreach (ClientGroup::where('name', $gName)->get() as $g) {
+                    if ($this->keepManual('chain', $g->id, (int) $g->price_list_id, $list->id, 'سلسلة '.$g->name)) {
+                        continue;
+                    }
                     $this->setGroup($g, ['price_list_id' => $list->id, 'default_discount' => $d], 'assign', $why);
                     $ct = $g->contract;
                     if ($ct && $ct->active && ! $ct->isExpired()) {
@@ -398,6 +411,51 @@ class ApplyPriceSheet extends Command
                 }
             }
         }
+    }
+
+    /**
+     * (قرار ٢٧) القايمة الحالية اتحطّت يدوياً (من شاشة) بعد تاريخ الخطة ⇒ متترجعش.
+     * بيرجّع true لو لازم يتساب (وبيسجّله).
+     */
+    private function keepManual(string $on, int $id, int $current, int $planList, string $label): bool
+    {
+        if ($current === $planList || $current === 0 || $this->option('override-manual')) {
+            return false;
+        }
+        $since = $this->planDate();
+        if ($since === null) {
+            return false;
+        }
+        $row = DB::table('activity_logs')
+            ->where('event', 'updated')->where('subject_type', $on === 'chain' ? 'ClientGroup' : 'Client')->where('subject_id', $id)
+            ->where('changes', 'like', '%"price_list_id"%')->where('created_at', '>=', $since)
+            ->where(fn ($q) => $q->whereNotNull('route')->orWhereIn('method', ['POST', 'PUT', 'PATCH']))
+            ->orderByDesc('created_at')->orderByDesc('id')->get(['changes', 'user_name', 'created_at'])
+            ->first(function ($r) use ($current) {
+                $pl = json_decode((string) $r->changes, true)['price_list_id'] ?? null;
+
+                return is_array($pl) && (int) ($pl[1] ?? 0) === $current;
+            });
+        // سلسلة الفرع اتغيّرت يدوياً والفرع ماشي معاها
+        if ($row === null && $on === 'client' && ($gid = Client::whereKey($id)->value('group_id'))
+            && (int) ClientGroup::whereKey($gid)->value('price_list_id') === $current) {
+            return $this->keepManual('chain', (int) $gid, $current, $planList, $label);
+        }
+        if ($row === null) {
+            return false;
+        }
+        $this->logRow('assign', $on === 'chain' ? 'client_group' : 'client', $id, $label, 'price_list_id', $current, $current,
+            sprintf('اتساب (قرار ٢٧): القايمة اتغيّرت يدوياً %s بإيد %s بعد الخطة — الخطة كانت %s',
+                $row->created_at, $row->user_name, PriceList::whereKey($planList)->value('code')));
+
+        return true;
+    }
+
+    private function planDate(): ?\Carbon\Carbon
+    {
+        $g = $this->plan['generated'] ?? null;
+
+        return $g ? \Carbon\Carbon::parse((string) $g)->startOfDay() : null;
     }
 
     private function everyClientHasList(): void
@@ -557,7 +615,16 @@ class ApplyPriceSheet extends Command
         foreach (\App\Models\Invoice::whereIn('id', $invWithReturns)->whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $inv) {
             $logDoc('invoice', $inv, \App\Services\Reprice\FullResync::invoice($inv));
         }
-        foreach (\App\Models\PurchaseOrder::whereIn('status', ['delivered', 'arrived', 'pending'])->whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $po) {
+        foreach (\App\Models\PurchaseOrder::with('client')->whereIn('status', ['delivered', 'arrived', 'pending'])->whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $po) {
+            // (قرار ٢٧) اتسلّم قبل آخر تغيير يدوي لقايمة العميل ⇒ بيفضل بسعر وقته
+            if ($po->status === 'delivered' && $po->client && ! $this->option('override-manual')
+                && ($ch = \App\Services\ListHistory::lastManualChange($po->client))
+                && ($po->delivered_at ?? $po->created_at) < $ch['at']) {
+                $this->logRow('docs', 'po', $po->id, $po->number, 'grand', (float) $po->grand_total, (float) $po->grand_total,
+                    'اتساب (قرار ٢٧): اتسلّم قبل تغيير القايمة يدوياً '.$ch['at']->format('Y-m-d H:i'));
+
+                continue;
+            }
             $logDoc('po', $po, \App\Services\Reprice\FullResync::po($po));
         }
         foreach (\App\Models\ClientReturn::whereNotIn('client_id', $skipIds)->orderBy('id')->get() as $ret) {

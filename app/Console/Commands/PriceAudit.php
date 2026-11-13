@@ -12,6 +12,7 @@ use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Transaction;
+use App\Services\ListHistory;
 use App\Services\PriceListOverview;
 use App\Services\Pricing;
 use App\Services\Tax;
@@ -189,15 +190,21 @@ class PriceAudit extends Command
             $this->docLines('invoice', $inv, $inv->items, $inv->client, $locked ? 'مرفوعة ضريبي — مقفولة' : null);
         }
         foreach (PurchaseOrder::with(['items.product', 'client'])->where('status', '!=', 'cancelled')->get() as $po) {
+            $delivered = $po->status === 'delivered';
             $this->docLines('po', $po, $po->items, $po->client, null,
-                $po->status === 'delivered' ? 'اتسلّم — تعديل الأسعار من الشاشة بيسيبه عن قصد؛ إعادة تسعيره في المكان قرار' : '');
+                $delivered ? 'اتسلّم — تعديل الأسعار من الشاشة بيسيبه عن قصد؛ إعادة تسعيره في المكان قرار' : '',
+                $delivered ? ($po->delivered_at ?? $po->created_at) : null);
         }
         foreach (ClientReturn::with(['items.product'])->get() as $r) {
             $this->returnLines($r);
         }
     }
 
-    private function docLines(string $kind, $doc, $items, ?Client $client, ?string $infoReason, string $why = ''): void
+    /**
+     * @param  \DateTimeInterface|null  $bookedAt  أمر اتسلّم: وقت تسجيل البيع. لو قبل آخر تغيير يدوي
+     *                                            لقايمة العميل (قرار ٢٧) والسطر = سعر القايمة السابقة ⇒ معلومة
+     */
+    private function docLines(string $kind, $doc, $items, ?Client $client, ?string $infoReason, string $why = '', ?\DateTimeInterface $bookedAt = null): void
     {
         $ref = $doc->number;
         if (! $client) {
@@ -206,6 +213,8 @@ class PriceAudit extends Command
             return;
         }
         $split = isset($this->splitLists[(int) $client->price_list_id]);
+        $change = $bookedAt ? ListHistory::lastManualChange($client) : null;
+        $before = $change && $bookedAt < $change['at'] ? ListHistory::asBefore($client, $change) : null;
         $net = $tax = 0.0;
         foreach ($items as $it) {
             if (! $it->product) {
@@ -213,7 +222,12 @@ class PriceAudit extends Command
             }
             $q = Pricing::quote($client, $it->product);
             $ok = abs((float) $it->price - (float) $q['unit_price']) < self::P4;
-            if ($ok || (! $split && ! $infoReason)) {
+            if (! $ok && $before && abs((float) $it->price - ($prev = (float) Pricing::quote($before, $it->product)['unit_price'])) < self::P4) {
+                // (قرار ٢٧) اتسلّم قبل تغيير القايمة وبسعر القايمة السابقة بالظبط = تاريخ مقبول
+                $this->note($kind, 'line_price_from_list', $ref.' · '.$it->product->code, $client, $q['unit_price'], (float) $it->price,
+                    sprintf('اتسعّر على القايمة السابقة (%s) — اتسلّم %s قبل تغييرها %s بإيد %s (قرار ٢٧)',
+                        PriceList::whereKey($change['from'])->value('code'), $bookedAt->format('Y-m-d H:i'), $change['at']->format('Y-m-d H:i'), $change['by']));
+            } elseif ($ok || (! $split && ! $infoReason)) {
                 $this->check($kind, 'line_price_from_list', $ok, $ref.' · '.$it->product->code, $client, $q['unit_price'], (float) $it->price, $why);
             } else {
                 $this->note($kind, 'line_price_from_list', $ref.' · '.$it->product->code, $client, $q['unit_price'], (float) $it->price,
