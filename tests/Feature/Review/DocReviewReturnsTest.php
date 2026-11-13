@@ -133,7 +133,7 @@ class DocReviewReturnsTest extends TestCase
         // اللوحة: الفاتورة الأصلية، رقم الإذن، إمضاء العميل، سعر البيع
         $this->actingAs($this->accountant)->get($this->url('pane', $ret))->assertOk()
             ->assertSee(__('review.ret_orig'))->assertSee('data-goto="inv-'.$inv->id.'"', false)
-            ->assertSee(__('review.ret_signed'))->assertSee(__('review.col_sale_price'))->assertSee('class="bad" data-chk="proof"', false);
+            ->assertSee(__('review.ret_signed'))->assertSee(__('review.dl_sale'))->assertSee('class="bad" data-chk="proof"', false);
 
         // ✓ من غير رقم إذن = ممنوع
         $this->actingAs($this->accountant)->postJson($this->url('mark', $ret), ['status' => 'ok'])->assertStatus(422)

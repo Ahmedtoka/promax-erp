@@ -29,4 +29,10 @@ return [
      * تحذير أحمر بيتأكد بضغطة تانية، true = مفيش ✓ لمرتجع من غير إمضاء/ختم.
      */
     'return_proof_required' => (bool) env('REVIEW_RETURN_PROOF_REQUIRED', false),
+
+    /*
+     * (١٣/١١ — أحمد) إثبات استلام الفاتورة (إذن استلام / إمضاء-ختم): false (الافتراضي)
+     * = تحذير أحمر بيتأكد بضغطة تانية، true = مفيش ✓ لفاتورة من غير إثبات.
+     */
+    'invoice_proof_required' => (bool) env('REVIEW_INVOICE_PROOF_REQUIRED', false),
 ];

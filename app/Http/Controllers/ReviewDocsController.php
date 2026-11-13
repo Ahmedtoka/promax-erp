@@ -45,6 +45,10 @@ class ReviewDocsController extends Controller
         $all = DocQueue::all($user);
         $scoped = DocQueue::filter($all, $f);
         $shown = DocQueue::byStatus($scoped, $f['status']);
+        // (١٣/١١ — أحمد) بحث عن مستند متراجع وانت على «لسه» = ولا حاجة ← وريه في «الكل»
+        if ($f['q'] !== '' && $f['status'] !== 'all' && $shown->isEmpty() && $scoped->isNotEmpty()) {
+            return redirect()->to($request->fullUrlWithQuery(['status' => 'all', 'page' => null]));
+        }
 
         // ⚠️ (١٢/١١) نسبة كل سلسلة من **كل** مستنداتها (بفلاتر الشكل)، مش من
         // اللي ظاهر بفلتر الحالة — على «لسه» كانت كل سلسلة بتقول ٠ من ن
@@ -172,6 +176,14 @@ class ReviewDocsController extends Controller
             isset($data['open_ms']) ? (int) $data['open_ms'] : null), $data['status'] === 'ok' ? __('review.doc_marked_ok') : __('review.doc_marked_issue'));
     }
 
+    /** (١٣/١١) تراجع المراجِع عن علامته هو — نفس اليوم */
+    public function undo(Request $request, string $type, int $id): JsonResponse
+    {
+        $doc = $this->doc($request, $type, $id);
+
+        return $this->run($request, $doc, fn () => DocReview::undo($request->user(), $doc), __('review.undo_done'));
+    }
+
     public function reopen(Request $request, string $type, int $id): JsonResponse
     {
         $doc = $this->doc($request, $type, $id);
@@ -297,7 +309,7 @@ class ReviewDocsController extends Controller
             __('review.f_status'), __('review.x_flags'), __('review.proof_receipt'), __('review.proof_receipt_no'), __('review.proof_signed'), __('review.ret_orig'),
             __('review.x_by'), __('review.x_at'), __('review.log_note')];
         // إذن الاستلام لأوامر التوريد بس؛ الإمضاء/الختم للأوامر والمرتجعات
-        $yn = fn ($r, $k) => $r['type'] === 'invoice' || ($k === 'receipt' && $r['type'] !== 'po') ? '' : ($r[$k] ? __('review.yes') : __('review.no'));
+        $yn = fn ($r, $k) => $k === 'receipt' && $r['type'] === 'return' ? '' : ($r[$k] ? __('review.yes') : __('review.no'));
 
         return $this->csv('doc-review-'.now()->format('Ymd-Hi').'.csv', $head, $rows->map(fn ($r) => [
             __('review.type_'.$r['type']), $r['number'], $r['paper_ref'], $r['date'], $r['client_code'], $r['client'],
@@ -353,7 +365,7 @@ class ReviewDocsController extends Controller
 
         return [
             'q' => $request->string('q')->trim()->value(),
-            'type' => in_array($request->string('type')->value(), DocQueue::TYPES, true) ? $request->string('type')->value() : '',
+            'type' => in_array($request->string('type')->value(), [...DocQueue::TYPES, 'sales'], true) ? $request->string('type')->value() : '',
             'mother' => $request->integer('mother') ?: '',
             'group' => $request->string('group')->value() === 'solo' ? 'solo' : ($request->integer('group') ?: ''),
             'client' => $request->integer('client') ?: '',
@@ -468,8 +480,8 @@ class ReviewDocsController extends Controller
             'prices' => [$offLines === 0, $offLines ? __($type === 'return' ? 'review.chk_ret_prices_off' : 'review.chk_prices_off', ['n' => $offLines]) : ''],
             'total' => [$state !== 'changed', $state === 'changed' ? __('review.st_changed') : ''],
         ];
-        // (١٢/١١) إثبات الاستلام — أوامر التوريد بس، وبعد التسليم بس
-        if ($type === 'po') {
+        // (١٢/١١) إثبات الاستلام — أوامر التوريد بعد التسليم، والفواتير (١٣/١١) دايماً
+        if ($type !== 'return') {
             $parts = array_filter([$doc->receipt_note ? __('review.proof_receipt').($doc->receipt_note_no ? ' '.$doc->receipt_note_no : '') : null,
                 $doc->paper_signed ? __('review.proof_signed') : null]);
             $checks = array_slice($checks, 0, 1, true) + ['proof' => DocReview::needsProof($doc)
@@ -497,6 +509,7 @@ class ReviewDocsController extends Controller
             'reps' => User::whereIn('role', User::FIELD_WORK_ROLES)->where('active', true)->orderBy('name')->get(['id', 'name', 'name_en', 'role']),
             'canEdit' => Access::allows($user, 'erp.review.docs.lines'),
             'canReopen' => Access::allows($user, 'erp.review.docs.reopen'),
+            'canUndo' => DocReview::canUndo($user, $check) && Access::allows($user, 'erp.review.docs.undo'),
             'canProof' => Access::allows($user, 'erp.review.docs.proof'),
             'proofHard' => DocReview::proofHard($doc),
             'afterReset' => DocReview::dateOf($doc)?->gte(Carbon::parse(DocReview::STOCK_RESET_DAY)) ?? false,

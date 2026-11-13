@@ -398,3 +398,30 @@ same queue next to invoices and POs.
   sales − returns = net, and the reviewed net. That net matches the client balance
   built from the same documents.
 - Migration: `2026_11_12_000200_return_doc_review.php` (add-only: `paper_ref`, `paper_signed`).
+
+## Addendum 5 — Live review fixes (13/11, Ahmed on live)
+
+- **Undo own mark**: a reviewer can undo their own ✓/✗ on the same calendar day.
+  Ways in: «↶ تراجع عن المراجعة» in the pane, an Undo button in the toast right after ✓,
+  and the key U. It is logged as `undo` in doc_review_events and the activity log.
+  Older marks, or someone else's, still go to an admin reopen.
+- **Cash toggle double collection** (INV-1017 / paper 0560): a credit invoice already
+  paid by a field collection was switched to cash. The toggle added a second linked
+  collection, and the client ended at −5,420.60.
+  `OpsController::cashToggleBlocker` now refuses when the client's ledger balance minus
+  the invoice would go below −1. The cash = sale + linked collection doctrine is
+  unchanged.
+- **Invoice proof**: invoices get `receipt_note` / `receipt_note_no` / `paper_signed`
+  (migration `2026_11_13_000100_invoice_delivery_proof.php`), the same as POs.
+  `REVIEW_INVOICE_PROOF_REQUIRED` defaults to soft. Proof stats now cover sales
+  documents (invoices + delivered POs), with the `type=sales` filter.
+- **Search**: the queue filter form had no submit button, so Enter did nothing.
+  A real submit button plus an Enter handler fix it. A search with no hits in the
+  current status jumps to «الكل». `Client::search` now also matches document numbers
+  (INV-1017 / 1017), paper serials ignoring leading zeros (560 = 0560), and Arabic digits.
+- **`php artisan review:audit`**: read-only report, saved to
+  storage/app/private/review-audit as JSON + CSV per check. It covers duplicate ledger
+  rows, double collections from the cash toggle, doc vs ledger, totals vs lines,
+  balance vs ledger, duplicate serials, ✓ changed after review, and every review-pane
+  edit before → after. `--fix` is a dry-run; `--fix --apply` takes a snapshot, then
+  removes exact duplicate rows and reverts double-collected toggled invoices to credit.

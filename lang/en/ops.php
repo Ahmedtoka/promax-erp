@@ -391,6 +391,7 @@ return [
     'pay_toggle_confirm' => 'Switch invoice :number to :to? Its linked collection entry will be adjusted and the client balance recalculated.',
     'pay_toggled' => 'Invoice :number is now :type - entries and balance adjusted.',
     'pay_eta_locked' => 'Invoice was exported to the tax authority - payment type cannot change.',
+    'pay_already_collected' => 'Invoice :number was already collected (field or other collection) — client balance :balance; a new cash entry would make it :after and collect it twice. If that collection paid this invoice, keep it on credit.',
     'pay_consignment_blocked' => 'This is a consignment invoice - no receivable exists, so cash/credit does not apply.',
     'zone_required_approve' => 'Pick a zone before approving - a client without a zone never appears to the rep in the app.',
     'pull_terms' => 'Copy their terms',

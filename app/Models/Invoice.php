@@ -21,6 +21,8 @@ class Invoice extends Model
         'cost_total', 'lat', 'lng',
         // تعديل الأسعار (Lane 13)
         'repriced_at', 'repriced_by', 'price_change_run_id',
+        // (١٣/١١) إثبات الاستلام في المراجعة مستند مستند
+        'receipt_note', 'receipt_note_no', 'paper_signed',
     ];
 
     /** حالات الرفع لمصلحة الضرائب */
@@ -45,6 +47,8 @@ class Invoice extends Model
             'grand_total' => 'decimal:2',
             'eta_submitted_at' => 'datetime',
             'repriced_at' => 'datetime',
+            'receipt_note' => 'boolean',
+            'paper_signed' => 'boolean',
         ];
     }
 

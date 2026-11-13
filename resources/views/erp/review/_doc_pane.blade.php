@@ -18,7 +18,7 @@
     $poEditUrl = $type === 'po' && isset($lockLines['po_approved']) && \App\Support\Access::allows($u, 'ops.po.edit') ? route('ops.po.edit', $doc) : null;
     $chain = $client?->group;
     $mother = $chain?->motherCompany;
-    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅', 'proof' => '📦'];
+    $evIcon = ['serial' => '#', 'rep' => '👤', 'date' => '📅', 'proof' => '📦', 'undo' => '↶', 'ok' => '✓', 'issue' => '✗', 'reopen' => '↺', 'lines' => '✎'];
     $yn = fn ($v) => $v ? '✓' : '✗';
 @endphp
 <div class="dp" data-key="{{ $key }}" data-type="{{ $type }}" data-id="{{ $doc->id }}" data-state="{{ $state }}"
@@ -53,8 +53,12 @@
         @if ($state !== 'ok')
             <button type="button" class="btn ok dp-ok">{{ __('review.btn_ok') }} <kbd>Enter</kbd></button>
             <button type="button" class="btn bad dp-issue">{{ __('review.btn_issue') }} <kbd>X</kbd></button>
-        @elseif ($canReopen)
+        @elseif ($canReopen && ! $canUndo)
             <button type="button" class="btn dp-reopen">↺ {{ __('review.btn_reopen') }}</button>
+        @endif
+        @if ($canUndo)
+            {{-- (١٣/١١) دوسة غلط؟ المراجِع بيرجّع علامته هو في نفس اليوم --}}
+            <button type="button" class="btn dp-undo" title="{{ __('review.undo_hint') }}">↶ {{ __('review.btn_undo') }} <kbd>U</kbd></button>
         @endif
         @if ($check)
             <span class="who">{{ $check->status === 'ok'
@@ -81,9 +85,15 @@
         <div class="dp-warn">⚠ {{ __('review.changed_note', ['old' => $money($check->system_balance), 'new' => $money($grand)]) }}</div>
     @endif
 
-    {{-- ═══ الورقة | السيستم ═══ --}}
-    {{-- ═══ الورقة | السيستم — سطر سطر: اللي على الورق جنب اللي في السيستم (١٢/١١) ═══ --}}
+    {{-- ═══ الورقة | السيستم — نفس الصفوف بنفس الترتيب للتلات أنواع (١٣/١١):
+         سيريال ← الفاتورة الأصلية (مرتجع) ← الإثبات ← التاريخ ← المندوب ← الإجمالي ═══ --}}
+    @php
+        $needProof = \App\Services\Review\DocReview::needsProof($doc);
+        $hasProof = \App\Services\Review\DocReview::hasProof($doc);
+        $p4 = fn ($v) => rtrim(rtrim(number_format((float) $v, 4, '.', ','), '0'), '.');
+    @endphp
     <table class="cmp" data-plain>
+        <colgroup><col class="cmp-c-th"><col><col></colgroup>
         <thead><tr>
             <th></th>
             <th class="cmp-paper">🧾 {{ __('review.paper') }}</th>
@@ -109,10 +119,9 @@
                 </td>
             </tr>
             @if ($isRet)
-                {{-- (١٢/١١) المرتجع: فواتيره الأصلية + إمضاء/ختم العميل على الإذن --}}
                 <tr>
                     <th scope="row">{{ __('review.ret_orig') }}</th>
-                    <td class="cmp-sys" colspan="2">
+                    <td class="cmp-wide" colspan="2">
                         @forelse ($retLinks as $inv)
                             <a href="#" data-goto="inv-{{ $inv->id }}" dir="ltr" title="{{ __('review.ret_orig_open') }}">{{ $inv->number }}</a>@if ($invUrl)<a href="{{ route('ops.invoice', $inv) }}" target="_blank" rel="noopener" class="rv-sub"> ↗</a>@endif @if (! $loop->last)· @endif
                         @empty
@@ -120,36 +129,26 @@
                         @endforelse
                     </td>
                 </tr>
-                <tr class="cmp-proof {{ $doc->paper_signed ? '' : 'bad' }}">
-                    <th scope="row">{{ __('review.ret_signed') }} <kbd>2</kbd></th>
-                    <td class="cmp-paper"><label class="pf"><input type="checkbox" class="dp-signed" @checked($doc->paper_signed) @disabled(! $canProof)> {{ __('review.ret_signed_label') }}</label></td>
-                    <td class="cmp-sys">@if ($doc->paper_signed)<span class="cmp-ok">✓ {{ __('review.proof_has') }}</span>@else<span class="cmp-bad">✗ {{ __('review.ret_proof_none') }}</span>@endif</td>
-                </tr>
             @endif
-            @if ($type === 'po')
-                {{-- (١٢/١١) إثبات الاستلام: إذن استلام العميل و/أو إمضاء/ختم على ورقتنا — بيتحفظ على طول --}}
-                @php
-                    $needProof = \App\Services\Review\DocReview::needsProof($doc);
-                    $hasProof = \App\Services\Review\DocReview::hasProof($doc);
-                @endphp
-                <tr class="cmp-proof {{ $needProof && ! $hasProof ? 'bad' : '' }}">
-                    <th scope="row">{{ __('review.proof_receipt') }} <kbd>1</kbd></th>
-                    <td class="cmp-paper"><div class="pf-row">
-                        <label class="pf"><input type="checkbox" class="dp-receipt" @checked($doc->receipt_note) @disabled(! $canProof)> {{ __('review.proof_receipt_has') }}</label>
-                        <input class="dp-receipt-no" value="{{ $doc->receipt_note_no }}" maxlength="40" dir="ltr" autocomplete="off"
-                               placeholder="{{ __('review.proof_no_ph') }}" aria-label="{{ __('review.proof_receipt_no') }}" @unless ($canProof) readonly @endunless>
-                    </div></td>
-                    <td class="cmp-sys" rowspan="2">
-                        @if (! $needProof)<span class="cmp-na">{{ __('review.proof_not_delivered') }}</span>
-                        @elseif ($hasProof)<span class="cmp-ok">✓ {{ __('review.proof_has') }}</span>
-                        @else<span class="cmp-bad">✗ {{ __('review.proof_none') }}</span>@endif
-                    </td>
-                </tr>
-                <tr class="cmp-proof {{ $needProof && ! $hasProof ? 'bad' : '' }}">
-                    <th scope="row">{{ __('review.proof_signed') }} <kbd>2</kbd></th>
-                    <td class="cmp-paper"><label class="pf"><input type="checkbox" class="dp-signed" @checked($doc->paper_signed) @disabled(! $canProof)> {{ __('review.proof_signed_label') }}</label></td>
-                </tr>
-            @endif
+            {{-- الإثبات: مفاتيح في سطر واحد، وحالته في الآخر — بيتحفظ أول ما يتغير --}}
+            <tr class="cmp-proof {{ $needProof && ! $hasProof ? 'bad' : ($needProof ? 'good' : '') }}">
+                <th scope="row">{{ __('review.chk_proof') }} @unless ($isRet)<kbd>1</kbd>@endunless<kbd>2</kbd></th>
+                <td class="cmp-wide" colspan="2">
+                    <div class="pf-row">
+                        @unless ($isRet)
+                            <label class="sw"><input type="checkbox" role="switch" class="dp-receipt" @checked($doc->receipt_note) @disabled(! $canProof)><i aria-hidden="true"></i>{{ __('review.pf_receipt_short') }}</label>
+                            <input class="dp-receipt-no" value="{{ $doc->receipt_note_no }}" maxlength="40" dir="ltr" autocomplete="off"
+                                   placeholder="{{ __('review.pf_no_short') }}" title="{{ __('review.proof_no_ph') }}" aria-label="{{ __('review.proof_receipt_no') }}" @unless ($canProof) readonly @endunless>
+                        @endunless
+                        <label class="sw"><input type="checkbox" role="switch" class="dp-signed" @checked($doc->paper_signed) @disabled(! $canProof)><i aria-hidden="true"></i>{{ $isRet ? __('review.ret_signed') : __('review.proof_signed') }}</label>
+                        <span class="pf-st">
+                            @if (! $needProof)<span class="cmp-na">{{ __('review.proof_not_delivered') }}</span>
+                            @elseif ($hasProof)<span class="cmp-ok">✓ {{ __('review.proof_has') }}</span>
+                            @else<span class="cmp-bad">✗ {{ $isRet ? __('review.ret_proof_none') : __('review.proof_none') }}</span>@endif
+                        </span>
+                    </div>
+                </td>
+            </tr>
             <tr>
                 <th scope="row">{{ __('review.doc_date') }} <kbd>D</kbd></th>
                 <td class="cmp-paper cmp-na">{{ __('review.cmp_look') }}</td>
@@ -192,14 +191,14 @@
         </tbody>
     </table>
 
-    {{-- ═══ البنود ═══ --}}
+    {{-- ═══ البنود — ٤ أعمدة تكفي اللوحة من غير سكرول: السعر تحته سعر البيع/القايمة، والإجمالي تحته الصافي والضريبة ═══ --}}
     <div class="dp-lines">
         <div class="tablewrap" data-noxl>
-            <table>
+            <table class="dl-t">
+                <colgroup><col><col class="dl-c-q"><col class="dl-c-p"><col class="dl-c-t"></colgroup>
                 <thead><tr>
                     <th>{{ __('review.col_product') }}</th><th>{{ __('review.col_qty') }}</th>
-                    <th>{{ __('review.col_unit') }}</th>@if ($isRet)<th>{{ __('review.col_sale_price') }}</th>@endif<th>{{ __('review.col_list_now') }}</th>
-                    <th>{{ __('review.col_net') }}</th><th>{{ __('review.col_vat') }}</th><th>{{ __('review.col_incl') }}</th>
+                    <th>{{ __('review.col_unit') }}</th><th>{{ __('review.col_incl') }}</th>
                 </tr></thead>
                 <tbody>
                 @foreach ($doc->items as $l)
@@ -210,26 +209,20 @@
                         $ref = $sale ?? $now;
                         $off = $ref !== null && ($isRet ? abs($ref - (float) $l->price) >= 0.005 : abs($ref - (float) $l->price) >= 0.00005);
                         $q = $type !== 'po' ? (int) $l->qty : ($l->delivered_qty !== null ? (int) $l->delivered_qty : (int) $l->qty);
-                        $p4 = fn ($v) => rtrim(rtrim(number_format((float) $v, 4, '.', ','), '0'), '.');
                     @endphp
                     <tr class="{{ $off ? 'off' : '' }}">
-                        <td>{{ $l->product?->code }} · {{ $l->product?->displayName() }}@if ($isRet && $l->condition === 'damaged') <span class="rv-sub">({{ __('field.return_cond_damaged') }})</span>@endif</td>
-                        <td dir="ltr">{{ $q }}@if ($type === 'po' && $l->delivered_qty !== null && (int) $l->delivered_qty !== (int) $l->qty) <span class="rv-sub">/ {{ (int) $l->qty }}</span>@endif</td>
-                        <td dir="ltr">{{ rtrim(rtrim(number_format((float) $l->price, 4, '.', ','), '0'), '.') }}</td>
-                        @if ($isRet)
-                            <td dir="ltr" class="c-list" title="{{ $sale === null ? __('review.ret_no_sale') : ($off ? __('review.ret_price_off') : __('review.price_ok')) }}">
-                                @if ($sale === null)—@else{{ $p4($sale) }} {{ $off ? '≠' : '✓' }}@endif
-                                @if ($l->invoiceItem?->invoice)<a href="#" data-goto="inv-{{ $l->invoiceItem->invoice_id }}" class="rv-sub">{{ $l->invoiceItem->invoice->number }}</a>@endif
-                            </td>
-                            <td dir="ltr" class="rv-sub">{{ $now === null ? '—' : $p4($now) }}</td>
-                        @else
-                        <td dir="ltr" class="c-list" title="{{ $off ? __('review.price_off') : __('review.price_ok') }}">
-                            {{ $now === null ? '—' : rtrim(rtrim(number_format($now, 4, '.', ','), '0'), '.') }} {{ $off ? '≠' : '✓' }}
+                        <td class="dl-name">{{ $l->product?->displayName() }}
+                            <small dir="ltr">{{ $l->product?->code }}</small>@if ($isRet && $l->condition === 'damaged')<small class="dl-dmg">{{ __('field.return_cond_damaged') }}</small>@endif</td>
+                        <td dir="ltr" class="num">{{ $q }}@if ($type === 'po' && $l->delivered_qty !== null && (int) $l->delivered_qty !== (int) $l->qty)<small>/ {{ (int) $l->qty }}</small>@endif</td>
+                        <td dir="ltr" class="num c-list" title="{{ $isRet ? ($sale === null ? __('review.ret_no_sale') : ($off ? __('review.ret_price_off') : __('review.price_ok'))) : ($off ? __('review.price_off') : __('review.price_ok')) }}">
+                            {{ $p4($l->price) }}
+                            @if ($isRet)
+                                <small>@if ($sale !== null){{ __('review.dl_sale') }} {{ $p4($sale) }} {{ $off ? '≠' : '✓' }}@if ($l->invoiceItem?->invoice) · <a href="#" data-goto="inv-{{ $l->invoiceItem->invoice_id }}">{{ $l->invoiceItem->invoice->number }}</a>@endif @else{{ __('review.dl_list') }} {{ $now === null ? '—' : $p4($now) }}@endif</small>
+                            @else
+                                <small>{{ __('review.dl_list') }} {{ $now === null ? '—' : $p4($now) }} {{ $now === null ? '' : ($off ? '≠' : '✓') }}</small>
+                            @endif
                         </td>
-                        @endif
-                        <td dir="ltr">{{ $money($l->total) }}</td>
-                        <td dir="ltr">{{ $money($l->tax) }}</td>
-                        <td dir="ltr">{{ $money((float) $l->total + (float) $l->tax) }}</td>
+                        <td dir="ltr" class="num"><b>{{ $money((float) $l->total + (float) $l->tax) }}</b><small>{{ $money($l->total) }} + {{ $money($l->tax) }}</small></td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -276,20 +269,48 @@
     {{-- ═══ السجل ═══ --}}
     <details class="dp-hist" @if ($events->isNotEmpty()) open @endif>
         <summary>{{ __('review.history') }} ({{ $events->count() }})</summary>
+        @php
+            // (١٣/١١) سطر مقروء لكل حركة: «جاد علّم "إمضاء / ختم" ✓ — 21:21» — الأحدث فوق
+            $q2 = fn ($v) => '«'.e((string) $v).'»';
+            $evText = function ($e) use ($money, $q2) {
+                $b = $e->before ?? [];
+                $a = $e->after ?? [];
+                $from = fn ($o, $n) => __('review.evl_from_to', ['old' => $o === null || $o === '' ? '—' : e((string) $o), 'new' => $n === null || $n === '' ? '—' : e((string) $n)]);
+                switch ($e->action) {
+                    case 'ok': return e(__('review.evl_ok'));
+                    case 'issue': return e(__('review.evl_issue'));
+                    case 'reopen': return e(__('review.evl_reopen'));
+                    case 'undo': return e(__('review.evl_undo'));
+                    case 'serial': return empty($b['paper_ref'])
+                        ? e(__('review.evl_serial_set')).' <b dir="ltr">'.e((string) ($a['paper_ref'] ?? '—')).'</b>'
+                        : e(__('review.evl_serial')).' '.$from($b['paper_ref'] ?? null, $a['paper_ref'] ?? null);
+                    case 'date': return e(__('review.evl_date')).' '.$from($b['date'] ?? null, $a['date'] ?? null);
+                    case 'rep': return e(__('review.evl_rep')).' '.$from($b['rep'] ?? null, $a['rep'] ?? null);
+                    case 'lines': return e(__('review.evl_lines')).' — '.$from($money($b['grand'] ?? 0), $money($a['grand'] ?? 0))
+                        .' <b dir="ltr" class="'.((float) $e->grand_delta > 0 ? 'd-up' : 'd-down').'">('.((float) $e->grand_delta > 0 ? '+' : '').$money($e->grand_delta).')</b>';
+                    case 'proof':
+                        $parts = [];
+                        foreach (['receipt_note' => __('review.proof_receipt'), 'paper_signed' => __('review.proof_signed')] as $k => $label) {
+                            if (array_key_exists($k, $a) && (bool) ($b[$k] ?? false) !== (bool) $a[$k]) {
+                                $parts[] = e($a[$k] ? __('review.evl_tick') : __('review.evl_untick')).' '.$q2($label).($a[$k] ? ' ✓' : '');
+                            }
+                        }
+                        if (($a['receipt_note_no'] ?? null) !== ($b['receipt_note_no'] ?? null) && ! empty($a['receipt_note_no'])) {
+                            $parts[] = e(__('review.evl_receipt_no')).' <b dir="ltr">'.e($a['receipt_note_no']).'</b>';
+                        }
+
+                        return implode('، ', $parts ?: [e(__('review.ev_proof', ['number' => '']))]);
+                    default: return e(__('review.ev_'.$e->action, ['number' => '']));
+                }
+            };
+        @endphp
         @forelse ($events as $e)
-            <div class="ev">
-                <span class="ev-i">{{ $evIcon[$e->action] ?? '•' }}</span>
-                <span><b>{{ __('review.ev_'.$e->action, ['number' => '']) }}</b> — {{ $e->user?->displayName() }}
-                    <span class="rv-sub" dir="ltr">{{ $e->created_at?->format('Y-m-d H:i:s') }}</span>
-                    @if ((float) $e->grand_delta != 0)<span class="ev-money" dir="ltr">{{ $money($e->before['grand'] ?? 0) }} → {{ $money($e->after['grand'] ?? 0) }} ({{ $e->grand_delta > 0 ? '+' : '' }}{{ $money($e->grand_delta) }})</span>@endif
-                    @if ($e->action === 'serial')<span dir="ltr">{{ $e->before['paper_ref'] ?? '—' }} → {{ $e->after['paper_ref'] ?? '—' }}</span>@endif
-                    @if ($e->action === 'proof')<span>@if (array_key_exists('receipt_note', $e->after ?? [])){{ __('review.proof_receipt') }} {{ $yn($e->before['receipt_note'] ?? false) }} → {{ $yn($e->after['receipt_note'] ?? false) }}@if (! empty($e->after['receipt_note_no'])) <b dir="ltr">{{ $e->after['receipt_note_no'] }}</b>@endif
-                        · @endif{{ __('review.proof_signed') }} {{ $yn($e->before['paper_signed'] ?? false) }} → {{ $yn($e->after['paper_signed'] ?? false) }}</span>@endif
-                    @if ($e->action === 'rep'){{ $e->before['rep'] ?? '—' }} → {{ $e->after['rep'] ?? '—' }}@endif
-                    @if ($e->action === 'date')<span dir="ltr">{{ $e->before['date'] ?? '—' }} → {{ $e->after['date'] ?? '—' }}</span>@endif
-                    @if ($e->seconds_since_prev !== null)<span class="rv-sub">· {{ __('review.ev_seconds', ['s' => $e->seconds_since_prev]) }}</span>@endif
+            <div class="ev ev-{{ $e->action }}">
+                <span class="ev-i" aria-hidden="true">{{ $evIcon[$e->action] ?? '•' }}</span>
+                <span class="ev-t"><b>{{ $e->user?->displayName() }}</b> {!! $evText($e) !!}
+                    <span class="ev-at" dir="ltr" title="{{ $e->created_at?->format('Y-m-d H:i:s') }}">— {{ $e->created_at?->isToday() ? $e->created_at->format('H:i') : $e->created_at?->format('m-d H:i') }}</span>
                     @if (! empty($e->after['review_cleared']))<span class="rv-sub">· {{ __('review.cleared_review') }}</span>@endif
-                    @if ($e->note)<br><span class="rv-sub">{{ $e->note }}</span>@endif
+                    @if ($e->note)<span class="ev-note">{{ $e->note }}</span>@endif
                 </span>
             </div>
         @empty

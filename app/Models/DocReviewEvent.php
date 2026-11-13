@@ -20,6 +20,9 @@ class DocReviewEvent extends Model
     /** الأحداث اللي بتتحسب «مراجعة» في التحليل (الوقت بين مستند والتاني) */
     public const REVIEW_ACTIONS = ['ok', 'issue'];
 
+    /** (١٣/١١) المراجِع اتراجع عن علامته (نفس اليوم) — مش مراجعة ولا تعديل */
+    public const UNDO = 'undo';
+
     public const EDIT_ACTIONS = ['serial', 'lines', 'rep', 'date', 'proof'];
 
     /** أقل من كده بين مراجعة والتانية = سريعة. ٥ ورا بعض = علم أحمر */

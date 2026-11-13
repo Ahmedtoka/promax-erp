@@ -56,7 +56,7 @@
         @endif
         @if ($context['proof'])
             <div><span class="rv-sub">📦 {{ __('review.proof_title') }} — {{ __('review.proof_n', ['p' => $context['proof']['proven'], 'n' => $context['proof']['delivered']]) }}</span>
-                <b>@if ($context['proof']['unproven'])<a href="{{ $qs(['flag' => 'noproof', 'status' => 'all']) }}" class="dq-risk">{{ $context['proof']['unproven'] }} {{ __('review.proof_risk') }} · <span dir="ltr">{{ $money($context['proof']['unproven_grand']) }}</span></a>@else<span class="dq-proven">✓ {{ $context['proof']['pct'] }}%</span>@endif</b></div>
+                <b>@if ($context['proof']['unproven'])<a href="{{ $qs(['flag' => 'noproof', 'status' => 'all', 'type' => 'sales']) }}" class="dq-risk">{{ $context['proof']['unproven'] }} {{ __('review.proof_risk') }} · <span dir="ltr">{{ $money($context['proof']['unproven_grand']) }}</span></a>@else<span class="dq-proven">✓ {{ $context['proof']['pct'] }}%</span>@endif</b></div>
         @endif
         @if ($context['money_url'])<a class="btn sm" href="{{ $context['money_url'] }}">↩ {{ __('review.ctx_back_money') }}</a>@endif
     </section>
@@ -68,7 +68,8 @@
     <input type="hidden" name="per" value="{{ $per }}">
     <div class="dq-f-row">
         <label class="dq-search">
-            <span aria-hidden="true">🔍</span>
+            {{-- (١٣/١١) زرار إرسال حقيقي: من غيره Enter في الفورم ده (فيه أكتر من خانة) مابيبعتش --}}
+            <button type="submit" class="dq-go" aria-label="{{ __('review.f_search') }}">🔍</button>
             <input name="q" id="dqSearch" type="search" value="{{ $f['q'] }}" placeholder="{{ __('review.docs_search') }}" autocomplete="off" aria-label="{{ __('review.f_search') }}">
             <kbd>/</kbd>
         </label>
@@ -226,6 +227,7 @@
     // ⚠️ لينكات الـJS — كل واحد محروس بصلاحيته (فحص PermissionInventoryTest)
     $urls = ['pane' => route('erp.review.docs.pane', ['type' => '__T', 'id' => 0])];
     if (\App\Support\Access::allows($u, 'erp.review.docs.mark')) { $urls['mark'] = route('erp.review.docs.mark', ['type' => '__T', 'id' => 0]); }
+    if (\App\Support\Access::allows($u, 'erp.review.docs.undo')) { $urls['undo'] = route('erp.review.docs.undo', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.reopen')) { $urls['reopen'] = route('erp.review.docs.reopen', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.serial')) { $urls['serial'] = route('erp.review.docs.serial', ['type' => '__T', 'id' => 0]); }
     if (\App\Support\Access::allows($u, 'erp.review.docs.proof')) { $urls['proof'] = route('erp.review.docs.proof', ['type' => '__T', 'id' => 0]); }
@@ -236,6 +238,8 @@
 @endphp
 
 <style>
+.dq-undo{margin-inline-start:8px;border:1px solid currentColor;background:transparent;color:inherit;border-radius:6px;padding:2px 8px;font:inherit;font-weight:800;cursor:pointer}
+.dq-go{border:0;background:none;padding:0 2px;cursor:pointer;font-size:inherit;line-height:1}
 /* ═══ الإنجاز ═══ */
 .dq-top{display:flex;gap:16px;align-items:center;padding:10px 14px}
 .dq-pct{display:flex;align-items:baseline;gap:1px;color:var(--green);font-variant-numeric:tabular-nums;min-width:74px}
@@ -478,6 +482,38 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
     .dq-ctx{gap:10px}
 }
 @media (prefers-reduced-motion:no-preference){.dq-row.flash td{animation:dqf .9s ease-out}@keyframes dqf{from{background:#BBF7D0}}}
+/* ═══ (١٣/١١) لوحة موحّدة للتلات أنواع ═══ */
+.cmp col.cmp-c-th{width:84px}
+.cmp thead th:first-child{width:auto}
+.cmp tbody th{white-space:normal;line-height:1.25;vertical-align:middle}
+.cmp td{vertical-align:middle}
+.cmp td.cmp-wide{white-space:normal;border-inline:1px dashed #CBD5E1;background:#FFFDF5!important}
+.cmp td.cmp-wide a{font-weight:700}
+.cmp .pf-row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.cmp .pf-row .dp-receipt-no{flex:0 1 78px;width:78px;min-width:56px}
+.cmp .pf-st{margin-inline-start:auto;white-space:nowrap}
+.cmp tr.cmp-proof.bad td.cmp-wide{background:#FEF2F2!important}
+.cmp tr.cmp-proof.good td.cmp-wide{background:#F0FDF4!important}
+.sw{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;user-select:none}
+.sw input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.sw i{position:relative;flex:none;width:28px;height:16px;border-radius:9px;background:#CBD5E1;transition:background .15s}
+.sw i::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.3);transition:inset-inline-start .15s}
+.sw input:checked+i{background:#16A34A}
+.sw input:checked+i::after{inset-inline-start:14px}
+.sw input:focus-visible+i{outline:2px solid #2563EB;outline-offset:2px}
+.sw input:disabled+i{opacity:.5}
+.dp-lines table.dl-t{table-layout:fixed;width:100%}
+.dl-t col.dl-c-q{width:52px}.dl-t col.dl-c-p{width:90px}.dl-t col.dl-c-t{width:98px}
+.dp-lines table.dl-t td,.dp-lines table.dl-t th{white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+.dp-lines table.dl-t td:first-child{min-width:0}
+.dl-t td.num{text-align:end;font-variant-numeric:tabular-nums}
+.dl-t small{display:block;font-size:10px;color:var(--muted);font-weight:500;line-height:1.3}
+.dl-t .dl-dmg{color:#B45309;font-weight:800}
+.dl-t tr.off td.c-list small{color:#C2410C;font-weight:800}
+.ev-t{line-height:1.5}.ev-at{color:var(--muted);font-size:11px;white-space:nowrap}
+.ev-note{display:block;color:var(--muted);font-size:11px}
+.ev .d-up{color:#B91C1C}.ev .d-down{color:#15803D}
+@media (min-width:1700px){.cmp col.cmp-c-th{width:110px}.dl-t col.dl-c-p{width:120px}.dl-t col.dl-c-t{width:120px}}
 </style>
 
 <script>
@@ -498,6 +534,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         po: @js(__('review.docs_po_progress', ['ok' => '__OK', 'n' => '__N'])),
         ret: @js(__('review.docs_ret_progress', ['ok' => '__OK', 'n' => '__N'])), retProofFirst: @js(__('review.ret_proof_required')),
         st: @js(collect(['pending', 'ok', 'issue', 'changed'])->mapWithKeys(fn ($s) => [$s => __('review.st_'.$s)])),
+        undo: @js(__('review.btn_undo')), undone: @js(__('review.undo_done')),
         missing: @js(__('review.serial_missing')), allDone: @js(__('review.page_done')), confirmRed: @js(__('review.confirm_red')), gone: @js(__('review.row_gone')), serialFirst: @js(__('review.serial_required')), proofFirst: @js(__('review.proof_required')), paperDiff: @js(__('review.chk_paper_diff')),
     };
     const pane = document.getElementById('dqPane');
@@ -505,7 +542,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
     const url = (k, type, id) => URLS[k].replace('__T', type).replace(/\/0(\/|$)/, '/' + id + '$1');
     const fmt = n => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const pctOf = (a, b) => { if (!b) return 0; const p = a * 100 / b; return p >= 10 ? Math.floor(p) : Math.floor(p * 10) / 10; };
-    let cur = null, openedAt = 0, loading = 0;
+    let cur = null, openedAt = 0, loading = 0, lastMarked = null;
 
     function toast(msg, kind) {
         const t = document.getElementById('dqToast');
@@ -552,7 +589,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         const n = list.slice(i + 1).find(r => r.dataset.state === 'pending') || list.slice(0, Math.max(0, i)).find(r => r.dataset.state === 'pending');
         if (n) { open(n.dataset.key); return; }
         if (PAGE.next) { location.href = setParam(PAGE.next, 'go', 'pending'); return; }
-        toast(T.allDone);
+        lastMarked ? undoToast(T.allDone) : toast(T.allDone);   // التوست يفضل فيه «تراجع»
     }
 
     async function post(kind, body) {
@@ -696,9 +733,33 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
             toast(T.confirmRed.replace(':n', bad), 'warn');
             return;
         }
-        const key = cur;
+        const key = cur, dpk = pane.querySelector('.dp');
         const d = await post('mark', { status: 'ok', open_ms: Math.round(performance.now() - openedAt) });
+        if (d) { lastMarked = { key, type: dpk.dataset.type, id: dpk.dataset.id }; undoToast(d.message); }
         if (d && key === cur) nextPending();
+    }
+    // (١٣/١١) ✓ بالغلط؟ توست فيه «تراجع» + زرار U — بيرجّع آخر ✓ «لسه» ويفتحه
+    function undoToast(msg) {
+        if (!URLS.undo) return;
+        const t = document.getElementById('dqToast');
+        t.innerHTML = ''; t.append(msg + ' ');
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'dq-undo'; b.textContent = '↶ ' + T.undo + ' (U)';
+        b.addEventListener('click', undoLast); t.append(b);
+        t.className = 'dq-toast'; t.hidden = false;
+        clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 8000);
+    }
+    async function undoLast() {
+        const m = lastMarked;
+        if (!m || !URLS.undo) return;
+        const fd = new FormData(); fd.append('_token', CSRF);
+        const res = await fetch(url('undo', m.type, m.id), { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
+        const data = await res.json().catch(() => ({ ok: false, message: '⚠️ ' + res.status }));
+        if (!data.ok) { toast(data.message, 'bad'); return; }
+        lastMarked = null;
+        if (data.row) paintRow(data.row);
+        if (data.overall) paintOverall(data.overall);
+        toast(data.message);
+        open(m.key);
     }
     // إثبات الاستلام — بيتحفظ أول ما الصح يتغير (أو Enter في رقم الإذن)
     function saveProof() {
@@ -718,6 +779,7 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
         if (!dp) return;
         dp.querySelector('.dp-ok')?.addEventListener('click', markOk);
         dp.querySelector('.dp-issue')?.addEventListener('click', markIssue);
+        dp.querySelector('.dp-undo')?.addEventListener('click', () => post('undo', {}));
         dp.querySelector('.dp-reopen')?.addEventListener('click', () => { const n = prompt(T.reopen, ''); if (n !== null) post('reopen', { note: n }); });
         dp.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); open(a.dataset.goto); }));
 
@@ -817,6 +879,8 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
 
     // الفلاتر بتتطبق أول ما تتغير — من غير زرار «اعرض»
     const form = document.getElementById('dqForm');
+    // Enter في البحث = ابحث (حتى لو المتصفح ماعملش الإرسال الضمني)
+    document.getElementById('dqSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); form.submit(); } });
     form.querySelectorAll('select[data-auto]').forEach(s => s.addEventListener('change', () => form.submit()));
     // الشهر = من أول يوم لآخر يوم — بيملا خانتين الفترة ويبعت
     document.getElementById('dqMonth')?.addEventListener('change', e => {
@@ -850,6 +914,11 @@ main:has(.dq) .dp-lines table td,main:has(.dq) .dp-lines table th{font-size:11px
             case '1': { const c = dp?.querySelector('.dp-receipt:not(:disabled)'); if (c) { e.preventDefault(); c.click(); } break; }
             case '2': { const c = dp?.querySelector('.dp-signed:not(:disabled)'); if (c) { e.preventDefault(); c.click(); } break; }
             case 'n': case 'N': { const c = dp?.querySelector('.dp-receipt-no'); if (c) { e.preventDefault(); c.focus(); c.select(); } break; }
+            case 'u': case 'U': {
+                e.preventDefault();
+                if (dp?.querySelector('.dp-undo')) post('undo', {}); else undoLast();
+                break;
+            }
             case '?': document.getElementById('dqKeys').showModal(); break;
         }
     });

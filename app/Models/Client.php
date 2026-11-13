@@ -507,9 +507,29 @@ public function zone(): BelongsTo
             0, 5,
         );
 
+        // (١٣/١١ — أحمد) أرقام عربي ← إنجليزي للتليفون والكود والمستندات: «٠١٠…» = «010…»
+        $s = strtr($s, ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9']);
+
         return $query->where(function ($w) use ($s, $tokens) {
             $w->where('phone', 'like', "%$s%")
                 ->orWhere('code', 'like', "%$s%");
+
+            // (١٣/١١ — أحمد) «لو كتبت رقم فاتورة مش بيعمل حاجة»: رقم مستند (INV-1017 / 1017
+            // / PO- / RET-) أو سيريال ورقي (560 = 0560) بيجيب عميله
+            if (preg_match('/\d{2,}/', $s) && ! str_contains($s, ' ')) {
+                $num = mb_strtoupper($s);
+                $digits = ctype_digit($s) ? ltrim($s, '0') : null;
+                $docs = function ($q) use ($num, $digits, $s) {
+                    $q->where('number', $num)
+                        ->when($digits !== null && $digits !== '', fn ($q) => $q->orWhere('number', 'like', '%-'.$digits)
+                            ->orWhereRaw("TRIM(LEADING '0' FROM paper_ref) = ?", [$digits]))
+                        ->orWhere('paper_ref', $s);
+                };
+                $db = \Illuminate\Support\Facades\DB::class;
+                $w->orWhereIn('clients.id', $db::table('invoices')->where($docs)->select('client_id'))
+                    ->orWhereIn('clients.id', $db::table('purchase_orders')->where($docs)->select('client_id'))
+                    ->orWhereIn('clients.id', $db::table('returns')->where($docs)->select('client_id'));
+            }
 
             if ($tokens === []) {
                 return;

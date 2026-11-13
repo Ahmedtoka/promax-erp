@@ -312,6 +312,30 @@ class DocReview
         });
     }
 
+    /**
+     * (١٣/١١) المراجِع يقدر يتراجع عن علامته هو (✓ أو ✗) في نفس اليوم — دوسة غلط
+     * مش لازم تستنى الأدمن. الأقدم من كده أو علامة حد تاني = الأدمن بيفتحها.
+     */
+    public static function canUndo(User $user, ?ReviewCheck $check): bool
+    {
+        return $check !== null && (int) $check->user_id === (int) $user->id
+            && $check->updated_at !== null && $check->updated_at->isSameDay(now());
+    }
+
+    public static function undo(User $user, Invoice|PurchaseOrder|ClientReturn $doc): void
+    {
+        $current = self::check($doc);
+        if (! self::canUndo($user, $current)) {
+            throw new Rejected(__('review.undo_denied'));
+        }
+
+        DB::transaction(function () use ($user, $doc, $current) {
+            $before = ['status' => $current->status, 'by' => $current->user?->displayName(), 'at' => $current->updated_at?->toDateTimeString()];
+            $current->delete();
+            self::event($user, $doc, 'undo', $before, ['status' => 'pending'], 0, 0, null, null, clearsReview: false);
+        });
+    }
+
     /** فتح ✓ تاني — الأدمن بس (الراوت) */
     public static function reopen(User $user, Invoice|PurchaseOrder|ClientReturn $doc, ?string $note): void
     {
@@ -355,7 +379,8 @@ class DocReview
      */
     public static function needsProof(Invoice|PurchaseOrder|ClientReturn $doc): bool
     {
-        return ($doc instanceof PurchaseOrder && $doc->status === 'delivered') || $doc instanceof ClientReturn;
+        // (١٣/١١) الفاتورة بضاعتها خرجت يوم البيع — إثباتها مطلوب دايماً زي الأمر المتسلّم
+        return $doc instanceof Invoice || ($doc instanceof PurchaseOrder && $doc->status === 'delivered') || $doc instanceof ClientReturn;
     }
 
     /** إذن استلام من العميل أو إمضاء/ختم على ورقتنا — أي واحد يكفي. المرتجع: إمضاء/ختم العميل */
@@ -365,7 +390,7 @@ class DocReview
             return (bool) $doc->paper_signed;
         }
 
-        return $doc instanceof PurchaseOrder && ($doc->receipt_note || $doc->paper_signed);
+        return (bool) ($doc->receipt_note || $doc->paper_signed);
     }
 
     /** الإثبات شرط ✓ ولا تحذير — مفتاح لكل نوع في `config/review.php` */
@@ -374,6 +399,7 @@ class DocReview
         return match (true) {
             $doc instanceof PurchaseOrder => (bool) config('review.po_proof_required'),
             $doc instanceof ClientReturn => (bool) config('review.return_proof_required'),
+            $doc instanceof Invoice => (bool) config('review.invoice_proof_required'),
             default => false,
         };
     }
@@ -384,9 +410,6 @@ class DocReview
      */
     public static function setProof(User $user, Invoice|PurchaseOrder|ClientReturn $doc, bool $receipt, ?string $receiptNo, bool $signed): void
     {
-        if ($doc instanceof Invoice) {
-            throw new Rejected(__('review.proof_po_only'));
-        }
         // المرتجع: إمضاء/ختم العميل بس — مفيش «إذن استلام» من العميل على بضاعة راجعة
         if ($doc instanceof ClientReturn) {
             $old = ['paper_signed' => (bool) $doc->paper_signed];
@@ -893,7 +916,7 @@ class DocReview
         $out = [];
 
         switch ($action) {
-            case 'ok': case 'issue': case 'reopen':
+            case 'ok': case 'issue': case 'reopen': case 'undo':
                 $out[__('review.log_state')] = [$st($b['status'] ?? 'pending'), $st($a['status'] ?? 'pending')];
                 if (isset($a['grand'])) {
                     $out[__('review.tot_incl')] = number_format((float) $a['grand'], 2);

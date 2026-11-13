@@ -126,7 +126,7 @@ class DocQueue
 
         foreach (DB::table('invoices')->whereIn('client_id', $ids)
             ->when($onlyType !== null, fn ($q) => $onlyType === 'invoice' ? $q->where('id', $onlyId) : $q->whereRaw('0 = 1'))
-            ->get(['id', 'number', 'paper_ref', 'client_id', 'user_id AS rep_id', 'created_at AS doc_at', 'payment AS st', 'total', 'tax_total', 'grand_total']) as $d) {
+            ->get(['id', 'number', 'paper_ref', 'receipt_note', 'receipt_note_no', 'paper_signed', 'client_id', 'user_id AS rep_id', 'created_at AS doc_at', 'payment AS st', 'total', 'tax_total', 'grand_total']) as $d) {
             $rows->push($make('invoice', $d, $invItems[$d->id] ?? null));
         }
         foreach (DB::table('purchase_orders')->whereIn('client_id', $ids)->where('status', '!=', 'cancelled')
@@ -186,7 +186,13 @@ class DocQueue
             return ! $r['signed'];
         }
 
-        return $r['type'] === 'po' && $r['status_doc'] === 'delivered' && ! $r['receipt'] && ! $r['signed'];
+        return self::saleNeedsProof($r) && ! $r['receipt'] && ! $r['signed'];
+    }
+
+    /** (١٣/١١) مستند بيع بضاعته خرجت: فاتورة، أو أمر توريد متسلّم — عليه الإثبات والفلوس اللي في خطر */
+    public static function saleNeedsProof(array $r): bool
+    {
+        return $r['type'] === 'invoice' || ($r['type'] === 'po' && $r['status_doc'] === 'delivered');
     }
 
     /**
@@ -198,11 +204,11 @@ class DocQueue
      */
     public static function proofStats(Collection $rows): array
     {
-        $blank = ['delivered' => 0, 'proven' => 0, 'receipt' => 0, 'signed' => 0, 'unproven' => 0, 'grand' => 0.0, 'unproven_grand' => 0.0];
+        $blank = ['delivered' => 0, 'invoices' => 0, 'pos' => 0, 'proven' => 0, 'receipt' => 0, 'signed' => 0, 'unproven' => 0, 'grand' => 0.0, 'unproven_grand' => 0.0];
         $total = $blank;
         $groups = [];
         foreach ($rows as $r) {
-            if ($r['type'] !== 'po' || $r['status_doc'] !== 'delivered') {
+            if (! self::saleNeedsProof($r)) {
                 continue;
             }
             $k = $r['group_id'] ? 'g'.$r['group_id'] : 'c'.$r['client_id'];
@@ -212,6 +218,7 @@ class DocQueue
             ];
             foreach ([&$total, &$groups[$k]] as &$o) {
                 $o['delivered']++;
+                $o[$r['type'] === 'invoice' ? 'invoices' : 'pos']++;
                 $o['grand'] += $r['grand'];
                 $o['receipt'] += $r['receipt'] ? 1 : 0;
                 $o['signed'] += $r['signed'] ? 1 : 0;
@@ -416,7 +423,7 @@ class DocQueue
         $amount = is_numeric(str_replace(',', '', $q)) ? (float) str_replace(',', '', $q) : null;
 
         $out = $rows->filter(function ($r) use ($f, $nq, $norm, $amount, $serialQ) {
-            if (! empty($f['type']) && $r['type'] !== $f['type']) {
+            if (! empty($f['type']) && ($f['type'] === 'sales' ? $r['type'] === 'return' : $r['type'] !== $f['type'])) {
                 return false;
             }
             if (! empty($f['mother']) && (int) $r['mother_id'] !== (int) $f['mother']) {

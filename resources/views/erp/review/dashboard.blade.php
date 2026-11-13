@@ -105,7 +105,7 @@
                 <tbody>
                 @foreach ($docProof['groups'] as $g)
                     <tr>
-                        <td><a href="{{ route('erp.review.docs', $g['filter'] + ['type' => 'po', 'status' => 'all', 'flag' => $g['unproven'] ? 'noproof' : null]) }}"><b>{{ $g['label'] }}</b></a>
+                        <td><a href="{{ route('erp.review.docs', $g['filter'] + ['type' => 'sales', 'status' => 'all', 'flag' => $g['unproven'] ? 'noproof' : null]) }}"><b>{{ $g['label'] }}</b></a>
                             <span class="rv-sub">{{ $g['solo'] ? __('review.solo_group') : ($g['mother'] ?? '') }}</span></td>
                         <td class="num">{{ $g['delivered'] }}</td>
                         <td class="num">{{ $g['proven'] }}</td>
@@ -117,7 +117,7 @@
                 </tbody>
             </table>
         </div>
-        @if ($pt['unproven'])<a class="btn sm" href="{{ route('erp.review.docs', ['type' => 'po', 'status' => 'all', 'flag' => 'noproof']) }}">📦 {{ __('review.pf_open') }} ({{ $pt['unproven'] }})</a>@endif
+        @if ($pt['unproven'])<a class="btn sm" href="{{ route('erp.review.docs', ['type' => 'sales', 'status' => 'all', 'flag' => 'noproof']) }}">📦 {{ __('review.pf_open') }} ({{ $pt['unproven'] }})</a>@endif
     </div>
 @endif
 @endif

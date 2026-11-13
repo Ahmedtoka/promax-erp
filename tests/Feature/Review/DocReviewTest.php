@@ -419,8 +419,9 @@ class DocReviewTest extends TestCase
             'title' => $a->number, 'changes' => ['grand_total' => ['30.00', 34.2]], 'created_at' => '2026-11-10 22:00:00']);
 
         $rows = DocQueue::all($this->admin)->keyBy('id');
-        $this->assertEqualsCanonicalizing(['rep_off', 'repriced'], $rows[$a->id]['flags']);
-        $this->assertEqualsCanonicalizing(['noserial', 'odd_date', 'rep_off'], $rows[$b->id]['flags']);
+        // (١٣/١١) الفواتير كمان عليها إثبات استلام — من غيره «noproof»
+        $this->assertEqualsCanonicalizing(['rep_off', 'repriced', 'noproof'], $rows[$a->id]['flags']);
+        $this->assertEqualsCanonicalizing(['noserial', 'odd_date', 'rep_off', 'noproof'], $rows[$b->id]['flags']);
         $all = DocQueue::all($this->admin);
         $this->assertSame([$a->id], DocQueue::filter($all, ['flag' => 'repriced'])->pluck('id')->all());
         $this->assertSame(2, DocQueue::filter($all, ['flag' => 'any'])->count());
@@ -595,9 +596,10 @@ class DocReviewTest extends TestCase
             ->assertJsonPath('row.state', 'pending')->assertJsonPath('checks.proof.ok', false);
         $this->assertNull($po->fresh()->receipt_note_no);
 
-        // الفواتير مالهاش إثبات استلام
-        $this->expectException(\App\Exceptions\Rejected::class);
-        DocReview::setProof($this->accountant, $this->invoice(), true, null, false);
+        // (١٣/١١) الفواتير كمان: إمضاء/ختم بيتحفظ عليها
+        $inv = $this->invoice();
+        DocReview::setProof($this->accountant, $inv, false, null, true);
+        $this->assertTrue($inv->fresh()->paper_signed);
     }
 
     /** المفتاح: من غير إثبات تحذير بالافتراضي (✓ بتعدّي)، وشرط لو `review.po_proof_required` */
