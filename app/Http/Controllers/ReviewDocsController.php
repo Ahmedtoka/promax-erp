@@ -304,6 +304,7 @@ class ReviewDocsController extends Controller
             $c['col_amt'] = (float) ($coll[$id]->amt ?? 0);
             $c['clients'] = 1;
             $c['done_clients'] = $c['docs'] > 0 && $c['ok'] === $c['docs'] ? 1 : 0;
+            $c['ids'] = [$id];
         }
         unset($c);
 
@@ -314,10 +315,11 @@ class ReviewDocsController extends Controller
                 $k = $c['group_id'] ? 'g'.$c['group_id'] : 'c'.$c['client_id'];
                 $g = &$list[$k];
                 $g ??= $blank + ['label' => $c['group'] ?? $c['label'], 'code' => $c['group_id'] ? '' : $c['code'], 'group' => null,
-                    'group_id' => $c['group_id'], 'mother' => $c['mother'], 'client_id' => $c['group_id'] ? null : $c['client_id']];
+                    'group_id' => $c['group_id'], 'mother' => $c['mother'], 'client_id' => $c['group_id'] ? null : $c['client_id'], 'ids' => []];
                 foreach (array_keys($blank) as $n) {
                     $g[$n] += $c[$n];
                 }
+                $g['ids'][] = $c['client_id'];
                 unset($g);
             }
         }
@@ -356,8 +358,24 @@ class ReviewDocsController extends Controller
 
         $tot = collect($byClient);
 
+        /* ⚠️ (١٣/١١ — لايف) صف «Σ الإجمالي» كان بيطلع ٢٤٣ مليون: سكريبت الجداول
+           العام بيجمع نص الخلية، والخلية كانت «العدد» ولاصق فيها «المبلغ» من
+           غير سطر — «1» + «7,514.40» اتقرت 17,514.40. دلوقتي العدد والمبلغ
+           عمودين، والإجمالي بيتحسب هنا من **المستندات نفسها** (مرة واحدة لكل
+           مستند) للعملاء اللي في القايمة بعد كل الفلاتر — مش جمع صفوف. */
+        $shown = $list->pluck('ids')->flatten()->unique()->flip();
+        $docs = $rows->filter(fn ($r) => isset($shown[$r['client_id']]))->unique(fn ($r) => $r['type'].'#'.$r['id']);
+        $sumT = fn (string $t) => ['n' => $docs->where('type', $t)->count(), 'amt' => round((float) $docs->where('type', $t)->sum('grand'), 2)];
+        $foot = [
+            'inv' => $sumT('invoice'), 'po' => $sumT('po'), 'ret' => $sumT('return'),
+            'col' => ['n' => (int) collect($shown->keys())->sum(fn ($id) => $coll[$id]->n ?? 0),
+                'amt' => round((float) collect($shown->keys())->sum(fn ($id) => $coll[$id]->amt ?? 0), 2)],
+            'docs' => $docs->count(), 'ok' => $docs->where('state', 'ok')->count(), 'issue' => $docs->where('state', 'issue')->count(),
+        ];
+        $foot['pct'] = DocQueue::pct($foot['ok'], $foot['docs']);
+
         return view('erp.review.coverage', [
-            'list' => $list, 'by' => $by, 'sort' => $sort, 'show' => $show, 'f' => $f, 'counts' => $counts,
+            'list' => $list, 'by' => $by, 'sort' => $sort, 'show' => $show, 'f' => $f, 'counts' => $counts, 'foot' => $foot,
             'top' => [
                 'clients' => $tot->count(), 'done_clients' => (int) $tot->sum('done_clients'),
                 'docs' => (int) $tot->sum('docs'), 'ok' => (int) $tot->sum('ok'), 'issue' => (int) $tot->sum('issue'),

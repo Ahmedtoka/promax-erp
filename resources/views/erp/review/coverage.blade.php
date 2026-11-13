@@ -76,10 +76,11 @@
         <table id="rvCoverage" class="cov-t">
             <thead><tr>
                 <th>{{ $by === 'chain' ? __('review.pf_chain') : __('review.doc_client') }}</th>
-                <th class="num">{{ __('review.type_invoices') }}</th>
-                <th class="num">{{ __('review.type_pos') }}</th>
-                <th class="num">{{ __('review.type_returns') }}</th>
-                <th class="num">{{ __('review.cov_collections') }}</th>
+                {{-- العدد والمبلغ عمودين منفصلين — لصقهم في خلية واحدة خلّى سكريبت الجداول يقراهم رقم واحد (١٣/١١) --}}
+                @foreach (['type_invoices', 'type_pos', 'type_returns', 'cov_collections'] as $h)
+                    <th class="num">{{ __('review.'.$h) }}</th>
+                    <th class="num cov-amt">{{ __('review.cov_amt', ['t' => __('review.'.$h)]) }}</th>
+                @endforeach
                 <th class="num">{{ __('review.cov_total_docs') }}</th>
                 <th class="num">{{ __('review.cov_reviewed') }}</th>
                 <th class="num">{{ __('review.cov_issues') }}</th>
@@ -95,10 +96,10 @@
                 <tr class="{{ $x['done'] ? 'cov-done-row' : ($x['issue'] ? 'cov-iss-row' : '') }}">
                     <td class="cov-name"><a href="{{ $docsUrl }}"><b>{{ $x['label'] }}</b></a>
                         <div class="rv-sub">@if ($x['code'])<span dir="ltr">{{ $x['code'] }}</span> · @endif{{ $by === 'chain' ? ($x['group_id'] ? __('review.branches_n', ['n' => $x['clients']]) : __('review.solo')) : ($x['group'] ?? __('review.solo')) }}@if ($x['mother']) · {{ $x['mother'] }}@endif</div></td>
-                    <td class="num">{{ $x['inv'] }}<small>{{ $fmt($x['inv_amt']) }}</small></td>
-                    <td class="num">{{ $x['po'] }}<small>{{ $fmt($x['po_amt']) }}</small></td>
-                    <td class="num">{{ $x['ret'] }}<small>{{ $fmt($x['ret_amt']) }}</small></td>
-                    <td class="num">{{ $x['col'] }}<small>{{ $fmt($x['col_amt']) }}</small></td>
+                    @foreach (['inv', 'po', 'ret', 'col'] as $k)
+                        <td class="num">{{ $x[$k] }}</td>
+                        <td class="num cov-amt">{{ $fmt($x[$k.'_amt']) }}</td>
+                    @endforeach
                     <td class="num"><b>{{ $x['docs'] }}</b></td>
                     <td class="num">{{ $x['ok'] }}</td>
                     <td class="num">@if ($x['issue'])<span class="cov-iss">✗ {{ $x['issue'] }}</span>@else 0 @endif</td>
@@ -108,9 +109,23 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" class="rv-sub">{{ __('review.none_found') }}</td></tr>
+                <tr><td colspan="13" class="rv-sub">{{ __('review.none_found') }}</td></tr>
             @endforelse
             </tbody>
+            @if ($list->isNotEmpty())
+            {{-- من السيرفر: كل مستند مرة واحدة، للقايمة كلها بعد الفلاتر (مش الصفحة الظاهرة بس) --}}
+            <tfoot><tr>
+                <td>Σ {{ __('review.cov_total_row', ['n' => $list->count()]) }}</td>
+                @foreach (['inv', 'po', 'ret', 'col'] as $k)
+                    <td class="num">{{ $n($foot[$k]['n']) }}</td>
+                    <td class="num cov-amt">{{ $fmt($foot[$k]['amt']) }}</td>
+                @endforeach
+                <td class="num"><b>{{ $n($foot['docs']) }}</b></td>
+                <td class="num">{{ $n($foot['ok']) }}</td>
+                <td class="num">{{ $n($foot['issue']) }}</td>
+                <td>{{ $foot['pct'] }}%</td>
+            </tr></tfoot>
+            @endif
         </table>
     </div>
 </div>
@@ -124,10 +139,15 @@
 .cov-done{color:#15803D}.cov-done small{font-size:13px;color:var(--muted)}
 .cov-f{flex-wrap:wrap}
 .cov-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px}
-.cov-t td small{display:block;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cov-t .cov-amt{color:var(--muted);font-size:11.5px}
+.cov-t th.cov-amt{font-weight:600}
+.cov-t tfoot .cov-amt{color:var(--primary);font-size:12px}
 .cov-t td.num{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
-.cov-t .cov-name{min-width:180px;white-space:normal}
-.cov-t .cov-p{min-width:140px}
+.cov-t th{white-space:normal;line-height:1.25;vertical-align:bottom}
+.cov-t td,.cov-t th{padding-inline:7px}
+.cov-t .cov-name{min-width:150px;white-space:normal}
+.cov-t .cov-p{min-width:100px}
+.cov-t tfoot td{white-space:nowrap}
 .cov-p-top{display:flex;gap:6px;align-items:baseline;margin-bottom:3px}
 .cov-t tr.cov-done-row td{background:#F0FDF4}
 .cov-t tr.cov-done-row .cov-p b{color:#15803D}

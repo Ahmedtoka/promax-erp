@@ -517,4 +517,6 @@ return [
     'cov_issues' => 'Issues',
     'cov_progress' => 'Progress',
     'cov_left' => ':n left',
+    'cov_amt' => ':t value',
+    'cov_total_row' => 'Total (:n rows)',
 ];

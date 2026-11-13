@@ -517,4 +517,6 @@ return [
     'cov_issues' => 'مشاكل',
     'cov_progress' => 'الإنجاز',
     'cov_left' => 'باقي :n',
+    'cov_amt' => 'قيمة :t',
+    'cov_total_row' => 'الإجمالي (:n صف)',
 ];
