@@ -543,7 +543,8 @@ class PriceChange
         }
 
         $result['totals'] = self::rounded($result['totals']);
-        $result['ledger_diff'] = $result['totals']['invoice']['diff_grand'];
+        // الكاش اللي تحصيله مشي معاه مالوش أثر على الرصيد
+        $result['ledger_diff'] = round($result['totals']['invoice']['diff_grand'] - ($result['cash_followed'] ?? 0), 2);
 
         return $result;
     }
@@ -585,12 +586,17 @@ class PriceChange
             return;
         }
 
-        // ⚠️ التحصيل ماحدش يلمسه، و`recalculate` مرة واحدة في الآخر
-        // والشجرة صارمة: فشل إعادة الترحيل = التعديل كله يرجع
-        InvoiceRepricer::apply($inv, $plan, false, false, true);
+        // ⚠️ (١٣/١١ قرار أحمد) الكاش: التحصيل بيمشي مع الإجمالي الجديد فأثره
+        // على الرصيد صفر. الآجل: الفرق على رصيد العميل. و`recalculate` مرة
+        // واحدة في الآخر، والشجرة صارمة: فشل إعادة الترحيل = التعديل كله يرجع
+        $follows = InvoiceRepricer::cashCollectionFollows($inv);
+        InvoiceRepricer::apply($inv, $plan, $follows, false, true);
 
         $fresh = $inv->fresh();
         $after = ['net' => (float) $fresh->total, 'tax' => (float) $fresh->tax_total, 'grand' => (float) $fresh->grand_total];
+        if ($follows) {
+            $result['cash_followed'] = round(($result['cash_followed'] ?? 0) + $after['grand'] - $plan['before']['grand'], 2);
+        }
 
         $result['invoices_changed']++;
         $result['docs'][] = self::docRow('invoice', $inv, 'changed', null, null, $plan['before'], $after, $plan['lines']);

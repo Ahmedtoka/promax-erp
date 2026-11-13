@@ -27,8 +27,9 @@ use Illuminate\Support\Facades\DB;
  * الكلاس ده بيعيد تسعيرهم **في المكان** من نفس `Pricing`/`Tax::line`:
  *   - الكميات (والمسلَّم فعلاً) ماتتلمسش أبداً — البنود بتتعدّل مش بتتبني تاني
  *   - قيد البيع/المرتجع بيتعدّل لنفس الإجمالي الجديد
- *   - التحصيل والمرتجع النقدي (refund) فلوس اتدفعت فعلاً — ماتتلمسش،
- *     فالفرق بيروح على رصيد العميل (زي PriceChange بالظبط)
+ *   - (١٣/١١ قرار أحمد) الفاتورة الكاش تحصيلها = إجماليها الجديد، والمرتجع
+ *     الكاش ردّه (refund) = إجماليه الجديد — المبلغ القديم كان على السعر الغلط.
+ *     الآجل الفرق بيروح على رصيد العميل زي ما هو.
  *
  * ⚠️ مفيش recalculate هنا — المنادي بيعمله مرة واحدة للعملاء اللي اتلمسوا.
  * كل دالة بترجّع سجل قبل/بعد (بالسطور) أو null لو مفيش تغيير.
@@ -50,7 +51,7 @@ class FullResync
         if (! $plan['changed']) {
             return null;
         }
-        InvoiceRepricer::apply($inv, $plan, adjustCollection: false, recalc: false);
+        InvoiceRepricer::apply($inv, $plan, adjustCollection: InvoiceRepricer::cashCollectionFollows($inv), recalc: false);
 
         return ['before' => $plan['before'], 'after' => $plan['after'], 'lines' => $plan['lines']];
     }
@@ -170,11 +171,34 @@ class FullResync
                 'subtotal' => round($sub, 2), 'discount' => round($sub - $after['net'], 2),
                 'total' => $after['net'], 'tax_total' => $after['tax'], 'grand_total' => $after['grand'],
             ])->save();
-            Transaction::where('source_type', ClientReturn::class)->where('source_id', $ret->id)->where('kind', 'return')
-                ->update(['credit' => $after['grand'], 'tax' => $after['tax']]);
+            $txs = Transaction::where('source_type', ClientReturn::class)->where('source_id', $ret->id)->where('kind', 'return')->get();
+            foreach ($txs as $t) {
+                $t->forceFill(['credit' => $after['grand'], 'tax' => $after['tax']])->saveQuietly();
+            }
+            // (١٣/١١) المرتجع الكاش: الرد اللي المندوب دفعه = الإجمالي الجديد
+            if ($ret->policy === ClientReturn::POLICY_CASH && $ret->refund_transaction_id
+                && ($refund = Transaction::find($ret->refund_transaction_id))) {
+                $refund->forceFill(['debit' => $after['grand'], 'tax' => $after['tax']])->saveQuietly();
+                $txs->push($refund);
+            }
+            // الشجرة: القيود اتعدّلت من غير الأوبزرفر — نفس `InvoiceGl::repost`
+            self::repostGl($txs, 'return '.$ret->id);
         });
 
         return ['before' => $before, 'after' => $after, 'lines' => $lines];
+    }
+
+    /** إعادة ترحيل قيود اتعدّلت للشجرة — فشلها يتسجّل ومايوقفش التعديل (زي InvoiceGl) */
+    public static function repostGl(iterable $txs, string $event): void
+    {
+        try {
+            $ledger = app(\App\Services\Gl\Ledger::class);
+            foreach ($txs as $t) {
+                $ledger->repost($t);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('gl.repost failed', ['event' => $event, 'error' => $e->getMessage()]);
+        }
     }
 
     /** المسلَّم فعلاً: السطر الكامل بأرقامه، والجزئي بـ`Tax::line` (نفس كود التسليم) */

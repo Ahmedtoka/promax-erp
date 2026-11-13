@@ -177,6 +177,25 @@ class InvoiceRepricer
      * ⚠️ بتفتح `DB::transaction` بتاعتها (التداخل سليم) — والمنادي
      * الجماعي لازم يناديها جوه ترانزاكشنه هو.
      */
+    /**
+     * تحصيل الفاتورة الكاش بيمشي مع الإجمالي الجديد؟ (قرار أحمد ١٣/١١/٢٠٢٦)
+     *
+     * «أكيد مبلغ التحصيل اللي نزل على السعر القديم غلط» — الفاتورة الكاش
+     * اتدفعت بالكامل، فتحصيلها = إجماليها دايماً. الجماعي (PriceChange و
+     * FullResync) كان بيسيب التحصيل والفرق يروح على رصيد العميل، فطلع
+     * ١٤ فاتورة كاش تحصيلها ≠ إجماليها بعد تصليح الأسعار.
+     *
+     * ⚠️ **قيد تحصيل واحد بس.** `apply` بيكتب نفس المبلغ على كل قيود
+     * التحصيل المربوطة — لو فيه اتنين (تحصيل مزدوج) كانت الفاتورة هتتحصّل
+     * مرتين بالسعر الجديد. ده بيتساب لأداة المراجعة.
+     */
+    public static function cashCollectionFollows(Invoice $inv): bool
+    {
+        return $inv->payment === 'cash'
+            && Transaction::where('source_type', Invoice::class)->where('source_id', $inv->id)
+                ->where('kind', 'collection')->count() === 1;
+    }
+
     public static function apply(Invoice $inv, array $plan, bool $adjustCollection, bool $recalc, bool $strictGl = false): void
     {
         // شبكة أمان — المنادي مفروض رفض قبل كده

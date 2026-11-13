@@ -291,7 +291,9 @@ class PriceChangeEngineTest extends TestCase
         $this->assertEqualsWithDelta($result['totals']['all']['after_grand'], (float) $run->after_grand, 0.001);
         $this->assertSame(2, $result['invoices_changed']);
         $this->assertSame(1, $result['pos_changed']);
-        $this->assertEqualsWithDelta(2 * 6.84, $result['ledger_diff'], 0.001);
+        // (١٣/١١) الكاش تحصيله بيمشي معاه — أثر الرصيد = فرق الآجل بس
+        $this->assertEqualsWithDelta(6.84, $result['ledger_diff'], 0.001);
+        $this->assertEqualsWithDelta($preview['ledger_diff'], $result['ledger_diff'], 0.001);
         $this->assertEqualsWithDelta(6.84, $result['totals']['po']['diff_grand'], 0.001);
     }
 
@@ -393,9 +395,10 @@ class PriceChangeEngineTest extends TestCase
         $this->assertLedgerReconciles($c);
     }
 
-    public function test_cash_invoice_difference_lands_on_ledger(): void
+    public function test_cash_invoice_collection_follows_the_new_total(): void
     {
-        // سعر أقل → الفرق رصيد دائن للعميل
+        // (١٣/١١ قرار أحمد) التحصيل على السعر القديم كان غلط — بيمشي مع الإجمالي
+        // سعر أقل
         $c = $this->client($this->listA, ['payment_terms' => 'cash']);
         $inv = $this->invoice($c, 10, 'cash');
         $this->assertEqualsWithDelta(0.0, (float) $c->fresh()->balance, 0.001);
@@ -405,19 +408,19 @@ class PriceChangeEngineTest extends TestCase
         $sale = Transaction::where('source_type', Invoice::class)->where('source_id', $inv->id)->where('kind', 'sale')->first();
         $coll = Transaction::where('source_type', Invoice::class)->where('source_id', $inv->id)->where('kind', 'collection')->first();
         $this->assertEqualsWithDelta(27.36, (float) $sale->debit, 0.001);
-        $this->assertEqualsWithDelta(34.20, (float) $coll->credit, 0.001, 'التحصيل ماحدش يلمسه');
-        $this->assertEqualsWithDelta(-6.84, (float) $c->fresh()->balance, 0.001);
+        $this->assertEqualsWithDelta(27.36, (float) $coll->credit, 0.001, 'التحصيل = الإجمالي الجديد');
+        $this->assertEqualsWithDelta(0.0, (float) $c->fresh()->balance, 0.001);
         $this->assertLedgerReconciles($c);
 
-        // سعر أعلى → الفرق مديونية
+        // سعر أعلى
         $d = $this->client($this->listB, ['payment_terms' => 'cash']);
         $this->invoice($d, 15, 'cash');
         PriceChange::apply(PriceChange::draft($this->admin, 'list', [
             'price_list_id' => $this->listB->id, 'prices' => [$this->product->id => 20],
         ]), $this->admin);
 
-        // 60 + 8.40 = 68.40 مقابل 51.30 متحصّلة
-        $this->assertEqualsWithDelta(17.10, (float) $d->fresh()->balance, 0.001);
+        // 60 + 8.40 = 68.40 والتحصيل بقى 68.40 — الرصيد صفر
+        $this->assertEqualsWithDelta(0.0, (float) $d->fresh()->balance, 0.001);
         $this->assertLedgerReconciles($c, $d);
     }
 
