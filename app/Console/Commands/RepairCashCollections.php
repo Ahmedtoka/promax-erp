@@ -58,9 +58,28 @@ class RepairCashCollections extends Command
             return self::SUCCESS;
         }
 
-        $this->table(['المستند', 'ورقي', 'التاريخ', 'العميل', 'المندوب', 'النوع', 'قبل', 'بعد', 'الفرق', 'تصفية المندوب'],
+        $this->table(['المستند', 'ورقي', 'التاريخ', 'العميل', 'المندوب', 'النوع', 'قبل', 'بعد', 'الفرق', 'أثره على فلوس المندوب', 'تصفية المندوب'],
             array_map(fn ($r) => [$r['doc'], $r['paper_ref'] ?? '', $r['date'], $r['client'], $r['rep'], $r['kind'],
-                number_format($r['old'], 2), number_format($r['new'], 2), number_format($r['diff'], 2), $r['settled'] ?? 'لسه — في عهدته'], $rows));
+                number_format($r['old'], 2), number_format($r['new'], 2), number_format($r['diff'], 2), $r['impact'], $r['settled'] ?? 'لسه — في عهدته'], $rows));
+
+        // صافي كل مندوب: الموجب = المفروض يسلّم زيادة، السالب = سلّم/معاه أكتر من اللي السيستم هيقوله
+        $byRep = [];
+        foreach ($rows as $r) {
+            $k = $r['rep'];
+            $byRep[$k] ??= ['n' => 0, 'up' => 0.0, 'down' => 0.0, 'net' => 0.0, 'settled' => 0.0];
+            $byRep[$k]['n']++;
+            $cash = $r['cash_effect'];
+            $cash >= 0 ? $byRep[$k]['up'] += $cash : $byRep[$k]['down'] += $cash;
+            $byRep[$k]['net'] += $cash;
+            if ($r['settled'] !== null) {
+                $byRep[$k]['settled'] += $cash;
+            }
+        }
+        $this->line('');
+        $this->line('صافي كل مندوب (فلوس الكاش اللي السيستم بيقول إنه استلمها من العملاء):');
+        $this->table(['المندوب', 'مستندات', 'يزيد عليه', 'يقل عنه', 'الصافي', 'منه جوه تصفية اتعملت'],
+            collect($byRep)->map(fn ($v, $k) => [$k, $v['n'], number_format($v['up'], 2), number_format($v['down'], 2), number_format($v['net'], 2), number_format($v['settled'], 2)])->values()->all());
+        $this->line('الموجب: العميل دفع أكتر من المسجّل → المندوب المفروض معاه/سلّم الفرق. السالب: المسجّل كان أعلى من الإجمالي الصح → المندوب استلم من العميل أكتر من سعره الصح (الفرق يا يرجع للعميل يا يتسوّى).');
         $this->line(sprintf('الإجمالي: %d مستند · صافي الفرق %s · منهم %d جوه تصفية اتعملت',
             count($rows), number_format(array_sum(array_column($rows, 'diff')), 2), count(array_filter($rows, fn ($r) => $r['settled'] !== null))));
 
@@ -144,9 +163,15 @@ class RepairCashCollections extends Command
 
     private function row(string $kind, $doc, $paper, $at, $clientId, $client, $repId, $rep, float $old, float $new, float $tax, int $txId, ?string $settled): array
     {
+        // أثر على فلوس المندوب: التحصيل بيزوّد اللي معاه، والرد (refund) بيقلّله
+        $cash = round($kind === 'refund' ? $old - $new : $new - $old, 2);
+        $impact = $cash > 0
+            ? 'المسجّل معاه يزيد '.number_format($cash, 2)
+            : 'المسجّل معاه يقل '.number_format(-$cash, 2).($settled ? ' — سلّم القديم فعلاً' : '');
+
         return ['kind' => $kind, 'doc' => $doc, 'paper_ref' => $paper, 'date' => $at?->format('Y-m-d'), 'client_id' => $clientId, 'client' => $client,
             'rep_id' => $repId, 'rep' => $rep, 'old' => round($old, 2), 'new' => round($new, 2), 'diff' => round($new - $old, 2), 'tax' => round($tax, 2),
-            'tx_id' => $txId, 'settled' => $settled];
+            'tx_id' => $txId, 'settled' => $settled, 'cash_effect' => $cash, 'impact' => $impact];
     }
 
     private function writeCsv(array $rows): string
@@ -154,9 +179,9 @@ class RepairCashCollections extends Command
         $path = 'price-audit/collections-'.now()->format('Ymd-His').'.csv';
         $fh = fopen('php://temp', 'w+');
         fwrite($fh, "\xEF\xBB\xBF");
-        fputcsv($fh, ['doc', 'paper_ref', 'date', 'client', 'rep', 'kind', 'old', 'new', 'diff', 'settled_in', 'transaction_id']);
+        fputcsv($fh, ['doc', 'paper_ref', 'date', 'client', 'rep', 'kind', 'old', 'new', 'diff', 'rep_cash_effect', 'impact', 'settled_in', 'transaction_id']);
         foreach ($rows as $r) {
-            fputcsv($fh, [$r['doc'], $r['paper_ref'], $r['date'], $r['client'], $r['rep'], $r['kind'], $r['old'], $r['new'], $r['diff'], $r['settled'] ?? '', $r['tx_id']]);
+            fputcsv($fh, [$r['doc'], $r['paper_ref'], $r['date'], $r['client'], $r['rep'], $r['kind'], $r['old'], $r['new'], $r['diff'], $r['cash_effect'], $r['impact'], $r['settled'] ?? '', $r['tx_id']]);
         }
         rewind($fh);
         $body = stream_get_contents($fh);
